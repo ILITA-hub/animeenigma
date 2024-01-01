@@ -1,0 +1,18 @@
+version: '3'
+name: anime-enigma
+
+services:
+
+  redis:
+    image: redis:6-alpine
+    container_name: 'redis'
+    restart: always
+    ports:
+      - 127.0.0.1:6379:6379
+    command: redis-server --save 20 1 --loglevel warning --requirepass v0RedisSecret
+    volumes: 
+      - redis:/data
+
+volumes:
+  redis:
+    driver: local
