@@ -13,6 +13,23 @@ services:
     volumes: 
       - redis:/data
 
+  db:
+    container_name: pg_container
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgresUserAE
+      POSTGRES_PASSWORD: pgSuperSecretMnogaBycaBab
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes: 
+      - postgres:/data
+      - ./custom_pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      - ./custom_postgresql.conf:/etc/postgresql.conf
+
 volumes:
   redis:
+    driver: local
+  postgres:
     driver: local
