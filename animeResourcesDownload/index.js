@@ -138,7 +138,7 @@ for(let key in animeOP) {
     if (anime != undefined) {
 
         await pg`INSERT INTO public.anime
-        (id, active,  "name", "nameRU", "nameJP", description, "imgPath")
+        (id, active, "name", "nameRU", "nameJP", description, "imgPath")
         VALUES(${anime.id}, true, ${anime.en_name}, ${anime.ru_name}, ${anime.jp_name}, ${anime.description}, ${anime.img.path})`
 
         for(let i = 0; i < anime.genres.length; i++) {
