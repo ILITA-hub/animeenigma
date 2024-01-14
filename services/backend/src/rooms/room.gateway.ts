@@ -80,8 +80,9 @@ export class RoomGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
 
   async handleConnection(client: Socket, ...args: any[]) {
-    client.send('hi', 'hi');
+    client.send('login', client.id);
     this.clients[client.id] = client;
+    // this.roomService.setCache('client' + client.id, {id: client.id, username: 'test'})
     this.logger.log(`Client connected: ${client.id}`);
 
     this.broadcastMessage('world', {});

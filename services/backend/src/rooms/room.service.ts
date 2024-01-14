@@ -1,47 +1,47 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { CacheTTL, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { Injectable } from '@nestjs/common';
 import { generateRoomId } from '../utils/miscellaneous'
 import { Room } from './dto/create-room.dto'
+import { SchemaRoom } from './schema/room.schema'
+import { CachesService } from '../caches/caches.service'
 
 @Injectable()
 export class RoomService {
-
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
-
-  async setCache(key: string, value: any) {
-    await this.cacheManager.set(key, value);
-  }
-  async getCache(key: string): Promise<any> {
-    return await this.cacheManager.get(key);
-  }
-  async delCache(key: string) {
-    await this.cacheManager.del(key);
-  }
+  constructor(
+    private readonly cachesService: CachesService,
+  ) {}
 
   async getAllRooms() {
-    const rooms = await this.getCache("rooms");
+    const rooms = await this.cachesService.getCache("rooms");
     return rooms;
   }
 
   async getRoom(id: string) {
-    const room = await this.getCache(`room${id}`);
-    return room;
+    let result = {
+      status: 200,
+      room: Room 
+    }
+    const room = await this.cachesService.getCache(`room${id}`);
+    if (!room) {
+      result.status = 404
+      return result
+    }
+    result.room = room;
+    return result;
   }
 
-  async createRoom(body: Room) {
+  async createRoom(body: SchemaRoom) {
     let result = {
       status : 200
     }
     const roomId = generateRoomId();
-    const newRoom = new Room(roomId, body.name, body.ownerId, body.rangeAnime);
-    await this.setCache(`room${roomId}`, newRoom);
+    const newRoom = new Room(roomId, body.name, body.ownerId, body.rangeOpenings);
+    await this.cachesService.setCache(`room${roomId}`, newRoom);
 
-    const allRooms = await this.getCache("rooms");
+    const allRooms = await this.cachesService.getCache("rooms");
     if (!allRooms) {
-      await this.setCache("rooms", [roomId])
+      await this.cachesService.setCache("rooms", [roomId])
     } else {
-      await this.setCache("rooms", [...allRooms, roomId])
+      await this.cachesService.setCache("rooms", [...allRooms, roomId])
     }
     return roomId;
   }
@@ -52,12 +52,12 @@ export class RoomService {
     }
     const roomId = id
 
-    const roomToDelete = await this.getCache(`room${roomId}`)
+    const roomToDelete = await this.cachesService.getCache(`room${roomId}`)
     if (!roomToDelete) {
       result.status = 403;
       return result
     }
-    await this.delCache(`room${roomId}`)
+    await this.cachesService.delCache(`room${roomId}`)
     return result
   }
 }

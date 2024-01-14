@@ -2,7 +2,7 @@ import { client } from 'node-shikimori';
 import ytdl from 'ytdl-core';
 import fs from 'fs'
 import axios from 'axios'
-import pg from '../backend/utils/pg.js'
+import pg from './pg.js'
 
 const shikimori = client({})
 let animeArr = []
@@ -72,7 +72,8 @@ for(let i = 0; i < animeArr.length; i++) {
             animeOP[result.id].op.push({
                 url: el2.url,
                 hosting: el2.hosting,
-                path: ""
+                path: "",
+                name: el2.name
             })
         }
     })
@@ -127,7 +128,7 @@ for(let key in animeOP) {
             animeOP[key].img.path = outNameOp
         })
         .catch(function (error) {
-            console.error('Ошибка при скачивании изображения:', error);
+            console.error('Ошибка при скачивании изображения:', URLIMAGE);
         });
 
     }
@@ -142,7 +143,7 @@ for(let key in animeOP) {
         VALUES(${anime.id}, true, ${anime.en_name}, ${anime.ru_name}, ${anime.jp_name}, ${anime.description}, ${anime.img.path})`
 
         for(let i = 0; i < anime.genres.length; i++) {
-            await pg`INSERT INTO public."animeGenres"
+            await pg`INSERT INTO public."genresAnime"
             ("animeId", "genreId", active)
             VALUES(${anime.id}, ${anime.genres[i].id}, true)`
         }
@@ -150,8 +151,10 @@ for(let key in animeOP) {
         for(let i = 0; i < anime.op.length; i++) {
             let op = anime.op[i]
             await pg`INSERT INTO public.openings
-            (id, active, "mp3OpPath", "animeId")
-            VALUES(nextval('openings_id_seq'::regclass), true, ${op.path}, ${anime.id})`
+            (id, active, "mp3OpPath", "animeId", "name")
+            VALUES(nextval('openings_id_seq'::regclass), true, ${op.path}, ${anime.id}, ${op.name})`
         }
     }
 }
+
+console.log("Всё")

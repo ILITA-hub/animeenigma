@@ -1,21 +1,12 @@
-import type { RedisClientOptions } from 'redis';
-import { redisStore } from 'cache-manager-redis-yet';
+
 import { Module } from '@nestjs/common';
-import { CacheModule, CacheStore } from '@nestjs/cache-manager';
 import { AppController } from './room.controller';
 import { RoomService } from './room.service';
 import { RoomGateway } from './room.gateway';
+import { CachesModule} from '../caches/caches.module'
 
 @Module({
-  imports: [
-    CacheModule.register({
-      store : redisStore,
-      ttl : 0,
-      host : 'localhost',
-      port : 6379,
-      password : "v0RedisSecret"
-    })
-  ],
+  imports: [CachesModule],
   controllers: [AppController],
   providers: [RoomService, RoomGateway],
 })

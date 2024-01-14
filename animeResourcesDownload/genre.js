@@ -1,5 +1,5 @@
 import { client } from 'node-shikimori'
-import pg from '../backend/utils/pg.js'
+import pg from './pg.js'
 import axios from 'axios'
 
 const shikimori = client({})
@@ -24,7 +24,8 @@ for (let i = 0; i < result.data.length; i++) {
     // console.log(`INSERT INTO public.genres (id, active, "createdAt", "updatedAt", "name", "nameRU") VALUES(${el.id}, true, now(), now(), '${el.name}', '${el.russian}')`)
     await pg`INSERT INTO
         public."genres"
-        (id, active, "name", "nameRU")
+        (id, active, "name", "nameRu")
         VALUES(${el.id}, true, ${el.name}, ${el.russian})
     `
 }
+console.log("Всё")

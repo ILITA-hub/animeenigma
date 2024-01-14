@@ -1,35 +1,33 @@
 import { IsNotEmpty } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { Socket } from 'socket.io';
+import { Status } from './enum-status.dto'
 
 export class Room {
     id: string;
 
-    @IsNotEmpty()
     name: string;
 
     description: string;
 
-    status: string;
+    status: Status;
 
     openingId: string;
 
-    users: object;
+    users: Array<Socket>;
 
     updatedAt: number;
 
-    @IsNotEmpty()
-    ownerId: number;
+    ownerId: string;
 
-    historyAnime: Array<number>;
+    historyAnime: Array<Number>;
 
-    @IsNotEmpty()
-    rangeAnime: Array<number>;
+    rangeOpenings: Array<Number>;
 
-    constructor(id: string, name:string, ownerId: number, rangeAnime: Array<number>) {
+    constructor(id: string, name: string, ownerId: string, rangeOpenings: Array<Number>) {
         this.id = id
         this.name = name
         this.ownerId = ownerId
-        this.rangeAnime = rangeAnime
+        this.rangeOpenings = rangeOpenings
     }
 }
-
-// const Status = { START: 'start', PLAYING: 'playing', BREAK: 'break' };

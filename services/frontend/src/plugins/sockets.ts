@@ -1,6 +1,7 @@
 
 import type { App } from 'vue'
 import { io } from "socket.io-client";
+import { useUser } from '@/stores/user';
 
 interface SocketOptions {
     baseUrl?: string
@@ -23,6 +24,8 @@ export default {
             //   "my-key": "my-value"
             // }
         });
+
+        const user = useUser();
 
         socket.on("disconnect", (reason) => {
             if (reason === "io server disconnect") {
@@ -47,6 +50,13 @@ export default {
         socket.on('message', (message) => {
             console.log('message', message);
         });
+        
+
+        socket.on('login', (message) => {
+            user.token = message.token;
+        });
+
+
 
         app.config.globalProperties.$socket = socket;
         
