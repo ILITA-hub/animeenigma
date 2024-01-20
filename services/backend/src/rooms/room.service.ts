@@ -15,7 +15,7 @@ export class RoomService {
     return rooms;
   }
 
-  async getRoom(id: string) {
+  async getRoom(id: number) {
     let result = {
       status: 200,
       room: Room 
@@ -27,6 +27,18 @@ export class RoomService {
     }
     result.room = room;
     return result;
+  }
+
+  async deleteAll() {
+    const rooms = await this.cachesService.getCache("rooms");
+    for (let i = 0; i < rooms.length; i++) {
+      const room = rooms[i]
+      const room2 = await this.cachesService.getCache(`room${room}`);
+      if (room2) {
+        await this.cachesService.delCache(`room${room}`)
+      }
+    }
+    await this.cachesService.delCache("rooms");
   }
 
   async createRoom(body: SchemaRoom) {
@@ -46,7 +58,7 @@ export class RoomService {
     return roomId;
   }
 
-  async deleteRoom(id: string) {
+  async deleteRoom(id: number) {
     let result = {
       status : 200
     }

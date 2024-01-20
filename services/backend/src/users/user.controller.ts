@@ -8,8 +8,10 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get(":name") // TODO УБРАТЬ КОГДА СДЕЛАЕМ АУТИСТИФИКАЦИЮ
-  async getUserById(@Param() params) {
-    return await this.userService.getUserByName(params.name);
+  async getUserSessionByName(@Param() params) {
+    const user = await this.userService.getUserByName(params.name);
+    const sessionId = await this.userService.createUserSession(user);
+    return sessionId;
   }
 
   @Post()

@@ -1,15 +1,16 @@
 import { Module } from '@nestjs/common';
 import { RoomModule } from './rooms/room.module'
-import { animeCollectionsModule } from './animeCollections/animeCollections.module'
+import { AnimeCollectionsModule } from './animeCollections/animeCollections.module'
 import { Logger } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { CachesModule } from './caches/caches.module'
+import { UserModule } from './users/user.module'
 
 @Module({
   imports: [
     RoomModule,
     CachesModule,
-    animeCollectionsModule,
+    AnimeCollectionsModule,
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         type: "postgres",
@@ -22,6 +23,7 @@ import { CachesModule } from './caches/caches.module'
         entities: [__dirname + '/**/*.entity{.js, .ts}']
       })
     }),
+    UserModule,
   ],
   providers: [Logger],
 })

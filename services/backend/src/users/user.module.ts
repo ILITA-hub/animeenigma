@@ -1,13 +1,17 @@
 
-// import { Module } from '@nestjs/common';
-// import { UserController } from './user.controller';
-// import { UserService } from './user.service';
-// import { CachesModule} from '../caches/caches.module'
+import { Module } from '@nestjs/common';
+import { UserController } from './user.controller';
+import { UserService } from './user.service';
+import { CachesModule} from '../caches/caches.module'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { UserEntity } from './entity/user.entity'
 
-// @Module({
-//   imports: [
-  // TypeOrmModule.forFeature([AnimeCollections, AnimeCollectionOpenings]), CachesModule],
-//   controllers: [UserController],
-//   providers: [UserService],
-// })
-// export class RoomModule {}
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([UserEntity]), CachesModule
+  ],
+  controllers: [UserController],
+  providers: [UserService],
+})
+
+export class UserModule {}

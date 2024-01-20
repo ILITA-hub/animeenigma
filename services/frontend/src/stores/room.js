@@ -1,12 +1,21 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import axios from 'axios'
 
-export const useCounterStore = defineStore('counter', () => {
-  const count = ref(0)
-  const doubleCount = computed(() => count.value * 2)
-  function increment() {
-    count.value++
-  }
+export const useRoomStore = defineStore('room', {
+  state: () => ({
+    rooms: [],
 
-  return { count, doubleCount, increment }
+  }),
+  getters: {
+    
+  },
+  actions: {
+    async getRooms() {
+      const response = await axios.get('http://46.181.201.172/api/rooms/getAll');
+      this.rooms = response.data
+      console.log(response)
+      return response
+    },
+  },
 })

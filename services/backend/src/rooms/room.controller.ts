@@ -16,7 +16,7 @@ export class AppController {
   }
 
   @Get(":roomId")
-  async getRoom(@Param("roomId") roomId : string) {
+  async getRoom(@Param("roomId") roomId : number) {
     const result = await this.appService.getRoom(roomId);
     if (result.status != 200) {
       throw new HttpException("", result.status);
@@ -28,12 +28,12 @@ export class AppController {
   @ApiResponse({status : 201, description: "Комната создана", type: String})
   @ApiResponse({status : 400, description: "Ошибка в параметрах", type: BadRequestSchema})
   @Post()
-  async createRoom(@Body() body : SchemaRoom, @Res({ passthrough: true }) res: Response) {
+  async createRoom(@Body() body : SchemaRoom) {
     return await this.appService.createRoom(body);
   }
 
   @Delete(":roomId")
-  async deleteRoom(@Param("roomId") roomId : string) {
+  async deleteRoom(@Param("roomId") roomId : number) {
     const result = await this.appService.deleteRoom(roomId)
     if (result.status != 200) {
       throw new HttpException("", result.status);

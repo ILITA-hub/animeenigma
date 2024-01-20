@@ -21,13 +21,13 @@ defineProps({
 <script>
 export default {
   created() {
-    console.log('Hello World!')
+    // console.log('Hello World!')
 
-    const ws = new WebSocket("ws://46.181.201.172:9000/")
+    // const ws = new WebSocket("ws://46.181.201.172:9000/")
 
-    ws.onmessage = (message) => {
-        console.log(message.data);
-    }
+    // ws.onmessage = (message) => {
+    //     console.log(message.data);
+    // }
   }
 }
 </script>

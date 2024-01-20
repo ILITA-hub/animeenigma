@@ -8,7 +8,7 @@ import App from './App.vue'
 import router from './router'
 import vuetify from '@/plugins/vuetify.js'
 import axios from '@/plugins/axios.ts'
-import sockets from '@/plugins/sockets.ts'
+// import sockets from '@/plugins/sockets.ts'
 
 const app = createApp(App) 
 
@@ -20,8 +20,8 @@ app.use(vuetify)
 app.use(axios, {
   baseUrl: '/api/',
 })
-app.use(sockets, {
-  baseUrl: '/ws/',
-})
+// app.use(sockets, {
+//   baseUrl: '/ws/',
+// })
 
 app.mount('#app')

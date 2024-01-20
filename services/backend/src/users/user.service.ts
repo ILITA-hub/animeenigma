@@ -48,7 +48,7 @@ export class UserService {
 
   async getUserSession(sessionId: string) {
     const session = this.cachesService.getCache('userSession' + sessionId);
-    return sessionId;
+    return session;
   }
 
   async createUserSession(userEntity: UserEntity) {

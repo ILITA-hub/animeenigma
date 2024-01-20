@@ -16,4 +16,4 @@ import { TypeOrmModule } from '@nestjs/typeorm'
   controllers: [AnimeCollectionsController],
   providers: [AnimeCollectionsService],
 })
-export class animeCollectionsModule {}
+export class AnimeCollectionsModule {}
