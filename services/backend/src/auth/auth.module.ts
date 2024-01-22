@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import { constants } from '../config/index';
+import { config } from '../config/index';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { SocketStrategy } from './strategies/socket.strategy';
@@ -13,7 +13,7 @@ import { SocketStrategy } from './strategies/socket.strategy';
       session: true 
     }),
     JwtModule.register({
-      secret: constants.jwtSecret,
+      secret: config.jwtSecret,
       // signOptions: { expiresIn: '60s' },
     }),
   ],

@@ -13,6 +13,8 @@ import { Socket } from 'socket.io';
 import { RoomService } from './room.service';
 import { SocketAuthGuard } from '../auth/guards/socket.guard';
 import { Clients } from './dto/TEMP-clients.dto' // УБРАТЬ ЭТО ГОВНО И СДЕЛАТЬ НОРМАЛЬНО (через кеши)
+import { UserService } from '../users/user.service';
+import { CachesService } from '../caches/caches.service';
 
 @WebSocketGateway(9000, {
   transports: ['websocket'],
@@ -25,6 +27,8 @@ import { Clients } from './dto/TEMP-clients.dto' // УБРАТЬ ЭТО ГОВН
 export class RoomGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly roomService: RoomService,
+    private readonly userService: UserService,
+    private readonly cachesService: CachesService,
   ) {}
   @WebSocketServer() 
   clients: Clients;
@@ -45,21 +49,33 @@ export class RoomGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
 
-  @UseGuards(SocketAuthGuard)
-  @SubscribeMessage('message')
-  async handleMessage2(
+  // @UseGuards(SocketAuthGuard)
+  @SubscribeMessage('joinRoom')
+  async userConnectedToRoom(
     @Request() req,
     @MessageBody() data: any,
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() socket: Socket,
   ): Promise<void> {
 
-    // let world = await this.worldService.getCache('world');
+    const client = this.clients[socket.id];
+    const roomId = data.roomId;
+    const user = this.clients[client.id]['user'];
 
-    // world.data = this.worldService.testWorldPayloadProcess(req.user, world.data, data);
 
-    // this.worldService.setCache('world', world);
-    this.broadcastMessage('message', data);
+    const room = await this.roomService.getRoom(roomId);
 
+    if (!room) {
+      client.emit('roomNotFound', 'roomNotFound');
+      console.log('room  NE CYWECTBYUET')
+      return;
+    }
+
+    client['roomId'] = roomId;
+    room.users[client.id] = user;
+
+    await this.cachesService.setCache('room' + roomId, room);
+
+    this.broadcastMessage('roomUpdate', room);
   }
 
 
@@ -73,19 +89,62 @@ export class RoomGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
 
-  handleDisconnect(client: Socket) {
-    this.clients[client.id] = undefined;
+  async handleDisconnect(socket: Socket) {
+
+    const client = this.clients[socket.id];
+
+    if (!client) {
+      this.logger.warn(`No client to disconnect: ${socket.id}`);
+      return;
+    }
+
+    const roomId = client['roomId'];
+
+    if (roomId) {
+      const room = await this.cachesService.getCache('room' + roomId);
+      if (room?.users?.[client.id]) {
+        delete room.users[client.id];
+        await this.cachesService.setCache('room' + roomId, room);
+        this.broadcastMessage('roomUpdate', room);
+      }
+    }
+    
+    delete this.clients[client.id];
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
 
-  async handleConnection(client: Socket, ...args: any[]) {
-    client.send('login', client.id);
+  async handleConnection(
+    client: Socket,
+    ...args: any[]
+  ): Promise<void> {
+    this.logger.log(`Client connection tried: ${client.id}`);
+
+    // TODO make auth guard
+    const sessionId = String(client.handshake.query.sessionId);
+
+    if (!sessionId) {
+      client.emit('login', 'unauthorized');
+      client.disconnect(true);
+      return;
+    }
+    console.log(sessionId)
+    const userSession = await this.userService.getUserSession(sessionId); 
+    
+    if (!userSession) {
+      client.emit('login', 'unauthorized');
+      client.disconnect(true);
+      return;
+    }
+
+    const user = await this.userService.getUserById(userSession.userId);
+    client['user'] = user;
+
     this.clients[client.id] = client;
-    // this.roomService.setCache('client' + client.id, {id: client.id, username: 'test'})
+    
     this.logger.log(`Client connected: ${client.id}`);
 
-    this.broadcastMessage('world', {});
+    this.broadcastMessage('user connected', { userName: user.name });
   }
   
 

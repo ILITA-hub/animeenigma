@@ -12,21 +12,24 @@ export class RoomService {
 
   async getAllRooms() {
     const rooms = await this.cachesService.getCache("rooms");
-    return rooms;
+    let result = []
+    for(let el of rooms ? rooms : []) {
+      const room = await this.cachesService.getCache(`room${el}`);
+      result.push(room)
+    }
+    return result;
   }
 
-  async getRoom(id: number) {
-    let result = {
-      status: 200,
-      room: Room 
-    }
+  async getRoom(id: string): Promise<Room> {
     const room = await this.cachesService.getCache(`room${id}`);
-    if (!room) {
-      result.status = 404
-      return result
-    }
-    result.room = room;
-    return result;
+
+    console.log({room})
+
+    return room;
+  }
+
+  async updateRoom(id: string, room: Room): Promise<void> {
+    await this.cachesService.setCache('room' + id, room);
   }
 
   async deleteAll() {
@@ -42,9 +45,6 @@ export class RoomService {
   }
 
   async createRoom(body: SchemaRoom) {
-    let result = {
-      status : 200
-    }
     const roomId = generateRoomId();
     const newRoom = new Room(roomId, body.name, body.ownerId, body.rangeOpenings);
     await this.cachesService.setCache(`room${roomId}`, newRoom);
@@ -58,7 +58,7 @@ export class RoomService {
     return roomId;
   }
 
-  async deleteRoom(id: number) {
+  async deleteRoom(id: string) {
     let result = {
       status : 200
     }
@@ -70,6 +70,11 @@ export class RoomService {
       return result
     }
     await this.cachesService.delCache(`room${roomId}`)
+
+    const allRooms = await this.cachesService.getCache("rooms");
+    const arr = allRooms.filter((word) => word != roomId);
+    await this.cachesService.setCache("rooms", [...arr])
+    
     return result
   }
 }

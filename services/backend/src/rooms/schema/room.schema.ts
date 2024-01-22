@@ -21,4 +21,8 @@ export class SchemaRoom {
     @IsNotEmpty()
     @ApiProperty({ type: [Number] })
     rangeOpenings: number[];
+
+    @IsInt()
+    @IsNotEmpty()
+    qtiUsersMax: number;
 }

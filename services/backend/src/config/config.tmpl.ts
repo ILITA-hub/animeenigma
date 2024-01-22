@@ -1,5 +1,5 @@
 
-module.exports = {
+export const config = {
 
     redisSecret: 'v0RedisSecret',
     redisHost: '127.0.0.1',
@@ -9,7 +9,7 @@ module.exports = {
 
     webSocketPort: 9000,
 
-    pgHost: 'localhost',
+    pgHost: '127.0.0.1',
     pgPort: 5432,
     pgUser: 'postgresUserAE',
     pgSecret: 'pgSuperSecretMnogaBycaBab',

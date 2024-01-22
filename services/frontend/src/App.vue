@@ -1,6 +1,7 @@
 
 <template>
    <v-app>
+    <HeaderApp />
       <v-main>
         <RouterView />
       </v-main>
@@ -12,14 +13,31 @@
 <script>
 import { RouterLink, RouterView } from 'vue-router'
 import HelloWorld from './components/HelloWorld.vue'
+import HeaderApp from '@/components/HeaderApp.vue'
+import { useUserStore } from '@/stores/user.js'
 
 export default {
+  setup() {
+    const userStore = useUserStore()
+
+    return {
+      userStore
+    }
+  },
+
   components: {
     HelloWorld,
     RouterLink,
-    RouterView
+    RouterView,
+    HeaderApp
   },
-  
+
+  async mounted() {
+    // console.log('this.userStore', this.userStore)
+    await this.userStore.checkUserLoggedIn();
+    console.log('this.userStore', this.userStore)
+    console.log('userLoggedIn', this.userStore.userLoggedIn)
+  }
 }
 </script>
 

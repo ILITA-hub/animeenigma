@@ -1,8 +1,6 @@
 
 import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-
-const defaultConfig = require('./config.tmpl.cjs');
+import { config as defaultConfig } from './config.tmpl';
 
 let localConfig = {};
 try {

@@ -8,10 +8,13 @@ import { AuthGuard } from '@nestjs/passport';
 @Injectable()
 export class SocketAuthGuard extends AuthGuard('socket') {
   canActivate(context: ExecutionContext) {
-      // Add your custom authentication logic here
-      // for example, call super.logIn(request) to establish a session.
-      // console.log(context);
-      return super.canActivate(context);
+    const request = context.switchToHttp().getRequest();
+
+    if (!request.user) {
+      return false;
+    }
+
+    return super.canActivate(context);
   }
 
   handleRequest(err, user, info) {

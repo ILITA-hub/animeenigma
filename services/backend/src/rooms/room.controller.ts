@@ -8,20 +8,20 @@ import { ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger'
 @ApiTags("Room")
 @Controller("rooms")
 export class AppController {
-  constructor(private readonly appService: RoomService) {}
+  constructor(private readonly roomService: RoomService) {}
 
   @Get("getAll")
   async getAllRooms() {
-    return await this.appService.getAllRooms();
+    return await this.roomService.getAllRooms();
   }
 
   @Get(":roomId")
-  async getRoom(@Param("roomId") roomId : number) {
-    const result = await this.appService.getRoom(roomId);
-    if (result.status != 200) {
-      throw new HttpException("", result.status);
+  async getRoom(@Param("roomId") roomId : string) {
+    const room = await this.roomService.getRoom(roomId);
+    if (!room) {
+      throw new HttpException("", 404);
     }
-    return result.room
+    return room
   }
 
   // @ApiBody({ type: SchemaRoom })
@@ -29,12 +29,13 @@ export class AppController {
   @ApiResponse({status : 400, description: "Ошибка в параметрах", type: BadRequestSchema})
   @Post()
   async createRoom(@Body() body : SchemaRoom) {
-    return await this.appService.createRoom(body);
+    return await this.roomService.createRoom(body);
   }
 
   @Delete(":roomId")
-  async deleteRoom(@Param("roomId") roomId : number) {
-    const result = await this.appService.deleteRoom(roomId)
+  async deleteRoom(@Param("roomId") roomId : string) {
+    // await this.roomService.deleteAll()
+    const result = await this.roomService.deleteRoom(roomId)
     if (result.status != 200) {
       throw new HttpException("", result.status);
     }

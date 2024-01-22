@@ -22,11 +22,11 @@ services:
       POSTGRES_PASSWORD: pgSuperSecretMnogaBycaBab
       POSTGRES_DB: postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      - 127.0.0.1:5432:5432
     volumes: 
       - postgres:/data
-      - ./custom_pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
-      - ./custom_postgresql.conf:/etc/postgresql.conf
+      # - ./custom_pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      # - ./custom_postgresql.conf:/etc/postgresql.conf
 
 volumes:
   redis:

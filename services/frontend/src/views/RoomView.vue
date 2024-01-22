@@ -52,22 +52,40 @@ export default {
     // },
   },
 
-  // async mounted () {
-  //   this.$socket.connect()
+  async mounted () {
 
-  //   this.$socket.on('hi', (data) => {
-  //     console.log('hi', data)
-  //   })
-    
-  //   this.$socket.emit('joinRoom', this.$route.params.id);
-  //   this.$socket.on('usersInRoom', (usersInRoom) => {
-  //     this.usersInRoom = usersInRoom;
-  //   });
-  //   this.$socket.on('answerOptions', (answerOptions) => {
-  //     this.answerOptions = answerOptions;
-  //   });
+    if (!this.$socket.connected) {
+      await this.$socket.connect()
+    }
 
-  // },
+    console.log('joinRoom')
+
+    this.$socket.on('usersInRoom', (usersInRoom) => {
+      this.usersInRoom = usersInRoom;
+    });
+    this.$socket.on('answerOptions', (answerOptions) => {
+      this.answerOptions = answerOptions;
+    });
+    this.$socket.on('roomUpdate', (roomUpdate) => {
+      console.log({roomUpdate})
+      this.usersInRoom = roomUpdate.users;
+      this.answerOptions = answerOptions;
+    });
+    this.$socket.on('roomNotFound', (roomUpdate) => {
+      console.log('roomNotFound')
+      this.$router.push('/');
+    });
+
+
+    this.$socket.$emit('joinRoom', { roomId: this.roomId });
+
+  },
+
+  computed: {
+    roomId () {
+      return this.$route.params.id;
+    },
+  },
 
 }
 

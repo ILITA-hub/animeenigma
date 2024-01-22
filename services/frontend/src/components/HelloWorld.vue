@@ -1,11 +1,11 @@
-<script setup>
+<!-- <script setup>
 defineProps({
   msg: {
     type: String,
     required: true
   }
 })
-</script>
+</script> -->
 
 <template>
   <div class="greetings">
@@ -20,6 +20,14 @@ defineProps({
 
 <script>
 export default {
+  components: {
+  },
+  props: {
+    msg: {
+      type: String,
+      required: true
+    }
+  },
   created() {
     // console.log('Hello World!')
 

@@ -5,6 +5,7 @@ import { Logger } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { CachesModule } from './caches/caches.module'
 import { UserModule } from './users/user.module'
+import { config } from './config/index'
 
 @Module({
   imports: [
@@ -14,11 +15,11 @@ import { UserModule } from './users/user.module'
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         type: "postgres",
-        host: "localhost",
-        port: 5432,
-        username: "postgresUserAE",
-        password: "pgSuperSecretMnogaBycaBab",
-        database: "postgres",
+        host: config.pgHost,
+        port: config.pgPort,
+        username: config.pgUser,
+        password: config.pgSecret,
+        database: config.pgDB,
         synchronize: true,
         entities: [__dirname + '/**/*.entity{.js, .ts}']
       })

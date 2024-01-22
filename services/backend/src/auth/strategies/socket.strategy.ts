@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { config } from '../../config/index';
-// import { UserService } from 'src/user/user.service';
+import { UserService } from '../../users/user.service';
 
 @Injectable()
 export class SocketStrategy extends PassportStrategy(Strategy, 'socket') {
-  constructor(private readonly userService: {}) { // UserService
+  constructor(private readonly userService: UserService) {
     super({
       jwtFromRequest: (request) => {
         return request?.handshake?.headers?.authorization

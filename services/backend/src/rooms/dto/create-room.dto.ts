@@ -2,6 +2,7 @@ import { IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Socket } from 'socket.io';
 import { Status } from './enum-status.dto'
+import { UserEntity } from '../../users/entity/user.entity';
 
 export class Room {
     id: string;
@@ -10,19 +11,19 @@ export class Room {
 
     description: string;
 
-    status: Status;
+    status: Status = Status.START;
 
-    openingId: string;
+    openingId: number = -1;
 
-    users: Array<Socket>;
+    users: { [key: string] : UserEntity} = {};
 
     updatedAt: number;
 
     ownerId: string;
 
-    historyAnime: Array<Number>;
+    historyAnime: Array<Number> = [];
 
-    rangeOpenings: Array<Number>;
+    rangeOpenings: Array<Number> = [];
 
     constructor(id: string, name: string, ownerId: string, rangeOpenings: Array<Number>) {
         this.id = id

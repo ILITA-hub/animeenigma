@@ -15,7 +15,7 @@ async function bootstrap() {
     .setTitle('Anime Enigma API')
     .setDescription('The Anime Enigma API')
     .setVersion('1.0')
-    .addServer("http://46.181.201.172/api")
+    .addServer("/api")
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('doc', app, document);

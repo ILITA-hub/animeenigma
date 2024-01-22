@@ -5,6 +5,7 @@ import { UserDto } from './dto/user.dto'
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm'
 import { UserEntity } from './entity/user.entity';
+import { UserLoginDto } from './dto/userLogin.dto';
 
 @Injectable()
 export class UserService {
@@ -37,7 +38,7 @@ export class UserService {
 
   }
 
-  async createUser(userDto: UserDto) {
+  async createUser(userDto: UserLoginDto) {
 
     const user = await this.UserRepository.save({
       name: userDto.name,
@@ -47,13 +48,13 @@ export class UserService {
   }
 
   async getUserSession(sessionId: string) {
-    const session = this.cachesService.getCache('userSession' + sessionId);
+    const session = await this.cachesService.getCache('userSession' + sessionId);
     return session;
   }
 
   async createUserSession(userEntity: UserEntity) {
     const sessionId = uuidv4();
-    this.cachesService.setCache('userSession' + sessionId, {
+    await this.cachesService.setCache('userSession' + sessionId, {
       userId: userEntity.id,
     });
     return sessionId;

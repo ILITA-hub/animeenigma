@@ -8,12 +8,14 @@
         v-for="room in roomStore.rooms"
         :key="room.id"
       >
-
-        <v-card>
-          <v-card-title>{{ room.title }}</v-card-title>
-          <v-card-text>{{ room.text }}</v-card-text>
-          <v-card-actions>
-            <v-btn @click="joinRoom(room)" text color="primary">Присоединиться</v-btn>
+        <v-card class="room_card">
+          <v-card-title>{{ room.name }}</v-card-title>
+          <!-- <v-card-text>{{ room.text }}</v-card-text> -->
+          <v-card-actions class="float-right">
+            <v-icon aria-hidden="false">
+              mdi-account
+            </v-icon>
+            <rounded-button v-if="userStore.userLoggedIn" @click="joinRoom(room)">join</rounded-button>
           </v-card-actions>
         </v-card>
       </v-col>
@@ -22,27 +24,41 @@
 </template>
 
 <script>
+import RoundedButton from '@/components/buttons/RoundedButton.vue'
+
 import {useRoomStore} from '@/stores/room.js'
+import { useUserStore } from '@/stores/user.js'
 
 export default {
   setup() {
     const roomStore = useRoomStore()
+    const userStore = useUserStore()
 
     return {
-      roomStore
+      roomStore,
+      userStore
     }
   },
-  data() {
-    return {
-    };
+  components: {
+    RoundedButton
   },
   mounted() {
     // console.log(this.roomStore)
   },
   methods: {
     joinRoom(room) {
+      // console.log(room.id)
+      this.$router.push(`/room/${room.id}`)
       return
     }
   }
 };
 </script>
+
+<style scoped>
+.room_card {
+  background-color: rgba(179,42,201, 0.15);
+  color: white;
+  border-radius: 10px
+}
+</style>
