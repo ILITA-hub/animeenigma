@@ -1,4 +1,5 @@
-const config = {
+
+export const config = {
 
     redisSecret: 'v0RedisSecret',
     redisHost: '127.0.0.1',
@@ -16,6 +17,4 @@ const config = {
 
     jwtSecret: 'jwtSecret',
 
-}
-
-export { config };
+};

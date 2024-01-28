@@ -1,44 +1,48 @@
 
 <template>
+
+  <v-container>
+    
+    <v-col justify="center">
+      <h1>Создание комнаты</h1>
+
+      <v-text-field v-model="newRoomName" class="mt-2" label="Название комнаты"></v-text-field>
+      <v-text-field v-model="newRoomDesc" class="mt-2" label="Описание"></v-text-field>
+      <v-text-field v-model="newRoomOpRange" class="mt-2" label="Диапазон опенингов (для прошареных)"></v-text-field>
+
+      <v-btn @click="createRoom">Создать</v-btn>
+
+    </v-col>
+    
+  </v-container>
     
 </template>
 
 <script>
 
 export default {
-  name: 'RoomView',
+  name: 'CreateRoomView',
   components: {
   },
   data: () => ({
-    answerOptions: [],
-    userName: '',
-    usersInRoom: [],
+    newRoomName: '',
+    newRoomDesc: '',
+    newRoomOpRange: '',
   }),
   methods: {
-    // async updateName () {
-    //   this.$socket.emit('updateName', this.userName);
-    // },
-    // async guess (answer) {
-    //   this.$socket.emit('guess', answer);
-    // },
+    async createRoom () {
+      
+      const data = {
+        name: this.newRoomName,
+        desc: this.newRoomDesc,
+        opRange: this.newRoomOpRange,
+      }
+
+      const response = await this.$axios.post('/rooms', data)
+      this.$router.push({ name: 'RoomView', params: { id: response.data.id } })
+
+    },
   },
-
-  // async mounted () {
-  //   this.$socket.connect()
-
-  //   this.$socket.on('hi', (data) => {
-  //     console.log('hi', data)
-  //   })
-    
-  //   this.$socket.emit('joinRoom', this.$route.params.id);
-  //   this.$socket.on('usersInRoom', (usersInRoom) => {
-  //     this.usersInRoom = usersInRoom;
-  //   });
-  //   this.$socket.on('answerOptions', (answerOptions) => {
-  //     this.answerOptions = answerOptions;
-  //   });
-
-  // },
 
 }
 

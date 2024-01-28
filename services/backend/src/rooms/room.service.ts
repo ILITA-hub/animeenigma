@@ -3,17 +3,21 @@ import { generateRoomId } from '../utils/miscellaneous'
 import { Room } from './dto/create-room.dto'
 import { SchemaRoom } from './schema/room.schema'
 import { CachesService } from '../caches/caches.service'
+import { exec } from 'child_process'
+import { Cron } from '@nestjs/schedule';
+
+let roomPort = 10000
 
 @Injectable()
 export class RoomService {
   constructor(
     private readonly cachesService: CachesService,
-  ) {}
+  ) { }
 
   async getAllRooms() {
     const rooms = await this.cachesService.getCache("rooms");
     let result = []
-    for(let el of rooms ? rooms : []) {
+    for (let el of rooms ? rooms : []) {
       const room = await this.cachesService.getCache(`room${el}`);
       result.push(room)
     }
@@ -23,7 +27,7 @@ export class RoomService {
   async getRoom(id: string): Promise<Room> {
     const room = await this.cachesService.getCache(`room${id}`);
 
-    console.log({room})
+    console.log({ room })
 
     return room;
   }
@@ -44,9 +48,13 @@ export class RoomService {
     await this.cachesService.delCache("rooms");
   }
 
-  async createRoom(body: SchemaRoom) {
+  async createRoom(body: SchemaRoom): Promise<Room> {
     const roomId = generateRoomId();
-    const newRoom = new Room(roomId, body.name, body.ownerId, body.rangeOpenings);
+    let ownerId = "0"
+
+    const port = roomPort++ // TODO СДЕЛАТЬ НОРМАЛЬНО
+
+    const newRoom = new Room(roomId, body.name, ownerId, body.rangeOpenings, port);
     await this.cachesService.setCache(`room${roomId}`, newRoom);
 
     const allRooms = await this.cachesService.getCache("rooms");
@@ -55,26 +63,30 @@ export class RoomService {
     } else {
       await this.cachesService.setCache("rooms", [...allRooms, roomId])
     }
-    return roomId;
+
+    exec(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
+    // console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
+
+    return newRoom;
   }
 
-  async deleteRoom(id: string) {
-    let result = {
-      status : 200
-    }
+  async deleteRoom(id: string): Promise<void> {
     const roomId = id
 
     const roomToDelete = await this.cachesService.getCache(`room${roomId}`)
     if (!roomToDelete) {
-      result.status = 403;
-      return result
+      return
     }
     await this.cachesService.delCache(`room${roomId}`)
 
     const allRooms = await this.cachesService.getCache("rooms");
     const arr = allRooms.filter((word) => word != roomId);
     await this.cachesService.setCache("rooms", [...arr])
-    
-    return result
+    exec(`kill $(lsof -t -i:${roomToDelete.port})`)
+  }
+
+  @Cron('0 * * * *')
+  async roomWatcher() {
+    const allRooms = await this.cachesService.getCache("rooms");
   }
 }

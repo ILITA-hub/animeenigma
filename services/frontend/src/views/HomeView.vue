@@ -3,22 +3,22 @@
 
   <v-container>
     <v-row justify="center">
-      <h1>You are in Home Page</h1>
+      <h1>Главная страница</h1>
     </v-row>
 
     <v-row justify="center">
       <v-col cols="12" sm="8" md="6">
         
-        <span v-if="userStore.userName" class="d-flex justify-center">Your name is {{userStore.userName}}</span>
-        <span v-else class="d-flex justify-center">YOU HAVE NO NAME, SET IT NOW!</span>
-        <span v-if="userStore.userLoggedIn" class="d-flex justify-center">You are logged in</span>
+        <span v-if="userStore.userName" class="d-flex justify-center">Ваше имя {{userStore.userName}}</span>
+        <span v-else class="d-flex justify-center">НЕТ ИМЕНИ, ПОСТАВЬ ИМЯ!</span>
+        <span v-if="userStore.userLoggedIn" class="d-flex justify-center">Ты готов к игре</span>
 
         <v-text-field v-model="newUserName" class="mt-2" label="Ваше имя"></v-text-field>
-        
-        <v-btn v-if="userStore.userLoggedIn" @click="userLogout">Logout</v-btn>
+
+        <v-btn v-if="userStore.userLoggedIn" @click="userLogout">Выйти</v-btn>
         <v-btn @click="userLogin">
-          <span v-if="userStore.userLoggedIn">Change name</span>
-          <span v-else>Login</span>
+          <span v-if="userStore.userLoggedIn">Сменить имя</span>
+          <span v-else>Войти</span>
         </v-btn>
       </v-col>
     </v-row>
@@ -30,11 +30,12 @@
   </v-container>
 
   <v-container >
-    <v-btn v-if="userStore.userLoggedIn" @click="createRoom">Create room</v-btn>
+    <v-btn v-if="userStore.userLoggedIn" @click="fastPlay">Быстрая игра</v-btn>
+    <v-btn v-if="userStore.userLoggedIn" @click="createRoom">Создать комнату</v-btn>
   </v-container>
 
   <v-container>
-    Rooms:
+    Комнаты:
     <RoomCardList/>
     
   </v-container>

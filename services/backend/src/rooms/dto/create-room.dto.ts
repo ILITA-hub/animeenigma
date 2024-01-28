@@ -23,12 +23,17 @@ export class Room {
 
     historyAnime: Array<Number> = [];
 
-    rangeOpenings: Array<Number> = [];
+    rangeOpenings: Array<Object> = [{type : "all", id : 0}];
 
-    constructor(id: string, name: string, ownerId: string, rangeOpenings: Array<Number>) {
+    PORT: number
+
+    constructor(id: string, name: string, ownerId: string, rangeOpenings: Array<Object>, PORT:number) {
         this.id = id
         this.name = name
         this.ownerId = ownerId
-        this.rangeOpenings = rangeOpenings
+        if (rangeOpenings) {
+            this.rangeOpenings = rangeOpenings
+        }
+        this.PORT = PORT
     }
 }

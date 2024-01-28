@@ -30,12 +30,14 @@ export class RoomGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly userService: UserService,
     private readonly cachesService: CachesService,
   ) {}
-  @WebSocketServer() 
+  @WebSocketServer()
   clients: Clients;
   server: Socket;
 
   private logger: Logger = new Logger('RoomsGateway');
+  
 
+  
 
   @UseGuards(SocketAuthGuard)
   @SubscribeMessage('chatMessage')

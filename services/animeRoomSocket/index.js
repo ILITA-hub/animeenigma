@@ -1,10 +1,10 @@
 
-// import { createRequire } from 'module';
-import { config as defaultConfig } from './config.tmpl';
+import { createRequire } from 'module';
+import { config as defaultConfig } from './config.tmpl.js';
 
 let localConfig = {};
 try {
-  // localConfig = require('./config.ts');
+  // localConfig = require('./config.cjs');
 } catch (error) {
   console.log('Local config not found, using tmpl config');
 }

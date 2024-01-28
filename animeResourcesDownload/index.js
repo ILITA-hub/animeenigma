@@ -3,20 +3,26 @@ import ytdl from 'ytdl-core';
 import fs from 'fs'
 import axios from 'axios'
 import pg from './pg.js'
+import randomUseragent from 'random-useragent';
+import youtubedl  from 'youtube-dl-exec'
 
 const shikimori = client({})
 let animeArr = []
 let animeOP = {}
 
+function delay(time) {
+    return new Promise(resolve => setTimeout(resolve, time));
+}
+
 // Цикл получения всех аниме
 for(let i = 1; i <= 1; i++) {
     let countTry = 0
-    let result
+    let result 
     try {
-        result = await shikimori.animes.list({
-            kind: 'tv',
-            limit: 50,
-            page: i
+        result = await axios.get(`https://shikimori.one/api/animes?page=${i}&limit=50&kind=tv&season=2020_2023&status=released&score=7`, {
+            headers: {
+                'User-Agent' : randomUseragent.getRandom()
+            }
         })
     } catch {
         await new Promise(resolve => setTimeout(resolve, 1000))
@@ -25,7 +31,9 @@ for(let i = 1; i <= 1; i++) {
         i--
         continue
     }
-    
+
+    result = result['data']
+
     if (result.length == 0) break
 
     result.forEach(el => {
@@ -39,9 +47,12 @@ for(let i = 0; i < animeArr.length; i++) {
     let countTry = 0
     let result
     try {
-        result = await shikimori.animes.byId({
-            id: animeArr[i]
+        result = await axios.get(`https://shikimori.one/api/animes/${animeArr[i]}`, {
+            headers: {
+                'User-Agent' : randomUseragent.getRandom()
+            }
         })
+        result = result['data']
     } catch {
         await new Promise(resolve => setTimeout(resolve, 1000))
         countTry++
@@ -66,18 +77,46 @@ for(let i = 0; i < animeArr.length; i++) {
         description: (result.description != null) ? result.description : "",
         genres: result.genres
     }
-
-    result["videos"].forEach(el2 => {
-        if (el2.kind == 'op') {
-            animeOP[result.id].op.push({
-                url: el2.url,
-                hosting: el2.hosting,
-                path: "",
-                name: el2.name
-            })
-        }
-    })
     console.log(`Пройдено ${i} аниме`)
+}
+
+for (let i = 0; i < Object.keys(animeOP).length; i++) {
+    const key = Object.keys(animeOP)[i]
+    const anime = animeOP[key]
+    let result
+    let count = 0
+    try {
+        if (count >= 5) {
+            console.log(`Не смог получить инфу по ${anime['id']} аниме`)
+            count = 0
+            continue
+        }
+        result = await axios.get(`https://shikimori.one/api/animes/${key}/videos`, {
+            headers: {
+                'User-Agent' : randomUseragent.getRandom()
+            }
+        })
+        console.log(`Получил инфу по ${anime['id']} аниме, ${i}`)
+
+        result["data"].forEach(el2 => {
+            if (el2.kind == 'op') {
+                animeOP[key].op.push({
+                    url: el2.url,
+                    hosting: el2.hosting,
+                    path: "",
+                    name: el2.name
+                })
+            }
+        })
+
+        await delay(1000)
+        count = 0
+    } catch {
+        console.log(`ы`)
+        await delay(1000)
+        i--
+        count++
+    }
 }
 
 //цикл проверки аниме на наличие
@@ -101,10 +140,11 @@ for(let key in animeOP) {
         for(let i = 0; i < animeOP[key].op.length; i++) {
             let el = animeOP[key].op[i]
             if (el.hosting == "youtube") {
-                let outNameOp = `../animeResources/${animeOP[key].id}_${i+1}.mp3`
+                let outNameOp = `../animeResources/${animeOP[key].id}_${i+1}.mp4`
                 animeOP[key].op[i].path = outNameOp
-                await ytdl(el.url, { filter: 'audioonly', quality: 'highestaudio' })
-                    .pipe(fs.createWriteStream(outNameOp))
+                await download(animeOP[key].op[i], outNameOp)
+                // await ytdl(el.url, { filter: 'audioonly', quality: 'highestaudio' })
+                //     .pipe(fs.createWriteStream(outNameOp))
             }
         }
 
@@ -158,3 +198,16 @@ for(let key in animeOP) {
 }
 
 console.log("Всё")
+
+async function download(opening, outNameOp) {
+    await new Promise(resolve => {
+        const optionsYoutubedl = {
+            format: 'best', 
+            output: outNameOp, // Название выходного файла
+        };
+        youtubedl(opening['url'], {
+            ...optionsYoutubedl
+            // addHeader: ['referer:youtube.com', 'user-agent:googlebot']
+        }).then(() => resolve())
+    });
+}

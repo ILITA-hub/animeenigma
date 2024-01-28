@@ -11,10 +11,15 @@
         <v-card class="room_card">
           <v-card-title>{{ room.name }}</v-card-title>
           <!-- <v-card-text>{{ room.text }}</v-card-text> -->
-          <v-card-actions class="float-right">
-            <v-icon aria-hidden="false">
-              mdi-account
-            </v-icon>
+          <v-card-actions class="float-right room-card-actions">
+            <div class="users-count-container">
+              <v-icon aria-hidden="false" class="users-count-icon">
+                mdi-account
+              </v-icon>
+              {{10}} / {{15}}
+            </div>
+            
+
             <rounded-button v-if="userStore.userLoggedIn" @click="joinRoom(room)">join</rounded-button>
           </v-card-actions>
         </v-card>
@@ -59,6 +64,20 @@ export default {
 .room_card {
   background-color: rgba(179,42,201, 0.15);
   color: white;
-  border-radius: 10px
+  border-radius: 10px;
+}
+.room-card-actions{
+  width: 100%;
+  position: relative;
+  justify-content: flex-end
+}
+.users-count-icon{
+  
+}
+.users-count-container{
+  position: absolute;
+  left: 10px;
+  align-items: center;
+  display: flex;
 }
 </style>

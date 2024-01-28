@@ -35,10 +35,7 @@ export class AppController {
   @Delete(":roomId")
   async deleteRoom(@Param("roomId") roomId : string) {
     // await this.roomService.deleteAll()
-    const result = await this.roomService.deleteRoom(roomId)
-    if (result.status != 200) {
-      throw new HttpException("", result.status);
-    }
+    await this.roomService.deleteRoom(roomId)
     return
   }
 }

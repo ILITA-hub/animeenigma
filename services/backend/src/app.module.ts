@@ -6,6 +6,9 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { CachesModule } from './caches/caches.module'
 import { UserModule } from './users/user.module'
 import { config } from './config/index'
+import { ServeStaticModule } from '@nestjs/serve-static';
+
+import { join } from 'path';
 
 @Module({
   imports: [
@@ -25,6 +28,9 @@ import { config } from './config/index'
       })
     }),
     UserModule,
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', '..', 'animeResources'),
+    }),
   ],
   providers: [Logger],
 })

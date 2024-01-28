@@ -12,17 +12,17 @@ export class SchemaRoom {
     @ApiProperty()
     description: string;
 
-    @IsString()
-    @IsNotEmpty()
-    @ApiProperty()
-    ownerId: string; // придумать как сделать
+    // @IsString()
+    // @IsNotEmpty()
+    // @ApiProperty()
+    // ownerId: string; // придумать как сделать
 
     @IsArray()
-    @IsNotEmpty()
-    @ApiProperty({ type: [Number] })
-    rangeOpenings: number[];
+    @ApiProperty({ type: [Object] })
+    rangeOpenings: Array<Object> = [{type : typeOpening.ALL, id: 0}];
 
     @IsInt()
-    @IsNotEmpty()
-    qtiUsersMax: number;
+    qtiUsersMax: number = 10;
 }
+
+enum typeOpening { ALL = "all", COLLECTION = "collection", GENRE = "genre"}
