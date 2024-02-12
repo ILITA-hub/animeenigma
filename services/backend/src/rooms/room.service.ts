@@ -27,7 +27,7 @@ export class RoomService {
   async getRoom(id: string): Promise<Room> {
     const room = await this.cachesService.getCache(`room${id}`);
 
-    console.log({ room })
+    // console.log({ room })
 
     return room;
   }
@@ -53,8 +53,8 @@ export class RoomService {
     let ownerId = "0"
 
     const port = roomPort++ // TODO СДЕЛАТЬ НОРМАЛЬНО
-
-    const newRoom = new Room(roomId, body.name, ownerId, body.rangeOpenings, port);
+    console.log(body.qtiUsersMax)
+    const newRoom = new Room(roomId, body.name, ownerId, body.rangeOpenings, port, body.qtiUsersMax);
     await this.cachesService.setCache(`room${roomId}`, newRoom);
 
     const allRooms = await this.cachesService.getCache("rooms");
@@ -65,7 +65,7 @@ export class RoomService {
     }
 
     exec(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
-    // console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
+    console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
 
     return newRoom;
   }

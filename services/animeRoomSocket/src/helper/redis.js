@@ -1,15 +1,15 @@
 
 import { createClient } from 'redis';
-import { config } from '../index.js';
+import { config } from '../../index.js';
 
 let client;
 
 async function init() {
-    client = await createClient({
+    client = createClient({
         password: config.redisSecret
-    })
-        .on('error', err => console.log('Redis Client Error', err))
-        .connect();
+    }).on('error', err => console.log('Redis Client Error', err))
+
+    await client.connect();
 
     // await client.set('key', 'value');
     // const value = await client.get('key');
@@ -17,10 +17,10 @@ async function init() {
 
 }
 
-init();
+await init();
 
 async function setCache(key, value) {
-    await client.set(key, value);
+    await client.set(key, JSON.stringify(value));
 }
 async function getCache(key) {
     return JSON.parse(await client.get(key));

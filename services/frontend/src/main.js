@@ -10,6 +10,9 @@ import vuetify from '@/plugins/vuetify.js'
 import axios from '@/plugins/axios.ts'
 import sockets from '@/plugins/sockets.ts'
 
+import RoundedButton from '@/components/buttons/RoundedButton.vue'
+import NormalButtion from '@/components/buttons/NormalButtion.vue'
+
 const app = createApp(App) 
 
 import VueSocketIO from 'vue-socket.io'
@@ -23,5 +26,8 @@ app.use(axios, {
 app.use(sockets, {
   baseUrl: '/ws/',
 })
+
+app.component('e-rbtn', RoundedButton)
+app.component('e-btn', NormalButtion)
 
 app.mount('#app')

@@ -1,6 +1,4 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany, ManyToMany } from 'typeorm';
-import { OpeningsEntity } from '../../opening/entity/opening.entity';
-import { GenresAnimeEntity } from '../../genresAnime/entity/genresAnime.entity';
 import { ObjectType, Field, Int } from '@nestjs/graphql'
 
 @Entity({
@@ -8,39 +6,33 @@ import { ObjectType, Field, Int } from '@nestjs/graphql'
 })
 @ObjectType()
 export class AnimeEntity {
-  @Field({ nullable: true})
+  // @Field({ nullable: true})
   @PrimaryGeneratedColumn()
   id: number
-  
-  @Field({ nullable: true})
-  @Column()
+
+  @Column({ nullable: false})
   name: string
 
-  @Field({ nullable: true})
-  @Column()
+  @Column({ nullable: true })
   nameRU: string
 
-  @Field({ nullable: true})
-  @Column()
+  @Column({ nullable: true})
   nameJP: string
 
-  @Field({ nullable: true})
-  @Column()
-  description: string
+  // @Field({ nullable: false})
+  // @Column()
+  // description: string
 
-  @Field({ nullable: true})
-  @Column()
-  imgPath: string
+  // @Field({ nullable: false})
+  // @Column()
+  // imgPath: string
 
-  @Field({ nullable: true})
   @Column()
   active: boolean
 
-  @Field({ nullable: true})
   @CreateDateColumn()
   createdAt: Date
 
-  @Field({ nullable: true})
   @UpdateDateColumn()
   updatedAt: Date
 }

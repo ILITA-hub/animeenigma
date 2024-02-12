@@ -1,13 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Cache } from 'cache-manager';
-import { generateRoomId } from '../utils/miscellaneous'
 import { Repository, createQueryBuilder, EntityManager } from 'typeorm';
 import { InjectEntityManager, InjectRepository } from '@nestjs/typeorm'
 import { AnimeCollections } from './entity/animeCollection.entity'
 import { AnimeCollectionOpenings } from './entity/animeCollectionsOpenings.entity'
 import { AnimeCollectionDTO } from './dto/AnimeCollection.dto'
-import { AnimeEntity } from '../anime/entity/anime.entity'
-import { OpeningsEntity } from '../opening/entity/opening.entity'
 
 @Injectable()
 export class AnimeCollectionsService {

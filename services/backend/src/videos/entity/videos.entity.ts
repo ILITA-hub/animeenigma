@@ -1,11 +1,10 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany } from 'typeorm';
 import { AnimeEntity } from '../../anime/entity/anime.entity'
-import { AnimeCollectionOpenings } from '../../animeCollections/entity/animeCollectionsOpenings.entity'
 
 @Entity({
-  name: "openings"
+  name: "videos"
 })
-export class OpeningsEntity {
+export class VideosEntity {
   @PrimaryGeneratedColumn()
   id: number
 
@@ -15,10 +14,8 @@ export class OpeningsEntity {
   @ManyToOne(() => AnimeEntity, animeId => animeId.id)
   anime: number
 
-  @Column({
-    nullable: true
-  })
-  mp3OpPath: string
+  @Column({nullable: true})
+  mp4Path: string
 
   @Column()
   name: string
@@ -28,4 +25,7 @@ export class OpeningsEntity {
 
   @UpdateDateColumn()
   updatedAt: Date
+
+  @Column()
+  kind: string
 }

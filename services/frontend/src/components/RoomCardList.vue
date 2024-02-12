@@ -16,11 +16,9 @@
               <v-icon aria-hidden="false" class="users-count-icon">
                 mdi-account
               </v-icon>
-              {{10}} / {{15}}
+              {{Object.keys(room.users).length}} / {{room.qtiUsersMax}}
             </div>
-            
-
-            <rounded-button v-if="userStore.userLoggedIn" @click="joinRoom(room)">join</rounded-button>
+            <e-rbtn v-if="userStore.userLoggedIn" @click="joinRoom(room)">join</e-rbtn>
           </v-card-actions>
         </v-card>
       </v-col>
@@ -52,9 +50,9 @@ export default {
   },
   methods: {
     joinRoom(room) {
+      
       // console.log(room.id)
       this.$router.push(`/room/${room.id}`)
-      return
     }
   }
 };

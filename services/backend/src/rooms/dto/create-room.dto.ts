@@ -27,7 +27,9 @@ export class Room {
 
     PORT: number
 
-    constructor(id: string, name: string, ownerId: string, rangeOpenings: Array<Object>, PORT:number) {
+    qtiUsersMax: number = 10
+
+    constructor(id: string, name: string, ownerId: string, rangeOpenings: Array<Object>, PORT:number, qtiUsersMax: number) {
         this.id = id
         this.name = name
         this.ownerId = ownerId
@@ -35,5 +37,8 @@ export class Room {
             this.rangeOpenings = rangeOpenings
         }
         this.PORT = PORT
+        if (qtiUsersMax) {
+            this.qtiUsersMax = qtiUsersMax
+        }
     }
 }

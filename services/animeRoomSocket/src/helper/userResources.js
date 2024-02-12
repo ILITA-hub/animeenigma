@@ -5,7 +5,11 @@ async function getUserByUsername (username) {
 }
 
 async function getUserByID (id) {
-    return await pg`SELECT * FROM users WHERE "id" = ${id}`
+    const result = await pg`SELECT * FROM users WHERE "id" = ${id}`
+    if (result.length > 0) {
+        return result[0]
+    }
+    return null
 }
 
 export {getUserByUsername, getUserByID}

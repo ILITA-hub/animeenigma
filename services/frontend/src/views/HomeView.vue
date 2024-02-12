@@ -9,11 +9,11 @@
     <v-row justify="center">
       <v-col cols="12" sm="8" md="6">
         
-        <span v-if="userStore.userName" class="d-flex justify-center">Ваше имя {{userStore.userName}}</span>
+        <span v-if="userStore.userName" class="d-flex justify-center">{{userStore.userName}}</span>
         <span v-else class="d-flex justify-center">НЕТ ИМЕНИ, ПОСТАВЬ ИМЯ!</span>
         <span v-if="userStore.userLoggedIn" class="d-flex justify-center">Ты готов к игре</span>
 
-        <v-text-field v-model="newUserName" class="mt-2" label="Ваше имя"></v-text-field>
+        <v-text-field v-model="newUserName" class="mt-2" label="Твоё имя"></v-text-field>
 
         <v-btn v-if="userStore.userLoggedIn" @click="userLogout">Выйти</v-btn>
         <v-btn @click="userLogin">
