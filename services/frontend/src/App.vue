@@ -11,6 +11,9 @@
 
 
 <script>
+
+console.log('здесь была алина')
+
 import { RouterLink, RouterView } from 'vue-router'
 import HelloWorld from './components/HelloWorld.vue'
 import HeaderApp from '@/components/HeaderApp.vue'
