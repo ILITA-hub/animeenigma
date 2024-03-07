@@ -1,26 +1,23 @@
 <template>
-    <v-app>
+    <div>
       <v-app-bar class="app-bar">
-        <v-img src="src/assets/img/logo.png" height="40" width="100" class="logo"></v-img>
-        <v-btn text class="button">Главная</v-btn>
-        <v-btn text class="button">Коллекции</v-btn>
-        <v-btn text class="button">Комнаты</v-btn>
+        <div class="content">
+          <v-img src="src/assets/img/logo.png" 
+          class="logo"></v-img>
+        <v-btn text class="button btn">Главная</v-btn>
+        <v-btn text class="button btn">Коллекции</v-btn>
+        <v-btn text class="button btn">Комнаты</v-btn>
         <v-text-field class="search"
-        append-inner-icon="mdi-magnify"
-        density="compact"
-        label="Поиск..."
-        variant=""
-        single-line
-      ></v-text-field>
-        <v-text-field  
-        append-inner-icon="mdi-magnify" 
-        density="compact"
-        label="Поиск"
-        ></v-text-field>
+          append-inner-icon="mdi-magnify"
+          density="compact"
+          label="Поиск..."
+          variant=""
+          single-line></v-text-field>
         <v-btn text class="button button-room">Комната + </v-btn>
         <v-btn text class="button button-main">Войти</v-btn>
+      </div>
       </v-app-bar>
-    </v-app>
+    </div>
   </template>
   
   <script>
@@ -35,43 +32,68 @@
   src: url('src/assets/fonts/Montserrat.ttf');
 }
 
-.app-bar {
-  display: grid;
+.app-bar {   
+  display: flex;  
+  background-color: #101115 !important;   
+  align-items: center !important;   
+  height: 84px !important;   
   justify-content: space-between;
-  background-color: #101115 !important;
-  align-items: center;
-}
+  
+}   
 
-.logo {
-  flex-direction: column;
-}
+.content { 
+  margin-top: 20px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-evenly !important;
+  width: 100%;
+  padding: 0 35px; 
+} 
 
-.button {
-  margin: 10px;
-  border-radius: 10px;
-  font-family: Montserrat;
-  font-weight: normal;
-  text-transform: none; 
-  color: white;
-}
+.logo {   
+  height: 40px; 
+  width: 100px; 
+  flex: none; 
+  margin-right: auto;
+}   
 
-.button-room {
-  background-color: rgb(255, 255, 255, 0.10);
-}
+.button {   
+  height: 40px !important;   
+  border-radius: 10px;   
+  font-family: Montserrat;   
+  font-weight: normal;   
+  text-transform: none;    
+  color: white;   
+  align-items: center;  
+  justify-content: center;
+  margin: 15px;
+  display: inline-flex !important;
+   
+}   
 
- .button-main {
-  background-color: #1470EF;
-  color: white;
-}
+  .btn {
+    margin: 0 0 0 40px;
+    margin-right: 50px;
+  }
+.button-room {   
+  width: 156px !important;   
+  background-color: rgba(255, 255, 255, 0.1);   
+}   
 
-.search {
-  font-family: Montserrat;
-  flex: none;
-  margin: 10px;
-  width: 350px;
-  height: 36px;
-  border-radius: 10px;
-  background-color: rgb(255, 255, 255, 0.10);
-  color: white;
-}
+.button-main {   
+  width: 163px !important;   
+  background-color: #1470EF;   
+  color: white;   
+}   
+
+.search {   
+  font-family: Montserrat;   
+  margin: 10px !important;   
+  width: 355px !important;   
+  height: 40px;   
+  border-radius: 10px;   
+  background-color: rgba(255, 255, 255, 0.1);   
+  color: white;   
+  flex: none; 
+}   
 </style>
