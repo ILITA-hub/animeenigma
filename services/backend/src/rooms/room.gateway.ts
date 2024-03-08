@@ -146,7 +146,7 @@ export class RoomGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     
     this.logger.log(`Client connected: ${client.id}`);
 
-    this.broadcastMessage('user connected', { userName: user.name });
+    this.broadcastMessage('user connected', { userName: user.username });
   }
   
 

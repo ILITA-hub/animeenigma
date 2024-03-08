@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { generateRoomId, uuidv4 } from '../utils/miscellaneous'
 import { CachesService } from '../caches/caches.service'
-import { UserDto } from './dto/user.dto'
+import { UserDto, UserDtoReg } from './dto/user.dto'
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm'
 import { UserEntity } from './entity/user.entity';
@@ -12,10 +12,10 @@ export class UserService {
   constructor(
     @InjectRepository(UserEntity) private readonly UserRepository: Repository<UserEntity>,
     private readonly cachesService: CachesService,
-  ) {}
+  ) { }
 
   async getUserById(userId: number) {
-    
+
     const user = await this.UserRepository.findOne({
       where: {
         id: userId
@@ -26,25 +26,23 @@ export class UserService {
 
   }
 
-  async getUserByName(userName: string) {
-
-    const user = await this.UserRepository.findOne({
-      where: {
-        name: userName
+  async loginUser(user: UserDto) {
+    let userClass = await this.UserRepository.findOne({
+      where : {
+        login : user.login
       }
     })
-
-    return user;
-
+    if (userClass == null) {
+      return null
+    }
+    if (userClass.password != user.password) {
+      return null
+    }
+    return "qwe"
   }
 
-  async createUser(userDto: UserLoginDto) {
+  async createUser(user: UserDtoReg) {
 
-    const user = await this.UserRepository.save({
-      name: userDto.name,
-    })
-
-    return user;
   }
 
   async getUserSession(sessionId: string) {
