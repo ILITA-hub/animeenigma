@@ -3,7 +3,8 @@ import { ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { UserService } from './user.service'
 import { UserDto, UserDtoReg } from './dto/user.dto'
 import { UserLoginDto } from './dto/userLogin.dto'
-import { BadRequestSchema401, SucsessfulRequest200 } from './schema/request.schema'
+import * as bcrypt from 'bcrypt'
+import { BadRequestSchema400, SucsessfulRequest200 } from './schema/request.schema'
 
 @ApiTags("user")
 @Controller("users")
@@ -24,19 +25,22 @@ export class UserController {
   // }
 
   @Post("/login")
-  @ApiResponse({status : 400, description: "Ошибка в параметрах", type: BadRequestSchema401})
-  @ApiResponse({status : 200, description: "Ошибка в параметрах", type: SucsessfulRequest200})
+  @ApiResponse({status : 400, description: "Ошибка в параметрах", type: BadRequestSchema400})
+  @ApiResponse({status : 200, description: "Авторизация успешна пройдена", type: SucsessfulRequest200})
   @HttpCode(200)
   async login(@Body() userDto: UserDto) {
     const result = await this.userService.loginUser(userDto)
-    if (result == null) {
-      throw new HttpException("user or password incorrect", 401)
-    }
+
     return {token : result}
   }
 
   @Post("/reg")
+  @ApiResponse({status : 400, description: "Ошибка в параметрах", type: BadRequestSchema400})
+  @ApiResponse({status : 200, description: "Регистрация прошла успешно", type: SucsessfulRequest200})
+  @HttpCode(200)
   async reg(@Body() userDTO: UserDtoReg) {
     const result = await this.userService.createUser(userDTO)
+    
+    return {token : result}
   }
 }

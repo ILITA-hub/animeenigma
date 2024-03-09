@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-class BadRequestSchema401 {
+class BadRequestSchema400 {
     @ApiProperty()
     message: String
 
-    @ApiProperty({default : 401})
+    @ApiProperty({default : 400})
     statusCode: Number
 }
 
@@ -13,4 +13,4 @@ class SucsessfulRequest200 {
     token : String
 }
 
-export {BadRequestSchema401, SucsessfulRequest200}
+export {BadRequestSchema400, SucsessfulRequest200}

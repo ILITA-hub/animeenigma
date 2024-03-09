@@ -14,10 +14,18 @@ class UserDto {
 class UserDtoReg {
   @IsNotEmpty()
   @ApiProperty()
+  username : String
+
+  @IsNotEmpty()
+  @ApiProperty()
   login : String
 
   @IsNotEmpty()
   @ApiProperty()
   password : String
+
+  @IsNotEmpty()
+  @ApiProperty()
+  confirmPassword : String
 }
 export {UserDto, UserDtoReg}
