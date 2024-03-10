@@ -15,17 +15,6 @@ export class UserService {
     private readonly cachesService: CachesService,
   ) { }
 
-  async getUserById(userId: number) {
-
-    const user = await this.UserRepository.findOne({
-      where: {
-        id: userId
-      }
-    })
-
-    return user;
-  }
-
   async loginUser(user: UserDto) {
     const userClass = await this.UserRepository.findOne({
       where: {
@@ -35,7 +24,8 @@ export class UserService {
     if (userClass == null) {
       throw new HttpException("user or password incorrect", 400) 
     }
-    if (userClass.password != user.password) {
+    const paswordConfirm = await bcrypt.compare(user.password, userClass.password)
+    if (!paswordConfirm) {
       throw new HttpException("user or password incorrect", 400)
     }
 
@@ -52,6 +42,7 @@ export class UserService {
         password: await bcrypt.hash(user.password, 10),
         username: user.username
       })
+
       return this.createUserSession(userClass)
     } catch (e) {
       if (e instanceof QueryFailedError) {
@@ -60,8 +51,13 @@ export class UserService {
     }
   }
 
+  async logoutUser(sessionId : String) {
+    this.deleteUserSession(sessionId)
+  }
+
   async getUserSession(sessionId: string) {
     const session = await this.cachesService.getCache('userSession' + sessionId);
+    
     return session;
   }
 
@@ -70,20 +66,11 @@ export class UserService {
     await this.cachesService.setCache('userSession' + sessionId, {
       userId: userEntity.id,
     });
+
     return sessionId;
   }
 
-  getRandom(max: number) {
-    return Math.floor(Math.random() * max)
+  async deleteUserSession(sessionId : String) {
+    await this.cachesService.delCache(`userSession${sessionId}`)
   }
-
-  createToken() {
-    const sim = "qwertyuiopasdfghjkl[];{}|zxcvbnm,.<>/?1234567890-+=_!@#$%^&*()"
-    let token = ""
-    for (let i = 0; i < 50; i++) {
-      token += sim[this.getRandom(sim.length)]
-    }
-    return token
-  }
-
 }

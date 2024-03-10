@@ -28,4 +28,10 @@ class UserDtoReg {
   @ApiProperty()
   confirmPassword : String
 }
-export {UserDto, UserDtoReg}
+
+class UserDTOLogout {
+  @IsNotEmpty()
+  @ApiProperty()
+  sessionId : String
+}
+export {UserDto, UserDtoReg, UserDTOLogout}

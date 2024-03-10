@@ -139,14 +139,14 @@ export class RoomGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       return;
     }
 
-    const user = await this.userService.getUserById(userSession.userId);
-    client['user'] = user;
+    // const user = await this.userService.getUserById(userSession.userId);
+    // client['user'] = user;
 
-    this.clients[client.id] = client;
+    // this.clients[client.id] = client;
     
-    this.logger.log(`Client connected: ${client.id}`);
+    // this.logger.log(`Client connected: ${client.id}`);
 
-    this.broadcastMessage('user connected', { userName: user.username });
+    // this.broadcastMessage('user connected', { userName: user.username });
   }
   
 

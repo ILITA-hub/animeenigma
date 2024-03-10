@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Param, Body, Delete, Res, HttpException, HttpCode } from '@nestjs/common'
 import { ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { UserService } from './user.service'
-import { UserDto, UserDtoReg } from './dto/user.dto'
+import { UserDto, UserDtoReg, UserDTOLogout } from './dto/user.dto'
 import { UserLoginDto } from './dto/userLogin.dto'
 import * as bcrypt from 'bcrypt'
 import { BadRequestSchema400, SucsessfulRequest200 } from './schema/request.schema'
@@ -42,5 +42,11 @@ export class UserController {
     const result = await this.userService.createUser(userDTO)
     
     return {token : result}
+  }
+
+  @Post("/logout")
+  @HttpCode(200)
+  async logout(@Body() sessionId : UserDTOLogout) {
+    await this.userService.logoutUser(sessionId.sessionId)
   }
 }
