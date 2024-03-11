@@ -3,9 +3,11 @@
       <v-app-bar class="app-bar">
         <div class="content">
           <v-img src="src/assets/img/logo.png" class="logo"></v-img>
+          <v-spacer></v-spacer>
           <v-btn text class="button btn">Главная</v-btn>
           <v-btn text class="button btn">Коллекции</v-btn>
           <v-btn text class="button btn">Комнаты</v-btn>
+          <v-spacer></v-spacer>
           <v-text-field class="search"
             density="compact"
             label="Поиск..."
@@ -15,6 +17,7 @@
               <v-btn icon @click="onSearchIconClick" class="search-icon-button">
                 <v-icon>mdi-magnify</v-icon></v-btn>
             </template></v-text-field>
+            <v-spacer></v-spacer>
           <v-btn text class="button button-room">Комната + </v-btn>
           <v-btn text class="button button-main">Войти</v-btn>
         </div>
@@ -72,12 +75,13 @@
   }   
 
   .btn {
-    margin-right: 85px;
+    margin: 0 65px 0 65px;
   }
 
   .button-room {   
   width: 163px !important;   
   background-color: rgba(255, 255, 255, 0.1);   
+    margin-right: 30px;
   }   
 
   .button-main {   
@@ -89,8 +93,8 @@
   .search {   
     position: relative;
     font-family: Montserrat;   
-    margin: 10px !important;   
-    width: 380px !important;   
+    margin: 0 0px 0 15px;   
+    width: 400px !important;   
     height: 40px;   
     border-radius: 10px;   
     background-color: rgba(255, 255, 255, 0.1);   

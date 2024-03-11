@@ -16,7 +16,7 @@
                 <v-icon>{{ item.icon }}</v-icon> 
               </v-btn> 
             </div> 
-          <v-btn class="button">Заказать рекламу</v-btn>
+          <v-btn class="button">Связаться с нами</v-btn>
           </div>
         </v-col>
       </v-row>
@@ -31,7 +31,7 @@ export default {
     socialButtons: [
       { icon: 'mdi-vk', link: 'https://vk.com' },
       { icon: 'mdi-telegram', link: 'https://web.telegram.org' },
-      { icon: 'mdi-whatsapp', link: 'https://web.whatsapp.com' },
+      { icon: 'mdi-youtube', link: 'https://www.youtube.com' },
     ],
   }),
 }
@@ -60,7 +60,7 @@ export default {
   }   
 
   .button {
-    width: 261px;
+    width: 250px;
     height: 40px;
     border-radius: 10px;
     background-color: #1470EF;
