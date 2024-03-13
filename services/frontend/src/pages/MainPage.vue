@@ -1,14 +1,28 @@
 <template>
-    <v-container fluid class="animated-background">
+  <v-container fluid class="animated-background">
       <div class="circle circle1" style="background-color: #FF3333;"></div>
       <div class="circle circle2" style="background-color: #EFFF33;;"></div>
       <div class="circle circle3" style="background-color: #CA33FF;"></div>
       <div class="circle circle4" style="background-color: #33A9FF;"></div>
-    </v-container>
-  </template>
-  
-  <style>
-  .animated-background {
+    <v-carousel>
+  <v-carousel-item
+    src="https://cdn.vuetifyjs.com/images/cards/docks.jpg"
+    cover
+  ></v-carousel-item>
+  <v-carousel-item
+    src="https://cdn.vuetifyjs.com/images/cards/hotel.jpg"
+    cover
+  ></v-carousel-item>
+  <v-carousel-item
+    src="https://cdn.vuetifyjs.com/images/cards/sunshine.jpg"
+    cover
+  ></v-carousel-item>
+</v-carousel>
+</v-container>
+</template>
+
+<style>
+.animated-background {
     position: relative;
     overflow: hidden;
     width: 100%;
@@ -110,5 +124,4 @@ right: 50%;
   100% { background-color: #33A9FF; }
 }
 
-  </style>
-  
+</style>

@@ -2,7 +2,7 @@
   <v-app>
     <HeaderApp/>
     <v-main>
-      <AnimatedBackground/>
+      <MainPage/>
     </v-main>
     <FooterApp/>
   </v-app>
@@ -12,6 +12,7 @@
 import HeaderApp from './components/HeaderApp.vue'
 import FooterApp from './components/FooterApp.vue'
 import AnimatedBackground from './components/AnimatedBackground.vue'
+import MainPage from './pages/MainPage.vue';
 
 export default {
   name: 'App',
@@ -20,6 +21,7 @@ export default {
     HeaderApp,
     FooterApp,
     AnimatedBackground,
+    MainPage,
   },
 
   data: () => ({
