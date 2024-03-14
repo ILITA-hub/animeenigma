@@ -12,7 +12,6 @@
     position: relative;
     overflow: hidden;
     width: 100%;
-    height: 100vh;
     background-color: #090B1F;
   }
   
