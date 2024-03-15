@@ -38,10 +38,6 @@ export default {
 </script>
 
 <style scoped>
-  @font-face {
-    font-family: Montserrat;
-    src: url('src/assets/fonts/Montserrat.ttf');
-  }
   
 .footer {
   padding: 0 35px; 

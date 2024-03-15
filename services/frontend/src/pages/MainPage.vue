@@ -49,6 +49,12 @@
     theme="dark"
     title="Card title"
   ></v-card>
+  <v-card
+    class="mx-auto"
+    image="https://cdn.vuetifyjs.com/images/cards/docks.jpg"
+    theme="dark"
+    title="Card title"
+  ></v-card>
 </div>
 </template>
 

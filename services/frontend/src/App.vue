@@ -1,11 +1,11 @@
 <template>
   <v-app>
+    <HeaderApp/>
     <v-container fluid class="animated-background">
     <div class="circle circle1" style="background-color: #FF3333;"></div>
       <div class="circle circle2" style="background-color: #EFFF33;;"></div>
       <div class="circle circle3" style="background-color: #CA33FF;"></div>
       <div class="circle circle4" style="background-color: #33A9FF;"></div>
-    <HeaderApp/>
     <v-main>
       <MainPage/>
     </v-main>
@@ -35,6 +35,11 @@ export default {
 </script>
 
 <style>
+@font-face {
+    font-family: Montserrat;
+    src: url('src/assets/fonts/Montserrat.ttf');
+  }
+
   .animated-background {
     position: relative;
     overflow: hidden;
