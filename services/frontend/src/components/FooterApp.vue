@@ -52,7 +52,7 @@ export default {
     height: 40px; 
     width: 100px; 
     flex: none; 
-    margin-right: -27px;
+    margin-left: 10px;
   }   
 
   .button {
@@ -64,6 +64,7 @@ export default {
     font-weight: normal;   
     text-transform: none;    
     color: white;   
+    margin-right: 30px;
   }
 
 .social-icons {

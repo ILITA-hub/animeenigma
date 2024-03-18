@@ -7,10 +7,12 @@
       <div class="circle circle3" style="background-color: #CA33FF;"></div>
       <div class="circle circle4" style="background-color: #33A9FF;"></div>
     <v-main>
-      <MainPage/>
+      <router-view></router-view>
+
     </v-main>
   </v-container>
   <FooterApp/>
+
   </v-app>
 </template>
 
@@ -18,6 +20,7 @@
 import HeaderApp from './components/HeaderApp.vue'
 import FooterApp from './components/FooterApp.vue'
 import MainPage from './pages/MainPage.vue'
+import AuthPage from './pages/AuthPage.vue';
 
 export default {
   name: 'App',
@@ -26,6 +29,7 @@ export default {
     HeaderApp,
     FooterApp,
     MainPage,
+    AuthPage,
   },
 
   data: () => ({

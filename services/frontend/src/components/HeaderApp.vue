@@ -6,9 +6,9 @@
         <v-icon>mdi-menu</v-icon>
       </v-btn>
       <div v-if="!isBurgerMenu" class="content">
-        <v-btn text class="button btn">Главная</v-btn>
-        <v-btn text class="button btn">Коллекции</v-btn>
-        <v-btn text class="button btn">Комнаты</v-btn>
+        <v-btn text class="button btn" @click="$router.push('/main')">Главная</v-btn>
+        <v-btn text class="button btn" @click="$router.push('/')">Коллекции</v-btn>
+        <v-btn text class="button btn" @click="$router.push('/')">Комнаты</v-btn>
         <v-spacer></v-spacer>
         <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line>
           <template v-slot:append>
@@ -18,28 +18,28 @@
           </template>
         </v-text-field>
         <v-spacer></v-spacer>
-        <v-btn text class="button button-room">Комната +</v-btn>
-        <v-btn text class="button button-main">Войти</v-btn>
+        <v-btn text class="button button-room" @click="$router.push('/')">Комната +</v-btn>
+        <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn>
       </div>
-      <v-navigation-drawer v-model="drawer" location="right" temporary>
-        <v-list dense>
-          <v-list-item @click="drawer = false">
-            <v-list-item-title>Главная</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="drawer = false">
-            <v-list-item-title>Коллекции</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="drawer = false">
-            <v-list-item-title>Комнаты</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="drawer = false">
-            <v-list-item-title>Комната +</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="drawer = false">
-            <v-list-item-title>Войти</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-navigation-drawer>
+      <v-navigation-drawer v-model="drawer" class="drawer" location="right" temporary fixed>
+      <v-list dense>
+        <v-list-item @click="drawer = false">
+          <v-list-item-title>Главная</v-list-item-title>
+        </v-list-item>
+        <v-list-item @click="drawer = false">
+          <v-list-item-title>Коллекции</v-list-item-title>
+        </v-list-item>
+        <v-list-item @click="drawer = false">
+          <v-list-item-title>Комнаты</v-list-item-title>
+        </v-list-item>
+        <v-list-item @click="drawer = false">
+          <v-list-item-title>Комната +</v-list-item-title>
+        </v-list-item>
+        <v-list-item @click="drawer = false">
+          <v-list-item-title>Войти</v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-navigation-drawer>
     </v-app-bar>
   </div>
 </template>
@@ -63,10 +63,11 @@ export default {
     onSearchIconClick() {
     },
     handleResize() {
-      this.isBurgerMenu = window.innerWidth <= 435;
+      this.isBurgerMenu = window.innerWidth <= 430;
     },
   },
 };
+
 </script>
 
 <style scoped>
@@ -83,8 +84,10 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-evenly !important;
+  max-width: 1560px;
+  margin-left: auto;
+  margin-right: 70px;
   width: 100%;
-  margin: 0 35px;
 }
 
 .logo {
@@ -92,7 +95,7 @@ export default {
   height: 40px;
   width: 100px;
   flex: none;
-  margin: 0 35px;
+  margin-left: 70px;
 }
 
 .button {
@@ -110,14 +113,16 @@ export default {
 }
 
 .button-room {
-  width: 163px !important;
+  width: 156px;
   background-color: rgba(255, 255, 255, 0.1);
+  display: flex;
 }
 
 .button-main {
-  width: 163px !important;
+  width: 156px;
   background-color: #1470EF;
   color: white;
+  display: flex;
 }
 
 .search {
@@ -125,7 +130,7 @@ export default {
   position: relative;
   font-family: Montserrat;
   margin: 0 0px 0 15px;
-  width: 400px !important;
+  width: 360px !important;
   height: 40px;
   border-radius: 10px;
   background-color: rgba(255, 255, 255, 0.1);
@@ -138,4 +143,24 @@ export default {
   background-color: #1470EF;
   color: white;
 }
+
+.mr-2 {
+  color: #1470EF;
+  top: 4px;
+  margin-left: 200px;
+}
+
+.drawer {
+  width: 430px;
+}
+
+@media (max-width: 430px) {
+  .logo {
+      margin-left: 20px;
+      top: 4px;
+    }
+  .app-bar {
+    height: 74px;
+  }
+  }
 </style>
