@@ -11,35 +11,31 @@
             <v-tab>Вход</v-tab>
             <v-tab>Регистрация</v-tab>
           </v-tabs>
-          <v-card flat class="form">
-            <v-tabs-items v-model="tab">
-              <v-tab-item>
-                <v-card-text>
-                  <div class="text">Добро пожаловать!</div>
-                  <div class="text-subtitle">Войдите в аккаунт, чтобы продолжить</div>
-                  <v-form>
-                    <v-text-field label="Email" required class="field"></v-text-field>
-                    <v-text-field class="field"
-                      label="Пароль"
-                      type="password"
-                      required
-                    ></v-text-field>
-                    <v-checkbox
-                      label="Запомнить меня"
-                      class="mb-4"
-                    ></v-checkbox>
-                    <div class="text-center pb-4">Забыли пароль?</div>
-                    <v-btn color="primary" block class="mb-4">
+          <v-card class="form">
+      <div class="text">Добро пожаловать!</div>
+      <div class="text-subtitle">Войдите в аккаунт, чтобы продолжить</div>
+      <v-text-field class="field"
+        density="compact"
+        placeholder="Email"
+        prepend-inner-icon="mdi-email-outline"
+        variant=""
+      ></v-text-field>
+      <v-text-field class="field"
+        :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"
+        :type="visible ? 'text' : 'password'"
+        density="compact"
+        placeholder="Пароль"
+        prepend-inner-icon="mdi-lock-outline"
+        variant=""
+        @click:append-inner="visible = !visible"
+      ></v-text-field>
+      
+      <v-radio color="#1470EF" label="Запомнить меня"></v-radio>
+                    <div class="pb-4">Забыли пароль?</div>
+                    <v-btn color="#1470EF" class="mb-4">
                       Войти
                     </v-btn>
-                  </v-form>
-                </v-card-text>
-              </v-tab-item>
-
-              <v-tab-item>
-              </v-tab-item>
-            </v-tabs-items>
-          </v-card>
+    </v-card>
         </v-col>
       </v-row>
     </v-container>
@@ -47,13 +43,11 @@
 </template>
 
 <script>
-export default {
-  data() {
-    return {
-      tab: 0,
-    };
-  },
-};
+  export default {
+    data: () => ({
+      visible: false,
+    }),
+  }
 </script>
 
 <style scoped>
@@ -72,6 +66,7 @@ export default {
   width: 464px;
   height: 361px;
   transform: translateX(-10%);
+  padding: 20px; 
 }
 
 .text {
@@ -83,7 +78,8 @@ export default {
   letter-spacing: 0%;
   text-align: left;
   padding-bottom: 15px;
-  margin: 4px 0px 0px 15px;
+  margin-left: 15px;
+  margin-top: 5px;
 
 }
 
@@ -106,4 +102,43 @@ export default {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.field {
+  color: rgb(194, 194, 194);
+  font-family: Montserrat;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0%;
+  width: 394px;
+  position: relative;
+  top: 20px;
+  color: none;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+  border-radius: 10px;
+  height: 50px;
+  margin-left: 15px;
+  display: grid;
+}
+.pb-4 {
+  color: rgb(255, 255, 255);
+font-family: Montserrat;
+font-size: 14px;
+font-weight: 400;
+line-height: 17px;
+letter-spacing: 0%;
+  text-align: right;
+position: relative;
+bottom: 20px;
+right: 15px;
+}
+.mb-4 {
+position: relative;
+width: 394px;
+height: 50px;
+display: flex;
+padding: 15px 55px 15px 55px;
+border-radius: 10px;
+left: 15px;
+top: -10px;
+}
 </style>
