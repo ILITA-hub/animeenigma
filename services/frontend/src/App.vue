@@ -8,7 +8,6 @@
       <div class="circle circle4" style="background-color: #33A9FF;"></div>
     <v-main>
       <router-view></router-view>
-
     </v-main>
   </v-container>
   <FooterApp/>
@@ -19,8 +18,6 @@
 <script>
 import HeaderApp from './components/HeaderApp.vue'
 import FooterApp from './components/FooterApp.vue'
-import MainPage from './pages/MainPage.vue'
-import AuthPage from './pages/AuthPage.vue';
 
 export default {
   name: 'App',
@@ -28,8 +25,6 @@ export default {
   components: {
     HeaderApp,
     FooterApp,
-    MainPage,
-    AuthPage,
   },
 
   data: () => ({
@@ -39,6 +34,7 @@ export default {
 </script>
 
 <style>
+
 @font-face {
     font-family: Montserrat;
     src: url('src/assets/fonts/Montserrat.ttf');

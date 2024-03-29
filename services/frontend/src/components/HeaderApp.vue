@@ -8,7 +8,7 @@
       <div v-if="!isBurgerMenu" class="content">
         <v-btn text class="button btn" @click="$router.push('/main')">Главная</v-btn>
         <v-btn text class="button btn" @click="$router.push('/')">Коллекции</v-btn>
-        <v-btn text class="button btn" @click="$router.push('/')">Комнаты</v-btn>
+        <v-btn text class="button btn" @click="$router.push('/rooms')">Комнаты</v-btn>
         <v-spacer></v-spacer>
         <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line>
           <template v-slot:append>
@@ -21,53 +21,11 @@
         <v-btn text class="button button-room" @click="$router.push('/')">Комната +</v-btn>
         <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn>
       </div>
-      <v-navigation-drawer v-model="drawer" class="drawer" location="right" temporary fixed>
-      <v-list dense>
-        <v-list-item @click="drawer = false">
-          <v-list-item-title>Главная</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="drawer = false">
-          <v-list-item-title>Коллекции</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="drawer = false">
-          <v-list-item-title>Комнаты</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="drawer = false">
-          <v-list-item-title>Комната +</v-list-item-title>
-        </v-list-item>
-        <v-list-item @click="drawer = false">
-          <v-list-item-title>Войти</v-list-item-title>
-        </v-list-item>
-      </v-list>
-    </v-navigation-drawer>
     </v-app-bar>
   </div>
 </template>
 
 <script>
-export default {
-  data() {
-    return {
-      isBurgerMenu: false,
-      drawer: false,
-    };
-  },
-  mounted() {
-    this.handleResize();
-    window.addEventListener('resize', this.handleResize);
-  },
-  beforeDestroy() {
-    window.removeEventListener('resize', this.handleResize);
-  },
-  methods: {
-    onSearchIconClick() {
-    },
-    handleResize() {
-      this.isBurgerMenu = window.innerWidth <= 430;
-    },
-  },
-};
-
 </script>
 
 <style scoped>
@@ -144,23 +102,4 @@ export default {
   color: white;
 }
 
-.mr-2 {
-  color: #1470EF;
-  top: 4px;
-  margin-left: 200px;
-}
-
-.drawer {
-  width: 430px;
-}
-
-@media (max-width: 430px) {
-  .logo {
-      margin-left: 20px;
-      top: 4px;
-    }
-  .app-bar {
-    height: 74px;
-  }
-  }
 </style>
