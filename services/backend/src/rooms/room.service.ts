@@ -1,17 +1,26 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm'
 import { generateRoomId } from '../utils/miscellaneous'
 import { Room } from './dto/create-room.dto'
 import { SchemaRoom } from './schema/room.schema'
+import { QueryFailedError, Repository } from 'typeorm'
 import { CachesService } from '../caches/caches.service'
 import { exec } from 'child_process'
-import { Cron } from '@nestjs/schedule';
+import { RoomEntity } from './entity/room.entity'
+import { Cron } from '@nestjs/schedule'
+import { getCiphers } from "crypto"
+import { CryptoService } from "../crypto/crypto.sevice"
 
 let roomPort = 10000
 
 @Injectable()
 export class RoomService {
+  
+
   constructor(
+    @InjectRepository(RoomEntity) private readonly RoomRepository: Repository<RoomEntity>,
     private readonly cachesService: CachesService,
+    private readonly CryptoService: CryptoService,
   ) { }
 
   async getAllRooms() {
@@ -48,26 +57,37 @@ export class RoomService {
     await this.cachesService.delCache("rooms");
   }
 
-  async createRoom(body: SchemaRoom): Promise<Room> {
-    const roomId = generateRoomId();
-    let ownerId = "0"
+  async createRoom(body: SchemaRoom) {
+    const ports = await this.RoomRepository.find({
+      where: {
+        deleteAt: null
+      },
+      order: {
+        port: "ASC"
+      }
+    })
 
-    const port = roomPort++ // TODO СДЕЛАТЬ НОРМАЛЬНО
-    console.log(body.qtiUsersMax)
-    const newRoom = new Room(roomId, body.name, ownerId, body.rangeOpenings, port, body.qtiUsersMax);
-    await this.cachesService.setCache(`room${roomId}`, newRoom);
+    let port = 10000
 
-    const allRooms = await this.cachesService.getCache("rooms");
-    if (!allRooms) {
-      await this.cachesService.setCache("rooms", [roomId])
-    } else {
-      await this.cachesService.setCache("rooms", [...allRooms, roomId])
+    for(let i = 0; i < ports.length; i++) {
+      console.log(ports[i])
+      if (port == ports[i].port) {
+        port++
+        continue
+      }
+      break
     }
 
-    exec(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
-    console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
+    const room = await this.RoomRepository.save({
+      name: body.name,
+      maxPlayer: body.qtiUsersMax,
+      port: port
+    })
 
-    return newRoom;
+    // exec(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
+    // console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
+
+    // return newRoom;
   }
 
   async deleteRoom(id: string): Promise<void> {
