@@ -6,12 +6,12 @@ import { RoomService } from './room.service';
 import { CachesModule} from '../caches/caches.module'
 import { UserModule } from '../users/user.module';
 import { TypeOrmModule } from '@nestjs/typeorm'
-import { RoomEntity } from './entity/room.entity'
+import { RoomEntity, RoomOpeningsEntity } from './entity/room.entity'
 import { CryptoService } from "../crypto/crypto.sevice"
 import { CryptoModule } from 'src/crypto/crypto.module';
 
 @Module({
-  imports: [CachesModule, UserModule, TypeOrmModule.forFeature([RoomEntity]), CryptoModule],
+  imports: [CachesModule, UserModule, TypeOrmModule.forFeature([RoomEntity, RoomOpeningsEntity]), CryptoModule],
   controllers: [AppController],
   providers: [RoomService], // RoomGateway
 })

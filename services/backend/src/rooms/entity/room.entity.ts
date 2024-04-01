@@ -1,5 +1,12 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany, DeleteDateColumn, Unique } from 'typeorm';
 
+export enum RoomStatus {
+  STARTING = "STARTING",
+  PLAYING = "PLAYING",
+  CLOUSING = "CLOUSING",
+  OFFLINE = "OFFLINE"
+}
+
 @Entity({
   name: "room"
 })
@@ -8,13 +15,23 @@ export class RoomEntity {
   id: number
 
   @Column()
-  name: String
+  name: string
 
   @Column()
-  maxPlayer: Number
+  maxPlayer: number
 
   @Column()
-  port: Number
+  port: number
+  
+  @Column({
+    type: "enum",
+    enum: RoomStatus,
+    default: RoomStatus.STARTING
+  })
+  status: RoomStatus
+
+  @Column({ nullable: true })
+  uniqueURL : string
 
   @CreateDateColumn()
   createdAt: Date
@@ -31,16 +48,16 @@ export class RoomEntity {
 })
 export class RoomOpeningsEntity {
   @PrimaryGeneratedColumn()
-  id: Number
+  id: number
 
   @Column()
-  idRoom: Number
+  idRoom: number
 
   @Column()
-  type: String
+  type: string
 
   @Column()
-  idEntity: Number
+  idEntity: number
 
   @CreateDateColumn()
   createdAt: Date

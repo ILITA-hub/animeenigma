@@ -21,7 +21,7 @@ export class SchemaRoom {
             {type: "anime", id: 1}
         ]
     })
-    rangeOpenings: Array<Object> = [{type : "all", id: 0}];
+    rangeOpenings: Array<rangeOp> = [{type : "all", id: 0}];
 
     @IsInt()
     @ApiProperty({
@@ -29,4 +29,9 @@ export class SchemaRoom {
         example: 10
     })
     qtiUsersMax: number = 10;
+}
+
+interface rangeOp {
+    type: string
+    id: number
 }

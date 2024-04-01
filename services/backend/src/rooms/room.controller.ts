@@ -16,16 +16,6 @@ export class AppController {
     return await this.roomService.getAllRooms();
   }
 
-  @ApiOperation({ summary: "Получение комнаты"})
-  @Get(":roomId")
-  async getRoom(@Param("roomId") roomId : string) {
-    const room = await this.roomService.getRoom(roomId);
-    if (!room) {
-      throw new HttpException("", 404);
-    }
-    return room
-  }
-
   // @ApiBody({ type: SchemaRoom })
   @ApiCreatedResponse({description: "Комната создана", type: String})
   @ApiBadRequestResponse({description: "Ошибка в параметрах", type: BadRequestSchema})
