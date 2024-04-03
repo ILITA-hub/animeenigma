@@ -1,5 +1,7 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany, ManyToMany } from 'typeorm';
 import { ObjectType, Field, Int } from '@nestjs/graphql'
+import { VideosEntity } from '../../videos/entity/videos.entity'
+import { GenresAnimeEntity } from '../../genresAnime/entity/genresAnime.entity'
 
 @Entity({
   name: "anime"
@@ -35,4 +37,10 @@ export class AnimeEntity {
 
   @UpdateDateColumn()
   updatedAt: Date
+
+  @OneToMany(type => VideosEntity, videos => videos.anime)
+  videos: VideosEntity
+
+  @OneToMany(type => GenresAnimeEntity, genres => genres.anime)
+  genres: GenresAnimeEntity
 }

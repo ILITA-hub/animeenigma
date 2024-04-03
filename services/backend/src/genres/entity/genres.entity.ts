@@ -25,4 +25,7 @@ export class GenresEntity {
 
     @DeleteDateColumn()
     deleteAt: Date
+
+    @OneToMany(type => GenresAnimeEntity, genreAnime => genreAnime.genre)
+    genreAnime: GenresAnimeEntity
 }
