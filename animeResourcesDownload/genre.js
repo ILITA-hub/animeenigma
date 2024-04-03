@@ -17,9 +17,7 @@ function createRequest(page) {
 async function init() {
     let result = await request('https://shikimori.one/api/graphql', createRequest())
 
-    result = result["genres"].filter(n => {
-        return n["kind"] == "genre"
-    })
+    result = result["genres"]
 
     for(let i = 0; i < result.length; i++) {
         const el = result[i]

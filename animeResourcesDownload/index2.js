@@ -28,6 +28,8 @@ function createRequest(page) {
             }
             genres {
                 id
+                name
+                russian
             }
         }
     }    
