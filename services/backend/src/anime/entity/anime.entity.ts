@@ -21,6 +21,9 @@ export class AnimeEntity {
   @Column({ nullable: true})
   nameJP: string
 
+  @Column()
+  year: number
+
   // @Field({ nullable: false})
   // @Column()
   // description: string

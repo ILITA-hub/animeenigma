@@ -63,8 +63,8 @@ async function addAnimeInDB(animes) {
 
     for(let anime of animes) {
         await pg`INSERT INTO public.anime
-        (id, "name", "nameRU", "nameJP", "active")
-        VALUES(${anime['id']}, ${anime['name'] ? anime['name'] : anime['english']}, ${anime['russian']}, ${anime['japanese']}, true)`
+        (id, "name", "nameRU", "nameJP", "active", "year")
+        VALUES(${anime['id']}, ${anime['name'] ? anime['name'] : anime['english']}, ${anime['russian']}, ${anime['japanese']}, true, ${anime["airedOn"]["year"]})`
 
         for(let videos of anime['videos']) {
             await pg`INSERT INTO public.videos

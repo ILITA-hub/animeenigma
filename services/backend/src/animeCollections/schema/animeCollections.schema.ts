@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class GetAnimeRequest {
+export class GetAnimeCollectionsRequest {
     @ApiProperty({
         default: 50,
         description: "Колличество аниме на странице",

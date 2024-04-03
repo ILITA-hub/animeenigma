@@ -10,33 +10,41 @@ export class AnimeService {
     @InjectRepository(AnimeEntity) private readonly AnimeRepository: Repository<AnimeEntity>,
   ) { }
 
-  async getAnime(query: GetAnimeRequest): Promise<Object>{
+  async getAnime(query: GetAnimeRequest): Promise<Object> {
+    console.log(query.year)
     let genres = []
-
     if (typeof query.genres == "string") {
-        genres.push(query.genres)
-    } else {
-        genres = [...query.genres]
+      genres.push(query.genres)
+    } else if (typeof query.genres == "object") {
+      genres = [...query.genres]
     }
-    
+
     const querySQLBuilder = this.AnimeRepository.createQueryBuilder("anime")
     querySQLBuilder.innerJoinAndSelect("anime.videos", "videos")
     querySQLBuilder.leftJoinAndSelect("anime.genres", "genresAnime")
     querySQLBuilder.leftJoinAndSelect("genresAnime.genre", "genres")
 
-    querySQLBuilder.where(qb => {
+    if (genres.length != 0 || query.year != undefined) {
+      querySQLBuilder.where(qb => {
         const subQuery = qb.subQuery()
-            .select("anime.id")
-            .from("anime", "anime")
-            .innerJoin("anime.genres", "genresAnime")
-            .leftJoin("genresAnime.genre", "genres")
-            .where("genres.id IN (:...genresID)", {genresID: genres})
-            .groupBy("anime.id")
-            .having("COUNT(genres.id) = :genresCount", {genresCount: genres.length})
-            .getQuery()
-            
-        return "anime.id IN " + subQuery
-    })
+        subQuery.select("anime.id")
+        subQuery.from("anime", "anime")
+        subQuery.innerJoin("anime.genres", "genresAnime")
+        subQuery.leftJoin("genresAnime.genre", "genres")
+        if (genres.length != 0) {
+          subQuery.andWhere("genres.id IN (:...genresID)", { genresID: genres })
+          subQuery.groupBy("anime.id")
+          subQuery.having("COUNT(genres.id) = :genresCount", { genresCount: genres.length })
+        }
+
+        if (query.year != undefined) {
+          subQuery.andWhere("anime.year = :year", { year: query.year })
+        }
+
+        return "anime.id IN " + subQuery.getQuery()
+      })
+
+    }
 
     querySQLBuilder.skip(query.limit * (query.page - 1))
     querySQLBuilder.take(query.limit)
