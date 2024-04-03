@@ -1,31 +1,34 @@
-import { client } from 'node-shikimori'
+import { request, gql } from 'graphql-request'
 import pg from './pg.js'
-import axios from 'axios'
 
-const shikimori = client({})
-
-let result
-let good = false
-const URL = "https://shikimori.one/api/genres"
-
-while (!good) {
-    try {
-        result = await axios.get(URL)
-        good = true
-    } catch (e) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        console.log(`ыыыыааааа`, e)
+function createRequest(page) {
+    return gql`   
+    query Genres {
+        genres(entryType: Anime) {
+            name
+            id
+            kind
+            russian
+        }
     }
-}
-
-for (let i = 0; i < result.data.length; i++) {
-    let el = result.data[i]
-    if (el.entry_type != "Anime") continue
-    // console.log(`INSERT INTO public.genres (id, active, "createdAt", "updatedAt", "name", "nameRU") VALUES(${el.id}, true, now(), now(), '${el.name}', '${el.russian}')`)
-    await pg`INSERT INTO
-        public."genres"
-        (id, active, "name", "nameRu")
-        VALUES(${el.id}, true, ${el.name}, ${el.russian})
     `
 }
-console.log("Всё")
+
+async function init() {
+    let result = await request('https://shikimori.one/api/graphql', createRequest())
+
+    result = result["genres"].filter(n => {
+        return n["kind"] == "genre"
+    })
+
+    for(let i = 0; i < result.length; i++) {
+        const el = result[i]
+
+        await pg`INSERT INTO public.genres (id, "name", "nameRu", active)
+        VALUES(${el['id']}, ${el['name']}, ${el['russian']}, true)`
+    }
+
+    console.log("Всё")
+}
+
+init()
