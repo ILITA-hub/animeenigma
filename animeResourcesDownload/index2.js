@@ -31,6 +31,9 @@ function createRequest(page) {
                 name
                 russian
             }
+            airedOn {
+                year
+            }
         }
     }    
 `

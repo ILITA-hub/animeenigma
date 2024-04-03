@@ -11,13 +11,36 @@ export class AnimeService {
   ) { }
 
   async getAnime(query: GetAnimeRequest): Promise<Object>{
-    const result = await this.AnimeRepository.createQueryBuilder("anime")
-    .innerJoinAndSelect("anime.videos", "videos")
-    .innerJoinAndSelect("anime.genres", "genresAnime")
-    .innerJoinAndSelect("genresAnime.genre", "genres")
-    .skip(query.limit * (query.page - 1))
-    .take(query.limit)
-    .getMany()
+    let genres = []
+
+    if (typeof query.genres == "string") {
+        genres.push(query.genres)
+    } else {
+        genres = [...query.genres]
+    }
+    
+    const querySQLBuilder = this.AnimeRepository.createQueryBuilder("anime")
+    querySQLBuilder.innerJoinAndSelect("anime.videos", "videos")
+    querySQLBuilder.leftJoinAndSelect("anime.genres", "genresAnime")
+    querySQLBuilder.leftJoinAndSelect("genresAnime.genre", "genres")
+
+    querySQLBuilder.where(qb => {
+        const subQuery = qb.subQuery()
+            .select("anime.id")
+            .from("anime", "anime")
+            .innerJoin("anime.genres", "genresAnime")
+            .leftJoin("genresAnime.genre", "genres")
+            .where("genres.id IN (:...genresID)", {genresID: genres})
+            .groupBy("anime.id")
+            .having("COUNT(genres.id) = :genresCount", {genresCount: genres.length})
+            .getQuery()
+            
+        return "anime.id IN " + subQuery
+    })
+
+    querySQLBuilder.skip(query.limit * (query.page - 1))
+    querySQLBuilder.take(query.limit)
+    const result = await querySQLBuilder.getMany()
 
     return result;
   }

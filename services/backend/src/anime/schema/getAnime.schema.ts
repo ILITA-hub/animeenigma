@@ -16,7 +16,8 @@ export class GetAnimeRequest {
     page: number
 
     @ApiProperty({
-        description: "Жанры аниме"
+        description: "Жанры аниме",
+        required: false
     })
     genres: []
 }
