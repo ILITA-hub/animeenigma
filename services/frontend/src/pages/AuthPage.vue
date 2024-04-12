@@ -24,7 +24,7 @@
                 variant="" 
               ></v-text-field> 
               <v-text-field class="field"  
-                :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"  
+                :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"  
                 :type="visible ? 'text' : 'password'"  
                 density="comfortable"  
                 placeholder="Пароль"  
@@ -32,16 +32,14 @@
                 variant=""  
                 @click:append-inner="visible = !visible"  
               ></v-text-field> 
-              <div class="radio-password"> 
-                <v-radio-group> 
-                  <v-radio  
-                    class="radio" 
+              <div class="remember-password"> 
+                  <v-checkbox  
+                    class="remember" 
                     label="Запомнить меня"  
                     color="#1470EF" 
                     value="rememberMe"> 
-                  </v-radio> 
-                </v-radio-group> 
-                <div class="pb-4">Забыли пароль?</div>
+                  </v-checkbox> 
+                <div class="forgot">Забыли пароль?</div>
               </div> 
               <v-btn color="#1470EF" class="mb-4">Войти</v-btn> 
             </div> 
@@ -55,7 +53,7 @@
                 variant="" 
               ></v-text-field> 
               <v-text-field class="field"  
-                :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"  
+                :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"  
                 :type="visible ? 'text' : 'password'"  
                 density="comfortable"  
                 placeholder="Придумайте пароль"  
@@ -64,7 +62,7 @@
                 @click:append-inner="visible = !visible"  
               ></v-text-field> 
               <v-text-field class="field"  
-                :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"  
+                :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"  
                 :type="visible ? 'text' : 'password'"  
                 density="comfortable"  
                 placeholder="Повторите пароль"  
@@ -72,7 +70,7 @@
                 variant=""  
                 @click:append-inner="visible = !visible"  
               ></v-text-field> 
-              <div class="pb-4">У вас уже есть аккаунт?</div>
+              <div class="have-acc" @click="tab = 0">У вас уже есть аккаунт?</div>
               <v-btn color="#1470EF" class="mb-4 logup">Зарегистрироваться</v-btn> 
             </div>
           </v-card> 
@@ -98,12 +96,11 @@ export default {
 
 <style scoped>
 
-
 .auth-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  min-height: 80vh;
 }
 
 .form {
@@ -180,33 +177,45 @@ export default {
   display: grid;
 
 }
-.pb-4 {
+.forgot {
   color: rgb(255, 255, 255);
-font-family: Montserrat;
-font-size: 14px;
-font-weight: 400;
-letter-spacing: 0%;
-text-align: right;
-position: relative;
-right: 15px;
-top: 15px;
+  font-family: Montserrat;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0%;
+  text-align: right;
+  position: relative;
+  left: 107px;
+  top: 18px;
+}
+.have-acc {
+  color: rgb(255, 255, 255);
+  font-family: Montserrat;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0%;
+  text-align: right;
+  position: relative;
+  left: -16px;
+  top: 15px;
+  margin-bottom: 15px;
 }
 .mb-4 {
-position: relative;
-width: 394px;
-height: 50px;
-font-size: 16px;
-display: flex;
-padding: 15px 55px 15px 55px;
-border-radius: 10px;
-left: 15px;
-top: -10px;
-text-transform: none;
-font-family: Montserrat;
+  position: relative;
+  width: 394px;
+  height: 50px;
+  font-size: 16px;
+  display: flex;
+  padding: 15px 55px 15px 55px;
+  border-radius: 10px;
+  left: 15px;
+  top: 1px;
+  text-transform: none;
+  font-family: Montserrat;
 }
 
 .logup {
-  top: 10px;
+  top: 15px;
   color: rgb(255, 255, 255);
   font-family: Montserrat;
   font-size: 16px;
@@ -215,22 +224,30 @@ font-family: Montserrat;
   text-transform: none;
 }
 
-.radio {
-top: 5px;
-left: 5px;
+.remember{
+left: 6px;
 color: rgb(255, 255, 255);
 font-size: 14px;
 font-weight: 400;
 letter-spacing: 0%;
 text-align: left;
+position: relative;
 }
 
-.radio-password {
-  display: flex;
-  color: rgb(255, 255, 255);
+.remember-password {
+display: flex;
+color: rgb(255, 255, 255);
 font-family: Montserrat;
 font-size: 14px;
 font-weight: 400;
-letter-spacing: 0%;
+height: 60px;
+top: 4px;
+position: relative;
 }
+
+.forgot:hover, .have-acc:hover {
+    color: #1470EF;
+    cursor: pointer;
+}
+
 </style>

@@ -1,34 +1,82 @@
-<template>
-  <div>
-    <v-app-bar class="app-bar">
-      <v-img src="src/assets/img/logo.png" class="logo"></v-img>
-      <v-btn icon class="mr-2" v-if="isBurgerMenu" @click.stop="drawer = !drawer">
-        <v-icon>mdi-menu</v-icon>
-      </v-btn>
-      <div v-if="!isBurgerMenu" class="content">
-        <v-btn text class="button btn" @click="$router.push('/main')">Главная</v-btn>
-        <v-btn text class="button btn" @click="$router.push('/')">Коллекции</v-btn>
-        <v-btn text class="button btn" @click="$router.push('/rooms')">Комнаты</v-btn>
-        <v-spacer></v-spacer>
-        <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line>
-          <template v-slot:append>
-            <v-btn icon @click="onSearchIconClick" class="search-icon-button">
-              <v-icon>mdi-magnify</v-icon>
-            </v-btn>
-          </template>
-        </v-text-field>
-        <v-spacer></v-spacer>
-        <v-btn text class="button button-room" @click="$router.push('/')">Комната +</v-btn>
-        <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn>
-      </div>
-    </v-app-bar>
-  </div>
+<template> 
+  <div> 
+    <v-app-bar class="app-bar"> 
+      <v-img src="src/assets/img/logo.png" class="logo" @click="$router.push('/')"></v-img>
+      <v-btn icon class="mr-2" v-if="isBurgerMenu" @click.stop="drawer = !drawer"> 
+        <v-icon>mdi-menu</v-icon> 
+      </v-btn> 
+      <div v-if="!isBurgerMenu" class="content"> 
+        <v-btn text class="button btn" @click="$router.push('/')">Главная</v-btn> 
+        <v-menu>
+      <template v-slot:activator="{ props }">
+        <v-btn text class="button btn" 
+        v-bind="props">
+        Коллекции 
+        <v-icon class="icon" 
+        :size="20">{{ menu ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon></v-btn>
+      </template>
+      <v-list class="list">
+        <v-list-item
+          v-for="(item, index) in items"
+          :key="index"
+          @click="routeTo(item.route)">
+          <v-list-item-title>{{ item.title }}</v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-menu>
+        <v-btn text class="button btn" @click="$router.push('/rooms')">Комнаты</v-btn>        
+        <v-spacer></v-spacer> 
+        <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line> 
+          <template v-slot:append> 
+            <v-btn icon @click="onSearchIconClick" class="search-icon-button"> 
+              <v-icon>mdi-magnify</v-icon> 
+            </v-btn> 
+          </template> 
+        </v-text-field> 
+        <v-spacer></v-spacer> 
+        <v-btn text class="button button-room" @click="$router.push('/createroom')">Комната +</v-btn> 
+        <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn> 
+      </div> 
+    </v-app-bar> 
+  </div> 
 </template>
 
+
 <script>
+ export default {
+  data: () => ({
+    menu: false,
+    items: [
+      { title: 'Коллекции на сайте', route: '/collections' },
+      { title: 'Коллекция +', route: '/custom-collections' },
+    ],
+  }),
+  methods: {
+    routeTo(route) {
+      if (route) {
+        this.$router.push(route);
+      }
+    },
+  },
+}
 </script>
 
 <style scoped>
+.icon {
+  margin-top: 2px;
+  margin-left: 10px;
+}
+
+.list {
+  background: #101115 !important;
+  border-radius: 10px !important;
+  color: white;
+  font-family: Montserrat;
+  text-transform: none;
+  font-weight: normal;
+  display: flex;
+  flex-direction: column;
+}
 .app-bar {
   display: flex;
   background-color: #101115 !important;
@@ -54,6 +102,7 @@
   width: 100px;
   flex: none;
   margin-left: 70px;
+  cursor: pointer;
 }
 
 .button {

@@ -12,6 +12,7 @@
       genre: Object
     }
   }
+  
   </script>
   
   <style scoped>

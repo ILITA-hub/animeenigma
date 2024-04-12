@@ -16,20 +16,39 @@
         </template>
         <v-card class="card-list">
           <v-select class="select"
-                :items="items"
-                label="Жанр"
-                multiple
-            ></v-select>
+    v-model="value"
+    :items="items"
+    label="Жанр"
+    multiple
+  >
+  <template v-slot:selection="{ item, index }"> 
+      <div v-if="index < 2"> 
+        <span>{{ item.title }}</span> 
+      </div> 
+      <span 
+        v-if="index === 2" 
+        class="text-grey text-caption align-self-center" 
+      > 
+        (+{{ value.length - 2 }} others) 
+      </span> 
+    </template> 
+  </v-select>
             <v-select class="select"
-                :items="items"
+                :items="years"
                 label="Год выпуска"
                 multiple
-            ></v-select>
-            <v-select class="select"
-                :items="items"
-                label="Тип"
-                multiple
-            ></v-select>
+            ><template v-slot:selection="{ item, index }"> 
+      <div v-if="index < 2"> 
+        <span>{{ item.title }}</span>
+         
+      </div> 
+      <span 
+        v-if="index === 2" 
+        class="text-grey text-caption align-self-center" 
+      > 
+        (+{{ value.length - 3 }} others) 
+      </span> 
+    </template> </v-select>
         </v-card>
       </v-menu>
         </v-container>
@@ -37,10 +56,14 @@
 </template>
 
 <script>
+
 export default {
     data: () => ({
       menu: false,
-      items: ['foo', 'bar', 'fizz', 'buzz'],
+      items: ['сенен', 'романтика', 'комедия', 'детектив'],
+      years: ['1990-2000', '2000-2010', '2010-2020'],
+      value: [],
+
     }),
 }
 </script>
@@ -74,7 +97,7 @@ export default {
     border-radius: 10px;
     margin: 10px 10px 10px 20px;
     overflow: hidden;
-    height: 45px;
+    height: 50px;
     color: white;
     font-family: 'Montserrat';
     line-height: 19.5px;
@@ -82,8 +105,8 @@ export default {
 }
 
 .v-menu > .v-overlay__content > .v-card, .v-menu > .v-overlay__content > .v-sheet, .v-menu > .v-overlay__content > .v-list { 
-    width: 100%;
-  height: 176px !important;
+  width: 100%;
+  height: 135px !important;
   background: rgba(255, 255, 255, 0.1);
   gap: 0px;
   border-radius: 10px !important;
