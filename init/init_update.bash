@@ -1,7 +1,7 @@
 
 # we in the root of the project
 
-$ROOT << $(pwd) && \
+ROOT=$(pwd) && \
 
 cd init && sudo docker compose up -d && \
 
