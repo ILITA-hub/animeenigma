@@ -4,7 +4,7 @@ const config = {
     redisHost: '127.0.0.1',
     redisPort: 6379,
 
-    restPort: 3000,
+    restPort: 13000,
 
     webSocketPort: 9000,
 
@@ -12,7 +12,7 @@ const config = {
     pgPort: 5432,
     pgUser: 'postgresUserAE',
     pgSecret: 'pgSuperSecretMnogaBycaBab',
-    pgDB: 'postgres',
+    pgDB: 'animeenigma',
 
     jwtSecret: 'jwtSecret',
 
