@@ -5,17 +5,12 @@ import { Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { config } from './config/index'
 
-console.log(1)
-
 import * as morgan from 'morgan';
 
 async function bootstrap() {
-  console.log(2)
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe());
   app.use(morgan('dev'));
-
-  console.log(3)
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Anime Enigma API')
@@ -25,8 +20,6 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('doc', app, document);
-
-  console.log(4)
   
   await app.listen(config.restPort);
 
