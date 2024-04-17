@@ -10,6 +10,7 @@ nginx -t && nginx -s reload && \
 
 cd $ROOT/services/backend && \
 npm ci && \
+npm run test && \
 npm run build && \
 
 cd $ROOT/services/frontend && \
