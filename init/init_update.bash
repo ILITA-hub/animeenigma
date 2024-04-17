@@ -5,7 +5,7 @@ ROOT=$(pwd) && \
 
 cd init && sudo docker compose up -d && \
 
-sudo ln -s $ROOT/init/animeenigma-nginx.conf /etc/nginx/sites-enabled/ && \
+sudo ln -sf $ROOT/init/animeenigma-nginx.conf /etc/nginx/sites-enabled/ && \
 nginx -t && nginx -s reload && \
 
 cd $ROOT/services/backend && \
