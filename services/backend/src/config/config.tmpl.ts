@@ -6,7 +6,7 @@ const config = {
 
     restPort: 13000,
 
-    webSocketPort: 9000,
+    webSocketPort: 19000,
 
     pgHost: '127.0.0.1',
     pgPort: 15432,

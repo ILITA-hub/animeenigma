@@ -10,6 +10,8 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 
 import { join } from 'path';
 
+console.log(22)
+
 @Module({
   imports: [
     RoomModule,
