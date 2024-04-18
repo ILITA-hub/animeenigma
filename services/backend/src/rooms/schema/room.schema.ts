@@ -5,24 +5,33 @@ import { Type } from 'class-transformer';
 export class SchemaRoom {
     @IsString()
     @IsNotEmpty()
-    @ApiProperty()
+    @ApiProperty({
+        description: "Название комнаты",
+        example: "МЕГА КРУТЫЕ АНИМЕ"
+    })
     name: string;
 
-    @IsString()
-    @ApiProperty()
-    description: string;
-
-    // @IsString()
-    // @IsNotEmpty()
-    // @ApiProperty()
-    // ownerId: string; // придумать как сделать
-
     @IsArray()
-    @ApiProperty({ type: [Object] })
-    rangeOpenings: Array<Object> = [{type : typeOpening.ALL, id: 0}];
+    @ApiProperty({ 
+        type: [Object],
+        description: "Опенинги",
+        example: [
+            {type: "all", id: 0},
+            {type: "collection", id: 1},
+            {type: "anime", id: 1}
+        ]
+    })
+    rangeOpenings: Array<rangeOp> = [{type : "all", id: 0}];
 
     @IsInt()
+    @ApiProperty({
+        description: "Максимальное колличество игроков",
+        example: 10
+    })
     qtiUsersMax: number = 10;
 }
 
-enum typeOpening { ALL = "all", COLLECTION = "collection", GENRE = "genre"}
+interface rangeOp {
+    type: string
+    id: number
+}

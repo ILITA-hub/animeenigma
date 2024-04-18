@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany } from 'typeorm';
 import { AnimeEntity } from '../../anime/entity/anime.entity'
+import { AnimeCollectionOpenings } from '../../animeCollections/entity/animeCollectionsOpenings.entity'
 
 @Entity({
   name: "videos"
@@ -11,7 +12,7 @@ export class VideosEntity {
   @Column()
   active: boolean
 
-  @ManyToOne(() => AnimeEntity, animeId => animeId.id)
+  @ManyToOne(() => AnimeEntity, anime => anime.id)
   anime: number
 
   @Column({nullable: true})

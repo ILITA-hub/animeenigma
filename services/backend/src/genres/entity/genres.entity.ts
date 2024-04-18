@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany, ManyToMany } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany, ManyToMany, DeleteDateColumn } from 'typeorm';
 import { GenresAnimeEntity } from '../../genresAnime/entity/genresAnime.entity'
 
 @Entity({
@@ -22,4 +22,10 @@ export class GenresEntity {
 
     @UpdateDateColumn()
     updatedAt: Date
+
+    @DeleteDateColumn()
+    deleteAt: Date
+
+    @OneToMany(type => GenresAnimeEntity, genreAnime => genreAnime.genre)
+    genreAnime: GenresAnimeEntity
 }
