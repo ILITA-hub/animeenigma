@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { AnimeCollectionOpenings } from "./animeCollectionsOpenings.entity"
 
 @Entity({
   name: "animeCollections"
@@ -18,4 +19,7 @@ export class AnimeCollections {
 
   @UpdateDateColumn()
   updatedAt: Date
+
+  @OneToMany(type => AnimeCollectionOpenings, openings => openings.animeCollection)
+  openings: AnimeCollectionOpenings
 }

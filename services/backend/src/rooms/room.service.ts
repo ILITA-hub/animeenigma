@@ -1,35 +1,32 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm'
 import { generateRoomId } from '../utils/miscellaneous'
 import { Room } from './dto/create-room.dto'
 import { SchemaRoom } from './schema/room.schema'
+import { QueryFailedError, Repository } from 'typeorm'
 import { CachesService } from '../caches/caches.service'
 import { exec } from 'child_process'
-import { Cron } from '@nestjs/schedule';
+import { RoomEntity, RoomOpeningsEntity, RoomStatus } from './entity/room.entity'
+import { Cron } from '@nestjs/schedule'
+import { getCiphers } from "crypto"
+import { CryptoService } from "../crypto/crypto.sevice"
+import { roomIdGenerate } from "../utils/miscellaneous"
 
 let roomPort = 10000
 
 @Injectable()
 export class RoomService {
+  
+
   constructor(
+    @InjectRepository(RoomEntity) private readonly RoomRepository: Repository<RoomEntity>,
+    @InjectRepository(RoomOpeningsEntity) private readonly RoomOpRepository: Repository<RoomOpeningsEntity>,
     private readonly cachesService: CachesService,
+    private readonly CryptoService: CryptoService,
   ) { }
 
   async getAllRooms() {
-    const rooms = await this.cachesService.getCache("rooms");
-    let result = []
-    for (let el of rooms ? rooms : []) {
-      const room = await this.cachesService.getCache(`room${el}`);
-      result.push(room)
-    }
-    return result;
-  }
-
-  async getRoom(id: string): Promise<Room> {
-    const room = await this.cachesService.getCache(`room${id}`);
-
-    // console.log({ room })
-
-    return room;
+    return await this.RoomRepository.find()
   }
 
   async updateRoom(id: string, room: Room): Promise<void> {
@@ -37,52 +34,67 @@ export class RoomService {
   }
 
   async deleteAll() {
-    const rooms = await this.cachesService.getCache("rooms");
-    for (let i = 0; i < rooms.length; i++) {
-      const room = rooms[i]
-      const room2 = await this.cachesService.getCache(`room${room}`);
-      if (room2) {
-        await this.cachesService.delCache(`room${room}`)
-      }
-    }
-    await this.cachesService.delCache("rooms");
+    
   }
 
-  async createRoom(body: SchemaRoom): Promise<Room> {
-    const roomId = generateRoomId();
-    let ownerId = "0"
+  async createRoom(body: SchemaRoom) {
+    const ports = await this.RoomRepository.find({
+      where: {
+        deleteAt: null
+      },
+      order: {
+        port: "ASC"
+      }
+    })
 
-    const port = roomPort++ // TODO СДЕЛАТЬ НОРМАЛЬНО
-    console.log(body.qtiUsersMax)
-    const newRoom = new Room(roomId, body.name, ownerId, body.rangeOpenings, port, body.qtiUsersMax);
-    await this.cachesService.setCache(`room${roomId}`, newRoom);
+    let port = 10000
 
-    const allRooms = await this.cachesService.getCache("rooms");
-    if (!allRooms) {
-      await this.cachesService.setCache("rooms", [roomId])
-    } else {
-      await this.cachesService.setCache("rooms", [...allRooms, roomId])
+    for(let i = 0; i < ports.length; i++) {
+      if (port == ports[i].port) {
+        port++
+        continue
+      }
+      break
     }
 
-    exec(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
-    console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${roomId} npm run start`)
+    const roomID = roomIdGenerate()
 
-    return newRoom;
+    const room = await this.RoomRepository.save({
+      name: body.name,
+      maxPlayer: body.qtiUsersMax,
+      port: port,
+      uniqueURL: roomID,
+      status: RoomStatus.STARTING
+    })
+
+    for(let i = 0; i < body.rangeOpenings.length; i++) {
+      const range = body.rangeOpenings[i]
+      await this.RoomOpRepository.save({
+        idRoom: room.id,
+        type: range.type,
+        idEntity: range.id
+      })
+    }
+
+    exec(`cd ../animeRoomSocket/; PORT=${port} ID=${room.id} npm run start`) // todo - вынести в отдельного воркера
+    console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${room.id} npm run start`)
+
+    return roomID
   }
 
   async deleteRoom(id: string): Promise<void> {
-    const roomId = id
+    const room = await this.RoomRepository.findOne({
+      where: {
+        deleteAt: null,
+        uniqueURL: id
+      }
+    })
 
-    const roomToDelete = await this.cachesService.getCache(`room${roomId}`)
-    if (!roomToDelete) {
-      return
-    }
-    await this.cachesService.delCache(`room${roomId}`)
+    exec(`kill $(lsof -t -i:${room.port})`)
 
-    const allRooms = await this.cachesService.getCache("rooms");
-    const arr = allRooms.filter((word) => word != roomId);
-    await this.cachesService.setCache("rooms", [...arr])
-    exec(`kill $(lsof -t -i:${roomToDelete.port})`)
+    await this.RoomRepository.update(room.id, {
+      deleteAt: new Date()
+    })
   }
 
   @Cron('0 * * * *')

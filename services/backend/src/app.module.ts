@@ -5,13 +5,16 @@ import { Logger } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { CachesModule } from './caches/caches.module'
 import { UserModule } from './users/user.module'
+import { AnimeModule } from './anime/anime.module'
 import { config } from './config/index'
 import { ServeStaticModule } from '@nestjs/serve-static';
 
 import { join } from 'path';
 
+
 @Module({
   imports: [
+    AnimeModule,
     RoomModule,
     CachesModule,
     AnimeCollectionsModule,
