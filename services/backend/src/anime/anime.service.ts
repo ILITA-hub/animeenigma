@@ -3,6 +3,7 @@ import { QueryFailedError, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm'
 import { AnimeEntity } from './entity/anime.entity';
 import { GetAnimeRequest } from './schema/getAnime.schema'
+import { count } from 'console';
 
 @Injectable()
 export class AnimeService {
@@ -10,7 +11,7 @@ export class AnimeService {
     @InjectRepository(AnimeEntity) private readonly AnimeRepository: Repository<AnimeEntity>,
   ) { }
 
-  async getAnime(query: GetAnimeRequest): Promise<Object> {
+  async getAnime(query: GetAnimeRequest) {
     console.log(query.year)
     let genres = []
     if (typeof query.genres == "string") {
@@ -29,6 +30,7 @@ export class AnimeService {
         const subQuery = qb.subQuery()
         subQuery.select("anime.id")
         subQuery.from("anime", "anime")
+        subQuery.where("anime.active = true")
         subQuery.innerJoin("anime.genres", "genresAnime")
         subQuery.leftJoin("genresAnime.genre", "genres")
         if (genres.length != 0) {
@@ -46,9 +48,24 @@ export class AnimeService {
 
     }
 
+    const count = await querySQLBuilder.getCount()
+    const allPage = Math.ceil(count/query.limit)
+    const prevPage = (query.page <= 1) ? 1 : (query.page >= allPage) ? allPage : query.page - 1
+    const nextPage = (query.page >= allPage) ? allPage : Number(query.page) + 1 // какава хуя оно в строку переделывается АААААААА, теперь будут стоять тут NUMBER
+
     querySQLBuilder.skip(query.limit * (query.page - 1))
     querySQLBuilder.take(query.limit)
-    const result = await querySQLBuilder.getMany()
+    querySQLBuilder.select(["anime.id", "anime.name", "anime.nameRU", "anime.nameJP", "anime.year", "videos.id", "videos.name", "videos.kind"])
+    const resultAnime = await querySQLBuilder.getMany()
+
+    const result = {
+      prevPage : prevPage,
+      page: Number(query.page),
+      nextPage : nextPage,
+      allPage : allPage,
+      countAnime : count,
+      data : resultAnime
+    }
 
     return result;
   }
