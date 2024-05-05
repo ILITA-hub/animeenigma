@@ -6,10 +6,16 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateCol
 })
 export class UserEntity {
   @PrimaryGeneratedColumn()
-  id: number
+  id: Number
   
+  @Column()
+  username: String
+
   @Column({ unique: true })
-  name: string
+  login : String
+
+  @Column()
+  password : String
 
   @CreateDateColumn()
   createdAt: Date

@@ -5,16 +5,23 @@ import { Logger } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { CachesModule } from './caches/caches.module'
 import { UserModule } from './users/user.module'
+import { AnimeModule } from './anime/anime.module'
 import { config } from './config/index'
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { GenreModule } from './genres/genre.module'
+import { VideosModule } from './videos/videos.module'
 
 import { join } from 'path';
 
+
 @Module({
   imports: [
+    AnimeModule,
     RoomModule,
     CachesModule,
     AnimeCollectionsModule,
+    GenreModule,
+    VideosModule,
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         type: "postgres",
