@@ -11,7 +11,6 @@ export class AnimeCollectionsService {
     constructor(
         @InjectRepository(AnimeCollections) private readonly AnimeCollectionsRepository: Repository<AnimeCollections>,
         @InjectRepository(AnimeCollectionOpenings) private readonly AnimeCollectionsOpeningsRepository: Repository<AnimeCollectionOpenings>,
-        @InjectEntityManager() private entityManager: EntityManager
     ) { }
 
     async findAll(query: GetAnimeCollectionsRequest) {
@@ -92,6 +91,7 @@ export class AnimeCollectionsService {
 
         }
 
+        querySQLBuilder.select(["animeCollections.id", "animeCollections.name"])
         const result = await querySQLBuilder.getMany()
         return result
     }

@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Body, Delete, Res, HttpException, Query }
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { VideosService } from './videos.service'
 import { VideoSchemaById404, VideoSchemaById200, VideoSchemaByAnime200, VideoSchemaByAnime404 } from './schema/videos.schema'
+import { VideosQueryDTO } from './dto/videos.dto'
 
 @ApiTags("Видео")
 @Controller("videos")
@@ -18,9 +19,15 @@ export class VideosController {
 
   @Get("/anime/:id")
   @ApiOperation({ summary: "Получение всех видео у аниме"})
-  @ApiResponse({ status: 200, type: VideoSchemaByAnime200})
+  @ApiResponse({ status: 200, type: VideoSchemaByAnime200, isArray: true})
   @ApiResponse({ status: 404, type: VideoSchemaByAnime404})
   async getVideosByAnime(@Param('id') id: number) {
     return await this.videosService.getVideosByAnime(id)
+  }
+
+  @Get()
+  @ApiOperation({ summary: "Получение всех видео"})
+  async getAllVideo(@Query() query: VideosQueryDTO) {
+    return await this.videosService.getAllVideo(query)
   }
 }
