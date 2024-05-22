@@ -24,13 +24,11 @@ export class AnimeEntity {
   @Column()
   year: number
 
-  // @Field({ nullable: false})
-  // @Column()
+  // @Column({ nullable: false})
   // description: string
 
-  // @Field({ nullable: false})
-  // @Column()
-  // imgPath: string
+  @Column({ nullable: true })
+  imgPath: string
 
   @Column()
   active: boolean
@@ -41,9 +39,9 @@ export class AnimeEntity {
   @UpdateDateColumn()
   updatedAt: Date
 
-  @OneToMany(type => VideosEntity, videos => videos.anime)
+  @OneToMany(() => VideosEntity, videos => videos.anime)
   videos: VideosEntity
 
-  @OneToMany(type => GenresAnimeEntity, genres => genres.anime)
+  @OneToMany(() => GenresAnimeEntity, genres => genres.anime)
   genres: GenresAnimeEntity
 }

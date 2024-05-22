@@ -13,7 +13,7 @@ export class VideosEntity {
   active: boolean
 
   @ManyToOne(() => AnimeEntity, anime => anime.id)
-  anime: number
+  anime: AnimeEntity
 
   @Column({nullable: true})
   mp4Path: string
@@ -29,4 +29,7 @@ export class VideosEntity {
 
   @Column()
   kind: string
+
+  @OneToMany(() => AnimeCollectionOpenings, animeCollections => animeCollections.animeOpening)
+  animeCollections: AnimeCollectionOpenings
 }
