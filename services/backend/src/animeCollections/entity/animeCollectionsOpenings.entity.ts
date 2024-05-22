@@ -9,11 +9,11 @@ export class AnimeCollectionOpenings {
   @PrimaryGeneratedColumn()
   id: number
 
-  @ManyToOne(() => AnimeCollections, animeCollection => animeCollection.id)
-  animeCollection: number
+  @ManyToOne(() => AnimeCollections, animeCollection => animeCollection.openings)
+  animeCollection: AnimeCollections
 
-  @ManyToOne(() => VideosEntity, animeOpening => animeOpening.id)
-  animeOpening: number
+  @ManyToOne(() => VideosEntity, animeOpening => animeOpening.animeCollections)
+  animeOpening: VideosEntity
 
   @CreateDateColumn()
   createdAt: Date

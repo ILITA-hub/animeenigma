@@ -1,6 +1,5 @@
 import { IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { Socket } from 'socket.io';
 
 export class AnimeCollectionDTO {
     @IsNotEmpty()

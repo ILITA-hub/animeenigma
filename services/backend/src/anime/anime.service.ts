@@ -50,7 +50,7 @@ export class AnimeService {
 
     const count = await querySQLBuilder.getCount()
     const allPage = Math.ceil(count/query.limit)
-    const prevPage = (query.page <= 1) ? 1 : (query.page >= allPage) ? allPage : query.page - 1
+    const prevPage = (query.page <= 1) ? 1 : (query.page > allPage) ? allPage : query.page - 1
     const nextPage = (query.page >= allPage) ? allPage : Number(query.page) + 1 // какава хуя оно в строку переделывается АААААААА, теперь будут стоять тут NUMBER
 
     querySQLBuilder.skip(query.limit * (query.page - 1))

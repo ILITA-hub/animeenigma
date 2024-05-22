@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common'
+import { Controller, Get, Header, Query } from '@nestjs/common'
 import { ApiBody, ApiResponse, ApiTags, ApiOperation } from '@nestjs/swagger'
 import { AnimeService } from './anime.service'
 import { GetAnimeRequest, GetAnimeResponse } from './schema/getAnime.schema'
@@ -8,6 +8,7 @@ import { GetAnimeRequest, GetAnimeResponse } from './schema/getAnime.schema'
 export class AnimeController {
   constructor(private readonly animeService: AnimeService) {}
 
+  @Header('Content-Security-Policy', "*localhost*")
   @Get()
   @ApiOperation({ summary: "Получение всех аниме"})
   @ApiResponse({ status: 200, type: GetAnimeResponse, isArray: true})
