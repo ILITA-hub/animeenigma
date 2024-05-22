@@ -1,17 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { Repository, createQueryBuilder, EntityManager } from 'typeorm';
 import { InjectEntityManager, InjectRepository } from '@nestjs/typeorm'
 import { AnimeCollections } from './entity/animeCollection.entity'
 import { AnimeCollectionOpenings } from './entity/animeCollectionsOpenings.entity'
 import { AnimeCollectionDTO } from './dto/AnimeCollection.dto'
 import { GetAnimeCollectionsRequest } from './schema/animeCollections.schema'
+import { CachesService } from '../caches/caches.service'
+import { UserEntity } from '../users/entity/user.entity';
+import { VideosEntity } from 'src/videos/entity/videos.entity';
 
 @Injectable()
 export class AnimeCollectionsService {
     constructor(
         @InjectRepository(AnimeCollections) private readonly AnimeCollectionsRepository: Repository<AnimeCollections>,
         @InjectRepository(AnimeCollectionOpenings) private readonly AnimeCollectionsOpeningsRepository: Repository<AnimeCollectionOpenings>,
-        @InjectEntityManager() private entityManager: EntityManager
+        @InjectRepository(UserEntity) private readonly UserRepository: Repository<UserEntity>,
+        @InjectRepository(VideosEntity) private readonly VideosRepository: Repository<VideosEntity>,
+        private readonly cachesService: CachesService,
     ) { }
 
     async findAll(query: GetAnimeCollectionsRequest) {
@@ -92,24 +97,36 @@ export class AnimeCollectionsService {
 
         }
 
+        querySQLBuilder.select(["animeCollections.id", "animeCollections.name"])
         const result = await querySQLBuilder.getMany()
         return result
     }
 
-    async create(animeCollectionReq: AnimeCollectionDTO) {
-        const animeCollection = await this.AnimeCollectionsRepository.save({
+    async create(animeCollectionReq: AnimeCollectionDTO, token: string) {
+        const session = await this.cachesService.getCache(`userSession${token}`)
+
+        if (session == null) {
+            throw new HttpException("Пользователь не авторизован", 401)
+        }
+
+        const collections = await this.AnimeCollectionsRepository.save({
             name: animeCollectionReq.name,
-            description: animeCollectionReq.description
+            description: animeCollectionReq.description,
+            owner: await this.UserRepository.findOneBy({ id: session["userId"]})
         })
 
         for (let i = 0; i < animeCollectionReq.openings.length; i++) {
-            const opening = animeCollectionReq.openings[i]
+            const opening = await this.VideosRepository.findOneBy({ id: animeCollectionReq.openings[i] })
             await this.AnimeCollectionsOpeningsRepository.save({
-                animeCollection: animeCollection.id,
+                animeCollection: collections,
                 animeOpening: opening
             })
         }
 
-        return animeCollection
+        return {
+            id: collections.id,
+            name: collections.name,
+            description: collections.description
+        }
     }
 }

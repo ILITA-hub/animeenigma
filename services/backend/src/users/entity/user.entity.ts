@@ -1,5 +1,6 @@
 
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { AnimeCollections } from 'src/animeCollections/entity/animeCollection.entity';
+import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity({
   name: "users"
@@ -23,4 +24,6 @@ export class UserEntity {
   @UpdateDateColumn()
   updatedAt: Date
 
+  @OneToMany(() => AnimeCollections, collections => collections.owner)
+  collections: AnimeCollections[]
 }
