@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, Res, HttpException, HttpCode } from '@nestjs/common'
+import { Controller, Get, Post, Param, Body, Delete, Res, HttpException, HttpCode, Header } from '@nestjs/common'
 import { ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { UserService } from './user.service'
 import { UserDto, UserDtoReg, UserDTOLogout } from './dto/user.dto'
@@ -24,6 +24,7 @@ export class UserController {
   //   return { sessionId, userData: user };
   // }
 
+  @Header('Content-Security-Policy', "*localhost*")
   @Post("/login")
   @ApiResponse({status : 400, description: "Ошибка в параметрах", type: BadRequestSchema400})
   @ApiResponse({status : 200, description: "Авторизация успешна пройдена", type: SucsessfulRequest200})
@@ -34,6 +35,7 @@ export class UserController {
     return {token : result}
   }
 
+  @Header('Content-Security-Policy', "*localhost*")
   @Post("/reg")
   @ApiResponse({status : 400, description: "Ошибка в параметрах", type: BadRequestSchema400})
   @ApiResponse({status : 200, description: "Регистрация прошла успешно", type: SucsessfulRequest200})
@@ -43,7 +45,8 @@ export class UserController {
     
     return {token : result}
   }
-
+  
+  @Header('Content-Security-Policy', "*localhost*")
   @Post("/logout")
   @HttpCode(200)
   async logout(@Body() sessionId : UserDTOLogout) {

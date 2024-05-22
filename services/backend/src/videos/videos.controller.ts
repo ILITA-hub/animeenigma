@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Delete, Res, HttpException, Query } from '@nestjs/common'
+import { Controller, Get, Post, Param, Body, Delete, Res, HttpException, Query, Header } from '@nestjs/common'
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { VideosService } from './videos.service'
 import { VideoSchemaById404, VideoSchemaById200, VideoSchemaByAnime200, VideoSchemaByAnime404 } from './schema/videos.schema'
@@ -9,6 +9,7 @@ import { VideosQueryDTO } from './dto/videos.dto'
 export class VideosController {
   constructor(private readonly videosService: VideosService) {}
 
+  @Header('Content-Security-Policy', "*localhost*")
   @Get("/:id")
   @ApiOperation({ summary: "Получение видео"})
   @ApiResponse({ status: 200, type: VideoSchemaById200})
@@ -17,6 +18,7 @@ export class VideosController {
     return await this.videosService.getVideoById(id)
   }
 
+  @Header('Content-Security-Policy', "*localhost*")
   @Get("/anime/:id")
   @ApiOperation({ summary: "Получение всех видео у аниме"})
   @ApiResponse({ status: 200, type: VideoSchemaByAnime200, isArray: true})
@@ -25,6 +27,7 @@ export class VideosController {
     return await this.videosService.getVideosByAnime(id)
   }
 
+  @Header('Content-Security-Policy', "*localhost*")
   @Get()
   @ApiOperation({ summary: "Получение всех видео"})
   async getAllVideo(@Query() query: VideosQueryDTO) {
