@@ -1,42 +1,48 @@
 
 <template>
-   <v-app>
-    <HeaderApp />
-      <v-main>
-        <RouterView />
-      </v-main>
-  </v-app>
-  
+  {{ qwe() }}
 </template>
 
 
 <script>
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
-import HeaderApp from '@/components/HeaderApp.vue'
-import { useUserStore } from '@/stores/user.js'
+// import { RouterLink, RouterView } from 'vue-router'
+// import HelloWorld from './components/HelloWorld.vue'
+// import HeaderApp from '@/components/HeaderApp.vue'
+// import { useUserStore } from '@/stores/user.js'
+import axios from 'axios'
 
 export default {
   setup() {
-    const userStore = useUserStore()
+    // const userStore = useUserStore()
 
     return {
-      userStore
+      // userStore
     }
   },
 
   components: {
-    HelloWorld,
-    RouterLink,
-    RouterView,
-    HeaderApp
+    // HelloWorld,
+    // RouterLink,
+    // RouterView,
+    // HeaderApp
+  },
+
+  methods: {
+    async qwe() {
+      console.log(123)
+    }
   },
 
   async mounted() {
+    console.log(123)
     // console.log('this.userStore', this.userStore)
-    await this.userStore.checkUserLoggedIn();
-    console.log('this.userStore', this.userStore)
-    console.log('userLoggedIn', this.userStore.userLoggedIn)
+    // await this.userStore.checkUserLoggedIn();
+    // console.log('this.userStore', this.userStore)
+    // console.log('userLoggedIn', this.userStore.userLoggedIn)
+    axios.get("https://animeenigma.ru/api/genre")
+      .then((res) => {
+        console.log(res)
+      })
   }
 }
 </script>
