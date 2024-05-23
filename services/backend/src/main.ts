@@ -8,7 +8,7 @@ import { config } from './config/index'
 import * as morgan from 'morgan';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {cors: true});
   app.useGlobalPipes(new ValidationPipe());
   app.use(morgan('dev'));
 
