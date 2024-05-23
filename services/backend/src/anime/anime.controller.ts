@@ -8,7 +8,6 @@ import { GetAnimeRequest, GetAnimeResponse } from './schema/getAnime.schema'
 export class AnimeController {
   constructor(private readonly animeService: AnimeService) {}
 
-  @Header('Content-Security-Policy', "*localhost*")
   @Get()
   @ApiOperation({ summary: "Получение всех аниме"})
   @ApiResponse({ status: 200, type: GetAnimeResponse, isArray: true})

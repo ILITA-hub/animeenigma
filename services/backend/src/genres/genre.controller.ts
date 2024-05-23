@@ -7,7 +7,6 @@ import { GenreService } from './genre.service'
 export class GenreController {
   constructor(private readonly genreService: GenreService) {}
 
-  @Header('Content-Security-Policy', "*localhost*")
   @Get()
   async getAll() {
     return await this.genreService.getAll()
