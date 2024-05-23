@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder, SwaggerCustomOptions } from '@nestjs/swagger';
+import { config } from './config/index'
 import { NextFunction, Request, Response } from 'express';
 
 import * as morgan from 'morgan';
@@ -16,7 +17,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
   app.use(morgan('dev'));
 
-  const config = new DocumentBuilder()
+  const swaggerConfig = new DocumentBuilder()
     .setTitle('Anime Enigma API')
     .setDescription('The Anime Enigma API')
     .setVersion('1.0')
@@ -24,10 +25,10 @@ async function bootstrap() {
     .addServer("/api")
     .addBearerAuth()
     .build();
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('doc', app, document);
   
-  await app.listen(3000);
+  await app.listen(config.restPort);
 
   const logger = app.get(Logger);
   logger.log(`Application listening at ${await app.getUrl()}`);

@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { generateRoomId } from '../utils/miscellaneous'
 
 @Injectable()
 export class CachesService {
