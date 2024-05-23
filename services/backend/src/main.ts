@@ -10,10 +10,7 @@ import * as morgan from 'morgan';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.use(function (request: Request, response: Response, next: NextFunction) {
-    response.setHeader('Access-Control-Allow-Origin', '*');
-    next();
-  });
+  app.enableCors();
   app.useGlobalPipes(new ValidationPipe());
   app.use(morgan('dev'));
 
