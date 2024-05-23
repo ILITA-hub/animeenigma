@@ -9,13 +9,11 @@ import { GetAnimeCollectionsRequest } from './schema/animeCollections.schema'
 export class AnimeCollectionsController {
   constructor(private readonly service: AnimeCollectionsService) {}
 
-  @Header('Content-Security-Policy', "*localhost*")
   @Get()
   async getAnimeCollections(@Query() query: GetAnimeCollectionsRequest) {
     return await this.service.findAll(query)
   }
 
-  @Header('Content-Security-Policy', "*localhost*")
   @Post()
   @ApiBearerAuth()
   async create(@Body() AnimeCollectionDTO : AnimeCollectionDTO, @Headers() header) {

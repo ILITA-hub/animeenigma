@@ -9,7 +9,6 @@ import { VideosQueryDTO } from './dto/videos.dto'
 export class VideosController {
   constructor(private readonly videosService: VideosService) {}
 
-  @Header('Content-Security-Policy', "*localhost*")
   @Get("/:id")
   @ApiOperation({ summary: "Получение видео"})
   @ApiResponse({ status: 200, type: VideoSchemaById200})
@@ -18,7 +17,6 @@ export class VideosController {
     return await this.videosService.getVideoById(id)
   }
 
-  @Header('Content-Security-Policy', "*localhost*")
   @Get("/anime/:id")
   @ApiOperation({ summary: "Получение всех видео у аниме"})
   @ApiResponse({ status: 200, type: VideoSchemaByAnime200, isArray: true})
@@ -27,7 +25,6 @@ export class VideosController {
     return await this.videosService.getVideosByAnime(id)
   }
 
-  @Header('Content-Security-Policy', "*localhost*")
   @Get()
   @ApiOperation({ summary: "Получение всех видео"})
   async getAllVideo(@Query() query: VideosQueryDTO) {
