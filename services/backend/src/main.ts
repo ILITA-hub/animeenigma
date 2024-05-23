@@ -2,14 +2,18 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { SwaggerModule, DocumentBuilder, SwaggerCustomOptions } from '@nestjs/swagger';
 import { config } from './config/index'
+import { NextFunction, Request, Response } from 'express';
 
 import * as morgan from 'morgan';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors();
+  app.use(function (request: Request, response: Response, next: NextFunction) {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    next();
+  });
   app.useGlobalPipes(new ValidationPipe());
   app.use(morgan('dev'));
 
