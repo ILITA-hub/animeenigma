@@ -1,16 +1,20 @@
 
 # we in the root of the project
 
-$ROOT << $(pwd);
+ROOT=$(pwd) && \
 
-cd services/backend && npm install
-cd $ROOT
-cd services/frontend && npm install && npm run build
+cd init && sudo docker compose up -d && \
 
-pm2 kill
-pm2 start ./init/pm2.config.cjs
+sudo ln -sf $ROOT/init/animeenigma-nginx.conf /etc/nginx/sites-enabled/ && \
+nginx -t && nginx -s reload && \
 
-cd init && sudo docker compose up -d
+cd $ROOT/services/backend && \
+npm ci && \
+npm run test && \
+npm run build && \
 
-# sudo ln -s /home/nandi/data/animeenigma/init/nginx.conf /etc/nginx/sites-enabled
-nginx -t && nginx -s reload
+cd $ROOT/services/frontend && \
+npm ci && \
+npm run build && \
+
+pm2 restart $ROOT/init/pm2.config.cjs
