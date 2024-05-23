@@ -7,7 +7,8 @@ import { SwaggerModule, DocumentBuilder, SwaggerCustomOptions } from '@nestjs/sw
 import * as morgan from 'morgan';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {cors: true});
+  const app = await NestFactory.create(AppModule);
+  app.enableCors();
   app.useGlobalPipes(new ValidationPipe());
   app.use(morgan('dev'));
 
