@@ -15,31 +15,31 @@
           </v-btn>
         </template>
         <v-card class="card-list">
-          <v-select class="select"
-                :items="items"
-                label="Статус викторины"
-                multiple
-            ></v-select>
-            <v-select class="select"
-                :items="items"
-                label="Игроков в комнате"
-                multiple
-            ></v-select>
-            <v-select class="select"
-                :items="items"
-                label="Период"
-                multiple
-            ></v-select>
-            <v-select class="select"
-                :items="items"
-                label="Диапазон игроков от"
-                multiple
-            ></v-select>
-            <v-select class="select"
-                :items="items"
-                label="Диапазон игроков до"
-                multiple
-            ></v-select>
+          <v-select class="select" 
+              :items="itemsStatus" 
+              label="Статус викторины" 
+              multiple 
+          ></v-select> 
+          <v-select class="select" 
+              :items="itemsPlayers" 
+              label="Игроков в комнате" 
+              multiple 
+          ></v-select> 
+          <v-select class="select" 
+              :items="itemsPeriod" 
+              label="Период" 
+              multiple 
+          ></v-select> 
+          <v-select class="select" 
+              :items="itemsPlayersFrom" 
+              label="Диапазон игроков от" 
+              multiple 
+          ></v-select> 
+          <v-select class="select" 
+              :items="itemsPlayersTo" 
+              label="Диапазон игроков до" 
+              multiple 
+          ></v-select>
         </v-card>
       </v-menu>
     </v-container>
@@ -50,7 +50,11 @@
 export default {
     data: () => ({
       menu: false,
-      items: ['foo', 'bar', 'fizz', 'buzz'],
+        itemsStatus: ['Ожидание игроков', 'В процессе'], 
+        itemsPlayers: ['5-10', '11-15', '16 и более'], 
+        itemsPeriod: ['1', '2', '3'], 
+        itemsPlayersFrom: ['5', '11', '16'], 
+        itemsPlayersTo: ['20', '25', '30'],
     }),
   }
 </script>

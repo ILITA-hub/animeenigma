@@ -1,98 +1,113 @@
-<template> 
-  <div class="auth-container"> 
-    <v-container> 
-      <v-row justify="center"> 
-        <v-col cols="12" lg="4"> 
-          <v-tabs 
-            class="tabs" 
-            fixed-tabs 
-            v-model="tab" 
-            background-color="transparent"> 
-            <v-tab :key="index" 
-            v-for="(item, index) in tabs" 
-            :class="{ 'tab--active': tab === index }">
-            {{item}}</v-tab>
-        </v-tabs>
-        <v-card :style="tab === 1 ? { minHeight: '422px'} : {}" class="form">
-            <div v-if="tab === 0"> 
-              <div class="text">Добро пожаловать!</div> 
-              <div class="text-subtitle">Войдите в аккаунт, чтобы продолжить</div> 
-              <v-text-field class="field" 
-                density="comfortable" 
-                placeholder="Email" 
-                prepend-inner-icon="mdi-email" 
-                variant="" 
-              ></v-text-field> 
-              <v-text-field class="field"  
-                :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"  
-                :type="visible ? 'text' : 'password'"  
-                density="comfortable"  
-                placeholder="Пароль"  
-                prepend-inner-icon="mdi-lock"  
-                variant=""  
-                @click:append-inner="visible = !visible"  
-              ></v-text-field> 
-              <div class="remember-password"> 
-                  <v-checkbox  
-                    class="remember" 
-                    label="Запомнить меня"  
-                    color="#1470EF" 
-                    value="rememberMe"> 
-                  </v-checkbox> 
+<template>
+  <div class="auth-container">
+    <v-container>
+      <v-row justify="center">
+        <v-col cols="12" lg="4">
+          <v-tabs class="tabs" fixed-tabs v-model="tab" background-color="transparent">
+            <v-tab :key="index" v-for="(item, index) in tabs" :class="{ 'tab--active': tab === index }">
+              {{ item }}
+            </v-tab>
+          </v-tabs>
+          <v-card :style="tab === 1 ? { minHeight: '422px' } : {}" class="form">
+            <div v-if="tab === 0">
+              <div class="text">Добро пожаловать!</div>
+              <div class="text-subtitle">Войдите в аккаунт, чтобы продолжить</div>
+              <v-text-field class="field" density="comfortable" placeholder="Email" prepend-inner-icon="mdi-email"
+                variant="" v-model="email">
+              </v-text-field>
+              <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
+                :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Пароль"
+                prepend-inner-icon="mdi-lock" variant="" @click:append-inner="visible = !visible" v-model="password">
+              </v-text-field>
+              <div class="remember-password">
+                <v-checkbox class="remember" label="Запомнить меня" color="#1470EF" v-model="rememberMe">
+                </v-checkbox>
                 <div class="forgot">Забыли пароль?</div>
-              </div> 
-              <v-btn color="#1470EF" class="mb-4">Войти</v-btn> 
-            </div> 
-            <div v-else-if="tab === 1">
-              <div class="text">Создайте аккаунт</div> 
-              <div class="text-subtitle">Зарегистрируйтесь, чтобы продолжить</div> 
-              <v-text-field class="field" 
-                density="comfortable" 
-                placeholder="Введите Email" 
-                prepend-inner-icon="mdi-email" 
-                variant="" 
-              ></v-text-field> 
-              <v-text-field class="field"  
-                :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"  
-                :type="visible ? 'text' : 'password'"  
-                density="comfortable"  
-                placeholder="Придумайте пароль"  
-                prepend-inner-icon="mdi-lock"  
-                variant=""  
-                @click:append-inner="visible = !visible"  
-              ></v-text-field> 
-              <v-text-field class="field"  
-                :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"  
-                :type="visible ? 'text' : 'password'"  
-                density="comfortable"  
-                placeholder="Повторите пароль"  
-                prepend-inner-icon="mdi-lock"  
-                variant=""  
-                @click:append-inner="visible = !visible"  
-              ></v-text-field> 
-              <div class="have-acc" @click="tab = 0">У вас уже есть аккаунт?</div>
-              <v-btn color="#1470EF" class="mb-4 logup">Зарегистрироваться</v-btn> 
+              </div>
+              <v-btn color="#1470EF" class="mb-4" @click="login">Войти</v-btn>
             </div>
-          </v-card> 
-        </v-col> 
-      </v-row> 
-    </v-container> 
-  </div> 
-</template> 
+            <div v-else-if="tab === 1">
+              <div class="text">Создайте аккаунт</div>
+              <div class="text-subtitle">Зарегистрируйтесь, чтобы продолжить</div>
+              <v-text-field class="field" density="comfortable" placeholder="Введите Email" prepend-inner-icon="mdi-email"
+                variant="" v-model="registrationEmail">
+              </v-text-field>
+              <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
+                :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Придумайте пароль"
+                prepend-inner-icon="mdi-lock" variant="" @click:append-inner="visible = !visible"
+                v-model="registrationPassword">
+              </v-text-field>
+              <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
+                :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Повторите пароль"
+                prepend-inner-icon="mdi-lock" variant="" @click:append-inner="visible = !visible"
+                v-model="registrationConfirmPassword">
+              </v-text-field>
+              <div class="have-acc" @click="tab = 0">У вас уже есть аккаунт?</div>
+              <v-btn color="#1470EF" class="mb-4 logup" @click="register">Зарегистрироваться</v-btn>
+            </div>
+          </v-card>
+          <div v-if="message">{{ message }}</div>
+        </v-col>
+      </v-row>
+    </v-container>
+  </div>
+</template>
 
 <script>
+import { mapActions } from 'vuex';
+import users from '@/users.js';
+
 export default {
   data() {
     return {
-      visible: false, 
-      tab: null,
+      visible: false,
+      tab: 0,
       tabs: ['Вход', 'Регистрация'],
+      email: '',
+      password: '',
+      rememberMe: false,
+      registrationEmail: '',
+      registrationPassword: '',
+      registrationConfirmPassword: '',
+      message: ''
     };
   },
+  methods: {
+  ...mapActions(['setUser']),
+  login() {
+    console.log('Login button clicked'); 
+    const user = users.find(user => user.email === this.email && user.password === this.password);
+    if (user) {
+      console.log('User found:', user); 
+      this.setUser(user); 
+      console.log('Vuex state after login:', this.$store.state.user); 
+      this.$router.push('/user');
+    } else {
+      console.log('Invalid email or password'); 
+      this.message = 'Неверный email или пароль.';
+    }
+  },
+  register() {
+    if (this.registrationPassword !== this.registrationConfirmPassword) {
+      this.message = 'Пароли не совпадают.';
+      return;
+    }
+
+    const userExists = users.some(user => user.email === this.registrationEmail);
+    if (userExists) {
+      this.message = 'Пользователь с таким email уже существует.';
+      return;
+    }
+
+    users.push({ email: this.registrationEmail, password: this.registrationPassword });
+    this.message = 'Регистрация успешна! Теперь вы можете войти.';
+    this.tab = 0;
+  }
 }
 
-
+};
 </script>
+
 
 <style scoped>
 

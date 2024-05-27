@@ -2,7 +2,8 @@
     <div class="room-card" @mouseover="showDetails = true" @mouseleave="showDetails = false">    
         <img class="room-image" :src="room.image" :alt="`Изображение ${room.title}`">    
         <div class="room-info" :class="{ active: showDetails }" :style="{height: showDetails ? 'auto' : '82px'}">     
-            <div class="room-title">{{ room.title }}</div>     
+            <div class="room-title">{{ room.title }}</div>
+            <div v-for="(players, index) in room.players" :key="players" class="players">{{ players }}</div>   
             <div v-if="showDetails" class="additional-info">    
                 <div v-for="genre in room.genres" :key="genre" class="genres">{{ genre }}</div>      
                 <v-btn class="enjoy">Присоединиться</v-btn>    
@@ -28,7 +29,15 @@
 
       
       <style scoped>
-      .result {  
+
+.players {
+  font-family: Montserrat;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 26.82px;
+  text-align: left;
+}
+.result {  
   font-family: Montserrat;  
   font-size: 28px;  
   font-weight: 700;  
@@ -42,15 +51,15 @@
 
 
 .room-card {  
-    cursor: pointer; 
-    width: 320px;  
-    position: relative;  
-    height: 445px;  
-    border-radius: 10px;  
-    overflow: hidden; 
-    transition: all 0.3s;
-    
-  }  
+  cursor: pointer; 
+  width: 320px;  
+  position: relative;  
+  height: 445px;  
+  border-radius: 10px;  
+  margin: 0px;  
+  overflow: hidden; 
+  transition: all 0.3s;
+}
   
   .room-card:hover .room-info {
     transform: translateY(0);
@@ -62,7 +71,7 @@
     position: absolute; 
     top: 0; 
     left: 0; 
-    border-radius: 10px;  
+  object-fit: cover;
   } 
   
   .room-info {   
@@ -79,6 +88,7 @@
   transition: all 0.3s; 
   transform: translateY(0); 
   height: 82px;
+  border-radius: 0 0 10px 10px; 
 }
 
   

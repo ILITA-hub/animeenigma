@@ -1,38 +1,40 @@
 <template>
-   <div class="container"> 
+  <div class="container"> 
     <div class="banner">
-      <img class="picture">
+      <div class="picture"></div>
       <div class="text">
-      <div class="title">Коллекции опенингов</div>
-      <div class="subtitle">Откройте мир аниме через его опенинги! Насладитесь музыкой и анимацией, <br>определившими каждый шедевр. Откройте для себя новые жемчужины!</div>
-    </div>
-      <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line>
-            <template v-slot:append>
-              <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
-            </template>
-          </v-text-field>
+        <div class="title">Коллекции опенингов</div>
+        <div class="subtitle">Откройте мир аниме через его опенинги! Насладитесь музыкой и анимацией, <br>определившими каждый шедевр. Откройте для себя новые жемчужины!</div>
+      </div>
+      <div class="search-container">
+        <v-text-field class="search" density="compact" label="Поиск..." variant="" hide-details single-line>
+          <template v-slot:append>
+            <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
+          </template>
+        </v-text-field>
+      </div>
     </div>
     <div class="content">  
       <div class="result">Результаты поиска</div>  
-    <div class="filter">
+      <div class="filter">
         <div class="filter-anime">
-      <FilterAnime/>
-    </div>
-    </div>
-    <div class="collections">
-      <CollectionsComp
-      v-for="collections in collections"
-      :key="collections.id"
-      :collections="collections"/>
+          <FilterAnime/>
+        </div>
+      </div>
+      <div class="collections">
+        <CollectionsComp
+          v-for="collections in collections"
+          :key="collections.id"
+          :collections="collections"/>
+      </div>
     </div>
   </div>
-</div>
-  </template>
+</template>
 
 <script>
-  import FilterAnime from "@/components/FilterComp/FilterAnime.vue"
-  import CollectionsComp from "@/components/Collections/CollectionsComp.vue"
-  import { collections } from "@/components/Collections/CollectionsComp.js"
+  import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
+  import CollectionsComp from "@/components/Collections/CollectionsComp.vue";
+  import { collections } from "@/components/Collections/CollectionsComp.js";
 
   export default {
     components: {
@@ -40,10 +42,10 @@
       CollectionsComp,
     },
     data () { 
-    return { 
-      collections,
-    }; 
-  },
+      return { 
+        collections,
+      }; 
+    },
   };
 </script>
 
@@ -89,34 +91,36 @@
   position: relative;
   overflow: hidden;
   height: 300px;
-  margin: 30px 30px 0px 30px;
+  margin: 30px 35px 0px 35px;
+  border-radius: 10px;
 }
 
 .picture {
   background-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0)), url('src/assets/img/picture2.png');
   background-size: cover;
   background-position: center; 
-  display: grid;
+  width: 100%;
+  height: 100%;
   border-radius: 10px;
-  position: relative;
-  top: 50%;
-  left: 50%;
-  transform:translate(-50%,-50%);
-  width: 1697px;
-  height: 300px;
+}
+
+.search-container {
+  left: 70px;
+  bottom: 40px;
+  position: absolute;
+  width: 480px;
+  height: 40px;
+  display: flex;
+  justify-content: center;
 }
 
 .search {
-  left: 70px;
-  bottom: 270px;
-  position: relative;
-  font-family: Montserrat;
-  margin: 0 0px 0 15px;
-  width: 480px;
-  height: 40px;
-  border-radius: 10px;
+  flex-grow: 1;
+  margin-right: 10px;
   background-color: rgba(255, 255, 255, 0.1);
   color: white;
+  border-radius: 10px;
+  font-family: Montserrat;
 }
 
 .button {
@@ -124,36 +128,31 @@
   font-weight: normal;
   text-transform: none;
   font-size: 16px;
-  left: 180px;
   height: 40px;
-  width: 164px;
+  width: 100px;
   border-radius: 10px;
   background-color: #1470EF;
   color: white;
 }
-
 .text {
-  position: relative;
-  bottom: 300px;
+  position: absolute;
+  bottom: 110px;
+  left: 70px;
   color: white;
   font-family: Montserrat;
   text-align: left;
-  margin: 80px 0px 10px 85px;
 }
+
 .title {
   font-size: 45px;
   font-weight: 700;
   line-height: 54.86px;
-  text-align: left;
 }
 
 .subtitle {
   font-size: 16px;
   font-weight: 500;
   line-height: 22px;
-  text-align: left;
-  bottom: -7px;
-  position: relative;
+  margin-top: 10px;
 }
-
 </style>

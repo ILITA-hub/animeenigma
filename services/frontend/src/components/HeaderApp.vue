@@ -1,49 +1,51 @@
-<template> 
-  <div> 
-    <v-app-bar class="app-bar"> 
+<template>
+  <div>
+    <v-app-bar class="app-bar">
       <v-img src="src/assets/img/logo.png" class="logo" @click="$router.push('/')"></v-img>
-      <v-btn icon class="mr-2" v-if="isBurgerMenu" @click.stop="drawer = !drawer"> 
-        <v-icon>mdi-menu</v-icon> 
-      </v-btn> 
-      <div v-if="!isBurgerMenu" class="content"> 
-        <v-btn text class="button btn" @click="$router.push('/')">Главная</v-btn> 
+      <v-btn icon class="mr-2" v-if="isBurgerMenu" @click.stop="drawer = !drawer">
+        <v-icon>mdi-menu</v-icon>
+      </v-btn>
+      <div v-if="!isBurgerMenu" class="content">
+        <v-btn text class="button btn" @click="$router.push('/')">Главная</v-btn>
         <v-menu>
-      <template v-slot:activator="{ props }">
-        <v-btn text class="button btn" 
-        v-bind="props">
-        Коллекции 
-        <v-icon class="icon" 
-        :size="20">{{ menu ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon></v-btn>
-      </template>
-      <v-list class="list">
-        <v-list-item
-          v-for="(item, index) in items"
-          :key="index"
-          @click="routeTo(item.route)">
-          <v-list-item-title>{{ item.title }}</v-list-item-title>
-        </v-list-item>
-      </v-list>
-    </v-menu>
-        <v-btn text class="button btn" @click="$router.push('/rooms')">Комнаты</v-btn>        
-        <v-spacer></v-spacer> 
-        <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line> 
-          <template v-slot:append> 
-            <v-btn icon @click="onSearchIconClick" class="search-icon-button"> 
-              <v-icon>mdi-magnify</v-icon> 
-            </v-btn> 
-          </template> 
-        </v-text-field> 
-        <v-spacer></v-spacer> 
-        <v-btn text class="button button-room" @click="$router.push('/createroom')">Комната +</v-btn> 
-        <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn> 
-      </div> 
-    </v-app-bar> 
-  </div> 
+          <template v-slot:activator="{ props }">
+            <v-btn text class="button btn" v-bind="props">
+              Коллекции
+              <v-icon class="icon" :size="20">{{ menu ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+            </v-btn>
+          </template>
+          <v-list class="list">
+            <v-list-item v-for="(item, index) in items" :key="index" @click="routeTo(item.route)">
+              <v-list-item-title>{{ item.title }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+        <v-btn text class="button btn" @click="$router.push('/rooms')">Комнаты</v-btn>
+        <v-spacer></v-spacer>
+        <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line>
+          <template v-slot:append>
+            <v-btn icon @click="onSearchIconClick" class="search-icon-button">
+              <v-icon>mdi-magnify</v-icon>
+            </v-btn>
+          </template>
+        </v-text-field>
+        <v-spacer></v-spacer>
+        <v-btn text class="button button-room" @click="$router.push('/createroom')">Комната +</v-btn>
+        <template v-if="isAuthenticated">
+          <v-avatar class="avatar" :image="user.avatar" size="40" @click="$router.push('/user')"></v-avatar>
+        </template>
+        <template v-else>
+          <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn>
+        </template>
+      </div>
+    </v-app-bar>
+  </div>
 </template>
 
-
 <script>
- export default {
+import { mapGetters } from 'vuex';
+
+export default {
   data: () => ({
     menu: false,
     items: [
@@ -51,6 +53,9 @@
       { title: 'Коллекция +', route: '/custom-collections' },
     ],
   }),
+  computed: {
+    ...mapGetters(['isAuthenticated', 'user']),
+  },
   methods: {
     routeTo(route) {
       if (route) {
@@ -61,7 +66,15 @@
 }
 </script>
 
+
+
+
 <style scoped>
+
+.avatar {
+  top: 10px;
+}
+
 .icon {
   margin-top: 2px;
   margin-left: 10px;
