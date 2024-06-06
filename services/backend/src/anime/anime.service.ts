@@ -55,7 +55,7 @@ export class AnimeService {
 
     querySQLBuilder.skip(query.limit * (query.page - 1))
     querySQLBuilder.take(query.limit)
-    querySQLBuilder.select(["anime.id", "anime.name", "anime.nameRU", "anime.nameJP", "anime.year", "videos.id", "videos.name", "videos.kind"])
+    querySQLBuilder.select(["anime.id", "anime.name", "anime.nameRU", "anime.nameJP", "anime.year", "anime.imgPath", "videos.id", "videos.name", "videos.kind"])
     const resultAnime = await querySQLBuilder.getMany()
 
     const result = {
