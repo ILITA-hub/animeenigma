@@ -1,0 +1,38 @@
+name: base prod redeploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare SSH
+        env:
+          PRIVATE_KEY:  ${{ secrets.PROD_PRIVATE_KEY  }}
+          HOSTNAME :    ${{ secrets.PROD_SSH_HOST  }}
+          USER_NAME :   ${{ secrets.PROD_SSH_USER  }}
+        run: |
+          mkdir -p ~/.ssh
+          sudo apt-get install -y openssh-client
+          echo "$PRIVATE_KEY" > ~/.ssh/private_key
+          chmod 600 ~/.ssh/private_key
+          echo -e "Host my-server\n\tHostName $HOSTNAME\n\tUser $USER_NAME\n\tStrictHostKeyChecking no\n\tIdentityFile ~/.ssh/private_key" > ~/.ssh/config
+          
+    
+      - name: Run redeploy script
+        run: |
+          ssh my-server '
+            cd /data/animeenigma &&
+            git fetch --all &&
+            git checkout main &&
+            git reset --hard origin/main &&
+            git pull origin main &&
+            bash init/init_update.bash
+          '

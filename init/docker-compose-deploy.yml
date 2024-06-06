@@ -6,7 +6,7 @@ services:
   animeenigma-redis:
     image: redis:6-alpine
     container_name: 'redis'
-    restart: always
+    restart: on-failure
     ports:
       - 127.0.0.1:16379:6379
     command: redis-server --save 20 1 --loglevel warning --requirepass v0RedisSecret
@@ -14,8 +14,9 @@ services:
       - redis:/data
 
   animeenigma-postgres:
+    container_name: pg_container
     image: postgres
-    restart: always
+    restart: on-failure
     environment:
       POSTGRES_USER: postgresUserAE
       POSTGRES_PASSWORD: pgSuperSecretMnogaBycaBab
@@ -26,6 +27,24 @@ services:
       - postgres:/data
       # - ./custom_pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
       # - ./custom_postgresql.conf:/etc/postgresql.conf
+
+  animeenigmaBackend:
+    container_name: animeenigmaBackend
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: on-failure
+    ports:
+      -
+
+  animeenigmaFrontend:
+    container_name: animeenigmaFrontend
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: on-failure
+    ports:
+      -
 
 volumes:
   redis:
