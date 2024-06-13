@@ -8,16 +8,16 @@
               {{ item }}
             </v-tab>
           </v-tabs>
-          <v-card :style="tab === 1 ? { minHeight: '422px' } : {}" class="form">
+          <v-card :class="tab === 1 ? 'form form--register' : 'form form--login'">
             <div v-if="tab === 0">
               <div class="text">Добро пожаловать!</div>
               <div class="text-subtitle">Войдите в аккаунт, чтобы продолжить</div>
               <v-text-field class="field" density="comfortable" placeholder="Email" prepend-inner-icon="mdi-email"
-                variant="" v-model="email">
+                v-model="email">
               </v-text-field>
               <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
                 :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Пароль"
-                prepend-inner-icon="mdi-lock" variant="" @click:append-inner="visible = !visible" v-model="password">
+                prepend-inner-icon="mdi-lock" @click:append-inner="visible = !visible" v-model="password">
               </v-text-field>
               <div class="remember-password">
                 <v-checkbox class="remember" label="Запомнить меня" color="#1470EF" v-model="rememberMe">
@@ -30,17 +30,18 @@
               <div class="text">Создайте аккаунт</div>
               <div class="text-subtitle">Зарегистрируйтесь, чтобы продолжить</div>
               <v-text-field class="field" density="comfortable" placeholder="Введите Email" prepend-inner-icon="mdi-email"
-                variant="" v-model="registrationEmail">
+                v-model="registrationEmail">
+              </v-text-field>
+              <v-text-field class="field" density="comfortable" placeholder="Придумайте никнейм" prepend-inner-icon="mdi-account"
+                v-model="registrationUsername">
               </v-text-field>
               <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
                 :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Придумайте пароль"
-                prepend-inner-icon="mdi-lock" variant="" @click:append-inner="visible = !visible"
-                v-model="registrationPassword">
+                prepend-inner-icon="mdi-lock" @click:append-inner="visible = !visible" v-model="registrationPassword">
               </v-text-field>
               <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
                 :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Повторите пароль"
-                prepend-inner-icon="mdi-lock" variant="" @click:append-inner="visible = !visible"
-                v-model="registrationConfirmPassword">
+                prepend-inner-icon="mdi-lock" @click:append-inner="visible = !visible" v-model="registrationConfirmPassword">
               </v-text-field>
               <div class="have-acc" @click="tab = 0">У вас уже есть аккаунт?</div>
               <v-btn color="#1470EF" class="mb-4 logup" @click="register">Зарегистрироваться</v-btn>
@@ -54,8 +55,8 @@
 </template>
 
 <script>
+import axios from 'axios';
 import { mapActions } from 'vuex';
-import users from '@/users.js';
 
 export default {
   data() {
@@ -67,50 +68,69 @@ export default {
       password: '',
       rememberMe: false,
       registrationEmail: '',
+      registrationUsername: '',
       registrationPassword: '',
       registrationConfirmPassword: '',
       message: ''
     };
   },
   methods: {
-  ...mapActions(['setUser']),
-  login() {
-    console.log('Login button clicked'); 
-    const user = users.find(user => user.email === this.email && user.password === this.password);
-    if (user) {
-      console.log('User found:', user); 
-      this.setUser(user); 
-      console.log('Vuex state after login:', this.$store.state.user); 
-      this.$router.push('/user');
+    ...mapActions(['setUser']),
+    async login() {
+  try {
+    const response = await axios.post('https://animeenigma.ru/api/users/login', {
+      login: this.email,
+      password: this.password
+    });
+    const token = response.data.token;
+    const user = { email: this.email, avatar: this.avatar, token }; 
+    if (this.rememberMe) {
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('registrationUsername', this.registrationUsername); 
+      localStorage.setItem('avatar', this.avatar);
     } else {
-      console.log('Invalid email or password'); 
-      this.message = 'Неверный email или пароль.';
+      sessionStorage.setItem('authToken', token);
     }
-  },
-  register() {
-    if (this.registrationPassword !== this.registrationConfirmPassword) {
-      this.message = 'Пароли не совпадают.';
-      return;
-    }
-
-    const userExists = users.some(user => user.email === this.registrationEmail);
-    if (userExists) {
-      this.message = 'Пользователь с таким email уже существует.';
-      return;
-    }
-
-    users.push({ email: this.registrationEmail, password: this.registrationPassword });
-    this.message = 'Регистрация успешна! Теперь вы можете войти.';
-    this.tab = 0;
+    this.setUser(user); 
+    this.$router.push('/user');
+  } catch (error) {
+    console.error('Login error:', error.response.data);
+    this.message = error.response.data.message || 'Неверный email или пароль.';
   }
-}
+},
 
+    async register() {
+      if (this.registrationPassword !== this.registrationConfirmPassword) {
+        this.message = 'Пароли не совпадают.';
+        return;
+      }
+      try {
+        const response = await axios.post('https://animeenigma.ru/api/users/reg', {
+          username: this.registrationUsername,
+          login: this.registrationEmail,
+          password: this.registrationPassword,
+          confirmPassword: this.registrationConfirmPassword
+        });
+
+        const token = response.data.token;
+        const user = { email: this.registrationEmail, avatar: this.avatar, token }; 
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('registrationUsername', this.registrationUsername); 
+        localStorage.setItem('avatar', this.avatar);
+        this.setUser(user);
+        this.$router.push('/user');
+        this.message = 'Регистрация успешна! Теперь вы вошли в систему.';
+      } catch (error) {
+        console.error('Registration error:', error.response.data);
+        this.message = error.response.data.message || 'Ошибка регистрации.';
+      }
+    }
+  }
 };
 </script>
 
 
 <style scoped>
-
 .auth-container {
   display: flex;
   justify-content: center;
@@ -123,11 +143,18 @@ export default {
   box-shadow: 10px 2px 50px 0px rgba(0, 0, 0, 0.05);
   background: rgb(33, 35, 53);
   top: 10px;
+  padding: 20px;
+  transform: translateX(-10%);
+}
+
+.form--login {
   width: 464px;
   height: 361px;
-  transform: translateX(-10%);
-  padding: 20px; 
-  max-height: 1000px;
+}
+
+.form--register {
+  width: 464px;
+  min-height: 422px;
 }
 
 .text {
@@ -141,7 +168,6 @@ export default {
   padding-bottom: 15px;
   margin-left: 15px;
   margin-top: 5px;
-
 }
 
 .text-subtitle {
@@ -167,7 +193,6 @@ export default {
   font-weight: 500;
   line-height: 22px;
   letter-spacing: 0%;
-
 }
 
 .tab--active {
@@ -183,15 +208,14 @@ export default {
   width: 394px;
   position: relative;
   top: 20px;
-  color: none;
   background-color: rgba(255, 255, 255, 0.1);
   margin-bottom: 20px;
   border-radius: 10px;
   height: 50px;
   margin-left: 15px;
   display: grid;
-
 }
+
 .forgot {
   color: rgb(255, 255, 255);
   font-family: Montserrat;
@@ -203,6 +227,7 @@ export default {
   left: 107px;
   top: 18px;
 }
+
 .have-acc {
   color: rgb(255, 255, 255);
   font-family: Montserrat;
@@ -215,6 +240,7 @@ export default {
   top: 15px;
   margin-bottom: 15px;
 }
+
 .mb-4 {
   position: relative;
   width: 394px;
@@ -239,30 +265,29 @@ export default {
   text-transform: none;
 }
 
-.remember{
-left: 6px;
-color: rgb(255, 255, 255);
-font-size: 14px;
-font-weight: 400;
-letter-spacing: 0%;
-text-align: left;
-position: relative;
+.remember {
+  left: 6px;
+  color: rgb(255, 255, 255);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0%;
+  text-align: left;
+  position: relative;
 }
 
 .remember-password {
-display: flex;
-color: rgb(255, 255, 255);
-font-family: Montserrat;
-font-size: 14px;
-font-weight: 400;
-height: 60px;
-top: 4px;
-position: relative;
+  display: flex;
+  color: rgb(255, 255, 255);
+  font-family: Montserrat;
+  font-size: 14px;
+  font-weight: 400;
+  height: 60px;
+  top: 4px;
+  position: relative;
 }
 
 .forgot:hover, .have-acc:hover {
-    color: #1470EF;
-    cursor: pointer;
+  color: #1470EF;
+  cursor: pointer;
 }
-
 </style>

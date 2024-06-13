@@ -4,7 +4,7 @@
       <div class="user-banner">
         <v-card class="main-banner">
           <div class="avatar-container">
-            <v-avatar class="avatar" image="src/assets/img/avatar.png" size="140"></v-avatar>
+            <v-avatar class="avatar" :image="avatar" size="140"></v-avatar>
           </div>
           <v-img
             class="bg-picture"
@@ -16,10 +16,10 @@
           <div class="user-header">
             <div class="text-container">
               <v-card-title class="user-title">
-                Rimu Rin
+                {{ registrationUsername }} 
               </v-card-title>
               <v-card-text class="subtitle">
-                <div>Зарегистрирована на сайте с 2024 года</div>
+                <div>Зарегистрирован на сайте с 2024 года</div>
               </v-card-text>
             </div>
           </div>
@@ -34,21 +34,69 @@
         </v-card>
       </div>
     </div>
+    <div class="user-collections">
+      <v-card class="collections-banner">
+        <v-card-title class="collections-title">Мои коллекции</v-card-title>
+        <div class="collections-list">
+          <div class="collection-item" v-for="(collection, index) in collections" :key="index">
+            <div class="collection-name">{{ collection.name }}</div>
+            <div class="collection-description">{{ collection.description }}</div>
+          </div>
+        </div>
+      </v-card>
+    </div>
   </div>
 </template>
 
 <script>
+import axios from 'axios';
+
 export default {
   name: 'UserPage',
   data() {
     return {
-      stats: ['Очков', 'Викторин создано', 'Викторин пройдено', 'Коллекций создано']
+      stats: ['Очков', 'Викторин создано', 'Викторин пройдено', 'Коллекций создано'],
+      registrationUsername: '', 
+      avatar: '',
+      collections: [],
     };
-  }
+  },
+  mounted() {
+    this.registrationUsername = localStorage.getItem('registrationUsername') || '';
+    this.avatar = localStorage.getItem('avatar') || '';
+
+    console.log('Username:', this.registrationUsername);
+    console.log('Avatar:', this.avatar);
+
+    this.fetchUserCollections();
+  },
+  methods: {
+    async fetchUserCollections() {
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+
+      if (!token) {
+        console.error('Нет токена аутентификации');
+        return;
+      }
+
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/animeCollections', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        this.collections = response.data; 
+        console.log('User collections:', this.collections);
+      } catch (error) {
+        console.error('Error fetching collections:', error.response.data);
+      }
+    },
+  },
 };
 </script>
 
 <style scoped>
+
 .user-banner {
   margin: 0px 65px 0px 65px;
   height: 300px;

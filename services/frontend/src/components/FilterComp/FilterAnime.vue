@@ -11,7 +11,6 @@
             class="btn-room"
             text
             v-bind="props"
-            variant=""
           >
             Фильтры аниме
             <v-icon class="icon" :size="28">{{ menu ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
@@ -82,9 +81,14 @@ export default {
       try {
         const response = await axios.get('https://animeenigma.ru/api/genre');
         if (response.data && Array.isArray(response.data)) {
-          this.genres = response.data.slice(0, 10);
+          const validGenres = response.data.slice(0, 10).map(genre => ({
+            id: genre.id,
+            nameRu: genre.nameRu || 'Неизвестный жанр'
+          }));
+          this.genres = validGenres;
+          console.log('Loaded genres:', this.genres);
         } else {
-          console.error('Invalid data format:', response.data);
+          console.log('Unexpected response format:', response.data);
         }
       } catch (error) {
         console.error('Failed to fetch genres:', error);
@@ -96,6 +100,8 @@ export default {
   },
 };
 </script>
+
+
 
 <style scoped>
 .btn-room {

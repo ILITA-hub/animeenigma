@@ -1,29 +1,79 @@
 <template>
-    <v-container> 
-      <v-row justify="center"> 
-        <div class="create-room">
-            <a @click="$router.push('/')" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
-        <v-card class="form">
-                <div class="text">Создать коллекцию</div> 
-                <v-text-field class="field" 
-                    density="comfortable" 
-                    placeholder="Название коллекции" 
-                    variant="" 
-                ></v-text-field> 
-                <div class="collection">
-                <div class="openings">Выбранные аниме</div>
-                    <v-btn class="collection-btn" @click="$router.push('/i')">Выбрать из коллекции</v-btn> 
-                </div>
-                <v-btn color="#1470EF" class="mb-4" @click="createRoom">Создать</v-btn>
-     </v-card>
-    </div>
-      </v-row> 
-</v-container> 
+  <v-container>
+    <v-row justify="center">
+      <div class="create-room">
+          <a @click="$router.push('/')" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+          <v-card class="form">
+              <div class="text">Создать коллекцию</div>
+              <v-text-field
+                  class="field"
+                  density="comfortable"
+                  placeholder="Название коллекции"
+                  v-model="collectionName"
+              ></v-text-field>
+              <v-text-field
+                  class="field"
+                  density="comfortable"
+                  placeholder="Описание коллекции"
+                  v-model="collectionDescription"
+              ></v-text-field>
+              <div class="collection">
+                  <div class="openings">Выбранные аниме</div>
+                  <v-btn class="collection-btn" @click="$router.push('/i')">Выбрать из коллекции</v-btn>
+              </div>
+              <v-btn color="#1470EF" class="mb-4" @click="createCollection">Создать</v-btn>
+          </v-card>
+      </div>
+    </v-row>
+  </v-container>
 </template>
 
-
 <script>
+import axios from 'axios';
+
+export default {
+data() {
+  return {
+    collectionName: '',
+    collectionDescription: '',
+    selectedOpenings: [], 
+  };
+},
+methods: {
+  async createCollection() {
+    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+
+    if (!token) {
+      console.error('Нет токена аутентификации');
+      return;
+    }
+
+    console.log('Using token:', token); 
+
+    const payload = {
+      name: this.collectionName,
+      description: this.collectionDescription,
+      openings: this.selectedOpenings,
+    };
+
+    try {
+      const response = await axios.post('https://animeenigma.ru/api/animeCollections', payload, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      console.log('Collection created:', response.data);
+      this.$router.push('/user');
+    } catch (error) {
+      console.error('Error creating collection:', error.response.data);
+    }
+  },
+},
+};
 </script>
+
+
+
 
 
 <style scoped>

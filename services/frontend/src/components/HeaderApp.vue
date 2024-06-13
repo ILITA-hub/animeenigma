@@ -46,13 +46,15 @@
 import { mapGetters } from 'vuex';
 
 export default {
-  data: () => ({
-    menu: false,
-    items: [
-      { title: 'Коллекции на сайте', route: '/collections' },
-      { title: 'Коллекция +', route: '/custom-collections' },
-    ],
-  }),
+  data() {
+    return {
+      menu: false,
+      items: [
+        { title: 'Коллекции на сайте', route: '/collections' },
+        { title: 'Коллекция +', route: '/custom-collections' },
+      ],
+    };
+  },
   computed: {
     ...mapGetters(['isAuthenticated', 'user']),
   },
@@ -62,16 +64,15 @@ export default {
         this.$router.push(route);
       }
     },
+    onSearchIconClick() {
+    },
   },
-}
+};
 </script>
 
-
-
-
 <style scoped>
-
 .avatar {
+  cursor: pointer;
   top: 10px;
 }
 
@@ -90,6 +91,7 @@ export default {
   display: flex;
   flex-direction: column;
 }
+
 .app-bar {
   display: flex;
   background-color: #101115 !important;
@@ -163,5 +165,4 @@ export default {
   background-color: #1470EF;
   color: white;
 }
-
 </style>
