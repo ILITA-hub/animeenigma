@@ -32,43 +32,42 @@
 import axios from 'axios';
 
 export default {
-data() {
-  return {
-    collectionName: '',
-    collectionDescription: '',
-    selectedOpenings: [], 
-  };
-},
-methods: {
-  async createCollection() {
-    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
-
-    if (!token) {
-      console.error('Нет токена аутентификации');
-      return;
-    }
-
-    console.log('Using token:', token); 
-
-    const payload = {
-      name: this.collectionName,
-      description: this.collectionDescription,
-      openings: this.selectedOpenings,
+  data() {
+    return {
+      collectionName: '',
+      collectionDescription: '',
+      selectedOpenings: [],
     };
-
-    try {
-      const response = await axios.post('https://animeenigma.ru/api/animeCollections', payload, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      console.log('Collection created:', response.data);
-      this.$router.push('/user');
-    } catch (error) {
-      console.error('Error creating collection:', error.response.data);
-    }
   },
-},
+  methods: {
+    async createCollection() {
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+
+      if (!token) {
+        console.error('Нет токена аутентификации');
+        return;
+      }
+
+      const payload = {
+        name: this.collectionName,
+        description: this.collectionDescription,
+        openings: this.selectedOpenings,
+      };
+
+      try {
+        const response = await axios.post('https://animeenigma.ru/api/animeCollections', payload, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        console.log('Collection created:', response.data);
+        this.$router.push('/user');
+      } catch (error) {
+        console.error('Error creating collection:', error.response.data);
+      }
+    },
+  },
 };
 </script>
 

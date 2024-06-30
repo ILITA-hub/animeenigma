@@ -42,6 +42,7 @@
             <div class="collection-name">{{ collection.name }}</div>
             <div class="collection-description">{{ collection.description }}</div>
           </div>
+          <div v-if="collections.length === 0">Нет коллекций для отображения.</div>
         </div>
       </v-card>
     </div>
@@ -56,7 +57,7 @@ export default {
   data() {
     return {
       stats: ['Очков', 'Викторин создано', 'Викторин пройдено', 'Коллекций создано'],
-      registrationUsername: '', 
+      registrationUsername: '',
       avatar: '',
       collections: [],
     };
@@ -64,10 +65,6 @@ export default {
   mounted() {
     this.registrationUsername = localStorage.getItem('registrationUsername') || '';
     this.avatar = localStorage.getItem('avatar') || '';
-
-    console.log('Username:', this.registrationUsername);
-    console.log('Avatar:', this.avatar);
-
     this.fetchUserCollections();
   },
   methods: {
@@ -85,7 +82,8 @@ export default {
             Authorization: `Bearer ${token}`
           }
         });
-        this.collections = response.data; 
+
+        this.collections = response.data;
         console.log('User collections:', this.collections);
       } catch (error) {
         console.error('Error fetching collections:', error.response.data);
@@ -96,7 +94,6 @@ export default {
 </script>
 
 <style scoped>
-
 .user-banner {
   margin: 0px 65px 0px 65px;
   height: 300px;
@@ -214,5 +211,58 @@ export default {
   font-weight: 500;
   line-height: 14.63px;
   color: white;
+}
+
+.user-collections {
+  margin: 20px 65px;
+}
+
+.collections-banner {
+  padding: 20px;
+  background-color: rgba(33, 35, 53, 1);
+  border-radius: 10px;
+}
+
+.collections-title {
+  font-family: Montserrat;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 19.5px;
+  text-align: left;
+  color: white;
+}
+
+.collections-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.collection-item {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 10px;
+  border-radius: 10px;
+  width: 200px;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.collection-name {
+  font-family: Montserrat;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+
+.collection-description {
+  font-family: Montserrat;
+  font-size: 12px;
+  font-weight: 400;
+  color: white;
+  margin-top: 5px;
 }
 </style>

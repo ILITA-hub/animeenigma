@@ -7,7 +7,14 @@
         <div class="subtitle">Откройте мир аниме через его опенинги! Насладитесь музыкой и анимацией, <br>определившими каждый шедевр. Откройте для себя новые жемчужины!</div>
       </div>
       <div class="search-container">
-        <v-text-field class="search" density="compact" label="Поиск..." variant="" hide-details single-line>
+        <v-text-field 
+          v-model="searchQuery"
+          class="search" 
+          density="compact" 
+          label="Поиск..." 
+          variant="" 
+          hide-details 
+          single-line>
           <template v-slot:append>
             <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
           </template>
@@ -15,7 +22,7 @@
       </div>
     </div>
     <div class="content">  
-      <div class="result">Результаты поиска</div>  
+      <div class="result" v-if="searchQuery">Результаты поиска</div>  
       <div class="filter">
         <div class="filter-anime">
           <FilterAnime/>
@@ -23,18 +30,18 @@
       </div>
       <div class="collections">
         <CollectionsComp
-          v-for="collections in collections"
-          :key="collections.id"
-          :collections="collections"/>
+          v-for="collection in filteredCollections"
+          :key="collection.id"
+          :collections="collection"/>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+  import axios from 'axios';
   import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
   import CollectionsComp from "@/components/Collections/CollectionsComp.vue";
-  import { collections } from "@/components/Collections/CollectionsComp.js";
 
   export default {
     components: {
@@ -43,9 +50,40 @@
     },
     data () { 
       return { 
-        collections,
+        collections: [],
+        searchQuery: ''
       }; 
     },
+    computed: {
+      filteredCollections() {
+        if (!this.searchQuery) {
+          return this.collections;
+        }
+        return this.collections.filter(collection => 
+          collection.nameRU.toLowerCase().includes(this.searchQuery.toLowerCase())
+        );
+      }
+    },
+    methods: {
+      async fetchCollections() {
+        try {
+          const response = await axios.get('https://animeenigma.ru/api/anime?limit=50&page=1&year=2024');
+          const animeData = response.data.data;
+          this.collections = animeData.map(anime => {
+            return {
+              ...anime,
+              seasons: anime.videos.map(video => video.kind).filter((value, index, self) => self.indexOf(value) === index)
+            };
+          });
+        } catch (error) {
+          console.error("Ошибка при загрузке данных:", error);
+        }
+      },
+      onSearchIconClick() {      }
+    },
+    mounted() {
+      this.fetchCollections();
+    }
   };
 </script>
 

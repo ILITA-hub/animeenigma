@@ -25,19 +25,8 @@
             item-text="nameRu"
             label="Жанр"
             multiple
-          >
-            <template v-slot:selection="{ item, index }">
-              <div v-if="index < 2">
-                <span>{{ item.nameRu }}</span>
-              </div>
-              <span
-                v-if="index === 2"
-                class="text-grey text-caption align-self-center"
-              >
-                (+{{ selectedGenres.length - 2 }} others)
-              </span>
-            </template>
-          </v-select>
+          ></v-select>
+
           <v-select
             class="select"
             v-model="selectedYears"
@@ -81,7 +70,7 @@ export default {
       try {
         const response = await axios.get('https://animeenigma.ru/api/genre');
         if (response.data && Array.isArray(response.data)) {
-          const validGenres = response.data.slice(0, 10).map(genre => ({
+          const validGenres = response.data.map(genre => ({
             id: genre.id,
             nameRu: genre.nameRu || 'Неизвестный жанр'
           }));
@@ -100,8 +89,6 @@ export default {
   },
 };
 </script>
-
-
 
 <style scoped>
 .btn-room {
