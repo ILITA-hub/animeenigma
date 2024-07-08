@@ -36,7 +36,7 @@
           >
             <template v-slot:selection="{ item, index }">
               <div v-if="index < 2">
-                <span>{{ item }}</span>
+                <span>{{ item.title }}</span>
               </div>
               <span
                 v-if="index === 2"
