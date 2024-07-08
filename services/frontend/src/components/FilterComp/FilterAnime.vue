@@ -22,7 +22,7 @@
             v-model="selectedGenres"
             :items="genres"
             item-value="id"
-            item-text="nameRu"
+            item-title="nameRu"
             label="Жанр"
             multiple
           ></v-select>
@@ -75,9 +75,6 @@ export default {
             nameRu: genre.nameRu || 'Неизвестный жанр'
           }));
           this.genres = validGenres;
-          console.log('Loaded genres:', this.genres);
-        } else {
-          console.log('Unexpected response format:', response.data);
         }
       } catch (error) {
         console.error('Failed to fetch genres:', error);
