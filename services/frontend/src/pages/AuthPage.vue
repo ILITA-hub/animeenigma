@@ -15,16 +15,16 @@
               <v-text-field class="field" density="comfortable" placeholder="Email" prepend-inner-icon="mdi-email"
                 v-model="email">
               </v-text-field>
-              <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
-                :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Пароль"
-                prepend-inner-icon="mdi-lock" @click:append-inner="visible = !visible" v-model="password">
+              <v-text-field class="field" :append-inner-icon="visible.value ? 'mdi-eye' : 'mdi-eye-off'"
+                :type="visible.value ? 'text' : 'password'" density="comfortable" placeholder="Пароль"
+                prepend-inner-icon="mdi-lock" @click:append-inner="visible.value = !visible.value" v-model="password">
               </v-text-field>
               <div class="remember-password">
                 <v-checkbox class="remember" label="Запомнить меня" color="#1470EF" v-model="rememberMe">
                 </v-checkbox>
                 <div class="forgot">Забыли пароль?</div>
               </div>
-              <v-btn color="#1470EF" class="mb-4" @click="login">Войти</v-btn>
+              <v-btn color="#1470EF" class="mb-4" @click="handleLogin">Войти</v-btn>
             </div>
             <div v-else-if="tab === 1">
               <div class="text">Создайте аккаунт</div>
@@ -35,16 +35,16 @@
               <v-text-field class="field" density="comfortable" placeholder="Придумайте никнейм" prepend-inner-icon="mdi-account"
                 v-model="registrationUsername">
               </v-text-field>
-              <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
-                :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Придумайте пароль"
-                prepend-inner-icon="mdi-lock" @click:append-inner="visible = !visible" v-model="registrationPassword">
+              <v-text-field class="field" :append-inner-icon="visible.value ? 'mdi-eye' : 'mdi-eye-off'"
+                :type="visible.value ? 'text' : 'password'" density="comfortable" placeholder="Придумайте пароль"
+                prepend-inner-icon="mdi-lock" @click:append-inner="visible.value = !visible.value" v-model="registrationPassword">
               </v-text-field>
-              <v-text-field class="field" :append-inner-icon="visible ? 'mdi-eye' : 'mdi-eye-off'"
-                :type="visible ? 'text' : 'password'" density="comfortable" placeholder="Повторите пароль"
-                prepend-inner-icon="mdi-lock" @click:append-inner="visible = !visible" v-model="registrationConfirmPassword">
+              <v-text-field class="field" :append-inner-icon="visible.value ? 'mdi-eye' : 'mdi-eye-off'"
+                :type="visible.value ? 'text' : 'password'" density="comfortable" placeholder="Повторите пароль"
+                prepend-inner-icon="mdi-lock" @click:append-inner="visible.value = !visible.value" v-model="registrationConfirmPassword">
               </v-text-field>
               <div class="have-acc" @click="tab = 0">У вас уже есть аккаунт?</div>
-              <v-btn color="#1470EF" class="mb-4 logup" @click="register">Зарегистрироваться</v-btn>
+              <v-btn color="#1470EF" class="mb-4 logup" @click="handleRegister">Зарегистрироваться</v-btn>
             </div>
           </v-card>
           <div v-if="message">{{ message }}</div>
@@ -55,80 +55,80 @@
 </template>
 
 <script>
-import axios from 'axios';
-import { mapActions } from 'vuex';
+import { defineComponent, ref } from 'vue';
+import { useAuthStore } from '@/stores/authStore';
+import { useRouter } from 'vue-router';
 
-export default {
-  data() {
+export default defineComponent({
+  setup() {
+    const visible = ref(false);
+    const tab = ref(0);
+    const authStore = useAuthStore();
+    const router = useRouter();
+    const email = ref('');
+    const password = ref('');
+    const rememberMe = ref(false);
+    const registrationEmail = ref('');
+    const registrationUsername = ref('');
+    const registrationPassword = ref('');
+    const registrationConfirmPassword = ref('');
+    const message = ref('');
+    const tabs = ['Вход', 'Регистрация'];
+
+    const handleLogin = async () => {
+      try {
+        const { success, user, message: msg } = await authStore.login({
+          email: email.value,
+          password: password.value,
+          rememberMe: rememberMe.value,
+        });
+        if (success) {
+          router.push('/user');
+        } else {
+          message.value = msg;
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        message.value = error.response?.data?.message || 'Неверный email или пароль.';
+      }
+    };
+    const handleRegister = async () => {
+      try {
+        const { success, user, message: msg } = await authStore.register({
+          email: registrationEmail.value,
+          username: registrationUsername.value,
+          password: registrationPassword.value,
+          confirmPassword: registrationConfirmPassword.value,
+        });
+        if (success) {
+          router.push('/user');
+        } else {
+          message.value = msg;
+        }
+      } catch (error) {
+        console.error('Registration error:', error);
+        message.value = error.response?.data?.message || 'Ошибка регистрации.';
+      }
+    };
     return {
-      visible: false,
-      tab: 0,
-      tabs: ['Вход', 'Регистрация'],
-      email: '',
-      password: '',
-      rememberMe: false,
-      registrationEmail: '',
-      registrationUsername: '',
-      registrationPassword: '',
-      registrationConfirmPassword: '',
-      message: ''
+      visible,
+      tab,
+      tabs,
+      email,
+      password,
+      rememberMe,
+      registrationEmail,
+      registrationUsername,
+      registrationPassword,
+      registrationConfirmPassword,
+      message,
+      handleLogin,
+      handleRegister,
     };
   },
-  methods: {
-    ...mapActions(['setUser']),
-    async login() {
-  try {
-    const response = await axios.post('https://animeenigma.ru/api/users/login', {
-      login: this.email,
-      password: this.password
-    });
-    const token = response.data.token;
-    const user = { email: this.email, avatar: this.avatar, token }; 
-    if (this.rememberMe) {
-      localStorage.setItem('authToken', token);
-      localStorage.setItem('registrationUsername', this.registrationUsername); 
-      localStorage.setItem('avatar', this.avatar);
-    } else {
-      sessionStorage.setItem('authToken', token);
-    }
-    this.setUser(user); 
-    this.$router.push('/user');
-  } catch (error) {
-    console.error('Login error:', error.response.data);
-    this.message = error.response.data.message || 'Неверный email или пароль.';
-  }
-},
+});
 
-    async register() {
-      if (this.registrationPassword !== this.registrationConfirmPassword) {
-        this.message = 'Пароли не совпадают.';
-        return;
-      }
-      try {
-        const response = await axios.post('https://animeenigma.ru/api/users/reg', {
-          username: this.registrationUsername,
-          login: this.registrationEmail,
-          password: this.registrationPassword,
-          confirmPassword: this.registrationConfirmPassword
-        });
-
-        const token = response.data.token;
-        const user = { email: this.registrationEmail, avatar: this.avatar, token }; 
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('registrationUsername', this.registrationUsername); 
-        localStorage.setItem('avatar', this.avatar);
-        this.setUser(user);
-        this.$router.push('/user');
-        this.message = 'Регистрация успешна! Теперь вы вошли в систему.';
-      } catch (error) {
-        console.error('Registration error:', error.response.data);
-        this.message = error.response.data.message || 'Ошибка регистрации.';
-      }
-    }
-  }
-};
 </script>
-
 
 <style scoped>
 .auth-container {

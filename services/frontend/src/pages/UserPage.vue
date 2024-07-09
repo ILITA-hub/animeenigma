@@ -35,22 +35,22 @@
       </div>
     </div>
     <div class="user-collections">
-      <v-card class="collections-banner">
-        <v-card-title class="collections-title">Мои коллекции</v-card-title>
-        <div class="collections-list">
-          <div class="collection-item" v-for="(collection, index) in collections" :key="index">
-            <div class="collection-name">{{ collection.name }}</div>
-            <div class="collection-description">{{ collection.description }}</div>
-          </div>
-          <div v-if="collections.length === 0">Нет коллекций для отображения.</div>
+          <v-card class="collections-banner">
+            <v-card-title class="collections-title">Мои коллекции</v-card-title>
+            <div class="collections-list">
+              <div class="collection-item" v-for="(collection, index) in collections" :key="index">
+                <div class="collection-name">{{ collection.name }}</div>
+                <div class="collection-description">{{ collection.description }}</div>
+              </div>
+              <div v-if="collections.length === 0">Нет коллекций для отображения.</div>
+            </div>
+          </v-card>
         </div>
-      </v-card>
-    </div>
   </div>
 </template>
 
 <script>
-import axios from 'axios';
+import { useCollectionStore } from '@/stores/collectionStore';
 
 export default {
   name: 'UserPage',
@@ -62,32 +62,16 @@ export default {
       collections: [],
     };
   },
-  mounted() {
+  async mounted() {
     this.registrationUsername = localStorage.getItem('registrationUsername') || '';
     this.avatar = localStorage.getItem('avatar') || '';
-    this.fetchUserCollections();
+    await this.fetchCollections();
   },
   methods: {
-    async fetchUserCollections() {
-      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
-
-      if (!token) {
-        console.error('Нет токена аутентификации');
-        return;
-      }
-
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/animeCollections', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        this.collections = response.data;
-        console.log('User collections:', this.collections);
-      } catch (error) {
-        console.error('Error fetching collections:', error.response.data);
-      }
+    async fetchCollections() {
+      const collectionStore = useCollectionStore();
+      await collectionStore.fetchUserCollections();
+      this.collections = collectionStore.collections;
     },
   },
 };

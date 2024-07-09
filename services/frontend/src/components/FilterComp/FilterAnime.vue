@@ -53,39 +53,31 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { genreStore } from '@/stores/genreStore';
 
 export default {
   data() {
     return {
       menu: false,
-      genres: [],
       selectedGenres: [],
       years: ['1990-2000', '2000-2010', '2010-2020'],
       selectedYears: [],
     };
   },
-  methods: {
-    async loadGenres() {
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/genre');
-        if (response.data && Array.isArray(response.data)) {
-          const validGenres = response.data.map(genre => ({
-            id: genre.id,
-            nameRu: genre.nameRu || 'Неизвестный жанр'
-          }));
-          this.genres = validGenres;
-        }
-      } catch (error) {
-        console.error('Failed to fetch genres:', error);
-      }
+  computed: {
+    genres() {
+      const store = genreStore();
+      return store.genres;
     },
   },
   async mounted() {
-    await this.loadGenres();
+    const store = genreStore();
+    await store.loadGenres();
   },
 };
 </script>
+
+
 
 <style scoped>
 .btn-room {

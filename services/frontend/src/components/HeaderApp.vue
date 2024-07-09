@@ -43,7 +43,8 @@
 </template>
 
 <script>
-import { mapGetters } from 'vuex';
+import { computed } from 'vue';
+import { userStore } from '@/stores/userStore';
 
 export default {
   data() {
@@ -55,8 +56,15 @@ export default {
       ],
     };
   },
-  computed: {
-    ...mapGetters(['isAuthenticated', 'user']),
+  setup() {
+    const store = userStore();
+    const isAuthenticated = computed(() => store.isAuthenticated);
+    const user = computed(() => store.user);
+
+    return {
+      isAuthenticated,
+      user,
+    };
   },
   methods: {
     routeTo(route) {
@@ -69,6 +77,8 @@ export default {
   },
 };
 </script>
+
+
 
 <style scoped>
 .avatar {

@@ -2,78 +2,64 @@
   <v-container>
     <v-row justify="center">
       <div class="create-room">
-          <a @click="$router.push('/')" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
-          <v-card class="form">
-              <div class="text">Создать коллекцию</div>
-              <v-text-field
-                  class="field"
-                  density="comfortable"
-                  placeholder="Название коллекции"
-                  v-model="collectionName"
-              ></v-text-field>
-              <v-text-field
-                  class="field"
-                  density="comfortable"
-                  placeholder="Описание коллекции"
-                  v-model="collectionDescription"
-              ></v-text-field>
-              <div class="collection">
-                  <div class="openings">Выбранные аниме</div>
-                  <v-btn class="collection-btn" @click="$router.push('/i')">Выбрать из коллекции</v-btn>
-              </div>
-              <v-btn color="#1470EF" class="mb-4" @click="createCollection">Создать</v-btn>
-          </v-card>
+        <a @click="$router.push('/')" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+        <v-card class="form">
+          <div class="text">Создать коллекцию</div>
+          <v-text-field
+            class="field"
+            density="comfortable"
+            placeholder="Название коллекции"
+            v-model="collectionName"
+          ></v-text-field>
+          <v-text-field
+            class="field"
+            density="comfortable"
+            placeholder="Описание коллекции"
+            v-model="collectionDescription"
+          ></v-text-field>
+          <div class="selected-videos">
+            <div v-for="video in selectedOpenings" :key="video.id" class="selected-video">{{ video.name }}</div>
+          </div>
+          <div class="collection">
+            <div class="openings">Выбранные аниме</div>
+            <v-btn class="collection-btn" @click="$router.push('/collect-select')">Выбрать из коллекции</v-btn>
+          </div>
+          <v-btn color="#1470EF" class="mb-4" @click="createCollection">Создать</v-btn>
+        </v-card>
       </div>
     </v-row>
   </v-container>
 </template>
 
 <script>
-import axios from 'axios';
+import { useCollectionStore } from '@/stores/collectionStore';
 
 export default {
   data() {
     return {
-      collectionName: '',
-      collectionDescription: '',
-      selectedOpenings: [],
+      collectionName: localStorage.getItem('collectionName') || '',
+      collectionDescription: localStorage.getItem('collectionDescription') || '',
+      selectedOpenings: JSON.parse(localStorage.getItem('selectedOpenings')) || [],
     };
   },
   methods: {
     async createCollection() {
-      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
-
-      if (!token) {
-        console.error('Нет токена аутентификации');
-        return;
-      }
-
-      const payload = {
-        name: this.collectionName,
-        description: this.collectionDescription,
-        openings: this.selectedOpenings,
-      };
-
+      const collectionStore = useCollectionStore();
+      collectionStore.collectionName = this.collectionName;
+      collectionStore.collectionDescription = this.collectionDescription;
+      collectionStore.selectedOpenings = this.selectedOpenings;
       try {
-        const response = await axios.post('https://animeenigma.ru/api/animeCollections', payload, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        console.log('Collection created:', response.data);
-        this.$router.push('/user');
+        const createdCollection = await collectionStore.createCollection();
+        if (createdCollection) {
+          this.$router.push('/user');
+        }
       } catch (error) {
-        console.error('Error creating collection:', error.response.data);
+        console.error('Error creating collection in component:', error);
       }
     },
   },
 };
 </script>
-
-
-
-
 
 <style scoped>
 

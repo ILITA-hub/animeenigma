@@ -1,15 +1,17 @@
-import { createApp } from 'vue'
-import App from './App.vue'
-import vuetify from './plugins/vuetify'
-import { loadFonts } from './plugins/webfontloader'
+import { createApp } from 'vue';
+import App from './App.vue';
+import vuetify from './plugins/vuetify';
+import { loadFonts } from './plugins/webfontloader';
 import router from './router';
-import store from './store';
+import { createPinia } from 'pinia'; 
 
-loadFonts()
+loadFonts();
 
-createApp(App)
+const app = createApp(App);
+const pinia = createPinia(); 
+
+app
   .use(router)
   .use(vuetify)
-  .use(store)
-  .mount('#app')
-
+  .use(pinia)
+  .mount('#app');
