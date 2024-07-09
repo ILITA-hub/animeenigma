@@ -36,7 +36,6 @@ export const useCollectionStore = defineStore('collection', {
           },
         });
         console.log('Collection created:', response.data);
-        await this.fetchUserCollections();
         return response.data;
       } catch (error) {
         console.error('Error creating collection:', error);
