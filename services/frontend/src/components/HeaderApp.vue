@@ -31,8 +31,9 @@
         </v-text-field>
         <v-spacer></v-spacer>
         <v-btn text class="button button-room" @click="$router.push('/createroom')">Комната +</v-btn>
-        <template v-if="isAuthenticated">
-          <v-avatar class="avatar" :image="user.avatar" size="40" @click="$router.push('/user')"></v-avatar>
+        <template v-if="authStore.isAuthenticated">
+          <v-avatar  class="avatar" size="40" @click="$router.push('/user')"><v-img class="avatarka" :src="userAvatar"></v-img>
+    </v-avatar>
         </template>
         <template v-else>
           <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn>
@@ -44,7 +45,7 @@
 
 <script>
 import { computed } from 'vue';
-import { userStore } from '@/stores/userStore';
+import { useAuthStore } from '@/stores/authStore';
 
 export default {
   data() {
@@ -57,13 +58,17 @@ export default {
     };
   },
   setup() {
-    const store = userStore();
-    const isAuthenticated = computed(() => store.isAuthenticated);
-    const user = computed(() => store.user);
+    const userAvatar = computed(() => {
+      if (authStore.user.avatar) {
+        return authStore.user.avatar
+      }
+      return  'av.svg'
+    })
+    const authStore = useAuthStore();
 
     return {
-      isAuthenticated,
-      user,
+      userAvatar,
+      authStore,
     };
   },
   methods: {
@@ -81,6 +86,12 @@ export default {
 
 
 <style scoped>
+
+.avatarka {
+  filter: invert(100%) sepia(0%) saturate(2%) hue-rotate(4deg) brightness(111%) contrast(101%);
+  padding: 5px;
+}
+
 .avatar {
   cursor: pointer;
   top: 10px;
