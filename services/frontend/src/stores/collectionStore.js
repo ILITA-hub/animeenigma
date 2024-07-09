@@ -26,7 +26,7 @@ export const useCollectionStore = defineStore('collection', {
       const payload = {
         name: this.collectionName,
         description: this.collectionDescription,
-        openings: this.selectedOpenings,
+        openings: this.selectedOpenings.length === 0 ? [0] : this.selectedOpenings, //TODO убрать проверку
       };
 
       try {
