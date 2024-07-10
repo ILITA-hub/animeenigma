@@ -25,18 +25,27 @@
             item-title="nameRu"
             label="Жанр"
             multiple
-          ></v-select>
-
+          >
+          <template v-slot:selection="{ item, index }">
+              <div v-if="index < 3">
+                <span>{{ item.title }},</span>
+              </div>
+              <span
+                v-if="index === 3"
+                class="text-grey text-caption align-self-center"
+              >
+                (+{{ selectedGenres.length - 3 }} others)
+              </span>
+            </template></v-select>
           <v-select
             class="select"
             v-model="selectedYears"
             :items="years"
             label="Год выпуска"
-            multiple
-          >
+            multiple>
             <template v-slot:selection="{ item, index }">
               <div v-if="index < 2">
-                <span>{{ item.title }}</span>
+                <span>{{ item.title }},</span>
               </div>
               <span
                 v-if="index === 2"
@@ -54,6 +63,7 @@
 
 <script>
 import { genreStore } from '@/stores/genreStore';
+import { computed, onMounted } from 'vue';
 
 export default {
   data() {
@@ -64,15 +74,18 @@ export default {
       selectedYears: [],
     };
   },
-  computed: {
-    genres() {
-      const store = genreStore();
-      return store.genres;
-    },
-  },
-  async mounted() {
+  setup() {
     const store = genreStore();
-    await store.loadGenres();
+    onMounted(async () => {
+      await store.loadGenres();
+    });
+
+    const genres = computed(() => store.genres);
+
+    return {
+      store,
+      genres,
+    };
   },
 };
 </script>
