@@ -12,7 +12,7 @@
             src="src/assets/img/banner.png"
             cover>
           </v-img>
-          <v-fab icon="$vuetify"></v-fab>
+          <!-- <v-fab icon="$vuetify"></v-fab> -->
           <div class="user-header">
             <div class="text-container">
               <v-card-title class="user-title">
@@ -38,7 +38,7 @@
           <v-card class="collections-banner">
             <v-card-title class="collections-title">Мои коллекции</v-card-title>
             <div class="collections-list">
-              <div class="collection-item" v-for="(collection, index) in collections" :key="index">
+              <div class="collection-item" v-for="collection in collections" :key="collection.id">
                 <div class="collection-name">{{ collection.name }}</div>
                 <div class="collection-description">{{ collection.description }}</div>
               </div>
@@ -51,31 +51,31 @@
 
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
+import { useAuthStore } from '@/stores/authStore';
+import { computed, onMounted } from 'vue';
 
 export default {
   name: 'UserPage',
-  data() {
+  setup() {
+    const authStore = useAuthStore();
+    const collectionStore = useCollectionStore();
+
+    const registrationUsername = computed(() => authStore.user?.email || '');
+    const collections = computed(() => collectionStore.collections);
+
+    onMounted(async () => {
+      collectionStore.userCollections();
+    });
+
     return {
       stats: ['Очков', 'Викторин создано', 'Викторин пройдено', 'Коллекций создано'],
-      registrationUsername: '',
-      avatar: '',
-      collections: [],
+      registrationUsername,
+      collections,
     };
-  },
-  async mounted() {
-    this.registrationUsername = localStorage.getItem('registrationUsername') || '';
-    this.avatar = localStorage.getItem('avatar') || '';
-    await this.fetchCollections();
-  },
-  methods: {
-    async fetchCollections() {
-      const collectionStore = useCollectionStore();
-      await collectionStore.fetchUserCollections();
-      this.collections = collectionStore.collections;
-    },
   },
 };
 </script>
+
 
 <style scoped>
 .user-banner {
