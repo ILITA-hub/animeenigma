@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 
 export const useCollectionStore = defineStore('collection', {
   state: () => ({
@@ -17,7 +18,7 @@ export const useCollectionStore = defineStore('collection', {
       this.selectedVideos = this.selectedVideos.filter(video => video.id !== videoId);
     },
     async createCollection() {
-      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      const token = Cookies.get('authToken');
 
       if (!token) {
         console.error('Нет токена аутентификации');
@@ -45,8 +46,8 @@ export const useCollectionStore = defineStore('collection', {
         throw error;
       }
     },
-    async fetchUserCollections() {
-      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+    async userCollections() {
+      const token = Cookies.get('authToken');
       if (!token) {
         console.error('Нет токена аутентификации');
         return;
@@ -58,7 +59,6 @@ export const useCollectionStore = defineStore('collection', {
           }
         });
         this.collections = response.data;
-        console.log('User collections:', this.collections);
       } catch (error) {
         console.error('Error fetching collections:', error.response?.data);
       }

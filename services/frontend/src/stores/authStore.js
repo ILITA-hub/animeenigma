@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -11,21 +12,18 @@ export const useAuthStore = defineStore('auth', {
     },
     logout() {
       this.user = null;
+      Cookies.remove('authToken');
     },
     async login(credentials) {
       try {
         const response = await axios.post('https://animeenigma.ru/api/users/login', {
           login: credentials.email,
-          password: credentials.password
+          password: credentials.password,
         });
         if (response && response.data) {
           const token = response.data.token;
           const user = { email: credentials.email, token };
-          if (credentials.rememberMe) {
-            localStorage.setItem('authToken', token);
-          } else {
-            sessionStorage.setItem('authToken', token);
-          }
+          Cookies.set('authToken', token, { expires: credentials.rememberMe ? 7 : 1 });
           this.setUser(user);
           return { success: true, user };
         } else {
@@ -43,12 +41,12 @@ export const useAuthStore = defineStore('auth', {
           username: credentials.username,
           login: credentials.email,
           password: credentials.password,
-          confirmPassword: credentials.confirmPassword
+          confirmPassword: credentials.confirmPassword,
         });
         if (response && response.data) {
           const token = response.data.token;
           const user = { email: credentials.email, token };
-          localStorage.setItem('authToken', token);
+          Cookies.set('authToken', token, { expires: 7 });
           this.setUser(user);
           return { success: true, user };
         } else {
@@ -59,10 +57,10 @@ export const useAuthStore = defineStore('auth', {
         console.error('Registration error:', error);
         return { success: false, message: error.response?.data?.message || 'Ошибка регистрации.' };
       }
-    }
+    },
   },
   getters: {
     isAuthenticated: (state) => !!state.user,
     loggedInUser: (state) => state.user,
-  },  
+  },
 });
