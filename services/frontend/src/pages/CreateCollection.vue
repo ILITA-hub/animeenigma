@@ -37,9 +37,9 @@ import { useCollectionStore } from '@/stores/collectionStore';
 export default {
   data() {
     return {
-      collectionName: localStorage.getItem('collectionName') || '',
-      collectionDescription: localStorage.getItem('collectionDescription') || '',
-      selectedOpenings: JSON.parse(localStorage.getItem('selectedOpenings')) || [],
+      collectionName: '',
+      collectionDescription: '',
+      selectedOpenings: [],
     };
   },
   methods: {
