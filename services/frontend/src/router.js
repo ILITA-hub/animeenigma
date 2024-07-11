@@ -6,6 +6,7 @@ import CreateRoom from "./pages/CreateRoom.vue";
 import CollectionsPage from "./pages/CollectionsPage.vue";
 import CreateCollection from "./pages/CreateCollection.vue";
 import UserPage from "./pages/UserPage.vue"
+import CollectSelect from "./pages/CollectSelect.vue";
 
 
 export default createRouter ({ 
@@ -18,5 +19,6 @@ export default createRouter ({
     { path: '/collections', component: CollectionsPage},
     { path: '/custom-collections', component: CreateCollection},
     { path: '/user', component: UserPage },
+    { path: '/collect-select', component: CollectSelect }, 
   ] 
 })
