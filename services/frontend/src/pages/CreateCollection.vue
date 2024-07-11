@@ -2,7 +2,7 @@
   <v-container>
     <v-row justify="center">
       <div class="create-room">
-        <a @click="$router.push('/')" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+        <a @click="goBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
         <v-card class="form">
           <div class="text">Создать коллекцию</div>
           <v-text-field
@@ -17,12 +17,12 @@
             placeholder="Описание коллекции"
             v-model="collectionDescription"
           ></v-text-field>
-          <div class="selected-videos">
-            <div v-for="video in selectedOpenings" :key="video.id" class="selected-video">{{ video.name }}</div>
-          </div>
           <div class="collection">
             <div class="openings">Выбранные аниме</div>
-            <v-btn class="collection-btn" @click="$router.push('/collect-select')">Выбрать из коллекции</v-btn>
+            <div class="selected-videos">
+              <div v-for="video in selectedVideos" :key="video.id" class="selected-video">{{ video.name }}</div>
+            </div>
+            <v-btn class="collection-btn" @click="selectFromCollection">Выбрать из коллекции</v-btn>
           </div>
           <v-btn color="#1470EF" class="mb-4" @click="createCollection">Создать</v-btn>
         </v-card>
@@ -33,31 +33,58 @@
 
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
+import { computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 
 export default {
-  data() {
-    return {
-      collectionName: '',
-      collectionDescription: '',
-      selectedOpenings: [],
+  setup() {
+    const collectionStore = useCollectionStore();
+    const router = useRouter();
+
+    const collectionName = computed({
+      get: () => collectionStore.collectionName,
+      set: (value) => collectionStore.collectionName = value
+    });
+    const collectionDescription = computed({
+      get: () => collectionStore.collectionDescription,
+      set: (value) => collectionStore.collectionDescription = value
+    });
+    const selectedVideos = computed(() => collectionStore.selectedOpenings);
+
+    const selectFromCollection = () => {
+      collectionStore.saveToLocalStorage();
+      router.push('/collect-select');
     };
-  },
-  methods: {
-    async createCollection() {
-      const collectionStore = useCollectionStore();
-      collectionStore.collectionName = this.collectionName;
-      collectionStore.collectionDescription = this.collectionDescription;
-      collectionStore.selectedOpenings = this.selectedOpenings;
+
+    const createCollection = async () => {
       try {
         const createdCollection = await collectionStore.createCollection();
         if (createdCollection) {
-          this.$router.push('/user');
+          collectionStore.clearCollectionData();
+          router.push('/user');
         }
       } catch (error) {
-        console.error('Error creating collection in component:', error);
+        console.error('ошибка создания коллекции:', error);
       }
-    },
-  },
+    };
+
+    onMounted(() => {
+      collectionStore.loadFromLocalStorage();
+    });
+
+    const goBack = () => {
+      router.push('/');
+    };
+
+    return {
+      collectionName,
+      collectionDescription,
+      selectedVideos,
+      selectFromCollection,
+      createCollection,
+      goBack
+    };
+  }
 };
 </script>
 
