@@ -4,18 +4,43 @@ import Cookies from 'js-cookie';
 
 export const useCollectionStore = defineStore('collection', {
   state: () => ({
-    selectedVideos: [],
+    selectedOpenings: [],
     collectionName: '',
     collectionDescription: '',
-    selectedOpenings: [],
     collections: [],
   }),
   actions: {
     addToCollection(video) {
-      this.selectedVideos.push(video);
+      if (video && video.id) {
+        if (!this.selectedOpenings.some(v => v.id === video.id)) {
+          this.selectedOpenings.push(video);
+          localStorage.setItem('selectedOpenings', JSON.stringify(this.selectedOpenings));
+        }
+      } else {
+        console.error('неверный формат объекта:', video);
+      }
     },
     removeFromCollection(videoId) {
-      this.selectedVideos = this.selectedVideos.filter(video => video.id !== videoId);
+      this.selectedOpenings = this.selectedOpenings.filter(video => video.id !== videoId);
+      localStorage.setItem('selectedOpenings', JSON.stringify(this.selectedOpenings));
+    },
+    loadFromLocalStorage() {
+      try {
+        const storedOpenings = JSON.parse(localStorage.getItem('selectedOpenings')) || [];
+        const storedName = localStorage.getItem('collectionName') || '';
+        const storedDescription = localStorage.getItem('collectionDescription') || '';
+
+        this.selectedOpenings = storedOpenings.filter(video => video !== null);
+        this.collectionName = storedName;
+        this.collectionDescription = storedDescription;
+      } catch (error) {
+        console.error('ошибка загрузки из локального хранилища:', error);
+      }
+    },
+    saveToLocalStorage() {
+      localStorage.setItem('collectionName', this.collectionName);
+      localStorage.setItem('collectionDescription', this.collectionDescription);
+      localStorage.setItem('selectedOpenings', JSON.stringify(this.selectedOpenings));
     },
     async createCollection() {
       const token = Cookies.get('authToken');
@@ -27,7 +52,8 @@ export const useCollectionStore = defineStore('collection', {
       const payload = {
         name: this.collectionName,
         description: this.collectionDescription,
-        openings: this.selectedOpenings.length === 0 ? [0] : this.selectedOpenings, //TODO убрать проверку
+        openings: this.selectedOpenings.map(video => video.id),
+        //openings: this.selectedOpenings.length === 0 ? [0] : this.selectedOpenings, //TODO убрать проверку
       };
 
       try {
@@ -36,13 +62,9 @@ export const useCollectionStore = defineStore('collection', {
             Authorization: `Bearer ${token}`,
           },
         });
-        console.log('Collection created:', response.data);
+        console.log('коллекция создана:', response.data);
         return response.data;
       } catch (error) {
-        console.error('Error creating collection:', error);
-        console.error('Error response:', error.response);
-        console.error('Error data:', error.response?.data);
-
         throw error;
       }
     },
@@ -60,11 +82,14 @@ export const useCollectionStore = defineStore('collection', {
         });
         this.collections = response.data;
       } catch (error) {
-        console.error('Error fetching collections:', error.response?.data);
+        console.error('ошибка получения коллекции:', error.response?.data);
       }
     },
-  },
-  getters: {
-    selectedVideosList: (state) => state.selectedVideos,
+    clearCollectionData() {
+      this.collectionName = '';
+      this.collectionDescription = '';
+      this.selectedOpenings = [];
+      this.saveToLocalStorage();
+    }
   },
 });
