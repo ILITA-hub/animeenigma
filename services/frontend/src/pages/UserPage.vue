@@ -12,7 +12,7 @@
             src="src/assets/img/banner.png"
             cover>
           </v-img>
-          <!-- <v-fab icon="$vuetify"></v-fab> -->
+          <!-- <v-fab icon="$vuetify"></v-fab> todo иконка для редактирования профиля -->
           <div class="user-header">
             <div class="text-container">
               <v-card-title class="user-title">
