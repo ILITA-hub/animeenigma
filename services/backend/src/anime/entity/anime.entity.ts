@@ -38,8 +38,8 @@ export class AnimeEntity {
   updatedAt: Date
 
   @OneToMany(() => VideosEntity, videos => videos.anime)
-  videos: VideosEntity
+  videos: VideosEntity[]
 
   @OneToMany(() => GenresAnimeEntity, genres => genres.anime)
-  genres: GenresAnimeEntity
+  genres: GenresAnimeEntity[]
 }
