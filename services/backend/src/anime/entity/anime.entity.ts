@@ -1,14 +1,12 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany, ManyToMany } from 'typeorm';
-import { ObjectType, Field, Int } from '@nestjs/graphql'
 import { VideosEntity } from '../../videos/entity/videos.entity'
 import { GenresAnimeEntity } from '../../genresAnime/entity/genresAnime.entity'
 
 @Entity({
   name: "anime"
 })
-@ObjectType()
 export class AnimeEntity {
-  // @Field({ nullable: true})
+
   @PrimaryGeneratedColumn()
   id: number
 
@@ -40,8 +38,8 @@ export class AnimeEntity {
   updatedAt: Date
 
   @OneToMany(() => VideosEntity, videos => videos.anime)
-  videos: VideosEntity
+  videos: VideosEntity[]
 
   @OneToMany(() => GenresAnimeEntity, genres => genres.anime)
-  genres: GenresAnimeEntity
+  genres: GenresAnimeEntity[]
 }
