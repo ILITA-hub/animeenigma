@@ -34,9 +34,27 @@ export class AnimeCollectionsService {
         querySQLBuilder.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
         querySQLBuilder.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
 
-        querySQLBuilder.andWhere("videos.id IN (:...videos)", { videos: videos })
+        if (genres.length != 0 || years.length != 0) {
+            querySQLBuilder.andWhere("videos.id IN (:...videos)", { videos: videos })
+        }
 
-        return await querySQLBuilder.getMany();
+        const count = await querySQLBuilder.getCount()
+        const allPage = Math.ceil(count / query.limit)
+        const prevPage = (query.page <= 1) ? 1 : (query.page > allPage) ? allPage : query.page - 1
+        const nextPage = (query.page >= allPage) ? allPage : Number(query.page) + 1 // какава хуя оно в строку переделывается АААААААА, теперь будут стоять тут NUMBER
+
+        const resultCollections = await querySQLBuilder.getMany()
+
+        const result = {
+            prevPage: prevPage,
+            page: Number(query.page),
+            nextPage: nextPage,
+            allPage: allPage,
+            countAnime: count,
+            data: resultCollections
+        }
+
+        return result
     }
 
     async getVideosIds(year, genre) {
