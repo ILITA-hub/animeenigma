@@ -14,4 +14,11 @@ export class AnimeController {
   async getAnime(@Query() query: GetAnimeRequest) {
     return await this.animeService.getAnime(query)
   }
+
+  @Get("/test")
+  @ApiOperation({ summary: "Получение всех аниме"})
+  @ApiResponse({ status: 200, type: GetAnimeResponse, isArray: true})
+  async getAnime2(@Query() query: GetAnimeRequest) {
+    return await this.animeService.getAnimeAll(query)
+  }
 }
