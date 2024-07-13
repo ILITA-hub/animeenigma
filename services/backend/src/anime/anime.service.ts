@@ -12,7 +12,6 @@ export class AnimeService {
   ) { }
 
   async getAnime(query: GetAnimeRequest) {
-    console.log(query.year)
     let genres = []
     if (typeof query.genres == "string") {
       genres.push(query.genres)
@@ -65,6 +64,29 @@ export class AnimeService {
       allPage : allPage,
       countAnime : count,
       data : resultAnime
+    }
+
+    return result;
+  }
+
+  async getAnimeAll(query: GetAnimeRequest) {
+
+    const querySQLBuilder = this.AnimeRepository.createQueryBuilder("anime")
+    querySQLBuilder.innerJoinAndSelect("anime.videos", "videos")
+    querySQLBuilder.leftJoinAndSelect("anime.genres", "genresAnime")
+    querySQLBuilder.leftJoinAndSelect("genresAnime.genre", "genres")
+
+
+    querySQLBuilder.skip(query.limit * (query.page - 1))
+    querySQLBuilder.take(query.limit)
+    querySQLBuilder.select(["anime.id", "anime.nameRU", "anime.year", "anime.imgPath", "videos.id", "videos.name"])
+    // querySQLBuilder.addSelect(["anime.id", "anime.nameRU", "anime.year", "anime.imgPath"])
+    // querySQLBuilder.addSelect(["videos.id", "videos.name"])
+
+    const resultAnime = await querySQLBuilder.getMany()
+
+    const result = {
+      data: resultAnime
     }
 
     return result;
