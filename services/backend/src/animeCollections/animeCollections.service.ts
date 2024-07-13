@@ -31,12 +31,14 @@ export class AnimeCollectionsService {
         const videos = await this.getVideosIds(years, genres)
 
         const querySQLBuilder = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections")
-        querySQLBuilder.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
-        querySQLBuilder.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
 
         if (genres.length != 0 || years.length != 0) {
+            querySQLBuilder.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
+            querySQLBuilder.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
             querySQLBuilder.andWhere("videos.id IN (:...videos)", { videos: videos })
         }
+
+        querySQLBuilder.select(["animeCollections.id", "animeCollections.name"])
 
         const count = await querySQLBuilder.getCount()
         const allPage = Math.ceil(count / query.limit)
@@ -44,6 +46,7 @@ export class AnimeCollectionsService {
         const nextPage = (query.page >= allPage) ? allPage : Number(query.page) + 1 // какава хуя оно в строку переделывается АААААААА, теперь будут стоять тут NUMBER
 
         const resultCollections = await querySQLBuilder.getMany()
+        console.log(querySQLBuilder.getQueryAndParameters())
 
         const result = {
             prevPage: prevPage,
