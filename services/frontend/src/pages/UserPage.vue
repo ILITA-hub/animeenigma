@@ -21,6 +21,7 @@
               <v-card-text class="subtitle">
                 <div>Зарегистрирован на сайте с 2024 года</div>
               </v-card-text>
+              <v-btn @click="logout" color="primary">Выйти</v-btn>
             </div>
           </div>
         </v-card>
@@ -35,17 +36,17 @@
       </div>
     </div>
     <div class="user-collections">
-          <v-card class="collections-banner">
-            <v-card-title class="collections-title">Мои коллекции</v-card-title>
-            <div class="collections-list">
-              <div class="collection-item" v-for="collection in collections" :key="collection.id">
-                <div class="collection-name">{{ collection.name }}</div>
-                <div class="collection-description">{{ collection.description }}</div>
-              </div>
-              <div v-if="collections.length === 0">Нет коллекций для отображения.</div>
-            </div>
-          </v-card>
+      <v-card class="collections-banner">
+        <v-card-title class="collections-title">Мои коллекции</v-card-title>
+        <div class="collections-list">
+          <div class="collection-item" v-for="collection in collections.data" :key="collection.id">
+            <div class="collection-name">{{ collection.name }}</div>
+            <div class="collection-description">{{ collection.description }}</div>
+          </div>
+          <div v-if="collections.length === 0">Нет коллекций для отображения.</div>
         </div>
+      </v-card>
+    </div>
   </div>
 </template>
 
@@ -63,18 +64,29 @@ export default {
     const registrationUsername = computed(() => authStore.user?.email || '');
     const collections = computed(() => collectionStore.collections);
 
+    const logout = async () => {
+      try {
+        await authStore.logout();
+        window.location.href = '/';
+      } catch (error) {
+        console.error('Ошибка при выходе из системы:', error);
+      }
+    };
+
     onMounted(async () => {
-      collectionStore.userCollections();
+      await collectionStore.userCollections();
     });
 
     return {
       stats: ['Очков', 'Викторин создано', 'Викторин пройдено', 'Коллекций создано'],
       registrationUsername,
       collections,
+      logout,
     };
   },
 };
 </script>
+
 
 
 <style scoped>
@@ -198,7 +210,7 @@ export default {
 }
 
 .user-collections {
-  margin: 20px 65px;
+  margin: 50px 65px;
 }
 
 .collections-banner {
