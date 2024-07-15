@@ -15,10 +15,8 @@
           variant="" 
           hide-details 
           single-line>
-          <template v-slot:append>
-            <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
-          </template>
         </v-text-field>
+        <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
       </div>
     </div>
     <div class="content">  
@@ -29,10 +27,11 @@
         </div>
       </div>
       <div class="collections">
-        <CollectionsComp
-          v-for="collection in filteredCollections"
-          :key="collection.id"
-          :collections="collection"/>
+        <div v-if="searchQuery" class="result">Результаты поиска</div>
+        <div v-for="collection in filteredCollections" :key="collection.id" class="collection-card">
+          <div class="collection-name">{{ collection.name }}</div>
+            <div class="collection-description">{{ collection.description }}</div>
+        </div>
       </div>
     </div>
   </div>
@@ -65,29 +64,40 @@
       }
     },
     methods: {
-      async fetchCollections() {
-        try {
-          const response = await axios.get('https://animeenigma.ru/api/anime?limit=50&page=1&year=2024');
-          const animeData = response.data.data;
-          this.collections = animeData.map(anime => {
-            return {
-              ...anime,
-              seasons: anime.videos.map(video => video.kind).filter((value, index, self) => self.indexOf(value) === index)
-            };
-          });
-        } catch (error) {
-          console.error("Ошибка при загрузке данных:", error);
-        }
-      },
-      onSearchIconClick() {      }
+    async fetchCollections() {
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/animeCollections');
+        this.collections = response.data.data;
+      } catch (error) {
+        console.error('Ошибка при загрузке коллекций:', error);
+      }
     },
-    mounted() {
-      this.fetchCollections();
+    onSearchIconClick() {
     }
-  };
+  },
+  mounted() {
+    this.fetchCollections();
+  }
+};
 </script>
 
 <style scoped>
+
+.collection-name {
+  font-family: Montserrat;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+
+.collection-description {
+  font-family: Montserrat;
+  font-size: 12px;
+  font-weight: 400;
+  color: white;
+  margin-top: 5px;
+}
+
 
 .result {  
   font-family: Montserrat;  
