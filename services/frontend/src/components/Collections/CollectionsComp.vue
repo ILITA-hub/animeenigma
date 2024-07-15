@@ -1,9 +1,9 @@
 <template>
-  <div v-if="collections" class="collection-card" @mouseenter="showDetailsWithDelay" @mouseleave="hideDetailsWithDelay">
+  <div v-if="collections" class="collection-card">
     <img class="collection-image" :src="collections.imgPath" :alt="`Изображение ${collections.nameRU}`">
-    <div class="collection-info" :class="{ active: showDetails }">
+    <div class="collection-info">
       <div class="collection-title">{{ collections.nameRU }}</div>
-      <div v-if="showDetails" class="additional-info" @mouseenter="cancelHideDetails" @mouseleave="hideDetailsWithDelay">
+      <div class="additional-info">
         <v-select
           class="select"
           v-model="selectedVideo"
@@ -18,6 +18,7 @@
     </div>
   </div>
 </template>
+
 
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
@@ -50,26 +51,6 @@ export default {
       addToCollection,
     };
   },
-  data() {
-    return {
-      showDetails: false,
-      hideTimeout: null
-    };
-  },
-  methods: {
-    showDetailsWithDelay() {
-      clearTimeout(this.hideTimeout);
-      this.showDetails = true;
-    },
-    hideDetailsWithDelay() {
-      this.hideTimeout = setTimeout(() => {
-        this.showDetails = false;
-      }, 840);
-    },
-    cancelHideDetails() {
-      clearTimeout(this.hideTimeout);
-    }
-  }
 };
 </script>
 
@@ -82,11 +63,11 @@ export default {
   border-radius: 10px;
   margin: 0 55px;
   overflow: hidden;
-  transition: all 0.3s;
+  transition: transform 0.3s ease;
 }
 
 .collection-card:hover .collection-info {
-  transform: translateY(0);
+  height: auto;
 }
 
 .collection-image {
@@ -108,14 +89,13 @@ export default {
   font-weight: bold;
   padding: 10px 15px;
   backdrop-filter: blur(2px);
-  transition: all 0.3s;
-  transform: translateY(0);
-  height: 82px;
+  transition: height 0.3s ease;
+  height: 50px;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
   overflow: hidden;
 }
 
-.active {
+.collection-info.active {
   height: auto;
 }
 
