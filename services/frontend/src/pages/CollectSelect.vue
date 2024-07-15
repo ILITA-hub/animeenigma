@@ -115,6 +115,7 @@ export default {
     justify-content: flex-end;  
     left: 35px;
     position: relative;
+    gap: 20px;
   }  
   
   .filter {
@@ -171,6 +172,7 @@ export default {
     background-color: #1470EF;
     color: white;
   }
+
   .text {
     position: absolute;
     bottom: 110px;
