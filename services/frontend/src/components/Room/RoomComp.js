@@ -1,7 +1,7 @@
 export const rooms = [  
   { id: 1,  
     title: 'Магическая битва', 
-    image: 'https://img.yani.tv/posters/full/1636670533.jpg',  
+    image: 'https://sportshub.cbsistatic.com/i/2023/08/24/c978d7c1-b2ab-4965-b712-f1b5bd50711e/jujutsu-kaisen.jpg?auto=webp&width=863&height=1200&crop=0.719:1,smart',  
     genres: ['Боевик', 'Мистика','Сёнен', 'Школа'], 
     age: ['A16'],
     players: ['Игроков 16/32']
@@ -29,7 +29,7 @@ export const rooms = [
   }, 
   { id: 1,  
     title: 'Магическая битва', 
-    image: 'https://img.yani.tv/posters/full/1636670533.jpg',  
+    image: 'https://sportshub.cbsistatic.com/i/2023/08/24/c978d7c1-b2ab-4965-b712-f1b5bd50711e/jujutsu-kaisen.jpg?auto=webp&width=863&height=1200&crop=0.719:1,smart',  
     genres: ['Боевик', 'Мистика','Сёнен', 'Школа'], 
     age: ['A16'],
     players: ['Игроков 16/32']
@@ -44,7 +44,7 @@ export const rooms = [
   },
   { id: 1,  
     title: 'Магическая битва', 
-    image: 'https://img.yani.tv/posters/full/1636670533.jpg',  
+    image: 'https://sportshub.cbsistatic.com/i/2023/08/24/c978d7c1-b2ab-4965-b712-f1b5bd50711e/jujutsu-kaisen.jpg?auto=webp&width=863&height=1200&crop=0.719:1,smart',  
     genres: ['Боевик', 'Мистика','Сёнен', 'Школа'], 
     age: ['A16'],
     players: ['Игроков 16/32']
