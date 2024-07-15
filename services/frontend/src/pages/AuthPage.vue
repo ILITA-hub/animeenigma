@@ -2,7 +2,7 @@
   <div class="auth-container">
     <v-container>
       <v-row justify="center">
-        <v-col cols="12" lg="4">
+        <v-col cols="12" lg="4" xs="12">
           <v-tabs class="tabs" fixed-tabs v-model="tab" background-color="transparent">
             <v-tab :key="index" v-for="(item, index) in tabs" :class="{ 'tab--active': tab === index }">
               {{ item }}
@@ -12,11 +12,11 @@
             <div v-if="tab === 0">
               <div class="text">Добро пожаловать!</div>
               <div class="text-subtitle">Войдите в аккаунт, чтобы продолжить</div>
-              <v-text-field class="field" density="comfortable" placeholder="Email" prepend-inner-icon="mdi-email"
+              <v-text-field class="field" density="comfortable" variant="" placeholder="Email" prepend-inner-icon="mdi-email"
                 v-model="email">
               </v-text-field>
               <v-text-field class="field" :append-inner-icon="visible.value ? 'mdi-eye' : 'mdi-eye-off'"
-                :type="visible.value ? 'text' : 'password'" density="comfortable" placeholder="Пароль"
+                :type="visible.value ? 'text' : 'password'" density="comfortable" variant="" placeholder="Пароль"
                 prepend-inner-icon="mdi-lock" @click:append-inner="visible.value = !visible.value" v-model="password">
               </v-text-field>
               <div class="remember-password">
@@ -29,18 +29,18 @@
             <div v-else-if="tab === 1">
               <div class="text">Создайте аккаунт</div>
               <div class="text-subtitle">Зарегистрируйтесь, чтобы продолжить</div>
-              <v-text-field class="field" density="comfortable" placeholder="Введите Email" prepend-inner-icon="mdi-email"
+              <v-text-field class="field" density="comfortable" variant="" placeholder="Введите Email" prepend-inner-icon="mdi-email"
                 v-model="registrationEmail">
               </v-text-field>
-              <v-text-field class="field" density="comfortable" placeholder="Придумайте никнейм" prepend-inner-icon="mdi-account"
+              <v-text-field class="field" density="comfortable" variant="" placeholder="Придумайте никнейм" prepend-inner-icon="mdi-account"
                 v-model="registrationUsername">
               </v-text-field>
               <v-text-field class="field" :append-inner-icon="visible.value ? 'mdi-eye' : 'mdi-eye-off'"
-                :type="visible.value ? 'text' : 'password'" density="comfortable" placeholder="Придумайте пароль"
+                :type="visible.value ? 'text' : 'password'" density="comfortable" variant="" placeholder="Придумайте пароль"
                 prepend-inner-icon="mdi-lock" @click:append-inner="visible.value = !visible.value" v-model="registrationPassword">
               </v-text-field>
               <v-text-field class="field" :append-inner-icon="visible.value ? 'mdi-eye' : 'mdi-eye-off'"
-                :type="visible.value ? 'text' : 'password'" density="comfortable" placeholder="Повторите пароль"
+                :type="visible.value ? 'text' : 'password'" density="comfortable" variant="" placeholder="Повторите пароль"
                 prepend-inner-icon="mdi-lock" @click:append-inner="visible.value = !visible.value" v-model="registrationConfirmPassword">
               </v-text-field>
               <div class="have-acc" @click="tab = 0">У вас уже есть аккаунт?</div>
@@ -193,6 +193,7 @@ export default defineComponent({
   font-weight: 500;
   line-height: 22px;
   letter-spacing: 0%;
+  width: 370px;
 }
 
 .tab--active {
