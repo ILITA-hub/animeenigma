@@ -14,6 +14,13 @@ export const useAuthStore = defineStore('auth', {
       this.user = null;
       Cookies.remove('authToken');
     },
+    async checkAuth() {
+      const authToken = Cookies.get('authToken');
+      if (authToken) {
+        const user = { token: authToken };
+        this.setUser(user);
+      }
+    },
     async login(credentials) {
       try {
         const response = await axios.post('https://animeenigma.ru/api/users/login', {

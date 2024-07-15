@@ -46,6 +46,7 @@
 <script>
 import { computed } from 'vue';
 import { useAuthStore } from '@/stores/authStore';
+import { onMounted } from 'vue';
 
 export default {
   data() {
@@ -58,13 +59,17 @@ export default {
     };
   },
   setup() {
-    const userAvatar = computed(() => {
-      if (authStore.user.avatar) {
-        return authStore.user.avatar
-      }
-      return  'av.svg'
-    })
     const authStore = useAuthStore();
+    const userAvatar = computed(() => {
+      if (authStore.user && authStore.user.avatar) {
+        return authStore.user.avatar;
+      }
+      return 'av.svg';
+    });
+
+    onMounted(() => {
+      authStore.checkAuth();
+    });
 
     return {
       userAvatar,
@@ -82,8 +87,6 @@ export default {
   },
 };
 </script>
-
-
 
 <style scoped>
 
