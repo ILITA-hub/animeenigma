@@ -8,14 +8,16 @@
           <v-text-field
             class="field"
             density="comfortable"
+            variant=""
             placeholder="Название лобби"
             v-model="roomName"
           ></v-text-field>
           <v-select
             class="select"
+            density="comfortable"
             :items="playerCounts"
             label="Количество игроков"
-            v-model="selectedPlayerCount"
+            hide-details
           ></v-select>
           <div class="collection">
             <div class="openings">Опенинги</div>
@@ -34,8 +36,8 @@ import axios from 'axios';
 export default {
   data: () => ({
     roomName: '',
-    playerCounts: [2, 4, 6, 8, 10],
-    selectedPlayerCount: 10,
+    playerCounts: ['2', '4', '6', '8', '10'],
+    selectedPlayerCount: '',
     rangeOpenings: [
       { type: 'all', id: 0 },
       { type: 'collection', id: 1 },

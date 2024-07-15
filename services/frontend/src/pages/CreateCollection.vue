@@ -8,14 +8,9 @@
           <v-text-field
             class="field"
             density="comfortable"
+            variant=""
             placeholder="Название коллекции"
             v-model="collectionName"
-          ></v-text-field>
-          <v-text-field
-            class="field"
-            density="comfortable"
-            placeholder="Описание коллекции"
-            v-model="collectionDescription"
           ></v-text-field>
           <div class="collection">
             <div class="openings">Выбранные аниме</div>
@@ -102,7 +97,7 @@ export default {
     cursor: pointer;
     position: relative;
     top: -250px;
-    left: 77px;
+    left: 29px;
 }
 .back .mdi {
     color: rgba(51, 169, 255, 1);
@@ -117,7 +112,6 @@ export default {
 }
 
 .form {
-margin-left: 50px;
   border-radius: 10px;
   box-shadow: 10px 2px 50px 0px rgba(0, 0, 0, 0.05);
   background: rgb(33, 35, 53);
@@ -184,19 +178,35 @@ margin-left: 50px;
 }
 
 .openings {
-    margin: 10px 0 10px 0;
-    color: rgb(255, 255, 255);
-    font-family: Montserrat;
-    font-size: 16px;
+  margin: 10px 0 10px 0;
+  color: rgb(255, 255, 255);
+  font-family: Montserrat;
+  font-size: 16px;
 }
 
 .select {
-     background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    overflow: hidden;
-    height: 50px;
-    color: white;
-    font-family: 'Montserrat';
-    
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+  height: 50px;
+  color: white;
+  font-family: 'Montserrat'; 
 }
+
+.selected-video {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 10px;
+  color: white;
+  font-family: Montserrat;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 19.5px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden; 
+  text-overflow: ellipsis;
+}
+
 </style>

@@ -14,12 +14,9 @@
           variant=""
           single-line
           v-model="searchQuery"
-          @input="onSearchInput"
-        >
-          <template v-slot:append>
-            <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
-          </template>
+          @input="onSearchInput">
         </v-text-field>
+        <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
       </div>
     </div>
     <div class="content">
@@ -168,8 +165,6 @@ export default {
   line-height: 22px;
   margin-top: 10px;
 }
-
-
 
 .filter {
   flex-basis: 300px;
