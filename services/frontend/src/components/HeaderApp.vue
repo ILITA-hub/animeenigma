@@ -22,7 +22,7 @@
         </v-menu>
         <v-btn text class="button btn" @click="$router.push('/rooms')">Комнаты</v-btn>
         <v-spacer></v-spacer>
-        <v-text-field class="search" density="compact" label="Поиск..." variant="" single-line>
+        <v-text-field class="search" density="compact" label="Поиск..." variant="plain" single-line>
           <template v-slot:append>
             <v-btn icon @click="onSearchIconClick" class="search-icon-button">
               <v-icon>mdi-magnify</v-icon>
@@ -172,6 +172,7 @@ export default {
 }
 
 .search {
+  padding-left: 15px;
   top: 10px;
   position: relative;
   font-family: Montserrat;
@@ -188,5 +189,6 @@ export default {
   border-radius: 10px;
   background-color: #1470EF;
   color: white;
+  bottom: 8px;
 }
 </style>

@@ -11,7 +11,7 @@
           class="search"
           density="compact"
           label="Поиск..."
-          variant=""
+          variant="plain"
           single-line
           v-model="searchQuery"
           @input="onSearchInput">
@@ -130,6 +130,7 @@ export default {
   color: white;
   border-radius: 10px;
   font-family: Montserrat;
+  padding-left: 15px;
 }
 
 .button {

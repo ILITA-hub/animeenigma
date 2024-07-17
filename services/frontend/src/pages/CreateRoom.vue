@@ -8,12 +8,13 @@
           <v-text-field
             class="field"
             density="comfortable"
-            variant=""
+            variant="plain"
             placeholder="Название лобби"
             v-model="roomName"
           ></v-text-field>
           <v-select
             class="select"
+            variant="plain"
             density="comfortable"
             :items="playerCounts"
             label="Количество игроков"
@@ -137,6 +138,7 @@ margin-left: 50px;
   border-radius: 10px;
   height: 50px;
   display: grid;
+  padding-left: 15px;
 }
 
 .mb-4 {
@@ -180,6 +182,6 @@ margin-left: 50px;
     height: 50px;
     color: white;
     font-family: 'Montserrat';
-    
+    padding: 0 15px 0 15px;
 }
 </style>

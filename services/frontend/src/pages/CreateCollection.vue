@@ -8,7 +8,7 @@
           <v-text-field
             class="field"
             density="comfortable"
-            variant=""
+            variant="plain"
             placeholder="Название коллекции"
             v-model="collectionName"
           ></v-text-field>
@@ -148,6 +148,7 @@ export default {
   border-radius: 10px;
   height: 50px;
   display: grid;
+  padding-left: 15px;
 }
 
 .mb-4 {

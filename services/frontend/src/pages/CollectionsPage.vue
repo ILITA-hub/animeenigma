@@ -12,7 +12,7 @@
           class="search" 
           density="compact" 
           label="Поиск..." 
-          variant="" 
+          variant="plain" 
           hide-details 
           single-line>
         </v-text-field>
@@ -169,6 +169,7 @@
   color: white;
   border-radius: 10px;
   font-family: Montserrat;
+  padding-left: 15px;
 }
 
 .button {
