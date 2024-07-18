@@ -13,12 +13,18 @@ export const useAuthStore = defineStore('auth', {
     logout() {
       this.user = null;
       Cookies.remove('authToken');
+      localStorage.removeItem('userEmail');
     },
     async checkAuth() {
       const authToken = Cookies.get('authToken');
+
       if (authToken) {
-        const user = { token: authToken };
-        this.setUser(user);
+        const userEmail = localStorage.getItem('userEmail');
+        if (userEmail) {
+          this.setUser({ email: userEmail, token: authToken });
+        } else {
+          this.setUser({ token: authToken });
+        }
       }
     },
     async login(credentials) {
@@ -31,6 +37,7 @@ export const useAuthStore = defineStore('auth', {
           const token = response.data.token;
           const user = { email: credentials.email, token };
           Cookies.set('authToken', token, { expires: credentials.rememberMe ? 7 : 1 });
+          localStorage.setItem('userEmail', credentials.email);
           this.setUser(user);
           return { success: true, user };
         } else {
@@ -54,6 +61,7 @@ export const useAuthStore = defineStore('auth', {
           const token = response.data.token;
           const user = { email: credentials.email, token };
           Cookies.set('authToken', token, { expires: 7 });
+          localStorage.setItem('userEmail', credentials.email);
           this.setUser(user);
           return { success: true, user };
         } else {

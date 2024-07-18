@@ -6,17 +6,12 @@
           <div class="avatar-container">
             <v-avatar class="avatar" :image="avatar" size="140"></v-avatar>
           </div>
-          <v-img
-            class="bg-picture"
-            height="211"
-            src="src/assets/img/banner.png"
-            cover>
-          </v-img>
-          <!-- <v-fab icon="$vuetify"></v-fab> todo иконка для редактирования профиля -->
+          <v-img class="bg-picture" height="211" src="src/assets/img/banner.png" cover></v-img>
+           <!-- <v-fab icon="$vuetify"></v-fab> todo иконка для редактирования профиля -->
           <div class="user-header">
             <div class="text-container">
               <v-card-title class="user-title">
-                {{ registrationUsername }} 
+                {{ userEmail }}
               </v-card-title>
               <v-card-text class="subtitle">
                 <div>Зарегистрирован на сайте с 2024 года</div>
@@ -61,7 +56,7 @@ export default {
     const authStore = useAuthStore();
     const collectionStore = useCollectionStore();
 
-    const registrationUsername = computed(() => authStore.user?.email || '');
+    const userEmail = computed(() => authStore.user?.email || '');
     const collections = computed(() => collectionStore.collections);
 
     const logout = async () => {
@@ -74,20 +69,19 @@ export default {
     };
 
     onMounted(async () => {
+      await authStore.checkAuth();
       await collectionStore.userCollections();
     });
 
     return {
       stats: ['Очков', 'Викторин создано', 'Викторин пройдено', 'Коллекций создано'],
-      registrationUsername,
+      userEmail,
       collections,
       logout,
     };
   },
 };
 </script>
-
-
 
 <style scoped>
 .user-banner {
