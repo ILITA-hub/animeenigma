@@ -29,8 +29,10 @@
       <div class="collections">
         <div v-if="searchQuery" class="result">Результаты поиска</div>
         <div v-for="collection in filteredCollections" :key="collection.id" class="collection-card">
-          <div class="collection-name">{{ collection.name }}</div>
-            <div class="collection-description">{{ collection.description }}</div>
+          <img :src="collection.image" alt="Collection Image" class="collection-image">
+          <div class="collection-info">
+            <div class="collection-name">{{ collection.name }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -38,9 +40,9 @@
 </template>
 
 <script>
-  import axios from 'axios';
   import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
   import CollectionsComp from "@/components/Collections/CollectionsComp.vue";
+  import { useCollectionStore } from "@/stores/collectionStore";
 
   export default {
     components: {
@@ -49,11 +51,13 @@
     },
     data () { 
       return { 
-        collections: [],
         searchQuery: ''
       }; 
     },
     computed: {
+      collections() {
+        return useCollectionStore().collections;
+      },
       filteredCollections() {
         if (!this.searchQuery) {
           return this.collections;
@@ -64,38 +68,58 @@
       }
     },
     methods: {
-    async fetchCollections() {
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/animeCollections');
-        this.collections = response.data.data;
-      } catch (error) {
-        console.error('Ошибка при загрузке коллекций:', error);
+      async siteCollections() {
+        await useCollectionStore().siteCollections();
+      },
+      onSearchIconClick() {
       }
     },
-    onSearchIconClick() {
+    mounted() {
+      this.siteCollections();
     }
-  },
-  mounted() {
-    this.fetchCollections();
-  }
-};
+  };
 </script>
 
 <style scoped>
+.collection-card {
+  cursor: pointer;
+  width: 320px;
+  position: relative;
+  height: 445px;
+  border-radius: 10px;
+  margin: 0 55px;
+  overflow: hidden;
+  transition: transform 0.3s ease;
+}
+
+.collection-image {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.collection-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  color: white;
+  font-size: 16px;
+  font-family: "Montserrat", sans-serif;
+  font-weight: bold;
+  padding: 10px 15px;
+  backdrop-filter: blur(2px);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
+  overflow: hidden;
+}
 
 .collection-name {
   font-family: Montserrat;
   font-size: 14px;
   font-weight: 600;
   color: white;
-}
-
-.collection-description {
-  font-family: Montserrat;
-  font-size: 12px;
-  font-weight: 400;
-  color: white;
-  margin-top: 5px;
 }
 
 
@@ -126,6 +150,7 @@
   justify-content: flex-end;  
   left: 35px;
   position: relative;
+  gap: 20px;
 }  
 
 .filter {
