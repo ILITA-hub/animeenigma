@@ -2,10 +2,7 @@
   <div>
     <v-app-bar class="app-bar">
       <v-img src="src/assets/img/logo.png" class="logo" @click="$router.push('/')"></v-img>
-      <v-btn icon class="mr-2" v-if="isBurgerMenu" @click.stop="drawer = !drawer">
-        <v-icon>mdi-menu</v-icon>
-      </v-btn>
-      <div v-if="!isBurgerMenu" class="content">
+      <div class="content">
         <v-btn text class="button btn" @click="$router.push('/')">Главная</v-btn>
         <v-menu>
           <template v-slot:activator="{ props }">

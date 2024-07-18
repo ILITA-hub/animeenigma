@@ -90,8 +90,6 @@ export default {
 };
 </script>
 
-
-
 <style scoped>
 .btn-room {
   font-family: 'Montserrat';
