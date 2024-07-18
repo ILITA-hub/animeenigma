@@ -1,9 +1,12 @@
 <template>
-  <div v-if="collections" class="collection-card">
+  <div v-if="collections" class="collection-card" @mouseenter="showGenres" @mouseleave="hideGenres">
     <img class="collection-image" :src="collections.imgPath" :alt="`Изображение ${collections.nameRU}`">
     <div class="collection-info">
       <div class="collection-title">{{ collections.nameRU }}</div>
       <div class="additional-info">
+        <div class="genres" :class="{ active: genresVisible }">
+          <span class="genre" v-for="genre in collections.genres" :key="genre.id">{{ genre.genre.nameRu }}</span>
+        </div>
         <v-select
           class="select"
           v-model="selectedVideo"
@@ -18,7 +21,6 @@
     </div>
   </div>
 </template>
-
 
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
@@ -35,6 +37,7 @@ export default {
   setup() {
     const collectionStore = useCollectionStore();
     const selectedVideo = ref(null);
+    const genresVisible = ref(false);
 
     const addToCollection = () => {
       if (selectedVideo.value && selectedVideo.value.id) {
@@ -45,16 +48,42 @@ export default {
         console.error('Не выбран объект видео или у видео нет id');
       }
     };
-    
+
+    const showGenres = () => {
+      genresVisible.value = true;
+    };
+
+    const hideGenres = () => {
+      genresVisible.value = false;
+    };
+
     return {
       selectedVideo,
       addToCollection,
+      genresVisible,
+      showGenres,
+      hideGenres
     };
   },
 };
 </script>
 
 <style scoped>
+.genre {
+  display: inline-block;
+  margin: 2px;
+  background-color: white;
+  color: black;
+  border-radius: 10px;
+  font-family: Montserrat;
+  font-size: 12px;
+  font-weight: 500;
+  width: auto;
+  height: 35px;
+  text-align: center;
+  padding: 10px;
+}
+
 .collection-card {
   cursor: pointer;
   width: 320px;
@@ -67,7 +96,7 @@ export default {
 }
 
 .collection-card:hover .collection-info {
-  height: auto;
+  bottom: 0%;
 }
 
 .collection-image {
@@ -80,7 +109,7 @@ export default {
 
 .collection-info {
   position: absolute;
-  bottom: 0;
+  bottom: -26%;
   left: 0;
   width: 100%;
   color: white;
@@ -89,14 +118,9 @@ export default {
   font-weight: bold;
   padding: 10px 15px;
   backdrop-filter: blur(2px);
-  transition: height 0.3s ease;
-  height: 50px;
+  transition: bottom 0.3s ease;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
   overflow: hidden;
-}
-
-.collection-info.active {
-  height: auto;
 }
 
 .additional-info {
@@ -109,18 +133,12 @@ export default {
 }
 
 .genres {
-  background-color: white;
-  color: black;
-  border-radius: 10px;
-  font-family: Montserrat;
-  font-size: 12px;
-  font-weight: 400;
-  width: auto;
-  height: 35px;
-  text-align: center;
-  position: relative;
-  display: inline-block;
-  padding: 10px;
+  display: none;
+  flex-wrap: wrap;
+}
+
+.genres.active {
+  display: flex;
 }
 
 .plus-collect {
@@ -128,7 +146,6 @@ export default {
   height: 50px;
   padding: 15px 55px 15px 55px;
   border-radius: 10px;
-  opacity: 0px;
   background: rgba(20, 112, 239, 1);
   font-family: Montserrat;
   font-size: 16px;
