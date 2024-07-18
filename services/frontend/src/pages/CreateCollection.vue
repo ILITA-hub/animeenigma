@@ -12,8 +12,15 @@
             placeholder="Название коллекции"
             v-model="collectionName"
           ></v-text-field>
+          <v-text-field
+            class="field"
+            density="comfortable"
+            variant="plain"
+            placeholder="Описание коллекции"
+            v-model="collectionDescription"
+          ></v-text-field>
           <div class="collection">
-            <div class="openings">Выбранные аниме</div>
+            <div class="openings">Выбранные видео</div>
             <div class="selected-videos">
               <div v-for="video in selectedVideos" :key="video.id" class="selected-video">{{ video.name }}</div>
             </div>
