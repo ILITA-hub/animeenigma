@@ -1,9 +1,6 @@
 <template>
   <div class="container">
     <v-btn @click="goBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</v-btn>
-    <div class="search-container">
-      <v-text-field v-model="searchQuery" placeholder="Поиск..." dense outlined></v-text-field>
-    </div>
     <div class="content">
       <div class="filter">
         <div class="filter-anime">
@@ -18,12 +15,16 @@
           @addToCollection="addToCollection"
         />
       </div>
+      <div class="pagination">
+        <v-btn @click="prevPage" :disabled="!prevPageNumber">Назад</v-btn>
+        <span>Страница {{ currentPage }} из {{ totalPages }}</span>
+        <v-btn @click="nextPage" :disabled="!nextPageNumber">Вперед</v-btn>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-import axios from 'axios';
 import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
 import CollectionsComp from "@/components/Collections/CollectionsComp.vue";
 import { useCollectionStore } from '@/stores/collectionStore';
@@ -40,27 +41,24 @@ export default {
     const router = useRouter();
     const searchQuery = ref('');
 
-    const fetchCollections = async () => {
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/anime?limit=50&page=1&year=2024');
-        const animeData = response.data.data;
-        collectionStore.collections = animeData.map(anime => {
-          return {
-            ...anime,
-            seasons: anime.videos.map(video => video.kind).filter((value, index, self) => self.indexOf(value) === index)
-          };
-        });
-      } catch (error) {
-        console.error("Ошибка при загрузке данных:", error);
-      }
-    };
-
     const goBack = () => {
       router.push('/custom-collections');
     };
 
+    const nextPage = () => {
+      if (collectionStore.nextPageNumber) {
+        collectionStore.fetchCollections(collectionStore.nextPageNumber);
+      }
+    };
+
+    const prevPage = () => {
+      if (collectionStore.prevPageNumber) {
+        collectionStore.fetchCollections(collectionStore.prevPageNumber);
+      }
+    };
+
     onMounted(() => {
-      fetchCollections();
+      collectionStore.fetchCollections();
     });
 
     const addToCollection = (video) => {
@@ -80,11 +78,19 @@ export default {
       goBack,
       addToCollection,
       filteredCollections,
-      searchQuery
+      searchQuery,
+      currentPage: computed(() => collectionStore.currentPage),
+      totalPages: computed(() => collectionStore.totalPages),
+      nextPage,
+      prevPage,
+      prevPageNumber: computed(() => collectionStore.prevPageNumber),
+      nextPageNumber: computed(() => collectionStore.nextPageNumber),
     };
   }
 };
 </script>
+
+
 
   <style scoped>
   
