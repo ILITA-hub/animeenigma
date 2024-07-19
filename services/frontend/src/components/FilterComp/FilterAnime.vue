@@ -70,7 +70,7 @@ export default {
     return {
       menu: false,
       selectedGenres: [],
-      years: ['1990-2000', '2000-2010', '2010-2020'],
+      years: ['2020', '2021', '2023', '2024'],
       selectedYears: [],
     };
   },
