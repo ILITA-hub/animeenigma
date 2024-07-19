@@ -2,7 +2,7 @@
   <v-container>
     <v-row justify="center">
       <div class="create-room">
-        <a @click="goBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+        <a @click="$router.go(-1)" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
         <v-card class="form">
           <div class="text">Создать коллекцию</div>
           <v-text-field
@@ -73,10 +73,6 @@ export default {
     onMounted(() => {
       collectionStore.loadFromLocalStorage();
     });
-
-    const goBack = () => {
-      router.push('/');
-    };
 
     return {
       collectionName,

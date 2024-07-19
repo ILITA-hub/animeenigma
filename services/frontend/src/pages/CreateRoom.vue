@@ -2,7 +2,7 @@
   <v-container>
     <v-row justify="center">
       <div class="create-room">
-        <a @click="$router.push('/')" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+        <a @click="$router.go(-1)" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
         <v-card class="form">
           <div class="text">Создать комнату</div>
           <v-text-field
@@ -86,7 +86,7 @@ export default {
     cursor: pointer;
     position: relative;
     top: -250px;
-    left: 77px;
+    left: 29px;
 }
 .back .mdi {
     color: rgba(51, 169, 255, 1);
@@ -101,7 +101,6 @@ export default {
 }
 
 .form {
-margin-left: 50px;
   border-radius: 10px;
   box-shadow: 10px 2px 50px 0px rgba(0, 0, 0, 0.05);
   background: rgb(33, 35, 53);
