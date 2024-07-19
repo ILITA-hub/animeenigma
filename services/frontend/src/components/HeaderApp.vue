@@ -27,16 +27,27 @@
           </template>
         </v-text-field>
         <v-spacer></v-spacer>
-        <v-btn text class="button button-room" @click="$router.push('/createroom')">Комната +</v-btn>
+        <v-btn text class="button button-room" @click="createRoom">Комната +</v-btn>
         <template v-if="authStore.isAuthenticated">
-          <v-avatar  class="avatar" size="40" @click="$router.push('/user')"><v-img class="avatarka" :src="userAvatar"></v-img>
-    </v-avatar>
+          <v-avatar class="avatar" size="40" @click="$router.push('/user')">
+            <v-img class="avatarka" :src="userAvatar"></v-img>
+          </v-avatar>
         </template>
         <template v-else>
           <v-btn text class="button button-main" @click="$router.push('/auth')">Войти</v-btn>
         </template>
       </div>
     </v-app-bar>
+    <v-dialog v-model="dialog" width="400">
+      <v-card class="dialog">
+        <v-card-title class="headline">Пожалуйста, авторизуйтесь</v-card-title>
+        <v-card-text>Для выполнения этого действия необходимо авторизоваться.</v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="primary" text @click="dialog = false">OK</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -53,6 +64,7 @@ export default {
         { title: 'Коллекции на сайте', route: '/collections' },
         { title: 'Коллекция +', route: '/custom-collections' },
       ],
+      dialog: false,
     };
   },
   setup() {
@@ -75,8 +87,17 @@ export default {
   },
   methods: {
     routeTo(route) {
-      if (route) {
+      if (route === '/custom-collections' && !this.authStore.isAuthenticated) {
+        this.dialog = true;
+      } else if (route) {
         this.$router.push(route);
+      }
+    },
+    createRoom() {
+      if (!this.authStore.isAuthenticated) {
+        this.dialog = true;
+      } else {
+        this.$router.push('/createroom');
       }
     },
     onSearchIconClick() {
@@ -86,6 +107,19 @@ export default {
 </script>
 
 <style scoped>
+
+
+.dialog {
+  background: #101115 !important;
+  border-radius: 10px !important;
+  color: white;
+  font-family: Montserrat;
+  text-transform: none;
+  font-weight: normal;
+  display: flex;
+  padding: 10px;
+  text-align: center;
+}
 
 .avatarka {
   filter: invert(100%) sepia(0%) saturate(2%) hue-rotate(4deg) brightness(111%) contrast(101%);
