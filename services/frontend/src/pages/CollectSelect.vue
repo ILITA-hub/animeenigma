@@ -1,32 +1,45 @@
 <template>
   <div class="container">
-    <v-btn @click="goBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</v-btn>
+    <a @click="goBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
     <div class="content">
+      <div class="search-container">
+        <v-text-field 
+          v-model="searchQuery"
+          class="search" 
+          density="compact" 
+          label="Поиск на странице..." 
+          variant="plain" 
+          hide-details 
+          single-line>
+        </v-text-field>
+      </div>
       <div class="filter">
         <div class="filter-anime">
           <FilterAnime />
         </div>
-      </div>
-      <div class="collections">
-        <CollectionsComp
-          v-for="collection in filteredCollections"
-          :key="collection.id"
-          :collections="collection"
-          @addToCollection="addToCollection"
-        />
       </div>
       <div class="pagination">
         <v-btn @click="prevPage" :disabled="!prevPageNumber">Назад</v-btn>
         <span>Страница {{ currentPage }} из {{ totalPages }}</span>
         <v-btn @click="nextPage" :disabled="!nextPageNumber">Вперед</v-btn>
       </div>
+      <div class="result" v-if="searchQuery">Результаты поиска</div>  
+      <div class="collections">
+        <AnimeCard
+          v-for="collection in filteredCollections"
+          :key="collection.id"
+          :collections="collection"
+          @addToCollection="addToCollection"
+        />
+      </div>
+
     </div>
   </div>
 </template>
 
 <script>
 import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
-import CollectionsComp from "@/components/Collections/CollectionsComp.vue";
+import AnimeCard from "@/components/Anime/AnimeCard.vue";
 import { useCollectionStore } from '@/stores/collectionStore';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -34,7 +47,7 @@ import { useRouter } from 'vue-router';
 export default {
   components: {
     FilterAnime,
-    CollectionsComp,
+    AnimeCard,
   },
   setup() {
     const collectionStore = useCollectionStore();
@@ -70,9 +83,12 @@ export default {
         return collectionStore.collections;
       }
       return collectionStore.collections.filter(collection =>
-        collection.nameRU.toLowerCase().includes(searchQuery.value.toLowerCase())
+        (collection.nameRU ?? '').toLowerCase().includes(searchQuery.value.toLowerCase())
       );
     });
+
+    const onSearchIconClick = () => {
+    };
 
     return {
       goBack,
@@ -85,6 +101,7 @@ export default {
       prevPage,
       prevPageNumber: computed(() => collectionStore.prevPageNumber),
       nextPageNumber: computed(() => collectionStore.nextPageNumber),
+      onSearchIconClick,
     };
   }
 };
@@ -93,6 +110,32 @@ export default {
 
 
   <style scoped>
+
+.back {
+  color: white;
+  font-family: Montserrat;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 19.5px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+margin: 10px;
+}
+.back .mdi {
+    color: rgba(51, 169, 255, 1);
+    margin-right: 5px;
+}
+
+  .pagination {
+    gap: 10px;
+    display: flex;
+    top: 100px;
+    position: relative;
+    color: rgb(225, 11, 11);
+  }
   
   .result {  
     font-family: Montserrat;  
@@ -101,8 +144,8 @@ export default {
     line-height: 34.13px;  
     text-align: left;  
     color: white;  
-    left: 500px;
-    top: 50px; 
+    left: 413px;
+    top: -87px;
     position: relative;
   }  
   
@@ -110,16 +153,11 @@ export default {
     width: 1697px;
   }
   
-  .container {  
-    display: flex; 
-    flex-direction: column; 
-  }  
-  
   .collections {  
-    display: flex;  
-    flex-wrap: wrap;  
-    justify-content: flex-end;  
-    left: 35px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    left: 370px;
     position: relative;
     gap: 20px;
   }  
@@ -127,32 +165,11 @@ export default {
   .filter {
     display: grid;
     width: 400px;
-    margin: 0 30px 0 30px;
-  }
-  
-  .banner {
-    display: grid;
-    position: relative;
-    overflow: hidden;
-    height: 300px;
-    margin: 30px 35px 0px 35px;
-    border-radius: 10px;
-  }
-  
-  .picture {
-    background-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0)), url('src/assets/img/picture2.png');
-    background-size: cover;
-    background-position: center; 
-    width: 100%;
-    height: 100%;
-    border-radius: 10px;
   }
   
   .search-container {
     left: 70px;
-    bottom: 40px;
-    position: absolute;
-    width: 480px;
+    width: 340px;
     height: 40px;
     display: flex;
     justify-content: center;
@@ -166,39 +183,6 @@ export default {
     border-radius: 10px;
     font-family: Montserrat;
   }
-  
-  .button {
-    font-family: Montserrat;
-    font-weight: normal;
-    text-transform: none;
-    font-size: 16px;
-    height: 40px;
-    width: 100px;
-    border-radius: 10px;
-    background-color: #1470EF;
-    color: white;
-  }
 
-  .text {
-    position: absolute;
-    bottom: 110px;
-    left: 70px;
-    color: white;
-    font-family: Montserrat;
-    text-align: left;
-  }
-  
-  .title {
-    font-size: 45px;
-    font-weight: 700;
-    line-height: 54.86px;
-  }
-  
-  .subtitle {
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 22px;
-    margin-top: 10px;
-  }
   </style>
   
