@@ -27,8 +27,8 @@
 </script>
 
 
-      
-      <style scoped>
+
+<style scoped>
 
 .players {
   font-family: Montserrat;
@@ -37,18 +37,6 @@
   line-height: 26.82px;
   text-align: left;
 }
-.result {  
-  font-family: Montserrat;  
-  font-size: 28px;  
-  font-weight: 700;  
-  line-height: 34.13px;  
-  text-align: left;  
-  color: white;  
-  left: 500px;
-  top: 50px; 
-  position: relative;
-}  
-
 
 .room-card {  
   cursor: pointer; 

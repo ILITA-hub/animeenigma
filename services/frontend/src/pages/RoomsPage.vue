@@ -14,18 +14,17 @@
           variant="plain"
           single-line
           v-model="searchQuery"
-          @input="onSearchInput">
         </v-text-field>
         <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
       </div>
     </div>
     <div class="content">
+      <div class="result" v-if="searchQuery">Результаты поиска</div> 
       <div class="filter">
         <FilterRoom /> 
         <FilterAnime /> 
       </div>
       <div class="rooms-display">
-        <div v-if="searchQuery" class="search-result-text">Результат поиска</div>
         <v-card v-for="(room, i) in filteredRooms" :key="i" class="room-card">   
           <RoomComp :room="room"/> 
         </v-card>  
@@ -59,7 +58,7 @@ export default {
         return this.rooms.slice(0, 6);
       }
       return this.rooms.filter(room =>
-        room.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+        room.title.toLowerCase().includes(this.searchQuery.toLowerCase())
       );
     },
   },
@@ -76,21 +75,27 @@ export default {
 
 
 <style scoped>
+
+
 .content {
-  display: flex;
-  margin: 30px 35px 0px 35px;
+  width: 1697px;
 }
 
 .container {  
   display: flex; 
   flex-direction: column; 
 }  
+  
 
-.collections {  
-  display: flex;  
-  flex-wrap: wrap;  
-  justify-content: flex-end;  
-  left: 35px;
+.result {  
+  font-family: Montserrat;  
+  font-size: 28px;  
+  font-weight: 700;  
+  line-height: 34.13px;  
+  text-align: left;  
+  color: white;  
+  left: 500px;
+  top: 50px; 
   position: relative;
 }  
 
@@ -168,16 +173,17 @@ export default {
 }
 
 .filter {
-  flex-basis: 300px;
-  margin-right: 20px;
+  display: grid;
+  width: 400px;
+  margin: 0 30px 0 30px;
 }
 
 .rooms-display {
-  margin-top: 25px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 50px;
-  justify-content: center;
-  flex-grow: 1;
+  display: flex;  
+  flex-wrap: wrap;  
+  justify-content: flex-end;  
+  left: 35px;
+  position: relative;
+  gap: 20px;
 }
 </style>
