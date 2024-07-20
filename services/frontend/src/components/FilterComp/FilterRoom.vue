@@ -9,7 +9,7 @@
           <v-btn class="btn-room"
             text
             v-bind="props"
-            variant="">
+            variant="plain">
             Фильтры комнат
             <v-icon class="icon" :size="28">{{ menu ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
