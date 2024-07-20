@@ -21,8 +21,15 @@
           ></v-text-field>
           <div class="collection">
             <div class="openings">Выбранные видео</div>
-            <div class="selected-videos">
-              <div v-for="video in selectedVideos" :key="video.id" class="selected-video">{{ video.name }}</div>
+            <div class="selected-videos scrollable">
+              <div v-for="video in selectedVideos" :key="video.id" class="selected-video">
+                {{ video.name }}
+                <v-icon
+                  small
+                  class="remove-icon"
+                  @click="removeVideo(video.id)"
+                >mdi-close</v-icon>
+              </div>
             </div>
             <v-btn class="collection-btn" @click="selectFromCollection">Выбрать из коллекции</v-btn>
           </div>
@@ -32,6 +39,7 @@
     </v-row>
   </v-container>
 </template>
+
 
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
@@ -70,6 +78,10 @@ export default {
       }
     };
 
+    const removeVideo = (videoId) => {
+      collectionStore.removeFromCollection(videoId);
+    };
+
     onMounted(() => {
       collectionStore.loadFromLocalStorage();
     });
@@ -80,27 +92,31 @@ export default {
       selectedVideos,
       selectFromCollection,
       createCollection,
-      goBack
+      removeVideo
     };
   }
 };
 </script>
 
 <style scoped>
+.remove-icon {
+  cursor: pointer;
+  color: red;
+}
 
 .back {
-    color: white;
-    font-family: Montserrat;
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 19.5px;
-    text-align: left;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    position: relative;
-    top: -250px;
-    left: 29px;
+  color: white;
+  font-family: Montserrat;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 19.5px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+  top: -250px;
+  left: 29px;
 }
 .back .mdi {
     color: rgba(51, 169, 255, 1);
@@ -112,6 +128,8 @@ export default {
   justify-content: center;
   align-items: center;
   min-height: 80vh;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .form {
@@ -124,6 +142,29 @@ export default {
   transform: translateX(-10%);
   padding: 20px; 
   max-height: 1000px;
+}
+
+.selected-videos {
+  max-height: 105px;
+  overflow-y: auto;  
+}
+
+.selected-videos::-webkit-scrollbar {
+  width: 6px; 
+}
+
+.selected-videos::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+  border-radius: 10px;
+}
+
+.selected-videos::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px; 
+}
+
+.selected-videos::-webkit-scrollbar-thumb:hover {
+  background: #555; 
 }
 
 .text {
@@ -168,9 +209,9 @@ export default {
 }
 
 .collection .collection-btn {
-    background: rgba(51, 169, 255, 0.1);
-    color: rgba(51, 169, 255, 1);
-    text-transform: none;
+  background: rgba(51, 169, 255, 0.1);
+  color: rgba(51, 169, 255, 1);
+  text-transform: none;
   font-family: Montserrat;
   position: relative;
   width: 394px;
@@ -179,6 +220,7 @@ export default {
   display: flex;
   padding: 15px 55px 15px 55px;
   border-radius: 10px;
+  margin-top: 10px;
 }
 
 .openings {
@@ -211,6 +253,10 @@ export default {
   white-space: nowrap;
   overflow: hidden; 
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
 }
 
 </style>
