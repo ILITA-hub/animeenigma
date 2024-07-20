@@ -16,7 +16,7 @@
           hide-details 
           single-line>
         </v-text-field>
-        <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
+        <v-btn text class="button">Поиск</v-btn>
       </div>
     </div>
     <div class="content">  
@@ -27,13 +27,7 @@
         </div>
       </div>
       <div class="collections">
-        <div v-if="searchQuery" class="result">Результаты поиска</div>
-        <div v-for="collection in filteredCollections" :key="collection.id" class="collection-card">
-          <img :src="collection.image" alt="Collection Image" class="collection-image">
-          <div class="collection-info">
-            <div class="collection-name">{{ collection.name }}</div>
-          </div>
-        </div>
+        <CollectionCard v-for="collection in filteredCollections" :collection="collection"/>
       </div>
     </div>
   </div>
@@ -41,17 +35,17 @@
 
 <script>
   import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
-  import CollectionsComp from "@/components/Collections/CollectionsComp.vue";
+  import CollectionCard from "@/components/Collections/CollectionCard.vue";
   import { useCollectionStore } from "@/stores/collectionStore";
 
   export default {
     components: {
       FilterAnime,
-      CollectionsComp,
+      CollectionCard,
     },
     data () { 
       return { 
-        searchQuery: ''
+        searchQuery: '', 
       }; 
     },
     computed: {
@@ -63,7 +57,7 @@
           return this.collections;
         }
         return this.collections.filter(collection => 
-          collection.nameRU.toLowerCase().includes(this.searchQuery.toLowerCase())
+          collection.name.toLowerCase().includes(this.searchQuery.toLowerCase())
         );
       }
     },
@@ -71,8 +65,6 @@
       async siteCollections() {
         await useCollectionStore().siteCollections();
       },
-      onSearchIconClick() {
-      }
     },
     mounted() {
       this.siteCollections();
@@ -81,47 +73,6 @@
 </script>
 
 <style scoped>
-.collection-card {
-  cursor: pointer;
-  width: 320px;
-  position: relative;
-  height: 445px;
-  border-radius: 10px;
-  margin: 0 55px;
-  overflow: hidden;
-  transition: transform 0.3s ease;
-}
-
-.collection-image {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.collection-info {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  color: white;
-  font-size: 16px;
-  font-family: "Montserrat", sans-serif;
-  font-weight: bold;
-  padding: 10px 15px;
-  backdrop-filter: blur(2px);
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
-  overflow: hidden;
-}
-
-.collection-name {
-  font-family: Montserrat;
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-}
-
 
 .result {  
   font-family: Montserrat;  
