@@ -39,6 +39,12 @@
   import { useCollectionStore } from "@/stores/collectionStore";
 
   export default {
+    setup(){
+      const collectionStore = useCollectionStore()
+      return{
+        collectionStore,
+      }
+    },
     components: {
       FilterAnime,
       CollectionCard,
@@ -49,25 +55,17 @@
       }; 
     },
     computed: {
-      collections() {
-        return useCollectionStore().collections;
-      },
       filteredCollections() {
         if (!this.searchQuery) {
-          return this.collections;
+          return this.collectionStore.collections;
         }
-        return this.collections.filter(collection => 
+        return this.collectionStore.collections.filter(collection => 
           collection.name.toLowerCase().includes(this.searchQuery.toLowerCase())
         );
       }
     },
-    methods: {
-      async siteCollections() {
-        await useCollectionStore().siteCollections();
-      },
-    },
-    mounted() {
-      this.siteCollections();
+    async mounted() {
+      await this.collectionStore.siteCollections();
     }
   };
 </script>
