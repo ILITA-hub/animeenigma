@@ -4,7 +4,9 @@
       <div class="user-banner">
         <v-card class="main-banner">
           <div class="avatar-container">
-            <v-avatar class="avatar" :image="avatar" size="140"></v-avatar>
+            <v-avatar class="avatar" size="140">
+            <v-img class="avatarka" :src="userAvatar"></v-img>
+          </v-avatar>
           </div>
           <v-img class="bg-picture" height="211" src="src/assets/img/banner.png" cover></v-img>
            <!-- <v-fab icon="$vuetify"></v-fab> todo иконка для редактирования профиля -->
@@ -58,6 +60,12 @@ export default {
 
     const userEmail = computed(() => authStore.user?.email || '');
     const collections = computed(() => collectionStore.collections);
+    const userAvatar = computed(() => {
+      if (authStore.user && authStore.user.avatar) {
+        return authStore.user.avatar;
+      }
+      return 'av.svg';
+    });
 
     const logout = async () => {
       try {
@@ -78,12 +86,20 @@ export default {
       userEmail,
       collections,
       logout,
+      userAvatar,
     };
   },
 };
 </script>
 
 <style scoped>
+
+.avatarka {
+  filter: invert(100%) sepia(0%) saturate(2%) hue-rotate(4deg) brightness(111%) contrast(101%);
+  padding: 5px;
+}
+
+
 .user-banner {
   margin: 0px 65px 0px 65px;
   height: 300px;
