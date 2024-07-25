@@ -1,5 +1,5 @@
 <template>
-  <div v-if="collections" class="collection-card" @mouseenter="showGenres" @mouseleave="hideGenres">
+  <div v-if="collections" class="collection-card">
     <img class="collection-image" :src="collections.imgPath" :alt="`Изображение ${collections.nameRU}`">
     <div class="collection-info">
       <div class="collection-title">{{ collections.nameRU }}</div>
