@@ -2,7 +2,7 @@
   <v-container>
     <v-row justify="center">
       <div class="create-room">
-        <a @click="$router.go(-1)" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+        <a @click="handleBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
         <v-card class="form">
           <div class="text">Создать коллекцию</div>
           <v-text-field
@@ -40,16 +40,16 @@
   </v-container>
 </template>
 
-
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
 import { computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 export default {
   setup() {
     const collectionStore = useCollectionStore();
     const router = useRouter();
+    const route = useRoute();
 
     const collectionName = computed({
       get: () => collectionStore.collectionName,
@@ -82,6 +82,14 @@ export default {
       collectionStore.removeFromCollection(videoId);
     };
 
+    const handleBack = () => {
+      if (route.meta.isDirectNavigation) {
+        router.push('/main');
+      } else {
+        router.go(-1);
+      }
+    };
+
     onMounted(() => {
       collectionStore.loadFromLocalStorage();
     });
@@ -92,11 +100,13 @@ export default {
       selectedVideos,
       selectFromCollection,
       createCollection,
-      removeVideo
+      removeVideo,
+      handleBack
     };
   }
 };
 </script>
+
 
 <style scoped>
 .remove-icon {

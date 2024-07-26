@@ -2,7 +2,7 @@
   <v-container>
     <v-row justify="center">
       <div class="create-room">
-        <a @click="$router.go(-1)" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+        <a @click="handleBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
         <v-card class="form">
           <div class="text">Создать комнату</div>
           <v-text-field
@@ -34,13 +34,25 @@
 
 <script>
 import { useRoomStore } from '@/stores/roomStore';
+import { useRouter, useRoute } from 'vue-router';
 
 export default {
   setup() {
     const roomStore = useRoomStore();
+    const router = useRouter();
+    const route = useRoute();
+
+    const handleBack = () => {
+      if (route.meta.isDirectNavigation) {
+        router.push('/main');
+      } else {
+        router.go(-1);
+      }
+    };
 
     return {
       roomStore,
+      handleBack,
     };
   },
   methods: {
