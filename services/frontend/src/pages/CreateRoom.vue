@@ -10,21 +10,22 @@
             density="comfortable"
             variant="plain"
             placeholder="Название лобби"
-            v-model="roomName"
+            v-model="roomStore.roomName"
           ></v-text-field>
           <v-select
             class="select"
             variant="plain"
             density="comfortable"
-            :items="playerCounts"
+            :items="roomStore.playerCounts"
             label="Количество игроков"
             hide-details
+            v-model="roomStore.selectedPlayerCount"
           ></v-select>
           <div class="collection">
             <div class="openings">Опенинги</div>
             <v-btn class="collection-btn" @click="selectCollection">Выбрать из коллекции</v-btn>
           </div>
-          <v-btn color="#1470EF" class="mb-4" @click="createRoom">Опубликовать</v-btn>
+          <v-btn color="#1470EF" class="mb-4" @click="roomStore.createRoom">Опубликовать</v-btn>
         </v-card>
       </div>
     </v-row>
@@ -32,44 +33,20 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { useRoomStore } from '@/stores/roomStore';
 
 export default {
-  data: () => ({
-    roomName: '',
-    playerCounts: ['2', '4', '6', '8', '10'],
-    selectedPlayerCount: '',
-    rangeOpenings: [
-      { type: 'all', id: 0 },
-      { type: 'collection', id: 1 },
-      { type: 'anime', id: 1 },
-    ],
-  }),
-  methods: {
-  async createRoom() {
-    const payload = {
-      name: this.roomName,
-      rangeOpenings: this.rangeOpenings,
-      qtiUsersMax: this.selectedPlayerCount,
-    };
+  setup() {
+    const roomStore = useRoomStore();
 
-    try {
-      const response = await axios.post('https://animeenigma.ru/api/rooms', payload);
-      console.log('Ответ от сервера:', response);
-      const roomId = response.data;
-      if (roomId) {
-        const roomLink = `AnimeEnigma.ru/room/${roomId}`;
-        console.log('Ссылка на созданную комнату:', roomLink);
-      } else {
-        console.error('ID комнаты не найден в ответе:', response.data);
-      }
-    } catch (error) {
-      console.error('Ошибка при создании комнаты:', error);
-    }
+    return {
+      roomStore,
+    };
   },
-  selectCollection() {
+  methods: {
+    selectCollection() {
+    }
   }
-}
 };
 </script>
 
