@@ -89,7 +89,7 @@ export const useCollectionStore = defineStore('collection', {
         console.error('ошибка получения коллекции:', error.response?.data);
       }
     },
-    async fetchCollections(page = 1) {
+    async animeRequest(page = 1) {
       try {
         const response = await axios.get(`https://animeenigma.ru/api/anime?limit=50&page=${page}`);
         const animeData = response.data.data;

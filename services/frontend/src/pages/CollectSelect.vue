@@ -32,7 +32,6 @@
           @addToCollection="addToCollection"
         />
       </div>
-
     </div>
   </div>
 </template>
@@ -60,18 +59,18 @@ export default {
 
     const nextPage = () => {
       if (collectionStore.nextPageNumber) {
-        collectionStore.fetchCollections(collectionStore.nextPageNumber);
+        collectionStore.animeRequest(collectionStore.nextPageNumber);
       }
     };
 
     const prevPage = () => {
       if (collectionStore.prevPageNumber) {
-        collectionStore.fetchCollections(collectionStore.prevPageNumber);
+        collectionStore.animeRequest(collectionStore.prevPageNumber);
       }
     };
 
     onMounted(() => {
-      collectionStore.fetchCollections();
+      collectionStore.animeRequest();
     });
 
     const addToCollection = (video) => {
