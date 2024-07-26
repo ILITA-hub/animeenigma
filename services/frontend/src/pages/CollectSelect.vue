@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <a @click="goBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+    <a @click="handleBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
     <div class="content">
       <div class="search-container">
         <v-text-field 
@@ -41,7 +41,7 @@ import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
 import AnimeCard from "@/components/Anime/AnimeCard.vue";
 import { useCollectionStore } from '@/stores/collectionStore';
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 export default {
   components: {
@@ -51,10 +51,15 @@ export default {
   setup() {
     const collectionStore = useCollectionStore();
     const router = useRouter();
+    const route = useRoute();
     const searchQuery = ref('');
 
-    const goBack = () => {
-      router.push('/custom-collections');
+    const handleBack = () => {
+      if (route.meta.isDirectNavigation) {
+        router.push('/main');
+      } else {
+        router.go(-1);
+      }
     };
 
     const nextPage = () => {
@@ -90,7 +95,7 @@ export default {
     };
 
     return {
-      goBack,
+      handleBack,
       addToCollection,
       filteredCollections,
       searchQuery,
