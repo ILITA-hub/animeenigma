@@ -5,11 +5,11 @@
         <v-card class="main-banner">
           <div class="avatar-container">
             <v-avatar class="avatar" size="140">
-            <v-img class="avatarka" :src="userAvatar"></v-img>
-          </v-avatar>
+              <v-img class="avatarka" :src="userAvatar"></v-img>
+            </v-avatar>
           </div>
           <v-img class="bg-picture" height="211" src="src/assets/img/banner.png" cover></v-img>
-           <!-- <v-fab icon="$vuetify"></v-fab> todo иконка для редактирования профиля -->
+          <!-- <v-fab icon="$vuetify"></v-fab> todo иконка для редактирования профиля -->
           <div class="user-header">
             <div class="text-container">
               <v-card-title class="user-title">
@@ -35,13 +35,10 @@
     <div class="user-collections">
       <v-card class="collections-banner">
         <v-card-title class="collections-title">Мои коллекции</v-card-title>
-        <div class="collections-list">
-          <div class="collection-item" v-for="collection in collections.data" :key="collection.id">
-            <div class="collection-name">{{ collection.name }}</div>
-            <div class="collection-description">{{ collection.description }}</div>
-          </div>
-          <div v-if="collections.length === 0">Нет коллекций для отображения.</div>
-        </div>
+        <div class="collections">
+        <CollectionCard v-for="collection in collections" :collection="collection"/>
+        <div v-if="collections.length === 0">Нет коллекций для отображения.</div>
+      </div>
       </v-card>
     </div>
   </div>
@@ -49,6 +46,7 @@
 
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
+import CollectionCard from "@/components/Collections/CollectionCard.vue";
 import { useAuthStore } from '@/stores/authStore';
 import { computed, onMounted } from 'vue';
 
@@ -78,7 +76,7 @@ export default {
 
     onMounted(async () => {
       await authStore.checkAuth();
-      await collectionStore.userCollections();
+      await collectionStore.siteCollections();
     });
 
     return {
@@ -89,10 +87,20 @@ export default {
       userAvatar,
     };
   },
+  components: {
+    CollectionCard,
+  },
 };
 </script>
 
 <style scoped>
+
+.collections {  
+  display: flex;  
+  flex-wrap: wrap;  
+  position: relative;
+  gap: 20px;
+} 
 
 .avatarka {
   filter: invert(100%) sepia(0%) saturate(2%) hue-rotate(4deg) brightness(111%) contrast(101%);
