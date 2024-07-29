@@ -23,7 +23,7 @@
             <div class="openings">Выбранные видео</div>
             <div class="selected-videos scrollable">
               <div v-for="video in selectedVideos" :key="video.id" class="selected-video">
-                {{ video.name }}
+                <span class="video-name">{{ video.name }}</span>
                 <v-icon
                   small
                   class="remove-icon"
@@ -39,6 +39,7 @@
     </v-row>
   </v-container>
 </template>
+
 
 <script>
 import { useCollectionStore } from '@/stores/collectionStore';
@@ -112,6 +113,7 @@ export default {
 .remove-icon {
   cursor: pointer;
   color: red;
+  flex-shrink: 0;
 }
 
 .back {
@@ -260,13 +262,15 @@ export default {
   font-weight: 400;
   line-height: 19.5px;
   text-align: left;
-  white-space: nowrap;
-  overflow: hidden; 
-  text-overflow: ellipsis;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px;
 }
 
+.video-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 24px);
+}
 </style>
