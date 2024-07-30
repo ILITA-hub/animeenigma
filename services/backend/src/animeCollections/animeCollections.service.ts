@@ -9,6 +9,7 @@ import { CachesService } from '../caches/caches.service'
 import { UserEntity } from '../users/entity/user.entity';
 import { VideosEntity } from 'src/videos/entity/videos.entity';
 import { AnimeEntity } from 'src/anime/entity/anime.entity';
+import { GenresAnimeEntity } from 'src/genresAnime/entity/genresAnime.entity';
 
 @Injectable()
 export class AnimeCollectionsService {
@@ -17,6 +18,7 @@ export class AnimeCollectionsService {
         @InjectRepository(AnimeCollectionOpenings) private readonly AnimeCollectionsOpeningsRepository: Repository<AnimeCollectionOpenings>,
         @InjectRepository(UserEntity) private readonly UserRepository: Repository<UserEntity>,
         @InjectRepository(VideosEntity) private readonly VideosRepository: Repository<VideosEntity>,
+        @InjectRepository(GenresAnimeEntity) private readonly GenresAnimeRepository: Repository<GenresAnimeEntity>,
         @InjectRepository(AnimeEntity) private readonly AnimeRepository: Repository<AnimeEntity>,
         private readonly cachesService: CachesService,
     ) { }
@@ -46,7 +48,35 @@ export class AnimeCollectionsService {
         const nextPage = (query.page >= allPage) ? allPage : Number(query.page) + 1 // какава хуя оно в строку переделывается АААААААА, теперь будут стоять тут NUMBER
 
         const resultCollections = await querySQLBuilder.getMany()
-        console.log(querySQLBuilder.getQueryAndParameters())
+        let resultColl = []
+
+        for (let collection of resultCollections) {
+            let coll = {
+                id: collection.id,
+                name: collection.name,
+                genres: []
+            }
+
+            const animeRequest = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections").andWhere(`animeCollections.id = ${collection.id}`)
+            animeRequest.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
+            animeRequest.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
+            animeRequest.leftJoinAndSelect("videos.anime", "anime")
+
+            let videosArray = await animeRequest.getMany(); 
+            for (let openign of videosArray) {
+                let animeId = openign.openings[0].animeOpening.anime.id
+
+                let genresCol = this.GenresAnimeRepository.createQueryBuilder("genresAnime")
+                    .andWhere(`genresAnime.animeId = ${animeId}`)
+                    .innerJoinAndSelect("genresAnime.genre", "genre")
+
+                for (let genre of await genresCol.getMany()) {
+                    coll.genres.push(genre.genre["nameRu"])
+                }
+            }
+
+            resultColl.push(coll)
+        }
 
         const result = {
             prevPage: prevPage,
@@ -54,7 +84,7 @@ export class AnimeCollectionsService {
             nextPage: nextPage,
             allPage: allPage,
             countAnime: count,
-            data: resultCollections
+            data: resultColl
         }
 
         return result
