@@ -5,10 +5,5 @@ import { GenreService } from './genre.service'
 @ApiTags("Жанры")
 @Controller("genre")
 export class GenreController {
-  constructor(private readonly genreService: GenreService) {}
-
-  @Get()
-  async getAll() {
-    return await this.genreService.getAll()
-  }
+  constructor(private readonly genreService: GenreService) {}  
 }

@@ -10,6 +10,7 @@ import { config } from './config/index'
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { GenreModule } from './genres/genre.module'
 import { VideosModule } from './videos/videos.module'
+import { FilterModule } from './filter/filters.module'
 import { join } from 'path';
 
 
@@ -21,6 +22,7 @@ import { join } from 'path';
     AnimeCollectionsModule,
     GenreModule,
     VideosModule,
+    FilterModule,
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         type: "postgres",
