@@ -62,7 +62,7 @@
 </template>
 
 <script>
-import { genreStore } from '@/stores/genreStore';
+import { useAnimeFilterStore } from '@/stores/animeFilterStore';
 import { computed, onMounted } from 'vue';
 
 export default {
@@ -70,21 +70,24 @@ export default {
     return {
       menu: false,
       selectedGenres: [],
-      years: ['2020', '2021', '2023', '2024'],
       selectedYears: [],
     };
   },
   setup() {
-    const store = genreStore();
+    const store = useAnimeFilterStore();
+
     onMounted(async () => {
       await store.loadGenres();
+      await store.loadYears();
     });
 
     const genres = computed(() => store.genres);
+    const years = computed(() => store.years);
 
     return {
       store,
       genres,
+      years,
     };
   },
 };
