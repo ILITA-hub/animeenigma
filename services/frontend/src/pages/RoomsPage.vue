@@ -14,20 +14,26 @@
           variant="plain"
           single-line
           v-model="searchQuery"
-        </v-text-field>
+        ></v-text-field>
         <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
       </div>
     </div>
     <div class="content">
-      <div class="result" v-if="searchQuery">Результаты поиска</div> 
-      <div class="filter">
-        <FilterRoom /> 
-        <FilterAnime /> 
+      <div class="sidebar">
+        <div class="filter">
+          <FilterRoom />
+          <FilterAnime />
+        </div>
       </div>
-      <div class="rooms-display">
-        <v-card v-for="(room, i) in filteredRooms" :key="i" class="room-card">   
-          <RoomComp :room="room"/> 
-        </v-card>  
+      <div class="main-content">
+        <div class="result-container" v-if="searchQuery">
+          <div class="result">Результаты поиска</div>
+        </div>
+        <div class="rooms">
+          <v-card v-for="(room, i) in filteredRooms" :key="i" class="room-card">
+            <RoomComp :room="room"/>
+          </v-card>
+        </div>
       </div>
     </div>
   </div>
@@ -73,55 +79,56 @@ export default {
 };
 </script>
 
-
 <style scoped>
-
-
-.content {
-  width: 1697px;
-}
-
 .container {  
   display: flex; 
   flex-direction: column; 
-}  
-  
-
-.result {  
-  font-family: Montserrat;  
-  font-size: 28px;  
-  font-weight: 700;  
-  line-height: 34.13px;  
-  text-align: left;  
-  color: white;  
-  left: 500px;
-  top: 50px; 
-  position: relative;
-}  
-
+}
 
 .banner {
   display: grid;
   position: relative;
   overflow: hidden;
   height: 300px;
-  margin: 30px 35px 0px 35px;
+  margin: 30px 35px 20px 35px;
   border-radius: 10px;
 }
 
 .picture {
   background-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0)), url('src/assets/img/picture.png');
   background-size: cover;
-  background-position: center; 
+  background-position: center;
   width: 100%;
   height: 100%;
   border-radius: 10px;
 }
 
+.text {
+  position: absolute;
+  bottom: 110px;
+  left: 70px;
+  color: white;
+  font-family: Montserrat;
+  text-align: left;
+}
+
+.title {
+  font-size: 45px;
+  font-weight: 700;
+  line-height: 54.86px;
+}
+
+.subtitle {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 22px;
+  margin-top: 10px;
+}
+
 .search-container {
+  position: absolute;
   left: 70px;
   bottom: 40px;
-  position: absolute;
   width: 480px;
   height: 40px;
   display: flex;
@@ -150,40 +157,54 @@ export default {
   color: white;
 }
 
-.text {
-  position: absolute;
-  bottom: 110px;
-  left: 70px;
-  color: white;
-  font-family: Montserrat;
-  text-align: left;
+.content {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  width: 100%;
+  position: relative;
+  left: 65px;
 }
 
-.title {
-  font-size: 45px;
-  font-weight: 700;
-  line-height: 54.86px;
-}
-
-.subtitle {
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 22px;
-  margin-top: 10px;
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 367px;
+  margin-right: 20px;
 }
 
 .filter {
-  display: grid;
-  width: 400px;
-  margin: 0 30px 0 30px;
+  display: block;
+  margin-bottom: 20px;
 }
 
-.rooms-display {
-  display: flex;  
-  flex-wrap: wrap;  
-  justify-content: flex-end;  
-  left: 35px;
+.main-content {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.result-container {
   position: relative;
+  bottom: 37px;
+  left: 45px;
+}
+
+.result {
+  color: white;
+  font-family: Montserrat;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34.13px;
+  margin: 0;
+}
+
+.rooms {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 20px;
 }
+
 </style>
