@@ -8,10 +8,6 @@ export const useCollectionStore = defineStore('collection', {
     collectionName: '',
     collectionDescription: '',
     collections: [],
-    currentPage: 1,
-    totalPages: 1,
-    prevPageNumber: null,
-    nextPageNumber: null,
   }),
   actions: {
     addToCollection(video) {
@@ -48,7 +44,6 @@ export const useCollectionStore = defineStore('collection', {
     },
     async createCollection() {
       const token = Cookies.get('authToken');
-
       if (!token) {
         console.error('Нет токена аутентификации');
         return;
@@ -79,7 +74,7 @@ export const useCollectionStore = defineStore('collection', {
         return;
       }
       try {
-        const response = await axios.get('https://animeenigma.ru/api/animeCollections', {
+        const response = await axios.get('https://animeenigma.ru/api/animeCollections?limit=50&page=1', {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -89,31 +84,14 @@ export const useCollectionStore = defineStore('collection', {
         console.error('ошибка получения коллекции:', error.response?.data);
       }
     },
-    async animeRequest(page = 1) {
-      try {
-        const response = await axios.get(`https://animeenigma.ru/api/anime?limit=50&page=${page}`);
-        const animeData = response.data.data;
-        this.currentPage = response.data.page;
-        this.totalPages = response.data.allPage;
-        this.prevPageNumber = response.data.prevPage;
-        this.nextPageNumber = response.data.nextPage;
-        this.collections = animeData.map(anime => {
-          return {
-            ...anime,
-            seasons: anime.videos.map(video => video.kind).filter((value, index, self) => self.indexOf(value) === index)
-          };
-        });
-      } catch (error) {
-        console.error("Ошибка при загрузке данных:", error);
-      }
-    },
     async siteCollections() {
       try {
-        const response = await axios.get('https://animeenigma.ru/api/animeCollections');
+        const response = await axios.get('https://animeenigma.ru/api/animeCollections?limit=50&page=1');
         this.collections = response.data.data.map(collection => {
           return {
             ...collection,
-            image: collection.image || 'zoro.jpg'
+            image: collection.image || 'zoro.jpg',
+            genres: collection.genres || [],
           };
         });
       } catch (error) {

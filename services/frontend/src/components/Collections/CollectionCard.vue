@@ -4,7 +4,7 @@
     <div class="collection-info">
       <div class="collection-name">{{ collection?.name }}</div>
       <div class="genres">
-        <span class="genre" v-for="genre in genres" :key="genre">{{ genre }}</span>
+        <span class="genre" v-for="genre in collection?.genres" :key="genre">{{ genre }}</span>
       </div>
     </div>
   </div>
@@ -14,38 +14,11 @@
 export default {
   props: {
     collection: Object
-  },
-  data() {
-    return {
-      genres: ['фэнтэзи', 'сенен', 'романтика', 'боевик'],
-    }
   }
 }
 </script>
 
 <style scoped>
-
-.genres {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 25px;
-}
-
-.genre {
-  display: inline-block;
-  background-color: white;
-  color: black;
-  border-radius: 10px;
-  font-family: Montserrat;
-  font-size: 12px;
-  font-weight: 500;
-  width: auto;
-  height: 35px;
-  text-align: center;
-  padding: 10px;
-}
-
 
 .collection-card {
   cursor: pointer;
@@ -58,11 +31,6 @@ export default {
   transition: transform 0.3s ease;
 }
 
-
-.collection-card:hover .collection-info {
-  bottom: 0%;
-}
-
 .collection-image {
   width: 100%;
   height: 100%;
@@ -70,6 +38,11 @@ export default {
   top: 0;
   left: 0;
 }
+
+.collection-card:hover .collection-info {
+  bottom: 0%;
+}
+
 .collection-info {
   position: absolute;
   bottom: -23%;
@@ -95,6 +68,27 @@ export default {
   font-size: 14px;
   font-weight: 600;
   color: white;
+}
+
+.genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 25px;
+}
+
+.genre {
+  display: inline-block;
+  background-color: white;
+  color: black;
+  border-radius: 10px;
+  font-family: Montserrat;
+  font-size: 12px;
+  font-weight: 500;
+  width: auto;
+  height: 35px;
+  text-align: center;
+  padding: 10px;
 }
 
 </style>

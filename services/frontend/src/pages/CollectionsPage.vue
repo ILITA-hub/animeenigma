@@ -1,5 +1,5 @@
 <template>
-  <div class="container"> 
+  <div class="container">
     <div class="banner">
       <div class="picture"></div>
       <div class="text">
@@ -19,19 +19,29 @@
         <v-btn text class="button">Поиск</v-btn>
       </div>
     </div>
-    <div class="content">  
-      <div class="result" v-if="searchQuery">Результаты поиска</div>  
+    <div class="content">
+      <div class="sidebar">
       <div class="filter">
         <div class="filter-anime">
-          <FilterAnime/>
+          <FilterAnime />
         </div>
       </div>
+    </div>
+    <div class="main-content">
+        <div class="result-container" v-if="searchQuery">
+          <div class="result">Результаты поиска</div>
+        </div>
       <div class="collections">
-        <CollectionCard v-for="collection in filteredCollections" :collection="collection"/>
+        <CollectionCard 
+          v-for="collection in filteredCollections" 
+          :key="collection.id" 
+          :collection="collection" />
       </div>
     </div>
   </div>
+</div>
 </template>
+
 
 <script>
   import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
@@ -72,20 +82,47 @@
 
 <style scoped>
 
-.result {  
-  font-family: Montserrat;  
-  font-size: 28px;  
-  font-weight: 700;  
-  line-height: 34.13px;  
-  text-align: left;  
-  color: white;  
-  left: 500px;
-  top: 50px; 
-  position: relative;
-}  
+.result {
+  color: white;
+  font-family: Montserrat;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34.13px;
+  margin: 0;
+}
+
+.main-content {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
 
 .content {
-  width: 1697px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  width: 100%;
+  position: relative;
+  left: 65px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 367px;
+  margin-right: 20px;
+}
+
+.filter {
+  display: block;
+  margin-bottom: 20px;
+}
+
+.result-container {
+  position: relative;
+  bottom: 37px;
+  left: 45px;
 }
 
 .container {  
@@ -93,27 +130,20 @@
   flex-direction: column; 
 }  
 
-.collections {  
-  display: flex;  
-  flex-wrap: wrap;  
-  justify-content: flex-end;  
-  left: 35px;
-  position: relative;
+.collections {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 20px;
-}  
-
-.filter {
-  display: grid;
-  width: 400px;
-  margin: 0 30px 0 30px;
 }
+
 
 .banner {
   display: grid;
   position: relative;
   overflow: hidden;
   height: 300px;
-  margin: 30px 35px 0px 35px;
+  margin: 30px 35px 20px 35px;
   border-radius: 10px;
 }
 
