@@ -1,16 +1,18 @@
 <template>
-  <div v-if="collections" class="collection-card">
-    <img class="collection-image" :src="collections.imgPath" :alt="`Изображение ${collections.nameRU}`">
-    <div class="collection-info">
-      <div class="collection-title">{{ collections.nameRU }}</div>
+  <div v-if="anime" class="anime-card">
+    <img class="anime-image" :src="anime.imgPath" :alt="`Изображение ${anime.nameRU}`">
+    <div class="anime-info">
+      <div class="anime-title">{{ anime.nameRU }}</div>
       <div class="additional-info">
-        <div class="genres" :class="{ active: genresVisible }">
-          <span class="genre" v-for="genre in collections.genres" :key="genre.id">{{ genre.genre.nameRu }}</span>
+        <div class="genres">
+          <span class="genre" v-for="genre in anime.genres" :key="genre.id">
+            {{ genre.genre.nameRu }}
+          </span>
         </div>
         <v-select
           class="select"
           v-model="selectedVideo"
-          :items="collections.videos"
+          :items="anime.videos"
           item-title="name"
           :item-value="video => video"
           label="Выберите видео"
@@ -27,14 +29,14 @@ import { useCollectionStore } from '@/stores/collectionStore';
 import { ref } from 'vue';
 
 export default {
-  name: 'CollectionsComp',
+  name: 'AnimeCard',
   props: {
-    collections: {
+    anime: {
       type: Object,
       required: true
     }
   },
-  setup() {
+  setup(props) {
     const collectionStore = useCollectionStore();
     const selectedVideo = ref(null);
     const genresVisible = ref(false);
@@ -69,22 +71,8 @@ export default {
 </script>
 
 <style scoped>
-.genre {
-  display: inline-block;
-  margin: 2px;
-  background-color: white;
-  color: black;
-  border-radius: 10px;
-  font-family: Montserrat;
-  font-size: 12px;
-  font-weight: 500;
-  width: auto;
-  height: 35px;
-  text-align: center;
-  padding: 10px;
-}
 
-.collection-card {
+.anime-card {
   cursor: pointer;
   width: 320px;
   position: relative;
@@ -95,11 +83,7 @@ export default {
   transition: transform 0.3s ease;
 }
 
-.collection-card:hover .collection-info {
-  bottom: 0%;
-}
-
-.collection-image {
+.anime-image {
   width: 100%;
   height: 100%;
   position: absolute;
@@ -107,7 +91,7 @@ export default {
   left: 0;
 }
 
-.collection-info {
+.anime-info {
   position: absolute;
   bottom: -26%;
   left: 0;
@@ -118,9 +102,13 @@ export default {
   font-weight: bold;
   padding: 10px 15px;
   backdrop-filter: blur(2px);
-  transition: bottom 0.3s ease;
+  transition: bottom 0.4s ease;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
   overflow: hidden;
+}
+
+.anime-card:hover .anime-info {
+  bottom: 0%;
 }
 
 .additional-info {
@@ -137,8 +125,32 @@ export default {
   flex-wrap: wrap;
 }
 
-.genres.active {
+.genre {
+  display: inline-block;
+  margin: 2px;
+  background-color: white;
+  color: black;
+  border-radius: 10px;
+  font-family: Montserrat;
+  font-size: 12px;
+  font-weight: 500;
+  width: auto;
+  height: 35px;
+  text-align: center;
+  padding: 10px;
+}
+
+.anime-card:hover .genres {
   display: flex;
+}
+
+.select {
+  width: 280px;
+  height: 40px;
+  background: white;
+  color: black;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .plus-collect {
@@ -156,12 +168,4 @@ export default {
   text-transform: none;
 }
 
-.select {
-  width: 280px;
-  height: 40px;
-  background: white;
-  color: black;
-  border-radius: 10px;
-  overflow: hidden;
-}
 </style>
