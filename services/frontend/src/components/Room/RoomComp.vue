@@ -1,11 +1,15 @@
 <template>
   <div class="room-card">
     <img class="room-image" :src="room.image" :alt="`Изображение ${room.title}`">
-    <div class="room-info" :class="{ active: showDetails }" :style="{ height: showDetails ? 'auto' : '82px' }">
+    <div class="room-info">
       <div class="room-title">{{ room.title }}</div>
       <div v-for="(players, index) in room.players" :key="players" class="players">{{ players }}</div>
       <div class="additional-info">
-        <div v-for="genre in room.genres" :key="genre" class="genres">{{ genre }}</div>
+        <div class="genres">
+        <span class="genre" v-for="genre in room.genres" :key="genre">
+          {{ genre }}
+        </span>
+      </div>
         <v-btn class="enjoy">Присоединиться</v-btn>
       </div>
     </div>
@@ -29,6 +33,26 @@ export default {
 
 
 <style scoped>
+.genres {
+  display: none;
+  flex-wrap: wrap;
+}
+
+.genre {
+  display: inline-block;
+  margin: 2px;
+  background-color: white;
+  color: black;
+  border-radius: 10px;
+  font-family: Montserrat;
+  font-size: 12px;
+  font-weight: 500;
+  width: auto;
+  height: 35px;
+  text-align: center;
+  padding: 10px;
+}
+
 .players {
   font-family: Montserrat;
   font-size: 22px;
@@ -38,24 +62,23 @@ export default {
 }
 
 .room-card {
-  display: flex;
   cursor: pointer;
   width: 320px;
   position: relative;
   height: 445px;
   border-radius: 10px;
-  margin: 0px;
+  margin: 0 45px;
   overflow: hidden;
-  transition: all 0.3s;
+  transition: transform 0.3s ease;
 }
 
 .room-card:hover .room-info {
-  bottom: 100px;
+  bottom: 0%;
 }
 
 .room-info {
   position: absolute;
-  bottom: -13px;
+  bottom: -26%;
   left: 0;
   width: 100%;
   color: white;
@@ -64,9 +87,9 @@ export default {
   font-weight: bold;
   padding: 10px 15px;
   backdrop-filter: blur(2px);
-  transition: all 0.3s;
-  height: 82px;
-  border-radius: 0 0 10px 10px;
+  transition: bottom 0.4s ease;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
+  overflow: hidden;
 }
 
 .room-image {
@@ -75,35 +98,19 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
-  object-fit: cover;
 }
 
-.active {
-  transform: translateY(-50px);
-}
 
 .additional-info {
   padding: 6px;
+  margin-top: 10px;
 }
 
 .additional-info div {
   margin: 5px 0;
 }
 
-.genres {
-  background-color: white;
-  color: black;
-  border-radius: 10px;
-  font-family: Montserrat;
-  font-size: 12px;
-  font-weight: 400;
-  width: auto;
-  height: 35px;
-  text-align: center;
-  position: relative;
-  display: inline-block;
-  padding: 10px;
-}
+
 
 .enjoy {
   width: 280px;
