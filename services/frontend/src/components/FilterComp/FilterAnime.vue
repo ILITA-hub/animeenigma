@@ -4,14 +4,12 @@
       <v-menu
         v-model="menu"
         :close-on-content-click="false"
-        location="bottom"
-      >
+        location="bottom">
         <template v-slot:activator="{ props }">
           <v-btn
             class="btn-room"
             text
-            v-bind="props"
-          >
+            v-bind="props">
             Фильтры аниме
             <v-icon class="icon" :size="28">{{ menu ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
@@ -24,17 +22,15 @@
             item-value="id"
             item-title="nameRu"
             label="Жанр"
-            multiple
-          >
+            multiple>
           <template v-slot:selection="{ item, index }">
               <div v-if="index < 3">
                 <span>{{ item.title }},</span>
               </div>
               <span
                 v-if="index === 3"
-                class="text-grey text-caption align-self-center"
-              >
-                (+{{ selectedGenres.length - 3 }} others)
+                class="text-grey text-caption align-self-center">
+                  (+{{ selectedGenres.length - 3 }} others)
               </span>
             </template></v-select>
           <v-select
@@ -49,9 +45,8 @@
               </div>
               <span
                 v-if="index === 2"
-                class="text-grey text-caption align-self-center"
-              >
-                (+{{ selectedYears.length - 2 }} others)
+                class="text-grey text-caption align-self-center">
+                  (+{{ selectedYears.length - 2 }} others)
               </span>
             </template>
           </v-select>
@@ -62,32 +57,39 @@
 </template>
 
 <script>
-import { useAnimeFilterStore } from '@/stores/animeFilterStore';
-import { computed, onMounted } from 'vue';
+import { useAnimeStore } from '@/stores/animeStore';
+import { computed, watch, onMounted, ref } from 'vue';
 
 export default {
-  data() {
-    return {
-      menu: false,
-      selectedGenres: [],
-      selectedYears: [],
-    };
-  },
   setup() {
-    const store = useAnimeFilterStore();
+    const animeStore = useAnimeStore();
+    const menu = ref(false);
+    const selectedGenres = ref([]);
+    const selectedYears = ref([]);
 
     onMounted(async () => {
-      await store.loadGenres();
-      await store.loadYears();
+      await animeStore.loadGenres();
+      await animeStore.loadYears();
     });
 
-    const genres = computed(() => store.genres);
-    const years = computed(() => store.years);
+    const genres = computed(() => animeStore.genres);
+    const years = computed(() => animeStore.years);
+
+    watch(
+      [selectedGenres, selectedYears],
+      ([newGenres, newYears]) => {
+        animeStore.setGenres(newGenres);
+        animeStore.setYears(newYears);
+        animeStore.animeRequest();
+      }
+    );
 
     return {
-      store,
+      menu,
       genres,
       years,
+      selectedGenres,
+      selectedYears,
     };
   },
 };
@@ -128,13 +130,4 @@ export default {
   text-align: left;
 }
 
-.v-menu > .v-overlay__content > .v-card,
-.v-menu > .v-overlay__content > .v-sheet,
-.v-menu > .v-overlay__content > .v-list {
-  width: 100%;
-  height: 135px !important;
-  background: rgba(255, 255, 255, 0.1);
-  gap: 0px;
-  border-radius: 10px !important;
-}
 </style>
