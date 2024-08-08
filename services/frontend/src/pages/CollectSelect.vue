@@ -49,6 +49,7 @@
         <div class="result-container" v-if="searchQuery">
           <div class="result">Результаты поиска</div>
         </div>
+         <!-- <div v-if="filteredAnime.length === 0">Аниме не найдено</div> -->
         <div class="anime">
           <AnimeCard
             v-for="anime in filteredAnime"
@@ -165,9 +166,7 @@ export default {
     cursor: pointer;
     margin: 0;
     padding: 10px;
-    justify-content: flex-end;
     position: relative;
-    left: 1293px;
     width: 100px;
 }
 .back .mdi {
@@ -193,23 +192,21 @@ export default {
 .content {
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
   width: 100%;
   position: relative;
-  left: 65px;
 }
 
 .main-content {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
+  margin-top: 10px;
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: 367px;
-  margin-right: 20px;
+  margin-right: 50px;
 }
 
 .filter,
@@ -220,8 +217,7 @@ export default {
 
 .result-container {
     position: relative;
-    bottom: 37px;
-    left: 45px;
+    left: 29px;
 }
 
 .anime {
@@ -229,6 +225,7 @@ export default {
   flex-wrap: wrap;
   justify-content: flex-start;
   gap: 20px;
+  margin-top: 10px;
 }
 
 
@@ -243,6 +240,12 @@ export default {
 
 .selected-videos-container {
   display: block;
+  position: relative;
+  left: 35px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  width: 320px;
 }
 
 .selected-videos {
