@@ -29,6 +29,7 @@
         <div class="result-container" v-if="searchQuery">
           <div class="result">Результаты поиска</div>
         </div>
+        <div class="no-room" v-if="filteredRooms.length === 0">Комната не найдена</div> 
         <div class="rooms">
           <v-card v-for="(room, i) in filteredRooms" :key="i" class="room-card">
             <RoomComp :room="room"/>
@@ -80,6 +81,17 @@ export default {
 </script>
 
 <style scoped>
+
+.no-room {
+  color: white;
+  font-family: Montserrat;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34.13px;
+  margin: 20px;
+  text-align: center;
+}
+
 .container {  
   display: flex; 
   flex-direction: column; 

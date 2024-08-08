@@ -49,7 +49,7 @@
         <div class="result-container" v-if="searchQuery">
           <div class="result">Результаты поиска</div>
         </div>
-         <!-- <div v-if="filteredAnime.length === 0">Аниме не найдено</div> -->
+          <div class="no-anime" v-if="filteredAnime.length === 0">Аниме не найдено</div> 
         <div class="anime">
           <AnimeCard
             v-for="anime in filteredAnime"
@@ -149,6 +149,17 @@ export default {
 
 
 <style scoped>
+
+.no-anime {
+  color: white;
+  font-family: Montserrat;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34.13px;
+  margin: 20px;
+  text-align: center;
+}
+
 .remove-icon {
   cursor: pointer;
   color: red;

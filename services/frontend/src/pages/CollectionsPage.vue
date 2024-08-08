@@ -31,6 +31,7 @@
         <div class="result-container" v-if="searchQuery">
           <div class="result">Результаты поиска</div>
         </div>
+        <div class="no-collection" v-if="filteredCollections.length === 0">Коллекция не найдена</div> 
       <div class="collections">
         <CollectionCard 
           v-for="collection in filteredCollections" 
@@ -81,6 +82,16 @@
 </script>
 
 <style scoped>
+
+.no-collection {
+  color: white;
+  font-family: Montserrat;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34.13px;
+  margin: 20px;
+  text-align: center;
+}
 
 .result {
   color: white;
