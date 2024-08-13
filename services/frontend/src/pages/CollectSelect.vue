@@ -27,14 +27,19 @@
         </div>
         <div class="selected-videos-container">
           <div class="openings">Выбранные видео</div>
-          <div class="selected-videos scrollable">
-            <div v-for="video in selectedVideos" :key="video.id" class="selected-video">
-              <span class="video-name">{{ video.name }}</span>
-              <v-icon
-                small
-                class="remove-icon"
-                @click="removeVideo(video.id)"
-              >mdi-close</v-icon>
+          <div class="selected-videos">
+              <div v-for="(videos, animeName) in groupedVideos" :key="animeName" class="anime-group">
+                <div class="anime-name">{{ animeName }}</div>
+                <div class="video-list">
+                  <div v-for="video in videos" :key="video.id" class="selected-video">
+                    <span class="video-name">{{ video.name }}</span>
+                    <v-icon 
+                    small 
+                    class="remove-icon" 
+                    @click="removeVideo(video.id)"
+                    >mdi-close</v-icon>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -49,7 +54,7 @@
         <div class="result-container" v-if="searchQuery">
           <div class="result">Результаты поиска</div>
         </div>
-          <div class="no-anime" v-if="filteredAnime.length === 0">Аниме не найдено</div> 
+        <div class="no-anime" v-if="filteredAnime.length === 0">Аниме не найдено</div>
         <div class="anime">
           <AnimeCard
             v-for="anime in filteredAnime"
@@ -123,7 +128,24 @@ export default {
         return name.toLowerCase().includes(searchQuery.value.toLowerCase());
       });
     });
- 
+
+    const groupedVideos = computed(() => {
+      const videos = collectionStore.selectedOpenings;
+      const animeMap = {};
+
+      videos.forEach((video) => {
+        const anime = animeStore.anime.find(anime => anime.videos.some(v => v.id === video.id));
+        if (anime) {
+          if (!animeMap[anime.nameRU]) {
+            animeMap[anime.nameRU] = [];
+          }
+          animeMap[anime.nameRU].push(video);
+        }
+      });
+
+      return animeMap;
+    });
+
     const onSearchIconClick = () => {
     };
 
@@ -139,6 +161,7 @@ export default {
       prevPageNumber: computed(() => animeStore.prevPageNumber),
       nextPageNumber: computed(() => animeStore.nextPageNumber),
       selectedVideos: computed(() => collectionStore.selectedOpenings),
+      groupedVideos,
       removeVideo,
       onSearchIconClick,
     };
@@ -146,9 +169,21 @@ export default {
 };
 </script>
 
-
-
 <style scoped>
+
+.anime-group {
+  margin-bottom: 10px;
+  padding: 6px;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.anime-name {
+  font-size: 18px;
+  color: white;
+  font-family: Montserrat;
+  margin-bottom: 10px;
+}
 
 .no-anime {
   color: white;
@@ -167,18 +202,18 @@ export default {
 }
 
 .back {
-    color: white;
-    font-family: Montserrat;
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 19.5px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    margin: 0;
-    padding: 10px;
-    position: relative;
-    width: 100px;
+  color: white;
+  font-family: Montserrat;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 19.5px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin: 0;
+  padding: 10px;
+  position: relative;
+  width: 100px;
 }
 .back .mdi {
   color: rgba(51, 169, 255, 1);
@@ -238,7 +273,6 @@ export default {
   gap: 20px;
   margin-top: 10px;
 }
-
 
 .search {
   flex-grow: 1;
