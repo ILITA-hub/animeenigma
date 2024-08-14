@@ -31,9 +31,10 @@
         </div>
         <div class="no-room" v-if="filteredRooms.length === 0">Комната не найдена</div> 
         <div class="rooms">
-          <v-card v-for="(room, i) in filteredRooms" :key="i" class="room-card">
-            <RoomComp :room="room"/>
-          </v-card>
+            <RoomComp
+              v-for="(room, i) in filteredRooms" 
+              :key="i"  
+              :room="room"/>
         </div>
       </div>
     </div>

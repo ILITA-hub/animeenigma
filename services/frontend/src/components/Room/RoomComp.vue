@@ -6,9 +6,7 @@
       <div v-for="(players, index) in room.players" :key="players" class="players">{{ players }}</div>
       <div class="additional-info">
         <div class="genres">
-        <span class="genre" v-for="genre in room.genres" :key="genre">
-          {{ genre }}
-        </span>
+          <span class="genre" v-for="genre in room.genres" :key="genre">{{ genre }}</span>
       </div>
         <v-btn class="enjoy">Присоединиться</v-btn>
       </div>
@@ -17,22 +15,84 @@
 </template>
 
 <script>
+import { ref } from 'vue';
+
 export default {
   name: 'RoomComp',
   props: {
     room: Object
   },
-  data() {
+
+  setup(props) {
+    const genresVisible = ref(false);
+
+    const showGenres = () => {
+      genresVisible.value = true;
+    };
+
+    const hideGenres = () => {
+      genresVisible.value = false;
+    };
+
     return {
-      showDetails: false,
+      genresVisible,
+      showGenres,
+      hideGenres
     };
   },
-}    
+};  
 </script>
 
-
-
 <style scoped>
+
+.room-card {
+  cursor: pointer;
+  width: 320px;
+  position: relative;
+  height: 445px;
+  border-radius: 10px;
+  margin: 0 45px;
+  overflow: hidden;
+  transition: transform 0.3s ease;
+}
+
+.room-image {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.room-info {
+  position: absolute;
+  bottom: -16%;
+  left: 0;
+  width: 100%;
+  color: white;
+  font-size: 16px;
+  font-family: "Montserrat", sans-serif;
+  font-weight: bold;
+  padding: 10px 15px;
+  backdrop-filter: blur(2px);
+  transition: bottom 0.4s ease;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
+  overflow: hidden;
+}
+
+.room-card:hover .room-info {
+  bottom: 0%;
+}
+
+.additional-info {
+  padding: 6px;
+  margin-top: 10px;
+}
+
+.additional-info div {
+  margin: 5px 0;
+}
+
 .genres {
   display: none;
   flex-wrap: wrap;
@@ -53,6 +113,10 @@ export default {
   padding: 10px;
 }
 
+.room-card:hover .genres {
+  display: flex;
+}
+
 .players {
   font-family: Montserrat;
   font-size: 22px;
@@ -60,57 +124,6 @@ export default {
   line-height: 26.82px;
   text-align: left;
 }
-
-.room-card {
-  cursor: pointer;
-  width: 320px;
-  position: relative;
-  height: 445px;
-  border-radius: 10px;
-  margin: 0 45px;
-  overflow: hidden;
-  transition: transform 0.3s ease;
-}
-
-.room-card:hover .room-info {
-  bottom: 0%;
-}
-
-.room-info {
-  position: absolute;
-  bottom: -26%;
-  left: 0;
-  width: 100%;
-  color: white;
-  font-size: 16px;
-  font-family: "Montserrat", sans-serif;
-  font-weight: bold;
-  padding: 10px 15px;
-  backdrop-filter: blur(2px);
-  transition: bottom 0.4s ease;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
-  overflow: hidden;
-}
-
-.room-image {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-
-.additional-info {
-  padding: 6px;
-  margin-top: 10px;
-}
-
-.additional-info div {
-  margin: 5px 0;
-}
-
-
 
 .enjoy {
   width: 280px;
