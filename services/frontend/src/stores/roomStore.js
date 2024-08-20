@@ -4,6 +4,7 @@ import axios from 'axios';
 export const useRoomStore = defineStore('roomStore', {
   state: () => ({
     roomName: '',
+    roomId: null,
     playerCounts: [2, 4, 6, 8, 10],
     selectedPlayerCount: '',
     rangeOpenings: [
@@ -11,6 +12,38 @@ export const useRoomStore = defineStore('roomStore', {
       { type: 'collection', id: 1 },
       { type: 'anime', id: 1 },
     ],
+    players:[
+      {
+        name: 'player228',
+        imgSrc: '/104652318_p0.png',
+        points: 500
+      },
+      {
+        name: 'player228',
+        imgSrc: '/104652318_p0.png',
+        points: 500
+      },
+      {
+        name: 'player228',
+        imgSrc: '/104652318_p0.png',
+        points: 500
+      },
+      {
+        name: 'player228',
+        imgSrc: '/104652318_p0.png',
+        points: 500
+      },
+      {
+        name: 'player228',
+        imgSrc: '/104652318_p0.png',
+        points: 500
+      },
+    ],
+    status: '',
+    userAnswer: '',
+    serverAnswer: '',
+    currentVideo: '',
+    variantsAnswer: []
   }),
   actions: {
     async createRoom() {

@@ -10,7 +10,7 @@
       <div v-for="(age, index) in room.age" :key="age" class="age">{{ age }}</div>
       <div v-for="(players, index) in room.players" :key="players" class="players">{{ players }}</div>
     </div>
-      <v-btn text class="button">Присоединиться</v-btn> 
+      <v-btn @click="$router.push({name: 'room', params: { uniqUrl: '631b7' }})" text class="button">Присоединиться</v-btn> 
     </div>  
   </div>  
 </template> 
