@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div ref="container" class="container">
     <div class="banner">
       <div class="picture"></div>
       <div class="text">
@@ -7,14 +7,8 @@
         <div class="subtitle">Очень крутое описание страницы. Нет, ну правда.<br>Прям ОЧЕНЬ крутое описание!!</div>
       </div>
       <div class="search-container">
-        <v-text-field
-          class="search"
-          density="compact"
-          label="Поиск..."
-          variant="plain"
-          single-line
-          v-model="searchQuery"
-        ></v-text-field>
+        <v-text-field class="search" density="compact" label="Поиск..." variant="plain" single-line
+          v-model="searchQuery"></v-text-field>
         <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
       </div>
     </div>
@@ -28,26 +22,22 @@
         <div class="selected-videos-container">
           <div class="openings">Выбранные видео</div>
           <div class="selected-videos">
-              <div v-for="(videos, animeName) in groupedVideos" :key="animeName" class="anime-group">
-                <div class="anime-name">{{ animeName }}</div>
-                <div class="video-list">
-                  <div v-for="video in videos" :key="video.id" class="selected-video">
-                    <span class="video-name">{{ video.name }}</span>
-                    <v-icon 
-                    small 
-                    class="remove-icon" 
-                    @click="removeVideo(video.id)"
-                    >mdi-close</v-icon>
+            <div v-for="(videos, animeName) in groupedVideos" :key="animeName" class="anime-group">
+              <div class="anime-name">{{ animeName }}</div>
+              <div class="video-list">
+                <div v-for="video in videos" :key="video.id" class="selected-video">
+                  <span class="video-name">{{ video.name }}</span>
+                  <v-icon small class="remove-icon" @click="removeVideo(video.id)">mdi-close</v-icon>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="pagination">
+        <!-- <div class="pagination">
           <v-btn @click="prevPage" :disabled="!prevPageNumber">Назад</v-btn>
           <span>Страница {{ currentPage }} из {{ totalPages }}</span>
           <v-btn @click="nextPage" :disabled="!nextPageNumber">Вперед</v-btn>
-        </div>
+        </div> -->
       </div>
       <div class="main-content">
         <a @click="handleBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
@@ -56,12 +46,7 @@
         </div>
         <div class="no-anime" v-if="filteredAnime.length === 0">Аниме не найдено</div>
         <div class="anime">
-          <AnimeCard
-            v-for="anime in filteredAnime"
-            :key="anime.id"
-            :anime="anime"
-            @addToCollection="addToCollection"
-          />
+          <AnimeCard v-for="anime in filteredAnime" :key="anime.id" :anime="anime" @addToCollection="addToCollection" />
         </div>
       </div>
     </div>
@@ -72,8 +57,8 @@
 import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
 import AnimeCard from "@/components/Anime/AnimeCard.vue";
 import { useCollectionStore } from '@/stores/collectionStore';
-import { useAnimeStore } from '@/stores/animeStore'; 
-import { computed, onMounted, ref } from 'vue';
+import { useAnimeStore } from '@/stores/animeStore';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 
 export default {
@@ -87,6 +72,8 @@ export default {
     const router = useRouter();
     const route = useRoute();
     const searchQuery = ref('');
+    let currentScroll = 0
+    let interval = null
 
     const handleBack = () => {
       if (route.meta.isDirectNavigation) {
@@ -106,11 +93,36 @@ export default {
       if (animeStore.prevPageNumber) {
         animeStore.animeRequest(animeStore.prevPageNumber);
       }
-    };
+    }
 
-    onMounted(() => {
-      animeStore.animeRequest();
+    const clearAnime = () => {
+      animeStore.anime = []
+    }
+
+    const checkScroll = async () => {
+      const html = document.querySelector("html")
+      const scroll = html.scrollTop + html.clientHeight
+
+      if (scroll >= (html.scrollHeight - 200)) {
+        if (animeStore.nextPageNumber) {
+          currentScroll = html.scrollTop
+          await animeStore.animeRequest(animeStore.nextPageNumber);
+        }
+        html.scrollTop = currentScroll
+      }
+    }
+
+    onMounted(async () => {
+      await animeStore.animeRequest();
+      interval = setInterval(() => {
+        checkScroll()
+      }, 500)
     });
+    
+    onUnmounted(async () => {
+      clearInterval(interval)
+      clearAnime()
+    })
 
     const addToCollection = (video) => {
       collectionStore.addToCollection(video);
@@ -164,13 +176,14 @@ export default {
       groupedVideos,
       removeVideo,
       onSearchIconClick,
+      checkScroll,
+      clearAnime
     };
   }
 };
 </script>
 
 <style scoped>
-
 .anime-group {
   margin-bottom: 10px;
   padding: 6px;
@@ -215,6 +228,7 @@ export default {
   position: relative;
   width: 100px;
 }
+
 .back .mdi {
   color: rgba(51, 169, 255, 1);
   margin-right: 5px;
@@ -262,8 +276,8 @@ export default {
 }
 
 .result-container {
-    position: relative;
-    left: 29px;
+  position: relative;
+  left: 29px;
 }
 
 .anime {
@@ -356,7 +370,7 @@ export default {
 }
 
 .picture {
-  background-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0)), url('src/assets/img/picture.png');
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0)), url('src/assets/img/picture.png');
   background-size: cover;
   background-position: center;
   width: 100%;

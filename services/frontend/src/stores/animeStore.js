@@ -23,7 +23,7 @@ export const useAnimeStore = defineStore('anime', {
         this.totalPages = response.data.allPage;
         this.prevPageNumber = response.data.prevPage;
         this.nextPageNumber = response.data.nextPage;
-        this.anime = animeData;
+        this.anime.push(...animeData);
       } catch (error) {
         console.error("Ошибка при загрузке данных:", error);
       }
