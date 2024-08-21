@@ -53,8 +53,7 @@ export default {
   width: 320px;
   position: relative;
   height: 445px;
-  border-radius: 10px;
-  margin: 0 45px;
+  border-radius: 5px;
   overflow: hidden;
   transition: transform 0.3s ease;
 }
