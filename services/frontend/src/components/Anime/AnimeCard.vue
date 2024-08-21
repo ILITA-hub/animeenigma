@@ -2,7 +2,7 @@
   <div v-if="anime" class="anime-card">
     <img class="anime-image" :src="anime.imgPath" :alt="`Изображение ${anime.nameRU}`">
     <div ref="animelInfo" class="anime-info">
-      <div class="anime-title">{{ anime.nameRU }}</div>
+      <div ref="animelTitle" class="anime-title">{{ anime.nameRU }}</div>
       <div class="additional-info">
         <div class="genres">
           <span class="genre" v-for="genre in anime.genres" :key="genre.id">
@@ -38,7 +38,8 @@ export default {
   },
   mounted(){
     const animelInfo = this.$refs.animelInfo
-    animelInfo.style.bottom = `-${animelInfo.offsetHeight - 55}px`
+    const animelTitle = this.$refs.animelTitle
+    animelInfo.style.bottom = `-${animelInfo.offsetHeight - animelTitle.offsetHeight - 17}px`
   },
   setup(props) {
     const collectionStore = useCollectionStore();
