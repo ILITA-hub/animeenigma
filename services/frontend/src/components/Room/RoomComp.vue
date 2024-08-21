@@ -24,7 +24,7 @@ export default {
   },
   mounted(){
     const roomInfo = this.$refs.roomInfo
-    console.log(roomInfo.style.bottom = `-${roomInfo.offsetHeight - 60}px`)
+    roomInfo.style.bottom = `-${roomInfo.offsetHeight - 60}px`
   },
   setup(props) {
     const genresVisible = ref(false);
