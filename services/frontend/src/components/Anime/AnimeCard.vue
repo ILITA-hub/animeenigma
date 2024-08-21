@@ -38,8 +38,7 @@ export default {
   },
   mounted(){
     const animelInfo = this.$refs.animelInfo
-    console.log(animelInfo.style.bottom = `-${animelInfo.offsetHeight - 55}px`)
-    
+    animelInfo.style.bottom = `-${animelInfo.offsetHeight - 55}px`
   },
   setup(props) {
     const collectionStore = useCollectionStore();
@@ -99,7 +98,6 @@ export default {
 
 .anime-info {
   position: absolute;
-  /* bottom: -26%; */
   left: 0;
   width: 100%;
   color: white;

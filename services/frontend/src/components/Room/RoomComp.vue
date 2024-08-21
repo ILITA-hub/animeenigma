@@ -69,7 +69,6 @@ export default {
 
 .room-info {
   position: absolute;
-  /* bottom: -35%; */
   left: 0;
   width: 100%;
   color: white;
