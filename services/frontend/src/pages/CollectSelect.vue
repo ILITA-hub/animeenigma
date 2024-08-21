@@ -33,11 +33,6 @@
             </div>
           </div>
         </div>
-        <!-- <div class="pagination">
-          <v-btn @click="prevPage" :disabled="!prevPageNumber">Назад</v-btn>
-          <span>Страница {{ currentPage }} из {{ totalPages }}</span>
-          <v-btn @click="nextPage" :disabled="!nextPageNumber">Вперед</v-btn>
-        </div> -->
       </div>
       <div class="main-content">
         <a @click="handleBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
@@ -117,11 +112,13 @@ export default {
       interval = setInterval(() => {
         checkScroll()
       }, 500)
+      collectionStore.loadFromLocalStorage();
     });
-    
+
     onUnmounted(async () => {
       clearInterval(interval)
       clearAnime()
+      
     })
 
     const addToCollection = (video) => {

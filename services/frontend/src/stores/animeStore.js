@@ -60,10 +60,12 @@ export const useAnimeStore = defineStore('anime', {
     },
     setGenres(genres) {
       this.selectedGenres = genres;
+      this.anime = []
       this.animeRequest(this.currentPage);
     },
     setYears(years) {
       this.selectedYears = years;
+      this.anime = []
       this.animeRequest(this.currentPage);
     },
   },
