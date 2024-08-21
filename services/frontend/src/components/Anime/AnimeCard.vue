@@ -1,7 +1,7 @@
 <template>
   <div v-if="anime" class="anime-card">
     <img class="anime-image" :src="anime.imgPath" :alt="`Изображение ${anime.nameRU}`">
-    <div class="anime-info">
+    <div ref="animelInfo" class="anime-info">
       <div class="anime-title">{{ anime.nameRU }}</div>
       <div class="additional-info">
         <div class="genres">
@@ -35,6 +35,11 @@ export default {
       type: Object,
       required: true
     }
+  },
+  mounted(){
+    const animelInfo = this.$refs.animelInfo
+    console.log(animelInfo.style.bottom = `-${animelInfo.offsetHeight - 55}px`)
+    
   },
   setup(props) {
     const collectionStore = useCollectionStore();
@@ -83,6 +88,7 @@ export default {
   transition: transform 0.3s ease;
 }
 
+
 .anime-image {
   width: 100%;
   height: 100%;
@@ -93,7 +99,7 @@ export default {
 
 .anime-info {
   position: absolute;
-  bottom: -26%;
+  /* bottom: -26%; */
   left: 0;
   width: 100%;
   color: white;
@@ -108,7 +114,7 @@ export default {
 }
 
 .anime-card:hover .anime-info {
-  bottom: 0%;
+  bottom: 0%!important;
 }
 
 .additional-info {
@@ -121,7 +127,7 @@ export default {
 }
 
 .genres {
-  display: none;
+  /* display: none; */
   flex-wrap: wrap;
 }
 

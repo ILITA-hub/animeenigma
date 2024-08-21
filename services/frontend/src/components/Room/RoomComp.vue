@@ -1,7 +1,7 @@
 <template>
   <div class="room-card">
     <img class="room-image" :src="room.image" :alt="`Изображение ${room.title}`">
-    <div class="room-info">
+    <div ref="roomInfo" class="room-info">
       <div class="room-title">{{ room.title }}</div>
       <div v-for="(players, index) in room.players" :key="players" class="players">{{ players }}</div>
       <div class="additional-info">
@@ -22,7 +22,10 @@ export default {
   props: {
     room: Object
   },
-
+  mounted(){
+    const roomInfo = this.$refs.roomInfo
+    console.log(roomInfo.style.bottom = `-${roomInfo.offsetHeight - 60}px`)
+  },
   setup(props) {
     const genresVisible = ref(false);
 
@@ -66,7 +69,7 @@ export default {
 
 .room-info {
   position: absolute;
-  bottom: -16%;
+  /* bottom: -35%; */
   left: 0;
   width: 100%;
   color: white;
@@ -81,7 +84,7 @@ export default {
 }
 
 .room-card:hover .room-info {
-  bottom: 0%;
+  bottom: 0%!important;
 }
 
 .additional-info {
@@ -90,12 +93,13 @@ export default {
 }
 
 .additional-info div {
-  margin: 5px 0;
+  margin: 5px 0 10px 0;
 }
 
 .genres {
-  display: none;
+  /* display: none; */
   flex-wrap: wrap;
+  margin-bottom: 10px;
 }
 
 .genre {
