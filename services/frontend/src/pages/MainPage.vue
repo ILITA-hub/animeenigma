@@ -10,11 +10,12 @@
     <div class="labels">
       <div class="label">Комнаты</div>
       <div class="watch-all" @click="$router.push('/rooms')">Смотреть все</div>
+    </div>
       <div class="rooms">
-        <v-card v-for="(room, i) in rooms" :key="i">
-          <RoomComp :room="room"/>
-        </v-card>
-      </div>
+          <RoomComp
+           v-for="(room, i) in rooms"
+           :key="i" 
+           :room="room"/>
     </div>
   </div>
 </template>
@@ -48,9 +49,9 @@ export default {
   margin-top: 90px; 
   display: flex;  
   flex-wrap: wrap;  
-  position: relative;  
-  justify-content: space-evenly; 
-  gap: 70px; 
+  position: relative; 
+  gap: 90px; 
+  left: 150px;
 } 
 
 .genres {  
