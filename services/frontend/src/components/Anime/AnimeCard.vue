@@ -9,15 +9,19 @@
             {{ genre.genre.nameRu }}
           </span>
         </div>
-        <v-select
-          class="select"
-          v-model="selectedVideo"
-          :items="anime.videos"
-          item-title="name"
-          :item-value="video => video"
-          label="Выберите видео"
-          density="compact"
-        ></v-select>
+        <v-list density="compact" class="select-list">
+          <v-list-group  v-model="selectedVideo" :value="selectedVideo">
+            <template v-slot:activator="{ props }">
+              <v-list-item  v-bind="props" :title="selectedVideo ? selectedVideo.name : 'Выберите видео'"></v-list-item>
+            </template>
+            <v-list-item
+              v-for="video in anime.videos"
+              :key="video.id"
+              :title="video.name"
+              @click="selectVideo(video)"
+            ></v-list-item>
+          </v-list-group>
+        </v-list>
         <v-btn class="plus-collect" @click="addToCollection">Добавить в коллекцию</v-btn>
       </div>
     </div>
@@ -44,7 +48,10 @@ export default {
   setup(props) {
     const collectionStore = useCollectionStore();
     const selectedVideo = ref(null);
-    const genresVisible = ref(false);
+
+    const selectVideo = (video) => {
+      selectedVideo.value = video;
+    };
 
     const addToCollection = () => {
       if (selectedVideo.value && selectedVideo.value.id) {
@@ -56,20 +63,10 @@ export default {
       }
     };
 
-    const showGenres = () => {
-      genresVisible.value = true;
-    };
-
-    const hideGenres = () => {
-      genresVisible.value = false;
-    };
-
     return {
       selectedVideo,
+      selectVideo,
       addToCollection,
-      genresVisible,
-      showGenres,
-      hideGenres
     };
   },
 };
@@ -121,10 +118,6 @@ export default {
   margin-top: 10px;
 }
 
-.additional-info div {
-  margin: 5px 0;
-}
-
 .genres {
   /* display: none; */
   flex-wrap: wrap;
@@ -149,13 +142,15 @@ export default {
   display: flex;
 }
 
-.select {
-  width: 280px;
-  height: 40px;
+.select-list {
+  width: 278px;
   background: white;
   color: black;
   border-radius: 10px;
   overflow: hidden;
+  font-family: Montserrat;
+  margin: 5px 0 5px 0;
+  padding: 0;
 }
 
 .plus-collect {
@@ -169,7 +164,6 @@ export default {
   font-weight: 600;
   line-height: 19.5px;
   text-align: left;
-  font-family: Montserrat;
   text-transform: none;
 }
 
