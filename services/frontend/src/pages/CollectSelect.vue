@@ -19,7 +19,7 @@
             <FilterAnime />
           </div>
         </div>
-        <div class="selected-videos-container">
+        <div ref="selectedVideosRef" class="selected-videos-container">
           <div class="openings">Выбранные видео</div>
           <div class="selected-videos">
             <div v-for="(videos, animeName) in groupedVideos" :key="animeName" class="anime-group">
@@ -67,8 +67,17 @@ export default {
     const router = useRouter();
     const route = useRoute();
     const searchQuery = ref('');
+    const selectedVideosRef = ref(null)
     let currentScroll = 0
     let interval = null
+
+    function toFixElement(elem) {
+      if (window.pageYOffset > 300) {
+        elem.style.transform = `translateY(${window.pageYOffset - 300}px)`;
+      } else {
+        elem.style.transform = `translateY(0)`;
+      }
+    }
 
     const handleBack = () => {
       if (route.meta.isDirectNavigation) {
@@ -113,12 +122,15 @@ export default {
         checkScroll()
       }, 500)
       collectionStore.loadFromLocalStorage();
+      window.addEventListener('scroll', function () {
+        toFixElement(selectedVideosRef.value);
+      });
     });
 
     onUnmounted(async () => {
       clearInterval(interval)
       clearAnime()
-      
+      window.removeEventListener('scroll', toFixElement)
     })
 
     const addToCollection = (video) => {
@@ -174,7 +186,8 @@ export default {
       removeVideo,
       onSearchIconClick,
       checkScroll,
-      clearAnime
+      clearAnime,
+      selectedVideosRef
     };
   }
 };
@@ -270,6 +283,9 @@ export default {
 .selected-videos-container,
 .pagination {
   margin-bottom: 20px;
+  left: 35px;
+  position: relative;
+  transition: transform 0.5s ease-in-out;
 }
 
 .result-container {
