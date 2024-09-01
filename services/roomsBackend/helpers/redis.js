@@ -5,7 +5,8 @@ let client;
 
 async function init() {
     client = createClient({
-        password: config.redisSecret
+        // password: config.redisSecret,
+        url: `redis://:${config.redisSecret}@localhost:${config.redisPort}`
     }).on('error', err => console.log('Redis Client Error', err))
 
     await client.connect();
