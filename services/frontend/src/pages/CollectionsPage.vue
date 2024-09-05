@@ -42,7 +42,8 @@
         <CollectionCard 
           v-for="collection in filteredCollections" 
           :key="collection.id" 
-          :collection="collection" />
+          :collection="collection" 
+          @toggle-genre="toggleGenreInFilter" />
       </div>
     </div>
   </div>
@@ -79,18 +80,25 @@
 
       const setSelectedYears = (newYears) => {
         selectedYears.value = newYears;
+        };
+
+        const toggleGenreInFilter = (genreName) => {
+        const index = selectedGenres.value.indexOf(genreName);
+        if (index === -1) {
+          selectedGenres.value.push(genreName);
+        } else {
+          selectedGenres.value.splice(index, 1);
+        }
       };
 
       const filteredCollections = computed(() => {
         return collectionStore.collections.filter((collection) => {
           const matchesGenre =
             selectedGenres.value.length === 0 ||
-            selectedGenres.value.some((selectedGenreId) => {
-              const selectedGenre = props.genres.find(
-                (genre) => genre.id === selectedGenreId
-              );
-              return selectedGenre && collection.genres.includes(selectedGenre.nameRu);
-            });
+            selectedGenres.value.some((selectedGenre) => {
+                return collection.genres.includes(selectedGenre);
+              });
+            
           const matchesYear =
             selectedYears.value.length === 0 || selectedYears.value.includes(collection.year);
 
@@ -102,6 +110,7 @@
       });
 
       return { 
+        toggleGenreInFilter,
         collectionStore,
         selectedGenres,
         selectedYears,
