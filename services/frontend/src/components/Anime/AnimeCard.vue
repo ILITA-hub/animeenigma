@@ -5,7 +5,7 @@
       <div ref="animelTitle" class="anime-title">{{ anime.nameRU }}</div>
       <div class="additional-info">
         <div class="genres">
-          <span class="genre" v-for="genre in anime.genres" :key="genre.id">
+          <span class="genre" v-for="genre in anime.genres" :key="genre.id" @click="selectGenre(genre.genre.id)">
             {{ genre.genre.nameRu }}
           </span>
         </div>
@@ -45,7 +45,7 @@ export default {
     const animelTitle = this.$refs.animelTitle
     animelInfo.style.bottom = `-${animelInfo.offsetHeight - animelTitle.offsetHeight - 17}px`
   },
-  setup(props) {
+  setup(props, { emit }) {
     const collectionStore = useCollectionStore();
     const selectedVideo = ref(null);
 
@@ -62,11 +62,15 @@ export default {
         console.error('Не выбран объект видео или у видео нет id');
       }
     };
+    const selectGenre = (genreId) => {
+      emit('select-genre', genreId);
+    };
 
     return {
       selectedVideo,
       selectVideo,
       addToCollection,
+      selectGenre
     };
   },
 };

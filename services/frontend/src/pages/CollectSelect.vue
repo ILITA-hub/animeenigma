@@ -48,7 +48,7 @@
         </div>
         <div class="no-anime" v-if="filteredAnime.length === 0">Аниме не найдено</div>
         <div class="anime">
-          <AnimeCard v-for="(anime, index) in filteredAnime" :key="anime.id + '-' + index" :anime="anime" @addToCollection="addToCollection" />
+          <AnimeCard v-for="(anime, index) in filteredAnime" :key="anime.id + '-' + index" :anime="anime" @addToCollection="addToCollection" @select-genre="addGenreToFilter"/>
         </div>
       </div>
     </div>
@@ -97,6 +97,11 @@ export default {
         elem.style.transform = `translateY(0)`;
       }
     }
+    const addGenreToFilter = (genreId) => {
+      if (!selectedGenres.value.includes(genreId)) {
+        selectedGenres.value.push(genreId);
+      }
+    };
 
     const handleBack = () => {
       if (route.meta.isDirectNavigation) {
@@ -202,6 +207,7 @@ export default {
     };
 
     return {
+      addGenreToFilter,
       setSelectedGenres,
       setSelectedYears,
       handleBack,
