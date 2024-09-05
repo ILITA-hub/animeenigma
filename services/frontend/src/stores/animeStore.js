@@ -28,22 +28,6 @@ export const useAnimeStore = defineStore('anime', {
         console.error("Ошибка при загрузке данных:", error);
       }
     },
-    async loadGenres() {
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/filters/genres');
-        this.genres = response.data;
-      } catch (error) {
-        console.error('ошибка загрузки жанров:', error);
-      }
-    },
-    async loadYears() {
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/filters/years');
-        this.years = response.data;
-      } catch (error) {
-        console.error('ошибка загрузки годов:', error);
-      }
-    },
     buildQuery(page) {
       const params = new URLSearchParams();
       params.append('limit', 20);

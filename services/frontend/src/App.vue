@@ -2,22 +2,22 @@
   <v-app>
     <HeaderApp/>
     <v-container fluid class="animated-background">
-    <div class="circle circle1" style="background-color: #FF3333;"></div>
-      <div class="circle circle2" style="background-color: #EFFF33;;"></div>
+      <div class="circle circle1" style="background-color: #FF3333;"></div>
+      <div class="circle circle2" style="background-color: #EFFF33;"></div>
       <div class="circle circle3" style="background-color: #CA33FF;"></div>
       <div class="circle circle4" style="background-color: #33A9FF;"></div>
-    <v-main>
-      <router-view></router-view>
-    </v-main>
-  </v-container>
-  <FooterApp/>
-
+      <v-main>
+        <router-view :genres="genres" :years="years" />
+      </v-main>
+    </v-container>
+    <FooterApp/>
   </v-app>
 </template>
 
 <script>
 import HeaderApp from './components/HeaderApp.vue'
 import FooterApp from './components/FooterApp.vue'
+import axios from 'axios'
 
 export default {
   name: 'App',
@@ -27,10 +27,37 @@ export default {
     FooterApp,
   },
 
-  data: () => ({
-    //
-  }),
-}
+  data() {
+    return {
+      genres: [],
+      years: [],
+    };
+  },
+
+  async mounted() {
+    await this.loadGenres();
+    await this.loadYears();
+  },
+
+  methods: {
+    async loadGenres() {
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/filters/genres');
+        this.genres = response.data;
+      } catch (error) {
+        console.error('Error loading genres:', error);
+      }
+    },
+    async loadYears() {
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/filters/years');
+        this.years = response.data;
+      } catch (error) {
+        console.error('Error loading years:', error);
+      }
+    },
+  },
+};
 </script>
 
 <style>
