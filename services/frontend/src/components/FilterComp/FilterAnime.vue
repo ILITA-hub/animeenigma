@@ -2,10 +2,11 @@
   <div ref="filterAnime" class="filter-anime">
     <v-card class="card-list" v-if="genres.length">
       <template v-slot:title>
-          <span class="filter-title">Фильтры аниме</span>
-        </template>
-      <v-select class="select" v-model="selectedGenres" :items="genres" item-value="id" item-title="nameRu" label="Жанр"
-        multiple>
+        <span class="filter-title">Фильтры аниме</span>
+      </template>
+      <v-select class="select" :model-value="selectedGenres" :items="genres" item-value="id" item-title="nameRu" label="Жанр"
+        multiple
+        @update:model-value="updateGenres">
         <template v-slot:selection="{ item, index }">
           <div v-if="index < 3">
             <span>{{ item.title }},</span>
@@ -13,8 +14,10 @@
           <span v-if="index === 3" class="text-grey text-caption align-self-center">
             (+{{ selectedGenres.length - 3 }} others)
           </span>
-        </template></v-select>
-      <v-select class="select" v-model="selectedYears" :items="years" label="Год выпуска" multiple>
+        </template>
+      </v-select>
+      <v-select class="select" :model-value="selectedYears" :items="years" label="Год выпуска" multiple
+        @update:model-value="updateYears">
         <template v-slot:selection="{ item, index }">
           <div v-if="index < 2">
             <span>{{ item.title }},</span>
@@ -29,27 +32,33 @@
 </template>
 
 <script>
-import { useAnimeStore } from '@/stores/animeStore';
-import { computed, watch, onMounted, onUnmounted, ref } from 'vue';
+import { watch, onMounted, onUnmounted, ref } from 'vue';
 
 export default {
-  methods: {
-
+  props: {
+    genres: {
+      type: Array,
+      required: true,
+    },
+    years: {
+      type: Array,
+      required: true,
+    },
+    selectedGenres: {
+      type: Array,
+      default: () => [],
+    },
+    selectedYears: {
+      type: Array,
+      default: () => [],
+    },
   },
-  mounted() {
+  emits: ['update:selectedGenres', 'update:selectedYears'],
 
-  },
-
-  setup() {
-    const animeStore = useAnimeStore();
-    const menu = ref(false);
-    const selectedGenres = ref([]);
-    const selectedYears = ref([]);
-    const filterAnime = ref()
+  setup(props, { emit }) {
+    const filterAnime = ref(null);
 
     onMounted(async () => {
-      await animeStore.loadGenres();
-      await animeStore.loadYears();
       window.addEventListener('scroll', function () {
         toFixElement(filterAnime.value);
       });
@@ -67,26 +76,33 @@ export default {
       }
     }
 
-    const genres = computed(() => animeStore.genres);
-    const years = computed(() => animeStore.years);
+    const updateGenres = (newGenres) => {
+      emit('update:selectedGenres', newGenres);
+    };
+
+    const updateYears = (newYears) => {
+      emit('update:selectedYears', newYears);
+    };
 
     watch(
-      [selectedGenres, selectedYears],
-      ([newGenres, newYears]) => {
-        animeStore.setGenres(newGenres);
-        animeStore.setYears(newYears);
-        animeStore.animeRequest();
+      () => props.selectedGenres,
+      (newGenres) => {
+        emit('update:selectedGenres', newGenres);
+      }
+    );
+
+    watch(
+      () => props.selectedYears,
+      (newYears) => {
+        emit('update:selectedYears', newYears);
       }
     );
 
     return {
-      menu,
-      genres,
-      years,
-      selectedGenres,
-      selectedYears,
+      filterAnime,
+      updateGenres,
+      updateYears,
       toFixElement,
-      filterAnime
     };
   },
 };
