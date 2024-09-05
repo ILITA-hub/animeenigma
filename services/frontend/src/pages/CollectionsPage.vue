@@ -23,7 +23,13 @@
       <div class="sidebar">
       <div class="filter">
         <div class="filter-anime">
-          <FilterAnime />
+          <FilterAnime
+            :genres="genres"
+            :years="years"
+            :selected-genres="selectedGenres"
+            :selected-years="selectedYears"
+            @update:selectedGenres="setSelectedGenres"
+            @update:selectedYears="setSelectedYears"/>
         </div>
       </div>
     </div>
@@ -48,32 +54,66 @@
   import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
   import CollectionCard from "@/components/Collections/CollectionCard.vue";
   import { useCollectionStore } from "@/stores/collectionStore";
+  import { ref, computed } from "vue";
 
   export default {
-    setup(){
-      const collectionStore = useCollectionStore()
-      return{
+    props: {
+      genres: {
+        type: Array,
+        required: true,
+      },
+      years: {
+        type: Array,
+        required: true,
+      },
+    },
+    setup(props) {
+      const selectedGenres = ref([]);
+      const selectedYears = ref([]);
+      const searchQuery = ref("");
+      const collectionStore = useCollectionStore();
+
+      const setSelectedGenres = (newGenres) => {
+        selectedGenres.value = newGenres;
+      };
+
+      const setSelectedYears = (newYears) => {
+        selectedYears.value = newYears;
+      };
+
+      const filteredCollections = computed(() => {
+        return collectionStore.collections.filter((collection) => {
+          const matchesGenre =
+            selectedGenres.value.length === 0 ||
+            selectedGenres.value.some((selectedGenreId) => {
+              const selectedGenre = props.genres.find(
+                (genre) => genre.id === selectedGenreId
+              );
+              return selectedGenre && collection.genres.includes(selectedGenre.nameRu);
+            });
+          const matchesYear =
+            selectedYears.value.length === 0 || selectedYears.value.includes(collection.year);
+
+          const matchesSearchQuery =
+            searchQuery.value.length === 0 ||
+            collection.name.toLowerCase().includes(searchQuery.value.toLowerCase());
+          return matchesGenre && matchesYear && matchesSearchQuery;
+        });
+      });
+
+      return { 
         collectionStore,
-      }
+        selectedGenres,
+        selectedYears,
+        setSelectedGenres,
+        setSelectedYears,
+        searchQuery,
+        filteredCollections,
+      };
     },
     components: {
       FilterAnime,
       CollectionCard,
-    },
-    data () { 
-      return { 
-        searchQuery: '', 
-      }; 
-    },
-    computed: {
-      filteredCollections() {
-        if (!this.searchQuery) {
-          return this.collectionStore.collections;
-        }
-        return this.collectionStore.collections.filter(collection => 
-          collection.name.toLowerCase().includes(this.searchQuery.toLowerCase())
-        );
-      }
     },
     async mounted() {
       await this.collectionStore.siteCollections();

@@ -16,7 +16,14 @@
       <div class="sidebar">
         <div class="filter">
           <div class="filter-anime">
-            <FilterAnime />
+            <FilterAnime
+              :genres="genres"
+              :years="years"
+              :selected-genres="selectedGenres"
+              :selected-years="selectedYears"
+              @update:selectedGenres="setSelectedGenres"
+              @update:selectedYears="setSelectedYears"
+            />
           </div>
         </div>
         <div ref="selectedVideosRef" class="selected-videos-container">
@@ -41,7 +48,7 @@
         </div>
         <div class="no-anime" v-if="filteredAnime.length === 0">Аниме не найдено</div>
         <div class="anime">
-          <AnimeCard v-for="anime in filteredAnime" :key="anime.id" :anime="anime" @addToCollection="addToCollection" />
+          <AnimeCard v-for="(anime, index) in filteredAnime" :key="anime.id + '-' + index" :anime="anime" @addToCollection="addToCollection" />
         </div>
       </div>
     </div>
@@ -57,6 +64,16 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 
 export default {
+    props: {
+      genres: {
+        type: Array,
+        required: true,
+      },
+      years: {
+        type: Array,
+        required: true,
+      },
+    },
   components: {
     FilterAnime,
     AnimeCard,
@@ -68,6 +85,8 @@ export default {
     const route = useRoute();
     const searchQuery = ref('');
     const selectedVideosRef = ref(null)
+    const selectedGenres = ref([]);
+    const selectedYears = ref([]);
     let currentScroll = 0
     let interval = null
 
@@ -141,12 +160,24 @@ export default {
       collectionStore.removeFromCollection(videoId);
     };
 
+    const setSelectedGenres = (newGenres) => {
+      selectedGenres.value = newGenres;
+    };
+
+    const setSelectedYears = (newYears) => {
+      selectedYears.value = newYears;
+    };
+
     const filteredAnime = computed(() => {
       if (!animeStore.anime) return [];
 
       return animeStore.anime.filter(anime => {
         const name = anime.nameRU || '';
-        return name.toLowerCase().includes(searchQuery.value.toLowerCase());
+        const matchesSearch = name.toLowerCase().includes(searchQuery.value.toLowerCase());
+        const matchesGenre = selectedGenres.value.length === 0 || selectedGenres.value.some(genre => anime.genres.some(g => g.genre.id === genre));
+        const matchesYear = selectedYears.value.length === 0 || selectedYears.value.includes(anime.year);
+
+        return matchesSearch && matchesGenre && matchesYear;
       });
     });
 
@@ -171,10 +202,14 @@ export default {
     };
 
     return {
+      setSelectedGenres,
+      setSelectedYears,
       handleBack,
       addToCollection,
       filteredAnime,
       searchQuery,
+      selectedGenres,
+      selectedYears,
       currentPage: computed(() => animeStore.currentPage),
       totalPages: computed(() => animeStore.totalPages),
       nextPage,
