@@ -19,7 +19,7 @@ export const useAnimeStore = defineStore('anime', {
     async animeRequest(page = 1) {
       try {
         const query = this.buildQuery(page);
-        const response = await axios.get(`${BASEURL}api/anime${query}`);
+        const response = await axios.get(`${BASEURL}/anime${query}`);
         const animeData = response.data.data;
         this.currentPage = response.data.page;
         this.totalPages = response.data.allPage;
@@ -32,7 +32,7 @@ export const useAnimeStore = defineStore('anime', {
     },
     async loadGenres() {
       try {
-        const response = await axios.get(`${BASEURL}api/filters/genres`);
+        const response = await axios.get(`${BASEURL}/filters/genres`);
         this.genres = response.data;
       } catch (error) {
         console.error('ошибка загрузки жанров:', error);
@@ -40,7 +40,7 @@ export const useAnimeStore = defineStore('anime', {
     },
     async loadYears() {
       try {
-        const response = await axios.get(`${BASEURL}api/filters/years`);
+        const response = await axios.get(`${BASEURL}/filters/years`);
         this.years = response.data;
       } catch (error) {
         console.error('ошибка загрузки годов:', error);
