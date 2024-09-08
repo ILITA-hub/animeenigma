@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 import Cookies from 'js-cookie';
+const BASEURL = import.meta.env.VITE_BASEURL
+
 
 export const useCollectionStore = defineStore('collection', {
   state: () => ({
@@ -56,7 +58,7 @@ export const useCollectionStore = defineStore('collection', {
       };
 
       try {
-        const response = await axios.post('https://animeenigma.ru/api/animeCollections', payload, {
+        const response = await axios.post(`${BASEURL}api/animeCollections`, payload, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -74,7 +76,7 @@ export const useCollectionStore = defineStore('collection', {
         return;
       }
       try {
-        const response = await axios.get('https://animeenigma.ru/api/animeCollections?limit=50&page=1', {
+        const response = await axios.get(`${BASEURL}api/animeCollections?limit=50&page=1`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -86,7 +88,7 @@ export const useCollectionStore = defineStore('collection', {
     },
     async siteCollections() {
       try {
-        const response = await axios.get('https://animeenigma.ru/api/animeCollections?limit=50&page=1');
+        const response = await axios.get(`${BASEURL}api/animeCollections?limit=50&page=1`);
         this.collections = response.data.data.map(collection => {
           return {
             ...collection,

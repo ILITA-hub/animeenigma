@@ -1,16 +1,21 @@
 <template>
   <div class="room-container">
-
     <div class="player-container">
       <div v-if="isGameStarted" ref="videoContainer" class="video-container">
-        <video id="player" width="800" height="450">
+        <video ref="video" id="player">
+          <source ref="videoSource" src="" type="video/mp4">
         </video>
       </div>
       <div v-else class="start-button-container">
         <v-btn @click="userStartGame" class="btn-answer">Играть</v-btn>
       </div>
       <div class="varints-ansver-container">
-        <v-btn class="btn-answer" v-for="variant in 4">{{ variant }}</v-btn>
+
+        <v-btn
+          :class="getButtonClass"
+          v-for="answer in variantAnswers" @click="setUserAnswer(answer)">
+          {{ answer.name }}
+        </v-btn>
       </div>
     </div>
 
@@ -18,7 +23,7 @@
       <RoomPlayers />
       <GameChat />
     </div>
-    
+
 
   </div>
 </template>
@@ -39,15 +44,20 @@ const userStore = useAuthStore()
 const router = useRouter();
 const route = useRoute();
 
-const variantAnswers = ref({})
+const variantAnswers = ref(null)
 const currentVideoUrl = ref('')
 const videoContainer = ref(null)
-const iframe = ref(null)
+const rightAnswer = ref(null)
+const userAnswer = ref(null)
 let isGameStarted = ref(false)
+const roomUsers = ref(null)
+const videoSource = ref(null)
+const video = ref(null)
+let isAnswerGeted = false
 
-let gameSocket = new WebSocket("ws://46.181.201.172:1234/");
-let roomUniq = ''
 
+let gameSocket = new WebSocket(`ws://46.181.201.172:1234/${route.params.uniqUrl}/${userStore.user.token}`);
+let clientId = ''
 
 gameSocket.onmessage = function (event) {
   let body = JSON.parse(event.data)
@@ -57,62 +67,89 @@ gameSocket.onmessage = function (event) {
 
 let wsTypes = {
   connect: connect,
-  startGame: ServerStartGame,
-  newQuestion: newQuestion,
-  resultCurrentQuestion: 'resultCurrentQuestion',
-  endGame: endGame,
+  startGame: ServerStartGame,// Все нажали ready
+
+  newOpening: newQuestion, //Когда пришел новый опенинг
+
+  startOpening: startOpening,// Начинаем проигрывать опенинг
+
+  endOpening: endOpening,// Приходит правильный ответ и раскрывается видео
+
+  updUsers: setRoomUsers,// Подключаются новые пользователи (в разработке)
+  endGame: endGame,// Конец игры (в разработке)
 }
 
 
 async function userStartGame() {
-  gameSocket.send(JSON.stringify({ roomId: route.params.uniqUrl, user: roomUniq, type: 'newQuestion' }))
+  gameSocket.send(JSON.stringify({ clientId: clientId, type: 'userIsReady' }))
+}
+function canplay(params) {
+  gameSocket.send(JSON.stringify({ clientId: clientId, type: 'openingIsLoaded' }))
+}
+
+async function setNewOpening() {
   await new Promise((res, rej) => {
-    setInterval(() => {
-      if (isGameStarted.value) {
-        res()
-      }
+    setTimeout(() => {
+      res()
     }, 500)
   })
-  console.log('start')
-  const player = new Plyr('#player', {
-    controls: [
 
-    ]
-  });
-  player.source = {
-    type: 'video',
-    sources: [
-      {
-        src: currentVideoUrl.value,
-        provider: 'youtube',
-      },
-    ],
-  };
-  // console.log(videoContainer.value.style)
-  player.on('ready', (event) => {
-    player.play()
-  });
+  videoSource.value.src = currentVideoUrl.value;
 
+  video.value.load();
+  video.value.removeEventListener('canplay', canplay)
+  video.value.addEventListener('canplay', canplay);
+}
+
+function setRoomUsers(body) {
+  roomUsers.value = body.users
+  roomStore.players = body.users
+  console.log(roomStore.players)
+}
+
+function startOpening(body) {
+
+  video.value.play()
 }
 
 function connect(body) {
-  roomUniq = body.clientId
-  gameSocket.send(JSON.stringify({ roomId: route.params.uniqUrl, user: roomUniq, type: 'connect' }))
+  clientId = body.clientId
 }
 function ServerStartGame(body) {
-
 }
 function endGame(body) {
-
 }
-function newQuestion(body) {
-  console.log(body.opening)
+
+function getButtonClass(answer) {
+  return {
+    'btn-answer': true,
+    'true-answer': answer?.id === rightAnswer?.id,
+    'choosed-answer': answer?.id === userAnswer?.id,
+    'wrong-answer': answer?.id === userAnswer?.id && userAnswer?.id !== rightAnswer?.id && isAnswerGeted
+  };
+}
+
+function endOpening(body) {
+  isAnswerGeted = true
+  gameSocket.send(JSON.stringify({ clientId: clientId, type: 'checkAnswer', answer: userAnswer.value.id }))
+  rightAnswer.value = body.trueAnswer
+}
+async function newQuestion(body) {
+  isAnswerGeted = false
+  rightAnswer.value = null
+  userAnswer.value = null
+  variantAnswers.value = body.answers
   currentVideoUrl.value = body.opening
   isGameStarted.value = true
+  await setNewOpening()
 }
-function userAnswer(body) {
 
+function setUserAnswer(answer) {
+  console.log(answer)
+  userAnswer.value = answer
+  
 }
+
 function handelServerAnswer(body) {
 
 }
@@ -130,6 +167,15 @@ function handelServerAnswer(body) {
   margin-top: 20px;
 }
 
+.choosed-answer {
+  background-color: #2196F3!important;
+}
+.wrong-answer {
+  background-color: #F44336!important;
+}
+.true-answer {
+  background-color: green !important;
+}
 .player-container {
   display: flex;
   flex-direction: column;

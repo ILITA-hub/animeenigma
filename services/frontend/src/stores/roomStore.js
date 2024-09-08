@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
+const BASEURL = import.meta.env.VITE_BASEURL
+
 
 export const useRoomStore = defineStore('roomStore', {
   state: () => ({
@@ -7,37 +9,13 @@ export const useRoomStore = defineStore('roomStore', {
     roomId: null,
     playerCounts: [2, 4, 6, 8, 10],
     selectedPlayerCount: '',
+    playerPoints: null,
     rangeOpenings: [
       { type: 'all', id: 0 },
       { type: 'collection', id: 1 },
       { type: 'anime', id: 1 },
     ],
     players:[
-      {
-        name: 'player228',
-        imgSrc: '/104652318_p0.png',
-        points: 500
-      },
-      {
-        name: 'player228',
-        imgSrc: '/104652318_p0.png',
-        points: 500
-      },
-      {
-        name: 'player228',
-        imgSrc: '/104652318_p0.png',
-        points: 500
-      },
-      {
-        name: 'player228',
-        imgSrc: '/104652318_p0.png',
-        points: 500
-      },
-      {
-        name: 'player228',
-        imgSrc: '/104652318_p0.png',
-        points: 500
-      },
     ],
     status: '',
     userAnswer: '',
@@ -54,7 +32,7 @@ export const useRoomStore = defineStore('roomStore', {
       };
 
       try {
-        const response = await axios.post('https://animeenigma.ru/api/rooms', payload);
+        const response = await axios.post(`${BASEURL}api/rooms`, payload);
         console.log('Ответ от сервера:', response);
         const roomId = response.data;
         if (roomId) {

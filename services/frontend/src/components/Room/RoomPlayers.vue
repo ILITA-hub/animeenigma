@@ -9,9 +9,9 @@
             <v-img :src="player.imgSrc">
             </v-img>
           </v-avatar>
-          <span class="player-nickname">{{ player.name }}</span>
+          <span class="player-nickname">{{ player.nickName }}</span>
           <div class="player-points">
-            {{ player.points }} очков
+            {{ player.score }} очков
           </div>
         </div>
         <v-divider class="mt-2"></v-divider>

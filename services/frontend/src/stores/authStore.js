@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 import Cookies from 'js-cookie';
+const BASEURL = import.meta.env.VITE_BASEURL
+
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -29,7 +31,7 @@ export const useAuthStore = defineStore('auth', {
     },
     async login(credentials) {
       try {
-        const response = await axios.post('https://animeenigma.ru/api/users/login', {
+        const response = await axios.post(`${BASEURL}users/login`, {
           login: credentials.email,
           password: credentials.password,
         });
@@ -51,7 +53,7 @@ export const useAuthStore = defineStore('auth', {
     },
     async register(credentials) {
       try {
-        const response = await axios.post('https://animeenigma.ru/api/users/reg', {
+        const response = await axios.post(`${BASEURL}api/users/reg`, {
           username: credentials.username,
           login: credentials.email,
           password: credentials.password,
