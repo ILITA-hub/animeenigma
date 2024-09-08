@@ -2,7 +2,7 @@
   <div class="room-container">
     <div class="player-container">
       <div v-if="isGameStarted" ref="videoContainer" class="video-container">
-        <video ref="video" id="player">
+        <video ref="video" id="player" v-show="isAnswerGeted">
           <source ref="videoSource" src="" type="video/mp4">
         </video>
       </div>
