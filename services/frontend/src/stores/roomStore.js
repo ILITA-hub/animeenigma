@@ -32,7 +32,7 @@ export const useRoomStore = defineStore('roomStore', {
       };
 
       try {
-        const response = await axios.post(`${BASEURL}/rooms`, payload);
+        const response = await axios.post(`${BASEURL}rooms`, payload);
         console.log('Ответ от сервера:', response);
         const roomId = response.data;
         if (roomId) {

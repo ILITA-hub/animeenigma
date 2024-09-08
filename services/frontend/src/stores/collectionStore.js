@@ -58,7 +58,7 @@ export const useCollectionStore = defineStore('collection', {
       };
 
       try {
-        const response = await axios.post(`${BASEURL}/animeCollections`, payload, {
+        const response = await axios.post(`${BASEURL}animeCollections`, payload, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

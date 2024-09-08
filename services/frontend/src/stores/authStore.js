@@ -53,7 +53,7 @@ export const useAuthStore = defineStore('auth', {
     },
     async register(credentials) {
       try {
-        const response = await axios.post(`${BASEURL}/users/reg`, {
+        const response = await axios.post(`${BASEURL}users/reg`, {
           username: credentials.username,
           login: credentials.email,
           password: credentials.password,
