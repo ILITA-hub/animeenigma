@@ -131,7 +131,7 @@ function getButtonClass(answer) {
 
 function endOpening(body) {
   isAnswerGeted = true
-  gameSocket.send(JSON.stringify({ clientId: clientId, type: 'checkAnswer', answer: userAnswer.value.id }))
+  gameSocket.send(JSON.stringify({ clientId: clientId, type: 'checkAnswer', answer: userAnswer.value?.id }))
   rightAnswer.value = body.trueAnswer
 }
 async function newQuestion(body) {

@@ -76,7 +76,7 @@ export const useCollectionStore = defineStore('collection', {
         return;
       }
       try {
-        const response = await axios.get(`${BASEURL}/animeCollections?limit=50&page=1`, {
+        const response = await axios.get(`${BASEURL}animeCollections?limit=50&page=1`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -88,7 +88,7 @@ export const useCollectionStore = defineStore('collection', {
     },
     async siteCollections() {
       try {
-        const response = await axios.get(`${BASEURL}/animeCollections?limit=50&page=1`);
+        const response = await axios.get(`${BASEURL}animeCollections?limit=50&page=1`);
         this.collections = response.data.data.map(collection => {
           return {
             ...collection,
