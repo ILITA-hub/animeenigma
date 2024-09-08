@@ -12,7 +12,7 @@
       <div class="varints-ansver-container">
 
         <v-btn
-          :class="getButtonClass"
+          :class="`btn-answer ${answer?.id === rightAnswer?.id ? 'true-answer' : ''} ${answer?.id === userAnswer?.id ? 'choosed-answer' : ''} ${(answer?.id === userAnswer?.id && userAnswer?.id !== rightAnswer?.id && isAnswerGeted) ? 'wrong-answer' : ''}`"
           v-for="answer in variantAnswers" @click="setUserAnswer(answer)">
           {{ answer.name }}
         </v-btn>
@@ -147,7 +147,6 @@ async function newQuestion(body) {
 function setUserAnswer(answer) {
   console.log(answer)
   userAnswer.value = answer
-  
 }
 
 function handelServerAnswer(body) {
