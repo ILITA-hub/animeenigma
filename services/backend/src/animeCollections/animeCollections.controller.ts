@@ -7,7 +7,7 @@ import { GetAnimeCollectionsRequest } from './schema/animeCollections.schema'
 @ApiTags("Аниме коллекции")
 @Controller("animeCollections")
 export class AnimeCollectionsController {
-  constructor(private readonly service: AnimeCollectionsService) {}
+  constructor(private readonly service: AnimeCollectionsService) { }
 
   @Get()
   async getAnimeCollections(@Query() query: GetAnimeCollectionsRequest) {
@@ -16,12 +16,17 @@ export class AnimeCollectionsController {
 
   @Post()
   @ApiBearerAuth()
-  async create(@Body() AnimeCollectionDTO : AnimeCollectionDTO, @Headers() header) {
+  async create(@Body() AnimeCollectionDTO: AnimeCollectionDTO, @Headers() header) {
     if (header["authorization"] == null) {
       throw new HttpException("Пользователь не авторизован", 401)
     }
-    
+
     const token = header["authorization"].split(" ")[1]
     return await this.service.create(AnimeCollectionDTO, token)
+  }
+
+  @Get("/:id")
+  async getVideosByAnime(@Param('id') id: number) {
+    return await this.service.getInfoById(id)
   }
 }
