@@ -1,19 +1,19 @@
 
-export const config = {
+module.exports = {
 
     redisSecret: 'v0RedisSecret',
-    redisHost: '127.0.0.1',
-    redisPort: 6379,
+    redisHost: 'localhost',
+    redisPort: 16379,
 
     restPort: 3000,
 
     webSocketPort: 9000,
 
-    pgHost: '127.0.0.1',
-    pgPort: 5432,
+    pgHost: 'localhost',
+    pgPort: 15432,
     pgUser: 'postgresUserAE',
     pgSecret: 'pgSuperSecretMnogaBycaBab',
-    pgDB: 'postgres',
+    pgDB: 'animeenigma',
 
     jwtSecret: 'jwtSecret',
 

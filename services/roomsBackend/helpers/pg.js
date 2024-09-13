@@ -1,5 +1,5 @@
 import postgres from 'postgres';
-import { config } from '../../index.js';
+import config from './config.tmpl.cjs';
 
 const pg = postgres({
     host: config.pgHost,
