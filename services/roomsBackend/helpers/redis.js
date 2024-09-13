@@ -1,12 +1,12 @@
-
 import { createClient } from 'redis';
-import { config } from '../../index.js';
+import config from './config.tmpl.cjs';
 
 let client;
 
 async function init() {
     client = createClient({
-        password: config.redisSecret
+        // password: config.redisSecret,
+        url: `redis://:${config.redisSecret}@localhost:${config.redisPort}`
     }).on('error', err => console.log('Redis Client Error', err))
 
     await client.connect();
