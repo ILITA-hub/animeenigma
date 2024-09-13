@@ -90,7 +90,7 @@ export class AnimeCollectionsService {
         return result
     }
 
-    async getVideosIds(year, genre) {
+    private async getVideosIds(year, genre) {
 
         let genres = []
         let years = []
@@ -155,7 +155,7 @@ export class AnimeCollectionsService {
         })
 
         for (let i = 0; i < animeCollectionReq.openings.length; i++) {
-            const opening = await this.VideosRepository.findOneBy({ id: animeCollectionReq.openings[i] })
+            const opening = await this.VideosRepository.findOneBy({ id:  animeCollectionReq.openings[i] })
             await this.AnimeCollectionsOpeningsRepository.save({
                 animeCollection: collections,
                 animeOpening: opening
@@ -167,5 +167,14 @@ export class AnimeCollectionsService {
             name: collections.name,
             description: collections.description
         }
+    }
+
+    async getInfoById(id: number) {
+        const query = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections")
+        query.andWhere("animeCollections.id = :id", {id: id})
+        query.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
+        query.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
+
+        return await query.getOne();
     }
 }

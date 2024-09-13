@@ -4,11 +4,21 @@ import { WebSocketServer } from "ws";
 import { uuidv4 } from './helpers/token.js'
 import { getCache } from './helpers/redis.js'
 import pg from './helpers/pg.js'
-import { getPlayingOpemimg, shuffle } from './helpers/playing.js'
+import { getPlayingOpenimg, shuffle } from './helpers/playing.js'
+import * as Minio from 'minio'
+
+const minioClient = new Minio.Client({
+    endPoint: 'localhost',
+    port: 9000,
+    useSSL: false,
+    accessKey: 'D3mQYLVKg1aJh7AJZQhH',
+    secretKey: '0gc2EyEO5zBoiLSWzt073Eexfu6z5WXVJhtsZFND',
+})
+const bucket = 'openings'
 
 const app = express()
 app.use(bodyParser.json())
-const opening = "http://46.181.201.172:9001/api/v1/download-shared-object/aHR0cDovLzEyNy4wLjAuMTo5MDAwL29wZW5pbmdzL1kybWF0ZS5teC0lRTMlODAlOEMlRTMlODElOEIlRTMlODElOEYlRTMlODIlOTklRTMlODIlODQlRTYlQTclOTglRTMlODElQUYlRTUlOTElOEElRTMlODIlODklRTMlODElOUIlRTMlODElOUYlRTMlODElODQtJUUzJTgyJUE2JUUzJTgzJUFCJUUzJTgzJTg4JUUzJTgzJUE5JUUzJTgzJUFEJUUzJTgzJTlFJUUzJTgzJUIzJUUzJTgzJTg2JUUzJTgyJUEzJUUzJTgzJTgzJUUzJTgyJUFGLSVFMyU4MCU4RCVFMyU4MiVBQSVFMyU4MyVCQyVFMyU4MyU5NSVFMyU4MiU5QSVFMyU4MyU4QiVFMyU4MyVCMyVFMyU4MiVBRiVFMyU4MiU5OSVFNiU5OCVBMCVFNSU4MyU4RiUyMCVFMiU5OSVBQSVFOSU4OCVCNCVFNiU5QyVBOCVFOSU5QiU4NSVFNCVCOSU4QiUyMGZlYXQuJTIwJUUzJTgxJTk5JUUzJTgxJTg1JUUzJTgwJThDR0lSSSUyMEdJUkklRTMlODAlOEQubXA0P1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9UlBNTTVMNVU5M0gxNkRHTktWMDUlMkYyMDI0MDkwMSUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNDA5MDFUMTIzMDU5WiZYLUFtei1FeHBpcmVzPTQzMjAwJlgtQW16LVNlY3VyaXR5LVRva2VuPWV5SmhiR2NpT2lKSVV6VXhNaUlzSW5SNWNDSTZJa3BYVkNKOS5leUpoWTJObGMzTkxaWGtpT2lKU1VFMU5OVXcxVlRrelNERTJSRWRPUzFZd05TSXNJbVY0Y0NJNk1UY3lOVEl6TnpBMU5pd2ljR0Z5Wlc1MElqb2lVazlQVkU1QlRVVWlmUS5Ud0NTY1R2MzZ6bV9xY1lGR24tamNJdTBFNjlUUGZ2NTRxTVRXTTBuRHR4anA2N3cxWDBNQ1hpZjY4RkFScDEwanB5V1hMZjQxejBrdnF3ZXRTVndNUSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QmdmVyc2lvbklkPW51bGwmWC1BbXotU2lnbmF0dXJlPTk4ZjNiOTVkZTJjY2JmMGE0ZmM3OTJlMDk3YTk3YTY4MDIyMTM5ZTY5OTc2YmM0NDA3ZWM5N2QyNzk3MjJhNzg"
+const opening = "http://46.181.201.172:9001/api/v1/download-shared-object/aHR0cDovLzEyNy4wLjAuMTo5MDAwL29wZW5pbmdzLzExNjg2P1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9TEc5UVNHT0w1VzNQMEIyVzRGT0olMkYyMDI0MDkwNyUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNDA5MDdUMTcxNTI3WiZYLUFtei1FeHBpcmVzPTQzMjAwJlgtQW16LVNlY3VyaXR5LVRva2VuPWV5SmhiR2NpT2lKSVV6VXhNaUlzSW5SNWNDSTZJa3BYVkNKOS5leUpoWTJObGMzTkxaWGtpT2lKTVJ6bFJVMGRQVERWWE0xQXdRakpYTkVaUFNpSXNJbVY0Y0NJNk1UY3lOVGMyT0RjeU1pd2ljR0Z5Wlc1MElqb2lVazlQVkU1QlRVVWlmUS5DVkd6Qy1ZTWxmN1pkN3draWwyWkVEaEV3eVhfbFlBZi1uZjdSNzFmalpFdXFwSC1fNzJuVmRzMzcyY0VydlpCVm9tOWx4SUV1cFFkUVVFYnFwZHc4USZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QmdmVyc2lvbklkPW51bGwmWC1BbXotU2lnbmF0dXJlPTgxNjdjY2I3YzM1ZjlkNTAyZjFmMGNiOGU0NzE5ZmQ1OGU3N2RjYjZjMjkxNDg2MGI3YTUzNjRhMjA1YmIyOTA"
 const wss = new WebSocketServer({ port: 1234 })
 let rooms = {
     "example": {
@@ -20,7 +30,7 @@ let rooms = {
                 score: 1,
                 ws: "ws",
                 load: false
-            }  
+            }
         ],
         opening: {
             url: "",
@@ -30,8 +40,8 @@ let rooms = {
         timeout: null,
         chat: [
             {
-                nickName: "nickName", 
-                message: "message" 
+                nickName: "nickName",
+                message: "message"
             }
         ],
         openings: [],
@@ -49,7 +59,7 @@ app.post("/create_room", async (req, res) => {
     const openingsDBTypes = await pg`SELECT * FROM "roomOpenings" WHERE "idRoom" = ${idRoom[0]['id']}`
     const openingsTypes = Array.from(openingsDBTypes)
 
-    for(let type of openingsTypes) {
+    for (let type of openingsTypes) {
         switch (type['type']) {
             case "collection":
                 const opening = await pg`SELECT * FROM "animeCollectionOpenings" WHERE "animeCollectionId" = ${type['idEntity']}`
@@ -94,27 +104,29 @@ wss.on("connection", async (ws, req) => {
 
     ws.on("message", data => {
         const messageBody = JSON.parse(data)
-        // console.log(messageBody)
         const roomId = req.url.split('/')[1]
         const token = req.url.split('/')[2]
 
         switch (messageBody["type"]) {
-            case "newQuestion":
-                playVideo("631b7", "//youtube.com/embed/j3p6sXq_uUM")
-                break
+            // case "newQuestion":
+            //     playVideo("631b7", "//youtube.com/embed/j3p6sXq_uUM")
+            //     break
             case "userIsReady":
                 if (!rooms[roomId]) {
                     ws.close(1000, JSON.stringify({
                         message: "Комната не найдена"
                     }))
                 }
-                
+
                 readyPlayer(roomId, messageBody['clientId'])
                 checkedReadyRoom(roomId)
                 // runGame(roomId)
                 break
             case "openingIsLoaded":
                 openingIsLoaded(roomId, clientId)
+                break
+            case "checkAnswer":
+                checkAnswer(clientId, messageBody['answer'], roomId)
                 break
         }
     })
@@ -123,8 +135,6 @@ wss.on("connection", async (ws, req) => {
     const token = req.url.split('/')[2]
     const clientId = `${uuidv4()}_${roomId}`
     const userSession = await getCache(`userSession${token}`)
-    console.log(userSession)
-    console.log(token)
     const userIdDB = userSession['userId']
     const user = await pg`SELECT username FROM users WHERE id = ${userIdDB}`
     if (rooms[roomId]) {
@@ -138,9 +148,9 @@ wss.on("connection", async (ws, req) => {
                 load: false
             }
         )
-        // console.log(rooms[roomId])
+
         clients.set(clientId, ws)
-    
+
         ws.send(JSON.stringify({
             type: "connect",
             clientId: clientId,
@@ -159,12 +169,11 @@ wss.on("connection", async (ws, req) => {
         ws.close(1000, JSON.stringify({
             message: "Комната не найдена"
         }))
-    }    
+    }
 
     ws.on("close", () => {
         clients.delete(clientId)
         deleteUsers(clientId)
-        // console.log(rooms)
     })
 })
 
@@ -172,10 +181,8 @@ wss.on("connection", async (ws, req) => {
 function deleteUsers(id) {
     for (let room in rooms) {
         for (let i = 0; i < rooms[room]["users"].length; i++) {
-            console.log(rooms[room]["users"][i]["id"], id)
             if (rooms[room]["users"][i]["id"] == id) {
                 rooms[room]["users"].splice(i, 1)
-                console.log(rooms[room]["users"])
                 break
             }
         }
@@ -184,7 +191,6 @@ function deleteUsers(id) {
 
 function playVideo(idRoom, opening) {
     rooms[idRoom].users.forEach((value, key) => {
-        // console.log(key)
         value.send(JSON.stringify({
             type: "newQuestion",
             opening: opening
@@ -195,8 +201,8 @@ function playVideo(idRoom, opening) {
 app.listen(1000)
 
 function readyPlayer(roomId, clientId) {
-    for(let i = 0; i < rooms[roomId]["users"].length; i++) {
-        if (rooms[roomId]['users'][i]['id'] == clientId) {            
+    for (let i = 0; i < rooms[roomId]["users"].length; i++) {
+        if (rooms[roomId]['users'][i]['id'] == clientId) {
             rooms[roomId]['users'][i]['ready'] = true
         }
     }
@@ -212,7 +218,7 @@ function checkedReadyRoom(roomId) {
 
     const ready = (readyPlayerCount / playerCount) * 100
 
-    if (ready >= 50) {
+    if (ready >= 100 && rooms[roomId]['status'] != 'playing') {
         rooms[roomId]['status'] = "playing"
         newOpening(roomId)
     }
@@ -222,8 +228,11 @@ async function newOpening(roomId) {
     if (rooms[roomId]['status'] == 'wait') {
         return
     }
-    
-    const openingId = getPlayingOpemimg(rooms[roomId]['openings'],rooms[roomId]['history'])
+
+    const openingId = getPlayingOpenimg(rooms[roomId]['openings'], rooms[roomId]['history'])
+
+    let url = `http://46.181.201.172:9000/openings/${openingId}`
+
     const anime = (await pg`SELECT anime."id" as animeId, anime."nameRU", videos.id as videoId
         from videos join anime ON anime.id = videos."animeId" where videos.id = ${openingId}`)[0]
     const animes = Array.from(await pg`SELECT anime.id as animeid, anime."nameRU" FROM anime where anime.id != ${anime['animeid']} ORDER BY random() LIMIT 3`)
@@ -237,7 +246,7 @@ async function newOpening(roomId) {
 
         value['ws'].send(JSON.stringify({
             type: "newOpening",
-            opening: opening,
+            opening: url,
             answers: [
                 {
                     id: openings[0]['animeid'],
@@ -260,17 +269,26 @@ async function newOpening(roomId) {
     })
 
     rooms[roomId]['opening'] = {
-        url: "",
+        url: url,
         id: anime['animeid'],
         name: anime['nameRU']
     }
+
+    rooms[roomId]['history'].push(openingId)
+
+    if (rooms[roomId]['history'].length >= 5) {
+        rooms[roomId]['history'].shift()
+    }
+
+    console.log("-----------------------")
+    console.log(rooms[roomId]['opening'])
 }
 
 async function openingIsLoaded(roomId, clientId) {
-    console.log(roomId, clientId)
+    console.log(roomId, clientId, 'loaded')
 
-    for(let i = 0; i < rooms[roomId]["users"].length; i++) {
-        if (rooms[roomId]['users'][i]['id'] == clientId) {            
+    for (let i = 0; i < rooms[roomId]["users"].length; i++) {
+        if (rooms[roomId]['users'][i]['id'] == clientId) {
             rooms[roomId]['users'][i]['load'] = true
         }
     }
@@ -292,15 +310,14 @@ async function runGame(roomId) {
         if (!value['ready']) {
             return
         }
-        
+
         value["ws"].send(JSON.stringify({
             type: "startOpening"
         }))
     })
 
     setTimeout(() => {
-            rooms[roomId]['users'].forEach((value, key) => {
-
+        rooms[roomId]['users'].forEach((value, key) => {
             value['ws'].send(JSON.stringify({
                 type: "endOpening",
                 trueAnswer: {
@@ -308,8 +325,30 @@ async function runGame(roomId) {
                     name: rooms[roomId]['opening']['name']
                 }
             }))
-
-            setTimeout(newOpening, 5000, roomId)
         })
+
+        loadIsFalse(roomId)
+
+        setTimeout(newOpening, 5000, roomId)
     }, 10000)
+}
+
+async function checkAnswer(userId, answer, roomId) {
+    if (rooms[roomId]['opening']['id'] == answer) {
+        rooms[roomId]['users'].find(user => user.id == userId).score += 1
+        rooms[roomId]['users'].forEach(value => {
+            value['ws'].send(
+                JSON.stringify({
+                    type: "updUsers",
+                    users: rooms[roomId]['users']
+                })
+            )
+        })
+    }
+}
+
+function loadIsFalse(roomId) {
+    for (let i = 0; i < rooms[roomId]["users"].length; i++) {
+        rooms[roomId]['users'][i]['load'] = false
+    }
 }

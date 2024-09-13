@@ -2,7 +2,7 @@ export function getRandomNumber(min, max) {
     return Math.floor(Math.random() * (max - min) + min)
 }
 
-export function getPlayingOpemimg(openings, history) {
+export function getPlayingOpenimg(openings, history) {
     while (true) {
         const index = getRandomNumber(0, openings.length - 1)
         const openingPlay = openings[index]
