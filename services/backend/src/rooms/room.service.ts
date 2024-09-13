@@ -11,12 +11,13 @@ import { Cron } from '@nestjs/schedule'
 import { getCiphers } from "crypto"
 import { CryptoService } from "../crypto/crypto.sevice"
 import { roomIdGenerate } from "../utils/miscellaneous"
+import axios from 'axios';
 
 let roomPort = 10000
 
 @Injectable()
 export class RoomService {
-  
+
 
   constructor(
     @InjectRepository(RoomEntity) private readonly RoomRepository: Repository<RoomEntity>,
@@ -34,7 +35,7 @@ export class RoomService {
   }
 
   async deleteAll() {
-    
+
   }
 
   async createRoom(body: SchemaRoom) {
@@ -49,7 +50,7 @@ export class RoomService {
 
     let port = 10000
 
-    for(let i = 0; i < ports.length; i++) {
+    for (let i = 0; i < ports.length; i++) {
       if (port == ports[i].port) {
         port++
         continue
@@ -67,7 +68,7 @@ export class RoomService {
       status: RoomStatus.STARTING
     })
 
-    for(let i = 0; i < body.rangeOpenings.length; i++) {
+    for (let i = 0; i < body.rangeOpenings.length; i++) {
       const range = body.rangeOpenings[i]
       await this.RoomOpRepository.save({
         idRoom: room.id,
@@ -76,8 +77,9 @@ export class RoomService {
       })
     }
 
-    exec(`cd ../animeRoomSocket/; PORT=${port} ID=${room.id} npm run start`) // todo - вынести в отдельного воркера
-    console.log(`cd ../animeRoomSocket/; PORT=${port} ID=${room.id} npm run start`)
+    await axios.post('http://localhost:1000/create_room', {
+      roomsId: roomID
+    })
 
     return roomID
   }
