@@ -57,7 +57,8 @@ export class AnimeCollectionsService {
                 genres: []
             }
 
-            const animeRequest = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections").andWhere(`animeCollections.id = ${collection.id}`)
+            const animeRequest = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections")
+                .andWhere(`animeCollections.id = ${collection.id}`)
             animeRequest.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
             animeRequest.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
             animeRequest.leftJoinAndSelect("videos.anime", "anime")
@@ -170,11 +171,46 @@ export class AnimeCollectionsService {
     }
 
     async getInfoById(id: number) {
-        const query = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections")
-        query.andWhere("animeCollections.id = :id", {id: id})
-        query.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
-        query.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
 
-        return await query.getOne();
+        let coll = {
+            id: id,
+            name: null,
+            videos: []
+        }
+
+        const collectionsRequest = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections")
+            .andWhere(`animeCollections.id = ${id}`)
+        collectionsRequest.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
+        collectionsRequest.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
+        collectionsRequest.leftJoinAndSelect("videos.anime", "anime")
+
+        let collectionArray = await collectionsRequest.getMany(); 
+
+        for (let openignIndex in collectionArray[0].openings) {
+            const videoObject = collectionArray[0].openings[openignIndex].animeOpening
+            console.log(videoObject)
+
+            const video = {
+                name: videoObject.name,
+                img: videoObject.anime.imgPath,
+                genres: []
+            }
+            
+            let animeId = videoObject.anime.id
+
+            let genresCol = this.GenresAnimeRepository.createQueryBuilder("genresAnime")
+                .andWhere(`genresAnime.animeId = ${animeId}`)
+                .innerJoinAndSelect("genresAnime.genre", "genre")
+
+            for (let genre of await genresCol.getMany()) {
+                video.genres.push(genre.genre["nameRu"])
+            }
+
+            coll.videos.push(video)
+        }
+
+        coll.name = collectionArray[0].name
+
+        return coll;
     }
 }

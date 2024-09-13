@@ -87,7 +87,7 @@ async function addAnimeInDB(animes) {
                 await pg`INSERT INTO public.videos
                 (id, "mp4Path", "name", "animeId", "active", "kind", "nameS3")
                 VALUES(${videos['id']}, ${videos['playerUrl']}, ${videos['name'] ? videos['name'] : anime['name'] ? anime['name'] : anime['english']}, ${anime['id']}, true, ${videos['kind']}, ${nameS3});`
-                await download(videos['playerUrl'], outNameOp, nameS3)
+                // await download(videos['playerUrl'], outNameOp, nameS3)
             } catch (e) {
                 console.error(e)
             }
