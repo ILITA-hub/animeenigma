@@ -71,7 +71,7 @@ export default {
     position: relative;
     overflow: hidden;
     width: 100%;
-    min-height: 100vh;
+    height: 100%;
     background-color: #090B1F;
   }
   
