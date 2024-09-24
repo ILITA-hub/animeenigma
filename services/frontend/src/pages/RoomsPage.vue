@@ -4,7 +4,10 @@
       <div class="picture"></div>
       <div class="text">
         <div class="title">Поиск комнаты AnimeEnigma</div>
-        <div class="subtitle">Погрузитесь в атмосферу аниме викторин, где проверите свои знания о<br> персонажах, сюжетах и деталях жанра. Готовы к вызову?</div>
+        <div class="subtitle">
+          Погрузитесь в атмосферу аниме викторин, где проверите свои знания о<br>
+          персонажах, сюжетах и деталях жанра. Готовы к вызову?
+        </div>
       </div>
       <div class="search-container">
         <v-text-field
@@ -15,26 +18,33 @@
           single-line
           v-model="searchQuery"
         ></v-text-field>
-        <v-btn text class="button" @click="onSearchIconClick">Поиск</v-btn>
+        <v-btn text class="button">Поиск</v-btn>
       </div>
     </div>
     <div class="content">
       <div class="sidebar">
         <div class="filter">
-          <FilterRoom />
-          <FilterAnime />
+          <!-- <FilterRoom />  -->
+          <FilterAnime
+            :genres="genres"
+            :years="years"
+            :selected-genres="selectedGenres"
+            :selected-years="selectedYears"
+            @update:selectedGenres="setSelectedGenres"
+            @update:selectedYears="setSelectedYears"
+          />
         </div>
       </div>
       <div class="main-content">
         <div class="result-container" v-if="searchQuery">
           <div class="result">Результаты поиска</div>
         </div>
-        <div class="no-room" v-if="filteredRooms.length === 0">Комната не найдена</div> 
+        <div class="no-room" v-if="filteredRooms.length === 0">Комната не найдена</div>
         <div class="rooms">
-            <RoomComp
-              v-for="(room, i) in filteredRooms" 
-              :key="i"  
-              :room="room"/>
+          <RoomComp
+            v-for="(room, i) in filteredRooms"
+            :key="i"
+            :room="room"/>
         </div>
       </div>
     </div>
@@ -42,41 +52,64 @@
 </template>
 
 <script>
+import { useRoomStore } from '@/stores/roomStore';
 import FilterRoom from "@/components/FilterComp/FilterRoom.vue";
 import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
 import RoomComp from "@/components/Room/RoomComp.vue";
-import { rooms } from "@/components/Room/RoomComp.js";
+import { computed, onMounted, ref } from 'vue';
 
 export default {
+  props: {
+    genres: {
+      type: Array,
+      required: true,
+    },
+    years: {
+      type: Array,
+      required: true,
+    },
+  },
   components: {
     FilterRoom,
     FilterAnime,
     RoomComp,
   },
-  data() {
+  setup() {
+    const selectedGenres = ref([]);
+    const selectedYears = ref([]);
+    const searchQuery = ref("");
+    const roomStore = useRoomStore();
+
+    const setSelectedGenres = (newGenres) => {
+        selectedGenres.value = newGenres;
+      };
+
+      const setSelectedYears = (newYears) => {
+        selectedYears.value = newYears;
+        };
+    
+        const  filteredRooms = computed(() => {
+        if (!searchQuery.value) {
+          return roomStore.rooms;
+        }
+        return roomStore.rooms.filter(room =>
+          room.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+        );
+      });
+
+    onMounted(() => {
+      roomStore.fetchRooms();
+    });
+
     return {
-      rooms: rooms,
-      searchQuery: '',
-      searchPerformed: false,
+      selectedGenres,
+        selectedYears,
+        setSelectedGenres,
+        setSelectedYears,
+        filteredRooms,
+        rooms: roomStore.rooms,
+        searchQuery,
     };
-  },
-  computed: {
-    filteredRooms() {
-      if (!this.searchQuery) {
-        return this.rooms.slice(0, 6);
-      }
-      return this.rooms.filter(room =>
-        room.title.toLowerCase().includes(this.searchQuery.toLowerCase())
-      );
-    },
-  },
-  methods: {
-    onSearchIconClick() {
-      this.searchPerformed = true;
-    },
-    onSearchInput() {
-      this.searchPerformed = true;
-    },
   },
 };
 </script>

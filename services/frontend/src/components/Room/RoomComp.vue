@@ -1,13 +1,13 @@
 <template>
   <div class="room-card">
-    <img class="room-image" :src="room.image" :alt="`Изображение ${room.title}`">
+    <img class="room-image" :src="room.image" :alt="`Изображение ${room.name}`">
     <div ref="roomInfo" class="room-info">
-      <div class="room-title">{{ room.title }}</div>
-      <div v-for="(players, index) in room.players" :key="players" class="players">{{ players }}</div>
+      <div ref="roomTitle" class="room-title">{{ room.name }}</div>
+      <div class="players">Игроков: {{ room.maxPlayer }}/{{ room.maxPlayer }}</div>
       <div class="additional-info">
         <div class="genres">
           <span class="genre" v-for="genre in room.genres" :key="genre">{{ genre }}</span>
-      </div>
+        </div>
         <v-btn class="enjoy">Присоединиться</v-btn>
       </div>
     </div>
@@ -15,34 +15,24 @@
 </template>
 
 <script>
-import { ref } from 'vue';
-
 export default {
   name: 'RoomComp',
   props: {
-    room: Object
+    room: {
+      type: Object,
+      required: true,
+    },
   },
-  mounted(){
-    const roomInfo = this.$refs.roomInfo
-    roomInfo.style.bottom = `-${roomInfo.offsetHeight - 60}px`
-  },
-  setup(props) {
-    const genresVisible = ref(false);
+  mounted() {
+  const roomInfo = this.$refs.roomInfo; 
+  const roomTitle = this.$refs.roomTitle; 
+  if (roomInfo && roomTitle) {
+    roomInfo.style.bottom = `-${roomInfo.offsetHeight - roomTitle.offsetHeight - 40}px`;
+  } else {
+    console.warn('Room info or title references are not defined.');
+  }
+},
 
-    const showGenres = () => {
-      genresVisible.value = true;
-    };
-
-    const hideGenres = () => {
-      genresVisible.value = false;
-    };
-
-    return {
-      genresVisible,
-      showGenres,
-      hideGenres
-    };
-  },
 };  
 </script>
 
@@ -53,7 +43,8 @@ export default {
   width: 320px;
   position: relative;
   height: 445px;
-  border-radius: 5px;
+  border-radius: 10px;
+  margin: 0 45px;
   overflow: hidden;
   transition: transform 0.3s ease;
 }
@@ -90,9 +81,6 @@ export default {
   margin-top: 10px;
 }
 
-.additional-info div {
-  margin: 5px 0 10px 0;
-}
 
 .genres {
   /* display: none; */
