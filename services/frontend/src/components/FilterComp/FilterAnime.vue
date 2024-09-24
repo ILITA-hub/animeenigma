@@ -58,23 +58,25 @@ export default {
   setup(props, { emit }) {
     const filterAnime = ref(null);
 
-    onMounted(async () => {
-      window.addEventListener('scroll', function () {
+    const toFixElement = (elem) => {
+      if (elem) {
+        if (window.pageYOffset > 300) {
+          elem.style.transform = `translateY(${window.pageYOffset - 300}px)`;
+        } else {
+          elem.style.transform = `translateY(0)`;
+        }
+      }
+    };
+
+    onMounted(() => {
+      window.addEventListener('scroll', () => {
         toFixElement(filterAnime.value);
       });
     });
 
-    onUnmounted(()=>{
-      window.removeEventListener('scroll', toFixElement)
-    })
-
-    function toFixElement(elem) {
-      if (window.pageYOffset > 300) {
-        elem.style.transform = `translateY(${window.pageYOffset - 300}px)`;
-      } else {
-        elem.style.transform = `translateY(0)`;
-      }
-    }
+    onUnmounted(() => {
+      window.removeEventListener('scroll', toFixElement);
+    });
 
     const updateGenres = (newGenres) => {
       emit('update:selectedGenres', newGenres);
