@@ -1,38 +1,24 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 
-export const useRoomStore = defineStore('roomStore', {
+export const useRoomStore = defineStore('room', {
   state: () => ({
-    roomName: '',
-    playerCounts: [2, 4, 6, 8, 10],
-    selectedPlayerCount: '',
-    rangeOpenings: [
-      { type: 'all', id: 0 },
-      { type: 'collection', id: 1 },
-      { type: 'anime', id: 1 },
-    ],
+    rooms: [],
+    defaultGenres: ['Сёнен', 'Фэнтези'],
+    defaultImage: 'zoro.jpg', 
   }),
   actions: {
-    async createRoom() {
-      const payload = {
-        name: this.roomName,
-        rangeOpenings: this.rangeOpenings,
-        qtiUsersMax: +this.selectedPlayerCount,
-      };
-
+    async fetchRooms() {
       try {
-        const response = await axios.post('https://animeenigma.ru/api/rooms', payload);
-        console.log('Ответ от сервера:', response);
-        const roomId = response.data;
-        if (roomId) {
-          const roomLink = `AnimeEnigma.ru/room/${roomId}`;
-          console.log('Ссылка на созданную комнату:', roomLink);
-        } else {
-          console.error('ID комнаты не найден в ответе:', response.data);
-        }
+        const response = await axios.get('https://animeenigma.ru/api/rooms/getAll');
+        this.rooms = response.data.map(room => ({
+          ...room,
+          genres: this.defaultGenres,
+          image: this.defaultImage,   
+        }));
       } catch (error) {
-        console.error('Ошибка при создании комнаты:', error);
+        console.error('Ошибка при загрузке комнат:', error);
       }
-    }
-  }
+    },
+  },
 });
