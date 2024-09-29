@@ -4,8 +4,8 @@
       <template v-slot:title>
         <span class="filter-title">Фильтры аниме</span>
       </template>
-      <v-select class="select" v-model="selectedGenres" :items="animeStore.genres" item-value="id"
-        item-title="nameRu" label="Жанр" multiple><!-- @update:model-value="updateGenres" -->
+      <v-select class="select" v-model="selectedGenres" :items="animeStore.genres" item-value="id" :model-value="props.incomingSelectedGenres"
+        item-title="nameRu" label="Жанр" multiple>
         <template v-slot:selection="{ item, index }">
           <div v-if="index < 3">
             <span>{{ item?.title }},</span>
@@ -15,8 +15,8 @@
           </span>
         </template>
       </v-select>
-      <v-select class="select" v-model="selectedYears" :items="animeStore.years" label="Год выпуска"
-        multiple><!-- @update:model-value="updateYears" -->
+      <v-select class="select" v-model="selectedYears" :items="animeStore.years" label="Год выпуска" :model-value="props.incomingSelectedYears"
+        multiple>
         <template v-slot:selection="{ item, index }">
           <div v-if="index < 2">
             <span>{{ item?.title }},</span>
@@ -34,6 +34,11 @@
 import { watch, onMounted, onUnmounted, ref } from 'vue';
 import { useAnimeStore } from '@/stores/animeStore';
 
+
+const props = defineProps({
+  incomingSelectedGenres: Array,
+  incomingSelectedYears: Array
+});
 
 const animeStore = useAnimeStore()
 const selectedGenre = ref([])
