@@ -24,15 +24,8 @@
     <div class="content">
       <div class="sidebar">
         <div class="filter">
-          <!-- <FilterRoom />  -->
-          <FilterAnime
-            :genres="genres"
-            :years="years"
-            :selected-genres="selectedGenres"
-            :selected-years="selectedYears"
-            @update:selectedGenres="setSelectedGenres"
-            @update:selectedYears="setSelectedYears"
-          />
+          <FilterRoom />
+          <!-- <FilterAnime /> -->
         </div>
       </div>
       <div class="main-content">
@@ -60,14 +53,6 @@ import { computed, onMounted, ref } from 'vue';
 
 export default {
   props: {
-    genres: {
-      type: Array,
-      required: true,
-    },
-    years: {
-      type: Array,
-      required: true,
-    },
   },
   components: {
     FilterRoom,

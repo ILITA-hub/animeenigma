@@ -7,7 +7,7 @@
       <div class="circle circle3" style="background-color: #CA33FF;"></div>
       <div class="circle circle4" style="background-color: #33A9FF;"></div>
       <v-main>
-        <router-view :genres="genres" :years="years" />
+        <router-view />
       </v-main>
     </v-container>
     <FooterApp/>
@@ -17,10 +17,18 @@
 <script>
 import HeaderApp from './components/HeaderApp.vue'
 import FooterApp from './components/FooterApp.vue'
+import { useAnimeStore } from './stores/animeStore';
 import axios from 'axios'
 
 export default {
   name: 'App',
+  setup(){
+    const animeStore = useAnimeStore()
+
+    return {
+      animeStore
+    }
+  },
 
   components: {
     HeaderApp,
@@ -35,27 +43,12 @@ export default {
   },
 
   async mounted() {
-    await this.loadGenres();
-    await this.loadYears();
+    this.animeStore.loadGenres();
+    this.animeStore.loadYears();
   },
 
   methods: {
-    async loadGenres() {
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/filters/genres');
-        this.genres = response.data;
-      } catch (error) {
-        console.error('Error loading genres:', error);
-      }
-    },
-    async loadYears() {
-      try {
-        const response = await axios.get('https://animeenigma.ru/api/filters/years');
-        this.years = response.data;
-      } catch (error) {
-        console.error('Error loading years:', error);
-      }
-    },
+    
   },
 };
 </script>

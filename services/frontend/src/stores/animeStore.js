@@ -42,6 +42,22 @@ export const useAnimeStore = defineStore('anime', {
       }
       return `?${params.toString()}`;
     },
+    async loadGenres() {
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/filters/genres');
+        this.genres = response.data;
+      } catch (error) {
+        console.error('Error loading genres:', error);
+      }
+    },
+    async loadYears() {
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/filters/years');
+        this.years = response.data;
+      } catch (error) {
+        console.error('Error loading years:', error);
+      }
+    },
     setGenres(genres) {
       this.selectedGenres = genres;
       this.anime = []

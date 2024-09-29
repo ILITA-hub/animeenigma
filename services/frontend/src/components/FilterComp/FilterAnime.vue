@@ -1,29 +1,28 @@
 <template>
   <div ref="filterAnime" class="filter-anime">
-    <v-card class="card-list" v-if="genres.length">
+    <v-card class="card-list" v-if="animeStore.genres.length">
       <template v-slot:title>
         <span class="filter-title">Фильтры аниме</span>
       </template>
-      <v-select class="select" :model-value="selectedGenres" :items="genres" item-value="id" item-title="nameRu" label="Жанр"
-        multiple
-        @update:model-value="updateGenres">
+      <v-select class="select" v-model="selectedGenres" :items="animeStore.genres" item-value="id"
+        item-title="nameRu" label="Жанр" multiple><!-- @update:model-value="updateGenres" -->
         <template v-slot:selection="{ item, index }">
           <div v-if="index < 3">
-            <span>{{ item.title }},</span>
+            <span>{{ item?.title }},</span>
           </div>
           <span v-if="index === 3" class="text-grey text-caption align-self-center">
-            (+{{ selectedGenres.length - 3 }} others)
+            (+{{ selectedGenres?.length - 3 }} others)
           </span>
         </template>
       </v-select>
-      <v-select class="select" :model-value="selectedYears" :items="years" label="Год выпуска" multiple
-        @update:model-value="updateYears">
+      <v-select class="select" v-model="selectedYears" :items="animeStore.years" label="Год выпуска"
+        multiple><!-- @update:model-value="updateYears" -->
         <template v-slot:selection="{ item, index }">
           <div v-if="index < 2">
-            <span>{{ item.title }},</span>
+            <span>{{ item?.title }},</span>
           </div>
           <span v-if="index === 2" class="text-grey text-caption align-self-center">
-            (+{{ selectedYears.length - 2 }} others)
+            (+{{ selectedYears?.length - 2 }} others)
           </span>
         </template>
       </v-select>
@@ -31,83 +30,46 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { watch, onMounted, onUnmounted, ref } from 'vue';
+import { useAnimeStore } from '@/stores/animeStore';
 
-export default {
-  props: {
-    genres: {
-      type: Array,
-      required: true,
-    },
-    years: {
-      type: Array,
-      required: true,
-    },
-    selectedGenres: {
-      type: Array,
-      default: () => [],
-    },
-    selectedYears: {
-      type: Array,
-      default: () => [],
-    },
-  },
-  emits: ['update:selectedGenres', 'update:selectedYears'],
 
-  setup(props, { emit }) {
-    const filterAnime = ref(null);
+const animeStore = useAnimeStore()
+const selectedGenre = ref([])
+const selectedYear = ref([])
+const selectedGenres = ref([])
+const selectedYears = ref([])
+const filterAnime = ref(null)
+const emit = defineEmits(['update:selectedGenres', 'update:selectedYears'])
 
-    const toFixElement = (elem) => {
-      if (elem) {
-        if (window.pageYOffset > 300) {
-          elem.style.transform = `translateY(${window.pageYOffset - 300}px)`;
-        } else {
-          elem.style.transform = `translateY(0)`;
-        }
-      }
-    };
 
-    onMounted(() => {
-      window.addEventListener('scroll', () => {
-        toFixElement(filterAnime.value);
-      });
-    });
+onMounted(async () => {
+  window.addEventListener('scroll', toFixElement);
+});
 
-    onUnmounted(() => {
-      window.removeEventListener('scroll', toFixElement);
-    });
+onUnmounted(() => {
+  window.removeEventListener('scroll', toFixElement)
+})
 
-    const updateGenres = (newGenres) => {
-      emit('update:selectedGenres', newGenres);
-    };
+function toFixElement() {
+  const elem = filterAnime.value
+  if (window.pageYOffset > 300) {
+    elem.style.transform = `translateY(${window.pageYOffset - 300}px)`;
+  } else {
+    elem.style.transform = `translateY(0)`;
+  }
+}
 
-    const updateYears = (newYears) => {
-      emit('update:selectedYears', newYears);
-    };
+watch(selectedGenres, (newGenres) => {
+  animeStore.selectedGenres = newGenres
+  emit('update:selectedGenres', selectedGenres.value);
+})
 
-    watch(
-      () => props.selectedGenres,
-      (newGenres) => {
-        emit('update:selectedGenres', newGenres);
-      }
-    );
-
-    watch(
-      () => props.selectedYears,
-      (newYears) => {
-        emit('update:selectedYears', newYears);
-      }
-    );
-
-    return {
-      filterAnime,
-      updateGenres,
-      updateYears,
-      toFixElement,
-    };
-  },
-};
+watch(selectedYears, (newYears) => {
+  console.log(newYears)
+  emit('update:selectedYears', newYears);
+})
 </script>
 
 <style scoped>
@@ -118,10 +80,11 @@ export default {
   transition: transform 0.5s ease-in-out;
 }
 
-.filter-title{
+.filter-title {
   color: #fff;
   font-family: Montserrat;
 }
+
 .btn-room {
   font-family: 'Montserrat';
   color: aliceblue;

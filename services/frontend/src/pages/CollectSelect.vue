@@ -17,10 +17,6 @@
         <div class="filter">
           <div class="filter-anime">
             <FilterAnime
-              :genres="genres"
-              :years="years"
-              :selected-genres="selectedGenres"
-              :selected-years="selectedYears"
               @update:selectedGenres="setSelectedGenres"
               @update:selectedYears="setSelectedYears"
             />
@@ -64,16 +60,6 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 
 export default {
-    props: {
-      genres: {
-        type: Array,
-        required: true,
-      },
-      years: {
-        type: Array,
-        required: true,
-      },
-    },
   components: {
     FilterAnime,
     AnimeCard,
@@ -90,7 +76,8 @@ export default {
     let currentScroll = 0
     let interval = null
 
-    function toFixElement(elem) {
+    function toFixElement() {
+      const elem = selectedVideosRef.value
       if (window.pageYOffset > 300) {
         elem.style.transform = `translateY(${window.pageYOffset - 300}px)`;
       } else {
@@ -146,9 +133,7 @@ export default {
         checkScroll()
       }, 500)
       collectionStore.loadFromLocalStorage();
-      window.addEventListener('scroll', function () {
-        toFixElement(selectedVideosRef.value);
-      });
+      window.addEventListener('scroll', toFixElement);
     });
 
     onUnmounted(async () => {
