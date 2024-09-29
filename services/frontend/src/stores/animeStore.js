@@ -11,7 +11,7 @@ export const useAnimeStore = defineStore('anime', {
     genres: [],
     years: [],
     selectedGenres: [],
-    selectedYears: [], //комментарий
+    selectedYears: [],
   }),
   actions: {
     async animeRequest(page = 1) {
