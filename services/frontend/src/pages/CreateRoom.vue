@@ -86,7 +86,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 80vh;
+  min-height: 79vh;
 }
 
 .form {

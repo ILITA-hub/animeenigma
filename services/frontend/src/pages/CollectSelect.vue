@@ -17,6 +17,8 @@
         <div class="filter">
           <div class="filter-anime">
             <FilterAnime
+              :incoming-selected-genres="selectedGenres"
+              :incoming-selected-years="selectedYears"
               @update:selectedGenres="setSelectedGenres"
               @update:selectedYears="setSelectedYears"
             />
