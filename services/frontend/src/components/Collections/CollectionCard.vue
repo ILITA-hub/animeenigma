@@ -55,7 +55,7 @@ export default {
 
 .collection-info {
   position: absolute;
-  bottom: -23%;
+  bottom: -29%;
   left: 0;
   width: 100%;
   color: white;
