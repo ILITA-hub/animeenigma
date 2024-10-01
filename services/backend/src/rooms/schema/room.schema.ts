@@ -16,9 +16,8 @@ export class SchemaRoom {
         type: [Object],
         description: "Опенинги",
         example: [
-            {type: "all", id: 0},
             {type: "collection", id: 1},
-            {type: "anime", id: 1}
+            {type: "video", id: 1}
         ]
     })
     rangeOpenings: Array<rangeOp> = [{type : "all", id: 0}];

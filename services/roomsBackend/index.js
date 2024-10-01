@@ -47,6 +47,7 @@ let rooms = {
         openings: [],
         history: [],
         status: "wait",
+        owner: 1
     }
 }
 
@@ -54,41 +55,52 @@ const clients = new Map()
 
 app.post("/create_room", async (req, res) => {
     const body = req.body
-    const idRoom = await pg`SELECT * FROM room WHERE "uniqueURL" = ${body.roomsId}`
-    const openings = []
-    const openingsDBTypes = await pg`SELECT * FROM "roomOpenings" WHERE "idRoom" = ${idRoom[0]['id']}`
-    const openingsTypes = Array.from(openingsDBTypes)
+    const idRoom = body.uniqueURL
+    const openings = body.openings
+    const maxPlayer = body.maxPlayer
+    const status = body.status
+    const name = body.name
 
-    for (let type of openingsTypes) {
-        switch (type['type']) {
-            case "collection":
-                const opening = await pg`SELECT * FROM "animeCollectionOpenings" WHERE "animeCollectionId" = ${type['idEntity']}`
-                Array.from(opening).forEach(value => {
-                    openings.push(value['animeOpeningId'])
-                })
-                break
-            case "anime":
-                break
-        }
-    }
+    const room = await pg`INSERT INTO room
+        ("name", "maxPlayer", status, "uniqueURL", "createdAt", "updatedAt")
+        VALUES(${name}, ${maxPlayer}, ${status}, ${idRoom}, now(), now())
+        returning id, name`
 
-    rooms[body.roomsId] = {
+    openings.forEach(async value => {
+        await pg`INSERT INTO "roomOpenings"
+            ("idRoom", "type", "idEntity", "createdAt", "updatedAt")
+            VALUES(${room[0].id}, 'video', ${value}, now(), now());`
+    })
+
+    rooms[idRoom] = {
         users: [],
         openings: openings,
         timeout: null,
         chat: [],
         opening: {
-            url: opening,
-            id: 1,
-            name: "name"
+            url: "",
+            id: -1,
+            name: ""
         },
         history: [],
-        status: "wait"
+        status: "wait",
+        owner: 1
     }
 
-    console.log(rooms)
+    console.log(rooms[idRoom])
 
     res.sendStatus(200)
+})
+
+app.get("/rooms", async (req, res) => {
+    const result = rooms.map((value, index) => {
+        return {
+            usersCount: value.users.length,
+            status: value.status
+        }
+    })
+
+    res.send(rooms)
 })
 
 app.post("/stop_room", async (req, res) => {

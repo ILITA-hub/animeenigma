@@ -27,6 +27,13 @@ export class GetAnimeRequest {
         example: ["2024", "2023"]
     })
     year: String[]
+
+    @ApiProperty({
+        description: "Название аниме",
+        required: false,
+        example: "Text"
+    })
+    text: string
 }
 
 class VideosArrayResponse {

@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, OneToMany, DeleteDateColumn, Unique } from 'typeorm';
 
 export enum RoomStatus {
+  CREATING = "CREATING",
   STARTING = "STARTING",
   PLAYING = "PLAYING",
   CLOUSING = "CLOUSING",
@@ -19,14 +20,11 @@ export class RoomEntity {
 
   @Column()
   maxPlayer: number
-
-  @Column()
-  port: number
   
   @Column({
     type: "enum",
     enum: RoomStatus,
-    default: RoomStatus.STARTING
+    default: RoomStatus.CREATING
   })
   status: RoomStatus
 

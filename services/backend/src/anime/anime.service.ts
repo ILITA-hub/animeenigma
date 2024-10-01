@@ -14,9 +14,11 @@ export class AnimeService {
   async getAnime(query: GetAnimeRequest) {
     let genres = []
     let years = []
+    let text = ""
 
     if (query.genres) genres = typeof query.genres == "object" ? [...query.genres] : [query.genres]
     if (query.year) years = typeof query.year == "object" ? [...query.year] : [query.year]
+    if (query.text) text = `%${query.text}%`
 
     const querySQLBuilder = this.AnimeRepository.createQueryBuilder("anime")
     querySQLBuilder.innerJoinAndSelect("anime.videos", "videos")
@@ -45,6 +47,14 @@ export class AnimeService {
     if (years.length != 0) {
       querySQLBuilder.andWhere("anime.year IN (:...years)", {years: years})
     }
+
+    if (text.length != 0) {
+      querySQLBuilder.andWhere("anime.name like :text", {text: text})
+        .orWhere("anime.nameRU like :text", {text: text})
+        .orWhere("anime.nameJP like :text", {text: text})
+    }
+
+
 
     querySQLBuilder.skip(query.limit * (query.page - 1))
     querySQLBuilder.take(query.limit)

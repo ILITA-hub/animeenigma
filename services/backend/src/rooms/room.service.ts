@@ -1,19 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm'
-import { generateRoomId } from '../utils/miscellaneous'
 import { Room } from './dto/create-room.dto'
 import { SchemaRoom } from './schema/room.schema'
-import { QueryFailedError, Repository } from 'typeorm'
+import { Repository } from 'typeorm'
 import { CachesService } from '../caches/caches.service'
-import { exec } from 'child_process'
 import { RoomEntity, RoomOpeningsEntity, RoomStatus } from './entity/room.entity'
-import { Cron } from '@nestjs/schedule'
-import { getCiphers } from "crypto"
-import { CryptoService } from "../crypto/crypto.sevice"
+import { AnimeCollectionOpenings } from '../animeCollections/entity/animeCollectionsOpenings.entity'
+import { VideosEntity } from '../videos/entity/videos.entity'
 import { roomIdGenerate } from "../utils/miscellaneous"
 import axios from 'axios';
-
-let roomPort = 10000
 
 @Injectable()
 export class RoomService {
@@ -22,85 +17,59 @@ export class RoomService {
   constructor(
     @InjectRepository(RoomEntity) private readonly RoomRepository: Repository<RoomEntity>,
     @InjectRepository(RoomOpeningsEntity) private readonly RoomOpRepository: Repository<RoomOpeningsEntity>,
+    @InjectRepository(AnimeCollectionOpenings) private readonly animeCollectionsOpeningRepository: Repository<AnimeCollectionOpenings>,
     private readonly cachesService: CachesService,
-    private readonly CryptoService: CryptoService,
   ) { }
 
   async getAllRooms() {
-    return await this.RoomRepository.find()
+    const rooms = await this.RoomRepository.createQueryBuilder('room')
+      .select(["room.id", "room.name", "room.maxPlayer", "room.status", "room.uniqueURL"])
+      .where("room.status != :status", {status: RoomStatus.CREATING})
+      .getMany()
+
+    const roomsBacend = await axios.get('http://0.0.0.0:1000/rooms')
+    console.log(roomsBacend)
+
+    return rooms
   }
 
   async updateRoom(id: string, room: Room): Promise<void> {
     await this.cachesService.setCache('room' + id, room);
   }
 
-  async deleteAll() {
-
-  }
-
   async createRoom(body: SchemaRoom) {
-    const ports = await this.RoomRepository.find({
-      where: {
-        deleteAt: null
-      },
-      order: {
-        port: "ASC"
-      }
-    })
-
-    let port = 10000
-
-    for (let i = 0; i < ports.length; i++) {
-      if (port == ports[i].port) {
-        port++
-        continue
-      }
-      break
-    }
-
     const roomID = roomIdGenerate()
 
-    const room = await this.RoomRepository.save({
-      name: body.name,
-      maxPlayer: body.qtiUsersMax,
-      port: port,
-      uniqueURL: roomID,
-      status: RoomStatus.STARTING
-    })
+    const openings = []
 
     for (let i = 0; i < body.rangeOpenings.length; i++) {
       const range = body.rangeOpenings[i]
-      await this.RoomOpRepository.save({
-        idRoom: room.id,
-        type: range.type,
-        idEntity: range.id
-      })
+
+      switch(range.type) {
+        case "video":
+          openings.push(range.id)
+          break
+
+        case "collection":
+          const videos = await this.animeCollectionsOpeningRepository.createQueryBuilder('animeCollectionOpenings')
+            .where("animeCollectionOpenings.animeCollectionId = :id", {id: range.id})
+            .select(["animeCollectionOpenings.animeOpeningId"])
+            .getRawMany()
+
+          const videosId = videos.map(value => value.animeOpeningId)
+          openings.push(...videosId)
+          break
+      }
     }
 
-    await axios.post('http://localhost:1000/create_room', {
-      roomsId: roomID
+    await axios.post('http://0.0.0.0:1000/create_room', {
+      name: body.name,
+      maxPlayer: body.qtiUsersMax,
+      uniqueURL: roomID,
+      status: RoomStatus.CREATING,
+      openings: openings
     })
 
     return roomID
-  }
-
-  async deleteRoom(id: string): Promise<void> {
-    const room = await this.RoomRepository.findOne({
-      where: {
-        deleteAt: null,
-        uniqueURL: id
-      }
-    })
-
-    exec(`kill $(lsof -t -i:${room.port})`)
-
-    await this.RoomRepository.update(room.id, {
-      deleteAt: new Date()
-    })
-  }
-
-  @Cron('0 * * * *')
-  async roomWatcher() {
-    const allRooms = await this.cachesService.getCache("rooms");
   }
 }

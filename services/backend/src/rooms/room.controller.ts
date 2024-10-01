@@ -11,7 +11,7 @@ export class AppController {
   constructor(private readonly roomService: RoomService) {}
 
   @ApiOperation({ summary: "Получение всех комнат"})
-  @Get("getAll")
+  @Get()
   async getAllRooms() {
     return await this.roomService.getAllRooms();
   }
@@ -23,13 +23,5 @@ export class AppController {
   @Post()
   async createRoom(@Body() body : SchemaRoom) {
     return await this.roomService.createRoom(body);
-  }
-
-  @ApiOperation({ summary: "Удаление комнаты"})
-  @Delete(":roomId")
-  async deleteRoom(@Param("roomId") roomId : string) {
-    // await this.roomService.deleteAll()
-    await this.roomService.deleteRoom(roomId)
-    return
   }
 }
