@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
+const BASEURL = import.meta.env.VITE_BASEURL
+
 
 export const useAnimeStore = defineStore('anime', {
   state: () => ({
@@ -17,7 +19,7 @@ export const useAnimeStore = defineStore('anime', {
     async animeRequest(page = 1) {
       try {
         const query = this.buildQuery(page);
-        const response = await axios.get(`https://animeenigma.ru/api/anime${query}`);
+        const response = await axios.get(`${BASEURL}anime${query}`);
         const animeData = response.data.data;
         this.currentPage = response.data.page;
         this.totalPages = response.data.allPage;
@@ -26,6 +28,22 @@ export const useAnimeStore = defineStore('anime', {
         this.anime.push(...animeData);
       } catch (error) {
         console.error("Ошибка при загрузке данных:", error);
+      }
+    },
+    async loadGenres() {
+      try {
+        const response = await axios.get(`${BASEURL}filters/genres`);
+        this.genres = response.data;
+      } catch (error) {
+        console.error('ошибка загрузки жанров:', error);
+      }
+    },
+    async loadYears() {
+      try {
+        const response = await axios.get(`${BASEURL}filters/years`);
+        this.years = response.data;
+      } catch (error) {
+        console.error('ошибка загрузки годов:', error);
       }
     },
     buildQuery(page) {

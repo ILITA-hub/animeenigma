@@ -7,6 +7,7 @@ import CollectionsPage from "./pages/CollectionsPage.vue";
 import CreateCollection from "./pages/CreateCollection.vue";
 import UserPage from "./pages/UserPage.vue";
 import CollectSelect from "./pages/CollectSelect.vue";
+import GameRoom from "./pages/GameRoom.vue";
 import { useAuthStore } from './stores/authStore';
 
 const router = createRouter({ 
@@ -15,12 +16,13 @@ const router = createRouter({
     { path: '/main', component: MainPage, alias: '/' },
     { path: '/auth', component: AuthPage }, 
     { path: '/rooms', component: RoomsPage},
+    { path: '/room/:uniqUrl', component: GameRoom,  name: 'room',  },
     { path: '/createroom', component: CreateRoom},
     { path: '/collections', component: CollectionsPage},
     { path: '/custom-collections', component: CreateCollection},
     { path: '/user', component: UserPage },
-    { path: '/collect-select', component: CollectSelect }, 
-  ] 
+    { path: '/collect-select', component: CollectSelect },
+  ]
 });
 
 let isDirectNavigation = true;
