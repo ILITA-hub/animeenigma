@@ -3,7 +3,7 @@ import axios from 'axios';
 const BASEURL = import.meta.env.VITE_BASEURL
 
 
-export const useRoomStore = defineStore('roomStore', {
+export const useRoomStore = defineStore('room', {
   state: () => ({
     roomName: '',
     roomId: null,
@@ -21,16 +21,13 @@ export const useRoomStore = defineStore('roomStore', {
     userAnswer: '',
     serverAnswer: '',
     currentVideo: '',
-    variantsAnswer: []
+    variantsAnswer: [],
+    rooms: [],
+    defaultGenres: ['Сёнен', 'Фэнтези'],
+    defaultImage: 'zoro.jpg', 
   }),
   actions: {
-    async createRoom() {
-      const payload = {
-        name: this.roomName,
-        rangeOpenings: this.rangeOpenings,
-        qtiUsersMax: +this.selectedPlayerCount,
-      };
-
+    async fetchRooms() {
       try {
         const response = await axios.post(`${BASEURL}rooms`, payload);
         console.log('Ответ от сервера:', response);
@@ -42,8 +39,8 @@ export const useRoomStore = defineStore('roomStore', {
           console.error('ID комнаты не найден в ответе:', response.data);
         }
       } catch (error) {
-        console.error('Ошибка при создании комнаты:', error);
+        console.error('Ошибка при загрузке комнат:', error);
       }
-    }
-  }
+    },
+  },
 });

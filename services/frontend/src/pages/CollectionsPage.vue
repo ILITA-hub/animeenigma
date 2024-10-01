@@ -4,85 +4,100 @@
       <div class="picture"></div>
       <div class="text">
         <div class="title">Коллекции опенингов</div>
-        <div class="subtitle">Откройте мир аниме через его опенинги! Насладитесь музыкой и анимацией, <br>определившими каждый шедевр. Откройте для себя новые жемчужины!</div>
+        <div class="subtitle">Откройте мир аниме через его опенинги! Насладитесь музыкой и анимацией, <br>определившими
+          каждый шедевр. Откройте для себя новые жемчужины!</div>
       </div>
       <div class="search-container">
-        <v-text-field 
-          v-model="searchQuery"
-          class="search" 
-          density="compact" 
-          label="Поиск..." 
-          variant="plain" 
-          hide-details 
-          single-line>
+        <v-text-field v-model="searchQuery" class="search" density="compact" label="Поиск..." variant="plain"
+          hide-details single-line>
         </v-text-field>
         <v-btn text class="button">Поиск</v-btn>
       </div>
     </div>
     <div class="content">
       <div class="sidebar">
-      <div class="filter">
-        <div class="filter-anime">
-          <FilterAnime />
+        <div class="filter">
+          <div class="filter-anime">
+            <FilterAnime
+            @update:selectedGenres="setSelectedGenres"
+            @update:selectedYears="setSelectedYears"
+            />
+          </div>
         </div>
       </div>
-    </div>
-    <div class="main-content">
+      <div class="main-content">
         <div class="result-container" v-if="searchQuery">
           <div class="result">Результаты поиска</div>
         </div>
-        <div class="no-collection" v-if="filteredCollections.length === 0">Коллекция не найдена</div> 
-      <div class="collections">
-        <CollectionCard 
-          v-for="collection in filteredCollections" 
-          :key="collection.id" 
-          :collection="collection" />
+        <div class="no-collection" v-if="collectionStore.collections.length === 0">Коллекция не найдена</div>
+        <div class="collections">
+          <CollectionCard v-for="collection in collectionStore.collections" :key="collection.id"
+            :collection="collection" @toggle-genre="toggleGenreInFilter" />
+        </div>
       </div>
     </div>
   </div>
-</div>
 </template>
 
 
 <script>
-  import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
-  import CollectionCard from "@/components/Collections/CollectionCard.vue";
-  import { useCollectionStore } from "@/stores/collectionStore";
+import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
+import CollectionCard from "@/components/Collections/CollectionCard.vue";
+import { useCollectionStore } from "@/stores/collectionStore";
+import { useAnimeStore } from "@/stores/animeStore";
+import { ref, computed, onMounted } from "vue";
 
-  export default {
-    setup(){
-      const collectionStore = useCollectionStore()
-      return{
-        collectionStore,
+export default {
+  setup(props) {
+    const selectedGenres = ref([]);
+    const selectedYears = ref([]);
+    const searchQuery = ref("");
+    const collectionStore = useCollectionStore();
+    const animeStore = useAnimeStore()
+
+    const setSelectedGenres = (newGenres) => {
+      selectedGenres.value = newGenres;
+    };
+
+    const setSelectedYears = (newYears) => {
+      selectedYears.value = newYears;
+    };
+    onMounted(()=>{
+      collectionStore.siteCollections()
+    })
+
+    const toggleGenreInFilter = (genreName) => {
+      const index = selectedGenres.value.indexOf(genreName);
+      if (index === -1) {
+        animeStore.selectedGenres.push(genreName)
+        selectedGenres.value.push(genreName);
+      } else {
+        animeStore.selectedGenres.splice(index, 1)
+        selectedGenres.value.splice(index, 1);
       }
-    },
-    components: {
-      FilterAnime,
-      CollectionCard,
-    },
-    data () { 
-      return { 
-        searchQuery: '', 
-      }; 
-    },
-    computed: {
-      filteredCollections() {
-        if (!this.searchQuery) {
-          return this.collectionStore.collections;
-        }
-        return this.collectionStore.collections.filter(collection => 
-          collection.name.toLowerCase().includes(this.searchQuery.toLowerCase())
-        );
-      }
-    },
-    async mounted() {
-      await this.collectionStore.siteCollections();
-    }
-  };
+    };
+
+    return {
+      toggleGenreInFilter,
+      collectionStore,
+      selectedGenres,
+      selectedYears,
+      setSelectedGenres,
+      setSelectedYears,
+      searchQuery,
+    };
+  },
+  components: {
+    FilterAnime,
+    CollectionCard,
+  },
+  async mounted() {
+    await this.collectionStore.siteCollections();
+  }
+};
 </script>
 
 <style scoped>
-
 .no-collection {
   color: white;
   font-family: Montserrat;
@@ -136,10 +151,10 @@
   left: 45px;
 }
 
-.container {  
-  display: flex; 
-  flex-direction: column; 
-}  
+.container {
+  display: flex;
+  flex-direction: column;
+}
 
 .collections {
   display: flex;
@@ -159,9 +174,9 @@
 }
 
 .picture {
-  background-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0)), url('src/assets/img/picture2.png');
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0)), url('src/assets/img/picture2.png');
   background-size: cover;
-  background-position: center; 
+  background-position: center;
   width: 100%;
   height: 100%;
   border-radius: 10px;
@@ -198,6 +213,7 @@
   background-color: #1470EF;
   color: white;
 }
+
 .text {
   position: absolute;
   bottom: 110px;

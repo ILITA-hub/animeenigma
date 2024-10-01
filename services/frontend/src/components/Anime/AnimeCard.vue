@@ -1,23 +1,27 @@
 <template>
   <div v-if="anime" class="anime-card">
     <img class="anime-image" :src="anime.imgPath" :alt="`Изображение ${anime.nameRU}`">
-    <div class="anime-info">
-      <div class="anime-title">{{ anime.nameRU }}</div>
+    <div ref="animelInfo" class="anime-info">
+      <div ref="animelTitle" class="anime-title">{{ anime.nameRU }}</div>
       <div class="additional-info">
         <div class="genres">
-          <span class="genre" v-for="genre in anime.genres" :key="genre.id">
+          <span class="genre" v-for="genre in anime.genres" :key="genre.id" @click="selectGenre(genre.genre.id)">
             {{ genre.genre.nameRu }}
           </span>
         </div>
-        <v-select
-          class="select"
-          v-model="selectedVideo"
-          :items="anime.videos"
-          item-title="name"
-          :item-value="video => video"
-          label="Выберите видео"
-          density="compact"
-        ></v-select>
+        <v-list density="compact" class="select-list">
+          <v-list-group  v-model="selectedVideo" :value="selectedVideo">
+            <template v-slot:activator="{ props }">
+              <v-list-item  v-bind="props" :title="selectedVideo ? selectedVideo.name : 'Выберите видео'"></v-list-item>
+            </template>
+            <v-list-item
+              v-for="video in anime.videos"
+              :key="video.id"
+              :title="video.name"
+              @click="selectVideo(video)"
+            ></v-list-item>
+          </v-list-group>
+        </v-list>
         <v-btn class="plus-collect" @click="addToCollection">Добавить в коллекцию</v-btn>
       </div>
     </div>
@@ -36,10 +40,18 @@ export default {
       required: true
     }
   },
-  setup(props) {
+  mounted(){
+    const animelInfo = this.$refs.animelInfo
+    const animelTitle = this.$refs.animelTitle
+    animelInfo.style.bottom = `-${animelInfo.offsetHeight - animelTitle.offsetHeight - 17}px`
+  },
+  setup(props, { emit }) {
     const collectionStore = useCollectionStore();
     const selectedVideo = ref(null);
-    const genresVisible = ref(false);
+
+    const selectVideo = (video) => {
+      selectedVideo.value = video;
+    };
 
     const addToCollection = () => {
       if (selectedVideo.value && selectedVideo.value.id) {
@@ -50,21 +62,15 @@ export default {
         console.error('Не выбран объект видео или у видео нет id');
       }
     };
-
-    const showGenres = () => {
-      genresVisible.value = true;
-    };
-
-    const hideGenres = () => {
-      genresVisible.value = false;
+    const selectGenre = (genreId) => {
+      emit('select-genre', genreId);
     };
 
     return {
       selectedVideo,
+      selectVideo,
       addToCollection,
-      genresVisible,
-      showGenres,
-      hideGenres
+      selectGenre
     };
   },
 };
@@ -83,6 +89,7 @@ export default {
   transition: transform 0.3s ease;
 }
 
+
 .anime-image {
   width: 100%;
   height: 100%;
@@ -93,7 +100,6 @@ export default {
 
 .anime-info {
   position: absolute;
-  bottom: -26%;
   left: 0;
   width: 100%;
   color: white;
@@ -108,7 +114,7 @@ export default {
 }
 
 .anime-card:hover .anime-info {
-  bottom: 0%;
+  bottom: 0%!important;
 }
 
 .additional-info {
@@ -116,12 +122,8 @@ export default {
   margin-top: 10px;
 }
 
-.additional-info div {
-  margin: 5px 0;
-}
-
 .genres {
-  display: none;
+  /* display: none; */
   flex-wrap: wrap;
 }
 
@@ -144,13 +146,15 @@ export default {
   display: flex;
 }
 
-.select {
-  width: 280px;
-  height: 40px;
+.select-list {
+  width: 278px;
   background: white;
   color: black;
   border-radius: 10px;
   overflow: hidden;
+  font-family: Montserrat;
+  margin: 5px 0 5px 0;
+  padding: 0;
 }
 
 .plus-collect {
@@ -164,7 +168,6 @@ export default {
   font-weight: 600;
   line-height: 19.5px;
   text-align: left;
-  font-family: Montserrat;
   text-transform: none;
 }
 

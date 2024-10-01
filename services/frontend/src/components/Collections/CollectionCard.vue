@@ -4,7 +4,7 @@
     <div class="collection-info">
       <div class="collection-name">{{ collection?.name }}</div>
       <div class="genres">
-        <span class="genre" v-for="genre in collection?.genres" :key="genre">{{ genre }}</span>
+        <span class="genre" v-for="genre in collection?.genres" :key="genre" @click="toggleGenre(genre)">{{ genre }}</span>
       </div>
     </div>
   </div>
@@ -14,6 +14,16 @@
 export default {
   props: {
     collection: Object
+  },
+  emits: ['toggle-genre'],
+  setup(props, { emit }) {
+    const toggleGenre = (genre) => {
+      emit('toggle-genre', genre);
+    };
+
+    return {
+      toggleGenre
+    };
   }
 }
 </script>
@@ -45,7 +55,7 @@ export default {
 
 .collection-info {
   position: absolute;
-  bottom: -23%;
+  bottom: -29%;
   left: 0;
   width: 100%;
   color: white;

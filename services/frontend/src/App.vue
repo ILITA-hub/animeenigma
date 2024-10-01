@@ -2,35 +2,55 @@
   <v-app>
     <HeaderApp/>
     <v-container fluid class="animated-background">
-    <div class="circle circle1" style="background-color: #FF3333;"></div>
-      <div class="circle circle2" style="background-color: #EFFF33;;"></div>
+      <div class="circle circle1" style="background-color: #FF3333;"></div>
+      <div class="circle circle2" style="background-color: #EFFF33;"></div>
       <div class="circle circle3" style="background-color: #CA33FF;"></div>
       <div class="circle circle4" style="background-color: #33A9FF;"></div>
-    <v-main>
-      <router-view></router-view>
-    </v-main>
-  </v-container>
-  <FooterApp/>
-
+      <v-main>
+        <router-view />
+      </v-main>
+    </v-container>
+    <FooterApp/>
   </v-app>
 </template>
 
 <script>
 import HeaderApp from './components/HeaderApp.vue'
 import FooterApp from './components/FooterApp.vue'
+import { useAnimeStore } from './stores/animeStore';
+import axios from 'axios'
 
 export default {
   name: 'App',
+  setup(){
+    const animeStore = useAnimeStore()
+
+    return {
+      animeStore
+    }
+  },
 
   components: {
     HeaderApp,
     FooterApp,
   },
 
-  data: () => ({
-    //
-  }),
-}
+  data() {
+    return {
+      genres: [],
+      years: [],
+    };
+  },
+
+  async mounted() {
+    this.animeStore.loadGenres();
+    this.animeStore.loadYears();
+  },
+
+  methods: {
+    
+  },
+};
 </script>
 
 <style>
@@ -44,7 +64,7 @@ export default {
     position: relative;
     overflow: hidden;
     width: 100%;
-    min-height: 100vh;
+    height: 100%;
     background-color: #090B1F;
   }
   

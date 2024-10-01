@@ -25,7 +25,7 @@ export const useAnimeStore = defineStore('anime', {
         this.totalPages = response.data.allPage;
         this.prevPageNumber = response.data.prevPage;
         this.nextPageNumber = response.data.nextPage;
-        this.anime = animeData;
+        this.anime.push(...animeData);
       } catch (error) {
         console.error("Ошибка при загрузке данных:", error);
       }
@@ -60,12 +60,30 @@ export const useAnimeStore = defineStore('anime', {
       }
       return `?${params.toString()}`;
     },
+    async loadGenres() {
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/filters/genres');
+        this.genres = response.data;
+      } catch (error) {
+        console.error('Error loading genres:', error);
+      }
+    },
+    async loadYears() {
+      try {
+        const response = await axios.get('https://animeenigma.ru/api/filters/years');
+        this.years = response.data;
+      } catch (error) {
+        console.error('Error loading years:', error);
+      }
+    },
     setGenres(genres) {
       this.selectedGenres = genres;
+      this.anime = []
       this.animeRequest(this.currentPage);
     },
     setYears(years) {
       this.selectedYears = years;
+      this.anime = []
       this.animeRequest(this.currentPage);
     },
   },
