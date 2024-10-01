@@ -62,7 +62,7 @@ export const useAnimeStore = defineStore('anime', {
     },
     async loadGenres() {
       try {
-        const response = await axios.get('https://animeenigma.ru/api/filters/genres');
+        const response = await axios.get(`${BASEURL}filters/genres`);
         this.genres = response.data;
       } catch (error) {
         console.error('Error loading genres:', error);
@@ -70,7 +70,7 @@ export const useAnimeStore = defineStore('anime', {
     },
     async loadYears() {
       try {
-        const response = await axios.get('https://animeenigma.ru/api/filters/years');
+        const response = await axios.get(`${BASEURL}years`);
         this.years = response.data;
       } catch (error) {
         console.error('Error loading years:', error);
