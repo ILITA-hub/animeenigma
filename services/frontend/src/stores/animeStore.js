@@ -70,7 +70,7 @@ export const useAnimeStore = defineStore('anime', {
     },
     async loadYears() {
       try {
-        const response = await axios.get(`${BASEURL}years`);
+        const response = await axios.get(`${BASEURL}filters/years`);
         this.years = response.data;
       } catch (error) {
         console.error('Error loading years:', error);
