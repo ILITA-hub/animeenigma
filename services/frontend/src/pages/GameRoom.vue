@@ -33,7 +33,6 @@ import { useRoomStore } from '@/stores/roomStore';
 import { useRouter, useRoute } from 'vue-router';
 import RoomPlayers from '@/components/Room/RoomPlayers.vue';
 import { useAuthStore } from '@/stores/authStore';
-import 'plyr/dist/plyr.css';
 import { ref } from 'vue';
 import GameChat from '@/components/Room/GameChat.vue';
 
