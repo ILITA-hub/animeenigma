@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-app-bar class="app-bar">
-      <v-img src="src/assets/img/logo.png" class="logo" @click="$router.push('/')"></v-img>
+      <v-img :src="logo" class="logo" @click="$router.push('/')"></v-img>
       <div class="content">
         <v-btn text class="button btn" @click="$router.push('/')">Главная</v-btn>
         <v-menu>
@@ -52,9 +52,9 @@
 </template>
 
 <script>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useAuthStore } from '@/stores/authStore';
-import { onMounted } from 'vue';
+import logo from '@/assets/img/logo.png';
 
 export default {
   data() {
@@ -73,7 +73,7 @@ export default {
       if (authStore.user && authStore.user.avatar) {
         return authStore.user.avatar;
       }
-      return 'av.svg';
+      return '/av.svg';
     });
 
     onMounted(() => {
@@ -81,6 +81,7 @@ export default {
     });
 
     return {
+      logo,
       userAvatar,
       authStore,
     };

@@ -174,7 +174,7 @@ export default {
 }
 
 .picture {
-  background-image: linear-gradient(to right, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0)), url('src/assets/img/picture2.png');
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0)), url('@/assets/img/picture2.png');
   background-size: cover;
   background-position: center;
   width: 100%;

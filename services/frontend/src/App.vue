@@ -57,7 +57,7 @@ export default {
 
 @font-face {
     font-family: Montserrat;
-    src: url('src/assets/fonts/Montserrat.ttf');
+    src: url('@/assets/fonts/Montserrat.ttf');
   }
 
   .animated-background {

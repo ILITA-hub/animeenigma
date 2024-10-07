@@ -3,7 +3,7 @@
     <v-container fluid>
       <v-row justify="space-between" align="center">
         <v-col cols="auto">
-          <v-img src="src/assets/img/logo.png" class="logo"></v-img>
+          <v-img :src="logo" class="logo"></v-img>
         </v-col>
         <v-col cols="auto"> 
           <div class="d-flex align-center">
@@ -25,9 +25,12 @@
 </template>
 
 <script>
+import logo from '@/assets/img/logo.png';
+
 export default {
   name: 'FooterApp',
   data: () => ({
+    logo,
     socialButtons: [
       { icon: 'mdi-vk', link: 'https://vk.com' },
       { icon: 'mdi-telegram', link: 'https://web.telegram.org' },
