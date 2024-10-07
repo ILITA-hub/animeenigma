@@ -1,5 +1,5 @@
 <template>
-  <div class="collection-card">
+  <div class="collection-card" @click="goToCollection">
     <img :src="collection?.image" alt="Collection Image" class="collection-image">
     <div class="collection-info">
       <div class="collection-name">{{ collection?.name }}</div>
@@ -11,18 +11,27 @@
 </template>
 
 <script>
+import { useRouter } from 'vue-router';
+
 export default {
   props: {
     collection: Object
   },
   emits: ['toggle-genre'],
   setup(props, { emit }) {
+    const router = useRouter();
+
     const toggleGenre = (genre) => {
       emit('toggle-genre', genre);
     };
 
+    const goToCollection = () => {
+      router.push({ name: 'CollectionPage', params: { id: props.collection.id } });
+    };
+
     return {
-      toggleGenre
+      toggleGenre,
+      goToCollection
     };
   }
 }

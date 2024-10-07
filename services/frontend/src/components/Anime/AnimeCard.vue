@@ -1,28 +1,28 @@
 <template>
   <div v-if="anime" class="anime-card">
-    <img class="anime-image" :src="anime.imgPath" :alt="`Изображение ${anime.nameRU}`">
+    <img class="anime-image" :src="anime.imgPath || anime.img || (anime.videos && anime.videos.length ? anime.videos[0].img : '')" :alt="`Изображение ${anime.nameRU || anime.name}`">
     <div ref="animelInfo" class="anime-info">
-      <div ref="animelTitle" class="anime-title">{{ anime.nameRU }}</div>
+      <div ref="animelTitle" class="anime-title">{{ anime.nameRU || anime.name }}</div>
       <div class="additional-info">
         <div class="genres">
-          <span class="genre" v-for="genre in anime.genres" :key="genre.id" @click="selectGenre(genre.genre.id)">
-            {{ genre.genre.nameRu }}
+          <span class="genre" v-for="(genre, index) in formattedGenres" :key="index" @click="selectGenre(genre.id)">
+            {{ genre.nameRu }}
           </span>
         </div>
-        <v-list density="compact" class="select-list">
-          <v-list-group  v-model="selectedVideo" :value="selectedVideo">
+        <v-list density="compact" class="select-list" v-if="anime.videos && anime.videos.length">
+          <v-list-group v-model="selectedVideo" :value="selectedVideo">
             <template v-slot:activator="{ props }">
-              <v-list-item  v-bind="props" :title="selectedVideo ? selectedVideo.name : 'Выберите видео'"></v-list-item>
+              <v-list-item v-bind="props" :title="selectedVideo ? selectedVideo.name : 'Выберите видео'"></v-list-item>
             </template>
             <v-list-item
               v-for="video in anime.videos"
-              :key="video.id"
+              :key="video.id || video.name"
               :title="video.name"
               @click="selectVideo(video)"
             ></v-list-item>
           </v-list-group>
         </v-list>
-        <v-btn class="plus-collect" @click="addToCollection">Добавить в коллекцию</v-btn>
+        <v-btn class="plus-collect" v-if="!isCollection" @click="addToCollection">Добавить в коллекцию</v-btn>
       </div>
     </div>
   </div>
@@ -38,6 +38,10 @@ export default {
     anime: {
       type: Object,
       required: true
+    },
+    isCollection: { 
+      type: Boolean,
+      default: false
     }
   },
   mounted(){
@@ -48,6 +52,12 @@ export default {
   setup(props, { emit }) {
     const collectionStore = useCollectionStore();
     const selectedVideo = ref(null);
+
+    const formattedGenres = ref(
+      props.anime.genres.map(genre => {
+        return typeof genre === 'string' ? { id: genre, nameRu: genre } : { id: genre.genre.id, nameRu: genre.genre.nameRu };
+      })
+    );
 
     const selectVideo = (video) => {
       selectedVideo.value = video;
@@ -68,6 +78,7 @@ export default {
 
     return {
       selectedVideo,
+      formattedGenres,
       selectVideo,
       addToCollection,
       selectGenre
