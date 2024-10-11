@@ -1,13 +1,9 @@
 <template>
   <div ref="container" class="container">
+
     <div class="banner">
       <v-card class="main-banner">
-        <v-img
-          class="bg-picture"
-          height="211"
-          :src="collection?.image || '/zoro.jpg'"
-          cover
-        ></v-img>
+        <v-img class="bg-picture" height="211" :src="collection?.image || '/zoro.jpg'" cover></v-img>
         <div class="header">
           <div class="text-container">
             <v-card-title class="title">
@@ -15,79 +11,54 @@
             </v-card-title>
           </div>
         </div>
+        
       </v-card>
     </div>
-
     <div class="content">
       <div class="sidebar">
-        <FilterAnime
-          :incoming-selected-genres="selectedGenres"
-          :incoming-selected-years="selectedYears"
-          @update:selectedGenres="setSelectedGenres"
-          @update:selectedYears="setSelectedYears"
-        />
-      <div class="main-content">
-        <AnimeCard
-          v-for="(video, index) in videos"
-          :key="index"
-          :anime="video"
-          :isCollection="true"
-        />
-      </div>
+        <FilterAnime :incoming-selected-genres="selectedGenres" :incoming-selected-years="selectedYears"
+          @update:selectedGenres="setSelectedGenres" @update:selectedYears="setSelectedYears" />
+        <div class="main-content">
+          <AnimeCard v-for="(video, index) in videos" :key="index" :anime="video" :isCollection="true" />
+        </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-import { onMounted, ref } from 'vue';
+<script setup>
+import { computed, onMounted, ref, toRef } from 'vue';
 import AnimeCard from '@/components/Anime/AnimeCard.vue';
 import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
-import axios from 'axios';
+import { useCollectionStore } from '@/stores/collectionStore';
 
-export default {
-  name: 'CollectionPage',
-  components: {
-    AnimeCard,
-    FilterAnime,
-  },
-  props: {
-    id: {
-      type: String,
-      required: true,
-    },
-  },
-  setup(props) {
-    const collection = ref(null);
-    const videos = ref([]);
-    const selectedGenres = ref([]);
-    const selectedYears = ref([]);
-    const searchQuery = ref('');
 
-    onMounted(async () => {
-      try {
-        const { data } = await axios.get(`https://animeenigma.ru/api/animeCollections/${props.id}`);
-        collection.value = data;
-        videos.value = data.videos;
-      } catch (error) {
-        console.error('Ошибка при загрузке коллекции:', error);
-      }
-    });
+const {id} = defineProps({
+  id: String,
+});
 
-    const removeVideo = (videoId) => {
-      videos.value = videos.value.filter(video => video.id !== videoId);
-    };
+const collectionStore = useCollectionStore()
+const selectedGenres = ref([]);
+const selectedYears = ref([]);
+const searchQuery = ref('');
+const collection = computed(()=> collectionStore.collection)
+const videos = computed(()=> collection.value.videos)
 
-    return {
-      collection,
-      videos,
-      selectedGenres,
-      selectedYears,
-      searchQuery,
-      removeVideo,
-    };
-  },
+onMounted(async () => {
+  await collectionStore.getCollection(id)
+});
+
+const removeVideo = (videoId) => {
+  videos.value = videos.value.filter(video => video.id !== videoId);
 };
+
+function setSelectedYears(params) {
+  
+}
+function setSelectedGenres(params) {
+  
+}
+
 </script>
 
 <style scoped>
@@ -95,6 +66,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  color: white;
 }
 
 .banner {
@@ -133,9 +105,10 @@ export default {
 }
 
 .sidebar {
-  width: 300px;
+  /* width: 300px; */
   display: flex;
-  flex-direction: column;
+  width: 100%;
+  /* flex-direction: column; */
 }
 
 .anime-name {
@@ -153,6 +126,6 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
+  width: 100%;
 }
-
 </style>
