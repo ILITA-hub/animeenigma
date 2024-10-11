@@ -1,26 +1,43 @@
 <template>
   <div class="collection-card">
     <img :src="collection?.image" alt="Collection Image" class="collection-image">
-    <div class="collection-info">
-      <div class="collection-name">{{ collection?.name }}</div>
+    <div ref="collectionInfo" class="collection-info">
+      <div ref="collectionName" class="collection-name">{{ collection?.name }}</div>
       <div class="genres">
-        <span class="genre" v-for="genre in collection?.genres" :key="genre" @click="toggleGenre(genre)">{{ genre }}</span>
+        <span class="genre" v-for="genre in collection?.genres" :key="genre" @click="toggleGenre(genre)">{{ genre
+          }}</span>
       </div>
+      <v-btn v-if="isActionAccept"  class="plus-collect" @click="addToCollection">Добавить в комнату</v-btn>
     </div>
+
   </div>
 </template>
 
 <script>
+import { onMounted, ref } from 'vue';
+
 export default {
   props: {
-    collection: Object
+    collection: Object,
+    isActionAccept: Boolean,
   },
-  emits: ['toggle-genre'],
+  methods: {
+    addToCollection() {
+      this.$emit('add-collection', this.collection)
+    }
+  },
+  mounted() {
+    const collectionInfo =  this.$refs.collectionInfo
+    const collectionName =  this.$refs.collectionName
+    
+    collectionInfo.style.bottom = `-${collectionInfo.offsetHeight - collectionName.offsetHeight - 20}px`
+  },
+  emits: ['toggle-genre', 'add-collection'],
   setup(props, { emit }) {
+    const collectionInfo = ref(null)
     const toggleGenre = (genre) => {
       emit('toggle-genre', genre);
     };
-
     return {
       toggleGenre
     };
@@ -29,7 +46,6 @@ export default {
 </script>
 
 <style scoped>
-
 .collection-card {
   cursor: pointer;
   width: 320px;
@@ -50,12 +66,12 @@ export default {
 }
 
 .collection-card:hover .collection-info {
-  bottom: 0%;
+  bottom: 0%!important;
 }
 
 .collection-info {
   position: absolute;
-  bottom: -29%;
+  /* bottom: -40%; */
   left: 0;
   width: 100%;
   color: white;
@@ -101,4 +117,18 @@ export default {
   padding: 10px;
 }
 
+.plus-collect {
+  width: 280px;
+  height: 50px;
+  padding: 15px 55px 15px 55px;
+  margin-top: 20px;
+  border-radius: 10px;
+  background: rgba(20, 112, 239, 1);
+  font-family: Montserrat;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 19.5px;
+  text-align: left;
+  text-transform: none;
+}
 </style>

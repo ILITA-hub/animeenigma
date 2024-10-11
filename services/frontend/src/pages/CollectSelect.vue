@@ -130,6 +130,7 @@ export default {
     }
 
     onMounted(async () => {
+      collectionStore.selectedOpenings = []
       await animeStore.animeRequest();
       interval = setInterval(() => {
         checkScroll()

@@ -27,11 +27,11 @@ export const useRoomStore = defineStore('room', {
     defaultImage: 'zoro.jpg', 
   }),
   actions: {
-    async fetchRooms() {
+    async createRoom(body) {
       try {
-        const response = await axios.post(`${BASEURL}rooms`, payload);
-        console.log('Ответ от сервера:', response);
-        const roomId = response.data;
+        const response = await axios.post(`${BASEURL}rooms`, body);
+        console.log('Ответ от сервера:', response); // Убрать после разарботки
+        const data = response.data;
         if (roomId) {
           const roomLink = `AnimeEnigma.ru/room/${roomId}`;
           console.log('Ссылка на созданную комнату:', roomLink);
@@ -42,5 +42,16 @@ export const useRoomStore = defineStore('room', {
         console.error('Ошибка при загрузке комнат:', error);
       }
     },
+
+    async fetchRooms() {
+      try {
+        const response = await axios.get(`${BASEURL}rooms`);
+        console.log('Ответ от сервера:', response); // Убрать после разарботки
+        this.rooms = response.data
+      } catch (error) {
+        console.error('Ошибка при загрузке комнат:', error);
+      }
+    },
+
   },
 });

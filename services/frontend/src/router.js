@@ -37,7 +37,7 @@ router.beforeEach((to, from, next) => {
   }
   isDirectNavigation = false;
   
-  const protectedRoutes = ['/user', '/custom-collections', '/createroom'];
+  const protectedRoutes = ['/user', '/custom-collections', '/createroom', '/rooms'];
   
   if (protectedRoutes.includes(to.path) && !authStore.isAuthenticated) {
     next('/auth');

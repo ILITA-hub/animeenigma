@@ -10,16 +10,12 @@
           </span>
         </div>
         <v-list density="compact" class="select-list">
-          <v-list-group  v-model="selectedVideo" :value="selectedVideo">
+          <v-list-group v-model="selectedVideo" :value="selectedVideo">
             <template v-slot:activator="{ props }">
-              <v-list-item  v-bind="props" :title="selectedVideo ? selectedVideo.name : 'Выберите видео'"></v-list-item>
+              <v-list-item v-bind="props" :title="selectedVideo ? selectedVideo.name : 'Выберите видео'"></v-list-item>
             </template>
-            <v-list-item
-              v-for="video in anime.videos"
-              :key="video.id"
-              :title="video.name"
-              @click="selectVideo(video)"
-            ></v-list-item>
+            <v-list-item v-for="video in anime.videos" :key="video.id" :title="video.name"
+              @click="selectVideo(video)"></v-list-item>
           </v-list-group>
         </v-list>
         <v-btn class="plus-collect" @click="addToCollection">Добавить в коллекцию</v-btn>
@@ -28,56 +24,48 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { useCollectionStore } from '@/stores/collectionStore';
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 
-export default {
-  name: 'AnimeCard',
-  props: {
-    anime: {
-      type: Object,
-      required: true
-    }
-  },
-  mounted(){
-    const animelInfo = this.$refs.animelInfo
-    const animelTitle = this.$refs.animelTitle
-    animelInfo.style.bottom = `-${animelInfo.offsetHeight - animelTitle.offsetHeight - 17}px`
-  },
-  setup(props, { emit }) {
-    const collectionStore = useCollectionStore();
-    const selectedVideo = ref(null);
 
-    const selectVideo = (video) => {
-      selectedVideo.value = video;
-    };
+const props = defineProps({
+  anime: Object,
+});
 
-    const addToCollection = () => {
-      if (selectedVideo.value && selectedVideo.value.id) {
-        if (!collectionStore.selectedOpenings.some(video => video.id === selectedVideo.value.id)) {
-          collectionStore.addToCollection(selectedVideo.value);
-        }
-      } else {
-        console.error('Не выбран объект видео или у видео нет id');
-      }
-    };
-    const selectGenre = (genreId) => {
-      emit('select-genre', genreId);
-    };
+const collectionStore = useCollectionStore();
+const selectedVideo = ref(null);
+const animelInfo = ref(null)
+const animelTitle = ref(null)
+const emit = defineEmits(['selectVideo'])
 
-    return {
-      selectedVideo,
-      selectVideo,
-      addToCollection,
-      selectGenre
-    };
-  },
+const selectVideo = (video) => {
+  selectedVideo.value = video;
+  
 };
+
+const addToCollection = () => {
+  emit('selectVideo', selectedVideo.value)
+  if (selectedVideo.value && selectedVideo.value.id) {
+    if (!collectionStore.selectedOpenings.some(video => video.id === selectedVideo.value.id)) {
+      collectionStore.addToCollection(selectedVideo.value);
+    }
+  } else {
+    console.error('Не выбран объект видео или у видео нет id');
+  }
+};
+
+onMounted(() => {
+  animelInfo.value.style.bottom = `-${animelInfo.value.offsetHeight - animelTitle.value.offsetHeight - 17}px`
+})
+
+const selectGenre = (genreId) => {
+  emit('select-genre', genreId);
+};
+
 </script>
 
 <style scoped>
-
 .anime-card {
   cursor: pointer;
   width: 320px;
@@ -114,7 +102,7 @@ export default {
 }
 
 .anime-card:hover .anime-info {
-  bottom: 0%!important;
+  bottom: 0% !important;
 }
 
 .additional-info {
@@ -170,5 +158,4 @@ export default {
   text-align: left;
   text-transform: none;
 }
-
 </style>

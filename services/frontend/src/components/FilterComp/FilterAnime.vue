@@ -41,8 +41,6 @@ const props = defineProps({
 });
 
 const animeStore = useAnimeStore()
-const selectedGenre = ref([])
-const selectedYear = ref([])
 const selectedGenres = ref([])
 const selectedYears = ref([])
 const filterAnime = ref(null)
