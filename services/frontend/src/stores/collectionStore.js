@@ -8,6 +8,7 @@ export const useCollectionStore = defineStore('collection', {
     collectionName: '',
     collectionDescription: '',
     collections: [],
+    collection: []
   }),
   actions: {
     addToCollection(video) {
@@ -41,6 +42,14 @@ export const useCollectionStore = defineStore('collection', {
       localStorage.setItem('collectionName', this.collectionName);
       localStorage.setItem('collectionDescription', this.collectionDescription);
       localStorage.setItem('selectedOpenings', JSON.stringify(this.selectedOpenings));
+    },
+    async getCollection(id) {
+      try {
+        const { data } = await axios.get(`https://animeenigma.ru/api/animeCollections/${id}`);
+        this.collection = data;
+      } catch (error) {
+        console.error('Ошибка при загрузке коллекции:', error);
+      }
     },
     async createCollection() {
       const token = Cookies.get('authToken');
