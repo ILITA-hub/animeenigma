@@ -22,13 +22,24 @@ export class RoomService {
   ) { }
 
   async getAllRooms() {
-    const rooms = await this.RoomRepository.createQueryBuilder('room')
-      .select(["room.id", "room.name", "room.maxPlayer", "room.status", "room.uniqueURL"])
-      .where("room.status != :status", {status: RoomStatus.CREATING})
-      .getMany()
-
     const roomsBacend = await axios.get('http://0.0.0.0:1000/rooms')
-    console.log(roomsBacend)
+    const roomsKey = []
+
+    for (let key in roomsBacend['data']) {
+      roomsKey.push(key)
+    }
+
+    // const rooms = await this.RoomRepository.createQueryBuilder('room')
+    //   .select(["room.id", "room.name", "room.maxPlayer", "room.status", "room.uniqueURL"])
+    //   .where("room.status != :status", {status: RoomStatus.CREATING})
+    //   .andWhere("room.uniqueURL = ANY(:ids::text[])", {ids: roomsKey})
+
+    const rooms = await this.RoomOpRepository.query(
+      `SELECT *
+      FROM room 
+      WHERE room."uniqueURL" = ANY($1::text[])`,
+      [roomsKey]
+    )
 
     return rooms
   }
@@ -41,6 +52,7 @@ export class RoomService {
     const roomID = roomIdGenerate()
 
     const openings = []
+    const videosIds = []
 
     for (let i = 0; i < body.rangeOpenings.length; i++) {
       const range = body.rangeOpenings[i]
@@ -51,25 +63,32 @@ export class RoomService {
           break
 
         case "collection":
-          const videos = await this.animeCollectionsOpeningRepository.createQueryBuilder('animeCollectionOpenings')
-            .where("animeCollectionOpenings.animeCollectionId = :id", {id: range.id})
-            .select(["animeCollectionOpenings.animeOpeningId"])
-            .getRawMany()
-
-          const videosId = videos.map(value => value.animeOpeningId)
-          openings.push(...videosId)
+          videosIds.push(range.id)
           break
       }
     }
+
+    const videoIdsCollection = await this.animeCollectionsOpeningRepository.query(`SELECT videos."id" as "videoId"  from "animeCollections"
+      join "animeCollectionOpenings" on "animeCollectionOpenings"."animeCollectionId" = "animeCollections".id 
+      join videos ON videos.id = "animeCollectionOpenings"."animeOpeningId"
+      where "animeCollections".id = ANY($1::int[])
+      group by videos."id"`, [videosIds])
+
+    openings.push(...videoIdsCollection.map(value => {
+      return value['videoId']
+    }))
 
     await axios.post('http://0.0.0.0:1000/create_room', {
       name: body.name,
       maxPlayer: body.qtiUsersMax,
       uniqueURL: roomID,
       status: RoomStatus.CREATING,
+      openingsType: body.rangeOpenings,
       openings: openings
     })
 
-    return roomID
+    return {
+      roomId: roomID
+    }
   }
 }

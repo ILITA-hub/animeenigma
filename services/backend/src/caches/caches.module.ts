@@ -8,7 +8,7 @@ import { config } from '../config/index'
   imports: [
     CacheModule.register({
       store : redisStore,
-      ttl : 0,
+      ttl : 24 * 60 * 60 * 1000,
       password : config.redisSecret,
       socket: {
         host: config.redisHost,

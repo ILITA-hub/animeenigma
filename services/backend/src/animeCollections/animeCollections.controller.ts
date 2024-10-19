@@ -14,6 +14,17 @@ export class AnimeCollectionsController {
     return await this.service.findAll(query)
   }
 
+  @Get("/my")
+  @ApiBearerAuth()
+  async getMyCollection(@Query() query: GetAnimeCollectionsRequest, @Headers() header) {
+    if (header["authorization"] == null) {
+      throw new HttpException("Пользователь не авторизован", 401)
+    }
+
+    const token = header["authorization"].split(" ")[1]
+    return await this.service.getMy(query, token)
+  }
+
   @Post()
   @ApiBearerAuth()
   async create(@Body() AnimeCollectionDTO: AnimeCollectionDTO, @Headers() header) {

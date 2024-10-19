@@ -22,7 +22,7 @@ export class AnimeCollections {
   updatedAt: Date
 
   @OneToMany(() => AnimeCollectionOpenings, openings => openings.animeCollection)
-  openings: AnimeCollectionOpenings
+  openings: AnimeCollectionOpenings[]
 
   @ManyToOne(() => UserEntity, owner => owner.collections)
   owner: UserEntity

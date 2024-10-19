@@ -10,9 +10,11 @@ export class CachesService {
   async setCache(key: string, value: any) {
     await this.cacheManager.set(key, value);
   }
+
   async getCache(key: string): Promise<any> {
     return await this.cacheManager.get(key);
   }
+
   async delCache(key: string) {
     await this.cacheManager.del(key);
   }

@@ -18,7 +18,6 @@ const bucket = 'openings'
 
 const app = express()
 app.use(bodyParser.json())
-const opening = "http://46.181.201.172:9001/api/v1/download-shared-object/aHR0cDovLzEyNy4wLjAuMTo5MDAwL29wZW5pbmdzLzExNjg2P1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9TEc5UVNHT0w1VzNQMEIyVzRGT0olMkYyMDI0MDkwNyUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNDA5MDdUMTcxNTI3WiZYLUFtei1FeHBpcmVzPTQzMjAwJlgtQW16LVNlY3VyaXR5LVRva2VuPWV5SmhiR2NpT2lKSVV6VXhNaUlzSW5SNWNDSTZJa3BYVkNKOS5leUpoWTJObGMzTkxaWGtpT2lKTVJ6bFJVMGRQVERWWE0xQXdRakpYTkVaUFNpSXNJbVY0Y0NJNk1UY3lOVGMyT0RjeU1pd2ljR0Z5Wlc1MElqb2lVazlQVkU1QlRVVWlmUS5DVkd6Qy1ZTWxmN1pkN3draWwyWkVEaEV3eVhfbFlBZi1uZjdSNzFmalpFdXFwSC1fNzJuVmRzMzcyY0VydlpCVm9tOWx4SUV1cFFkUVVFYnFwZHc4USZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QmdmVyc2lvbklkPW51bGwmWC1BbXotU2lnbmF0dXJlPTgxNjdjY2I3YzM1ZjlkNTAyZjFmMGNiOGU0NzE5ZmQ1OGU3N2RjYjZjMjkxNDg2MGI3YTUzNjRhMjA1YmIyOTA"
 const wss = new WebSocketServer({ port: 1234 })
 let rooms = {
     "example": {
@@ -56,20 +55,26 @@ const clients = new Map()
 app.post("/create_room", async (req, res) => {
     const body = req.body
     const idRoom = body.uniqueURL
-    const openings = body.openings
+    const entity = body.openingsType
     const maxPlayer = body.maxPlayer
     const status = body.status
     const name = body.name
+    const openings = body.openings
 
     const room = await pg`INSERT INTO room
         ("name", "maxPlayer", status, "uniqueURL", "createdAt", "updatedAt")
         VALUES(${name}, ${maxPlayer}, ${status}, ${idRoom}, now(), now())
         returning id, name`
 
-    openings.forEach(async value => {
-        await pg`INSERT INTO "roomOpenings"
-            ("idRoom", "type", "idEntity", "createdAt", "updatedAt")
-            VALUES(${room[0].id}, 'video', ${value}, now(), now());`
+    await entity.forEach(async value => {
+        if (value['type'] && value['id']) {
+            await pg`INSERT INTO "roomOpenings"
+                ("idRoom", "type", "idEntity")
+                VALUES
+                (${room[0].id}, ${value['type']}, ${value['id']})`
+        } else {
+            console.log('Invalid value for type or idEntity:', value);
+        }
     })
 
     rooms[idRoom] = {
@@ -93,13 +98,6 @@ app.post("/create_room", async (req, res) => {
 })
 
 app.get("/rooms", async (req, res) => {
-    const result = rooms.map((value, index) => {
-        return {
-            usersCount: value.users.length,
-            status: value.status
-        }
-    })
-
     res.send(rooms)
 })
 

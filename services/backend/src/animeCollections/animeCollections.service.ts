@@ -54,6 +54,7 @@ export class AnimeCollectionsService {
             let coll = {
                 id: collection.id,
                 name: collection.name,
+                img: "",
                 genres: []
             }
 
@@ -76,6 +77,88 @@ export class AnimeCollectionsService {
                 }
             }
 
+            const animeImg = this.getRandomNumber(0, videosArray[0].openings.length)
+            coll.img = videosArray[0].openings[animeImg].animeOpening.anime.imgPath
+            resultColl.push(coll)
+        }
+
+        const result = {
+            prevPage: prevPage,
+            page: Number(query.page),
+            nextPage: nextPage,
+            allPage: allPage,
+            countAnime: count,
+            data: resultColl
+        }
+
+        return result
+    }
+
+    async getMy(query: GetAnimeCollectionsRequest, token: string) {
+        const session = await this.cachesService.getCache(`userSession${token}`)
+
+        if (session == null) {
+            throw new HttpException("Пользователь не авторизован", 401)
+        }
+
+        const userId = session["userId"]
+
+        let genres = []
+        let years = []
+
+        if (query.genres) genres = typeof query.genres == "object" ? [...query.genres] : [query.genres]
+        if (query.year) years = typeof query.year == "object" ? [...query.year] : [query.year]
+
+        const videos = await this.getVideosIds(years, genres)
+
+        const querySQLBuilder = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections")
+        querySQLBuilder.andWhere("animeCollections.ownerId = :id", {id: userId})
+
+        if (genres.length != 0 || years.length != 0) {
+            querySQLBuilder.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
+            querySQLBuilder.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
+            querySQLBuilder.andWhere("videos.id IN (:...videos)", { videos: videos })
+        }
+
+        querySQLBuilder.select(["animeCollections.id", "animeCollections.name"])
+
+        const count = await querySQLBuilder.getCount()
+        const allPage = Math.ceil(count / query.limit)
+        const prevPage = (query.page <= 1) ? 1 : (query.page > allPage) ? allPage : query.page - 1
+        const nextPage = (query.page >= allPage) ? allPage : Number(query.page) + 1 // какава хуя оно в строку переделывается АААААААА, теперь будут стоять тут NUMBER
+
+        const resultCollections = await querySQLBuilder.getMany()
+        let resultColl = []
+
+        for (let collection of resultCollections) {
+            let coll = {
+                id: collection.id,
+                name: collection.name,
+                img: "",
+                genres: []
+            }
+
+            const animeRequest = this.AnimeCollectionsRepository.createQueryBuilder("animeCollections")
+                .andWhere(`animeCollections.id = ${collection.id}`)
+            animeRequest.innerJoinAndSelect("animeCollections.openings", "animeCollectionOpenings")
+            animeRequest.leftJoinAndSelect("animeCollectionOpenings.animeOpening", "videos")
+            animeRequest.leftJoinAndSelect("videos.anime", "anime")
+
+            let videosArray = await animeRequest.getMany(); 
+            for (let openign of videosArray) {
+                let animeId = openign.openings[0].animeOpening.anime.id
+
+                let genresCol = this.GenresAnimeRepository.createQueryBuilder("genresAnime")
+                    .andWhere(`genresAnime.animeId = ${animeId}`)
+                    .innerJoinAndSelect("genresAnime.genre", "genre")
+
+                for (let genre of await genresCol.getMany()) {
+                    coll.genres.push(genre.genre["nameRu"])
+                }
+            }
+
+            const animeImg = this.getRandomNumber(0, videosArray[0].openings.length)
+            coll.img = videosArray[0].openings[animeImg].animeOpening.anime.imgPath
             resultColl.push(coll)
         }
 
@@ -212,5 +295,9 @@ export class AnimeCollectionsService {
         coll.name = collectionArray[0].name
 
         return coll;
+    }
+
+    private getRandomNumber(min, max) {
+        return Math.floor(Math.random() * (max - min) + min)
     }
 }
