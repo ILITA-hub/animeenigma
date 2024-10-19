@@ -60,6 +60,7 @@ import { useCollectionStore } from '@/stores/collectionStore';
 import { useAnimeStore } from '@/stores/animeStore';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useAuthStore } from "@/stores/authStore";
 
 export default {
   components: {

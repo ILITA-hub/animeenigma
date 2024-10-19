@@ -8,7 +8,7 @@
         <div class="genres">
           <span class="genre" v-for="genre in room.genres" :key="genre">{{ genre }}</span>
         </div>
-        <v-btn class="enjoy">Присоединиться</v-btn>
+        <v-btn @click="routToRoom" class="enjoy">Присоединиться</v-btn>
       </div>
     </div>
   </div>
@@ -19,25 +19,29 @@ export default {
   name: 'RoomComp',
   props: {
     room: {
-      type: Object,
+      type: Number,
       required: true,
     },
   },
   mounted() {
-  const roomInfo = this.$refs.roomInfo; 
-  const roomTitle = this.$refs.roomTitle; 
-  if (roomInfo && roomTitle) {
-    roomInfo.style.bottom = `-${roomInfo.offsetHeight - roomTitle.offsetHeight - 40}px`;
-  } else {
-    console.warn('Room info or title references are not defined.');
+    const roomInfo = this.$refs.roomInfo;
+    const roomTitle = this.$refs.roomTitle;
+    if (roomInfo && roomTitle) {
+      roomInfo.style.bottom = `-${roomInfo.offsetHeight - roomTitle.offsetHeight - 40}px`;
+    } else {
+      console.warn('Room info or title references are not defined.');
+    }
+    console.log(this.room)
+  },
+  methods: {
+    routToRoom() {
+      this.$router.push({name: 'room', params: { uniqUrl: this.room.uniqueURL } })
+    }
   }
-},
-
 };  
 </script>
 
 <style scoped>
-
 .room-card {
   cursor: pointer;
   width: 320px;
@@ -73,7 +77,7 @@ export default {
 }
 
 .room-card:hover .room-info {
-  bottom: 0%!important;
+  bottom: 0% !important;
 }
 
 .additional-info {

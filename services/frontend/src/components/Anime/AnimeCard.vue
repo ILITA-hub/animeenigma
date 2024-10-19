@@ -72,7 +72,7 @@ const selectGenre = (genreId) => {
   position: relative;
   height: 445px;
   border-radius: 10px;
-  margin: 0 45px;
+  /* margin: 0 45px; */
   overflow: hidden;
   transition: transform 0.3s ease;
 }

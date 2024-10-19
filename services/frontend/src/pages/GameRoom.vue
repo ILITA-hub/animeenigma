@@ -33,7 +33,7 @@ import { useRoomStore } from '@/stores/roomStore';
 import { useRouter, useRoute } from 'vue-router';
 import RoomPlayers from '@/components/Room/RoomPlayers.vue';
 import { useAuthStore } from '@/stores/authStore';
-import { ref } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import GameChat from '@/components/Room/GameChat.vue';
 
 
@@ -53,6 +53,10 @@ const videoSource = ref(null)
 const video = ref(null)
 let isAnswerGeted = false
 
+
+onUnmounted(()=>{
+  gameSocket.close()
+})
 
 let gameSocket = new WebSocket(`ws://46.181.201.172:1234/${route.params.uniqUrl}/${userStore.user.token}`);
 let clientId = ''
@@ -102,7 +106,6 @@ async function setNewOpening() {
 function setRoomUsers(body) {
   roomUsers.value = body.users
   roomStore.players = body.users
-  console.log(roomStore.players)
 }
 
 function startOpening(body) {

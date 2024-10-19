@@ -47,15 +47,17 @@
             @update:selectedGenres="setGenres" @update:selectedYears="setYears" />
         </div>
 
-        <div v-if="swithController" class="switch-content-container">
-          <AnimeCard @selectVideo="addSelectedVideo" v-for="anime in animeStore.anime" :anime="anime" />
-        </div>
-
-        <div v-if="!swithController" class="switch-content-container">
-          <CollectionCard @add-collection="addCollectionToRoom" :isActionAccept="true"
-            v-for="collection in collectionStore.collections" :collection="collection" />
-        </div>
-
+        <Transition mode="out-in">
+          <div class="switch-content-container" v-if="isLoaded">
+            <div v-if="swithController" class="anime-card-container">
+              <AnimeCard @selectVideo="addSelectedVideo" v-for="anime in animeStore.anime" :anime="anime" />
+            </div>
+            <div v-if="!swithController" class="collection-card-container">
+              <CollectionCard @add-collection="addCollectionToRoom" :isActionAccept="true"
+                v-for="collection in collectionStore.collections" :collection="collection" />
+            </div>
+          </div>
+        </Transition>
       </v-row>
     </div>
   </div>
@@ -85,6 +87,9 @@ const searchQuery = ref('')
 const swithController = ref(false)
 const selectedGenres = ref([]);
 const selectedYears = ref([]);
+const isLoaded = ref(false)
+let interval = null
+let currentScroll = 0
 
 
 const handleBack = () => {
@@ -123,6 +128,19 @@ function addSelectedVideo(selectedVideo) {
   }
 }
 
+const checkScroll = async () => {
+  const html = document.querySelector("html")
+  const scroll = html.scrollTop + html.clientHeight
+
+  if (scroll >= (html.scrollHeight - 200)) {
+    if (animeStore.nextPageNumber) {
+      currentScroll = html.scrollTop
+      await animeStore.animeRequest(animeStore.nextPageNumber);
+    }
+    html.scrollTop = currentScroll
+  }
+}
+
 function setGenres(selected) {
   selectedGenres.value = selected
   animeStore.setGenres(selected)
@@ -135,24 +153,53 @@ function setYears(selected) {
 onMounted(async () => {
   await animeStore.animeRequest()
   await collectionStore.siteCollections()
+  interval = setInterval(() => {
+    checkScroll()
+  }, 500)
   window.addEventListener('scroll', toFixElement);
+  isLoaded.value = true
 });
 
 onUnmounted(async () => {
   window.removeEventListener('scroll', toFixElement)
+  clearInterval(interval)
 })
 
 watch(swithController, async (newVal, oldVal) => {
-  console.log(newVal)
   if (newVal) {
-    animeStore.animeRequest()
+    isLoaded.value = false
+    animeStore.anime = []
+    await animeStore.animeRequest()
+    isLoaded.value = true
   } else {
-    collectionStore.siteCollections()
+    isLoaded.value = false
+    await collectionStore.siteCollections()
+    isLoaded.value = true
   }
 })
 
 function createRoom() {
   console.log(roomSetting.value)
+  const requestBody = {
+    name: roomSetting.value.roomName,
+    qtiUsersMax: roomSetting.value.selectedPlayerCount,
+    rangeOpenings: []
+  }
+  const collections = roomSetting.value.selectedCollectins.map((collection, index, array) => {
+    return {
+      type: 'collection',
+      id: collection.id
+    }
+  })
+  const videos = roomSetting.value.selectedVideos.map((video, index, array) => {
+    return {
+      type: 'video',
+      id: video.id
+    }
+  })
+  requestBody.rangeOpenings.push(...videos)
+  requestBody.rangeOpenings.push(...collections)//91e86
+  roomStore.createRoom(requestBody)
 }
 </script>
 
@@ -162,13 +209,23 @@ function createRoom() {
 }
 
 .switch-content-container {
-  display: flex;
-  flex-wrap: wrap;
   margin-top: 20px;
-  gap: 20px 0;
   flex-basis: 0;
   flex-grow: 1;
   max-width: 100%;
+  margin-left: 40px;
+}
+
+.anime-card-container,
+.collection-card-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 20px;
+}
+
+.test {
+  display: flex;
+  flex-basis: 0;
 }
 
 .back {

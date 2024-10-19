@@ -33,6 +33,7 @@
           <div class="result">Результаты поиска</div>
         </div>
         <div class="no-room" v-if="filteredRooms.length === 0">Комната не найдена</div>
+        
         <div class="rooms">
           <RoomComp
             v-for="(room, i) in filteredRooms"
@@ -73,7 +74,7 @@ export default {
         selectedYears.value = newYears;
         };
     
-        const  filteredRooms = computed(() => {
+        const filteredRooms = computed(() => {
         if (!searchQuery.value) {
           return roomStore.rooms;
         }
