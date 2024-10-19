@@ -90,3 +90,5 @@ docker-compose.local.yml
 .idea/modules.xml
 .idea/vcs.xml
 .idea/inspectionProfiles/Project_Default.xml
+
+/animeResourcesDownload/venv
