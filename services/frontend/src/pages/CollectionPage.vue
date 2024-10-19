@@ -1,6 +1,8 @@
 <template>
   <div ref="container" class="container">
-    <a @click="handleBack" class="back"><span class="mdi mdi-arrow-left"></span> Назад</a>
+    <a @click="handleBack" class="back">
+      <span class="mdi mdi-arrow-left"></span> Назад
+    </a>
     <div class="banner">
       <v-card class="main-banner">
         <v-img class="bg-picture" height="260" :src="collection?.image || '/zoro.jpg'" cover></v-img>
@@ -26,8 +28,12 @@
         <FilterAnime :incoming-selected-genres="selectedGenres" :incoming-selected-years="selectedYears"
           @update:selectedGenres="setSelectedGenres" @update:selectedYears="setSelectedYears" />
         <div class="main-content">
-          <div class="result">Результаты поиска</div>
-          <AnimeCard v-for="(video, index) in videos" :key="index" :anime="video" :isCollection="true" />
+          <div class="anime-container">
+            <div class="anime-in-col">Аниме в коллекции</div>
+          </div>
+          <div class="anime">
+            <AnimeCard v-for="(video, index) in videos" :key="index" :anime="video" :isCollection="true" />
+        </div>
         </div>
       </div>
     </div>
@@ -39,6 +45,7 @@ import { computed, onMounted, ref, toRef } from 'vue';
 import AnimeCard from '@/components/Anime/AnimeCard.vue';
 import FilterAnime from "@/components/FilterComp/FilterAnime.vue";
 import { useCollectionStore } from '@/stores/collectionStore';
+import { useRouter, useRoute } from 'vue-router';
 
 
 const {id} = defineProps({
@@ -51,6 +58,16 @@ const selectedGenres = ref([]);
 const selectedYears = ref([]);
 const collection = computed(()=> collectionStore.collection)
 const videos = computed(()=> collection.value.videos)
+const router = useRouter();
+const route = useRoute();
+
+const handleBack = () => {
+      if (route.meta.isDirectNavigation) {
+        router.push('/main');
+      } else {
+        router.go(-1);
+      }
+    };
 
 onMounted(async () => {
   await collectionStore.getCollection(id)
@@ -71,13 +88,28 @@ function setSelectedGenres(params) {
 
 <style scoped>
 
-.result {
+.anime {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 20px;
+  margin-top: 10px;
+}
+
+.anime-container {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.anime-in-col {
   color: white;
   font-family: Montserrat;
   font-size: 28px;
   font-weight: 700;
   line-height: 34.13px;
   margin: 0;
+  left: 48px;
+  position: relative;
 }
 
 .back {
@@ -212,7 +244,7 @@ function setSelectedGenres(params) {
 .main-content {
   flex: 1;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 20px;
   width: 100%;
 }
