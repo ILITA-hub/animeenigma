@@ -92,3 +92,4 @@ docker-compose.local.yml
 .idea/inspectionProfiles/Project_Default.xml
 
 /animeResourcesDownload/venv
+/animeResourcesDownload/.env

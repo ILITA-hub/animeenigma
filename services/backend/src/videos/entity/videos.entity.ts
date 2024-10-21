@@ -30,9 +30,6 @@ export class VideosEntity {
   @Column()
   kind: string
 
-  @Column()
-  nameS3: string
-
   @OneToMany(() => AnimeCollectionOpenings, animeCollections => animeCollections.animeOpening)
   animeCollections: AnimeCollectionOpenings
 }

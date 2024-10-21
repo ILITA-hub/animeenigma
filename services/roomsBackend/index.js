@@ -28,7 +28,8 @@ let rooms = {
                 nickName: "username",
                 score: 1,
                 ws: "ws",
-                load: false
+                load: false,
+                ping: false
             }
         ],
         opening: {
@@ -102,12 +103,25 @@ app.get("/rooms", async (req, res) => {
 })
 
 app.post("/stop_room", async (req, res) => {
+    console.log(123)
     const body = req.body
     rooms[body.roomsId]['status'] = "wait"
     console.log(rooms)
+    console.log(123)
 
     res.sendStatus(200)
 })
+
+setInterval(() => {
+    console.log("Начинаю пинг")
+    pingAll()
+    console.log("Всех пинганул")
+    setTimeout(() => {
+        console.log("Начинаю удалять пользователей")
+        deleteNoPingUsers()
+        console.log("Удалил пользователей")
+    }, 1000 * 10)
+}, 1000 * 10)
 
 wss.on("connection", async (ws, req) => {
     ws.on("error", console.error)
@@ -118,9 +132,6 @@ wss.on("connection", async (ws, req) => {
         const token = req.url.split('/')[2]
 
         switch (messageBody["type"]) {
-            // case "newQuestion":
-            //     playVideo("631b7", "//youtube.com/embed/j3p6sXq_uUM")
-            //     break
             case "userIsReady":
                 if (!rooms[roomId]) {
                     ws.close(1000, JSON.stringify({
@@ -137,6 +148,9 @@ wss.on("connection", async (ws, req) => {
                 break
             case "checkAnswer":
                 checkAnswer(clientId, messageBody['answer'], roomId)
+                break
+            case "pong":
+                pong(roomId, clientId)
                 break
         }
     })
@@ -155,7 +169,8 @@ wss.on("connection", async (ws, req) => {
                 nickName: user[0]['username'],
                 score: 1,
                 ws: ws,
-                load: false
+                load: false,
+                ping: true
             }
         )
 
@@ -182,6 +197,7 @@ wss.on("connection", async (ws, req) => {
     }
 
     ws.on("close", () => {
+        clients.get(clientId).close()
         clients.delete(clientId)
         deleteUsers(clientId)
     })
@@ -360,5 +376,42 @@ async function checkAnswer(userId, answer, roomId) {
 function loadIsFalse(roomId) {
     for (let i = 0; i < rooms[roomId]["users"].length; i++) {
         rooms[roomId]['users'][i]['load'] = false
+    }
+}
+
+
+function pingAll() {
+    for (let j = 0; j < rooms.length; j++) {
+        for (let i = 0; i < rooms[j]["users"].length; i++) {
+            rooms[j]['users'][i]['ping'] = false
+            rooms[j]['users'][i]['ws'].send(
+                JSON.stringify({
+                    type: "ping",
+                })
+            )
+        }
+    }
+}
+
+function pong(roomId, clientId) {
+    for (let i = 0; i < rooms[roomId]["users"].length; i++) {
+        if (rooms[roomId]['users'][i]['id'] == clientId) {
+            rooms[roomId]['users'][i]['ping'] = true
+        }
+    }
+}
+
+function deleteNoPingUsers() {
+    let deleteUsers = []
+    for (let j = 0; j < rooms.length; j++) {
+        deleteUsers = [...deleteUsers, ...rooms[j]['users'].filter(user => {
+            console.log(user)
+            return !user['ping']
+        })]
+    }
+
+    console.log(deleteUsers)
+    for (let user of deleteUsers) {
+        console.log(user)
     }
 }
