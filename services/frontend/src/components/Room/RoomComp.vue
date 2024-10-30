@@ -31,7 +31,6 @@ export default {
     } else {
       console.warn('Room info or title references are not defined.');
     }
-    console.log(this.room)
   },
   methods: {
     routToRoom() {

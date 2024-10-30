@@ -2,6 +2,7 @@
   <div class="room-container">
     <div class="player-container">
       <div v-if="isGameStarted" ref="videoContainer" class="video-container">
+        <v-img v-show="!isAnswerGeted" class="preview-img":width="500" cover src="/bacR.jpg"></v-img>
         <video ref="video" id="player" v-show="isAnswerGeted">
           <source ref="videoSource" src="" type="video/mp4">
         </video>
@@ -10,7 +11,7 @@
         <v-btn @click="userStartGame" class="btn-answer">Играть</v-btn>
       </div>
       <div class="varints-ansver-container">
-
+        <span class="timer-to-answer">{{ timeToAnswer }}</span>
         <v-btn
           :class="`btn-answer ${answer?.id === rightAnswer?.id ? 'true-answer' : ''} ${answer?.id === userAnswer?.id ? 'choosed-answer' : ''} ${(answer?.id === userAnswer?.id && userAnswer?.id !== rightAnswer?.id && isAnswerGeted) ? 'wrong-answer' : ''}`"
           v-for="answer in variantAnswers" @click="setUserAnswer(answer)">
@@ -51,6 +52,8 @@ let isGameStarted = ref(false)
 const roomUsers = ref(null)
 const videoSource = ref(null)
 const video = ref(null)
+const timeToAnswer = ref()
+let timerAnswer = null
 let isAnswerGeted = false
 
 
@@ -109,7 +112,14 @@ function setRoomUsers(body) {
 }
 
 function startOpening(body) {
-
+  timeToAnswer.value = 10
+  timerAnswer = setInterval(()=>{
+    if (timeToAnswer.value === 0) {
+      clearInterval(timerAnswer)
+      return
+    }
+    timeToAnswer.value -= 1
+  }, 1000)
   video.value.play()
 }
 
@@ -181,12 +191,26 @@ function handelServerAnswer(body) {
   flex-direction: column;
 }
 
+.timer-to-answer{
+  position: absolute;
+  top: 160px;
+  left: auto;
+  right: auto;
+  color: #fff;
+  font-size: 30px;
+}
+
 .start-button-container {
   width: 954px;
   height: 536px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.preview-img{
+  width: 100%;
+  height: 100%;
 }
 
 .video-container {
@@ -199,6 +223,7 @@ function handelServerAnswer(body) {
 .varints-ansver-container {
   color: #000;
   display: flex;
+  position: relative;
   justify-content: center;
   margin-top: 20px;
   gap: 10px;

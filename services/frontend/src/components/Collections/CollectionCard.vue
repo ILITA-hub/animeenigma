@@ -1,6 +1,6 @@
 <template>
   <div class="collection-card">
-    <img :src="collection?.image" alt="Collection Image" class="collection-image">
+    <img :src="collection?.img" alt="Collection Image" class="collection-image">
     <div ref="collectionInfo" class="collection-info">
       <div ref="collectionName" class="collection-name">{{ collection?.name }}</div>
       <div class="genres">
