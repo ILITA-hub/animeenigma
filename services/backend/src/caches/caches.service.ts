@@ -7,8 +7,12 @@ export class CachesService {
 
   constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
 
-  async setCache(key: string, value: any) {
-    await this.cacheManager.set(key, value);
+  async setCache(key: string, value: any, ttl?: number) {
+    if (ttl) {
+      await this.cacheManager.set(key, value, ttl * 1000); // cache-manager expects ms
+    } else {
+      await this.cacheManager.set(key, value);
+    }
   }
   async getCache(key: string): Promise<any> {
     return await this.cacheManager.get(key);
