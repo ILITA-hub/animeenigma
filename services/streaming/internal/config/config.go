@@ -13,12 +13,28 @@ import (
 )
 
 type Config struct {
-	Server  ServerConfig
-	Redis   cache.Config
-	Storage videoutils.StorageConfig
-	Proxy   videoutils.ProxyConfig
-	JWT     authz.JWTConfig
-	Stream  StreamConfig
+	Server    ServerConfig
+	Redis     cache.Config
+	Storage   videoutils.StorageConfig
+	Proxy     videoutils.ProxyConfig
+	JWT       authz.JWTConfig
+	Stream    StreamConfig
+	Providers ProvidersConfig
+}
+
+// ProvidersConfig holds configuration for external video providers
+type ProvidersConfig struct {
+	Kodik   KodikConfig
+	Aniboom AniboomConfig
+}
+
+type KodikConfig struct {
+	APIKey  string
+	BaseURL string
+}
+
+type AniboomConfig struct {
+	BaseURL string
 }
 
 type ServerConfig struct {
@@ -77,6 +93,15 @@ func Load() (*Config, error) {
 			TokenTTL:         getEnvDuration("STREAM_TOKEN_TTL", 4*time.Hour),
 			MaxUploadSize:    getEnvInt64("MAX_UPLOAD_SIZE", 2*1024*1024*1024), // 2GB
 			AllowedQualities: []string{"360p", "480p", "720p", "1080p"},
+		},
+		Providers: ProvidersConfig{
+			Kodik: KodikConfig{
+				APIKey:  getEnv("KODIK_API_KEY", ""),
+				BaseURL: getEnv("KODIK_BASE_URL", "https://kodikapi.com"),
+			},
+			Aniboom: AniboomConfig{
+				BaseURL: getEnv("ANIBOOM_BASE_URL", ""),
+			},
 		},
 	}, nil
 }
