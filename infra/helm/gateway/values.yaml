@@ -1,0 +1,71 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/ilita-hub/animeenigma/gateway
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+  hosts:
+    - host: api.animeenigma.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+env:
+  - name: SERVER_PORT
+    value: "8000"
+  - name: AUTH_SERVICE_URL
+    value: "http://auth:8080"
+  - name: CATALOG_SERVICE_URL
+    value: "http://catalog:8081"
+  - name: STREAMING_SERVICE_URL
+    value: "http://streaming:8082"
+  - name: PLAYER_SERVICE_URL
+    value: "http://player:8083"
+  - name: ROOMS_SERVICE_URL
+    value: "http://rooms:8084"
+  - name: REDIS_HOST
+    value: "redis-master"
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: animeenigma-secrets
+        key: jwt-secret
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 5

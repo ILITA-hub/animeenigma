@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: animeenigma
+
+resources:
+  - namespace.yaml
+  - secrets.yaml
+  - configmap.yaml
+
+# Service deployments
+  - services/gateway.yaml
+  - services/auth.yaml
+  - services/catalog.yaml
+  - services/streaming.yaml
+  - services/player.yaml
+  - services/rooms.yaml
+  - services/scheduler.yaml
+  - services/web.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: animeenigma

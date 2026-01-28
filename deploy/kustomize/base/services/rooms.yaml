@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rooms
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rooms
+  template:
+    metadata:
+      labels:
+        app: rooms
+    spec:
+      containers:
+        - name: rooms
+          image: ghcr.io/ilita-hub/animeenigma/rooms:latest
+          ports:
+            - containerPort: 8084
+          envFrom:
+            - configMapRef:
+                name: animeenigma-config
+          env:
+            - name: SERVER_PORT
+              value: "8084"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: jwt-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rooms
+spec:
+  selector:
+    app: rooms
+  ports:
+    - port: 8084
+      targetPort: 8084

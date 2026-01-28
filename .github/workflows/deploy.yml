@@ -1,0 +1,54 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Docker Build & Push"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.29.0'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Deploy with Kustomize
+        run: |
+          ENV=${{ github.event.inputs.environment || 'dev' }}
+          kubectl apply -k deploy/kustomize/overlays/$ENV
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n animeenigma rollout status deployment/gateway --timeout=300s
+          kubectl -n animeenigma rollout status deployment/auth --timeout=300s
+          kubectl -n animeenigma rollout status deployment/catalog --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          kubectl -n animeenigma get pods
+          kubectl -n animeenigma get services
