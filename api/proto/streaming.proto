@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package animeenigma.streaming.v1;
+
+option go_package = "github.com/ILITA-hub/animeenigma/gen/go/streaming/v1;streamingv1";
+
+import "google/protobuf/timestamp.proto";
+
+// StreamingService handles video streaming operations
+// Used for internal service-to-service communication
+service StreamingService {
+  // Get stream URL for a video
+  rpc GetStreamURL(GetStreamURLRequest) returns (GetStreamURLResponse);
+
+  // Validate stream token
+  rpc ValidateStreamToken(ValidateStreamTokenRequest) returns (ValidateStreamTokenResponse);
+
+  // Register video source (called by catalog service when adding videos)
+  rpc RegisterVideoSource(RegisterVideoSourceRequest) returns (RegisterVideoSourceResponse);
+
+  // Get video info
+  rpc GetVideoInfo(GetVideoInfoRequest) returns (GetVideoInfoResponse);
+}
+
+message StreamSource {
+  string id = 1;
+  SourceType type = 2;
+  string quality = 3;
+  string language = 4;
+  repeated string subtitles = 5;
+  string url = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  bool requires_proxy = 8;
+}
+
+enum SourceType {
+  SOURCE_TYPE_UNSPECIFIED = 0;
+  SOURCE_TYPE_MINIO = 1;
+  SOURCE_TYPE_EXTERNAL = 2;
+}
+
+message VideoInfo {
+  string id = 1;
+  string anime_id = 2;
+  int32 episode_number = 3;
+  SourceType source_type = 4;
+  string quality = 5;
+  string language = 6;
+  int64 size = 7;
+  int32 duration = 8;
+  string storage_key = 9;
+  string external_url = 10;
+}
+
+// Request/Response messages
+
+message GetStreamURLRequest {
+  string anime_id = 1;
+  int32 episode_number = 2;
+  string quality = 3;  // "auto", "360p", "480p", "720p", "1080p"
+  string user_id = 4;  // For generating user-specific tokens
+}
+
+message GetStreamURLResponse {
+  repeated StreamSource sources = 1;
+  string anime_name = 2;
+  string episode_name = 3;
+  int32 duration = 4;
+  string thumbnail_url = 5;
+  optional int32 next_episode = 6;
+  optional int32 previous_episode = 7;
+}
+
+message ValidateStreamTokenRequest {
+  string token = 1;
+}
+
+message ValidateStreamTokenResponse {
+  bool valid = 1;
+  string video_id = 2;
+  string user_id = 3;
+  SourceType source_type = 4;
+  string source_url = 5;
+  google.protobuf.Timestamp expires_at = 6;
+}
+
+message RegisterVideoSourceRequest {
+  string anime_id = 1;
+  int32 episode_number = 2;
+  SourceType source_type = 3;
+  string quality = 4;
+  string language = 5;
+  string url = 6;  // MinIO key or external URL
+  int64 size = 7;
+  int32 duration = 8;
+}
+
+message RegisterVideoSourceResponse {
+  string video_id = 1;
+}
+
+message GetVideoInfoRequest {
+  string video_id = 1;
+}
+
+message GetVideoInfoResponse {
+  VideoInfo video = 1;
+}

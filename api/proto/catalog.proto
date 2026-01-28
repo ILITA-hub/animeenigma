@@ -1,0 +1,190 @@
+syntax = "proto3";
+
+package animeenigma.catalog.v1;
+
+option go_package = "github.com/ILITA-hub/animeenigma/gen/go/catalog/v1;catalogv1";
+
+import "google/protobuf/timestamp.proto";
+import "common.proto";
+
+// CatalogService handles anime catalog operations
+// Used for internal service-to-service communication
+service CatalogService {
+  // Get anime by ID
+  rpc GetAnime(GetAnimeRequest) returns (GetAnimeResponse);
+
+  // Search anime (triggers Shikimori fetch if not found locally)
+  rpc SearchAnime(SearchAnimeRequest) returns (SearchAnimeResponse);
+
+  // Get anime for a season
+  rpc GetSeasonalAnime(GetSeasonalAnimeRequest) returns (GetSeasonalAnimeResponse);
+
+  // Sync anime from external source
+  rpc SyncAnime(SyncAnimeRequest) returns (SyncAnimeResponse);
+
+  // Get random openings/endings for game
+  rpc GetRandomVideos(GetRandomVideosRequest) returns (GetRandomVideosResponse);
+
+  // Resolve external ID to internal ID
+  rpc ResolveExternalID(ResolveExternalIDRequest) returns (ResolveExternalIDResponse);
+}
+
+message Anime {
+  string id = 1;
+  string name = 2;
+  string name_ru = 3;
+  string name_jp = 4;
+  string description = 5;
+  int32 year = 6;
+  Season season = 7;
+  AnimeStatus status = 8;
+  int32 episodes_count = 9;
+  int32 episode_duration = 10;
+  float score = 11;
+  string poster_url = 12;
+  repeated Genre genres = 13;
+  ExternalIDs external_ids = 14;
+  bool has_video = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+message Episode {
+  string id = 1;
+  string anime_id = 2;
+  int32 number = 3;
+  string name = 4;
+  string name_jp = 5;
+  google.protobuf.Timestamp aired_at = 6;
+  int32 duration = 7;
+  bool has_video = 8;
+}
+
+message Genre {
+  string id = 1;
+  string name = 2;
+  string name_ru = 3;
+}
+
+message ExternalIDs {
+  string shikimori = 1;
+  string mal = 2;
+  string anilist = 3;
+  string anidb = 4;
+}
+
+message Video {
+  string id = 1;
+  string anime_id = 2;
+  string anime_name = 3;
+  VideoType type = 4;
+  int32 number = 5;  // Episode number or opening/ending number
+  string name = 6;
+  VideoSource source = 7;
+  string url = 8;
+  string thumbnail_url = 9;
+  int32 duration = 10;
+}
+
+enum Season {
+  SEASON_UNSPECIFIED = 0;
+  SEASON_WINTER = 1;
+  SEASON_SPRING = 2;
+  SEASON_SUMMER = 3;
+  SEASON_FALL = 4;
+}
+
+enum AnimeStatus {
+  ANIME_STATUS_UNSPECIFIED = 0;
+  ANIME_STATUS_ONGOING = 1;
+  ANIME_STATUS_RELEASED = 2;
+  ANIME_STATUS_ANNOUNCED = 3;
+}
+
+enum VideoType {
+  VIDEO_TYPE_UNSPECIFIED = 0;
+  VIDEO_TYPE_EPISODE = 1;
+  VIDEO_TYPE_OPENING = 2;
+  VIDEO_TYPE_ENDING = 3;
+}
+
+enum VideoSource {
+  VIDEO_SOURCE_UNSPECIFIED = 0;
+  VIDEO_SOURCE_MINIO = 1;
+  VIDEO_SOURCE_EXTERNAL = 2;
+  VIDEO_SOURCE_YOUTUBE = 3;
+}
+
+enum ExternalSource {
+  EXTERNAL_SOURCE_UNSPECIFIED = 0;
+  EXTERNAL_SOURCE_SHIKIMORI = 1;
+  EXTERNAL_SOURCE_MAL = 2;
+  EXTERNAL_SOURCE_ANILIST = 3;
+}
+
+// Request/Response messages
+
+message GetAnimeRequest {
+  string id = 1;
+}
+
+message GetAnimeResponse {
+  Anime anime = 1;
+}
+
+message SearchAnimeRequest {
+  string query = 1;
+  animeenigma.common.v1.OffsetPaginationRequest pagination = 2;
+  optional int32 year = 3;
+  optional Season season = 4;
+  repeated string genre_ids = 5;
+  optional AnimeStatus status = 6;
+  bool fetch_from_external = 7;  // If true, fetch from Shikimori if not found locally
+}
+
+message SearchAnimeResponse {
+  repeated Anime anime = 1;
+  animeenigma.common.v1.OffsetPaginationInfo pagination = 2;
+}
+
+message GetSeasonalAnimeRequest {
+  int32 year = 1;
+  Season season = 2;
+  animeenigma.common.v1.OffsetPaginationRequest pagination = 3;
+}
+
+message GetSeasonalAnimeResponse {
+  repeated Anime anime = 1;
+  animeenigma.common.v1.OffsetPaginationInfo pagination = 2;
+}
+
+message SyncAnimeRequest {
+  ExternalSource source = 1;
+  string external_id = 2;
+}
+
+message SyncAnimeResponse {
+  Anime anime = 1;
+  bool was_created = 2;  // true if newly created, false if updated
+}
+
+message GetRandomVideosRequest {
+  VideoType type = 1;  // OPENING, ENDING, or both if unspecified
+  int32 count = 2;
+  optional string collection_id = 3;  // Limit to a specific collection
+  repeated string exclude_ids = 4;  // Videos to exclude
+}
+
+message GetRandomVideosResponse {
+  repeated Video videos = 1;
+}
+
+message ResolveExternalIDRequest {
+  ExternalSource source = 1;
+  string external_id = 2;
+}
+
+message ResolveExternalIDResponse {
+  string internal_id = 1;
+  Anime anime = 2;
+}

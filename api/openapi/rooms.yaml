@@ -1,0 +1,371 @@
+openapi: 3.1.0
+info:
+  title: AnimeEnigma Rooms API
+  version: 1.0.0
+  description: |
+    Real-time multiplayer rooms for anime opening/ending guessing game.
+    REST endpoints for room management, WebSocket for gameplay.
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+paths:
+  /rooms:
+    get:
+      operationId: listRooms
+      summary: List active rooms
+      tags:
+        - Rooms
+      parameters:
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [waiting, playing, finished]
+      responses:
+        '200':
+          description: Room list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomListResponse'
+    post:
+      operationId: createRoom
+      summary: Create new game room
+      tags:
+        - Rooms
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+
+  /rooms/{roomId}:
+    get:
+      operationId: getRoom
+      summary: Get room details
+      tags:
+        - Rooms
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Room details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+    delete:
+      operationId: deleteRoom
+      summary: Delete room (owner only)
+      tags:
+        - Rooms
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Room deleted
+        '403':
+          $ref: './common.yaml#/components/responses/Forbidden'
+
+  /rooms/{roomId}/join:
+    post:
+      operationId: joinRoom
+      summary: Join a room
+      tags:
+        - Rooms
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: Required if room is private
+      responses:
+        '200':
+          description: Join token for WebSocket connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinResponse'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+        '403':
+          description: Wrong password or room full
+
+  /rooms/{roomId}/start:
+    post:
+      operationId: startGame
+      summary: Start the game (owner only)
+      tags:
+        - Rooms
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Game started
+        '403':
+          $ref: './common.yaml#/components/responses/Forbidden'
+
+  /rooms/{roomId}/leaderboard:
+    get:
+      operationId: getRoomLeaderboard
+      summary: Get room leaderboard
+      tags:
+        - Rooms
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+
+  /leaderboard:
+    get:
+      operationId: getGlobalLeaderboard
+      summary: Get global leaderboard
+      tags:
+        - Rooms
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [daily, weekly, monthly, all_time]
+            default: weekly
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Global leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+
+components:
+  schemas:
+    Room:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        owner_id:
+          type: string
+        owner_name:
+          type: string
+        status:
+          type: string
+          enum: [waiting, playing, finished]
+        max_players:
+          type: integer
+        current_players:
+          type: integer
+        is_private:
+          type: boolean
+        rounds:
+          type: integer
+        time_per_round:
+          type: integer
+          description: Seconds per round
+        game_mode:
+          type: string
+          enum: [openings, endings, both]
+        source:
+          type: string
+          enum: [all, collection, anime_list]
+        collection_id:
+          type: string
+          nullable: true
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/Player'
+        created_at:
+          type: string
+          format: date-time
+        websocket_url:
+          type: string
+          format: uri
+          description: WebSocket URL for real-time gameplay
+
+    Player:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        score:
+          type: integer
+        is_ready:
+          type: boolean
+        is_owner:
+          type: boolean
+
+    CreateRoomRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        max_players:
+          type: integer
+          minimum: 2
+          maximum: 20
+          default: 10
+        is_private:
+          type: boolean
+          default: false
+        password:
+          type: string
+          description: Required if is_private is true
+        rounds:
+          type: integer
+          minimum: 5
+          maximum: 50
+          default: 20
+        time_per_round:
+          type: integer
+          minimum: 10
+          maximum: 60
+          default: 30
+        game_mode:
+          type: string
+          enum: [openings, endings, both]
+          default: openings
+        source:
+          type: string
+          enum: [all, collection]
+          default: all
+        collection_id:
+          type: string
+          description: Required if source is collection
+
+    RoomResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Room'
+
+    RoomListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Room'
+        meta:
+          $ref: './common.yaml#/components/schemas/PaginationMeta'
+
+    JoinResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            room_id:
+              type: string
+            token:
+              type: string
+              description: Token for WebSocket authentication
+            websocket_url:
+              type: string
+              format: uri
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        user_id:
+          type: string
+        username:
+          type: string
+        score:
+          type: integer
+        games_played:
+          type: integer
+        correct_answers:
+          type: integer
+        average_time:
+          type: number
+          format: float
+          description: Average answer time in seconds
+
+    LeaderboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+        meta:
+          $ref: './common.yaml#/components/schemas/PaginationMeta'
+
+  securitySchemes:
+    BearerAuth:
+      $ref: './common.yaml#/components/securitySchemes/BearerAuth'

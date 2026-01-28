@@ -1,0 +1,314 @@
+# CloudEvents Schema Definitions for AnimeEnigma
+# Used for async messaging between services via NATS
+
+version: "1.0"
+namespace: animeenigma
+
+events:
+  # ============================================================================
+  # Catalog Events
+  # ============================================================================
+
+  anime.created:
+    description: Emitted when a new anime is added to the catalog
+    source: catalog-service
+    dataschema:
+      type: object
+      required:
+        - anime_id
+        - name
+        - source
+      properties:
+        anime_id:
+          type: string
+        name:
+          type: string
+        name_jp:
+          type: string
+        source:
+          type: string
+          enum: [shikimori, mal, manual]
+        external_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+  anime.updated:
+    description: Emitted when anime metadata is updated
+    source: catalog-service
+    dataschema:
+      type: object
+      required:
+        - anime_id
+      properties:
+        anime_id:
+          type: string
+        updated_fields:
+          type: array
+          items:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+
+  anime.synced:
+    description: Emitted after syncing anime from external source
+    source: scheduler-service
+    dataschema:
+      type: object
+      required:
+        - source
+        - anime_count
+      properties:
+        source:
+          type: string
+          enum: [shikimori, mal]
+        anime_count:
+          type: integer
+        new_count:
+          type: integer
+        updated_count:
+          type: integer
+        sync_duration_ms:
+          type: integer
+        completed_at:
+          type: string
+          format: date-time
+
+  # ============================================================================
+  # Video Events
+  # ============================================================================
+
+  video.uploaded:
+    description: Emitted when a video is uploaded to storage
+    source: streaming-service
+    dataschema:
+      type: object
+      required:
+        - video_id
+        - anime_id
+        - episode_number
+        - storage_key
+      properties:
+        video_id:
+          type: string
+        anime_id:
+          type: string
+        episode_number:
+          type: integer
+        storage_key:
+          type: string
+        quality:
+          type: string
+        size:
+          type: integer
+        uploaded_by:
+          type: string
+        uploaded_at:
+          type: string
+          format: date-time
+
+  video.deleted:
+    description: Emitted when a video is deleted
+    source: streaming-service
+    dataschema:
+      type: object
+      required:
+        - video_id
+        - anime_id
+      properties:
+        video_id:
+          type: string
+        anime_id:
+          type: string
+        deleted_by:
+          type: string
+        deleted_at:
+          type: string
+          format: date-time
+
+  video.external_added:
+    description: Emitted when an external video source is registered
+    source: catalog-service
+    dataschema:
+      type: object
+      required:
+        - anime_id
+        - episode_number
+        - external_url
+      properties:
+        anime_id:
+          type: string
+        episode_number:
+          type: integer
+        external_url:
+          type: string
+        quality:
+          type: string
+        added_by:
+          type: string
+
+  # ============================================================================
+  # User Events
+  # ============================================================================
+
+  user.registered:
+    description: Emitted when a new user registers
+    source: auth-service
+    dataschema:
+      type: object
+      required:
+        - user_id
+        - username
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        registered_at:
+          type: string
+          format: date-time
+
+  user.list_updated:
+    description: Emitted when user updates their anime list
+    source: player-service
+    dataschema:
+      type: object
+      required:
+        - user_id
+        - anime_id
+        - action
+      properties:
+        user_id:
+          type: string
+        anime_id:
+          type: string
+        action:
+          type: string
+          enum: [added, updated, removed]
+        status:
+          type: string
+        score:
+          type: integer
+        episodes_watched:
+          type: integer
+
+  user.progress_saved:
+    description: Emitted when user's watch progress is saved
+    source: player-service
+    dataschema:
+      type: object
+      required:
+        - user_id
+        - anime_id
+        - episode_number
+        - position
+      properties:
+        user_id:
+          type: string
+        anime_id:
+          type: string
+        episode_number:
+          type: integer
+        position:
+          type: integer
+        duration:
+          type: integer
+        percentage:
+          type: number
+
+  # ============================================================================
+  # Room Events
+  # ============================================================================
+
+  room.created:
+    description: Emitted when a game room is created
+    source: rooms-service
+    dataschema:
+      type: object
+      required:
+        - room_id
+        - owner_id
+        - name
+      properties:
+        room_id:
+          type: string
+        owner_id:
+          type: string
+        name:
+          type: string
+        game_mode:
+          type: string
+        max_players:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+  room.game_started:
+    description: Emitted when a game starts
+    source: rooms-service
+    dataschema:
+      type: object
+      required:
+        - room_id
+        - player_count
+      properties:
+        room_id:
+          type: string
+        player_count:
+          type: integer
+        rounds:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+
+  room.game_ended:
+    description: Emitted when a game ends
+    source: rooms-service
+    dataschema:
+      type: object
+      required:
+        - room_id
+        - winner_id
+      properties:
+        room_id:
+          type: string
+        winner_id:
+          type: string
+        final_scores:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id:
+                type: string
+              score:
+                type: integer
+        rounds_played:
+          type: integer
+        duration_seconds:
+          type: integer
+        ended_at:
+          type: string
+          format: date-time
+
+  # ============================================================================
+  # Cache Invalidation Events
+  # ============================================================================
+
+  cache.invalidate:
+    description: Request to invalidate cache entries
+    source: any
+    dataschema:
+      type: object
+      required:
+        - pattern
+      properties:
+        pattern:
+          type: string
+          description: Cache key pattern to invalidate (supports wildcards)
+        reason:
+          type: string
