@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: animeenigma-config
+data:
+  # Service URLs
+  AUTH_SERVICE_URL: "http://auth:8080"
+  CATALOG_SERVICE_URL: "http://catalog:8081"
+  STREAMING_SERVICE_URL: "http://streaming:8082"
+  PLAYER_SERVICE_URL: "http://player:8083"
+  ROOMS_SERVICE_URL: "http://rooms:8084"
+
+  # Database
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_SSLMODE: "disable"
+
+  # Redis
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+
+  # MinIO
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_BUCKET: "animeenigma"
+  MINIO_USE_SSL: "false"
+
+  # Shikimori
+  SHIKIMORI_BASE_URL: "https://shikimori.one"
+  SHIKIMORI_USER_AGENT: "AnimeEnigma/1.0"

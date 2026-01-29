@@ -1,0 +1,487 @@
+openapi: 3.1.0
+info:
+  title: AnimeEnigma Catalog API
+  version: 1.0.0
+  description: |
+    Anime catalog API with on-demand data population from Shikimori.
+    When searching, anime data is fetched from Shikimori and cached locally.
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+paths:
+  /anime/search:
+    get:
+      operationId: searchAnime
+      summary: Search anime (fetches from Shikimori on-demand)
+      description: |
+        Searches for anime. If not found locally, queries Shikimori API
+        and caches the results for future use.
+      tags:
+        - Catalog
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+          description: Search query (searches Japanese, Romaji, and English titles)
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: season
+          in: query
+          schema:
+            type: string
+            enum: [winter, spring, summer, fall]
+        - name: genre
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ongoing, released, announced]
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListResponse'
+
+  /anime/{animeId}:
+    get:
+      operationId: getAnime
+      summary: Get anime by ID
+      tags:
+        - Catalog
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Anime details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeResponse'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+  /anime/{animeId}/episodes:
+    get:
+      operationId: getAnimeEpisodes
+      summary: Get anime episodes
+      tags:
+        - Catalog
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Episode list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeListResponse'
+
+  /anime/browse:
+    get:
+      operationId: browseAnime
+      summary: Browse anime catalog
+      tags:
+        - Catalog
+      parameters:
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [score, popularity, newest, updated]
+            default: popularity
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: genre
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+        - name: year_from
+          in: query
+          schema:
+            type: integer
+        - name: year_to
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ongoing, released, announced]
+      responses:
+        '200':
+          description: Anime list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListResponse'
+
+  /anime/seasonal/{year}/{season}:
+    get:
+      operationId: getSeasonalAnime
+      summary: Get anime for a specific season
+      tags:
+        - Catalog
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: season
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [winter, spring, summer, fall]
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Seasonal anime
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListResponse'
+
+  /genres:
+    get:
+      operationId: getGenres
+      summary: Get all genres
+      tags:
+        - Catalog
+      responses:
+        '200':
+          description: Genre list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenreListResponse'
+
+  /admin/anime:
+    post:
+      operationId: createAnime
+      summary: Manually add anime (admin only)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnimeRequest'
+      responses:
+        '201':
+          description: Anime created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeResponse'
+        '403':
+          $ref: './common.yaml#/components/responses/Forbidden'
+
+  /admin/anime/{animeId}/videos:
+    post:
+      operationId: addAnimeVideo
+      summary: Add video source to anime (admin only)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddVideoRequest'
+      responses:
+        '201':
+          description: Video added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoResponse'
+
+components:
+  schemas:
+    Anime:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Romaji/English title
+        name_ru:
+          type: string
+          description: Russian title
+        name_jp:
+          type: string
+          description: Japanese title
+        description:
+          type: string
+        year:
+          type: integer
+        season:
+          type: string
+          enum: [winter, spring, summer, fall]
+        status:
+          type: string
+          enum: [ongoing, released, announced]
+        episodes_count:
+          type: integer
+        episode_duration:
+          type: integer
+          description: Average episode duration in minutes
+        score:
+          type: number
+          format: float
+        poster_url:
+          type: string
+          format: uri
+        genres:
+          type: array
+          items:
+            $ref: '#/components/schemas/Genre'
+        external_ids:
+          $ref: '#/components/schemas/ExternalIDs'
+        has_video:
+          type: boolean
+          description: Whether video sources are available
+        video_sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/VideoSourceSummary'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Episode:
+      type: object
+      properties:
+        id:
+          type: string
+        anime_id:
+          type: string
+        number:
+          type: integer
+        name:
+          type: string
+        name_jp:
+          type: string
+        aired_at:
+          type: string
+          format: date
+        duration:
+          type: integer
+        has_video:
+          type: boolean
+        video_sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/VideoSourceSummary'
+
+    VideoSourceSummary:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [minio, external]
+        quality:
+          type: string
+          enum: [360p, 480p, 720p, 1080p]
+        language:
+          type: string
+        subtitles:
+          type: array
+          items:
+            type: string
+
+    Genre:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        name_ru:
+          type: string
+
+    ExternalIDs:
+      type: object
+      properties:
+        shikimori:
+          type: string
+        mal:
+          type: string
+        anilist:
+          type: string
+        anidb:
+          type: string
+
+    AnimeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Anime'
+
+    AnimeListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Anime'
+        meta:
+          $ref: './common.yaml#/components/schemas/PaginationMeta'
+
+    EpisodeListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Episode'
+        meta:
+          $ref: './common.yaml#/components/schemas/PaginationMeta'
+
+    GenreListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Genre'
+
+    CreateAnimeRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        name_ru:
+          type: string
+        name_jp:
+          type: string
+        description:
+          type: string
+        year:
+          type: integer
+        season:
+          type: string
+        status:
+          type: string
+        episodes_count:
+          type: integer
+        poster_url:
+          type: string
+        genre_ids:
+          type: array
+          items:
+            type: string
+        shikimori_id:
+          type: string
+          description: If provided, will fetch additional data from Shikimori
+
+    AddVideoRequest:
+      type: object
+      required:
+        - episode_number
+        - source_type
+      properties:
+        episode_number:
+          type: integer
+        source_type:
+          type: string
+          enum: [minio, external]
+        external_url:
+          type: string
+          format: uri
+          description: Required if source_type is external
+        quality:
+          type: string
+          enum: [360p, 480p, 720p, 1080p]
+        language:
+          type: string
+          default: japanese
+        subtitles:
+          type: array
+          items:
+            type: string
+
+    VideoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            anime_id:
+              type: string
+            episode_number:
+              type: integer
+            source_type:
+              type: string
+            quality:
+              type: string
+
+  securitySchemes:
+    BearerAuth:
+      $ref: './common.yaml#/components/securitySchemes/BearerAuth'

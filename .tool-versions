@@ -1,0 +1,7 @@
+golang 1.22.0
+nodejs 20.11.0
+pnpm 8.15.0
+kubectl 1.29.0
+helm 3.14.0
+buf 1.29.0
+protoc 25.0
