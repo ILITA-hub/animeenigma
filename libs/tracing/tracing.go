@@ -13,6 +13,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // Config holds tracing configuration
@@ -35,7 +36,7 @@ type Tracer struct {
 func New(ctx context.Context, cfg Config) (*Tracer, error) {
 	if !cfg.Enabled {
 		return &Tracer{
-			tracer: trace.NewNoopTracerProvider().Tracer(cfg.ServiceName),
+			tracer: noop.NewTracerProvider().Tracer(cfg.ServiceName),
 		}, nil
 	}
 

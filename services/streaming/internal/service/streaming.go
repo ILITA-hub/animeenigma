@@ -79,22 +79,6 @@ func NewStreamingService(
 	}
 }
 
-func NewStreamingService(
-	storage *videoutils.Storage,
-	proxy *videoutils.VideoProxy,
-	cache *cache.RedisCache,
-	cfg *config.Config,
-	log *logger.Logger,
-) *StreamingService {
-	return &StreamingService{
-		storage: storage,
-		proxy:   proxy,
-		cache:   cache,
-		config:  cfg,
-		log:     log,
-	}
-}
-
 // StreamToken represents a signed token for video access
 type StreamToken struct {
 	VideoID    string            `json:"vid"`
@@ -328,7 +312,7 @@ func (s *StreamingService) GetVideoSources(ctx context.Context, animeTitle, anim
 			// Generate proxy URL with signed token
 			token, _, err := s.GenerateStreamToken(
 				fmt.Sprintf("%s-ep%d", animeTitle, ps.Episode),
-				videoutils.VideoSourceExternal,
+				videoutils.SourceExternal,
 				ps.URL,
 				"",
 				"",
@@ -401,7 +385,7 @@ func (s *StreamingService) GetEpisodeSources(ctx context.Context, shikimoriID st
 				source.StreamURL = ep.URL
 				token, _, err := s.GenerateStreamToken(
 					fmt.Sprintf("%s-ep%d", shikimoriID, episode),
-					videoutils.VideoSourceExternal,
+					videoutils.SourceExternal,
 					ep.URL,
 					"",
 					"",
@@ -449,7 +433,7 @@ func (s *StreamingService) ResolveStreamURL(ctx context.Context, provider, video
 	if source.NeedsProxy {
 		token, _, err := s.GenerateStreamToken(
 			videoID,
-			videoutils.VideoSourceExternal,
+			videoutils.SourceExternal,
 			source.URL,
 			"",
 			"",

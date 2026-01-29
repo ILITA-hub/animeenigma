@@ -31,8 +31,8 @@ func (h *ProgressHandler) UpdateProgress(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}
@@ -50,8 +50,8 @@ func (h *ProgressHandler) UpdateProgress(w http.ResponseWriter, r *http.Request)
 func (h *ProgressHandler) GetProgress(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
 
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}

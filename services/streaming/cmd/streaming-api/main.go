@@ -19,7 +19,7 @@ import (
 
 func main() {
 	log := logger.Default()
-	defer log.Sync()
+	defer func() { _ = log.Sync() }()
 
 	cfg, err := config.Load()
 	if err != nil {

@@ -22,20 +22,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v1
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/web/package-lock.json
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install
 
       - name: Lint
-        run: npm run lint
+        run: bun lint
 
       - name: Type check
-        run: npm run type-check
+        run: bun run type-check
 
   test:
     name: Test
@@ -47,17 +45,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v1
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/web/package-lock.json
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install
 
       - name: Run tests
-        run: npm run test:unit || echo "No tests yet"
+        run: bun run test:unit || echo "No tests yet"
 
   build:
     name: Build
@@ -70,17 +66,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v1
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/web/package-lock.json
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install
 
       - name: Build
-        run: npm run build
+        run: bun run build
 
       - uses: actions/upload-artifact@v4
         with:

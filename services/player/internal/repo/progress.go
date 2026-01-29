@@ -8,10 +8,10 @@ import (
 )
 
 type ProgressRepository struct {
-	db *database.Database
+	db *database.DB
 }
 
-func NewProgressRepository(db *database.Database) *ProgressRepository {
+func NewProgressRepository(db *database.DB) *ProgressRepository {
 	return &ProgressRepository{
 		db: db,
 	}
