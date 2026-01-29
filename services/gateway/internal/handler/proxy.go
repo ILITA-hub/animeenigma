@@ -3,7 +3,6 @@ package handler
 import (
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"

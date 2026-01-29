@@ -25,8 +25,8 @@ func NewListHandler(listService *service.ListService, log *logger.Logger) *ListH
 
 // GetUserList returns user's anime list
 func (h *ListHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}
@@ -50,8 +50,8 @@ func (h *ListHandler) UpdateListEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}
@@ -69,9 +69,9 @@ func (h *ListHandler) UpdateListEntry(w http.ResponseWriter, r *http.Request) {
 func (h *ListHandler) DeleteListEntry(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
 
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
-	httputil.Unauthorized(w)
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
 		return
 	}
 

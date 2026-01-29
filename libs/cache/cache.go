@@ -131,6 +131,16 @@ func (c *RedisCache) Client() *redis.Client {
 	return c.client
 }
 
+// SetJSON is an alias for Set (which already handles JSON marshaling)
+func (c *RedisCache) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	return c.Set(ctx, key, value, ttl)
+}
+
+// GetJSON is an alias for Get (which already handles JSON unmarshaling)
+func (c *RedisCache) GetJSON(ctx context.Context, key string, dest interface{}) error {
+	return c.Get(ctx, key, dest)
+}
+
 func (c *RedisCache) Close() error {
 	return c.client.Close()
 }

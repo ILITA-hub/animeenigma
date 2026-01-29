@@ -15,13 +15,7 @@ use (
 	./services/catalog
 	./services/streaming
 	./services/player
-	./services/social
 	./services/rooms
 	./services/scheduler
 	./services/gateway
-	./services/notifications
-	./tools/migrator
-	./tools/sync-cli
-	./tools/video-tools
-	./tools/id-mapper
 )

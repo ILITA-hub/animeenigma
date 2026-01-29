@@ -23,8 +23,8 @@ func NewHistoryHandler(historyService *service.HistoryService, log *logger.Logge
 
 // GetWatchHistory returns user's watch history
 func (h *HistoryHandler) GetWatchHistory(w http.ResponseWriter, r *http.Request) {
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}

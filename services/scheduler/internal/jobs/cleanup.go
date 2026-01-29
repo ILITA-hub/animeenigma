@@ -11,14 +11,14 @@ import (
 )
 
 type CleanupJob struct {
-	db     *database.Database
+	db     *database.DB
 	cache  *cache.RedisCache
 	config *config.JobsConfig
 	log    *logger.Logger
 }
 
 func NewCleanupJob(
-	db *database.Database,
+	db *database.DB,
 	cache *cache.RedisCache,
 	config *config.JobsConfig,
 	log *logger.Logger,

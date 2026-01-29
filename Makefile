@@ -78,15 +78,21 @@ test-e2e: ## Run end-to-end tests
 
 lint: lint-go lint-proto lint-frontend ## Run all linters
 
-lint-go: ## Run Go linter
+lint-go: ## Run Go linter (matches CI)
 	@echo "Linting Go code..."
-	golangci-lint run ./...
+	@for mod in libs/* services/auth services/catalog services/gateway services/player services/rooms services/scheduler services/streaming; do \
+		if [ -f "$$mod/go.mod" ]; then \
+			echo "Linting $$mod..."; \
+			(cd "$$mod" && golangci-lint run ./...) || exit 1; \
+		fi; \
+	done
+	@echo "All Go modules passed linting"
 
 lint-proto: ## Lint protobuf files
 	buf lint api/proto
 
 lint-frontend: ## Lint frontend code
-	cd frontend/web && pnpm lint
+	cd frontend/web && bun lint
 
 fmt: ## Format all code
 	@echo "Formatting Go code..."
@@ -202,13 +208,13 @@ clean-docker: ## Clean Docker resources
 # ============================================================================
 
 frontend-install: ## Install frontend dependencies
-	cd frontend/web && pnpm install
+	cd frontend/web && bun install
 
 frontend-dev: ## Start frontend development server
-	cd frontend/web && pnpm dev
+	cd frontend/web && bun dev
 
 frontend-build: ## Build frontend for production
-	cd frontend/web && pnpm build
+	cd frontend/web && bun run build
 
 frontend-preview: ## Preview production build
-	cd frontend/web && pnpm preview
+	cd frontend/web && bun run preview

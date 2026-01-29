@@ -32,8 +32,8 @@ func (h *RoomHandler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}
@@ -83,8 +83,8 @@ func (h *RoomHandler) JoinRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}
@@ -106,8 +106,8 @@ func (h *RoomHandler) LeaveRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := authz.ClaimsFromContext(r.Context())
-	if claims == nil {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}

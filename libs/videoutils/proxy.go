@@ -146,7 +146,7 @@ func (p *VideoProxy) ProxyStream(ctx context.Context, sourceURL string, w http.R
 
 // GetStreamInfo fetches information about a video stream without downloading
 func (p *VideoProxy) GetStreamInfo(ctx context.Context, sourceURL string) (*VideoStreamInfo, error) {
-	parsed, err := url.Parse(sourceURL)
+	_, err := url.Parse(sourceURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid url: %w", err)
 	}

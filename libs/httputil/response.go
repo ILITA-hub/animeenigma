@@ -109,6 +109,11 @@ func Forbidden(w http.ResponseWriter) {
 	Error(w, errors.Forbidden(""))
 }
 
+// TooManyRequests writes a 429 response
+func TooManyRequests(w http.ResponseWriter) {
+	Error(w, errors.RateLimited())
+}
+
 // NoContent writes a 204 response
 func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)

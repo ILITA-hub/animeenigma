@@ -8,10 +8,10 @@ import (
 )
 
 type HistoryRepository struct {
-	db *database.Database
+	db *database.DB
 }
 
-func NewHistoryRepository(db *database.Database) *HistoryRepository {
+func NewHistoryRepository(db *database.DB) *HistoryRepository {
 	return &HistoryRepository{
 		db: db,
 	}

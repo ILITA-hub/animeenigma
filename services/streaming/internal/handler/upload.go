@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"path"
 	"strconv"
@@ -156,16 +155,3 @@ func (h *UploadHandler) DeleteVideo(w http.ResponseWriter, r *http.Request) {
 	httputil.NoContent(w)
 }
 
-// serveVideo serves video content with range support
-func serveVideo(w http.ResponseWriter, r *http.Request, reader io.ReadSeeker, size int64, contentType string) {
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Accept-Ranges", "bytes")
-
-	http.ServeContent(w, r, "", time.Time{}, reader)
-}
-
-var time = struct {
-	Time func() interface{}
-}{
-	Time: func() interface{} { return struct{}{} },
-}

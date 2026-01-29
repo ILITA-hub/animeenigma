@@ -8,10 +8,10 @@ import (
 )
 
 type ListRepository struct {
-	db *database.Database
+	db *database.DB
 }
 
-func NewListRepository(db *database.Database) *ListRepository {
+func NewListRepository(db *database.DB) *ListRepository {
 	return &ListRepository{
 		db: db,
 	}
