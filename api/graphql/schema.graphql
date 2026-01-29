@@ -1,0 +1,473 @@
+"""
+AnimeEnigma GraphQL Schema
+Optimized for complex anime queries from the frontend
+"""
+
+scalar DateTime
+scalar URL
+
+type Query {
+  """Get anime by ID"""
+  anime(id: ID!): Anime
+
+  """Search anime with filters"""
+  searchAnime(input: SearchAnimeInput!): AnimeConnection!
+
+  """Browse anime catalog"""
+  browseAnime(input: BrowseAnimeInput!): AnimeConnection!
+
+  """Get seasonal anime"""
+  seasonalAnime(year: Int!, season: Season!): AnimeConnection!
+
+  """Get all genres"""
+  genres: [Genre!]!
+
+  """Get current user"""
+  me: User
+
+  """Get user by ID"""
+  user(id: ID!): User
+
+  """Get user's anime list"""
+  userList(userId: ID!, status: WatchStatus): AnimeListConnection!
+
+  """Get active game rooms"""
+  rooms(status: RoomStatus, first: Int, after: String): RoomConnection!
+
+  """Get room by ID"""
+  room(id: ID!): Room
+
+  """Get global leaderboard"""
+  leaderboard(period: LeaderboardPeriod!, first: Int): [LeaderboardEntry!]!
+}
+
+type Mutation {
+  """Add anime to user's list"""
+  addToList(input: AddToListInput!): UserAnimeEntry!
+
+  """Update anime in user's list"""
+  updateListEntry(input: UpdateListEntryInput!): UserAnimeEntry!
+
+  """Remove anime from user's list"""
+  removeFromList(animeId: ID!): Boolean!
+
+  """Save watch progress"""
+  saveProgress(input: SaveProgressInput!): WatchProgress!
+
+  """Create game room"""
+  createRoom(input: CreateRoomInput!): Room!
+
+  """Join game room"""
+  joinRoom(roomId: ID!, password: String): JoinRoomPayload!
+}
+
+type Subscription {
+  """Room state updates"""
+  roomUpdated(roomId: ID!): Room!
+
+  """Game events (new round, answers, etc.)"""
+  gameEvent(roomId: ID!): GameEvent!
+}
+
+# ============================================================================
+# Anime Types
+# ============================================================================
+
+type Anime {
+  id: ID!
+  name: String!
+  nameRu: String
+  nameJp: String
+  description: String
+  year: Int
+  season: Season
+  status: AnimeStatus
+  episodesCount: Int
+  episodeDuration: Int
+  score: Float
+  posterUrl: URL
+  genres: [Genre!]!
+  externalIds: ExternalIDs!
+  hasVideo: Boolean!
+  episodes(first: Int, after: String): EpisodeConnection!
+  videos(type: VideoType): [Video!]!
+  """Current user's list entry for this anime"""
+  myListEntry: UserAnimeEntry
+  """Current user's watch progress"""
+  myProgress: WatchProgress
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Episode {
+  id: ID!
+  anime: Anime!
+  number: Int!
+  name: String
+  nameJp: String
+  airedAt: DateTime
+  duration: Int
+  hasVideo: Boolean!
+  videoSources: [VideoSource!]!
+}
+
+type Video {
+  id: ID!
+  anime: Anime!
+  type: VideoType!
+  number: Int!
+  name: String
+  thumbnailUrl: URL
+  duration: Int
+}
+
+type VideoSource {
+  id: ID!
+  type: SourceType!
+  quality: VideoQuality!
+  language: String!
+  subtitles: [String!]!
+  url: URL!
+  requiresProxy: Boolean!
+}
+
+type Genre {
+  id: ID!
+  name: String!
+  nameRu: String
+  animeCount: Int!
+}
+
+type ExternalIDs {
+  shikimori: String
+  mal: String
+  anilist: String
+  anidb: String
+}
+
+# ============================================================================
+# User Types
+# ============================================================================
+
+type User {
+  id: ID!
+  username: String!
+  role: UserRole!
+  animeList(status: WatchStatus, first: Int, after: String): AnimeListConnection!
+  stats: UserStats!
+  gameStats: GameStats!
+  createdAt: DateTime!
+}
+
+type UserAnimeEntry {
+  id: ID!
+  anime: Anime!
+  status: WatchStatus!
+  score: Int
+  episodesWatched: Int!
+  rewatches: Int!
+  notes: String
+  startedAt: DateTime
+  completedAt: DateTime
+  updatedAt: DateTime!
+}
+
+type WatchProgress {
+  animeId: ID!
+  episodeNumber: Int!
+  position: Int!
+  duration: Int!
+  percentage: Float!
+  updatedAt: DateTime!
+}
+
+type UserStats {
+  totalAnime: Int!
+  totalEpisodes: Int!
+  totalTimeWatched: Int!
+  meanScore: Float
+  statusDistribution: [StatusCount!]!
+}
+
+type StatusCount {
+  status: WatchStatus!
+  count: Int!
+}
+
+type GameStats {
+  gamesPlayed: Int!
+  totalScore: Int!
+  correctAnswers: Int!
+  averageTime: Float!
+  bestStreak: Int!
+}
+
+# ============================================================================
+# Room Types
+# ============================================================================
+
+type Room {
+  id: ID!
+  name: String!
+  owner: User!
+  status: RoomStatus!
+  maxPlayers: Int!
+  currentPlayers: Int!
+  isPrivate: Boolean!
+  hasPassword: Boolean!
+  rounds: Int!
+  timePerRound: Int!
+  gameMode: GameMode!
+  players: [Player!]!
+  currentRound: Int
+  websocketUrl: URL!
+  createdAt: DateTime!
+}
+
+type Player {
+  id: ID!
+  user: User!
+  score: Int!
+  isReady: Boolean!
+  isOwner: Boolean!
+  currentStreak: Int!
+}
+
+type JoinRoomPayload {
+  room: Room!
+  token: String!
+  websocketUrl: URL!
+}
+
+type LeaderboardEntry {
+  rank: Int!
+  user: User!
+  score: Int!
+  gamesPlayed: Int!
+  correctAnswers: Int!
+  averageTime: Float!
+}
+
+union GameEvent = RoundStarted | RoundEnded | PlayerAnswered | GameEnded
+
+type RoundStarted {
+  roundNumber: Int!
+  video: Video!
+  startTime: DateTime!
+  timeLimit: Int!
+}
+
+type RoundEnded {
+  roundNumber: Int!
+  correctAnswer: Anime!
+  scores: [PlayerScore!]!
+}
+
+type PlayerAnswered {
+  playerId: ID!
+  isCorrect: Boolean!
+  timeMs: Int!
+  newScore: Int!
+}
+
+type GameEnded {
+  winner: Player!
+  finalScores: [PlayerScore!]!
+}
+
+type PlayerScore {
+  player: Player!
+  score: Int!
+  delta: Int!
+}
+
+# ============================================================================
+# Connections (Pagination)
+# ============================================================================
+
+type AnimeConnection {
+  edges: [AnimeEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type AnimeEdge {
+  node: Anime!
+  cursor: String!
+}
+
+type EpisodeConnection {
+  edges: [EpisodeEdge!]!
+  pageInfo: PageInfo!
+}
+
+type EpisodeEdge {
+  node: Episode!
+  cursor: String!
+}
+
+type AnimeListConnection {
+  edges: [AnimeListEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type AnimeListEdge {
+  node: UserAnimeEntry!
+  cursor: String!
+}
+
+type RoomConnection {
+  edges: [RoomEdge!]!
+  pageInfo: PageInfo!
+}
+
+type RoomEdge {
+  node: Room!
+  cursor: String!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+# ============================================================================
+# Inputs
+# ============================================================================
+
+input SearchAnimeInput {
+  query: String!
+  first: Int = 20
+  after: String
+  year: Int
+  season: Season
+  genreIds: [ID!]
+  status: AnimeStatus
+}
+
+input BrowseAnimeInput {
+  first: Int = 20
+  after: String
+  sort: AnimeSort = POPULARITY
+  order: SortOrder = DESC
+  genreIds: [ID!]
+  yearFrom: Int
+  yearTo: Int
+  status: AnimeStatus
+}
+
+input AddToListInput {
+  animeId: ID!
+  status: WatchStatus!
+  score: Int
+  episodesWatched: Int = 0
+}
+
+input UpdateListEntryInput {
+  animeId: ID!
+  status: WatchStatus
+  score: Int
+  episodesWatched: Int
+  notes: String
+}
+
+input SaveProgressInput {
+  animeId: ID!
+  episodeNumber: Int!
+  position: Int!
+  duration: Int!
+}
+
+input CreateRoomInput {
+  name: String!
+  maxPlayers: Int = 10
+  isPrivate: Boolean = false
+  password: String
+  rounds: Int = 20
+  timePerRound: Int = 30
+  gameMode: GameMode = OPENINGS
+  collectionId: ID
+}
+
+# ============================================================================
+# Enums
+# ============================================================================
+
+enum Season {
+  WINTER
+  SPRING
+  SUMMER
+  FALL
+}
+
+enum AnimeStatus {
+  ONGOING
+  RELEASED
+  ANNOUNCED
+}
+
+enum VideoType {
+  EPISODE
+  OPENING
+  ENDING
+}
+
+enum VideoQuality {
+  Q360P
+  Q480P
+  Q720P
+  Q1080P
+}
+
+enum SourceType {
+  MINIO
+  EXTERNAL
+}
+
+enum WatchStatus {
+  WATCHING
+  COMPLETED
+  ON_HOLD
+  DROPPED
+  PLAN_TO_WATCH
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum RoomStatus {
+  WAITING
+  PLAYING
+  FINISHED
+}
+
+enum GameMode {
+  OPENINGS
+  ENDINGS
+  BOTH
+}
+
+enum LeaderboardPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ALL_TIME
+}
+
+enum AnimeSort {
+  SCORE
+  POPULARITY
+  NEWEST
+  UPDATED
+  NAME
+}
+
+enum SortOrder {
+  ASC
+  DESC
+}

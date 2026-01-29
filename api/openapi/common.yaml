@@ -1,0 +1,186 @@
+openapi: 3.1.0
+info:
+  title: AnimeEnigma Common Components
+  version: 1.0.0
+  description: Shared components for AnimeEnigma API
+
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - INTERNAL
+                - NOT_FOUND
+                - ALREADY_EXISTS
+                - INVALID_INPUT
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - RATE_LIMITED
+                - UNAVAILABLE
+                - TIMEOUT
+                - VIDEO_NOT_READY
+                - EXTERNAL_API_ERROR
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties:
+                type: string
+
+    SuccessResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total_pages:
+          type: integer
+        total_count:
+          type: integer
+          format: int64
+
+    CursorPaginationInfo:
+      type: object
+      properties:
+        has_next_page:
+          type: boolean
+        has_previous_page:
+          type: boolean
+        start_cursor:
+          type: string
+        end_cursor:
+          type: string
+
+    Timestamps:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PageSizeParam:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    AfterCursor:
+      name: after
+      in: query
+      schema:
+        type: string
+      description: Cursor for forward pagination
+
+    BeforeCursor:
+      name: before
+      in: query
+      schema:
+        type: string
+      description: Cursor for backward pagination
+
+    FirstParam:
+      name: first
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+      description: Number of items to fetch (forward pagination)
+
+    LastParam:
+      name: last
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+      description: Number of items to fetch (backward pagination)
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

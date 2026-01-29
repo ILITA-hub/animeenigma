@@ -1,0 +1,27 @@
+go 1.22
+
+use (
+	./libs/logger
+	./libs/tracing
+	./libs/errors
+	./libs/authz
+	./libs/animeparser
+	./libs/videoutils
+	./libs/cache
+	./libs/pagination
+	./libs/httputil
+	./libs/database
+	./services/auth
+	./services/catalog
+	./services/streaming
+	./services/player
+	./services/social
+	./services/rooms
+	./services/scheduler
+	./services/gateway
+	./services/notifications
+	./tools/migrator
+	./tools/sync-cli
+	./tools/video-tools
+	./tools/id-mapper
+)

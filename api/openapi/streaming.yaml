@@ -1,0 +1,340 @@
+openapi: 3.1.0
+info:
+  title: AnimeEnigma Streaming API
+  version: 1.0.0
+  description: |
+    Video streaming API supporting multiple sources:
+    - MinIO (self-hosted uploaded videos)
+    - External APIs (proxied/restreamed)
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+paths:
+  /stream/{animeId}/{episodeNumber}:
+    get:
+      operationId: getStreamInfo
+      summary: Get stream information for an episode
+      description: |
+        Returns available video sources for streaming.
+        For external sources, provides a proxy URL.
+        For MinIO sources, provides direct or presigned URL.
+      tags:
+        - Streaming
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: episodeNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: quality
+          in: query
+          schema:
+            type: string
+            enum: [360p, 480p, 720p, 1080p, auto]
+            default: auto
+      responses:
+        '200':
+          description: Stream information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamInfoResponse'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+  /stream/proxy:
+    get:
+      operationId: proxyStream
+      summary: Proxy video stream from external source
+      description: |
+        Proxies video content from external APIs.
+        Requires a signed token to prevent abuse.
+      tags:
+        - Streaming
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Signed stream token from getStreamInfo
+      responses:
+        '200':
+          description: Video stream
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: Partial content (range request)
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+  /stream/direct/{videoId}:
+    get:
+      operationId: directStream
+      summary: Direct stream from MinIO storage
+      tags:
+        - Streaming
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Video stream
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: Partial content
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+  /admin/upload:
+    post:
+      operationId: uploadVideo
+      summary: Upload video file (admin only)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - anime_id
+                - episode_number
+                - file
+              properties:
+                anime_id:
+                  type: string
+                episode_number:
+                  type: integer
+                quality:
+                  type: string
+                  enum: [360p, 480p, 720p, 1080p]
+                  default: 720p
+                language:
+                  type: string
+                  default: japanese
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Video uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '403':
+          $ref: './common.yaml#/components/responses/Forbidden'
+
+  /admin/upload/url:
+    post:
+      operationId: getUploadUrl
+      summary: Get presigned upload URL (admin only)
+      description: For large files, get a presigned URL to upload directly to MinIO
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+
+  /admin/videos/{videoId}:
+    delete:
+      operationId: deleteVideo
+      summary: Delete video (admin only)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Video deleted
+        '403':
+          $ref: './common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+components:
+  schemas:
+    StreamSource:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [minio, external]
+        quality:
+          type: string
+        language:
+          type: string
+        subtitles:
+          type: array
+          items:
+            type: string
+        url:
+          type: string
+          format: uri
+          description: |
+            For minio: presigned URL or /stream/direct endpoint
+            For external: /stream/proxy endpoint with token
+        expires_at:
+          type: string
+          format: date-time
+        requires_proxy:
+          type: boolean
+          description: Whether the client should use the proxy endpoint
+
+    StreamInfoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            anime_id:
+              type: string
+            anime_name:
+              type: string
+            episode_number:
+              type: integer
+            episode_name:
+              type: string
+            duration:
+              type: integer
+              description: Duration in seconds
+            sources:
+              type: array
+              items:
+                $ref: '#/components/schemas/StreamSource'
+            thumbnail_url:
+              type: string
+              format: uri
+            next_episode:
+              type: integer
+              nullable: true
+            previous_episode:
+              type: integer
+              nullable: true
+
+    UploadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            video_id:
+              type: string
+            anime_id:
+              type: string
+            episode_number:
+              type: integer
+            quality:
+              type: string
+            size:
+              type: integer
+              format: int64
+            storage_key:
+              type: string
+
+    UploadUrlRequest:
+      type: object
+      required:
+        - anime_id
+        - episode_number
+        - filename
+        - content_type
+        - size
+      properties:
+        anime_id:
+          type: string
+        episode_number:
+          type: integer
+        filename:
+          type: string
+        content_type:
+          type: string
+          enum: [video/mp4, video/webm, video/x-matroska]
+        size:
+          type: integer
+          format: int64
+        quality:
+          type: string
+          enum: [360p, 480p, 720p, 1080p]
+
+    UploadUrlResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            upload_url:
+              type: string
+              format: uri
+            video_id:
+              type: string
+            expires_at:
+              type: string
+              format: date-time
+            callback_url:
+              type: string
+              format: uri
+              description: URL to call after upload completes
+
+  securitySchemes:
+    BearerAuth:
+      $ref: './common.yaml#/components/securitySchemes/BearerAuth'
