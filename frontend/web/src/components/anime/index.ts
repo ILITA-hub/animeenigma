@@ -1,0 +1,5 @@
+export { default as AnimeCard } from './AnimeCard.vue'
+export { default as AnimeCardNew } from './AnimeCardNew.vue'
+export { default as ContinueCard } from './ContinueCard.vue'
+export { default as EpisodeCard } from './EpisodeCard.vue'
+export { default as GenreChip } from './GenreChip.vue'
