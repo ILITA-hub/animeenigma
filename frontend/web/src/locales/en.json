@@ -1,0 +1,126 @@
+{
+  "nav": {
+    "home": "Home",
+    "catalog": "Catalog",
+    "genres": "Genres",
+    "rooms": "Rooms",
+    "search": "Search",
+    "profile": "Profile",
+    "login": "Sign In",
+    "logout": "Sign Out"
+  },
+  "hero": {
+    "tagline": "Stream anime, your way",
+    "browse": "Browse",
+    "signin": "Sign In",
+    "scroll": "Scroll down"
+  },
+  "home": {
+    "continueWatching": "Continue Watching",
+    "recommended": "Recommended for You",
+    "trending": "Trending Now",
+    "newEpisodes": "New Episodes",
+    "genres": "Genres",
+    "popular": "Popular",
+    "seeAll": "See All"
+  },
+  "anime": {
+    "watch": "Watch",
+    "addToList": "Add to List",
+    "removeFromList": "Remove from List",
+    "episodes": "Episodes",
+    "synopsis": "Synopsis",
+    "characters": "Characters",
+    "related": "Related",
+    "recommendations": "Recommendations",
+    "episode": "Episode",
+    "of": "of",
+    "status": {
+      "ongoing": "Ongoing",
+      "completed": "Completed",
+      "upcoming": "Upcoming"
+    }
+  },
+  "player": {
+    "quality": "Quality",
+    "subtitles": "Subtitles",
+    "audio": "Audio",
+    "autoplay": "Autoplay",
+    "next": "Next",
+    "previous": "Previous"
+  },
+  "search": {
+    "placeholder": "Search anime...",
+    "recent": "Recent Searches",
+    "clearAll": "Clear All",
+    "noResults": "No results found",
+    "filters": "Filters",
+    "year": "Year",
+    "genre": "Genre",
+    "status": "Status",
+    "sort": "Sort",
+    "type": "Type"
+  },
+  "profile": {
+    "memberSince": "Member since",
+    "editProfile": "Edit Profile",
+    "tabs": {
+      "watchlist": "Watchlist",
+      "history": "History",
+      "favorites": "Favorites",
+      "settings": "Settings"
+    },
+    "watchlist": {
+      "all": "All",
+      "watching": "Watching",
+      "planToWatch": "Plan to Watch",
+      "completed": "Completed",
+      "dropped": "Dropped"
+    },
+    "settings": {
+      "appearance": "Appearance",
+      "language": "Language",
+      "autoplay": "Autoplay next",
+      "reduceMotion": "Reduce motion",
+      "playback": "Playback",
+      "defaultQuality": "Default quality",
+      "preferredAudio": "Preferred audio",
+      "subtitles": "Subtitles",
+      "account": "Account",
+      "email": "Email",
+      "changePassword": "Change Password",
+      "signOut": "Sign Out"
+    }
+  },
+  "rooms": {
+    "title": "Game Rooms",
+    "create": "Create Room",
+    "join": "Join",
+    "players": "players",
+    "host": "Host",
+    "round": "Round",
+    "status": {
+      "live": "Live",
+      "waiting": "Waiting",
+      "finished": "Finished"
+    },
+    "leaderboard": "Leaderboard",
+    "leave": "Leave"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "footer": {
+    "rights": "All rights reserved"
+  }
+}
