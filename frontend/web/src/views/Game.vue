@@ -1,154 +1,315 @@
 <template>
-  <div class="game-page">
-    <div class="container">
-      <h1>Anime Game Rooms</h1>
-      <p class="subtitle">Play anime-themed games with other fans!</p>
+  <div class="min-h-screen pt-20 pb-20 md:pb-8">
+    <div class="max-w-7xl mx-auto px-4">
+      <!-- Header -->
+      <div class="mb-8">
+        <h1 class="text-2xl md:text-3xl font-bold text-white mb-2">{{ $t('rooms.title') }}</h1>
+        <p class="text-white/60">Play anime-themed games with other fans!</p>
+      </div>
 
-      <div v-if="!currentRoom">
-        <div class="rooms-header">
-          <h2>Available Rooms</h2>
-          <button @click="showCreateModal = true" class="btn btn-primary">
-            Create Room
-          </button>
+      <!-- Room List View -->
+      <template v-if="!currentRoom">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-semibold text-white">Available Rooms</h2>
+          <Button @click="showCreateModal = true">
+            <template #icon>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+            </template>
+            {{ $t('rooms.create') }}
+          </Button>
         </div>
 
-        <div v-if="loading" class="loading">Loading rooms...</div>
-        <div v-else-if="rooms.length === 0" class="empty">
-          No active rooms. Create one to get started!
+        <!-- Loading State -->
+        <div v-if="loading" class="flex justify-center py-20">
+          <div class="w-12 h-12 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
         </div>
-        <div v-else class="rooms-grid">
-          <div
+
+        <!-- Empty State -->
+        <div v-else-if="rooms.length === 0" class="text-center py-20">
+          <svg class="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <p class="text-white/50 text-lg mb-4">No active rooms</p>
+          <Button variant="outline" @click="showCreateModal = true">Create the first room</Button>
+        </div>
+
+        <!-- Rooms Grid -->
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <button
             v-for="room in rooms"
             :key="room.id"
-            class="room-card"
+            class="text-left p-5 rounded-xl glass-card card-hover border border-white/10 hover:border-cyan-500/30 transition-all"
             @click="joinRoom(room.id)"
           >
-            <h3>{{ room.name }}</h3>
-            <p class="room-game">{{ room.gameType }}</p>
-            <div class="room-info">
-              <span>{{ room.players }}/{{ room.maxPlayers }} Players</span>
-              <span :class="['status', room.status]">{{ room.status }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-else class="game-room">
-        <div class="room-header">
-          <div>
-            <h2>{{ currentRoom.name }}</h2>
-            <p>{{ currentRoom.gameType }}</p>
-          </div>
-          <button @click="leaveRoom" class="btn btn-secondary">Leave Room</button>
-        </div>
-
-        <div class="game-area">
-          <div class="players-list">
-            <h3>Players ({{ currentRoom.players?.length || 0 }})</h3>
-            <div
-              v-for="player in currentRoom.players"
-              :key="player.id"
-              class="player-item"
-            >
-              <span>{{ player.username }}</span>
-              <span class="score">{{ player.score || 0 }} pts</span>
-            </div>
-          </div>
-
-          <div class="game-content">
-            <div v-if="currentRoom.status === 'waiting'" class="waiting">
-              <h3>Waiting for players...</h3>
-              <p>Game will start when enough players join</p>
-            </div>
-            <div v-else class="game-active">
-              <h3>{{ currentRoom.currentQuestion?.text }}</h3>
-              <div class="answers">
-                <button
-                  v-for="(answer, index) in currentRoom.currentQuestion?.options"
-                  :key="index"
-                  @click="submitAnswer(index)"
-                  class="answer-btn"
-                >
-                  {{ answer }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="chat">
-            <h3>Chat</h3>
-            <div class="chat-messages" ref="chatMessages">
-              <div
-                v-for="msg in chatMessages"
-                :key="msg.id"
-                class="chat-message"
+            <div class="flex items-start justify-between mb-3">
+              <h3 class="text-lg font-semibold text-white">{{ room.name }}</h3>
+              <Badge
+                :variant="room.status === 'waiting' ? 'warning' : 'success'"
+                size="sm"
               >
-                <strong>{{ msg.username }}:</strong> {{ msg.text }}
+                {{ $t(`rooms.status.${room.status}`) }}
+              </Badge>
+            </div>
+            <p class="text-cyan-400 mb-3 capitalize">{{ room.gameType.replace('-', ' ') }}</p>
+            <div class="flex items-center justify-between text-sm text-white/50">
+              <span class="flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                {{ room.players }}/{{ room.maxPlayers }} {{ $t('rooms.players') }}
+              </span>
+              <span v-if="room.host" class="truncate max-w-[120px]">
+                {{ $t('rooms.host') }}: {{ room.host }}
+              </span>
+            </div>
+          </button>
+        </div>
+      </template>
+
+      <!-- In-Room View -->
+      <template v-else>
+        <!-- Room Header -->
+        <div class="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
+          <div>
+            <h2 class="text-xl font-semibold text-white">{{ currentRoom.name }}</h2>
+            <p class="text-cyan-400 capitalize">{{ currentRoom.gameType?.replace('-', ' ') }}</p>
+          </div>
+          <Button variant="secondary" size="sm" @click="leaveRoom">
+            {{ $t('rooms.leave') }}
+          </Button>
+        </div>
+
+        <!-- Game Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <!-- Players Sidebar -->
+          <div class="lg:col-span-1">
+            <div class="glass-card p-4 sticky top-24">
+              <h3 class="text-lg font-semibold text-white mb-4">
+                Players ({{ currentRoom.players?.length || 0 }})
+              </h3>
+              <div class="space-y-2">
+                <div
+                  v-for="player in currentRoom.players"
+                  :key="player.id"
+                  class="flex items-center justify-between p-3 rounded-lg bg-white/5"
+                >
+                  <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-sm font-medium">
+                      {{ player.username?.slice(0, 2).toUpperCase() }}
+                    </div>
+                    <span class="text-white text-sm">{{ player.username }}</span>
+                  </div>
+                  <span class="text-amber-400 font-bold">{{ player.score || 0 }}</span>
+                </div>
+              </div>
+
+              <!-- Leaderboard -->
+              <div v-if="currentRoom.status !== 'waiting'" class="mt-6 pt-4 border-t border-white/10">
+                <h4 class="text-sm font-medium text-white/60 mb-3">{{ $t('rooms.leaderboard') }}</h4>
+                <div class="space-y-2">
+                  <div
+                    v-for="(player, index) in sortedPlayers"
+                    :key="player.id"
+                    class="flex items-center gap-2"
+                  >
+                    <span class="w-5 text-center" :class="index === 0 ? 'text-amber-400' : 'text-white/40'">
+                      {{ index + 1 }}
+                    </span>
+                    <span class="flex-1 text-white/70 truncate">{{ player.username }}</span>
+                    <span class="text-amber-400 font-bold">{{ player.score }}</span>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="chat-input">
-              <input
-                v-model="chatInput"
-                @keyup.enter="sendMessage"
-                placeholder="Type a message..."
-              />
-              <button @click="sendMessage">Send</button>
+          </div>
+
+          <!-- Main Game Area -->
+          <div class="lg:col-span-2">
+            <div class="glass-card p-6 min-h-[400px] flex items-center justify-center">
+              <!-- Waiting State -->
+              <div v-if="currentRoom.status === 'waiting'" class="text-center">
+                <div class="w-16 h-16 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin mx-auto mb-4" />
+                <h3 class="text-xl font-semibold text-white mb-2">{{ $t('rooms.status.waiting') }}</h3>
+                <p class="text-white/50">Game will start when enough players join</p>
+                <p class="text-cyan-400 mt-4">
+                  {{ $t('rooms.round') }} {{ currentRoom.currentRound || 1 }}
+                </p>
+              </div>
+
+              <!-- Active Game -->
+              <div v-else class="w-full">
+                <div class="text-center mb-8">
+                  <Badge variant="primary" size="md" class="mb-4">
+                    {{ $t('rooms.round') }} {{ currentRoom.currentRound || 1 }}
+                  </Badge>
+                  <h3 class="text-xl md:text-2xl font-semibold text-white">
+                    {{ currentRoom.currentQuestion?.text || 'Loading question...' }}
+                  </h3>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    v-for="(answer, index) in currentRoom.currentQuestion?.options"
+                    :key="index"
+                    class="p-4 rounded-xl text-left transition-all"
+                    :class="[
+                      selectedAnswer === index
+                        ? 'bg-cyan-500/20 border-2 border-cyan-500'
+                        : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-cyan-500/30'
+                    ]"
+                    :disabled="hasAnswered"
+                    @click="submitAnswer(index)"
+                  >
+                    <span class="text-white">{{ answer }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat Sidebar -->
+          <div class="lg:col-span-1">
+            <div class="glass-card p-4 h-[500px] flex flex-col">
+              <h3 class="text-lg font-semibold text-white mb-4">Chat</h3>
+
+              <!-- Messages -->
+              <div ref="chatMessagesRef" class="flex-1 overflow-y-auto space-y-2 mb-4 scrollbar-hide">
+                <div
+                  v-for="msg in chatMessages"
+                  :key="msg.id"
+                  class="p-2 rounded-lg bg-white/5"
+                >
+                  <span class="text-cyan-400 font-medium">{{ msg.username }}:</span>
+                  <span class="text-white/70 ml-1">{{ msg.text }}</span>
+                </div>
+              </div>
+
+              <!-- Input -->
+              <div class="flex gap-2">
+                <Input
+                  v-model="chatInput"
+                  placeholder="Type a message..."
+                  size="sm"
+                  @keyup.enter="sendMessage"
+                />
+                <Button size="sm" @click="sendMessage">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
 
     <!-- Create Room Modal -->
-    <div v-if="showCreateModal" class="modal-overlay" @click="showCreateModal = false">
-      <div class="modal" @click.stop>
-        <h2>Create Game Room</h2>
-        <form @submit.prevent="createRoom">
-          <input v-model="newRoom.name" placeholder="Room Name" required />
-          <select v-model="newRoom.gameType" required>
+    <Modal v-model="showCreateModal" :title="$t('rooms.create')">
+      <form @submit.prevent="createRoom" class="space-y-4">
+        <Input
+          v-model="newRoom.name"
+          label="Room Name"
+          placeholder="Enter room name"
+          required
+        />
+        <div>
+          <label class="block text-sm font-medium text-white/70 mb-2">Game Type</label>
+          <select
+            v-model="newRoom.gameType"
+            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500"
+            required
+          >
             <option value="anime-quiz">Anime Quiz</option>
             <option value="character-guess">Character Guess</option>
             <option value="opening-quiz">Opening Quiz</option>
           </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-white/70 mb-2">Max Players</label>
           <input
             v-model.number="newRoom.maxPlayers"
             type="number"
             min="2"
             max="20"
-            placeholder="Max Players"
+            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500"
             required
           />
-          <div class="modal-actions">
-            <button type="button" @click="showCreateModal = false" class="btn btn-secondary">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary">Create</button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </form>
+      <template #footer>
+        <Button variant="ghost" @click="showCreateModal = false">{{ $t('common.cancel') }}</Button>
+        <Button @click="createRoom">{{ $t('rooms.create') }}</Button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { gameApi } from '@/api/client'
 import { io, Socket } from 'socket.io-client'
+import { Button, Badge, Input, Modal } from '@/components/ui'
+
+interface Player {
+  id: string
+  username: string
+  score: number
+}
+
+interface Room {
+  id: string
+  name: string
+  gameType: string
+  status: string
+  players: number
+  maxPlayers: number
+  host?: string
+}
+
+interface CurrentRoom {
+  id: string
+  name: string
+  gameType: string
+  status: string
+  players: Player[]
+  currentRound?: number
+  currentQuestion?: {
+    text: string
+    options: string[]
+  }
+}
+
+interface ChatMessage {
+  id: string
+  username: string
+  text: string
+}
 
 const route = useRoute()
 const loading = ref(false)
-const rooms = ref<any[]>([])
-const currentRoom = ref<any>(null)
+const rooms = ref<Room[]>([])
+const currentRoom = ref<CurrentRoom | null>(null)
 const showCreateModal = ref(false)
-const chatMessages = ref<any[]>([])
+const chatMessages = ref<ChatMessage[]>([])
+const chatMessagesRef = ref<HTMLElement | null>(null)
 const chatInput = ref('')
 const socket = ref<Socket | null>(null)
+const selectedAnswer = ref<number | null>(null)
+const hasAnswered = ref(false)
 
 const newRoom = ref({
   name: '',
   gameType: 'anime-quiz',
   maxPlayers: 10
+})
+
+const sortedPlayers = computed(() => {
+  if (!currentRoom.value?.players) return []
+  return [...currentRoom.value.players].sort((a, b) => (b.score || 0) - (a.score || 0))
 })
 
 const loadRooms = async () => {
@@ -168,7 +329,10 @@ const createRoom = async () => {
     const response = await gameApi.createRoom(newRoom.value)
     currentRoom.value = response.data
     showCreateModal.value = false
-    connectSocket(currentRoom.value.id)
+    if (currentRoom.value) {
+      connectSocket(currentRoom.value.id)
+    }
+    newRoom.value = { name: '', gameType: 'anime-quiz', maxPlayers: 10 }
   } catch (err) {
     console.error('Failed to create room:', err)
   }
@@ -190,6 +354,8 @@ const leaveRoom = async () => {
       await gameApi.leaveRoom(currentRoom.value.id)
       socket.value?.disconnect()
       currentRoom.value = null
+      selectedAnswer.value = null
+      hasAnswered.value = false
       await loadRooms()
     } catch (err) {
       console.error('Failed to leave room:', err)
@@ -205,12 +371,19 @@ const connectSocket = (roomId: string) => {
 
   socket.value.emit('join-room', roomId)
 
-  socket.value.on('room-update', (data: any) => {
+  socket.value.on('room-update', (data: CurrentRoom) => {
     currentRoom.value = data
+    selectedAnswer.value = null
+    hasAnswered.value = false
   })
 
-  socket.value.on('chat-message', (message: any) => {
+  socket.value.on('chat-message', (message: ChatMessage) => {
     chatMessages.value.push(message)
+    nextTick(() => {
+      if (chatMessagesRef.value) {
+        chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight
+      }
+    })
   })
 
   socket.value.on('game-start', () => {
@@ -219,6 +392,11 @@ const connectSocket = (roomId: string) => {
 }
 
 const submitAnswer = (answerIndex: number) => {
+  if (hasAnswered.value) return
+
+  selectedAnswer.value = answerIndex
+  hasAnswered.value = true
+
   if (socket.value && currentRoom.value) {
     socket.value.emit('submit-answer', {
       roomId: currentRoom.value.id,
@@ -249,311 +427,3 @@ onUnmounted(() => {
   socket.value?.disconnect()
 })
 </script>
-
-<style scoped>
-.game-page {
-  min-height: 100vh;
-  padding: 2rem;
-}
-
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-  color: #fff;
-}
-
-.subtitle {
-  color: #999;
-  margin-bottom: 2rem;
-}
-
-.rooms-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-.rooms-header h2 {
-  font-size: 1.8rem;
-  color: #fff;
-}
-
-.rooms-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.5rem;
-}
-
-.room-card {
-  padding: 1.5rem;
-  background: #1a1a1a;
-  border: 2px solid #333;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.room-card:hover {
-  border-color: #ff6b6b;
-  transform: translateY(-4px);
-}
-
-.room-card h3 {
-  font-size: 1.3rem;
-  margin-bottom: 0.5rem;
-  color: #fff;
-}
-
-.room-game {
-  color: #ff6b6b;
-  margin-bottom: 1rem;
-  text-transform: capitalize;
-}
-
-.room-info {
-  display: flex;
-  justify-content: space-between;
-  color: #999;
-  font-size: 0.9rem;
-}
-
-.status {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  text-transform: uppercase;
-  font-size: 0.75rem;
-}
-
-.status.waiting {
-  background: #ffa500;
-  color: #000;
-}
-
-.status.playing {
-  background: #4caf50;
-  color: #fff;
-}
-
-.game-room {
-  background: #1a1a1a;
-  border-radius: 12px;
-  padding: 2rem;
-}
-
-.room-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #333;
-}
-
-.room-header h2 {
-  font-size: 1.8rem;
-  color: #fff;
-}
-
-.game-area {
-  display: grid;
-  grid-template-columns: 200px 1fr 300px;
-  gap: 2rem;
-}
-
-.players-list,
-.chat {
-  background: #0f0f0f;
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.players-list h3,
-.chat h3 {
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
-  color: #fff;
-}
-
-.player-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  background: #1a1a1a;
-  border-radius: 4px;
-}
-
-.score {
-  color: #ffd700;
-  font-weight: bold;
-}
-
-.game-content {
-  background: #0f0f0f;
-  border-radius: 8px;
-  padding: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.waiting {
-  text-align: center;
-}
-
-.waiting h3 {
-  font-size: 1.5rem;
-  color: #fff;
-  margin-bottom: 1rem;
-}
-
-.game-active h3 {
-  font-size: 1.3rem;
-  color: #fff;
-  margin-bottom: 2rem;
-}
-
-.answers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.answer-btn {
-  padding: 1rem;
-  background: #1a1a1a;
-  border: 2px solid #333;
-  border-radius: 8px;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.answer-btn:hover {
-  border-color: #ff6b6b;
-  background: #222;
-}
-
-.chat-messages {
-  height: 300px;
-  overflow-y: auto;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
-}
-
-.chat-message {
-  margin-bottom: 0.5rem;
-  color: #ccc;
-  font-size: 0.9rem;
-}
-
-.chat-message strong {
-  color: #ff6b6b;
-}
-
-.chat-input {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.chat-input input {
-  flex: 1;
-  padding: 0.5rem;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: white;
-}
-
-.chat-input button {
-  padding: 0.5rem 1rem;
-  background: #ff6b6b;
-  border: none;
-  border-radius: 4px;
-  color: white;
-  cursor: pointer;
-}
-
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.3s;
-}
-
-.btn-primary {
-  background: #ff6b6b;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #ff5252;
-}
-
-.btn-secondary {
-  background: #333;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background: #444;
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: #1a1a1a;
-  padding: 2rem;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-}
-
-.modal h2 {
-  font-size: 1.5rem;
-  margin-bottom: 1.5rem;
-  color: #fff;
-}
-
-.modal form input,
-.modal form select {
-  width: 100%;
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  background: #0f0f0f;
-  border: 2px solid #333;
-  border-radius: 8px;
-  color: white;
-  font-size: 1rem;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-top: 1.5rem;
-}
-
-.loading,
-.empty {
-  text-align: center;
-  padding: 3rem;
-  color: #999;
-}
-</style>
