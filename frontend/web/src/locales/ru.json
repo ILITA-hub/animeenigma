@@ -1,0 +1,126 @@
+{
+  "nav": {
+    "home": "Главная",
+    "catalog": "Каталог",
+    "genres": "Жанры",
+    "rooms": "Комнаты",
+    "search": "Поиск",
+    "profile": "Профиль",
+    "login": "Войти",
+    "logout": "Выйти"
+  },
+  "hero": {
+    "tagline": "Смотри аниме по-своему",
+    "browse": "Каталог",
+    "signin": "Войти",
+    "scroll": "Прокрутите вниз"
+  },
+  "home": {
+    "continueWatching": "Продолжить просмотр",
+    "recommended": "Рекомендации для вас",
+    "trending": "Сейчас в тренде",
+    "newEpisodes": "Новые эпизоды",
+    "genres": "Жанры",
+    "popular": "Популярное",
+    "seeAll": "Все"
+  },
+  "anime": {
+    "watch": "Смотреть",
+    "addToList": "В список",
+    "removeFromList": "Убрать из списка",
+    "episodes": "Эпизоды",
+    "synopsis": "Описание",
+    "characters": "Персонажи",
+    "related": "Связанные",
+    "recommendations": "Рекомендации",
+    "episode": "Эпизод",
+    "of": "из",
+    "status": {
+      "ongoing": "Онгоинг",
+      "completed": "Завершён",
+      "upcoming": "Скоро"
+    }
+  },
+  "player": {
+    "quality": "Качество",
+    "subtitles": "Субтитры",
+    "audio": "Аудио",
+    "autoplay": "Автовоспр.",
+    "next": "Следующий",
+    "previous": "Предыдущий"
+  },
+  "search": {
+    "placeholder": "Поиск аниме...",
+    "recent": "Недавние поиски",
+    "clearAll": "Очистить всё",
+    "noResults": "Ничего не найдено",
+    "filters": "Фильтры",
+    "year": "Год",
+    "genre": "Жанр",
+    "status": "Статус",
+    "sort": "Сортировка",
+    "type": "Тип"
+  },
+  "profile": {
+    "memberSince": "Участник с",
+    "editProfile": "Редактировать",
+    "tabs": {
+      "watchlist": "Список",
+      "history": "История",
+      "favorites": "Избранное",
+      "settings": "Настройки"
+    },
+    "watchlist": {
+      "all": "Все",
+      "watching": "Смотрю",
+      "planToWatch": "Запланировано",
+      "completed": "Просмотрено",
+      "dropped": "Брошено"
+    },
+    "settings": {
+      "appearance": "Внешний вид",
+      "language": "Язык",
+      "autoplay": "Автовоспроизведение",
+      "reduceMotion": "Уменьшить анимацию",
+      "playback": "Воспроизведение",
+      "defaultQuality": "Качество по умолчанию",
+      "preferredAudio": "Предпочитаемое аудио",
+      "subtitles": "Субтитры",
+      "account": "Аккаунт",
+      "email": "Email",
+      "changePassword": "Сменить пароль",
+      "signOut": "Выйти"
+    }
+  },
+  "rooms": {
+    "title": "Игровые комнаты",
+    "create": "Создать комнату",
+    "join": "Войти",
+    "players": "игроков",
+    "host": "Хост",
+    "round": "Раунд",
+    "status": {
+      "live": "Идёт игра",
+      "waiting": "Ожидание",
+      "finished": "Завершено"
+    },
+    "leaderboard": "Таблица лидеров",
+    "leave": "Покинуть"
+  },
+  "common": {
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "retry": "Повторить",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "confirm": "Подтвердить",
+    "back": "Назад",
+    "next": "Далее",
+    "today": "Сегодня",
+    "yesterday": "Вчера"
+  },
+  "footer": {
+    "rights": "Все права защищены"
+  }
+}

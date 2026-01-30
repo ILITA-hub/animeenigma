@@ -12,24 +12,32 @@
     "lint:fix": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix --ignore-path .gitignore"
   },
   "dependencies": {
-    "vue": "^3.4.21",
-    "vue-router": "^4.3.0",
-    "pinia": "^2.1.7",
+    "@vueuse/core": "^14.1.0",
+    "@vueuse/motion": "^3.0.3",
     "axios": "^1.6.7",
+    "pinia": "^2.1.7",
     "socket.io-client": "^4.7.4",
-    "video.js": "^8.10.0"
+    "video.js": "^8.10.0",
+    "vue": "^3.4.21",
+    "vue-i18n": "^11.2.8",
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.4",
-    "@vue/tsconfig": "^0.5.1",
-    "typescript": "^5.4.2",
-    "vite": "^5.1.6",
-    "vue-tsc": "^2.0.7",
+    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^20.11.25",
     "@types/video.js": "^7.3.58",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/tsconfig": "^0.5.1",
+    "autoprefixer": "^10.4.23",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.23.0",
-    "@typescript-eslint/eslint-plugin": "^7.1.0",
-    "@typescript-eslint/parser": "^7.1.0"
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.6",
+    "vue-tsc": "^2.0.7"
   }
 }

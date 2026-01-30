@@ -1,0 +1,126 @@
+{
+  "nav": {
+    "home": "ホーム",
+    "catalog": "カタログ",
+    "genres": "ジャンル",
+    "rooms": "ルーム",
+    "search": "検索",
+    "profile": "プロフィール",
+    "login": "ログイン",
+    "logout": "ログアウト"
+  },
+  "hero": {
+    "tagline": "あなただけのアニメ体験",
+    "browse": "カタログ",
+    "signin": "ログイン",
+    "scroll": "スクロールしてください"
+  },
+  "home": {
+    "continueWatching": "視聴を続ける",
+    "recommended": "おすすめ",
+    "trending": "トレンド",
+    "newEpisodes": "新着エピソード",
+    "genres": "ジャンル",
+    "popular": "人気",
+    "seeAll": "すべて見る"
+  },
+  "anime": {
+    "watch": "視聴する",
+    "addToList": "リストに追加",
+    "removeFromList": "リストから削除",
+    "episodes": "エピソード",
+    "synopsis": "あらすじ",
+    "characters": "キャラクター",
+    "related": "関連作品",
+    "recommendations": "おすすめ",
+    "episode": "話",
+    "of": "/",
+    "status": {
+      "ongoing": "放送中",
+      "completed": "完結",
+      "upcoming": "放送予定"
+    }
+  },
+  "player": {
+    "quality": "画質",
+    "subtitles": "字幕",
+    "audio": "音声",
+    "autoplay": "自動再生",
+    "next": "次へ",
+    "previous": "前へ"
+  },
+  "search": {
+    "placeholder": "アニメを検索...",
+    "recent": "最近の検索",
+    "clearAll": "すべて削除",
+    "noResults": "結果が見つかりません",
+    "filters": "フィルター",
+    "year": "年",
+    "genre": "ジャンル",
+    "status": "状態",
+    "sort": "並び替え",
+    "type": "タイプ"
+  },
+  "profile": {
+    "memberSince": "登録日",
+    "editProfile": "編集",
+    "tabs": {
+      "watchlist": "リスト",
+      "history": "履歴",
+      "favorites": "お気に入り",
+      "settings": "設定"
+    },
+    "watchlist": {
+      "all": "すべて",
+      "watching": "視聴中",
+      "planToWatch": "視聴予定",
+      "completed": "視聴済み",
+      "dropped": "中断"
+    },
+    "settings": {
+      "appearance": "外観",
+      "language": "言語",
+      "autoplay": "自動再生",
+      "reduceMotion": "モーション軽減",
+      "playback": "再生",
+      "defaultQuality": "デフォルト画質",
+      "preferredAudio": "優先音声",
+      "subtitles": "字幕",
+      "account": "アカウント",
+      "email": "メール",
+      "changePassword": "パスワード変更",
+      "signOut": "ログアウト"
+    }
+  },
+  "rooms": {
+    "title": "ゲームルーム",
+    "create": "ルーム作成",
+    "join": "参加",
+    "players": "人",
+    "host": "ホスト",
+    "round": "ラウンド",
+    "status": {
+      "live": "プレイ中",
+      "waiting": "待機中",
+      "finished": "終了"
+    },
+    "leaderboard": "ランキング",
+    "leave": "退出"
+  },
+  "common": {
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "retry": "再試行",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "confirm": "確認",
+    "back": "戻る",
+    "next": "次へ",
+    "today": "今日",
+    "yesterday": "昨日"
+  },
+  "footer": {
+    "rights": "All rights reserved"
+  }
+}
