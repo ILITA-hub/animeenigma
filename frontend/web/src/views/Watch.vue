@@ -1,60 +1,180 @@
 <template>
-  <div class="watch-page">
-    <div class="video-container">
+  <div class="min-h-screen bg-black">
+    <!-- Video Player Section -->
+    <div class="relative aspect-video max-h-[70vh] bg-black">
       <VideoPlayer v-if="episode" :episode="episode" />
-      <div v-else-if="loading" class="loading">Loading episode...</div>
-      <div v-else-if="error" class="error">{{ error }}</div>
-    </div>
-
-    <div class="watch-info">
-      <div class="episode-details">
-        <h1>{{ episode?.title || 'Loading...' }}</h1>
-        <p v-if="anime">{{ anime.title }} - Episode {{ episode?.episodeNumber }}</p>
+      <div v-else-if="loading" class="absolute inset-0 flex items-center justify-center">
+        <div class="w-12 h-12 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
       </div>
-
-      <div class="controls">
-        <button @click="previousEpisode" :disabled="!hasPrevious" class="nav-btn">
-          ← Previous
-        </button>
-        <button @click="nextEpisode" :disabled="!hasNext" class="nav-btn">
-          Next →
-        </button>
+      <div v-else-if="error" class="absolute inset-0 flex items-center justify-center">
+        <div class="text-center">
+          <p class="text-pink-400 mb-4">{{ error }}</p>
+          <Button variant="outline" @click="loadEpisode">{{ $t('common.retry') }}</Button>
+        </div>
       </div>
     </div>
 
-    <div class="episodes-list">
-      <h2>Episodes</h2>
-      <div class="episodes-scroll">
-        <button
-          v-for="ep in episodes"
-          :key="ep.id"
-          @click="selectEpisode(ep.id)"
-          :class="['episode-item', { active: ep.id === episodeId }]"
-        >
-          <span class="ep-number">{{ ep.episodeNumber }}</span>
-          <span class="ep-title">{{ ep.title }}</span>
-        </button>
+    <!-- Episode Info Bar -->
+    <div class="bg-surface border-b border-white/10">
+      <div class="max-w-7xl mx-auto px-4 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <!-- Episode Details -->
+          <div class="flex-1 min-w-0">
+            <h1 class="text-lg md:text-xl font-semibold text-white truncate">
+              {{ episode?.title || `Episode ${episode?.episodeNumber}` }}
+            </h1>
+            <router-link
+              v-if="anime"
+              :to="`/anime/${animeId}`"
+              class="text-white/60 hover:text-cyan-400 transition-colors inline-flex items-center gap-2"
+            >
+              <span class="truncate">{{ anime.title }}</span>
+              <span class="text-white/30">•</span>
+              <span>{{ $t('anime.episode') }} {{ episode?.episodeNumber }} {{ $t('anime.of') }} {{ anime.totalEpisodes }}</span>
+            </router-link>
+          </div>
+
+          <!-- Navigation Controls -->
+          <div class="flex items-center gap-3">
+            <Button
+              size="sm"
+              variant="ghost"
+              :disabled="!hasPrevious"
+              @click="previousEpisode"
+            >
+              <template #icon>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+              </template>
+              {{ $t('player.previous') }}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              :disabled="!hasNext"
+              @click="nextEpisode"
+            >
+              {{ $t('player.next') }}
+              <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="anime-info" v-if="anime">
-      <h2>About This Anime</h2>
-      <p>{{ anime.description }}</p>
-      <div class="genres">
-        <span v-for="genre in anime.genres" :key="genre" class="genre-tag">
-          {{ genre }}
-        </span>
-      </div>
+    <!-- Content Area -->
+    <div class="max-w-7xl mx-auto px-4 py-6 space-y-8">
+      <!-- Episodes Section -->
+      <section>
+        <h2 class="text-xl font-semibold text-white mb-4">{{ $t('anime.episodes') }}</h2>
+        <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x-mandatory">
+          <button
+            v-for="ep in episodes"
+            :key="ep.id"
+            class="flex-shrink-0 w-28 p-3 rounded-xl text-left transition-all snap-start"
+            :class="[
+              ep.id === episodeId
+                ? 'bg-cyan-500/20 border-2 border-cyan-500/50 text-cyan-400'
+                : 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white'
+            ]"
+            @click="selectEpisode(ep.id)"
+          >
+            <div class="text-2xl font-bold mb-1">{{ ep.episodeNumber }}</div>
+            <div class="text-xs truncate opacity-70">{{ ep.title || `EP ${ep.episodeNumber}` }}</div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Anime Info Section -->
+      <section v-if="anime" class="glass-card p-6">
+        <div class="flex gap-4">
+          <router-link
+            :to="`/anime/${animeId}`"
+            class="flex-shrink-0 w-20 aspect-[2/3] rounded-lg overflow-hidden"
+          >
+            <img
+              :src="anime.coverImage"
+              :alt="anime.title"
+              class="w-full h-full object-cover"
+            />
+          </router-link>
+          <div class="flex-1 min-w-0">
+            <router-link
+              :to="`/anime/${animeId}`"
+              class="text-lg font-semibold text-white hover:text-cyan-400 transition-colors"
+            >
+              {{ anime.title }}
+            </router-link>
+            <div class="flex flex-wrap gap-2 mt-2">
+              <Badge v-if="anime.rating" variant="rating" size="sm">
+                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                {{ anime.rating.toFixed(1) }}
+              </Badge>
+              <Badge variant="default" size="sm">{{ anime.releaseYear }}</Badge>
+              <Badge variant="default" size="sm">{{ anime.totalEpisodes }} eps</Badge>
+            </div>
+            <p class="text-white/60 text-sm mt-3 line-clamp-2">
+              {{ anime.description }}
+            </p>
+            <div class="flex flex-wrap gap-2 mt-3">
+              <span
+                v-for="genre in anime.genres?.slice(0, 3)"
+                :key="genre"
+                class="text-xs px-2 py-1 rounded-md bg-white/5 text-white/50"
+              >
+                {{ genre }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Player Settings -->
+      <section class="glass-card p-4">
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="flex items-center gap-2">
+            <span class="text-white/60 text-sm">{{ $t('player.autoplay') }}</span>
+            <button
+              class="w-10 h-6 rounded-full transition-colors relative"
+              :class="autoplay ? 'bg-cyan-500' : 'bg-white/20'"
+              @click="autoplay = !autoplay"
+            >
+              <span
+                class="absolute top-1 w-4 h-4 rounded-full bg-white transition-transform"
+                :class="autoplay ? 'left-5' : 'left-1'"
+              />
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-white/60 text-sm">{{ $t('player.quality') }}</span>
+            <select
+              v-model="quality"
+              class="bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-cyan-500"
+            >
+              <option value="auto">Auto</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+            </select>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch as vueWatch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAnime } from '@/composables/useAnime'
-import { usePlayerStore } from '@/stores/player'
+import { usePlayerStore, type Episode as PlayerEpisode } from '@/stores/player'
 import VideoPlayer from '@/components/player/VideoPlayer.vue'
+import { Button, Badge } from '@/components/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -63,7 +183,9 @@ const playerStore = usePlayerStore()
 
 const animeId = ref(route.params.animeId as string)
 const episodeId = ref(route.params.episodeId as string)
-const episode = ref<any>(null)
+const episode = ref<PlayerEpisode | null>(null)
+const autoplay = ref(false)
+const quality = ref('auto')
 
 const currentEpisodeIndex = computed(() => {
   return episodes.value.findIndex(ep => ep.id === episodeId.value)
@@ -92,14 +214,17 @@ const selectEpisode = (epId: string) => {
 
 const loadEpisode = async () => {
   try {
-    episode.value = await fetchEpisode(episodeId.value)
-    playerStore.setEpisode(episode.value)
+    const fetchedEpisode = await fetchEpisode(episodeId.value)
+    if (fetchedEpisode) {
+      episode.value = fetchedEpisode as PlayerEpisode
+      playerStore.setEpisode(episode.value)
+    }
   } catch (err) {
     console.error('Failed to load episode:', err)
   }
 }
 
-watch(() => route.params.episodeId, async (newId) => {
+vueWatch(() => route.params.episodeId, async (newId) => {
   if (newId) {
     episodeId.value = newId as string
     await loadEpisode()
@@ -112,152 +237,3 @@ onMounted(async () => {
   await loadEpisode()
 })
 </script>
-
-<style scoped>
-.watch-page {
-  background: #000;
-  min-height: 100vh;
-}
-
-.video-container {
-  width: 100%;
-  background: #000;
-}
-
-.watch-info {
-  padding: 1.5rem 2rem;
-  background: #1a1a1a;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.episode-details h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
-  color: #fff;
-}
-
-.episode-details p {
-  color: #999;
-}
-
-.controls {
-  display: flex;
-  gap: 1rem;
-}
-
-.nav-btn {
-  padding: 0.75rem 1.5rem;
-  background: #333;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-
-.nav-btn:hover:not(:disabled) {
-  background: #444;
-}
-
-.nav-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.episodes-list {
-  padding: 2rem;
-  background: #0f0f0f;
-}
-
-.episodes-list h2 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  color: #fff;
-}
-
-.episodes-scroll {
-  display: flex;
-  gap: 1rem;
-  overflow-x: auto;
-  padding-bottom: 1rem;
-}
-
-.episode-item {
-  min-width: 200px;
-  padding: 1rem;
-  background: #1a1a1a;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s;
-  text-align: left;
-  color: white;
-}
-
-.episode-item:hover {
-  background: #222;
-}
-
-.episode-item.active {
-  border-color: #ff6b6b;
-  background: #222;
-}
-
-.ep-number {
-  display: block;
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-  color: #ff6b6b;
-}
-
-.ep-title {
-  display: block;
-  font-size: 0.9rem;
-  color: #ccc;
-}
-
-.anime-info {
-  padding: 2rem;
-  background: #0f0f0f;
-}
-
-.anime-info h2 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  color: #fff;
-}
-
-.anime-info p {
-  color: #ccc;
-  line-height: 1.6;
-  margin-bottom: 1rem;
-}
-
-.genres {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.genre-tag {
-  padding: 0.25rem 0.75rem;
-  background: #333;
-  border-radius: 4px;
-  font-size: 0.85rem;
-}
-
-.loading,
-.error {
-  text-align: center;
-  padding: 3rem;
-  color: #999;
-}
-
-.error {
-  color: #ff6b6b;
-}
-</style>
