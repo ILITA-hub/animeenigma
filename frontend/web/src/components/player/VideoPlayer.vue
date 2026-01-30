@@ -7,25 +7,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import videojs from 'video.js'
-import { usePlayerStore } from '@/stores/player'
-import type Player from 'video.js/dist/types/player'
-
-interface Episode {
-  id: string
-  title: string
-  sources: Array<{
-    url: string
-    quality: string
-    type: string
-  }>
-}
+import { usePlayerStore, type Episode } from '@/stores/player'
 
 const props = defineProps<{
   episode: Episode
 }>()
 
 const videoElement = ref<HTMLVideoElement | null>(null)
-const player = ref<Player | null>(null)
+const player = ref<ReturnType<typeof videojs> | null>(null)
 const playerStore = usePlayerStore()
 
 const initPlayer = () => {
@@ -61,7 +50,7 @@ const initPlayer = () => {
   }
 
   player.value = videojs(videoElement.value, options)
-  playerStore.setPlayer(player.value)
+  playerStore.setPlayer(player.value as ReturnType<typeof videojs>)
 
   // Auto-save progress every 10 seconds
   const saveInterval = setInterval(() => {

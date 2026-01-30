@@ -40,9 +40,19 @@ import { ref, onMounted } from 'vue'
 import { useAnime } from '@/composables/useAnime'
 import AnimeCard from '@/components/anime/AnimeCard.vue'
 
+interface Anime {
+  id: string
+  title: string
+  coverImage: string
+  rating?: number
+  releaseYear?: number
+  status?: string
+  genres?: string[]
+}
+
 const { loading, error, fetchTrending, fetchPopular } = useAnime()
-const trendingAnime = ref([])
-const popularAnime = ref([])
+const trendingAnime = ref<Anime[]>([])
+const popularAnime = ref<Anime[]>([])
 
 onMounted(async () => {
   try {
