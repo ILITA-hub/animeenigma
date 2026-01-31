@@ -42,6 +42,37 @@ func (h *ListHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, list)
 }
 
+// AddToList adds an anime to user's watchlist
+func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		AnimeID string `json:"animeId"`
+	}
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	// Add with default status "plan_to_watch"
+	listReq := &domain.UpdateListRequest{
+		AnimeID: req.AnimeID,
+		Status:  "plan_to_watch",
+	}
+
+	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, listReq)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.Created(w, entry)
+}
+
 // UpdateListEntry updates an anime list entry
 func (h *ListHandler) UpdateListEntry(w http.ResponseWriter, r *http.Request) {
 	var req domain.UpdateListRequest

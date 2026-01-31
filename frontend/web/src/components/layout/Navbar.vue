@@ -127,11 +127,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { onClickOutside } from '@vueuse/core'
 import Button from '@/components/ui/Button.vue'
 
+const router = useRouter()
 const { locale } = useI18n()
 const authStore = useAuthStore()
 
@@ -167,8 +169,7 @@ const setLocale = (code: string) => {
 }
 
 const showLogin = () => {
-  // TODO: Implement login modal
-  console.log('Show login modal')
+  router.push('/auth')
 }
 
 const handleScroll = () => {

@@ -1,0 +1,257 @@
+version: '3.8'
+
+# Production docker-compose for use with host nginx
+# Services bind to localhost only - nginx handles external traffic
+#
+# Usage:
+#   docker compose -f docker/docker-compose.prod.yml up -d
+
+services:
+  # =============================================================================
+  # Infrastructure
+  # =============================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: animeenigma-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      POSTGRES_DB: animeenigma
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: animeenigma-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: animeenigma-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY required}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # =============================================================================
+  # Backend Services
+  # =============================================================================
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: services/gateway/Dockerfile
+    container_name: animeenigma-gateway
+    environment:
+      SERVER_PORT: 8000
+      AUTH_SERVICE_URL: http://auth:8080
+      CATALOG_SERVICE_URL: http://catalog:8081
+      STREAMING_SERVICE_URL: http://streaming:8082
+      PLAYER_SERVICE_URL: http://player:8083
+      ROOMS_SERVICE_URL: http://rooms:8084
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - redis
+      - auth
+      - catalog
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: ..
+      dockerfile: services/auth/Dockerfile
+    container_name: animeenigma-auth
+    environment:
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      DB_NAME: animeenigma_auth
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  catalog:
+    build:
+      context: ..
+      dockerfile: services/catalog/Dockerfile
+    container_name: animeenigma-catalog
+    environment:
+      SERVER_PORT: 8081
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      DB_NAME: animeenigma_catalog
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SHIKIMORI_USER_AGENT: ${SHIKIMORI_USER_AGENT:-AnimeEnigma/1.0}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+    expose:
+      - "8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  streaming:
+    build:
+      context: ..
+      dockerfile: services/streaming/Dockerfile
+    container_name: animeenigma-streaming
+    environment:
+      SERVER_PORT: 8082
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-animeenigma}
+      MINIO_USE_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:?STREAM_TOKEN_SECRET required}
+      KODIK_API_KEY: ${KODIK_API_KEY:-}
+      ANIBOOM_BASE_URL: ${ANIBOOM_BASE_URL:-}
+    expose:
+      - "8082"
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  player:
+    build:
+      context: ..
+      dockerfile: services/player/Dockerfile
+    container_name: animeenigma-player
+    environment:
+      SERVER_PORT: 8083
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      DB_NAME: animeenigma_player
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+    expose:
+      - "8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  rooms:
+    build:
+      context: ..
+      dockerfile: services/rooms/Dockerfile
+    container_name: animeenigma-rooms
+    environment:
+      SERVER_PORT: 8084
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+    expose:
+      - "8084"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: services/scheduler/Dockerfile
+    container_name: animeenigma-scheduler
+    environment:
+      SERVER_PORT: 8085
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      DB_NAME: animeenigma_catalog
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SHIKIMORI_USER_AGENT: ${SHIKIMORI_USER_AGENT:-AnimeEnigma/1.0}
+    expose:
+      - "8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # =============================================================================
+  # Frontend
+  # =============================================================================
+
+  web:
+    build:
+      context: ..
+      dockerfile: frontend/web/Dockerfile
+    container_name: animeenigma-web
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  default:
+    name: animeenigma-network

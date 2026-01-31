@@ -15,7 +15,7 @@ test.describe('Search/Browse Page', () => {
     await expect(page.getByText(/жанр|genre/i).first()).toBeVisible()
 
     // Sort option
-    await expect(page.locator('select')).toBeVisible()
+    await expect(page.locator('select').first()).toBeVisible()
   })
 
   test('should type in search and trigger search', async ({ page }) => {

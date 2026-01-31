@@ -23,6 +23,29 @@ export interface Episode {
   duration: number
 }
 
+// Transform API response to frontend Anime interface
+function transformAnime(apiAnime: any): Anime {
+  return {
+    id: apiAnime.id,
+    title: apiAnime.name_ru || apiAnime.name || apiAnime.name_jp || '',
+    description: apiAnime.description || '',
+    coverImage: apiAnime.poster_url || '',
+    bannerImage: apiAnime.banner_url,
+    genres: apiAnime.genres?.map((g: any) => g.name_ru || g.name) || [],
+    status: apiAnime.status || '',
+    releaseYear: apiAnime.year || 0,
+    rating: apiAnime.score || 0,
+    totalEpisodes: apiAnime.episodes_count || 0
+  }
+}
+
+function transformAnimeList(apiList: any): Anime[] {
+  if (!apiList) return []
+  const list = apiList.data || apiList
+  if (!Array.isArray(list)) return []
+  return list.map(transformAnime)
+}
+
 export function useAnime() {
   const anime = ref<Anime | null>(null)
   const animeList = ref<Anime[]>([])
@@ -35,8 +58,9 @@ export function useAnime() {
     error.value = null
     try {
       const response = await animeApi.getById(id)
-      anime.value = response.data
-      return response.data
+      const data = response.data?.data || response.data
+      anime.value = transformAnime(data)
+      return anime.value
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to fetch anime'
       throw err
@@ -50,8 +74,8 @@ export function useAnime() {
     error.value = null
     try {
       const response = await animeApi.getAll(params)
-      animeList.value = response.data
-      return response.data
+      animeList.value = transformAnimeList(response.data)
+      return animeList.value
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to fetch anime list'
       throw err
@@ -65,8 +89,8 @@ export function useAnime() {
     error.value = null
     try {
       const response = await animeApi.search(query)
-      animeList.value = response.data
-      return response.data
+      animeList.value = transformAnimeList(response.data)
+      return animeList.value
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Search failed'
       throw err
@@ -80,8 +104,8 @@ export function useAnime() {
     error.value = null
     try {
       const response = await animeApi.getTrending()
-      animeList.value = response.data
-      return response.data
+      animeList.value = transformAnimeList(response.data)
+      return animeList.value
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to fetch trending'
       throw err
@@ -95,7 +119,7 @@ export function useAnime() {
     error.value = null
     try {
       const response = await animeApi.getPopular()
-      return response.data
+      return transformAnimeList(response.data)
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to fetch popular'
       throw err
@@ -105,17 +129,18 @@ export function useAnime() {
   }
 
   const fetchEpisodes = async (animeId: string) => {
-    loading.value = true
-    error.value = null
+    // Don't set global loading for episodes - use separate loadingEpisodes in component
     try {
       const response = await episodeApi.getByAnimeId(animeId)
-      episodes.value = response.data
-      return response.data
+      // Extract data array from response wrapper
+      const data = response.data?.data || response.data
+      episodes.value = Array.isArray(data) ? data : []
+      return episodes.value
     } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch episodes'
-      throw err
-    } finally {
-      loading.value = false
+      // Don't set global error for episodes failure
+      console.error('Failed to fetch episodes:', err)
+      episodes.value = []
+      return []
     }
   }
 

@@ -37,23 +37,26 @@ func NewRouter(
 	r.Get("/openapi.json", proxyHandler.GetOpenAPISpec)
 
 	// API routes
-	r.Route("/api/v1", func(r chi.Router) {
+	r.Route("/api", func(r chi.Router) {
 		// Auth service routes (public)
 		r.HandleFunc("/auth/*", proxyHandler.ProxyToAuth)
 
-		// Catalog service routes
-		r.HandleFunc("/catalog/*", proxyHandler.ProxyToCatalog)
+		// Catalog service routes (public)
+		r.HandleFunc("/anime", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/anime/*", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/genres", proxyHandler.ProxyToCatalog)
 
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT))
-			r.HandleFunc("/player/*", proxyHandler.ProxyToPlayer)
+			r.HandleFunc("/users/*", proxyHandler.ProxyToPlayer)
 		})
 
 		// Rooms service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT))
 			r.HandleFunc("/rooms/*", proxyHandler.ProxyToRooms)
+			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
 
 		// Streaming service routes (protected)

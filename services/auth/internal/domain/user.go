@@ -48,9 +48,25 @@ type RefreshRequest struct {
 // AuthResponse represents an authentication response
 type AuthResponse struct {
 	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
+	RefreshToken string    `json:"-"` // Not included in JSON, sent via httpOnly cookie
 	ExpiresAt    time.Time `json:"expires_at"`
 	User         *User     `json:"user"`
+}
+
+// PublicAuthResponse is the response sent to the client (without refresh token)
+type PublicAuthResponse struct {
+	AccessToken string    `json:"access_token"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	User        *User     `json:"user"`
+}
+
+// ToPublicResponse converts AuthResponse to PublicAuthResponse
+func (r *AuthResponse) ToPublicResponse() *PublicAuthResponse {
+	return &PublicAuthResponse{
+		AccessToken: r.AccessToken,
+		ExpiresAt:   r.ExpiresAt,
+		User:        r.User,
+	}
 }
 
 // UpdateUserRequest represents a user update request

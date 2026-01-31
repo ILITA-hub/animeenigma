@@ -183,7 +183,8 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	// Build ORDER BY
 	orderBy := "score DESC"
 	if filters.Sort != "" {
-		column := filters.Sort
+		// Map frontend sort values to database columns
+		column := mapSortColumn(filters.Sort)
 		order := "DESC"
 		if filters.Order == "asc" {
 			order = "ASC"
@@ -233,4 +234,22 @@ func (r *AnimeRepository) SetHasVideo(ctx context.Context, animeID string, hasVi
 	query := `UPDATE anime SET has_video = $1, updated_at = $2 WHERE id = $3`
 	_, err := r.db.ExecContext(ctx, query, hasVideo, time.Now(), animeID)
 	return err
+}
+
+// mapSortColumn maps frontend sort values to database column names
+func mapSortColumn(sort string) string {
+	switch sort {
+	case "popularity":
+		return "score" // Use score as proxy for popularity
+	case "rating":
+		return "score"
+	case "year":
+		return "year"
+	case "title":
+		return "name"
+	case "score", "name", "created_at", "updated_at":
+		return sort // Already valid column names
+	default:
+		return "score" // Default fallback
+	}
 }

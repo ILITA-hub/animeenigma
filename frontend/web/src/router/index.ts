@@ -14,6 +14,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Home' }
   },
   {
+    path: '/auth',
+    name: 'auth',
+    component: () => import('@/views/Auth.vue'),
+    meta: { title: 'Вход' }
+  },
+  {
     path: '/browse',
     name: 'browse',
     component: Browse,

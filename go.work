@@ -1,21 +1,23 @@
-go 1.22
+go 1.24.0
+
+toolchain go1.24.12
 
 use (
-	./libs/logger
-	./libs/tracing
-	./libs/errors
-	./libs/authz
 	./libs/animeparser
-	./libs/videoutils
+	./libs/authz
 	./libs/cache
-	./libs/pagination
-	./libs/httputil
 	./libs/database
+	./libs/errors
+	./libs/httputil
+	./libs/logger
+	./libs/pagination
+	./libs/tracing
+	./libs/videoutils
 	./services/auth
 	./services/catalog
-	./services/streaming
+	./services/gateway
 	./services/player
 	./services/rooms
 	./services/scheduler
-	./services/gateway
+	./services/streaming
 )

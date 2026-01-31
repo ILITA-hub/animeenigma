@@ -71,6 +71,69 @@ func (h *CatalogHandler) BrowseAnime(w http.ResponseWriter, r *http.Request) {
 	httputil.JSONWithMeta(w, http.StatusOK, animes, meta)
 }
 
+// GetTrendingAnime handles getting trending anime
+func (h *CatalogHandler) GetTrendingAnime(w http.ResponseWriter, r *http.Request) {
+	page := pagination.ParseIntParam(r.URL.Query().Get("page"), 1)
+	pageSize := pagination.ParseIntParam(r.URL.Query().Get("page_size"), 20)
+
+	animes, total, err := h.catalogService.GetTrendingAnime(r.Context(), page, pageSize)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	meta := httputil.Meta{
+		Page:       page,
+		PageSize:   pageSize,
+		TotalCount: total,
+		TotalPages: int((total + int64(pageSize) - 1) / int64(pageSize)),
+	}
+
+	httputil.JSONWithMeta(w, http.StatusOK, animes, meta)
+}
+
+// GetPopularAnime handles getting popular anime
+func (h *CatalogHandler) GetPopularAnime(w http.ResponseWriter, r *http.Request) {
+	page := pagination.ParseIntParam(r.URL.Query().Get("page"), 1)
+	pageSize := pagination.ParseIntParam(r.URL.Query().Get("page_size"), 20)
+
+	animes, total, err := h.catalogService.GetPopularAnime(r.Context(), page, pageSize)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	meta := httputil.Meta{
+		Page:       page,
+		PageSize:   pageSize,
+		TotalCount: total,
+		TotalPages: int((total + int64(pageSize) - 1) / int64(pageSize)),
+	}
+
+	httputil.JSONWithMeta(w, http.StatusOK, animes, meta)
+}
+
+// GetRecentAnime handles getting recently added anime
+func (h *CatalogHandler) GetRecentAnime(w http.ResponseWriter, r *http.Request) {
+	page := pagination.ParseIntParam(r.URL.Query().Get("page"), 1)
+	pageSize := pagination.ParseIntParam(r.URL.Query().Get("page_size"), 20)
+
+	animes, total, err := h.catalogService.GetRecentAnime(r.Context(), page, pageSize)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	meta := httputil.Meta{
+		Page:       page,
+		PageSize:   pageSize,
+		TotalCount: total,
+		TotalPages: int((total + int64(pageSize) - 1) / int64(pageSize)),
+	}
+
+	httputil.JSONWithMeta(w, http.StatusOK, animes, meta)
+}
+
 // GetAnime handles getting a single anime
 func (h *CatalogHandler) GetAnime(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
@@ -149,6 +212,133 @@ func (h *CatalogHandler) GetGenres(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.OK(w, genres)
+}
+
+// GetAniboomTranslations gets available translations from Aniboom
+func (h *CatalogHandler) GetAniboomTranslations(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	translations, err := h.catalogService.GetAniboomTranslations(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, translations)
+}
+
+// GetAniboomVideo gets video source URL from Aniboom
+func (h *CatalogHandler) GetAniboomVideo(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeStr := r.URL.Query().Get("episode")
+	translationID := r.URL.Query().Get("translation")
+
+	if episodeStr == "" {
+		httputil.BadRequest(w, "episode number is required")
+		return
+	}
+	if translationID == "" {
+		httputil.BadRequest(w, "translation ID is required")
+		return
+	}
+
+	episode, err := strconv.Atoi(episodeStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid episode number")
+		return
+	}
+
+	source, err := h.catalogService.GetAniboomVideoSource(r.Context(), animeID, episode, translationID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, source)
+}
+
+// GetKodikTranslations gets available translations from Kodik
+func (h *CatalogHandler) GetKodikTranslations(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	translations, err := h.catalogService.GetKodikTranslations(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, translations)
+}
+
+// GetKodikVideo gets video embed link from Kodik
+func (h *CatalogHandler) GetKodikVideo(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeStr := r.URL.Query().Get("episode")
+	translationIDStr := r.URL.Query().Get("translation")
+
+	if episodeStr == "" {
+		httputil.BadRequest(w, "episode number is required")
+		return
+	}
+	if translationIDStr == "" {
+		httputil.BadRequest(w, "translation ID is required")
+		return
+	}
+
+	episode, err := strconv.Atoi(episodeStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid episode number")
+		return
+	}
+
+	translationID, err := strconv.Atoi(translationIDStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid translation ID")
+		return
+	}
+
+	source, err := h.catalogService.GetKodikVideoSource(r.Context(), animeID, episode, translationID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, source)
+}
+
+// SearchKodik searches for anime on Kodik
+func (h *CatalogHandler) SearchKodik(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" || len(query) < 2 {
+		httputil.BadRequest(w, "search query must be at least 2 characters")
+		return
+	}
+
+	results, err := h.catalogService.SearchKodik(r.Context(), query)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, results)
 }
 
 func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {

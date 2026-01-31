@@ -32,9 +32,11 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 // UpdateListEntry updates or creates an anime list entry
 func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *domain.UpdateListRequest) (*domain.AnimeListEntry, error) {
 	entry := &domain.AnimeListEntry{
-		UserID:  userID,
-		AnimeID: req.AnimeID,
-		Status:  req.Status,
+		UserID:     userID,
+		AnimeID:    req.AnimeID,
+		AnimeTitle: req.AnimeTitle,
+		AnimeCover: req.AnimeCover,
+		Status:     req.Status,
 	}
 
 	if req.Score != nil {

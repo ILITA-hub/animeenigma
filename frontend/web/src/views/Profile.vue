@@ -54,7 +54,15 @@
     <div class="max-w-4xl mx-auto px-4">
       <Tabs v-model="activeTab" :tabs="tabs" variant="underline" full-width class="mb-6">
         <template #watchlist>
-          <div v-if="watchlist.length > 0" class="space-y-4">
+          <!-- Loading -->
+          <div v-if="loading" class="flex justify-center py-12">
+            <svg class="w-8 h-8 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+
+          <div v-else-if="watchlistEntries.length > 0" class="space-y-4">
             <!-- Filter Pills -->
             <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
               <button
@@ -66,24 +74,71 @@
                   : 'bg-white/5 text-white/60 border border-transparent hover:text-white'"
                 @click="watchlistFilter = filter.value"
               >
-                {{ $t(`profile.watchlist.${filter.value}`) }}
+                {{ filter.label }}
                 <span class="ml-1 opacity-60">({{ filter.count }})</span>
               </button>
             </div>
 
             <!-- Watchlist Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              <AnimeCardNew
+              <div
                 v-for="anime in filteredWatchlist"
                 :key="anime.id"
-                :anime="anime"
-              />
+                class="relative group"
+              >
+                <router-link :to="`/anime/${anime.id}`" class="block">
+                  <div class="aspect-[2/3] rounded-xl overflow-hidden bg-surface flex items-center justify-center">
+                    <img
+                      v-if="anime.coverImage && anime.coverImage !== '/placeholder.svg'"
+                      :src="anime.coverImage"
+                      :alt="anime.title"
+                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'"
+                    />
+                    <div v-else class="flex flex-col items-center justify-center text-white/30 p-4">
+                      <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span class="text-xs text-center">Нет постера</span>
+                    </div>
+                  </div>
+                  <h3 class="mt-2 text-sm font-medium text-white line-clamp-2">{{ anime.title }}</h3>
+                </router-link>
+
+                <!-- Status dropdown -->
+                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <select
+                    :value="anime.listStatus"
+                    @change="updateAnimeStatus(anime.id, ($event.target as HTMLSelectElement).value)"
+                    @click.prevent
+                    class="bg-black/80 backdrop-blur text-white text-xs rounded px-2 py-1 border border-white/20 cursor-pointer"
+                  >
+                    <option value="watching">Смотрю</option>
+                    <option value="plan_to_watch">Запланировано</option>
+                    <option value="completed">Просмотрено</option>
+                    <option value="on_hold">Отложено</option>
+                    <option value="dropped">Брошено</option>
+                  </select>
+                </div>
+
+                <!-- Remove button -->
+                <button
+                  @click="removeFromList(anime.id)"
+                  class="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-pink-500/80 flex items-center justify-center text-white hover:bg-pink-500"
+                  title="Удалить из списка"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
+
           <div v-else class="text-center py-12">
-            <p class="text-white/50 mb-4">{{ $t('profile.watchlist.empty') || 'Your watchlist is empty' }}</p>
+            <p class="text-white/50 mb-4">Ваш список пуст</p>
             <Button variant="outline" @click="$router.push('/browse')">
-              {{ $t('nav.catalog') }}
+              Перейти в каталог
             </Button>
           </div>
         </template>
@@ -117,18 +172,6 @@
           </div>
         </template>
 
-        <template #favorites>
-          <div v-if="favorites.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            <AnimeCardNew
-              v-for="anime in favorites"
-              :key="anime.id"
-              :anime="anime"
-            />
-          </div>
-          <div v-else class="text-center py-12">
-            <p class="text-white/50">{{ $t('profile.favorites.empty') || 'No favorites yet' }}</p>
-          </div>
-        </template>
 
         <template #settings>
           <div class="space-y-6">
@@ -230,7 +273,21 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button, Tabs } from '@/components/ui'
-import { AnimeCardNew } from '@/components/anime'
+import { userApi } from '@/api/client'
+
+interface WatchlistEntry {
+  id: string
+  user_id: string
+  anime_id: string
+  anime_title: string
+  anime_cover: string
+  status: string
+  score: number
+  episodes: number
+  notes: string
+  created_at: string
+  updated_at: string
+}
 
 interface Anime {
   id: string
@@ -240,7 +297,7 @@ interface Anime {
   releaseYear?: number
   episodes?: number
   genres?: string[]
-  status?: string
+  listStatus?: string
 }
 
 interface HistoryItem {
@@ -259,12 +316,12 @@ const authStore = useAuthStore()
 
 const activeTab = ref('watchlist')
 const watchlistFilter = ref('all')
+const loading = ref(false)
 
 const tabs = [
-  { value: 'watchlist', label: 'Watchlist' },
-  { value: 'history', label: 'History' },
-  { value: 'favorites', label: 'Favorites' },
-  { value: 'settings', label: 'Settings' },
+  { value: 'watchlist', label: 'Мои списки' },
+  { value: 'history', label: 'История' },
+  { value: 'settings', label: 'Настройки' },
 ]
 
 const settings = reactive({
@@ -274,22 +331,45 @@ const settings = reactive({
   defaultQuality: 'auto',
 })
 
-// Mock data
+const watchlistEntries = ref<WatchlistEntry[]>([])
 const watchlist = ref<Anime[]>([])
 const history = ref<HistoryItem[]>([])
-const favorites = ref<Anime[]>([])
 
-const watchlistFilters = computed(() => [
-  { value: 'all', count: watchlist.value.length },
-  { value: 'watching', count: 0 },
-  { value: 'planToWatch', count: 0 },
-  { value: 'completed', count: 0 },
-  { value: 'dropped', count: 0 },
-])
+const statusLabels: Record<string, string> = {
+  all: 'Все',
+  watching: 'Смотрю',
+  plan_to_watch: 'Запланировано',
+  completed: 'Просмотрено',
+  on_hold: 'Отложено',
+  dropped: 'Брошено',
+}
+
+const watchlistFilters = computed(() => {
+  const counts: Record<string, number> = {
+    all: watchlistEntries.value.length,
+    watching: 0,
+    plan_to_watch: 0,
+    completed: 0,
+    on_hold: 0,
+    dropped: 0,
+  }
+
+  watchlistEntries.value.forEach(entry => {
+    if (counts[entry.status] !== undefined) {
+      counts[entry.status]++
+    }
+  })
+
+  return Object.entries(statusLabels).map(([value, label]) => ({
+    value,
+    label,
+    count: counts[value] || 0,
+  }))
+})
 
 const filteredWatchlist = computed(() => {
   if (watchlistFilter.value === 'all') return watchlist.value
-  return watchlist.value.filter((a: Anime) => (a as Anime & { status?: string }).status === watchlistFilter.value)
+  return watchlist.value.filter(a => a.listStatus === watchlistFilter.value)
 })
 
 const userInitials = computed(() => {
@@ -297,6 +377,58 @@ const userInitials = computed(() => {
   if (!username) return '?'
   return username.slice(0, 2).toUpperCase()
 })
+
+const fetchWatchlist = async () => {
+  if (!authStore.isAuthenticated) return
+
+  loading.value = true
+  try {
+    const response = await userApi.getWatchlist()
+    const entries: WatchlistEntry[] = response.data?.data || response.data || []
+    watchlistEntries.value = entries
+
+    // Use stored anime data from watchlist entries
+    const animeList: Anime[] = entries.map(entry => ({
+      id: entry.anime_id,
+      title: entry.anime_title || `Anime ${entry.anime_id}`,
+      coverImage: entry.anime_cover || '',
+      listStatus: entry.status,
+    }))
+
+    watchlist.value = animeList
+  } catch (err) {
+    console.error('Failed to fetch watchlist:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
+const updateAnimeStatus = async (animeId: string, newStatus: string) => {
+  try {
+    await userApi.updateWatchlistStatus(animeId, newStatus)
+    // Update local state
+    const entry = watchlistEntries.value.find(e => e.anime_id === animeId)
+    if (entry) {
+      entry.status = newStatus
+    }
+    const anime = watchlist.value.find(a => a.id === animeId)
+    if (anime) {
+      anime.listStatus = newStatus
+    }
+  } catch (err) {
+    console.error('Failed to update status:', err)
+  }
+}
+
+const removeFromList = async (animeId: string) => {
+  try {
+    await userApi.removeFromWatchlist(animeId)
+    watchlistEntries.value = watchlistEntries.value.filter(e => e.anime_id !== animeId)
+    watchlist.value = watchlist.value.filter(a => a.id !== animeId)
+  } catch (err) {
+    console.error('Failed to remove from list:', err)
+  }
+}
 
 const logout = () => {
   authStore.logout()
@@ -307,5 +439,6 @@ onMounted(async () => {
   if (!authStore.user) {
     await authStore.fetchUser()
   }
+  await fetchWatchlist()
 })
 </script>
