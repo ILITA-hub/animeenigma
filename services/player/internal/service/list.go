@@ -32,11 +32,12 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 // UpdateListEntry updates or creates an anime list entry
 func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *domain.UpdateListRequest) (*domain.AnimeListEntry, error) {
 	entry := &domain.AnimeListEntry{
-		UserID:     userID,
-		AnimeID:    req.AnimeID,
-		AnimeTitle: req.AnimeTitle,
-		AnimeCover: req.AnimeCover,
-		Status:     req.Status,
+		UserID:             userID,
+		AnimeID:            req.AnimeID,
+		AnimeTitle:         req.AnimeTitle,
+		AnimeCover:         req.AnimeCover,
+		Status:             req.Status,
+		AnimeType:          req.AnimeType,
 	}
 
 	if req.Score != nil {
@@ -49,6 +50,26 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 
 	if req.Notes != nil {
 		entry.Notes = *req.Notes
+	}
+
+	if req.Tags != nil {
+		entry.Tags = *req.Tags
+	}
+
+	if req.IsRewatching != nil {
+		entry.IsRewatching = *req.IsRewatching
+	}
+
+	if req.Priority != nil {
+		entry.Priority = *req.Priority
+	}
+
+	if req.AnimeTotalEpisodes != nil {
+		entry.AnimeTotalEpisodes = *req.AnimeTotalEpisodes
+	}
+
+	if req.MalID != nil {
+		entry.MalID = req.MalID
 	}
 
 	// Set timestamps based on status

@@ -16,19 +16,25 @@ type WatchProgress struct {
 }
 
 type AnimeListEntry struct {
-	ID         string     `json:"id" db:"id"`
-	UserID     string     `json:"user_id" db:"user_id"`
-	AnimeID    string     `json:"anime_id" db:"anime_id"`
-	AnimeTitle string     `json:"anime_title" db:"anime_title"`
-	AnimeCover string     `json:"anime_cover" db:"anime_cover"`
-	Status     string     `json:"status" db:"status"` // watching, completed, plan_to_watch, dropped, on_hold
-	Score      int        `json:"score" db:"score"`   // 1-10
-	Episodes   int        `json:"episodes" db:"episodes"`
-	Notes      string     `json:"notes" db:"notes"`
-	StartedAt  *time.Time `json:"started_at,omitempty" db:"started_at"`
-	CompletedAt *time.Time `json:"completed_at,omitempty" db:"completed_at"`
-	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at" db:"updated_at"`
+	ID                 string     `json:"id" db:"id"`
+	UserID             string     `json:"user_id" db:"user_id"`
+	AnimeID            string     `json:"anime_id" db:"anime_id"`
+	AnimeTitle         string     `json:"anime_title" db:"anime_title"`
+	AnimeCover         string     `json:"anime_cover" db:"anime_cover"`
+	Status             string     `json:"status" db:"status"` // watching, completed, plan_to_watch, dropped, on_hold
+	Score              int        `json:"score" db:"score"`   // 1-10
+	Episodes           int        `json:"episodes" db:"episodes"`
+	Notes              string     `json:"notes" db:"notes"`
+	Tags               string     `json:"tags" db:"tags"`
+	IsRewatching       bool       `json:"is_rewatching" db:"is_rewatching"`
+	Priority           string     `json:"priority" db:"priority"` // low, medium, high
+	AnimeType          string     `json:"anime_type" db:"anime_type"`
+	AnimeTotalEpisodes int        `json:"anime_total_episodes" db:"anime_total_episodes"`
+	MalID              *int       `json:"mal_id,omitempty" db:"mal_id"`
+	StartedAt          *time.Time `json:"started_at,omitempty" db:"started_at"`
+	CompletedAt        *time.Time `json:"completed_at,omitempty" db:"completed_at"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type WatchHistory struct {
@@ -48,13 +54,19 @@ type UpdateProgressRequest struct {
 }
 
 type UpdateListRequest struct {
-	AnimeID    string  `json:"anime_id"`
-	AnimeTitle string  `json:"anime_title,omitempty"`
-	AnimeCover string  `json:"anime_cover,omitempty"`
-	Status     string  `json:"status"`
-	Score      *int    `json:"score,omitempty"`
-	Episodes   *int    `json:"episodes,omitempty"`
-	Notes      *string `json:"notes,omitempty"`
+	AnimeID            string  `json:"anime_id"`
+	AnimeTitle         string  `json:"anime_title,omitempty"`
+	AnimeCover         string  `json:"anime_cover,omitempty"`
+	Status             string  `json:"status"`
+	Score              *int    `json:"score,omitempty"`
+	Episodes           *int    `json:"episodes,omitempty"`
+	Notes              *string `json:"notes,omitempty"`
+	Tags               *string `json:"tags,omitempty"`
+	IsRewatching       *bool   `json:"is_rewatching,omitempty"`
+	Priority           *string `json:"priority,omitempty"`
+	AnimeType          string  `json:"anime_type,omitempty"`
+	AnimeTotalEpisodes *int    `json:"anime_total_episodes,omitempty"`
+	MalID              *int    `json:"mal_id,omitempty"`
 }
 
 // Review represents a user review for an anime

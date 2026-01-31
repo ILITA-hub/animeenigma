@@ -29,18 +29,20 @@ func (r *AnimeRepository) Create(ctx context.Context, anime *domain.Anime) error
 	query := `
 		INSERT INTO anime (
 			id, name, name_ru, name_jp, description, year, season, status,
-			episodes_count, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, created_at, updated_at
+			episodes_count, episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on,
+			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
 		)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
 		anime.ID, anime.Name, anime.NameRU, anime.NameJP, anime.Description,
-		anime.Year, anime.Season, anime.Status, anime.EpisodesCount,
+		anime.Year, anime.Season, anime.Status, anime.EpisodesCount, anime.EpisodesAired,
 		anime.EpisodeDuration, anime.Score, anime.PosterURL,
 		anime.ShikimoriID, anime.MALID, anime.AniListID, anime.HasVideo,
+		anime.NextEpisodeAt, anime.AiredOn,
 		anime.CreatedAt, anime.UpdatedAt)
 
 	if err != nil {
@@ -53,8 +55,8 @@ func (r *AnimeRepository) Create(ctx context.Context, anime *domain.Anime) error
 func (r *AnimeRepository) GetByID(ctx context.Context, id string) (*domain.Anime, error) {
 	query := `
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
-			episodes_count, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, created_at, updated_at
+			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		WHERE id = $1
 	`
@@ -74,8 +76,8 @@ func (r *AnimeRepository) GetByID(ctx context.Context, id string) (*domain.Anime
 func (r *AnimeRepository) GetByShikimoriID(ctx context.Context, shikimoriID string) (*domain.Anime, error) {
 	query := `
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
-			episodes_count, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, created_at, updated_at
+			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		WHERE shikimori_id = $1
 	`
@@ -92,6 +94,27 @@ func (r *AnimeRepository) GetByShikimoriID(ctx context.Context, shikimoriID stri
 	return &anime, nil
 }
 
+func (r *AnimeRepository) GetByMALID(ctx context.Context, malID string) (*domain.Anime, error) {
+	query := `
+		SELECT id, name, name_ru, name_jp, description, year, season, status,
+			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+		FROM anime
+		WHERE mal_id = $1
+	`
+
+	var anime domain.Anime
+	err := r.db.GetContext(ctx, &anime, query, malID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found is not an error for this use case
+		}
+		return nil, fmt.Errorf("get anime by mal id: %w", err)
+	}
+
+	return &anime, nil
+}
+
 func (r *AnimeRepository) Update(ctx context.Context, anime *domain.Anime) error {
 	anime.UpdatedAt = time.Now()
 
@@ -99,18 +122,18 @@ func (r *AnimeRepository) Update(ctx context.Context, anime *domain.Anime) error
 		UPDATE anime SET
 			name = $1, name_ru = $2, name_jp = $3, description = $4,
 			year = $5, season = $6, status = $7, episodes_count = $8,
-			episode_duration = $9, score = $10, poster_url = $11,
-			shikimori_id = $12, mal_id = $13, anilist_id = $14,
-			has_video = $15, updated_at = $16
-		WHERE id = $17
+			episodes_aired = $9, episode_duration = $10, score = $11, poster_url = $12,
+			shikimori_id = $13, mal_id = $14, anilist_id = $15,
+			has_video = $16, next_episode_at = $17, aired_on = $18, updated_at = $19
+		WHERE id = $20
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
 		anime.Name, anime.NameRU, anime.NameJP, anime.Description,
-		anime.Year, anime.Season, anime.Status, anime.EpisodesCount,
+		anime.Year, anime.Season, anime.Status, anime.EpisodesCount, anime.EpisodesAired,
 		anime.EpisodeDuration, anime.Score, anime.PosterURL,
 		anime.ShikimoriID, anime.MALID, anime.AniListID, anime.HasVideo,
-		anime.UpdatedAt, anime.ID)
+		anime.NextEpisodeAt, anime.AiredOn, anime.UpdatedAt, anime.ID)
 
 	if err != nil {
 		return fmt.Errorf("update anime: %w", err)
@@ -200,8 +223,8 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 
 	query := fmt.Sprintf(`
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
-			episodes_count, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, created_at, updated_at
+			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		%s
 		ORDER BY %s
@@ -236,6 +259,57 @@ func (r *AnimeRepository) SetHasVideo(ctx context.Context, animeID string, hasVi
 	return err
 }
 
+// GetSchedule returns ongoing anime with next episode dates, grouped by day of week
+func (r *AnimeRepository) GetSchedule(ctx context.Context) ([]*domain.Anime, error) {
+	query := `
+		SELECT id, name, name_ru, name_jp, description, year, season, status,
+			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+		FROM anime
+		WHERE status = 'ongoing' AND next_episode_at IS NOT NULL AND next_episode_at > NOW()
+		ORDER BY next_episode_at ASC
+	`
+
+	var animes []*domain.Anime
+	if err := r.db.SelectContext(ctx, &animes, query); err != nil {
+		return nil, fmt.Errorf("get schedule: %w", err)
+	}
+
+	return animes, nil
+}
+
+// GetOngoingAnime returns all ongoing anime
+func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize int) ([]*domain.Anime, int64, error) {
+	// Count total
+	var total int64
+	countQuery := `SELECT COUNT(*) FROM anime WHERE status = 'ongoing'`
+	if err := r.db.GetContext(ctx, &total, countQuery); err != nil {
+		return nil, 0, fmt.Errorf("count ongoing anime: %w", err)
+	}
+
+	offset := (page - 1) * pageSize
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `
+		SELECT id, name, name_ru, name_jp, description, year, season, status,
+			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+		FROM anime
+		WHERE status = 'ongoing'
+		ORDER BY COALESCE(next_episode_at, '9999-12-31') ASC, score DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	var animes []*domain.Anime
+	if err := r.db.SelectContext(ctx, &animes, query, pageSize, offset); err != nil {
+		return nil, 0, fmt.Errorf("get ongoing anime: %w", err)
+	}
+
+	return animes, total, nil
+}
+
 // mapSortColumn maps frontend sort values to database column names
 func mapSortColumn(sort string) string {
 	switch sort {
@@ -252,4 +326,58 @@ func mapSortColumn(sort string) string {
 	default:
 		return "score" // Default fallback
 	}
+}
+
+// GetPinnedTranslations returns all pinned translations for an anime
+func (r *AnimeRepository) GetPinnedTranslations(ctx context.Context, animeID string) ([]domain.PinnedTranslation, error) {
+	query := `
+		SELECT anime_id, translation_id, translation_title, translation_type, pinned_at
+		FROM pinned_translations
+		WHERE anime_id = $1
+		ORDER BY pinned_at ASC
+	`
+
+	var pinned []domain.PinnedTranslation
+	err := r.db.SelectContext(ctx, &pinned, query, animeID)
+	if err != nil {
+		return nil, fmt.Errorf("get pinned translations: %w", err)
+	}
+
+	return pinned, nil
+}
+
+// PinTranslation pins a translation for an anime
+func (r *AnimeRepository) PinTranslation(ctx context.Context, pin *domain.PinnedTranslation) error {
+	query := `
+		INSERT INTO pinned_translations (anime_id, translation_id, translation_title, translation_type, pinned_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (anime_id, translation_id) DO UPDATE SET
+			translation_title = EXCLUDED.translation_title,
+			translation_type = EXCLUDED.translation_type
+	`
+
+	_, err := r.db.ExecContext(ctx, query,
+		pin.AnimeID, pin.TranslationID, pin.TranslationTitle, pin.TranslationType, time.Now())
+	if err != nil {
+		return fmt.Errorf("pin translation: %w", err)
+	}
+
+	return nil
+}
+
+// UnpinTranslation removes a pinned translation for an anime
+func (r *AnimeRepository) UnpinTranslation(ctx context.Context, animeID string, translationID int) error {
+	query := `DELETE FROM pinned_translations WHERE anime_id = $1 AND translation_id = $2`
+
+	result, err := r.db.ExecContext(ctx, query, animeID, translationID)
+	if err != nil {
+		return fmt.Errorf("unpin translation: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.NotFound("pinned translation not found")
+	}
+
+	return nil
 }

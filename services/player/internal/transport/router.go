@@ -16,6 +16,7 @@ func NewRouter(
 	listHandler *handler.ListHandler,
 	historyHandler *handler.HistoryHandler,
 	reviewHandler *handler.ReviewHandler,
+	malImportHandler *handler.MALImportHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 ) http.Handler {
@@ -54,6 +55,9 @@ func NewRouter(
 
 			// User's reviews
 			r.Get("/reviews", reviewHandler.GetUserReviews)
+
+			// MAL Import
+			r.Post("/import/mal", malImportHandler.ImportMALList)
 		})
 
 		// Anime reviews routes

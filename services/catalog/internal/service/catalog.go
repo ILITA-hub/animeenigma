@@ -153,6 +153,76 @@ func (s *CatalogService) GetAnimeByShikimoriID(ctx context.Context, shikimoriID 
 	return anime, nil
 }
 
+// GetAnimeByMALID gets anime by MAL ID (does not fetch from external)
+func (s *CatalogService) GetAnimeByMALID(ctx context.Context, malID string) (*domain.Anime, error) {
+	existing, err := s.animeRepo.GetByMALID(ctx, malID)
+	if err != nil {
+		return nil, err
+	}
+
+	if existing != nil {
+		s.enrichAnime(ctx, existing)
+		return existing, nil
+	}
+
+	return nil, nil
+}
+
+// RefreshAnimeFromShikimori refreshes anime data from Shikimori
+func (s *CatalogService) RefreshAnimeFromShikimori(ctx context.Context, animeID string) (*domain.Anime, error) {
+	// Get anime from database
+	existing, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+
+	if existing.ShikimoriID == "" {
+		return nil, errors.InvalidInput("anime does not have a shikimori_id")
+	}
+
+	s.log.Infow("refreshing anime from Shikimori",
+		"anime_id", animeID,
+		"shikimori_id", existing.ShikimoriID)
+
+	// Fetch fresh data from Shikimori
+	shikimoriAnime, err := s.shikimoriClient.GetAnimeByID(ctx, existing.ShikimoriID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch from shikimori: %w", err)
+	}
+
+	// Preserve local ID and flags
+	shikimoriAnime.ID = existing.ID
+	shikimoriAnime.HasVideo = existing.HasVideo
+	shikimoriAnime.CreatedAt = existing.CreatedAt
+
+	// Update in database
+	if err := s.animeRepo.Update(ctx, shikimoriAnime); err != nil {
+		return nil, fmt.Errorf("update anime: %w", err)
+	}
+
+	// Update genres
+	for _, genre := range shikimoriAnime.Genres {
+		if err := s.genreRepo.Upsert(ctx, &genre); err != nil {
+			s.log.Warnw("failed to upsert genre", "error", err)
+		}
+	}
+	genreIDs := make([]string, len(shikimoriAnime.Genres))
+	for i, g := range shikimoriAnime.Genres {
+		genreIDs[i] = g.ID
+	}
+	if len(genreIDs) > 0 {
+		if err := s.genreRepo.SetAnimeGenres(ctx, shikimoriAnime.ID, genreIDs); err != nil {
+			s.log.Warnw("failed to set anime genres", "error", err)
+		}
+	}
+
+	// Invalidate cache
+	_ = s.cache.Delete(ctx, cache.KeyAnime(animeID))
+
+	s.enrichAnime(ctx, shikimoriAnime)
+	return shikimoriAnime, nil
+}
+
 // GetSeasonalAnime gets anime for a specific season
 func (s *CatalogService) GetSeasonalAnime(ctx context.Context, year int, season string, page, pageSize int) ([]*domain.Anime, int64, error) {
 	// Try local first
@@ -278,6 +348,34 @@ func (s *CatalogService) GetRecentAnime(ctx context.Context, page, pageSize int)
 	}
 
 	animes, total, err := s.animeRepo.Search(ctx, filters)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	for _, anime := range animes {
+		s.enrichAnime(ctx, anime)
+	}
+
+	return animes, total, nil
+}
+
+// GetSchedule gets anime release schedule (ongoing with next episode dates)
+func (s *CatalogService) GetSchedule(ctx context.Context) ([]*domain.Anime, error) {
+	animes, err := s.animeRepo.GetSchedule(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, anime := range animes {
+		s.enrichAnime(ctx, anime)
+	}
+
+	return animes, nil
+}
+
+// GetOngoingAnime gets all ongoing anime
+func (s *CatalogService) GetOngoingAnime(ctx context.Context, page, pageSize int) ([]*domain.Anime, int64, error) {
+	animes, total, err := s.animeRepo.GetOngoingAnime(ctx, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -646,9 +744,10 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 	result := make([]domain.KodikTranslation, len(translations))
 	for i, t := range translations {
 		result[i] = domain.KodikTranslation{
-			ID:    t.ID,
-			Title: t.Title,
-			Type:  t.Type,
+			ID:            t.ID,
+			Title:         t.Title,
+			Type:          t.Type,
+			EpisodesCount: t.EpisodesCount,
 		}
 	}
 
@@ -761,4 +860,25 @@ func (s *CatalogService) SearchKodik(ctx context.Context, title string) ([]domai
 	}
 
 	return searchResults, nil
+}
+
+// GetPinnedTranslations returns all pinned translations for an anime
+func (s *CatalogService) GetPinnedTranslations(ctx context.Context, animeID string) ([]domain.PinnedTranslation, error) {
+	return s.animeRepo.GetPinnedTranslations(ctx, animeID)
+}
+
+// PinTranslation pins a translation for an anime (admin only)
+func (s *CatalogService) PinTranslation(ctx context.Context, animeID string, req domain.PinTranslationRequest) error {
+	pin := &domain.PinnedTranslation{
+		AnimeID:          animeID,
+		TranslationID:    req.TranslationID,
+		TranslationTitle: req.TranslationTitle,
+		TranslationType:  req.TranslationType,
+	}
+	return s.animeRepo.PinTranslation(ctx, pin)
+}
+
+// UnpinTranslation removes a pinned translation for an anime (admin only)
+func (s *CatalogService) UnpinTranslation(ctx context.Context, animeID string, translationID int) error {
+	return s.animeRepo.UnpinTranslation(ctx, animeID, translationID)
 }
