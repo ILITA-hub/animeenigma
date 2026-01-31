@@ -11,13 +11,12 @@ export interface User {
 }
 
 export interface LoginCredentials {
-  email: string
+  username: string
   password: string
 }
 
 export interface RegisterData {
   username: string
-  email: string
   password: string
 }
 
@@ -26,8 +25,14 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const isRefreshing = ref(false)
 
   const isAuthenticated = computed(() => !!token.value)
+
+  const setToken = (accessToken: string) => {
+    token.value = accessToken
+    localStorage.setItem('token', accessToken)
+  }
 
   const login = async (credentials: LoginCredentials) => {
     loading.value = true
@@ -35,12 +40,12 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await apiClient.post('/auth/login', credentials)
-      token.value = response.data.token
-      user.value = response.data.user
-      localStorage.setItem('token', response.data.token)
+      const data = response.data?.data || response.data
+      setToken(data.access_token)
+      user.value = data.user
       return true
     } catch (err: any) {
-      error.value = err.response?.data?.message || 'Login failed'
+      error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка входа'
       return false
     } finally {
       loading.value = false
@@ -53,19 +58,46 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await apiClient.post('/auth/register', data)
-      token.value = response.data.token
-      user.value = response.data.user
-      localStorage.setItem('token', response.data.token)
+      const respData = response.data?.data || response.data
+      setToken(respData.access_token)
+      user.value = respData.user
       return true
     } catch (err: any) {
-      error.value = err.response?.data?.message || 'Registration failed'
+      error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка регистрации'
       return false
     } finally {
       loading.value = false
     }
   }
 
-  const logout = () => {
+  const refreshAccessToken = async (): Promise<boolean> => {
+    if (isRefreshing.value) {
+      return false
+    }
+
+    isRefreshing.value = true
+    try {
+      // Refresh token is sent automatically via httpOnly cookie
+      const response = await apiClient.post('/auth/refresh')
+      const data = response.data?.data || response.data
+      setToken(data.access_token)
+      user.value = data.user
+      return true
+    } catch {
+      logout()
+      return false
+    } finally {
+      isRefreshing.value = false
+    }
+  }
+
+  const logout = async () => {
+    // Call logout endpoint to clear the httpOnly cookie
+    try {
+      await apiClient.post('/auth/logout')
+    } catch {
+      // Ignore errors, we're logging out anyway
+    }
     user.value = null
     token.value = null
     localStorage.removeItem('token')
@@ -107,10 +139,12 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     error,
     isAuthenticated,
+    isRefreshing,
     login,
     register,
     logout,
     fetchUser,
-    updateProfile
+    updateProfile,
+    refreshAccessToken
   }
 })

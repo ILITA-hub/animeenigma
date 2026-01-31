@@ -32,13 +32,20 @@ func NewRouter(
 	})
 
 	// API routes
-	r.Route("/api/v1", func(r chi.Router) {
+	r.Route("/api", func(r chi.Router) {
 		// Auth routes (public)
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.RefreshToken)
 			r.Post("/logout", authHandler.Logout)
+		})
+
+		// Protected auth routes
+		r.Group(func(r chi.Router) {
+			r.Use(AuthMiddleware(jwtConfig))
+			r.Get("/auth/me", userHandler.GetCurrentUser)
+			r.Patch("/auth/profile", userHandler.UpdateCurrentUser)
 		})
 
 		// User routes

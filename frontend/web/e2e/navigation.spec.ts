@@ -28,7 +28,7 @@ test.describe('Navigation', () => {
     await page.goto('/')
 
     // Desktop nav links should be hidden
-    const desktopNavLinks = page.locator('header .hidden.md\\:flex')
+    const desktopNavLinks = page.locator('header .hidden.md\\:flex').first()
     await expect(desktopNavLinks).toBeHidden()
   })
 })

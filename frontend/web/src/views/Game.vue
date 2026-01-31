@@ -364,7 +364,7 @@ const leaveRoom = async () => {
 }
 
 const connectSocket = (roomId: string) => {
-  const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'
+  const socketUrl = import.meta.env.VITE_SOCKET_URL || ''
   socket.value = io(socketUrl, {
     auth: { token: localStorage.getItem('token') }
   })

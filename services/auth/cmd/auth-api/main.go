@@ -52,7 +52,7 @@ func main() {
 	userService := service.NewUserService(userRepo, log)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(authService, log)
+	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, log)
 	userHandler := handler.NewUserHandler(userService, log)
 
 	// Initialize router

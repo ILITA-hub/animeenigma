@@ -40,19 +40,22 @@ func main() {
 	progressRepo := repo.NewProgressRepository(db)
 	listRepo := repo.NewListRepository(db)
 	historyRepo := repo.NewHistoryRepository(db)
+	reviewRepo := repo.NewReviewRepository(db)
 
 	// Initialize services
 	progressService := service.NewProgressService(progressRepo, log)
 	listService := service.NewListService(listRepo, log)
 	historyService := service.NewHistoryService(historyRepo, log)
+	reviewService := service.NewReviewService(reviewRepo, log)
 
 	// Initialize handlers
 	progressHandler := handler.NewProgressHandler(progressService, log)
 	listHandler := handler.NewListHandler(listService, log)
 	historyHandler := handler.NewHistoryHandler(historyService, log)
+	reviewHandler := handler.NewReviewHandler(reviewService, log)
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, cfg.JWT, log)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, cfg.JWT, log)
 
 	// Create HTTP server
 	srv := &http.Server{

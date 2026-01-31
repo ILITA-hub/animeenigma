@@ -15,6 +15,7 @@ func NewRouter(
 	progressHandler *handler.ProgressHandler,
 	listHandler *handler.ListHandler,
 	historyHandler *handler.HistoryHandler,
+	reviewHandler *handler.ReviewHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 ) http.Handler {
@@ -33,26 +34,41 @@ func NewRouter(
 	})
 
 	// API routes
-	r.Route("/api/v1", func(r chi.Router) {
-		// Protected routes
-		r.Group(func(r chi.Router) {
+	r.Route("/api", func(r chi.Router) {
+		// Protected routes - user data
+		r.Route("/users", func(r chi.Router) {
 			r.Use(AuthMiddleware(jwtConfig))
 
-			// Progress routes
-			r.Route("/progress", func(r chi.Router) {
-				r.Post("/", progressHandler.UpdateProgress)
-				r.Get("/{animeId}", progressHandler.GetProgress)
-			})
+			// Watchlist routes
+			r.Get("/watchlist", listHandler.GetUserList)
+			r.Post("/watchlist", listHandler.AddToList)
+			r.Put("/watchlist", listHandler.UpdateListEntry)
+			r.Delete("/watchlist/{animeId}", listHandler.DeleteListEntry)
 
-			// List routes
-			r.Route("/list", func(r chi.Router) {
-				r.Get("/", listHandler.GetUserList)
-				r.Put("/", listHandler.UpdateListEntry)
-				r.Delete("/{animeId}", listHandler.DeleteListEntry)
-			})
+			// Progress routes
+			r.Post("/progress", progressHandler.UpdateProgress)
+			r.Get("/progress/{animeId}", progressHandler.GetProgress)
 
 			// History routes
 			r.Get("/history", historyHandler.GetWatchHistory)
+
+			// User's reviews
+			r.Get("/reviews", reviewHandler.GetUserReviews)
+		})
+
+		// Anime reviews routes
+		r.Route("/anime/{animeId}", func(r chi.Router) {
+			// Public routes
+			r.Get("/reviews", reviewHandler.GetAnimeReviews)
+			r.Get("/rating", reviewHandler.GetAnimeRating)
+
+			// Protected routes
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(jwtConfig))
+				r.Post("/reviews", reviewHandler.CreateOrUpdateReview)
+				r.Get("/reviews/me", reviewHandler.GetUserReview)
+				r.Delete("/reviews", reviewHandler.DeleteReview)
+			})
 		})
 	})
 

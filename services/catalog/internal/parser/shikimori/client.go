@@ -1,7 +1,9 @@
 package shikimori
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -139,25 +141,115 @@ type shikimoriVideo struct {
 	PlayerURL graphql.String `graphql:"playerUrl"`
 }
 
-// SearchAnime searches for anime on Shikimori
+// SearchAnime searches for anime on Shikimori using raw GraphQL
 func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int) ([]*domain.Anime, error) {
 	c.rateLimiter.acquire()
 
-	var q animeQuery
-	variables := map[string]interface{}{
-		"search": graphql.String(query),
-		"limit":  graphql.Int(limit),
-		"page":   graphql.Int(page),
-		"season": (*graphql.String)(nil),
-		"score":  (*graphql.Int)(nil),
-		"kind":   graphql.String("tv"),
+	gqlQuery := fmt.Sprintf(`{
+		animes(search: "%s", limit: %d, page: %d, kind: "tv") {
+			id name russian japanese description score status episodes duration
+			airedOn { year month day }
+			poster { originalUrl }
+			genres { id name russian }
+		}
+	}`, query, limit, page)
+
+	return c.executeRawQuery(ctx, gqlQuery)
+}
+
+func (c *Client) executeRawQuery(ctx context.Context, query string) ([]*domain.Anime, error) {
+	reqBody := map[string]string{"query": query}
+	jsonBody, _ := json.Marshal(reqBody)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.config.GraphQLURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", c.config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data struct {
+			Animes []rawAnime `json:"animes"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 	}
 
-	if err := c.graphqlClient.Query(ctx, &q, variables); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, errors.ExternalAPI("shikimori", err)
 	}
 
-	return c.mapAnimeList(q.Animes), nil
+	if len(result.Errors) > 0 {
+		return nil, errors.ExternalAPI("shikimori", fmt.Errorf("%s", result.Errors[0].Message))
+	}
+
+	return c.mapRawAnimeList(result.Data.Animes), nil
+}
+
+type rawAnime struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Russian     string  `json:"russian"`
+	Japanese    string  `json:"japanese"`
+	Description string  `json:"description"`
+	Score       float64 `json:"score"`
+	Status      string  `json:"status"`
+	Episodes    int     `json:"episodes"`
+	Duration    int     `json:"duration"`
+	AiredOn     *struct {
+		Year  int `json:"year"`
+		Month int `json:"month"`
+		Day   int `json:"day"`
+	} `json:"airedOn"`
+	Poster *struct {
+		OriginalURL string `json:"originalUrl"`
+	} `json:"poster"`
+	Genres []struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Russian string `json:"russian"`
+	} `json:"genres"`
+}
+
+func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
+	result := make([]*domain.Anime, 0, len(animes))
+	for _, a := range animes {
+		anime := &domain.Anime{
+			ShikimoriID:     a.ID,
+			Name:            a.Name,
+			NameRU:          a.Russian,
+			NameJP:          a.Japanese,
+			Description:     a.Description,
+			Score:           a.Score,
+			Status:          mapStatus(a.Status),
+			EpisodesCount:   a.Episodes,
+			EpisodeDuration: a.Duration,
+		}
+		if a.AiredOn != nil {
+			anime.Year = a.AiredOn.Year
+			anime.Season = detectSeason(a.AiredOn.Month)
+		}
+		if a.Poster != nil {
+			anime.PosterURL = a.Poster.OriginalURL
+		}
+		for _, g := range a.Genres {
+			anime.Genres = append(anime.Genres, domain.Genre{
+				ID:     g.ID,
+				Name:   g.Name,
+				NameRU: g.Russian,
+			})
+		}
+		result = append(result, anime)
+	}
+	return result
 }
 
 // GetAnimeByID fetches a specific anime by Shikimori ID
@@ -179,6 +271,38 @@ func (c *Client) GetAnimeByID(ctx context.Context, shikimoriID string) (*domain.
 
 	animes := c.mapAnimeList(q.Animes)
 	return animes[0], nil
+}
+
+// GetTrendingAnime fetches trending anime (high score, ongoing)
+func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*domain.Anime, error) {
+	c.rateLimiter.acquire()
+
+	gqlQuery := fmt.Sprintf(`{
+		animes(limit: %d, page: %d, status: "ongoing", order: ranked, kind: "tv") {
+			id name russian japanese description score status episodes duration
+			airedOn { year month day }
+			poster { originalUrl }
+			genres { id name russian }
+		}
+	}`, limit, page)
+
+	return c.executeRawQuery(ctx, gqlQuery)
+}
+
+// GetPopularAnime fetches popular anime (all time)
+func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domain.Anime, error) {
+	c.rateLimiter.acquire()
+
+	gqlQuery := fmt.Sprintf(`{
+		animes(limit: %d, page: %d, order: popularity, kind: "tv") {
+			id name russian japanese description score status episodes duration
+			airedOn { year month day }
+			poster { originalUrl }
+			genres { id name russian }
+		}
+	}`, limit, page)
+
+	return c.executeRawQuery(ctx, gqlQuery)
 }
 
 // GetSeasonalAnime fetches anime for a specific season

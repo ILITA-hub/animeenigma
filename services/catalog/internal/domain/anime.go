@@ -90,7 +90,54 @@ type SourceType string
 const (
 	SourceTypeMinio    SourceType = "minio"
 	SourceTypeExternal SourceType = "external"
+	SourceTypeAniboom  SourceType = "aniboom"
+	SourceTypeKodik    SourceType = "kodik"
 )
+
+// AniboomVideoSource represents a video source from Aniboom
+type AniboomVideoSource struct {
+	URL           string `json:"url"`
+	Type          string `json:"type"` // "mpd" or "m3u8"
+	Episode       int    `json:"episode"`
+	Translation   string `json:"translation"`
+	TranslationID string `json:"translation_id"`
+}
+
+// AniboomTranslation represents an available translation/dubbing
+type AniboomTranslation struct {
+	Name          string `json:"name"`
+	TranslationID string `json:"translation_id"`
+}
+
+// KodikTranslation represents an available translation/dubbing from Kodik
+type KodikTranslation struct {
+	ID    int    `json:"id"`
+	Title string `json:"title"`
+	Type  string `json:"type"` // "voice" or "subtitles"
+}
+
+// KodikVideoSource represents a video source from Kodik
+type KodikVideoSource struct {
+	EmbedLink     string `json:"embed_link"`
+	Episode       int    `json:"episode"`
+	TranslationID int    `json:"translation_id"`
+	Translation   string `json:"translation"`
+	Quality       string `json:"quality,omitempty"`
+}
+
+// KodikSearchResult represents a search result from Kodik
+type KodikSearchResult struct {
+	ID            string             `json:"id"`
+	Type          string             `json:"type"`
+	Link          string             `json:"link"`
+	Title         string             `json:"title"`
+	TitleOrig     string             `json:"title_orig"`
+	Year          int                `json:"year"`
+	EpisodesCount int                `json:"episodes_count,omitempty"`
+	ShikimoriID   string             `json:"shikimori_id,omitempty"`
+	Translation   *KodikTranslation  `json:"translation"`
+	Quality       string             `json:"quality"`
+}
 
 // VideoSource is a summary of available video sources for an episode
 type VideoSource struct {

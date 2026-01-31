@@ -33,15 +33,28 @@ func NewRouter(
 	})
 
 	// API routes
-	r.Route("/api/v1", func(r chi.Router) {
+	r.Route("/api", func(r chi.Router) {
 		// Public catalog routes
 		r.Route("/anime", func(r chi.Router) {
+			r.Get("/", catalogHandler.BrowseAnime) // GET /api/anime - default list
 			r.Get("/search", catalogHandler.SearchAnime)
 			r.Get("/browse", catalogHandler.BrowseAnime)
+			r.Get("/trending", catalogHandler.GetTrendingAnime)
+			r.Get("/popular", catalogHandler.GetPopularAnime)
+			r.Get("/recent", catalogHandler.GetRecentAnime)
 			r.Get("/seasonal/{year}/{season}", catalogHandler.GetSeasonalAnime)
 			r.Get("/{animeId}", catalogHandler.GetAnime)
 			r.Get("/{animeId}/episodes", catalogHandler.GetAnimeEpisodes)
+			// Aniboom video sources
+			r.Get("/{animeId}/aniboom/translations", catalogHandler.GetAniboomTranslations)
+			r.Get("/{animeId}/aniboom/video", catalogHandler.GetAniboomVideo)
+			// Kodik video sources
+			r.Get("/{animeId}/kodik/translations", catalogHandler.GetKodikTranslations)
+			r.Get("/{animeId}/kodik/video", catalogHandler.GetKodikVideo)
 		})
+
+		// Kodik search (for finding anime not in our DB)
+		r.Get("/kodik/search", catalogHandler.SearchKodik)
 
 		r.Get("/genres", catalogHandler.GetGenres)
 

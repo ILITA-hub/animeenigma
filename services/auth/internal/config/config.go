@@ -16,6 +16,13 @@ type Config struct {
 	Database database.Config
 	Redis    cache.Config
 	JWT      authz.JWTConfig
+	Cookie   CookieConfig
+}
+
+type CookieConfig struct {
+	Domain   string
+	Secure   bool
+	SameSite string
 }
 
 type ServerConfig struct {
@@ -56,7 +63,21 @@ func Load() (*Config, error) {
 			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
+		Cookie: CookieConfig{
+			Domain:   getEnv("COOKIE_DOMAIN", ""),
+			Secure:   getEnvBool("COOKIE_SECURE", false),
+			SameSite: getEnv("COOKIE_SAMESITE", "Lax"),
+		},
 	}, nil
+}
+
+func getEnvBool(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			return b
+		}
+	}
+	return defaultVal
 }
 
 func getEnv(key, defaultVal string) string {
