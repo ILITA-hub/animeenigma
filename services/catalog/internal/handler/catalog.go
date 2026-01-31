@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -149,6 +150,77 @@ func (h *CatalogHandler) GetAnime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.OK(w, anime)
+}
+
+// GetAnimeByMALID handles getting anime by MAL ID
+func (h *CatalogHandler) GetAnimeByMALID(w http.ResponseWriter, r *http.Request) {
+	malID := chi.URLParam(r, "malId")
+	if malID == "" {
+		httputil.BadRequest(w, "MAL ID is required")
+		return
+	}
+
+	anime, err := h.catalogService.GetAnimeByMALID(r.Context(), malID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if anime == nil {
+		httputil.NotFound(w, "anime not found")
+		return
+	}
+
+	httputil.OK(w, anime)
+}
+
+// RefreshAnime refreshes anime data from Shikimori
+func (h *CatalogHandler) RefreshAnime(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	anime, err := h.catalogService.RefreshAnimeFromShikimori(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, anime)
+}
+
+// GetSchedule handles getting anime release schedule
+func (h *CatalogHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
+	animes, err := h.catalogService.GetSchedule(r.Context())
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, animes)
+}
+
+// GetOngoingAnime handles getting all ongoing anime
+func (h *CatalogHandler) GetOngoingAnime(w http.ResponseWriter, r *http.Request) {
+	page := pagination.ParseIntParam(r.URL.Query().Get("page"), 1)
+	pageSize := pagination.ParseIntParam(r.URL.Query().Get("page_size"), 50)
+
+	animes, total, err := h.catalogService.GetOngoingAnime(r.Context(), page, pageSize)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	meta := httputil.Meta{
+		Page:       page,
+		PageSize:   pageSize,
+		TotalCount: total,
+		TotalPages: int((total + int64(pageSize) - 1) / int64(pageSize)),
+	}
+
+	httputil.JSONWithMeta(w, http.StatusOK, animes, meta)
 }
 
 // GetSeasonalAnime handles getting seasonal anime
@@ -388,4 +460,70 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 	}
 
 	return filters
+}
+
+// GetPinnedTranslations returns pinned translations for an anime
+func (h *CatalogHandler) GetPinnedTranslations(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	pinned, err := h.catalogService.GetPinnedTranslations(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, pinned)
+}
+
+// PinTranslation pins a translation for an anime (admin only)
+func (h *CatalogHandler) PinTranslation(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	var req domain.PinTranslationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+
+	if req.TranslationID == 0 {
+		httputil.BadRequest(w, "translation_id is required")
+		return
+	}
+
+	if err := h.catalogService.PinTranslation(r.Context(), animeID, req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]string{"status": "pinned"})
+}
+
+// UnpinTranslation removes a pinned translation for an anime (admin only)
+func (h *CatalogHandler) UnpinTranslation(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	translationID := pagination.ParseIntParam(chi.URLParam(r, "translationId"), 0)
+	if translationID == 0 {
+		httputil.BadRequest(w, "translation ID is required")
+		return
+	}
+
+	if err := h.catalogService.UnpinTranslation(r.Context(), animeID, translationID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]string{"status": "unpinned"})
 }

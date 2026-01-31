@@ -22,8 +22,10 @@ func NewListRepository(db *database.DB) *ListRepository {
 // Upsert creates or updates an anime list entry
 func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntry) error {
 	query := `
-		INSERT INTO anime_list (id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes, started_at, completed_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO anime_list (id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes,
+			tags, is_rewatching, priority, anime_type, anime_total_episodes, mal_id,
+			started_at, completed_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		ON CONFLICT (user_id, anime_id)
 		DO UPDATE SET
 			anime_title = COALESCE(NULLIF(EXCLUDED.anime_title, ''), anime_list.anime_title),
@@ -31,7 +33,13 @@ func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntr
 			status = EXCLUDED.status,
 			score = EXCLUDED.score,
 			episodes = EXCLUDED.episodes,
-			notes = EXCLUDED.notes,
+			notes = COALESCE(NULLIF(EXCLUDED.notes, ''), anime_list.notes),
+			tags = COALESCE(NULLIF(EXCLUDED.tags, ''), anime_list.tags),
+			is_rewatching = EXCLUDED.is_rewatching,
+			priority = COALESCE(NULLIF(EXCLUDED.priority, ''), anime_list.priority),
+			anime_type = COALESCE(NULLIF(EXCLUDED.anime_type, ''), anime_list.anime_type),
+			anime_total_episodes = CASE WHEN EXCLUDED.anime_total_episodes > 0 THEN EXCLUDED.anime_total_episodes ELSE anime_list.anime_total_episodes END,
+			mal_id = COALESCE(EXCLUDED.mal_id, anime_list.mal_id),
 			started_at = EXCLUDED.started_at,
 			completed_at = EXCLUDED.completed_at,
 			updated_at = EXCLUDED.updated_at
@@ -54,6 +62,12 @@ func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntr
 		entry.Score,
 		entry.Episodes,
 		entry.Notes,
+		entry.Tags,
+		entry.IsRewatching,
+		entry.Priority,
+		entry.AnimeType,
+		entry.AnimeTotalEpisodes,
+		entry.MalID,
 		entry.StartedAt,
 		entry.CompletedAt,
 		entry.CreatedAt,
@@ -65,7 +79,9 @@ func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntr
 // GetByUser returns all anime list entries for a user
 func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
 	query := `
-		SELECT id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes, started_at, completed_at, created_at, updated_at
+		SELECT id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes,
+			tags, is_rewatching, priority, anime_type, anime_total_episodes, mal_id,
+			started_at, completed_at, created_at, updated_at
 		FROM anime_list
 		WHERE user_id = $1
 		ORDER BY updated_at DESC
@@ -82,7 +98,9 @@ func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domai
 // GetByUserAndStatus returns anime list entries for a user filtered by status
 func (r *ListRepository) GetByUserAndStatus(ctx context.Context, userID, status string) ([]*domain.AnimeListEntry, error) {
 	query := `
-		SELECT id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes, started_at, completed_at, created_at, updated_at
+		SELECT id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes,
+			tags, is_rewatching, priority, anime_type, anime_total_episodes, mal_id,
+			started_at, completed_at, created_at, updated_at
 		FROM anime_list
 		WHERE user_id = $1 AND status = $2
 		ORDER BY updated_at DESC

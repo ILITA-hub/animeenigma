@@ -79,8 +79,157 @@
               </button>
             </div>
 
-            <!-- Watchlist Grid -->
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            <!-- View Toggle -->
+            <div class="flex justify-end gap-2">
+              <button
+                class="p-2 rounded-lg transition-colors"
+                :class="viewMode === 'table' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-white/60 hover:text-white'"
+                @click="viewMode = 'table'"
+                title="Table view"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+              </button>
+              <button
+                class="p-2 rounded-lg transition-colors"
+                :class="viewMode === 'grid' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-white/60 hover:text-white'"
+                @click="viewMode = 'grid'"
+                title="Grid view"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- MAL-style Table View -->
+            <div v-if="viewMode === 'table'" class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-white/60 border-b border-white/10">
+                    <th class="pb-3 pr-2 w-8">#</th>
+                    <th class="pb-3 px-2 w-16">Image</th>
+                    <th class="pb-3 px-2">Title</th>
+                    <th class="pb-3 px-2 w-16 text-center">Score</th>
+                    <th class="pb-3 px-2 w-20">Type</th>
+                    <th class="pb-3 px-2 w-24">Progress</th>
+                    <th class="pb-3 px-2 hidden md:table-cell">Tags</th>
+                    <th class="pb-3 pl-2 w-24 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(anime, index) in filteredWatchlist"
+                    :key="anime.id"
+                    class="border-b border-white/5 hover:bg-white/5 transition-colors group"
+                  >
+                    <!-- Number -->
+                    <td class="py-3 pr-2 text-white/40">{{ index + 1 }}</td>
+
+                    <!-- Image -->
+                    <td class="py-3 px-2">
+                      <router-link :to="`/anime/${anime.id}`" class="block w-12 h-16 rounded overflow-hidden bg-surface">
+                        <img
+                          v-if="anime.coverImage && anime.coverImage !== '/placeholder.svg'"
+                          :src="anime.coverImage"
+                          :alt="anime.title"
+                          class="w-full h-full object-cover"
+                          @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'"
+                        />
+                        <div v-else class="w-full h-full flex items-center justify-center text-white/20">
+                          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      </router-link>
+                    </td>
+
+                    <!-- Title -->
+                    <td class="py-3 px-2">
+                      <router-link :to="`/anime/${anime.id}`" class="text-white hover:text-cyan-400 transition-colors font-medium">
+                        {{ anime.title }}
+                      </router-link>
+                      <div v-if="anime.isRewatching" class="text-xs text-cyan-400 mt-0.5">Rewatching</div>
+                    </td>
+
+                    <!-- Score -->
+                    <td class="py-3 px-2 text-center">
+                      <span v-if="anime.score && anime.score > 0" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
+                        {{ anime.score }}
+                      </span>
+                      <span v-else class="text-white/30">-</span>
+                    </td>
+
+                    <!-- Type -->
+                    <td class="py-3 px-2">
+                      <span class="text-white/60 text-xs uppercase">{{ anime.animeType || '-' }}</span>
+                    </td>
+
+                    <!-- Progress -->
+                    <td class="py-3 px-2">
+                      <div class="flex items-center gap-1">
+                        <span class="text-white">{{ anime.episodes || 0 }}</span>
+                        <span class="text-white/40">/</span>
+                        <span class="text-white/60">{{ anime.totalEpisodes || '?' }}</span>
+                      </div>
+                      <div v-if="anime.totalEpisodes && anime.totalEpisodes > 0" class="mt-1 h-1 w-16 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          class="h-full bg-cyan-500 transition-all"
+                          :style="{ width: `${Math.min(100, ((anime.episodes || 0) / anime.totalEpisodes) * 100)}%` }"
+                        />
+                      </div>
+                    </td>
+
+                    <!-- Tags -->
+                    <td class="py-3 px-2 hidden md:table-cell">
+                      <div v-if="anime.tags" class="flex flex-wrap gap-1 max-w-xs">
+                        <span
+                          v-for="tag in anime.tags.split(',').slice(0, 3)"
+                          :key="tag"
+                          class="px-2 py-0.5 rounded-full bg-white/10 text-white/60 text-xs"
+                        >
+                          {{ tag.trim() }}
+                        </span>
+                        <span v-if="anime.tags.split(',').length > 3" class="text-white/40 text-xs">
+                          +{{ anime.tags.split(',').length - 3 }}
+                        </span>
+                      </div>
+                      <span v-else class="text-white/30 text-xs">-</span>
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="py-3 pl-2">
+                      <div class="flex items-center justify-center gap-1">
+                        <select
+                          :value="anime.listStatus"
+                          @change="updateAnimeStatus(anime.id, ($event.target as HTMLSelectElement).value)"
+                          class="bg-white/10 text-white text-xs rounded px-2 py-1 border border-white/10 cursor-pointer hover:border-white/20 focus:outline-none focus:border-cyan-500"
+                        >
+                          <option value="watching">Watching</option>
+                          <option value="plan_to_watch">Plan to Watch</option>
+                          <option value="completed">Completed</option>
+                          <option value="on_hold">On Hold</option>
+                          <option value="dropped">Dropped</option>
+                        </select>
+                        <button
+                          @click="removeFromList(anime.id)"
+                          class="p-1.5 rounded text-white/40 hover:text-pink-400 hover:bg-pink-500/10 transition-colors"
+                          title="Remove from list"
+                        >
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Grid View (original) -->
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               <div
                 v-for="anime in filteredWatchlist"
                 :key="anime.id"
@@ -99,10 +248,16 @@
                       <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <span class="text-xs text-center">Нет постера</span>
+                      <span class="text-xs text-center">No poster</span>
                     </div>
                   </div>
                   <h3 class="mt-2 text-sm font-medium text-white line-clamp-2">{{ anime.title }}</h3>
+                  <div v-if="anime.score && anime.score > 0" class="mt-1 flex items-center gap-1 text-xs text-white/60">
+                    <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ anime.score }}
+                  </div>
                 </router-link>
 
                 <!-- Status dropdown -->
@@ -113,11 +268,11 @@
                     @click.prevent
                     class="bg-black/80 backdrop-blur text-white text-xs rounded px-2 py-1 border border-white/20 cursor-pointer"
                   >
-                    <option value="watching">Смотрю</option>
-                    <option value="plan_to_watch">Запланировано</option>
-                    <option value="completed">Просмотрено</option>
-                    <option value="on_hold">Отложено</option>
-                    <option value="dropped">Брошено</option>
+                    <option value="watching">Watching</option>
+                    <option value="plan_to_watch">Plan to Watch</option>
+                    <option value="completed">Completed</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="dropped">Dropped</option>
                   </select>
                 </div>
 
@@ -125,7 +280,7 @@
                 <button
                   @click="removeFromList(anime.id)"
                   class="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-pink-500/80 flex items-center justify-center text-white hover:bg-pink-500"
-                  title="Удалить из списка"
+                  title="Remove from list"
                 >
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -136,9 +291,9 @@
           </div>
 
           <div v-else class="text-center py-12">
-            <p class="text-white/50 mb-4">Ваш список пуст</p>
+            <p class="text-white/50 mb-4">Your list is empty</p>
             <Button variant="outline" @click="$router.push('/browse')">
-              Перейти в каталог
+              Browse Catalog
             </Button>
           </div>
         </template>
@@ -248,6 +403,47 @@
               </div>
             </div>
 
+            <!-- Import -->
+            <div class="glass-card p-6">
+              <h3 class="text-lg font-semibold text-white mb-4">Import List</h3>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-white/60 text-sm mb-2">MyAnimeList</label>
+                  <div class="flex gap-2">
+                    <input
+                      v-model="malUsername"
+                      type="text"
+                      placeholder="Enter MAL username"
+                      class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
+                      :disabled="malImporting"
+                    />
+                    <Button
+                      variant="primary"
+                      :disabled="!malUsername || malImporting"
+                      @click="importMAL"
+                    >
+                      <svg v-if="malImporting" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {{ malImporting ? 'Importing...' : 'Import' }}
+                    </Button>
+                  </div>
+                  <p class="text-white/40 text-xs mt-2">
+                    Imports your anime list from MyAnimeList. Your profile must be public.
+                  </p>
+                  <div v-if="malImportResult" class="mt-3 p-3 rounded-lg" :class="malImportResult.errors?.length ? 'bg-amber-500/20' : 'bg-green-500/20'">
+                    <p class="text-sm" :class="malImportResult.errors?.length ? 'text-amber-400' : 'text-green-400'">
+                      Imported: {{ malImportResult.imported }} | Skipped: {{ malImportResult.skipped }}
+                    </p>
+                  </div>
+                  <div v-if="malImportError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
+                    <p class="text-sm text-pink-400">{{ malImportError }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Account -->
             <div class="glass-card p-6">
               <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.account') }}</h3>
@@ -285,6 +481,12 @@ interface WatchlistEntry {
   score: number
   episodes: number
   notes: string
+  tags: string
+  is_rewatching: boolean
+  priority: string
+  anime_type: string
+  anime_total_episodes: number
+  mal_id: number | null
   created_at: string
   updated_at: string
 }
@@ -296,8 +498,16 @@ interface Anime {
   rating?: number
   releaseYear?: number
   episodes?: number
+  totalEpisodes?: number
   genres?: string[]
   listStatus?: string
+  score?: number
+  animeType?: string
+  tags?: string
+  isRewatching?: boolean
+  priority?: string
+  notes?: string
+  malId?: number | null
 }
 
 interface HistoryItem {
@@ -316,12 +526,13 @@ const authStore = useAuthStore()
 
 const activeTab = ref('watchlist')
 const watchlistFilter = ref('all')
+const viewMode = ref<'table' | 'grid'>('table')
 const loading = ref(false)
 
 const tabs = [
-  { value: 'watchlist', label: 'Мои списки' },
-  { value: 'history', label: 'История' },
-  { value: 'settings', label: 'Настройки' },
+  { value: 'watchlist', label: 'My Lists' },
+  { value: 'history', label: 'History' },
+  { value: 'settings', label: 'Settings' },
 ]
 
 const settings = reactive({
@@ -335,13 +546,19 @@ const watchlistEntries = ref<WatchlistEntry[]>([])
 const watchlist = ref<Anime[]>([])
 const history = ref<HistoryItem[]>([])
 
+// MAL Import
+const malUsername = ref('')
+const malImporting = ref(false)
+const malImportResult = ref<{ imported: number; skipped: number; errors?: string[] } | null>(null)
+const malImportError = ref<string | null>(null)
+
 const statusLabels: Record<string, string> = {
-  all: 'Все',
-  watching: 'Смотрю',
-  plan_to_watch: 'Запланировано',
-  completed: 'Просмотрено',
-  on_hold: 'Отложено',
-  dropped: 'Брошено',
+  all: 'All',
+  watching: 'Watching',
+  plan_to_watch: 'Plan to Watch',
+  completed: 'Completed',
+  on_hold: 'On Hold',
+  dropped: 'Dropped',
 }
 
 const watchlistFilters = computed(() => {
@@ -393,6 +610,15 @@ const fetchWatchlist = async () => {
       title: entry.anime_title || `Anime ${entry.anime_id}`,
       coverImage: entry.anime_cover || '',
       listStatus: entry.status,
+      score: entry.score,
+      episodes: entry.episodes,
+      totalEpisodes: entry.anime_total_episodes,
+      animeType: entry.anime_type,
+      tags: entry.tags,
+      isRewatching: entry.is_rewatching,
+      priority: entry.priority,
+      notes: entry.notes,
+      malId: entry.mal_id,
     }))
 
     watchlist.value = animeList
@@ -427,6 +653,26 @@ const removeFromList = async (animeId: string) => {
     watchlist.value = watchlist.value.filter(a => a.id !== animeId)
   } catch (err) {
     console.error('Failed to remove from list:', err)
+  }
+}
+
+const importMAL = async () => {
+  if (!malUsername.value) return
+
+  malImporting.value = true
+  malImportResult.value = null
+  malImportError.value = null
+
+  try {
+    const response = await userApi.importMAL(malUsername.value)
+    const data = response.data?.data || response.data
+    malImportResult.value = data
+    // Refresh watchlist after import
+    await fetchWatchlist()
+  } catch (err: any) {
+    malImportError.value = err.response?.data?.message || 'Failed to import list'
+  } finally {
+    malImporting.value = false
   }
 }
 

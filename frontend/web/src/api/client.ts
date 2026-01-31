@@ -110,9 +110,11 @@ export const animeApi = {
   getTrending: () => apiClient.get('/anime/trending'),
   getPopular: () => apiClient.get('/anime/popular'),
   getRecent: () => apiClient.get('/anime/recent'),
-  getOngoing: (limit = 20) => apiClient.get('/anime', { params: { status: 'ongoing', page_size: limit } }),
+  getSchedule: () => apiClient.get('/anime/schedule'),
+  getOngoing: (limit = 20) => apiClient.get('/anime/ongoing', { params: { page_size: limit } }),
   getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'anons', page_size: limit } }),
-  getTop: (limit = 20) => apiClient.get('/anime', { params: { sort: 'score', order: 'desc', page_size: limit } })
+  getTop: (limit = 20) => apiClient.get('/anime', { params: { sort: 'score', order: 'desc', page_size: limit } }),
+  refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`)
 }
 
 export const episodeApi = {
@@ -133,6 +135,7 @@ export const userApi = {
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: any) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
+  importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
 }
 
 export const reviewApi = {
@@ -169,7 +172,16 @@ export const kodikApi = {
     apiClient.get(`/anime/${animeId}/kodik/video`, {
       params: { episode, translation: translationId }
     }),
-  search: (query: string) => apiClient.get('/kodik/search', { params: { q: query } })
+  search: (query: string) => apiClient.get('/kodik/search', { params: { q: query } }),
+  getPinnedTranslations: (animeId: string) => apiClient.get(`/anime/${animeId}/pinned-translations`),
+  pinTranslation: (animeId: string, translationId: number, title: string, type: string) =>
+    apiClient.post(`/anime/${animeId}/pin-translation`, {
+      translation_id: translationId,
+      translation_title: title,
+      translation_type: type
+    }),
+  unpinTranslation: (animeId: string, translationId: number) =>
+    apiClient.delete(`/anime/${animeId}/pin-translation/${translationId}`)
 }
 
 export default apiClient

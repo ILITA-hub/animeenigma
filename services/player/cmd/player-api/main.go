@@ -53,9 +53,10 @@ func main() {
 	listHandler := handler.NewListHandler(listService, log)
 	historyHandler := handler.NewHistoryHandler(historyService, log)
 	reviewHandler := handler.NewReviewHandler(reviewService, log)
+	malImportHandler := handler.NewMALImportHandler(listService, log)
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, cfg.JWT, log)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, cfg.JWT, log)
 
 	// Create HTTP server
 	srv := &http.Server{
