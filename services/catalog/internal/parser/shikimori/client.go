@@ -145,8 +145,9 @@ type shikimoriVideo struct {
 func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int) ([]*domain.Anime, error) {
 	c.rateLimiter.acquire()
 
+	// Don't filter by kind to include TV, ONA, OVA, movies, etc.
 	gqlQuery := fmt.Sprintf(`{
-		animes(search: "%s", limit: %d, page: %d, kind: "tv") {
+		animes(search: "%s", limit: %d, page: %d) {
 			id name russian japanese description score status episodes duration
 			airedOn { year month day }
 			poster { originalUrl }
