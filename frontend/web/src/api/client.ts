@@ -109,7 +109,10 @@ export const animeApi = {
   search: (query: string) => apiClient.get('/anime/search', { params: { q: query } }),
   getTrending: () => apiClient.get('/anime/trending'),
   getPopular: () => apiClient.get('/anime/popular'),
-  getRecent: () => apiClient.get('/anime/recent')
+  getRecent: () => apiClient.get('/anime/recent'),
+  getOngoing: (limit = 20) => apiClient.get('/anime', { params: { status: 'ongoing', page_size: limit } }),
+  getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'anons', page_size: limit } }),
+  getTop: (limit = 20) => apiClient.get('/anime', { params: { sort: 'score', order: 'desc', page_size: limit } })
 }
 
 export const episodeApi = {

@@ -1,198 +1,353 @@
 <template>
-  <div class="min-h-screen">
-    <!-- Hero Section -->
-    <Hero
-      background-image="/images/hero-bg.jpg"
-      @signin="showLoginModal"
-    />
+  <div class="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black">
+    <!-- Header -->
+    <div class="pt-8 pb-6 px-4 lg:px-8 max-w-7xl mx-auto">
+      <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">
+        AnimeEnigma
+      </h1>
+      <p class="text-gray-400">
+        Смотри аниме онлайн бесплатно
+      </p>
+    </div>
 
-    <!-- Main Content -->
-    <div class="relative z-10 -mt-20 space-y-12 pb-12">
-      <!-- Continue Watching (logged in users with history) -->
-      <section v-if="authStore.isAuthenticated && continueWatching.length > 0">
-        <Carousel
-          :items="continueWatching"
-          :title="$t('home.continueWatching')"
-          item-key="id"
+    <!-- Search Bar -->
+    <div class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+      <div class="relative">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Поиск аниме..."
+          class="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all"
+          @keyup.enter="goToSearch"
+        />
+        <button
+          @click="goToSearch"
+          class="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition-colors"
         >
-          <template #default="{ item }">
-            <ContinueCard
-              :anime="(item as ContinueWatchingItem).anime"
-              :current-episode="(item as ContinueWatchingItem).currentEpisode"
-              :total-episodes="(item as ContinueWatchingItem).totalEpisodes"
-              :progress="(item as ContinueWatchingItem).progress"
-            />
-          </template>
-        </Carousel>
-      </section>
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
+      </div>
+    </div>
 
-      <!-- Recommended for You (logged in users) -->
-      <section v-if="authStore.isAuthenticated && recommendedAnime.length > 0">
-        <Carousel
-          :items="recommendedAnime"
-          :title="$t('home.recommended')"
-          see-all-link="/browse?filter=recommended"
-          item-key="id"
-        >
-          <template #default="{ item }">
-            <AnimeCardNew :anime="(item as Anime)" />
-          </template>
-        </Carousel>
-      </section>
+    <!-- Three Columns Layout -->
+    <div class="px-4 lg:px-8 max-w-7xl mx-auto pb-12">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-      <!-- Trending Now -->
-      <section>
-        <Carousel
-          :items="trendingAnime"
-          :title="$t('home.trending')"
-          see-all-link="/browse?sort=trending"
-          item-key="id"
-        >
-          <template #default="{ item }">
-            <AnimeCardNew :anime="(item as Anime)" />
-          </template>
-        </Carousel>
-      </section>
+        <!-- Announcements Column -->
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 class="text-xl font-bold text-white">Анонсы</h2>
+          </div>
 
-      <!-- New Episodes -->
-      <section v-if="newEpisodes.length > 0">
-        <Carousel
-          :items="newEpisodes"
-          :title="$t('home.newEpisodes')"
-          see-all-link="/browse?sort=new"
-          item-key="id"
-        >
-          <template #default="{ item }">
-            <AnimeCardNew :anime="(item as Anime)" />
-          </template>
-        </Carousel>
-      </section>
+          <div v-if="loadingAnnounced" class="space-y-3">
+            <div v-for="i in 5" :key="i" class="animate-pulse">
+              <div class="flex gap-3">
+                <div class="w-16 h-20 bg-white/10 rounded-lg"></div>
+                <div class="flex-1 space-y-2">
+                  <div class="h-4 bg-white/10 rounded w-3/4"></div>
+                  <div class="h-3 bg-white/10 rounded w-1/2"></div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-      <!-- Genres -->
-      <section class="px-4 lg:px-8 max-w-7xl mx-auto">
-        <h2 class="text-xl md:text-2xl font-bold text-white mb-4">
-          {{ $t('home.genres') }}
-        </h2>
-        <div class="flex flex-wrap gap-3">
-          <GenreChip
-            v-for="genre in genres"
-            :key="genre.name"
-            :genre="genre.name"
-            :label="genre.localizedName"
-          />
+          <div v-else class="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
+            <router-link
+              v-for="anime in announcedAnime"
+              :key="anime.id"
+              :to="`/anime/${anime.id}`"
+              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+            >
+              <img
+                :src="anime.poster_url || '/placeholder.svg'"
+                :alt="anime.name_ru || anime.name"
+                class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
+              />
+              <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
+                  {{ anime.name_ru || anime.name }}
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">
+                  {{ anime.year }} {{ anime.season ? `/ ${translateSeason(anime.season)}` : '' }}
+                </p>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+                    Анонс
+                  </span>
+                </div>
+              </div>
+            </router-link>
+
+            <div v-if="announcedAnime.length === 0" class="text-center py-8 text-gray-400">
+              Нет анонсов
+            </div>
+          </div>
         </div>
-      </section>
 
-      <!-- Popular -->
-      <section>
-        <Carousel
-          :items="popularAnime"
-          :title="$t('home.popular')"
-          see-all-link="/browse?sort=popular"
-          item-key="id"
-        >
-          <template #default="{ item }">
-            <AnimeCardNew :anime="(item as Anime)" />
-          </template>
-        </Carousel>
-      </section>
+        <!-- Ongoing Column -->
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 class="text-xl font-bold text-white">Онгоинги</h2>
+          </div>
+
+          <div v-if="loadingOngoing" class="space-y-3">
+            <div v-for="i in 5" :key="i" class="animate-pulse">
+              <div class="flex gap-3">
+                <div class="w-16 h-20 bg-white/10 rounded-lg"></div>
+                <div class="flex-1 space-y-2">
+                  <div class="h-4 bg-white/10 rounded w-3/4"></div>
+                  <div class="h-3 bg-white/10 rounded w-1/2"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
+            <router-link
+              v-for="anime in ongoingAnime"
+              :key="anime.id"
+              :to="`/anime/${anime.id}`"
+              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+            >
+              <img
+                :src="anime.poster_url || '/placeholder.svg'"
+                :alt="anime.name_ru || anime.name"
+                class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
+              />
+              <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
+                  {{ anime.name_ru || anime.name }}
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">
+                  {{ anime.episodes_count ? `${anime.episodes_count} эп.` : '' }}
+                </p>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                    Выходит
+                  </span>
+                  <span v-if="anime.score" class="text-xs text-yellow-400 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ anime.score.toFixed(1) }}
+                  </span>
+                </div>
+              </div>
+            </router-link>
+
+            <div v-if="ongoingAnime.length === 0" class="text-center py-8 text-gray-400">
+              Нет онгоингов
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Anime Column -->
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center">
+              <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+            </div>
+            <h2 class="text-xl font-bold text-white">Топ аниме</h2>
+          </div>
+
+          <div v-if="loadingTop" class="space-y-3">
+            <div v-for="i in 5" :key="i" class="animate-pulse">
+              <div class="flex gap-3">
+                <div class="w-8 h-8 bg-white/10 rounded-full"></div>
+                <div class="w-16 h-20 bg-white/10 rounded-lg"></div>
+                <div class="flex-1 space-y-2">
+                  <div class="h-4 bg-white/10 rounded w-3/4"></div>
+                  <div class="h-3 bg-white/10 rounded w-1/2"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
+            <router-link
+              v-for="(anime, index) in topAnime"
+              :key="anime.id"
+              :to="`/anime/${anime.id}`"
+              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+            >
+              <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
+                   :class="getRankClass(index)">
+                {{ index + 1 }}
+              </div>
+              <img
+                :src="anime.poster_url || '/placeholder.svg'"
+                :alt="anime.name_ru || anime.name"
+                class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
+              />
+              <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
+                  {{ anime.name_ru || anime.name }}
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">
+                  {{ anime.year }} {{ anime.episodes_count ? `/ ${anime.episodes_count} эп.` : '' }}
+                </p>
+                <div class="flex items-center gap-2 mt-1">
+                  <span v-if="anime.score" class="text-xs text-yellow-400 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ anime.score.toFixed(1) }}
+                  </span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">
+                    {{ translateStatus(anime.status) }}
+                  </span>
+                </div>
+              </div>
+            </router-link>
+
+            <div v-if="topAnime.length === 0" class="text-center py-8 text-gray-400">
+              Нет данных
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
-import { useAnime } from '@/composables/useAnime'
-import { Hero } from '@/components/hero'
-import { Carousel } from '@/components/carousel'
-import { AnimeCardNew, ContinueCard, GenreChip } from '@/components/anime'
+import { useRouter } from 'vue-router'
+import { animeApi } from '@/api/client'
 
 interface Anime {
   id: string
-  title: string
-  coverImage: string
-  rating?: number
-  releaseYear?: number
-  episodes?: number
-  status?: string
-  genres?: string[]
-  quality?: string
-}
-
-interface ContinueWatchingItem {
-  id: string
-  anime: Anime
-  currentEpisode: number
-  totalEpisodes: number
-  progress: number
-}
-
-interface Genre {
   name: string
-  localizedName: string
+  name_ru?: string
+  name_jp?: string
+  poster_url?: string
+  score?: number
+  status?: string
+  episodes_count?: number
+  year?: number
+  season?: string
 }
 
-const { locale } = useI18n()
-const authStore = useAuthStore()
-const { fetchTrending, fetchPopular } = useAnime()
+const router = useRouter()
 
-const trendingAnime = ref<Anime[]>([])
-const popularAnime = ref<Anime[]>([])
-const newEpisodes = ref<Anime[]>([])
-const recommendedAnime = ref<Anime[]>([])
-const continueWatching = ref<ContinueWatchingItem[]>([])
+const searchQuery = ref('')
+const announcedAnime = ref<Anime[]>([])
+const ongoingAnime = ref<Anime[]>([])
+const topAnime = ref<Anime[]>([])
 
-const genres = ref<Genre[]>([
-  { name: 'Action', localizedName: locale.value === 'ru' ? 'Экшен' : 'Action' },
-  { name: 'Adventure', localizedName: locale.value === 'ru' ? 'Приключения' : 'Adventure' },
-  { name: 'Comedy', localizedName: locale.value === 'ru' ? 'Комедия' : 'Comedy' },
-  { name: 'Drama', localizedName: locale.value === 'ru' ? 'Драма' : 'Drama' },
-  { name: 'Fantasy', localizedName: locale.value === 'ru' ? 'Фэнтези' : 'Fantasy' },
-  { name: 'Romance', localizedName: locale.value === 'ru' ? 'Романтика' : 'Romance' },
-  { name: 'Sci-Fi', localizedName: locale.value === 'ru' ? 'Научная фантастика' : 'Sci-Fi' },
-  { name: 'Slice of Life', localizedName: locale.value === 'ru' ? 'Повседневность' : 'Slice of Life' },
-  { name: 'Sports', localizedName: locale.value === 'ru' ? 'Спорт' : 'Sports' },
-  { name: 'Supernatural', localizedName: locale.value === 'ru' ? 'Сверхъестественное' : 'Supernatural' },
-  { name: 'Mecha', localizedName: locale.value === 'ru' ? 'Меха' : 'Mecha' },
-  { name: 'Isekai', localizedName: locale.value === 'ru' ? 'Исекай' : 'Isekai' },
-])
+const loadingAnnounced = ref(true)
+const loadingOngoing = ref(true)
+const loadingTop = ref(true)
 
-const showLoginModal = () => {
-  // TODO: Implement login modal
-  console.log('Show login modal')
+const goToSearch = () => {
+  if (searchQuery.value.trim()) {
+    router.push({ path: '/browse', query: { q: searchQuery.value.trim() } })
+  }
+}
+
+const translateSeason = (season: string) => {
+  const seasons: Record<string, string> = {
+    winter: 'Зима',
+    spring: 'Весна',
+    summer: 'Лето',
+    fall: 'Осень'
+  }
+  return seasons[season] || season
+}
+
+const translateStatus = (status?: string) => {
+  if (!status) return ''
+  const statuses: Record<string, string> = {
+    released: 'Вышло',
+    ongoing: 'Выходит',
+    anons: 'Анонс'
+  }
+  return statuses[status] || status
+}
+
+const getRankClass = (index: number) => {
+  if (index === 0) return 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-black'
+  if (index === 1) return 'bg-gradient-to-br from-gray-300 to-gray-500 text-black'
+  if (index === 2) return 'bg-gradient-to-br from-amber-600 to-amber-800 text-white'
+  return 'bg-white/10 text-gray-400'
 }
 
 onMounted(async () => {
+  // Fetch announced anime
   try {
-    // Fetch anime data
-    const [trending, popular] = await Promise.all([
-      fetchTrending(),
-      fetchPopular(),
-    ])
-
-    trendingAnime.value = trending || []
-    popularAnime.value = popular || []
-
-    // Mock new episodes (would come from API)
-    newEpisodes.value = trending?.slice(0, 10) || []
-
-    // Mock recommended for authenticated users
-    if (authStore.isAuthenticated) {
-      recommendedAnime.value = popular?.slice(0, 10) || []
-
-      // Mock continue watching
-      continueWatching.value = trending?.slice(0, 5).map((anime: Anime, index: number) => ({
-        id: `cw-${anime.id}`,
-        anime,
-        currentEpisode: index + 1,
-        totalEpisodes: 12,
-        progress: Math.floor(Math.random() * 80) + 10,
-      })) || []
-    }
+    const response = await animeApi.getAnnounced(15)
+    announcedAnime.value = response.data?.data || []
   } catch (err) {
-    console.error('Failed to load anime data:', err)
+    console.error('Failed to load announced anime:', err)
+  } finally {
+    loadingAnnounced.value = false
+  }
+
+  // Fetch ongoing anime
+  try {
+    const response = await animeApi.getOngoing(15)
+    ongoingAnime.value = response.data?.data || []
+  } catch (err) {
+    console.error('Failed to load ongoing anime:', err)
+  } finally {
+    loadingOngoing.value = false
+  }
+
+  // Fetch top anime
+  try {
+    const response = await animeApi.getTop(15)
+    topAnime.value = response.data?.data || []
+  } catch (err) {
+    console.error('Failed to load top anime:', err)
+  } finally {
+    loadingTop.value = false
   }
 })
 </script>
+
+<style scoped>
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>
