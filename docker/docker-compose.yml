@@ -5,23 +5,23 @@ services:
   # Infrastructure
   # =============================================================================
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: animeenigma-postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: animeenigma
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: animeenigma-postgres
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_DB: animeenigma
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
 
   redis:
     image: redis:7-alpine
@@ -108,18 +108,18 @@ services:
     container_name: animeenigma-auth
     environment:
       SERVER_PORT: 8080
-      DB_HOST: postgres
+      DB_HOST: 172.29.0.8
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: animeenigma_auth
       REDIS_HOST: redis
       JWT_SECRET: dev-secret-change-in-production
+      COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: Lax
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -130,7 +130,7 @@ services:
     container_name: animeenigma-catalog
     environment:
       SERVER_PORT: 8081
-      DB_HOST: postgres
+      DB_HOST: 172.29.0.8
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
@@ -141,8 +141,6 @@ services:
     ports:
       - "8081:8081"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -176,7 +174,7 @@ services:
     container_name: animeenigma-player
     environment:
       SERVER_PORT: 8083
-      DB_HOST: postgres
+      DB_HOST: 172.29.0.8
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
@@ -186,8 +184,6 @@ services:
     ports:
       - "8083:8083"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -213,7 +209,7 @@ services:
     container_name: animeenigma-scheduler
     environment:
       SERVER_PORT: 8085
-      DB_HOST: postgres
+      DB_HOST: 172.29.0.8
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
@@ -223,8 +219,6 @@ services:
     ports:
       - "8085:8085"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -238,12 +232,11 @@ services:
       dockerfile: Dockerfile
     container_name: animeenigma-web
     ports:
-      - "3000:80"
+      - "3003:80"
     depends_on:
       - gateway
 
 volumes:
-  postgres_data:
   redis_data:
   minio_data:
   nats_data:
