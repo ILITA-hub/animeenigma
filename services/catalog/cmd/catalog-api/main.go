@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
@@ -66,8 +67,11 @@ func main() {
 	catalogHandler := handler.NewCatalogHandler(catalogService, log)
 	adminHandler := handler.NewAdminHandler(catalogService, log)
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("catalog")
+
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, cfg, log)
+	router := transport.NewRouter(catalogHandler, adminHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

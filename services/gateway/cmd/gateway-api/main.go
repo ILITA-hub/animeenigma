@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/service"
@@ -32,8 +33,11 @@ func main() {
 	// Initialize handlers
 	proxyHandler := handler.NewProxyHandler(proxyService, log)
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("gateway")
+
 	// Initialize router
-	router := transport.NewRouter(proxyHandler, cfg, log)
+	router := transport.NewRouter(proxyHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

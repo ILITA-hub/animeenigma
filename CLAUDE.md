@@ -251,6 +251,59 @@ make migrate-down
 - Don't use ORM magic - write explicit SQL
 - Don't add complex abstractions for simple operations
 
+## Service Ports
+
+| Service    | Port | Metrics   | Description                    |
+|------------|------|-----------|--------------------------------|
+| gateway    | 8000 | /metrics  | API gateway, rate limiting     |
+| auth       | 8080 | /metrics  | Authentication, JWT            |
+| catalog    | 8081 | /metrics  | Anime catalog, Shikimori API   |
+| streaming  | 8082 | /metrics  | Video streaming, MinIO         |
+| player     | 8083 | /metrics  | Watch progress, watchlists     |
+| rooms      | 8084 | /metrics  | Game rooms, WebSocket          |
+| scheduler  | 8085 | /metrics  | Background jobs                |
+| web        | 80   | -         | Vue 3 frontend (nginx)         |
+
+### Gateway Routing
+
+All API requests go through the gateway service:
+
+- `/api/auth/*` → auth:8080
+- `/api/anime/*` → catalog:8081
+- `/api/genres` → catalog:8081
+- `/api/kodik/*` → catalog:8081
+- `/api/admin/*` → catalog:8081 (protected)
+- `/api/streaming/*` → streaming:8082
+- `/api/users/*` → player:8083
+- `/api/rooms/*` → rooms:8084
+- `/api/game/*` → rooms:8084
+
+### Monitoring Endpoints
+
+Each service exposes Prometheus metrics at `/metrics`:
+
+```bash
+# Check gateway metrics
+curl http://localhost:8000/metrics
+
+# Check catalog latency percentiles
+curl http://localhost:8081/metrics | grep http_request_duration_seconds
+```
+
+Available metrics:
+- `http_requests_total` - Counter with labels: service, method, path, status
+- `http_request_duration_seconds` - Histogram for p50/p95/p99 latencies
+- `http_response_size_bytes` - Response size histogram
+
+### Admin URLs (Kubernetes)
+
+When deployed to Kubernetes, admin interfaces are available at:
+
+- `https://admin.animeenigma.com/grafana` - Grafana dashboards
+- `https://admin.animeenigma.com/prometheus` - Prometheus raw metrics
+- `https://admin.animeenigma.com/pgadmin` - PostgreSQL admin
+- `https://admin.animeenigma.com/k8s` - Kubernetes dashboard
+
 ## File Locations
 
 - Shared libraries: `/libs/`
@@ -258,3 +311,4 @@ make migrate-down
 - Service code: `/services/{name}/`
 - Frontend: `/frontend/web/`
 - Infrastructure: `/docker/`, `/deploy/`, `/infra/`
+- Kubernetes manifests: `/deploy/kustomize/`

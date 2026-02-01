@@ -6,26 +6,30 @@ import (
 
 // Anime represents an anime in the catalog
 type Anime struct {
-	ID              string       `db:"id" json:"id"`
-	Name            string       `db:"name" json:"name"`
-	NameRU          string       `db:"name_ru" json:"name_ru,omitempty"`
-	NameJP          string       `db:"name_jp" json:"name_jp,omitempty"`
-	Description     string       `db:"description" json:"description,omitempty"`
-	Year            int          `db:"year" json:"year,omitempty"`
-	Season          string       `db:"season" json:"season,omitempty"`
-	Status          AnimeStatus  `db:"status" json:"status"`
-	EpisodesCount   int          `db:"episodes_count" json:"episodes_count"`
-	EpisodeDuration int          `db:"episode_duration" json:"episode_duration,omitempty"`
-	Score           float64      `db:"score" json:"score,omitempty"`
-	PosterURL       string       `db:"poster_url" json:"poster_url,omitempty"`
-	ShikimoriID     string       `db:"shikimori_id" json:"shikimori_id,omitempty"`
-	MALID           string       `db:"mal_id" json:"mal_id,omitempty"`
-	AniListID       string       `db:"anilist_id" json:"anilist_id,omitempty"`
-	HasVideo        bool         `db:"has_video" json:"has_video"`
-	Genres          []Genre      `json:"genres,omitempty"`
+	ID              string        `db:"id" json:"id"`
+	Name            string        `db:"name" json:"name"`
+	NameRU          string        `db:"name_ru" json:"name_ru,omitempty"`
+	NameJP          string        `db:"name_jp" json:"name_jp,omitempty"`
+	Description     string        `db:"description" json:"description,omitempty"`
+	Year            int           `db:"year" json:"year,omitempty"`
+	Season          string        `db:"season" json:"season,omitempty"`
+	Status          AnimeStatus   `db:"status" json:"status"`
+	EpisodesCount   int           `db:"episodes_count" json:"episodes_count"`
+	EpisodesAired   int           `db:"episodes_aired" json:"episodes_aired,omitempty"`
+	EpisodeDuration int           `db:"episode_duration" json:"episode_duration,omitempty"`
+	Score           float64       `db:"score" json:"score,omitempty"`
+	PosterURL       string        `db:"poster_url" json:"poster_url,omitempty"`
+	ShikimoriID     string        `db:"shikimori_id" json:"shikimori_id,omitempty"`
+	MALID           string        `db:"mal_id" json:"mal_id,omitempty"`
+	AniListID       string        `db:"anilist_id" json:"anilist_id,omitempty"`
+	HasVideo        bool          `db:"has_video" json:"has_video"`
+	Hidden          bool          `db:"hidden" json:"hidden"`
+	NextEpisodeAt   *time.Time    `db:"next_episode_at" json:"next_episode_at,omitempty"`
+	AiredOn         *time.Time    `db:"aired_on" json:"aired_on,omitempty"`
+	Genres          []Genre       `json:"genres,omitempty"`
 	VideoSources    []VideoSource `json:"video_sources,omitempty"`
-	CreatedAt       time.Time    `db:"created_at" json:"created_at"`
-	UpdatedAt       time.Time    `db:"updated_at" json:"updated_at"`
+	CreatedAt       time.Time     `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time     `db:"updated_at" json:"updated_at"`
 }
 
 // AnimeStatus represents the airing status
@@ -111,9 +115,27 @@ type AniboomTranslation struct {
 
 // KodikTranslation represents an available translation/dubbing from Kodik
 type KodikTranslation struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Type  string `json:"type"` // "voice" or "subtitles"
+	ID            int    `json:"id"`
+	Title         string `json:"title"`
+	Type          string `json:"type"`           // "voice" or "subtitles"
+	EpisodesCount int    `json:"episodes_count"` // Number of available episodes for this translation
+	Pinned        bool   `json:"pinned"`         // Whether this translation is pinned for this anime
+}
+
+// PinnedTranslation represents a pinned translation for an anime
+type PinnedTranslation struct {
+	AnimeID          string    `db:"anime_id" json:"anime_id"`
+	TranslationID    int       `db:"translation_id" json:"translation_id"`
+	TranslationTitle string    `db:"translation_title" json:"translation_title"`
+	TranslationType  string    `db:"translation_type" json:"translation_type"`
+	PinnedAt         time.Time `db:"pinned_at" json:"pinned_at"`
+}
+
+// PinTranslationRequest for pinning a translation
+type PinTranslationRequest struct {
+	TranslationID    int    `json:"translation_id" validate:"required"`
+	TranslationTitle string `json:"translation_title"`
+	TranslationType  string `json:"translation_type"`
 }
 
 // KodikVideoSource represents a video source from Kodik

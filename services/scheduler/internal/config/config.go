@@ -31,6 +31,7 @@ type JobsConfig struct {
 	CleanupCron         string
 	ShikimoriAPIURL     string
 	ShikimoriAppName    string
+	CatalogServiceURL   string
 	DataRetentionDays   int
 }
 
@@ -62,6 +63,7 @@ func Load() (*Config, error) {
 			CleanupCron:        getEnv("CLEANUP_CRON", "0 3 * * 0"),        // Weekly on Sunday at 3 AM
 			ShikimoriAPIURL:    getEnv("SHIKIMORI_API_URL", "https://shikimori.one/api"),
 			ShikimoriAppName:   getEnv("SHIKIMORI_APP_NAME", "AnimeEnigma"),
+			CatalogServiceURL:  getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
 			DataRetentionDays:  getEnvInt("DATA_RETENTION_DAYS", 90),
 		},
 	}, nil

@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/jobs"
@@ -60,8 +61,11 @@ func main() {
 	// Initialize handlers
 	jobHandler := handler.NewJobHandler(jobService, log)
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("scheduler")
+
 	// Initialize router
-	router := transport.NewRouter(jobHandler, log)
+	router := transport.NewRouter(jobHandler, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

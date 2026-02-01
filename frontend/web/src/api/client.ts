@@ -112,7 +112,7 @@ export const animeApi = {
   getRecent: () => apiClient.get('/anime/recent'),
   getSchedule: () => apiClient.get('/anime/schedule'),
   getOngoing: (limit = 20) => apiClient.get('/anime/ongoing', { params: { page_size: limit } }),
-  getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'anons', page_size: limit } }),
+  getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'announced', page_size: limit } }),
   getTop: (limit = 20) => apiClient.get('/anime', { params: { sort: 'score', order: 'desc', page_size: limit } }),
   refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`)
 }
@@ -127,15 +127,26 @@ export const userApi = {
   getProfile: () => apiClient.get('/users/profile'),
   updateProfile: (data: any) => apiClient.patch('/users/profile', data),
   getWatchlist: (status?: string) => apiClient.get('/users/watchlist', { params: status ? { status } : {} }),
-  addToWatchlist: (animeId: string, status: string = 'plan_to_watch', animeTitle?: string, animeCover?: string) =>
-    apiClient.post('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover }),
-  updateWatchlistStatus: (animeId: string, status: string, animeTitle?: string, animeCover?: string) =>
-    apiClient.put('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover }),
+  getWatchlistEntry: (animeId: string) => apiClient.get(`/users/watchlist/${animeId}`),
+  addToWatchlist: (animeId: string, status: string = 'plan_to_watch', animeTitle?: string, animeCover?: string, animeTotalEpisodes?: number) =>
+    apiClient.post('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover, anime_total_episodes: animeTotalEpisodes }),
+  updateWatchlistStatus: (animeId: string, status: string, animeTitle?: string, animeCover?: string, animeTotalEpisodes?: number) =>
+    apiClient.put('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover, anime_total_episodes: animeTotalEpisodes }),
   removeFromWatchlist: (animeId: string) => apiClient.delete(`/users/watchlist/${animeId}`),
+  markEpisodeWatched: (animeId: string, episode: number) => apiClient.post(`/users/watchlist/${animeId}/episode`, { episode }),
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: any) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
+}
+
+export const adminApi = {
+  // Hide/unhide anime globally
+  hideAnime: (animeId: string) => apiClient.post(`/admin/anime/${animeId}/hide`),
+  unhideAnime: (animeId: string) => apiClient.delete(`/admin/anime/${animeId}/hide`),
+  // Update shikimori_id
+  updateShikimoriId: (animeId: string, shikimoriId: string) =>
+    apiClient.patch(`/admin/anime/${animeId}/shikimori`, { shikimori_id: shikimoriId }),
 }
 
 export const reviewApi = {

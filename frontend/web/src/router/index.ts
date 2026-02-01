@@ -50,6 +50,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Profile', requiresAuth: true }
   },
   {
+    path: '/schedule',
+    name: 'schedule',
+    component: () => import('@/views/Schedule.vue'),
+    meta: { title: 'Расписание' }
+  },
+  {
     path: '/game',
     name: 'game',
     component: Game,

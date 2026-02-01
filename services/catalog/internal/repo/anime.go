@@ -56,7 +56,7 @@ func (r *AnimeRepository) GetByID(ctx context.Context, id string) (*domain.Anime
 	query := `
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
 			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+			shikimori_id, mal_id, anilist_id, has_video, COALESCE(hidden, false) as hidden, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		WHERE id = $1
 	`
@@ -77,7 +77,7 @@ func (r *AnimeRepository) GetByShikimoriID(ctx context.Context, shikimoriID stri
 	query := `
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
 			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+			shikimori_id, mal_id, anilist_id, has_video, COALESCE(hidden, false) as hidden, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		WHERE shikimori_id = $1
 	`
@@ -98,7 +98,7 @@ func (r *AnimeRepository) GetByMALID(ctx context.Context, malID string) (*domain
 	query := `
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
 			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+			shikimori_id, mal_id, anilist_id, has_video, COALESCE(hidden, false) as hidden, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		WHERE mal_id = $1
 	`
@@ -152,6 +152,9 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	var args []interface{}
 	argIndex := 1
 
+	// Always filter out hidden anime for public searches
+	conditions = append(conditions, "(hidden = false OR hidden IS NULL)")
+
 	// Build WHERE conditions
 	if filters.Query != "" {
 		conditions = append(conditions, fmt.Sprintf(
@@ -191,10 +194,7 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 		argIndex++
 	}
 
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
-	}
+	whereClause := "WHERE " + strings.Join(conditions, " AND ")
 
 	// Count total
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM anime %s", whereClause)
@@ -224,7 +224,7 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	query := fmt.Sprintf(`
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
 			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+			shikimori_id, mal_id, anilist_id, has_video, COALESCE(hidden, false) as hidden, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		%s
 		ORDER BY %s
@@ -259,14 +259,62 @@ func (r *AnimeRepository) SetHasVideo(ctx context.Context, animeID string, hasVi
 	return err
 }
 
+// SetHidden sets the hidden status of an anime
+func (r *AnimeRepository) SetHidden(ctx context.Context, animeID string, hidden bool) error {
+	query := `UPDATE anime SET hidden = $1, updated_at = $2 WHERE id = $3`
+	result, err := r.db.ExecContext(ctx, query, hidden, time.Now(), animeID)
+	if err != nil {
+		return fmt.Errorf("set hidden: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return errors.NotFound("anime")
+	}
+	return nil
+}
+
+// GetHiddenAnime returns all hidden anime (for admin view)
+func (r *AnimeRepository) GetHiddenAnime(ctx context.Context) ([]*domain.Anime, error) {
+	query := `
+		SELECT id, name, name_ru, name_jp, description, year, season, status,
+			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
+			shikimori_id, mal_id, anilist_id, has_video, COALESCE(hidden, false) as hidden, next_episode_at, aired_on, created_at, updated_at
+		FROM anime
+		WHERE hidden = true
+		ORDER BY updated_at DESC
+	`
+
+	var animes []*domain.Anime
+	if err := r.db.SelectContext(ctx, &animes, query); err != nil {
+		return nil, fmt.Errorf("get hidden anime: %w", err)
+	}
+
+	return animes, nil
+}
+
+// UpdateShikimoriID updates the shikimori_id for an anime
+func (r *AnimeRepository) UpdateShikimoriID(ctx context.Context, animeID string, shikimoriID string) error {
+	query := `UPDATE anime SET shikimori_id = $1, updated_at = $2 WHERE id = $3`
+	result, err := r.db.ExecContext(ctx, query, shikimoriID, time.Now(), animeID)
+	if err != nil {
+		return fmt.Errorf("update shikimori_id: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return errors.NotFound("anime")
+	}
+	return nil
+}
+
 // GetSchedule returns ongoing anime with next episode dates, grouped by day of week
 func (r *AnimeRepository) GetSchedule(ctx context.Context) ([]*domain.Anime, error) {
 	query := `
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
 			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+			shikimori_id, mal_id, anilist_id, has_video, COALESCE(hidden, false) as hidden, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
 		WHERE status = 'ongoing' AND next_episode_at IS NOT NULL AND next_episode_at > NOW()
+			AND (hidden = false OR hidden IS NULL)
 		ORDER BY next_episode_at ASC
 	`
 
@@ -282,7 +330,7 @@ func (r *AnimeRepository) GetSchedule(ctx context.Context) ([]*domain.Anime, err
 func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize int) ([]*domain.Anime, int64, error) {
 	// Count total
 	var total int64
-	countQuery := `SELECT COUNT(*) FROM anime WHERE status = 'ongoing'`
+	countQuery := `SELECT COUNT(*) FROM anime WHERE status = 'ongoing' AND (hidden = false OR hidden IS NULL)`
 	if err := r.db.GetContext(ctx, &total, countQuery); err != nil {
 		return nil, 0, fmt.Errorf("count ongoing anime: %w", err)
 	}
@@ -295,9 +343,9 @@ func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize in
 	query := `
 		SELECT id, name, name_ru, name_jp, description, year, season, status,
 			episodes_count, COALESCE(episodes_aired, 0) as episodes_aired, episode_duration, score, poster_url,
-			shikimori_id, mal_id, anilist_id, has_video, next_episode_at, aired_on, created_at, updated_at
+			shikimori_id, mal_id, anilist_id, has_video, COALESCE(hidden, false) as hidden, next_episode_at, aired_on, created_at, updated_at
 		FROM anime
-		WHERE status = 'ongoing'
+		WHERE status = 'ongoing' AND (hidden = false OR hidden IS NULL)
 		ORDER BY COALESCE(next_episode_at, '9999-12-31') ASC, score DESC
 		LIMIT $1 OFFSET $2
 	`

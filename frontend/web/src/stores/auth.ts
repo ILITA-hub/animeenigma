@@ -20,14 +20,47 @@ export interface RegisterData {
   password: string
 }
 
+export interface TelegramAuthData {
+  id: number
+  first_name: string
+  last_name?: string
+  username?: string
+  photo_url?: string
+  auth_date: number
+  hash: string
+}
+
+// Helper to safely parse user from localStorage
+function loadUserFromStorage(): User | null {
+  try {
+    const stored = localStorage.getItem('user')
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    localStorage.removeItem('user')
+  }
+  return null
+}
+
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
+  const user = ref<User | null>(loadUserFromStorage())
   const token = ref<string | null>(localStorage.getItem('token'))
   const loading = ref(false)
   const error = ref<string | null>(null)
   const isRefreshing = ref(false)
 
   const isAuthenticated = computed(() => !!token.value)
+  const isAdmin = computed(() => user.value?.role === 'admin')
+
+  const setUser = (userData: User | null) => {
+    user.value = userData
+    if (userData) {
+      localStorage.setItem('user', JSON.stringify(userData))
+    } else {
+      localStorage.removeItem('user')
+    }
+  }
 
   const setToken = (accessToken: string) => {
     token.value = accessToken
@@ -42,7 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiClient.post('/auth/login', credentials)
       const data = response.data?.data || response.data
       setToken(data.access_token)
-      user.value = data.user
+      setUser(data.user)
       return true
     } catch (err: any) {
       error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка входа'
@@ -60,7 +93,7 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiClient.post('/auth/register', data)
       const respData = response.data?.data || response.data
       setToken(respData.access_token)
-      user.value = respData.user
+      setUser(respData.user)
       return true
     } catch (err: any) {
       error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка регистрации'
@@ -81,13 +114,33 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiClient.post('/auth/refresh')
       const data = response.data?.data || response.data
       setToken(data.access_token)
-      user.value = data.user
+      if (data.user) {
+        setUser(data.user)
+      }
       return true
     } catch {
       logout()
       return false
     } finally {
       isRefreshing.value = false
+    }
+  }
+
+  const loginWithTelegram = async (telegramData: TelegramAuthData) => {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await apiClient.post('/auth/telegram', telegramData)
+      const data = response.data?.data || response.data
+      setToken(data.access_token)
+      setUser(data.user)
+      return true
+    } catch (err: any) {
+      error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка входа через Telegram'
+      return false
+    } finally {
+      loading.value = false
     }
   }
 
@@ -98,7 +151,7 @@ export const useAuthStore = defineStore('auth', () => {
     } catch {
       // Ignore errors, we're logging out anyway
     }
-    user.value = null
+    setUser(null)
     token.value = null
     localStorage.removeItem('token')
   }
@@ -109,8 +162,9 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       const response = await apiClient.get('/auth/me')
-      user.value = response.data
-    } catch (err) {
+      const userData = response.data?.data || response.data
+      setUser(userData)
+    } catch {
       logout()
     } finally {
       loading.value = false
@@ -123,7 +177,8 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await apiClient.patch('/auth/profile', data)
-      user.value = response.data
+      const userData = response.data?.data || response.data
+      setUser(userData)
       return true
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Update failed'
@@ -139,9 +194,11 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     error,
     isAuthenticated,
+    isAdmin,
     isRefreshing,
     login,
     register,
+    loginWithTelegram,
     logout,
     fetchUser,
     updateProfile,

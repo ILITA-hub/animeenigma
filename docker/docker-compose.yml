@@ -108,7 +108,7 @@ services:
     container_name: animeenigma-auth
     environment:
       SERVER_PORT: 8080
-      DB_HOST: 172.29.0.8
+      DB_HOST: 172.29.0.2
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
@@ -117,6 +117,8 @@ services:
       JWT_SECRET: dev-secret-change-in-production
       COOKIE_SECURE: "false"
       COOKIE_SAMESITE: Lax
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -130,7 +132,7 @@ services:
     container_name: animeenigma-catalog
     environment:
       SERVER_PORT: 8081
-      DB_HOST: 172.29.0.8
+      DB_HOST: 172.29.0.2
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
@@ -174,7 +176,7 @@ services:
     container_name: animeenigma-player
     environment:
       SERVER_PORT: 8083
-      DB_HOST: 172.29.0.8
+      DB_HOST: 172.29.0.2
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
@@ -209,18 +211,22 @@ services:
     container_name: animeenigma-scheduler
     environment:
       SERVER_PORT: 8085
-      DB_HOST: 172.29.0.8
+      DB_HOST: 172.29.0.2
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: animeenigma_catalog
       REDIS_HOST: redis
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
+      CATALOG_SERVICE_URL: http://catalog:8081
+      SHIKIMORI_SYNC_CRON: "0 2 * * *"
     ports:
       - "8085:8085"
     depends_on:
       redis:
         condition: service_healthy
+      catalog:
+        condition: service_started
 
   # =============================================================================
   # Frontend
@@ -230,6 +236,9 @@ services:
     build:
       context: ../frontend/web
       dockerfile: Dockerfile
+      args:
+        VITE_TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
+        VITE_API_URL: /api
     container_name: animeenigma-web
     ports:
       - "3003:80"

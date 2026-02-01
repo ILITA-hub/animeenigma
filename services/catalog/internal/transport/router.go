@@ -6,6 +6,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
 	"github.com/go-chi/chi/v5"
@@ -17,11 +18,13 @@ func NewRouter(
 	adminHandler *handler.AdminHandler,
 	cfg *config.Config,
 	log *logger.Logger,
+	metricsCollector *metrics.Collector,
 ) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware
 	r.Use(middleware.RequestID)
+	r.Use(metricsCollector.Middleware)
 	r.Use(httputil.RequestLogger(log))
 	r.Use(httputil.Recoverer(log))
 	r.Use(httputil.CORS([]string{"*"}))
@@ -30,6 +33,11 @@ func NewRouter(
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
+	})
+
+	// Metrics endpoint
+	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics.Handler().ServeHTTP(w, r)
 	})
 
 	// API routes
@@ -75,6 +83,14 @@ func NewRouter(
 			r.Post("/anime/{animeId}/videos", adminHandler.AddVideoSource)
 			r.Delete("/videos/{videoId}", adminHandler.DeleteVideo)
 			r.Post("/sync/shikimori/{shikimoriId}", adminHandler.SyncFromShikimori)
+
+			// Hide/unhide anime
+			r.Post("/anime/{animeId}/hide", adminHandler.HideAnime)
+			r.Delete("/anime/{animeId}/hide", adminHandler.UnhideAnime)
+			r.Get("/anime/hidden", adminHandler.GetHiddenAnime)
+
+			// Update shikimori_id
+			r.Patch("/anime/{animeId}/shikimori", adminHandler.UpdateShikimoriID)
 		})
 	})
 

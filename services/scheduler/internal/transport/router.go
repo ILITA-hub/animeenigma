@@ -5,6 +5,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -13,11 +14,13 @@ import (
 func NewRouter(
 	jobHandler *handler.JobHandler,
 	log *logger.Logger,
+	metricsCollector *metrics.Collector,
 ) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware
 	r.Use(middleware.RequestID)
+	r.Use(metricsCollector.Middleware)
 	r.Use(httputil.RequestLogger(log))
 	r.Use(httputil.Recoverer(log))
 	r.Use(httputil.CORS([]string{"*"}))
@@ -26,6 +29,11 @@ func NewRouter(
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
+	})
+
+	// Metrics endpoint
+	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics.Handler().ServeHTTP(w, r)
 	})
 
 	// API routes

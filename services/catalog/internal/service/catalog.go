@@ -711,7 +711,9 @@ func (s *CatalogService) GetAniboomVideoSource(ctx context.Context, animeID stri
 // GetKodikTranslations gets available translations from Kodik for an anime
 func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID string) ([]domain.KodikTranslation, error) {
 	if s.kodikClient == nil {
-		return nil, errors.Internal("kodik client not initialized")
+		s.log.Warnw("kodik client not initialized, returning empty translations",
+			"anime_id", animeID)
+		return []domain.KodikTranslation{}, nil
 	}
 
 	// Get anime to get Shikimori ID
@@ -721,7 +723,9 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 	}
 
 	if anime.ShikimoriID == "" {
-		return nil, errors.InvalidInput("anime does not have a shikimori_id")
+		s.log.Warnw("anime does not have shikimori_id, cannot fetch kodik translations",
+			"anime_id", animeID)
+		return []domain.KodikTranslation{}, nil
 	}
 
 	// Check cache first
@@ -731,14 +735,15 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 		return cached, nil
 	}
 
-	// Get translations from Kodik
+	// Get translations from Kodik (with retry on failure)
 	translations, err := s.kodikClient.GetTranslations(anime.ShikimoriID)
 	if err != nil {
-		s.log.Warnw("failed to get kodik translations",
+		s.log.Warnw("failed to get kodik translations, returning empty list",
 			"anime_id", animeID,
 			"shikimori_id", anime.ShikimoriID,
 			"error", err)
-		return nil, err
+		// Return empty list instead of error - Kodik is not critical
+		return []domain.KodikTranslation{}, nil
 	}
 
 	result := make([]domain.KodikTranslation, len(translations))
@@ -760,7 +765,7 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 // GetKodikVideoSource gets video embed link from Kodik for a specific episode
 func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string, episode int, translationID int) (*domain.KodikVideoSource, error) {
 	if s.kodikClient == nil {
-		return nil, errors.Internal("kodik client not initialized")
+		return nil, errors.NotFound("kodik not available")
 	}
 
 	// Get anime to get Shikimori ID
@@ -770,7 +775,7 @@ func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string
 	}
 
 	if anime.ShikimoriID == "" {
-		return nil, errors.InvalidInput("anime does not have a shikimori_id")
+		return nil, errors.NotFound("anime does not have shikimori_id")
 	}
 
 	// Check cache first
@@ -789,7 +794,7 @@ func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string
 			"episode", episode,
 			"translation_id", translationID,
 			"error", err)
-		return nil, err
+		return nil, errors.NotFound("video not found on kodik")
 	}
 
 	// Get translation name
@@ -881,4 +886,32 @@ func (s *CatalogService) PinTranslation(ctx context.Context, animeID string, req
 // UnpinTranslation removes a pinned translation for an anime (admin only)
 func (s *CatalogService) UnpinTranslation(ctx context.Context, animeID string, translationID int) error {
 	return s.animeRepo.UnpinTranslation(ctx, animeID, translationID)
+}
+
+// SetAnimeHidden sets the hidden status of an anime (admin only)
+func (s *CatalogService) SetAnimeHidden(ctx context.Context, animeID string, hidden bool) error {
+	return s.animeRepo.SetHidden(ctx, animeID, hidden)
+}
+
+// GetHiddenAnime returns all hidden anime (admin only)
+func (s *CatalogService) GetHiddenAnime(ctx context.Context) ([]*domain.Anime, error) {
+	animes, err := s.animeRepo.GetHiddenAnime(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, anime := range animes {
+		s.enrichAnime(ctx, anime)
+	}
+
+	return animes, nil
+}
+
+// UpdateShikimoriID updates the Shikimori ID for an anime (admin only)
+func (s *CatalogService) UpdateShikimoriID(ctx context.Context, animeID string, shikimoriID string) error {
+	// Invalidate cache for kodik translations
+	_ = s.cache.Delete(ctx, fmt.Sprintf("kodik:translations:%s", animeID))
+	_ = s.cache.Delete(ctx, cache.KeyAnime(animeID))
+
+	return s.animeRepo.UpdateShikimoriID(ctx, animeID, shikimoriID)
 }

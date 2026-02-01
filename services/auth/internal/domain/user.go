@@ -11,6 +11,7 @@ type User struct {
 	ID           string      `db:"id" json:"id"`
 	Username     string      `db:"username" json:"username"`
 	PasswordHash string      `db:"password_hash" json:"-"`
+	TelegramID   *int64      `db:"telegram_id" json:"telegram_id,omitempty"`
 	Role         authz.Role  `db:"role" json:"role"`
 	CreatedAt    time.Time   `db:"created_at" json:"created_at"`
 	UpdatedAt    time.Time   `db:"updated_at" json:"updated_at"`
@@ -43,6 +44,17 @@ type LoginRequest struct {
 // RefreshRequest represents a token refresh request
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// TelegramLoginRequest represents Telegram Login Widget data
+type TelegramLoginRequest struct {
+	ID        int64  `json:"id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name,omitempty"`
+	Username  string `json:"username,omitempty"`
+	PhotoURL  string `json:"photo_url,omitempty"`
+	AuthDate  int64  `json:"auth_date"`
+	Hash      string `json:"hash"`
 }
 
 // AuthResponse represents an authentication response

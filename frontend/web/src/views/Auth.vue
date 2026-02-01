@@ -149,8 +149,13 @@
           <div class="flex-1 border-t border-white/10"></div>
         </div>
 
-        <!-- Social Login (placeholder) -->
+        <!-- Social Login -->
         <div class="space-y-3">
+          <!-- Telegram Login Widget Container -->
+          <div ref="telegramLoginContainer" class="flex justify-center">
+            <!-- Telegram widget will be inserted here -->
+          </div>
+
           <button
             type="button"
             class="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/70 font-medium transition-colors flex items-center justify-center gap-3"
@@ -175,14 +180,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, type TelegramAuthData } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const mode = ref<'login' | 'register'>('login')
+const telegramLoginContainer = ref<HTMLElement | null>(null)
+
+// Telegram bot name from environment or default
+const TELEGRAM_BOT_NAME = import.meta.env.VITE_TELEGRAM_BOT_NAME || ''
 
 const loginForm = ref({
   username: '',
@@ -222,4 +231,39 @@ const socialLogin = (provider: string) => {
   // TODO: Implement OAuth login
   console.log('Social login:', provider)
 }
+
+// Telegram Login Widget callback
+const handleTelegramAuth = async (telegramUser: TelegramAuthData) => {
+  const success = await authStore.loginWithTelegram(telegramUser)
+  if (success) {
+    router.push('/')
+  }
+}
+
+// Expose callback to window for Telegram widget
+declare global {
+  interface Window {
+    onTelegramAuth: (user: TelegramAuthData) => void
+  }
+}
+
+onMounted(() => {
+  // Set up global callback for Telegram widget
+  window.onTelegramAuth = handleTelegramAuth
+
+  // Only load widget if bot name is configured
+  if (TELEGRAM_BOT_NAME && telegramLoginContainer.value) {
+    // Create and append Telegram Login Widget script
+    const script = document.createElement('script')
+    script.async = true
+    script.src = 'https://telegram.org/js/telegram-widget.js?22'
+    script.setAttribute('data-telegram-login', TELEGRAM_BOT_NAME)
+    script.setAttribute('data-size', 'large')
+    script.setAttribute('data-radius', '8')
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)')
+    script.setAttribute('data-request-access', 'write')
+    script.setAttribute('data-userpic', 'false')
+    telegramLoginContainer.value.appendChild(script)
+  }
+})
 </script>

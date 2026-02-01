@@ -8,6 +8,7 @@ use (
 	./libs/errors
 	./libs/httputil
 	./libs/logger
+	./libs/metrics
 	./libs/pagination
 	./libs/tracing
 	./libs/videoutils

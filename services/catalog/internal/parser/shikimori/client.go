@@ -102,19 +102,21 @@ type animeByIDQuery struct {
 }
 
 type shikimoriAnime struct {
-	ID          graphql.String  `graphql:"id"`
-	Name        graphql.String  `graphql:"name"`
-	Russian     graphql.String  `graphql:"russian"`
-	Japanese    graphql.String  `graphql:"japanese"`
-	Description graphql.String  `graphql:"description"`
-	Score       graphql.Float   `graphql:"score"`
-	Status      graphql.String  `graphql:"status"`
-	Episodes    graphql.Int     `graphql:"episodes"`
-	Duration    graphql.Int     `graphql:"duration"`
-	AiredOn     *shikimoriDate  `graphql:"airedOn"`
-	Poster      *shikimoriPoster `graphql:"poster"`
-	Genres      []shikimoriGenre `graphql:"genres"`
-	Videos      []shikimoriVideo `graphql:"videos"`
+	ID            graphql.String   `graphql:"id"`
+	Name          graphql.String   `graphql:"name"`
+	Russian       graphql.String   `graphql:"russian"`
+	Japanese      graphql.String   `graphql:"japanese"`
+	Description   graphql.String   `graphql:"description"`
+	Score         graphql.Float    `graphql:"score"`
+	Status        graphql.String   `graphql:"status"`
+	Episodes      graphql.Int      `graphql:"episodes"`
+	EpisodesAired graphql.Int      `graphql:"episodesAired"`
+	Duration      graphql.Int      `graphql:"duration"`
+	AiredOn       *shikimoriDate   `graphql:"airedOn"`
+	NextEpisodeAt graphql.String   `graphql:"nextEpisodeAt"`
+	Poster        *shikimoriPoster `graphql:"poster"`
+	Genres        []shikimoriGenre `graphql:"genres"`
+	Videos        []shikimoriVideo `graphql:"videos"`
 }
 
 type shikimoriDate struct {
@@ -148,8 +150,9 @@ func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int)
 	// Don't filter by kind to include TV, ONA, OVA, movies, etc.
 	gqlQuery := fmt.Sprintf(`{
 		animes(search: "%s", limit: %d, page: %d) {
-			id name russian japanese description score status episodes duration
+			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
+			nextEpisodeAt
 			poster { originalUrl }
 			genres { id name russian }
 		}
@@ -196,16 +199,18 @@ func (c *Client) executeRawQuery(ctx context.Context, query string) ([]*domain.A
 }
 
 type rawAnime struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Russian     string  `json:"russian"`
-	Japanese    string  `json:"japanese"`
-	Description string  `json:"description"`
-	Score       float64 `json:"score"`
-	Status      string  `json:"status"`
-	Episodes    int     `json:"episodes"`
-	Duration    int     `json:"duration"`
-	AiredOn     *struct {
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Russian        string  `json:"russian"`
+	Japanese       string  `json:"japanese"`
+	Description    string  `json:"description"`
+	Score          float64 `json:"score"`
+	Status         string  `json:"status"`
+	Episodes       int     `json:"episodes"`
+	EpisodesAired  int     `json:"episodesAired"`
+	Duration       int     `json:"duration"`
+	NextEpisodeAt  string  `json:"nextEpisodeAt"`
+	AiredOn        *struct {
 		Year  int `json:"year"`
 		Month int `json:"month"`
 		Day   int `json:"day"`
@@ -232,11 +237,22 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 			Score:           a.Score,
 			Status:          mapStatus(a.Status),
 			EpisodesCount:   a.Episodes,
+			EpisodesAired:   a.EpisodesAired,
 			EpisodeDuration: a.Duration,
 		}
 		if a.AiredOn != nil {
 			anime.Year = a.AiredOn.Year
 			anime.Season = detectSeason(a.AiredOn.Month)
+			// Parse full aired date
+			if a.AiredOn.Year > 0 && a.AiredOn.Month > 0 && a.AiredOn.Day > 0 {
+				airedDate := time.Date(a.AiredOn.Year, time.Month(a.AiredOn.Month), a.AiredOn.Day, 0, 0, 0, 0, time.UTC)
+				anime.AiredOn = &airedDate
+			}
+		}
+		if a.NextEpisodeAt != "" {
+			if nextEp, err := time.Parse(time.RFC3339, a.NextEpisodeAt); err == nil {
+				anime.NextEpisodeAt = &nextEp
+			}
 		}
 		if a.Poster != nil {
 			anime.PosterURL = a.Poster.OriginalURL
@@ -280,8 +296,9 @@ func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*doma
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, status: "ongoing", order: ranked, kind: "tv") {
-			id name russian japanese description score status episodes duration
+			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
+			nextEpisodeAt
 			poster { originalUrl }
 			genres { id name russian }
 		}
@@ -296,8 +313,9 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, order: popularity, kind: "tv") {
-			id name russian japanese description score status episodes duration
+			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
+			nextEpisodeAt
 			poster { originalUrl }
 			genres { id name russian }
 		}
@@ -347,12 +365,27 @@ func (c *Client) mapAnime(sa shikimoriAnime) *domain.Anime {
 		Score:           float64(sa.Score),
 		Status:          mapStatus(string(sa.Status)),
 		EpisodesCount:   int(sa.Episodes),
+		EpisodesAired:   int(sa.EpisodesAired),
 		EpisodeDuration: int(sa.Duration),
 	}
 
 	if sa.AiredOn != nil {
 		anime.Year = int(sa.AiredOn.Year)
 		anime.Season = detectSeason(int(sa.AiredOn.Month))
+		// Parse full aired date
+		year := int(sa.AiredOn.Year)
+		month := int(sa.AiredOn.Month)
+		day := int(sa.AiredOn.Day)
+		if year > 0 && month > 0 && day > 0 {
+			airedDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+			anime.AiredOn = &airedDate
+		}
+	}
+
+	if string(sa.NextEpisodeAt) != "" {
+		if nextEp, err := time.Parse(time.RFC3339, string(sa.NextEpisodeAt)); err == nil {
+			anime.NextEpisodeAt = &nextEp
+		}
 	}
 
 	if sa.Poster != nil {

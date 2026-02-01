@@ -18,67 +18,155 @@ type ShikimoriSyncJob struct {
 	log    *logger.Logger
 }
 
+// OngoingAnimeResponse represents the response from catalog service
+type OngoingAnimeResponse struct {
+	Data []OngoingAnime `json:"data"`
+	Meta struct {
+		Page       int   `json:"page"`
+		PageSize   int   `json:"page_size"`
+		TotalCount int64 `json:"total_count"`
+		TotalPages int   `json:"total_pages"`
+	} `json:"meta"`
+}
+
+type OngoingAnime struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 func NewShikimoriSyncJob(config *config.JobsConfig, log *logger.Logger) *ShikimoriSyncJob {
 	return &ShikimoriSyncJob{
 		config: config,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 60 * time.Second,
 		},
 		log: log,
 	}
 }
 
-// Run executes the Shikimori sync job
+// Run executes the Shikimori sync job - updates all ongoing anime from Shikimori
 func (j *ShikimoriSyncJob) Run(ctx context.Context) error {
-	j.log.Info("starting Shikimori sync job")
+	j.log.Info("starting ongoing anime sync job")
 
-	// Fetch anime data from Shikimori API
-	animeList, err := j.fetchAnimeList(ctx)
+	// Fetch all ongoing anime from catalog service
+	ongoingAnime, err := j.fetchOngoingAnime(ctx)
 	if err != nil {
-		return fmt.Errorf("fetch anime list: %w", err)
+		return fmt.Errorf("fetch ongoing anime: %w", err)
 	}
 
-	j.log.Infow("fetched anime list", "count", len(animeList))
+	j.log.Infow("fetched ongoing anime list", "count", len(ongoingAnime))
 
-	// In a real implementation, this would:
-	// 1. Fetch anime data from Shikimori API
-	// 2. Update local database with new anime
-	// 3. Update existing anime information
-	// 4. Handle pagination
-	// 5. Respect API rate limits
+	if len(ongoingAnime) == 0 {
+		j.log.Info("no ongoing anime to update")
+		return nil
+	}
 
-	j.log.Info("Shikimori sync job completed")
+	// Update each anime with rate limiting
+	var successCount, failCount int
+	for i, anime := range ongoingAnime {
+		select {
+		case <-ctx.Done():
+			j.log.Warn("sync job cancelled")
+			return ctx.Err()
+		default:
+		}
+
+		j.log.Infow("refreshing anime",
+			"progress", fmt.Sprintf("%d/%d", i+1, len(ongoingAnime)),
+			"id", anime.ID,
+			"name", anime.Name,
+		)
+
+		if err := j.refreshAnime(ctx, anime.ID); err != nil {
+			j.log.Warnw("failed to refresh anime",
+				"id", anime.ID,
+				"name", anime.Name,
+				"error", err,
+			)
+			failCount++
+		} else {
+			successCount++
+		}
+
+		// Rate limiting: wait between requests to respect Shikimori API limits
+		// Shikimori allows ~5 requests per second, we'll be more conservative
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	j.log.Infow("ongoing anime sync completed",
+		"total", len(ongoingAnime),
+		"success", successCount,
+		"failed", failCount,
+	)
+
 	return nil
 }
 
-func (j *ShikimoriSyncJob) fetchAnimeList(ctx context.Context) ([]map[string]interface{}, error) {
-	// Build request
-	url := fmt.Sprintf("%s/animes?limit=50&order=ranked", j.config.ShikimoriAPIURL)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
+// fetchOngoingAnime fetches all ongoing anime from the catalog service
+func (j *ShikimoriSyncJob) fetchOngoingAnime(ctx context.Context) ([]OngoingAnime, error) {
+	var allAnime []OngoingAnime
+	page := 1
+	pageSize := 100
+
+	for {
+		url := fmt.Sprintf("%s/api/anime/ongoing?page=%d&page_size=%d",
+			j.config.CatalogServiceURL, page, pageSize)
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := j.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("catalog service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var response OngoingAnimeResponse
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		resp.Body.Close()
+
+		allAnime = append(allAnime, response.Data...)
+
+		// Check if we've fetched all pages
+		if page >= response.Meta.TotalPages || len(response.Data) == 0 {
+			break
+		}
+
+		page++
 	}
 
-	// Set User-Agent header as required by Shikimori API
-	req.Header.Set("User-Agent", j.config.ShikimoriAppName)
+	return allAnime, nil
+}
 
-	// Execute request
+// refreshAnime calls the catalog service to refresh a single anime from Shikimori
+func (j *ShikimoriSyncJob) refreshAnime(ctx context.Context, animeID string) error {
+	url := fmt.Sprintf("%s/api/anime/%s/refresh", j.config.CatalogServiceURL, animeID)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
+	if err != nil {
+		return err
+	}
+
 	resp, err := j.client.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("refresh returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
-	var animeList []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&animeList); err != nil {
-		return nil, err
-	}
-
-	return animeList, nil
+	return nil
 }

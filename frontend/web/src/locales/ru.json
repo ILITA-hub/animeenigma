@@ -35,8 +35,35 @@
     "recommendations": "Рекомендации",
     "episode": "Эпизод",
     "of": "из",
+    "reviews": "Отзывы",
+    "reviewsCount": "{count} отзывов",
+    "writeReview": "Написать отзыв",
+    "editReview": "Изменить отзыв",
+    "yourRating": "Ваша оценка",
+    "reviewPlaceholder": "Поделитесь своими впечатлениями об аниме...",
+    "reviewOptional": "Ваш отзыв (необязательно)",
+    "publishing": "Сохранение...",
+    "publish": "Опубликовать",
+    "update": "Обновить",
+    "loginToReview": "Войдите, чтобы оставить отзыв",
+    "noReviews": "Пока нет отзывов. Будьте первым!",
+    "user": "Пользователь",
+    "refresh": "Обновить",
+    "refreshing": "Обновление...",
+    "refreshTooltip": "Обновить данные с Shikimori",
+    "showMore": "Показать полностью",
+    "showLess": "Скрыть",
+    "removeFromList": "Удалить из списка",
+    "nextEpisode": "Эп. {episode}:",
+    "todayAt": "Сегодня в {time} МСК",
+    "tomorrowAt": "Завтра в {time} МСК",
+    "hide": "Скрыть",
+    "unhide": "Показать",
+    "hidden": "Скрыто",
     "status": {
       "ongoing": "Онгоинг",
+      "released": "Вышло",
+      "announced": "Анонс",
       "completed": "Завершён",
       "upcoming": "Скоро"
     }
@@ -47,7 +74,8 @@
     "audio": "Аудио",
     "autoplay": "Автовоспр.",
     "next": "Следующий",
-    "previous": "Предыдущий"
+    "previous": "Предыдущий",
+    "noTranslations": "Нет доступных озвучек"
   },
   "search": {
     "placeholder": "Поиск аниме...",
@@ -65,23 +93,59 @@
     "memberSince": "Участник с",
     "editProfile": "Редактировать",
     "tabs": {
-      "watchlist": "Список",
+      "watchlist": "Мои списки",
       "history": "История",
       "favorites": "Избранное",
-      "settings": "Настройки"
+      "settings": "Настройки",
+      "hidden": "Скрытое"
     },
     "watchlist": {
       "all": "Все",
       "watching": "Смотрю",
       "planToWatch": "Запланировано",
       "completed": "Просмотрено",
+      "onHold": "Отложено",
       "dropped": "Брошено"
+    },
+    "table": {
+      "number": "#",
+      "image": "Обложка",
+      "title": "Название",
+      "score": "Оценка",
+      "type": "Тип",
+      "progress": "Прогресс",
+      "tags": "Теги",
+      "actions": "Действия"
+    },
+    "empty": {
+      "watchlist": "Ваш список пуст",
+      "history": "История просмотра пуста",
+      "hidden": "Нет скрытых аниме"
+    },
+    "actions": {
+      "browseCatalog": "Каталог",
+      "removeFromList": "Удалить из списка",
+      "tableView": "Таблица",
+      "gridView": "Сетка"
+    },
+    "rewatching": "Пересматриваю",
+    "noPoster": "Нет постера",
+    "import": {
+      "title": "Импорт списка",
+      "malPlaceholder": "Введите имя пользователя MAL",
+      "malDescription": "Импортирует ваш список аниме с MyAnimeList. Ваш профиль должен быть публичным.",
+      "importing": "Импорт...",
+      "import": "Импорт",
+      "imported": "Импортировано",
+      "skipped": "Пропущено"
     },
     "settings": {
       "appearance": "Внешний вид",
       "language": "Язык",
+      "languageDesc": "Язык интерфейса",
       "autoplay": "Автовоспроизведение",
       "reduceMotion": "Уменьшить анимацию",
+      "reduceMotionDesc": "Уменьшить анимации",
       "playback": "Воспроизведение",
       "defaultQuality": "Качество по умолчанию",
       "preferredAudio": "Предпочитаемое аудио",
@@ -90,6 +154,10 @@
       "email": "Email",
       "changePassword": "Сменить пароль",
       "signOut": "Выйти"
+    },
+    "history": {
+      "empty": "История просмотра пуста",
+      "episode": "Эпизод"
     }
   },
   "rooms": {

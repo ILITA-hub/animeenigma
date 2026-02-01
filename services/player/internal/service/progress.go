@@ -21,7 +21,7 @@ func NewProgressService(progressRepo *repo.ProgressRepository, log *logger.Logge
 	}
 }
 
-// UpdateProgress updates or creates watch progress
+// UpdateProgress updates or creates watch progress (time tracking only)
 func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req *domain.UpdateProgressRequest) (*domain.WatchProgress, error) {
 	progress := &domain.WatchProgress{
 		UserID:        userID,
@@ -29,7 +29,7 @@ func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req
 		EpisodeNumber: req.EpisodeNumber,
 		Progress:      req.Progress,
 		Duration:      req.Duration,
-		Completed:     req.Progress >= req.Duration-5, // Consider completed if within 5 seconds
+		Completed:     false, // User marks manually
 		LastWatchedAt: time.Now(),
 	}
 

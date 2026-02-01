@@ -79,12 +79,18 @@ func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntr
 // GetByUser returns all anime list entries for a user
 func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
 	query := `
-		SELECT id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes,
-			tags, is_rewatching, priority, anime_type, anime_total_episodes, mal_id,
-			started_at, completed_at, created_at, updated_at
-		FROM anime_list
-		WHERE user_id = $1
-		ORDER BY updated_at DESC
+		SELECT
+			al.id, al.user_id, al.anime_id,
+			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
+			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
+			al.status, al.score, al.episodes, al.notes,
+			al.tags, al.is_rewatching, al.priority, al.anime_type,
+			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
+			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
+		FROM anime_list al
+		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
+		WHERE al.user_id = $1
+		ORDER BY al.updated_at DESC
 	`
 
 	var entries []*domain.AnimeListEntry
@@ -98,12 +104,18 @@ func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domai
 // GetByUserAndStatus returns anime list entries for a user filtered by status
 func (r *ListRepository) GetByUserAndStatus(ctx context.Context, userID, status string) ([]*domain.AnimeListEntry, error) {
 	query := `
-		SELECT id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes,
-			tags, is_rewatching, priority, anime_type, anime_total_episodes, mal_id,
-			started_at, completed_at, created_at, updated_at
-		FROM anime_list
-		WHERE user_id = $1 AND status = $2
-		ORDER BY updated_at DESC
+		SELECT
+			al.id, al.user_id, al.anime_id,
+			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
+			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
+			al.status, al.score, al.episodes, al.notes,
+			al.tags, al.is_rewatching, al.priority, al.anime_type,
+			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
+			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
+		FROM anime_list al
+		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
+		WHERE al.user_id = $1 AND al.status = $2
+		ORDER BY al.updated_at DESC
 	`
 
 	var entries []*domain.AnimeListEntry
@@ -114,9 +126,63 @@ func (r *ListRepository) GetByUserAndStatus(ctx context.Context, userID, status 
 	return entries, nil
 }
 
+// GetByUserAndAnime returns a single anime list entry for a user
+func (r *ListRepository) GetByUserAndAnime(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
+	query := `
+		SELECT
+			al.id, al.user_id, al.anime_id,
+			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
+			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
+			al.status, al.score, al.episodes, al.notes,
+			al.tags, al.is_rewatching, al.priority, al.anime_type,
+			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
+			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
+		FROM anime_list al
+		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
+		WHERE al.user_id = $1 AND al.anime_id = $2
+	`
+
+	var entry domain.AnimeListEntry
+	err := r.db.GetContext(ctx, &entry, query, userID, animeID)
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
 // Delete removes an anime from user's list
 func (r *ListRepository) Delete(ctx context.Context, userID, animeID string) error {
 	query := `DELETE FROM anime_list WHERE user_id = $1 AND anime_id = $2`
 	_, err := r.db.ExecContext(ctx, query, userID, animeID)
 	return err
+}
+
+// IncrementEpisodes increments the watched episodes count if the new episode is higher
+// Returns true if episodes count was updated
+func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID string, episodeNumber int) (bool, error) {
+	query := `
+		UPDATE anime_list al
+		SET episodes = $3,
+			status = CASE
+				WHEN COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) > 0
+					AND $3 >= COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) THEN 'completed'
+				WHEN al.status = 'plan_to_watch' THEN 'watching'
+				ELSE al.status
+			END,
+			started_at = CASE WHEN al.started_at IS NULL THEN NOW() ELSE al.started_at END,
+			completed_at = CASE
+				WHEN COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) > 0
+					AND $3 >= COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) THEN NOW()
+				ELSE al.completed_at
+			END,
+			updated_at = NOW()
+		FROM catalog_anime ca
+		WHERE al.user_id = $1 AND al.anime_id = $2 AND al.episodes < $3 AND ca.id = al.anime_id
+	`
+	result, err := r.db.ExecContext(ctx, query, userID, animeID, episodeNumber)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected > 0, nil
 }

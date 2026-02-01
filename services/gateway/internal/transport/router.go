@@ -6,6 +6,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/handler"
 	"github.com/go-chi/chi/v5"
@@ -17,11 +18,13 @@ func NewRouter(
 	proxyHandler *handler.ProxyHandler,
 	cfg *config.Config,
 	log *logger.Logger,
+	metricsCollector *metrics.Collector,
 ) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware
 	r.Use(middleware.RequestID)
+	r.Use(metricsCollector.Middleware)
 	r.Use(httputil.RequestLogger(log))
 	r.Use(httputil.Recoverer(log))
 	r.Use(httputil.CORS([]string{"*"}))
@@ -31,6 +34,11 @@ func NewRouter(
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
+	})
+
+	// Metrics endpoint
+	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics.Handler().ServeHTTP(w, r)
 	})
 
 	// OpenAPI spec
@@ -45,6 +53,13 @@ func NewRouter(
 		r.HandleFunc("/anime", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/anime/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/genres", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/kodik/*", proxyHandler.ProxyToCatalog)
+
+		// Admin routes (protected, proxied to catalog)
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT))
+			r.HandleFunc("/admin/*", proxyHandler.ProxyToCatalog)
+		})
 
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {

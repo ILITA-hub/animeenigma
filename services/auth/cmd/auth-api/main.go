@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/repo"
@@ -48,15 +49,18 @@ func main() {
 	userRepo := repo.NewUserRepository(db)
 
 	// Initialize services
-	authService := service.NewAuthService(userRepo, redisCache, cfg.JWT, log)
+	authService := service.NewAuthService(userRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, log)
 	userService := service.NewUserService(userRepo, log)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, log)
 	userHandler := handler.NewUserHandler(userService, log)
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("auth")
+
 	// Initialize router
-	router := transport.NewRouter(authHandler, userHandler, cfg.JWT, log)
+	router := transport.NewRouter(authHandler, userHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
