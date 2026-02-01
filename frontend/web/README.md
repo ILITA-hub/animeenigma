@@ -67,14 +67,13 @@ frontend/web/
 
 ### Prerequisites
 
-- Node.js 20.x or later
-- npm or yarn
+- Bun 1.x or later
 
 ### Installation
 
 1. Install dependencies:
 ```bash
-npm install
+bun install
 ```
 
 2. Copy environment variables:
@@ -92,7 +91,7 @@ VITE_SOCKET_URL=http://localhost:8000
 
 Start the development server:
 ```bash
-npm run dev
+bun run dev
 ```
 
 The application will be available at `http://localhost:3000`
@@ -101,19 +100,19 @@ The application will be available at `http://localhost:3000`
 
 Build the application:
 ```bash
-npm run build
+bun run build
 ```
 
 Preview the production build:
 ```bash
-npm run preview
+bun run preview
 ```
 
 ### Type Checking
 
 Run TypeScript type checking:
 ```bash
-npm run type-check
+bun run type-check
 ```
 
 ## Docker Deployment

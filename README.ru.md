@@ -64,7 +64,7 @@
 ### Требования
 
 - Go 1.22+
-- Node.js 20+
+- Bun 1.x+
 - Docker & Docker Compose
 - Make
 
@@ -86,8 +86,8 @@
 3. **Запустить фронтенд:**
    ```bash
    cd frontend/web
-   npm install
-   npm run dev
+   bun install
+   bun run dev
    ```
 
 ### С Docker Compose
@@ -263,10 +263,6 @@ AnimeEnigma включает игру по угадыванию опенинго
 4. Игроки вводят название аниме
 5. Очки начисляются за скорость и правильность ответа
 6. Глобальная и сессионная таблица лидеров
-
-## Устаревшая настройка
-
-Оригинальный NestJS бэкенд и Express rooms бэкенд сохранены в `services/backend/` и `services/roomsBackend/` для справки во время миграции.
 
 ## Лицензия
 

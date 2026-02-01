@@ -64,7 +64,7 @@ The anime catalog is **NOT pre-populated**. Instead:
 ### Prerequisites
 
 - Go 1.22+
-- Node.js 20+
+- Bun 1.x+
 - Docker & Docker Compose
 - Make
 
@@ -86,8 +86,8 @@ The anime catalog is **NOT pre-populated**. Instead:
 3. **Start frontend:**
    ```bash
    cd frontend/web
-   npm install
-   npm run dev
+   bun install
+   bun run dev
    ```
 
 ### Using Docker Compose
@@ -252,10 +252,6 @@ helm install animeenigma ./gateway -f gateway/values.yaml
 - OpenAPI specs: `api/openapi/`
 - GraphQL schema: `api/graphql/schema.graphql`
 - Proto definitions: `api/proto/`
-
-## Legacy Setup
-
-The original NestJS backend and Express rooms backend are preserved in `services/backend/` and `services/roomsBackend/` for reference during migration.
 
 ## License
 
