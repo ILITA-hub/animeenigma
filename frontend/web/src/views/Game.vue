@@ -215,18 +215,11 @@
           placeholder="Enter room name"
           required
         />
-        <div>
-          <label class="block text-sm font-medium text-white/70 mb-2">Game Type</label>
-          <select
-            v-model="newRoom.gameType"
-            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500"
-            required
-          >
-            <option value="anime-quiz">Anime Quiz</option>
-            <option value="character-guess">Character Guess</option>
-            <option value="opening-quiz">Opening Quiz</option>
-          </select>
-        </div>
+        <Select
+          v-model="newRoom.gameType"
+          :options="gameTypeOptions"
+          label="Game Type"
+        />
         <div>
           <label class="block text-sm font-medium text-white/70 mb-2">Max Players</label>
           <input
@@ -252,7 +245,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { gameApi } from '@/api/client'
 import { io, Socket } from 'socket.io-client'
-import { Button, Badge, Input, Modal } from '@/components/ui'
+import { Button, Badge, Input, Modal, Select } from '@/components/ui'
 
 interface Player {
   id: string
@@ -306,6 +299,12 @@ const newRoom = ref({
   gameType: 'anime-quiz',
   maxPlayers: 10
 })
+
+const gameTypeOptions = [
+  { value: 'anime-quiz', label: 'Anime Quiz' },
+  { value: 'character-guess', label: 'Character Guess' },
+  { value: 'opening-quiz', label: 'Opening Quiz' },
+]
 
 const sortedPlayers = computed(() => {
   if (!currentRoom.value?.players) return []

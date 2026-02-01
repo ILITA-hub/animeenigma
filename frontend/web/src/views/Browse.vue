@@ -89,26 +89,25 @@
           </div>
 
           <!-- Year Filter -->
-          <select
-            v-model="selectedYear"
-            class="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 focus:outline-none focus:border-cyan-500 appearance-none cursor-pointer"
-            @change="handleFilter"
-          >
-            <option value="">{{ $t('search.year') }}</option>
-            <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
-          </select>
+          <div class="w-32">
+            <Select
+              v-model="selectedYear"
+              :options="yearOptions"
+              :placeholder="$t('search.year')"
+              size="sm"
+              @change="handleFilter"
+            />
+          </div>
 
           <!-- Sort -->
-          <select
-            v-model="sortBy"
-            class="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 focus:outline-none focus:border-cyan-500 appearance-none cursor-pointer"
-            @change="handleFilter"
-          >
-            <option value="popularity">{{ $t('search.sort') }}: Popular</option>
-            <option value="rating">{{ $t('search.sort') }}: Rating</option>
-            <option value="year">{{ $t('search.sort') }}: Year</option>
-            <option value="title">{{ $t('search.sort') }}: A-Z</option>
-          </select>
+          <div class="w-40">
+            <Select
+              v-model="sortBy"
+              :options="sortOptions"
+              size="sm"
+              @change="handleFilter"
+            />
+          </div>
 
           <!-- Clear Filters -->
           <button
@@ -184,7 +183,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { onClickOutside, useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
-import { Input, Badge, Button } from '@/components/ui'
+import { Input, Badge, Button, Select } from '@/components/ui'
 import { AnimeCardNew } from '@/components/anime'
 
 const route = useRoute()
@@ -221,7 +220,20 @@ const genres = [
   { value: 'supernatural', label: 'Supernatural' },
 ]
 
-const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i)
+const yearOptions = [
+  { value: '', label: 'Year' },
+  ...Array.from({ length: 30 }, (_, i) => {
+    const year = new Date().getFullYear() - i
+    return { value: String(year), label: String(year) }
+  })
+]
+
+const sortOptions = [
+  { value: 'popularity', label: 'Sort: Popular' },
+  { value: 'rating', label: 'Sort: Rating' },
+  { value: 'year', label: 'Sort: Year' },
+  { value: 'title', label: 'Sort: A-Z' },
+]
 
 const selectGenre = (genre: string) => {
   selectedGenre.value = genre
