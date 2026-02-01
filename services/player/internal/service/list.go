@@ -29,6 +29,11 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 	return s.listRepo.GetByUser(ctx, userID)
 }
 
+// GetUserAnimeEntry returns a single anime entry from user's list
+func (s *ListService) GetUserAnimeEntry(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
+	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
+}
+
 // UpdateListEntry updates or creates an anime list entry
 func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *domain.UpdateListRequest) (*domain.AnimeListEntry, error) {
 	entry := &domain.AnimeListEntry{
@@ -91,4 +96,23 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 // DeleteListEntry removes an anime from user's list
 func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID string) error {
 	return s.listRepo.Delete(ctx, userID, animeID)
+}
+
+// MarkEpisodeWatched marks an episode as watched and updates the episodes count
+func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, episode int) (*domain.AnimeListEntry, error) {
+	updated, err := s.listRepo.IncrementEpisodes(ctx, userID, animeID, episode)
+	if err != nil {
+		return nil, err
+	}
+
+	if !updated {
+		s.log.Infow("episode already marked or anime not in list",
+			"user_id", userID,
+			"anime_id", animeID,
+			"episode", episode,
+		)
+	}
+
+	// Return updated entry
+	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
 }

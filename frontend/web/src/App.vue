@@ -27,12 +27,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/layout/Navbar.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
 
 const route = useRoute()
+const authStore = useAuthStore()
 
 const isFullscreen = computed(() => route.name === 'watch')
 
@@ -40,7 +42,14 @@ const mainClasses = computed(() => {
   if (isFullscreen.value) {
     return ''
   }
-  return 'pb-20 md:pb-0' // Bottom padding for mobile nav
+  return 'pt-16 pb-20 md:pb-0' // Top padding for fixed navbar, bottom for mobile nav
+})
+
+// Initialize auth state - fetch user if we have token but no user data
+onMounted(async () => {
+  if (authStore.token && !authStore.user) {
+    await authStore.fetchUser()
+  }
 })
 </script>
 

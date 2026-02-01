@@ -108,14 +108,14 @@
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-left text-white/60 border-b border-white/10">
-                    <th class="pb-3 pr-2 w-8">#</th>
-                    <th class="pb-3 px-2 w-16">Image</th>
-                    <th class="pb-3 px-2">Title</th>
-                    <th class="pb-3 px-2 w-16 text-center">Score</th>
-                    <th class="pb-3 px-2 w-20">Type</th>
-                    <th class="pb-3 px-2 w-24">Progress</th>
-                    <th class="pb-3 px-2 hidden md:table-cell">Tags</th>
-                    <th class="pb-3 pl-2 w-24 text-center">Actions</th>
+                    <th class="pb-3 pr-2 w-8">{{ $t('profile.table.number') }}</th>
+                    <th class="pb-3 px-2 w-16">{{ $t('profile.table.image') }}</th>
+                    <th class="pb-3 px-2">{{ $t('profile.table.title') }}</th>
+                    <th class="pb-3 px-2 w-16 text-center">{{ $t('profile.table.score') }}</th>
+                    <th class="pb-3 px-2 w-20">{{ $t('profile.table.type') }}</th>
+                    <th class="pb-3 px-2 w-24">{{ $t('profile.table.progress') }}</th>
+                    <th class="pb-3 px-2 hidden md:table-cell">{{ $t('profile.table.tags') }}</th>
+                    <th class="pb-3 pl-2 w-24 text-center">{{ $t('profile.table.actions') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -150,7 +150,7 @@
                       <router-link :to="`/anime/${anime.id}`" class="text-white hover:text-cyan-400 transition-colors font-medium">
                         {{ anime.title }}
                       </router-link>
-                      <div v-if="anime.isRewatching" class="text-xs text-cyan-400 mt-0.5">Rewatching</div>
+                      <div v-if="anime.isRewatching" class="text-xs text-cyan-400 mt-0.5">{{ $t('profile.rewatching') }}</div>
                     </td>
 
                     <!-- Score -->
@@ -206,11 +206,11 @@
                           @change="updateAnimeStatus(anime.id, ($event.target as HTMLSelectElement).value)"
                           class="bg-white/10 text-white text-xs rounded px-2 py-1 border border-white/10 cursor-pointer hover:border-white/20 focus:outline-none focus:border-cyan-500"
                         >
-                          <option value="watching">Watching</option>
-                          <option value="plan_to_watch">Plan to Watch</option>
-                          <option value="completed">Completed</option>
-                          <option value="on_hold">On Hold</option>
-                          <option value="dropped">Dropped</option>
+                          <option value="watching">{{ $t('profile.watchlist.watching') }}</option>
+                          <option value="plan_to_watch">{{ $t('profile.watchlist.planToWatch') }}</option>
+                          <option value="completed">{{ $t('profile.watchlist.completed') }}</option>
+                          <option value="on_hold">{{ $t('profile.watchlist.onHold') }}</option>
+                          <option value="dropped">{{ $t('profile.watchlist.dropped') }}</option>
                         </select>
                         <button
                           @click="removeFromList(anime.id)"
@@ -248,7 +248,7 @@
                       <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <span class="text-xs text-center">No poster</span>
+                      <span class="text-xs text-center">{{ $t('profile.noPoster') }}</span>
                     </div>
                   </div>
                   <h3 class="mt-2 text-sm font-medium text-white line-clamp-2">{{ anime.title }}</h3>
@@ -268,11 +268,11 @@
                     @click.prevent
                     class="bg-black/80 backdrop-blur text-white text-xs rounded px-2 py-1 border border-white/20 cursor-pointer"
                   >
-                    <option value="watching">Watching</option>
-                    <option value="plan_to_watch">Plan to Watch</option>
-                    <option value="completed">Completed</option>
-                    <option value="on_hold">On Hold</option>
-                    <option value="dropped">Dropped</option>
+                    <option value="watching">{{ $t('profile.watchlist.watching') }}</option>
+                    <option value="plan_to_watch">{{ $t('profile.watchlist.planToWatch') }}</option>
+                    <option value="completed">{{ $t('profile.watchlist.completed') }}</option>
+                    <option value="on_hold">{{ $t('profile.watchlist.onHold') }}</option>
+                    <option value="dropped">{{ $t('profile.watchlist.dropped') }}</option>
                   </select>
                 </div>
 
@@ -291,9 +291,9 @@
           </div>
 
           <div v-else class="text-center py-12">
-            <p class="text-white/50 mb-4">Your list is empty</p>
+            <p class="text-white/50 mb-4">{{ $t('profile.empty.watchlist') }}</p>
             <Button variant="outline" @click="$router.push('/browse')">
-              Browse Catalog
+              {{ $t('profile.actions.browseCatalog') }}
             </Button>
           </div>
         </template>
@@ -312,7 +312,7 @@
                 <router-link :to="`/anime/${item.animeId}`" class="font-medium text-white hover:text-cyan-400 transition-colors">
                   {{ item.title }}
                 </router-link>
-                <p class="text-white/50 text-sm">Episode {{ item.episode }}</p>
+                <p class="text-white/50 text-sm">{{ $t('profile.history.episode') }} {{ item.episode }}</p>
                 <div class="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
                   <div class="h-full bg-cyan-400" :style="{ width: `${item.progress}%` }" />
                 </div>
@@ -323,10 +323,9 @@
             </div>
           </div>
           <div v-else class="text-center py-12">
-            <p class="text-white/50">{{ $t('profile.history.empty') || 'No watch history yet' }}</p>
+            <p class="text-white/50">{{ $t('profile.history.empty') }}</p>
           </div>
         </template>
-
 
         <template #settings>
           <div class="space-y-6">
@@ -337,7 +336,7 @@
                 <div class="flex items-center justify-between">
                   <div>
                     <p class="text-white">{{ $t('profile.settings.language') }}</p>
-                    <p class="text-white/50 text-sm">{{ $t('profile.settings.languageDesc') || 'Interface language' }}</p>
+                    <p class="text-white/50 text-sm">{{ $t('profile.settings.languageDesc') }}</p>
                   </div>
                   <select
                     v-model="settings.language"
@@ -351,7 +350,7 @@
                 <div class="flex items-center justify-between">
                   <div>
                     <p class="text-white">{{ $t('profile.settings.reduceMotion') }}</p>
-                    <p class="text-white/50 text-sm">{{ $t('profile.settings.reduceMotionDesc') || 'Reduce animations' }}</p>
+                    <p class="text-white/50 text-sm">{{ $t('profile.settings.reduceMotionDesc') }}</p>
                   </div>
                   <button
                     class="w-12 h-7 rounded-full transition-colors relative"
@@ -405,7 +404,7 @@
 
             <!-- Import -->
             <div class="glass-card p-6">
-              <h3 class="text-lg font-semibold text-white mb-4">Import List</h3>
+              <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.import.title') }}</h3>
               <div class="space-y-4">
                 <div>
                   <label class="block text-white/60 text-sm mb-2">MyAnimeList</label>
@@ -413,7 +412,7 @@
                     <input
                       v-model="malUsername"
                       type="text"
-                      placeholder="Enter MAL username"
+                      :placeholder="$t('profile.import.malPlaceholder')"
                       class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
                       :disabled="malImporting"
                     />
@@ -426,15 +425,15 @@
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      {{ malImporting ? 'Importing...' : 'Import' }}
+                      {{ malImporting ? $t('profile.import.importing') : $t('profile.import.import') }}
                     </Button>
                   </div>
                   <p class="text-white/40 text-xs mt-2">
-                    Imports your anime list from MyAnimeList. Your profile must be public.
+                    {{ $t('profile.import.malDescription') }}
                   </p>
                   <div v-if="malImportResult" class="mt-3 p-3 rounded-lg" :class="malImportResult.errors?.length ? 'bg-amber-500/20' : 'bg-green-500/20'">
                     <p class="text-sm" :class="malImportResult.errors?.length ? 'text-amber-400' : 'text-green-400'">
-                      Imported: {{ malImportResult.imported }} | Skipped: {{ malImportResult.skipped }}
+                      {{ $t('profile.import.imported') }}: {{ malImportResult.imported }} | {{ $t('profile.import.skipped') }}: {{ malImportResult.skipped }}
                     </p>
                   </div>
                   <div v-if="malImportError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
@@ -521,7 +520,7 @@ interface HistoryItem {
 }
 
 const router = useRouter()
-const { locale } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 
 const activeTab = ref('watchlist')
@@ -529,11 +528,11 @@ const watchlistFilter = ref('all')
 const viewMode = ref<'table' | 'grid'>('table')
 const loading = ref(false)
 
-const tabs = [
-  { value: 'watchlist', label: 'My Lists' },
-  { value: 'history', label: 'History' },
-  { value: 'settings', label: 'Settings' },
-]
+const tabs = computed(() => [
+  { value: 'watchlist', label: t('profile.tabs.watchlist') },
+  { value: 'history', label: t('profile.tabs.history') },
+  { value: 'settings', label: t('profile.tabs.settings') },
+])
 
 const settings = reactive({
   language: locale.value,
@@ -552,14 +551,14 @@ const malImporting = ref(false)
 const malImportResult = ref<{ imported: number; skipped: number; errors?: string[] } | null>(null)
 const malImportError = ref<string | null>(null)
 
-const statusLabels: Record<string, string> = {
-  all: 'All',
-  watching: 'Watching',
-  plan_to_watch: 'Plan to Watch',
-  completed: 'Completed',
-  on_hold: 'On Hold',
-  dropped: 'Dropped',
-}
+const statusLabels = computed(() => ({
+  all: t('profile.watchlist.all'),
+  watching: t('profile.watchlist.watching'),
+  plan_to_watch: t('profile.watchlist.planToWatch'),
+  completed: t('profile.watchlist.completed'),
+  on_hold: t('profile.watchlist.onHold'),
+  dropped: t('profile.watchlist.dropped'),
+}))
 
 const watchlistFilters = computed(() => {
   const counts: Record<string, number> = {
@@ -577,7 +576,7 @@ const watchlistFilters = computed(() => {
     }
   })
 
-  return Object.entries(statusLabels).map(([value, label]) => ({
+  return Object.entries(statusLabels.value).map(([value, label]) => ({
     value,
     label,
     count: counts[value] || 0,

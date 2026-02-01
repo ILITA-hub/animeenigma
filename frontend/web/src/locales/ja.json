@@ -35,8 +35,34 @@
     "recommendations": "おすすめ",
     "episode": "話",
     "of": "/",
+    "reviews": "レビュー",
+    "reviewsCount": "{count}件のレビュー",
+    "writeReview": "レビューを書く",
+    "editReview": "レビューを編集",
+    "yourRating": "あなたの評価",
+    "reviewPlaceholder": "このアニメについて感想を共有してください...",
+    "reviewOptional": "レビュー（任意）",
+    "publishing": "保存中...",
+    "publish": "投稿",
+    "update": "更新",
+    "loginToReview": "レビューするにはログインしてください",
+    "noReviews": "まだレビューがありません。最初のレビューを書きましょう！",
+    "user": "ユーザー",
+    "refresh": "更新",
+    "refreshing": "更新中...",
+    "refreshTooltip": "Shikimoriからデータを更新",
+    "showMore": "もっと見る",
+    "showLess": "閉じる",
+    "nextEpisode": "第{episode}話:",
+    "todayAt": "今日 {time} MSK",
+    "tomorrowAt": "明日 {time} MSK",
+    "hide": "非表示",
+    "unhide": "表示",
+    "hidden": "非表示中",
     "status": {
       "ongoing": "放送中",
+      "released": "放送終了",
+      "announced": "放送予定",
       "completed": "完結",
       "upcoming": "放送予定"
     }
@@ -47,7 +73,8 @@
     "audio": "音声",
     "autoplay": "自動再生",
     "next": "次へ",
-    "previous": "前へ"
+    "previous": "前へ",
+    "noTranslations": "利用可能な翻訳がありません"
   },
   "search": {
     "placeholder": "アニメを検索...",
@@ -65,23 +92,59 @@
     "memberSince": "登録日",
     "editProfile": "編集",
     "tabs": {
-      "watchlist": "リスト",
+      "watchlist": "マイリスト",
       "history": "履歴",
       "favorites": "お気に入り",
-      "settings": "設定"
+      "settings": "設定",
+      "hidden": "非表示"
     },
     "watchlist": {
       "all": "すべて",
       "watching": "視聴中",
       "planToWatch": "視聴予定",
       "completed": "視聴済み",
+      "onHold": "保留中",
       "dropped": "中断"
+    },
+    "table": {
+      "number": "#",
+      "image": "画像",
+      "title": "タイトル",
+      "score": "評価",
+      "type": "タイプ",
+      "progress": "進捗",
+      "tags": "タグ",
+      "actions": "操作"
+    },
+    "empty": {
+      "watchlist": "リストは空です",
+      "history": "視聴履歴がありません",
+      "hidden": "非表示のアニメはありません"
+    },
+    "actions": {
+      "browseCatalog": "カタログを見る",
+      "removeFromList": "リストから削除",
+      "tableView": "テーブル表示",
+      "gridView": "グリッド表示"
+    },
+    "rewatching": "再視聴中",
+    "noPoster": "ポスターなし",
+    "import": {
+      "title": "リストをインポート",
+      "malPlaceholder": "MALユーザー名を入力",
+      "malDescription": "MyAnimeListからアニメリストをインポートします。プロフィールは公開されている必要があります。",
+      "importing": "インポート中...",
+      "import": "インポート",
+      "imported": "インポート済み",
+      "skipped": "スキップ"
     },
     "settings": {
       "appearance": "外観",
       "language": "言語",
+      "languageDesc": "インターフェース言語",
       "autoplay": "自動再生",
       "reduceMotion": "モーション軽減",
+      "reduceMotionDesc": "アニメーションを軽減",
       "playback": "再生",
       "defaultQuality": "デフォルト画質",
       "preferredAudio": "優先音声",
@@ -90,6 +153,10 @@
       "email": "メール",
       "changePassword": "パスワード変更",
       "signOut": "ログアウト"
+    },
+    "history": {
+      "empty": "視聴履歴がありません",
+      "episode": "エピソード"
     }
   },
   "rooms": {

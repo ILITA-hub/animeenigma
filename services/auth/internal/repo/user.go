@@ -26,12 +26,12 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	user.UpdatedAt = time.Now()
 
 	query := `
-		INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO users (id, username, password_hash, telegram_id, role, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
-		user.ID, user.Username, user.PasswordHash, user.Role, user.CreatedAt, user.UpdatedAt)
+		user.ID, user.Username, user.PasswordHash, user.TelegramID, user.Role, user.CreatedAt, user.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return errors.AlreadyExists("username")
@@ -44,7 +44,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, created_at, updated_at
+		SELECT id, username, password_hash, telegram_id, role, created_at, updated_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -61,9 +61,28 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 	return &user, nil
 }
 
+func (r *UserRepository) GetByTelegramID(ctx context.Context, telegramID int64) (*domain.User, error) {
+	query := `
+		SELECT id, username, password_hash, telegram_id, role, created_at, updated_at
+		FROM users
+		WHERE telegram_id = $1 AND deleted_at IS NULL
+	`
+
+	var user domain.User
+	err := r.db.GetContext(ctx, &user, query, telegramID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found is not an error for this use case
+		}
+		return nil, fmt.Errorf("get user by telegram id: %w", err)
+	}
+
+	return &user, nil
+}
+
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, created_at, updated_at
+		SELECT id, username, password_hash, telegram_id, role, created_at, updated_at
 		FROM users
 		WHERE username = $1 AND deleted_at IS NULL
 	`
@@ -85,12 +104,12 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 
 	query := `
 		UPDATE users
-		SET username = $1, password_hash = $2, role = $3, updated_at = $4
-		WHERE id = $5 AND deleted_at IS NULL
+		SET username = $1, password_hash = $2, telegram_id = $3, role = $4, updated_at = $5
+		WHERE id = $6 AND deleted_at IS NULL
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
-		user.Username, user.PasswordHash, user.Role, user.UpdatedAt, user.ID)
+		user.Username, user.PasswordHash, user.TelegramID, user.Role, user.UpdatedAt, user.ID)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return errors.AlreadyExists("username")

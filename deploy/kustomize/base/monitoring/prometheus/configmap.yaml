@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # AnimeEnigma services
+      - job_name: 'gateway'
+        static_configs:
+          - targets: ['gateway.animeenigma.svc.cluster.local:8000']
+        metrics_path: /metrics
+
+      - job_name: 'auth'
+        static_configs:
+          - targets: ['auth.animeenigma.svc.cluster.local:8080']
+        metrics_path: /metrics
+
+      - job_name: 'catalog'
+        static_configs:
+          - targets: ['catalog.animeenigma.svc.cluster.local:8081']
+        metrics_path: /metrics
+
+      - job_name: 'streaming'
+        static_configs:
+          - targets: ['streaming.animeenigma.svc.cluster.local:8082']
+        metrics_path: /metrics
+
+      - job_name: 'player'
+        static_configs:
+          - targets: ['player.animeenigma.svc.cluster.local:8083']
+        metrics_path: /metrics
+
+      - job_name: 'rooms'
+        static_configs:
+          - targets: ['rooms.animeenigma.svc.cluster.local:8084']
+        metrics_path: /metrics
+
+      - job_name: 'scheduler'
+        static_configs:
+          - targets: ['scheduler.animeenigma.svc.cluster.local:8085']
+        metrics_path: /metrics
+
+      # Kubernetes service discovery for pods with prometheus annotations
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - animeenigma
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: app

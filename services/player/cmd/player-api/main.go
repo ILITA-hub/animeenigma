@@ -10,6 +10,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
@@ -55,8 +56,11 @@ func main() {
 	reviewHandler := handler.NewReviewHandler(reviewService, log)
 	malImportHandler := handler.NewMALImportHandler(listService, log)
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("player")
+
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, cfg.JWT, log)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

@@ -45,7 +45,33 @@
             <span class="text-white/30">•</span>
             <span class="text-white/60">{{ (anime as AnimeWithExtras).type || 'TV' }}</span>
             <span class="text-white/30">•</span>
-            <span class="text-white/60">{{ anime.totalEpisodes }} {{ $t('anime.episodes') }}</span>
+            <span class="text-white/60">{{ formatEpisodeCount(anime) }}</span>
+            <template v-if="anime.shikimoriId">
+              <span class="text-white/30">•</span>
+              <a
+                :href="`https://shikimori.one/animes/${anime.shikimoriId}`"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-cyan-400 hover:text-cyan-300 transition-colors"
+              >
+                Shikimori #{{ anime.shikimoriId }}
+              </a>
+            </template>
+          </div>
+
+          <!-- Next Episode Info -->
+          <div v-if="anime.nextEpisodeAt && anime.status === 'ongoing'" class="mb-4">
+            <div class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+              <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-cyan-400 font-medium">
+                Эп. {{ (anime.episodesAired || 0) + 1 }}:
+              </span>
+              <span class="text-white">
+                {{ formatNextEpisode(anime.nextEpisodeAt) }}
+              </span>
+            </div>
           </div>
 
           <!-- Ratings -->
@@ -74,7 +100,26 @@
           </div>
 
           <!-- Actions -->
-          <div class="flex flex-wrap items-center gap-3 mb-6">
+          <div v-if="authStore.isAuthenticated" class="flex flex-wrap items-center gap-3 mb-6">
+            <!-- Refresh Data Button -->
+            <button
+              @click="refreshAnimeData"
+              :disabled="refreshing"
+              class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all bg-white/5 text-white border border-white/10 hover:bg-white/10 disabled:opacity-50"
+              :title="$t('anime.refreshTooltip')"
+            >
+              <svg
+                class="w-5 h-5 transition-transform"
+                :class="{ 'animate-spin': refreshing }"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span class="hidden sm:inline">{{ refreshing ? $t('anime.refreshing') : $t('anime.refresh') }}</span>
+            </button>
+
             <!-- Watchlist Status Dropdown -->
             <div class="relative" ref="dropdownRef">
               <button
@@ -88,7 +133,7 @@
                   <path v-if="currentListStatus" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
-                <span>{{ currentListStatus ? statusLabels[currentListStatus] : 'В список' }}</span>
+                <span>{{ currentListStatus ? statusLabels[currentListStatus] : $t('anime.addToList') }}</span>
                 <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showStatusDropdown }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
@@ -131,11 +176,60 @@
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
-                      Удалить из списка
+                      {{ $t('anime.removeFromList') }}
                     </button>
                   </div>
                 </div>
               </Transition>
+            </div>
+
+            <!-- Hide Button (Admin only) -->
+            <button
+              v-if="authStore.isAdmin"
+              @click="toggleHidden"
+              class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all"
+              :class="isHidden
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30'
+                : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+              <span>{{ isHidden ? $t('anime.unhide') : $t('anime.hide') }}</span>
+            </button>
+
+            <!-- Edit Shikimori ID (Admin only) -->
+            <button
+              v-if="authStore.isAdmin"
+              @click="showShikimoriEdit = !showShikimoriEdit"
+              class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all bg-white/5 text-white border border-white/10 hover:bg-white/10"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>Shikimori ID</span>
+            </button>
+          </div>
+
+          <!-- Shikimori ID Edit Panel (Admin only) -->
+          <div v-if="authStore.isAdmin && showShikimoriEdit" class="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
+            <div class="flex items-center gap-3">
+              <label class="text-white/60 text-sm whitespace-nowrap">Shikimori ID:</label>
+              <input
+                v-model="editShikimoriId"
+                type="text"
+                class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+                placeholder="например: 59459"
+              />
+              <button
+                @click="saveShikimoriId"
+                :disabled="savingShikimoriId"
+                class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg transition-colors disabled:opacity-50 text-sm"
+              >
+                {{ savingShikimoriId ? '...' : 'Сохранить' }}
+              </button>
             </div>
           </div>
 
@@ -165,7 +259,7 @@
             class="mt-2 text-cyan-400 hover:text-cyan-300 transition-colors text-sm"
             @click="synopsisExpanded = !synopsisExpanded"
           >
-            {{ synopsisExpanded ? 'Скрыть' : 'Показать полностью' }}
+            {{ synopsisExpanded ? $t('anime.showLess') : $t('anime.showMore') }}
           </button>
         </div>
       </section>
@@ -198,21 +292,21 @@
               <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
-              Отзывы
+              {{ $t('anime.reviews') }}
             </span>
           </h2>
-          <span v-if="reviews.length > 0" class="text-white/40 text-sm">{{ reviews.length }} отзывов</span>
+          <span v-if="reviews.length > 0" class="text-white/40 text-sm">{{ $t('anime.reviewsCount', { count: reviews.length }) }}</span>
         </div>
 
         <!-- Write Review Form -->
         <div v-if="authStore.isAuthenticated" class="glass-card p-4 md:p-6 mb-6">
           <h3 class="text-lg font-medium text-white mb-4">
-            {{ myReview ? 'Изменить отзыв' : 'Написать отзыв' }}
+            {{ myReview ? $t('anime.editReview') : $t('anime.writeReview') }}
           </h3>
 
           <!-- Star Rating -->
           <div class="mb-4">
-            <label class="block text-white/60 text-sm mb-2">Ваша оценка</label>
+            <label class="block text-white/60 text-sm mb-2">{{ $t('anime.yourRating') }}</label>
             <div class="flex gap-1">
               <button
                 v-for="star in 10"
@@ -235,12 +329,12 @@
 
           <!-- Review Text -->
           <div class="mb-4">
-            <label class="block text-white/60 text-sm mb-2">Ваш отзыв (необязательно)</label>
+            <label class="block text-white/60 text-sm mb-2">{{ $t('anime.reviewOptional') }}</label>
             <textarea
               v-model="reviewForm.text"
               rows="4"
               class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
-              placeholder="Поделитесь своими впечатлениями об аниме..."
+              :placeholder="$t('anime.reviewPlaceholder')"
             ></textarea>
           </div>
 
@@ -251,26 +345,26 @@
               :disabled="reviewForm.score === 0 || reviewSubmitting"
               class="px-6 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {{ reviewSubmitting ? 'Сохранение...' : (myReview ? 'Обновить' : 'Опубликовать') }}
+              {{ reviewSubmitting ? $t('anime.publishing') : (myReview ? $t('anime.update') : $t('anime.publish')) }}
             </button>
             <button
               v-if="myReview"
               @click="deleteMyReview"
               class="px-6 py-2.5 bg-pink-500/20 hover:bg-pink-500/30 text-pink-400 font-medium rounded-lg transition-colors"
             >
-              Удалить
+              {{ $t('common.delete') }}
             </button>
           </div>
         </div>
 
         <!-- Login prompt -->
         <div v-else class="glass-card p-6 mb-6 text-center">
-          <p class="text-white/60 mb-3">Войдите, чтобы оставить отзыв</p>
+          <p class="text-white/60 mb-3">{{ $t('anime.loginToReview') }}</p>
           <router-link
             to="/auth"
             class="inline-block px-6 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg transition-colors"
           >
-            Войти
+            {{ $t('nav.login') }}
           </router-link>
         </div>
 
@@ -287,7 +381,7 @@
                   {{ review.username?.slice(0, 2).toUpperCase() || '??' }}
                 </div>
                 <div>
-                  <p class="font-medium text-white">{{ review.username || 'Пользователь' }}</p>
+                  <p class="font-medium text-white">{{ review.username || $t('anime.user') }}</p>
                   <p class="text-white/40 text-sm">{{ formatDate(review.created_at) }}</p>
                 </div>
               </div>
@@ -303,7 +397,7 @@
         </div>
 
         <div v-else class="glass-card p-8 text-center">
-          <p class="text-white/50">Пока нет отзывов. Будьте первым!</p>
+          <p class="text-white/50">{{ $t('anime.noReviews') }}</p>
         </div>
       </section>
 
@@ -342,13 +436,14 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button } from '@/components/ui'
 import { GenreChip, AnimeCardNew } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import KodikPlayer from '@/components/player/KodikPlayer.vue'
-import { userApi, reviewApi } from '@/api/client'
+import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
 
 interface AnimeWithExtras {
   japaneseTitle?: string
@@ -382,6 +477,7 @@ interface AnimeRating {
 }
 
 const route = useRoute()
+const { t } = useI18n()
 const authStore = useAuthStore()
 const { anime, loading, error, fetchAnime } = useAnime()
 
@@ -390,6 +486,11 @@ const currentListStatus = ref<string | null>(null)
 const showStatusDropdown = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const relatedAnime = ref<RelatedAnime[]>([])
+const refreshing = ref(false)
+const isHidden = ref(false)
+const showShikimoriEdit = ref(false)
+const editShikimoriId = ref('')
+const savingShikimoriId = ref(false)
 
 // Reviews
 const reviews = ref<Review[]>([])
@@ -401,18 +502,18 @@ const reviewForm = reactive({
   text: '',
 })
 
-const statusLabels: Record<string, string> = {
-  watching: 'Смотрю',
-  plan_to_watch: 'Запланировано',
-  completed: 'Просмотрено',
-  on_hold: 'Отложено',
-  dropped: 'Брошено',
-}
+const statusLabels = computed((): Record<string, string> => ({
+  watching: t('profile.watchlist.watching'),
+  plan_to_watch: t('profile.watchlist.planToWatch'),
+  completed: t('profile.watchlist.completed'),
+  on_hold: t('profile.watchlist.onHold'),
+  dropped: t('profile.watchlist.dropped'),
+}))
 
 const statusVariant = computed(() => {
   const status = anime.value?.status?.toLowerCase()
-  if (status === 'completed') return 'success'
-  if (status === 'upcoming') return 'warning'
+  if (status === 'completed' || status === 'released') return 'success'
+  if (status === 'upcoming' || status === 'announced') return 'warning'
   return 'primary' // ongoing
 })
 
@@ -423,6 +524,54 @@ const formatDate = (dateStr: string) => {
     month: 'long',
     year: 'numeric',
   })
+}
+
+const formatNextEpisode = (dateStr: string) => {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = date.getTime() - now.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  const timeStr = date.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Moscow'
+  })
+
+  if (diffDays === 0) {
+    return `Сегодня в ${timeStr} МСК`
+  } else if (diffDays === 1) {
+    return `Завтра в ${timeStr} МСК`
+  } else if (diffDays > 1 && diffDays < 7) {
+    const dayNames = ['воскресенье', 'понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу']
+    return `В ${dayNames[date.getDay()]} в ${timeStr} МСК`
+  } else {
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Moscow'
+    }) + ' МСК'
+  }
+}
+
+const formatEpisodeCount = (anime: any) => {
+  const aired = anime.episodesAired || 0
+  const total = anime.totalEpisodes || 0
+
+  if (total > 0) {
+    // Total known - show "aired / total" for ongoing, or just "total" for completed
+    if (anime.status === 'ongoing' && aired > 0 && aired < total) {
+      return `${aired} / ${total} эп.`
+    }
+    return `${total} эп.`
+  } else if (aired > 0) {
+    // Total unknown but some aired
+    return `${aired} / ? эп.`
+  }
+  // Nothing known
+  return '? эп.'
 }
 
 const fetchWatchlistStatus = async () => {
@@ -439,6 +588,46 @@ const fetchWatchlistStatus = async () => {
     }
   } catch (err) {
     console.error('Failed to fetch watchlist status:', err)
+  }
+}
+
+const fetchHiddenStatus = () => {
+  // Hidden status comes from the anime object itself
+  if (anime.value) {
+    isHidden.value = (anime.value as any).hidden || false
+    editShikimoriId.value = (anime.value as any).shikimoriId || ''
+  }
+}
+
+const toggleHidden = async () => {
+  if (!anime.value || !authStore.isAdmin) return
+
+  try {
+    if (isHidden.value) {
+      await adminApi.unhideAnime(anime.value.id)
+      isHidden.value = false
+    } else {
+      await adminApi.hideAnime(anime.value.id)
+      isHidden.value = true
+    }
+  } catch (err) {
+    console.error('Failed to toggle hidden status:', err)
+  }
+}
+
+const saveShikimoriId = async () => {
+  if (!anime.value || !authStore.isAdmin || savingShikimoriId.value) return
+
+  savingShikimoriId.value = true
+  try {
+    await adminApi.updateShikimoriId(anime.value.id, editShikimoriId.value)
+    showShikimoriEdit.value = false
+    // Refresh anime data to get updated translations
+    await fetchAnime(anime.value.id)
+  } catch (err) {
+    console.error('Failed to update Shikimori ID:', err)
+  } finally {
+    savingShikimoriId.value = false
   }
 }
 
@@ -515,7 +704,8 @@ const setListStatus = async (status: string) => {
       anime.value.id,
       status,
       anime.value.title,
-      anime.value.coverImage
+      anime.value.coverImage,
+      anime.value.totalEpisodes || anime.value.episodesAired
     )
     currentListStatus.value = status
     showStatusDropdown.value = false
@@ -543,6 +733,21 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 }
 
+const refreshAnimeData = async () => {
+  if (!anime.value || refreshing.value) return
+
+  refreshing.value = true
+  try {
+    await animeApi.refresh(anime.value.id)
+    // Refetch anime data to show updated info
+    await fetchAnime(anime.value.id)
+  } catch (err) {
+    console.error('Failed to refresh anime data:', err)
+  } finally {
+    refreshing.value = false
+  }
+}
+
 const retry = () => {
   const animeId = route.params.id as string
   fetchAnime(animeId)
@@ -552,6 +757,7 @@ onMounted(async () => {
   const animeId = route.params.id as string
   await fetchAnime(animeId)
   await fetchWatchlistStatus()
+  await fetchHiddenStatus()
   await fetchReviews()
   document.addEventListener('click', handleClickOutside)
 })

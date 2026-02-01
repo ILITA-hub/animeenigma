@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/rooms/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/rooms/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/rooms/internal/service"
@@ -53,8 +54,11 @@ func main() {
 	wsHandler := handler.NewWebSocketHandler(wsService, log)
 	leaderboardHandler := handler.NewLeaderboardHandler(leaderboardService, log)
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("rooms")
+
 	// Initialize router
-	router := transport.NewRouter(roomHandler, wsHandler, leaderboardHandler, cfg.JWT, log)
+	router := transport.NewRouter(roomHandler, wsHandler, leaderboardHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

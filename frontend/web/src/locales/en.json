@@ -35,8 +35,34 @@
     "recommendations": "Recommendations",
     "episode": "Episode",
     "of": "of",
+    "reviews": "Reviews",
+    "reviewsCount": "{count} reviews",
+    "writeReview": "Write a review",
+    "editReview": "Edit review",
+    "yourRating": "Your rating",
+    "reviewPlaceholder": "Share your thoughts about this anime...",
+    "reviewOptional": "Your review (optional)",
+    "publishing": "Saving...",
+    "publish": "Publish",
+    "update": "Update",
+    "loginToReview": "Sign in to leave a review",
+    "noReviews": "No reviews yet. Be the first!",
+    "user": "User",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing...",
+    "refreshTooltip": "Refresh data from Shikimori",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "nextEpisode": "Ep. {episode}:",
+    "todayAt": "Today at {time} MSK",
+    "tomorrowAt": "Tomorrow at {time} MSK",
+    "hide": "Hide",
+    "unhide": "Unhide",
+    "hidden": "Hidden",
     "status": {
       "ongoing": "Ongoing",
+      "released": "Released",
+      "announced": "Announced",
       "completed": "Completed",
       "upcoming": "Upcoming"
     }
@@ -47,7 +73,8 @@
     "audio": "Audio",
     "autoplay": "Autoplay",
     "next": "Next",
-    "previous": "Previous"
+    "previous": "Previous",
+    "noTranslations": "No translations available"
   },
   "search": {
     "placeholder": "Search anime...",
@@ -65,23 +92,59 @@
     "memberSince": "Member since",
     "editProfile": "Edit Profile",
     "tabs": {
-      "watchlist": "Watchlist",
+      "watchlist": "My Lists",
       "history": "History",
       "favorites": "Favorites",
-      "settings": "Settings"
+      "settings": "Settings",
+      "hidden": "Hidden"
     },
     "watchlist": {
       "all": "All",
       "watching": "Watching",
       "planToWatch": "Plan to Watch",
       "completed": "Completed",
+      "onHold": "On Hold",
       "dropped": "Dropped"
+    },
+    "table": {
+      "number": "#",
+      "image": "Image",
+      "title": "Title",
+      "score": "Score",
+      "type": "Type",
+      "progress": "Progress",
+      "tags": "Tags",
+      "actions": "Actions"
+    },
+    "empty": {
+      "watchlist": "Your list is empty",
+      "history": "No watch history yet",
+      "hidden": "No hidden anime"
+    },
+    "actions": {
+      "browseCatalog": "Browse Catalog",
+      "removeFromList": "Remove from list",
+      "tableView": "Table view",
+      "gridView": "Grid view"
+    },
+    "rewatching": "Rewatching",
+    "noPoster": "No poster",
+    "import": {
+      "title": "Import List",
+      "malPlaceholder": "Enter MAL username",
+      "malDescription": "Imports your anime list from MyAnimeList. Your profile must be public.",
+      "importing": "Importing...",
+      "import": "Import",
+      "imported": "Imported",
+      "skipped": "Skipped"
     },
     "settings": {
       "appearance": "Appearance",
       "language": "Language",
+      "languageDesc": "Interface language",
       "autoplay": "Autoplay next",
       "reduceMotion": "Reduce motion",
+      "reduceMotionDesc": "Reduce animations",
       "playback": "Playback",
       "defaultQuality": "Default quality",
       "preferredAudio": "Preferred audio",
@@ -90,6 +153,10 @@
       "email": "Email",
       "changePassword": "Change Password",
       "signOut": "Sign Out"
+    },
+    "history": {
+      "empty": "No watch history yet",
+      "episode": "Episode"
     }
   },
   "rooms": {

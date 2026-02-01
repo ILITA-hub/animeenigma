@@ -1,0 +1,56 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: admin-ingress
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: admin-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "AnimeEnigma Admin Area"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Enable CORS for dashboard API
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    # Backend protocol for K8s Dashboard
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - admin.animeenigma.com
+      secretName: admin-tls
+  rules:
+    - host: admin.animeenigma.com
+      http:
+        paths:
+          # Grafana - monitoring dashboards
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
+          # pgAdmin - database administration
+          - path: /pgadmin
+            pathType: Prefix
+            backend:
+              service:
+                name: pgadmin
+                port:
+                  number: 80
+          # Kubernetes Dashboard
+          - path: /k8s
+            pathType: Prefix
+            backend:
+              service:
+                name: kubernetes-dashboard
+                port:
+                  number: 443
+          # Prometheus - raw metrics
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus
+                port:
+                  number: 9090

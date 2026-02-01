@@ -99,3 +99,82 @@ func (h *AdminHandler) SyncFromShikimori(w http.ResponseWriter, r *http.Request)
 
 	httputil.OK(w, anime)
 }
+
+// HideAnime hides an anime from the public site
+func (h *AdminHandler) HideAnime(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	if err := h.catalogService.SetAnimeHidden(r.Context(), animeID, true); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	h.log.Infow("anime hidden", "anime_id", animeID)
+	httputil.OK(w, map[string]bool{"hidden": true})
+}
+
+// UnhideAnime unhides an anime, making it visible on the public site
+func (h *AdminHandler) UnhideAnime(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	if err := h.catalogService.SetAnimeHidden(r.Context(), animeID, false); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	h.log.Infow("anime unhidden", "anime_id", animeID)
+	httputil.OK(w, map[string]bool{"hidden": false})
+}
+
+// GetHiddenAnime returns all hidden anime
+func (h *AdminHandler) GetHiddenAnime(w http.ResponseWriter, r *http.Request) {
+	animes, err := h.catalogService.GetHiddenAnime(r.Context())
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if animes == nil {
+		animes = []*domain.Anime{}
+	}
+
+	httputil.OK(w, animes)
+}
+
+// UpdateShikimoriID updates the Shikimori ID for an anime
+func (h *AdminHandler) UpdateShikimoriID(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	var req struct {
+		ShikimoriID string `json:"shikimori_id"`
+	}
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if req.ShikimoriID == "" {
+		httputil.BadRequest(w, "shikimori_id is required")
+		return
+	}
+
+	if err := h.catalogService.UpdateShikimoriID(r.Context(), animeID, req.ShikimoriID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	h.log.Infow("shikimori_id updated", "anime_id", animeID, "shikimori_id", req.ShikimoriID)
+	httputil.OK(w, map[string]string{"shikimori_id": req.ShikimoriID})
+}

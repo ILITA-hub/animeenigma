@@ -152,3 +152,24 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	h.clearRefreshTokenCookie(w)
 	httputil.NoContent(w)
 }
+
+// TelegramLogin handles Telegram Login Widget authentication
+func (h *AuthHandler) TelegramLogin(w http.ResponseWriter, r *http.Request) {
+	var req domain.TelegramLoginRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	resp, err := h.authService.LoginWithTelegram(r.Context(), &req)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	// Set refresh token as httpOnly cookie
+	h.setRefreshTokenCookie(w, resp.RefreshToken)
+
+	// Return response without refresh token in body
+	httputil.OK(w, resp.ToPublicResponse())
+}

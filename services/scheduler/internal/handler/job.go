@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -28,12 +29,12 @@ func (h *JobHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 
 // TriggerShikimoriSync manually triggers the Shikimori sync job
 func (h *JobHandler) TriggerShikimoriSync(w http.ResponseWriter, r *http.Request) {
-	go h.jobService.TriggerShikimoriSync(r.Context())
+	go h.jobService.TriggerShikimoriSync(context.Background())
 	httputil.OK(w, map[string]string{"status": "job triggered"})
 }
 
 // TriggerCleanup manually triggers the cleanup job
 func (h *JobHandler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
-	go h.jobService.TriggerCleanup(r.Context())
+	go h.jobService.TriggerCleanup(context.Background())
 	httputil.OK(w, map[string]string{"status": "job triggered"})
 }

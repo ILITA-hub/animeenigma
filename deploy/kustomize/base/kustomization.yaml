@@ -18,5 +18,30 @@ resources:
   - services/scheduler.yaml
   - services/web.yaml
 
+# Monitoring stack
+  - monitoring/namespace.yaml
+  - monitoring/prometheus/rbac.yaml
+  - monitoring/prometheus/configmap.yaml
+  - monitoring/prometheus/pvc.yaml
+  - monitoring/prometheus/deployment.yaml
+  - monitoring/prometheus/service.yaml
+  - monitoring/grafana/secret.yaml
+  - monitoring/grafana/pvc.yaml
+  - monitoring/grafana/configmap-datasources.yaml
+  - monitoring/grafana/configmap-dashboards.yaml
+  - monitoring/grafana/deployment.yaml
+  - monitoring/grafana/service.yaml
+
+# Admin tools
+  - admin/pgadmin/secret.yaml
+  - admin/pgadmin/configmap.yaml
+  - admin/pgadmin/deployment.yaml
+  - admin/pgadmin/service.yaml
+  - admin/kubernetes-dashboard/rbac.yaml
+  - admin/kubernetes-dashboard/deployment.yaml
+  - admin/kubernetes-dashboard/service.yaml
+  - admin/basic-auth-secret.yaml
+  - admin/ingress.yaml
+
 commonLabels:
   app.kubernetes.io/part-of: animeenigma

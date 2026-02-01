@@ -10,6 +10,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/handler"
@@ -56,8 +57,11 @@ func main() {
 	streamHandler := handler.NewStreamHandler(streamingService, log)
 	uploadHandler := handler.NewUploadHandler(streamingService, log)
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector("streaming")
+
 	// Initialize router
-	router := transport.NewRouter(streamHandler, uploadHandler, cfg, log)
+	router := transport.NewRouter(streamHandler, uploadHandler, cfg, log, metricsCollector)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),

@@ -2,12 +2,25 @@
   <div class="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black">
     <!-- Header -->
     <div class="pt-8 pb-6 px-4 lg:px-8 max-w-7xl mx-auto">
-      <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">
-        AnimeEnigma
-      </h1>
-      <p class="text-gray-400">
-        Смотри аниме онлайн бесплатно
-      </p>
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">
+            AnimeEnigma
+          </h1>
+          <p class="text-gray-400">
+            Смотри аниме онлайн бесплатно
+          </p>
+        </div>
+        <router-link
+          to="/schedule"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span class="hidden sm:inline">Расписание</span>
+        </router-link>
+      </div>
     </div>
 
     <!-- Search Bar -->
@@ -145,6 +158,13 @@
                     {{ anime.score.toFixed(1) }}
                   </span>
                 </div>
+                <!-- Next episode info -->
+                <p v-if="anime.next_episode_at" class="text-xs text-cyan-400 mt-1 flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Эп. {{ (anime.episodes_aired || 0) + 1 }}: {{ formatNextEpisode(anime.next_episode_at) }}
+                </p>
               </div>
             </router-link>
 
@@ -239,8 +259,10 @@ interface Anime {
   score?: number
   status?: string
   episodes_count?: number
+  episodes_aired?: number
   year?: number
   season?: string
+  next_episode_at?: string
 }
 
 const router = useRouter()
@@ -285,6 +307,33 @@ const getRankClass = (index: number) => {
   if (index === 1) return 'bg-gradient-to-br from-gray-300 to-gray-500 text-black'
   if (index === 2) return 'bg-gradient-to-br from-amber-600 to-amber-800 text-white'
   return 'bg-white/10 text-gray-400'
+}
+
+const formatNextEpisode = (dateStr: string) => {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = date.getTime() - now.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  const timeStr = date.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Moscow'
+  })
+
+  if (diffDays === 0) {
+    return `Сегодня ${timeStr}`
+  } else if (diffDays === 1) {
+    return `Завтра ${timeStr}`
+  } else if (diffDays > 1 && diffDays < 7) {
+    const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+    return `${dayNames[date.getDay()]} ${timeStr}`
+  } else {
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short'
+    })
+  }
 }
 
 onMounted(async () => {

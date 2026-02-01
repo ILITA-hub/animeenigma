@@ -5,6 +5,14 @@ FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
+# Build arguments for environment variables
+ARG VITE_TELEGRAM_BOT_NAME=""
+ARG VITE_API_URL="http://localhost:8000/api"
+
+# Set environment variables for build
+ENV VITE_TELEGRAM_BOT_NAME=$VITE_TELEGRAM_BOT_NAME
+ENV VITE_API_URL=$VITE_API_URL
+
 # Copy package files
 COPY package.json bun.lock ./
 

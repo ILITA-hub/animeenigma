@@ -56,23 +56,53 @@
 
         <!-- Episodes below player -->
         <div class="mt-4">
-          <h3 class="text-white/60 text-sm mb-3 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
-            {{ $t('anime.episodes') || 'Серии' }} ({{ episodeRange.length }})
-          </h3>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-white/60 text-sm flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              {{ $t('anime.episodes') || 'Серии' }} ({{ episodeRange.length }})
+            </h3>
+            <!-- Mark as watched button -->
+            <button
+              v-if="authStore.isAuthenticated"
+              @click="markCurrentEpisodeWatched"
+              :disabled="markingWatched"
+              class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              :class="episodeMarkedWatched
+                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                : 'bg-white/10 text-white hover:bg-white/20'"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              {{ episodeMarkedWatched ? 'Просмотрено' : 'Отметить просмотренным' }}
+            </button>
+          </div>
           <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
             <button
               v-for="ep in episodeRange"
               :key="ep"
               @click="selectEpisode(ep)"
-              class="w-12 h-10 rounded-lg text-sm font-medium transition-all"
-              :class="selectedEpisode === ep
-                ? 'bg-cyan-500 text-black'
-                : 'bg-white/10 text-white hover:bg-white/20'"
+              class="relative w-12 h-10 rounded-lg text-sm font-medium transition-all"
+              :class="[
+                selectedEpisode === ep
+                  ? 'bg-cyan-500 text-black'
+                  : isEpisodeWatched(ep)
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                    : 'bg-white/10 text-white hover:bg-white/20'
+              ]"
             >
               {{ ep }}
+              <!-- Watched indicator -->
+              <span
+                v-if="isEpisodeWatched(ep) && selectedEpisode !== ep"
+                class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center"
+              >
+                <svg class="w-2 h-2 text-black" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+              </span>
             </button>
           </div>
         </div>
@@ -187,8 +217,101 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { kodikApi } from '@/api/client'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { kodikApi, userApi } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
+
+// Watch progress tracking
+const currentTime = ref(0)
+const maxTime = ref(0) // Track max reached time as approximate duration
+const lastSaveTime = ref(0)
+const SAVE_INTERVAL = 30 // Save every 30 seconds of playback
+const AUTO_MARK_THRESHOLD = 20 * 60 // Auto-mark as watched after 20 minutes (1200 seconds)
+const authStore = useAuthStore()
+
+// Mark episode as watched
+const markingWatched = ref(false)
+const episodeMarkedWatched = ref(false)
+const watchedEpisodes = ref(0) // Number of episodes user has watched
+
+const emit = defineEmits<{
+  (e: 'progress', data: { episode: number; time: number; maxTime: number }): void
+  (e: 'episodeWatched', data: { episode: number }): void
+}>()
+
+// Save progress to localStorage (works without auth)
+const saveProgressLocal = (animeId: string, episode: number, time: number) => {
+  const key = `watch_progress:${animeId}`
+  const data = JSON.parse(localStorage.getItem(key) || '{}')
+  data[episode] = { time, maxTime: maxTime.value, updatedAt: Date.now() }
+  localStorage.setItem(key, JSON.stringify(data))
+}
+
+// Save progress to server (requires auth)
+const saveProgressServer = async (animeId: string, episode: number, time: number) => {
+  if (!authStore.isAuthenticated) return
+
+  try {
+    await userApi.updateProgress({
+      anime_id: animeId,
+      episode_number: episode,
+      progress: Math.floor(time),
+      duration: Math.floor(maxTime.value) || null
+    })
+  } catch (err) {
+    console.warn('Failed to save progress to server:', err)
+  }
+}
+
+// Handle Kodik postMessage events
+const handleKodikMessage = (event: MessageEvent) => {
+  // Filter only Kodik messages
+  if (!event.origin.includes('kodik') && !event.origin.includes('aniqit')) return
+
+  try {
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+
+    // Handle time update: { key: "kodik_player_time_update", value: 1331 }
+    if (data.key === 'kodik_player_time_update' && typeof data.value === 'number') {
+      currentTime.value = data.value
+
+      // Track max time reached (approximate duration)
+      if (data.value > maxTime.value) {
+        maxTime.value = data.value
+      }
+
+      // Emit progress event
+      emit('progress', {
+        episode: selectedEpisode.value,
+        time: data.value,
+        maxTime: maxTime.value
+      })
+
+      // Save progress every SAVE_INTERVAL seconds
+      if (data.value - lastSaveTime.value >= SAVE_INTERVAL) {
+        lastSaveTime.value = data.value
+        saveProgressLocal(props.animeId, selectedEpisode.value, data.value)
+        saveProgressServer(props.animeId, selectedEpisode.value, data.value)
+      }
+
+      // Auto-mark as watched after 20 minutes
+      if (authStore.isAuthenticated &&
+          !episodeMarkedWatched.value &&
+          data.value >= AUTO_MARK_THRESHOLD) {
+        autoMarkEpisodeWatched()
+      }
+    }
+
+    // Handle pause event (save immediately)
+    if (data.key === 'kodik_player_pause') {
+      saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
+      saveProgressServer(props.animeId, selectedEpisode.value, currentTime.value)
+    }
+
+  } catch {
+    // Ignore parse errors
+  }
+}
 
 interface KodikTranslation {
   id: number
@@ -358,9 +481,81 @@ const selectTranslation = (translationId: number) => {
 
 const selectEpisode = (episode: number) => {
   if (selectedEpisode.value === episode) return
+
+  // Save progress of current episode before switching
+  if (currentTime.value > 0) {
+    saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
+    saveProgressServer(props.animeId, selectedEpisode.value, currentTime.value)
+  }
+
+  // Reset progress tracking for new episode
+  currentTime.value = 0
+  maxTime.value = 0
+  lastSaveTime.value = 0
+  // Check if new episode is already watched
+  episodeMarkedWatched.value = isEpisodeWatched(episode)
+
   selectedEpisode.value = episode
   if (selectedTranslation.value) {
     loadVideo()
+  }
+}
+
+// Fetch watched episodes count from user's watchlist
+const fetchWatchedEpisodes = async () => {
+  if (!authStore.isAuthenticated) {
+    watchedEpisodes.value = 0
+    return
+  }
+
+  try {
+    const response = await userApi.getWatchlistEntry(props.animeId)
+    const entry = response.data?.data || response.data
+    watchedEpisodes.value = entry?.episodes || 0
+  } catch {
+    watchedEpisodes.value = 0
+  }
+}
+
+// Check if episode is watched
+const isEpisodeWatched = (episode: number): boolean => {
+  return episode <= watchedEpisodes.value
+}
+
+// Mark current episode as watched
+const markCurrentEpisodeWatched = async () => {
+  if (!authStore.isAuthenticated || markingWatched.value) return
+
+  markingWatched.value = true
+  try {
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value)
+    episodeMarkedWatched.value = true
+    // Update watched episodes count
+    if (selectedEpisode.value > watchedEpisodes.value) {
+      watchedEpisodes.value = selectedEpisode.value
+    }
+    emit('episodeWatched', { episode: selectedEpisode.value })
+  } catch (err: any) {
+    error.value = err.response?.data?.message || 'Не удалось отметить серию'
+  } finally {
+    markingWatched.value = false
+  }
+}
+
+// Auto-mark episode as watched (silent, no UI feedback on error)
+const autoMarkEpisodeWatched = async () => {
+  if (!authStore.isAuthenticated || episodeMarkedWatched.value) return
+
+  try {
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value)
+    episodeMarkedWatched.value = true
+    // Update watched episodes count
+    if (selectedEpisode.value > watchedEpisodes.value) {
+      watchedEpisodes.value = selectedEpisode.value
+    }
+    emit('episodeWatched', { episode: selectedEpisode.value })
+  } catch {
+    // Silent fail for auto-mark
   }
 }
 
@@ -384,18 +579,57 @@ const togglePin = async (translation: KodikTranslation) => {
   }
 }
 
+// Save progress before leaving
+const saveBeforeLeave = () => {
+  if (currentTime.value > 0) {
+    saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
+    // Use sendBeacon for reliable save on page close
+    if (authStore.isAuthenticated && navigator.sendBeacon) {
+      const data = JSON.stringify({
+        anime_id: props.animeId,
+        episode_number: selectedEpisode.value,
+        progress: Math.floor(currentTime.value),
+        duration: Math.floor(maxTime.value) || null
+      })
+      navigator.sendBeacon('/api/users/progress', new Blob([data], { type: 'application/json' }))
+    }
+  }
+}
+
 // Reset when anime changes
 watch(() => props.animeId, () => {
+  // Save current progress before switching anime
+  saveBeforeLeave()
+
   embedUrl.value = null
   selectedEpisode.value = 1
+  currentTime.value = 0
+  maxTime.value = 0
+  lastSaveTime.value = 0
+  watchedEpisodes.value = 0
+  episodeMarkedWatched.value = false
   fetchTranslations()
+  fetchWatchedEpisodes()
 })
 
 onMounted(() => {
+  // Listen for Kodik postMessage events
+  window.addEventListener('message', handleKodikMessage)
+  window.addEventListener('beforeunload', saveBeforeLeave)
+
   if (props.initialEpisode) {
     selectedEpisode.value = props.initialEpisode
   }
   fetchTranslations()
+  fetchWatchedEpisodes()
+})
+
+onUnmounted(() => {
+  // Save progress when component unmounts
+  saveBeforeLeave()
+
+  window.removeEventListener('message', handleKodikMessage)
+  window.removeEventListener('beforeunload', saveBeforeLeave)
 })
 </script>
 

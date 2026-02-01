@@ -12,6 +12,9 @@ export interface Anime {
   releaseYear: number
   rating: number
   totalEpisodes: number
+  episodesAired: number
+  nextEpisodeAt?: string
+  shikimoriId?: string
 }
 
 export interface Episode {
@@ -35,7 +38,10 @@ function transformAnime(apiAnime: any): Anime {
     status: apiAnime.status || '',
     releaseYear: apiAnime.year || 0,
     rating: apiAnime.score || 0,
-    totalEpisodes: apiAnime.episodes_count || 0
+    totalEpisodes: apiAnime.episodes_count || 0,
+    episodesAired: apiAnime.episodes_aired || 0,
+    nextEpisodeAt: apiAnime.next_episode_at || null,
+    shikimoriId: apiAnime.shikimori_id || null
   }
 }
 
@@ -128,6 +134,35 @@ export function useAnime() {
     }
   }
 
+  const fetchSchedule = async () => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await animeApi.getSchedule()
+      const data = response.data?.data || response.data
+      return Array.isArray(data) ? data : []
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to fetch schedule'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchOngoing = async () => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await animeApi.getOngoing(50)
+      return transformAnimeList(response.data)
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to fetch ongoing'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   const fetchEpisodes = async (animeId: string) => {
     // Don't set global loading for episodes - use separate loadingEpisodes in component
     try {
@@ -158,9 +193,13 @@ export function useAnime() {
     }
   }
 
-  const addToWatchlist = async (animeId: string) => {
+  const addToWatchlist = async (animeId: string, animeTitle?: string, animeCover?: string, totalEpisodes?: number) => {
     try {
-      await userApi.addToWatchlist(animeId)
+      // Use current anime data if available and not provided
+      const title = animeTitle ?? anime.value?.title
+      const cover = animeCover ?? anime.value?.coverImage
+      const episodes = totalEpisodes ?? anime.value?.totalEpisodes ?? anime.value?.episodesAired
+      await userApi.addToWatchlist(animeId, 'plan_to_watch', title, cover, episodes)
       return true
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to add to watchlist'
@@ -189,6 +228,8 @@ export function useAnime() {
     searchAnime,
     fetchTrending,
     fetchPopular,
+    fetchSchedule,
+    fetchOngoing,
     fetchEpisodes,
     fetchEpisode,
     addToWatchlist,

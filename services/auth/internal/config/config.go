@@ -17,6 +17,12 @@ type Config struct {
 	Redis    cache.Config
 	JWT      authz.JWTConfig
 	Cookie   CookieConfig
+	Telegram TelegramConfig
+}
+
+type TelegramConfig struct {
+	BotToken string
+	BotName  string
 }
 
 type CookieConfig struct {
@@ -67,6 +73,10 @@ func Load() (*Config, error) {
 			Domain:   getEnv("COOKIE_DOMAIN", ""),
 			Secure:   getEnvBool("COOKIE_SECURE", false),
 			SameSite: getEnv("COOKIE_SAMESITE", "Lax"),
+		},
+		Telegram: TelegramConfig{
+			BotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
+			BotName:  getEnv("TELEGRAM_BOT_NAME", ""),
 		},
 	}, nil
 }

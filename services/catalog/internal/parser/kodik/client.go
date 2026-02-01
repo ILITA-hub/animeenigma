@@ -19,8 +19,9 @@ const (
 )
 
 type Client struct {
-	httpClient *http.Client
-	token      string
+	httpClient   *http.Client
+	token        string
+	tokenExpires time.Time
 }
 
 // SearchResult represents an anime search result from Kodik
@@ -46,9 +47,10 @@ type SearchResult struct {
 
 // Translation represents dubbing/subtitle info
 type Translation struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Type  string `json:"type"` // "voice" or "subtitles"
+	ID            int    `json:"id"`
+	Title         string `json:"title"`
+	Type          string `json:"type"`           // "voice" or "subtitles"
+	EpisodesCount int    `json:"episodes_count"` // Number of available episodes
 }
 
 // Season represents season data with episodes
@@ -119,8 +121,25 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("failed to get kodik token: %w", err)
 	}
 	client.token = token
+	// Token is valid for 24 hours (refresh every 12 hours to be safe)
+	client.tokenExpires = time.Now().Add(12 * time.Hour)
 
 	return client, nil
+}
+
+// refreshTokenIfNeeded refreshes the token if it's expired or about to expire
+func (c *Client) refreshTokenIfNeeded() error {
+	if time.Now().Before(c.tokenExpires) {
+		return nil
+	}
+
+	token, err := c.getToken()
+	if err != nil {
+		return err
+	}
+	c.token = token
+	c.tokenExpires = time.Now().Add(12 * time.Hour)
+	return nil
 }
 
 // NewClientWithToken creates a client with a pre-defined token
@@ -257,65 +276,132 @@ func decodeSecret(input []int, password string) string {
 
 // SearchByShikimoriID searches for anime by Shikimori ID
 func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error) {
-	params := url.Values{}
-	params.Set("token", c.token)
-	params.Set("shikimori_id", shikimoriID)
-	params.Set("with_episodes", "true")
-	params.Set("with_material_data", "true")
-
-	resp, err := c.httpClient.PostForm(APIEndpoint+"/search", params)
-	if err != nil {
-		return nil, fmt.Errorf("search request failed: %w", err)
+	// Refresh token if needed
+	if err := c.refreshTokenIfNeeded(); err != nil {
+		// Continue with existing token, it might still work
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	var lastErr error
+	maxRetries := 3
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Wait before retry (exponential backoff)
+			time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+		}
+
+		params := url.Values{}
+		params.Set("token", c.token)
+		params.Set("shikimori_id", shikimoriID)
+		params.Set("with_episodes", "true")
+		params.Set("with_material_data", "true")
+
+		resp, err := c.httpClient.PostForm(APIEndpoint+"/search", params)
+		if err != nil {
+			lastErr = fmt.Errorf("search request failed: %w", err)
+			continue
+		}
+
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("search failed: status %d, body: %s", resp.StatusCode, string(body)[:min(200, len(body))])
+		resp.Body.Close()
+
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			// Token might be invalid, try to refresh
+			if newToken, refreshErr := c.getToken(); refreshErr == nil {
+				c.token = newToken
+				c.tokenExpires = time.Now().Add(12 * time.Hour)
+				lastErr = fmt.Errorf("token refresh needed, retrying")
+				continue
+			}
+		}
+
+		if resp.StatusCode != 200 {
+			lastErr = fmt.Errorf("search failed: status %d, body: %s", resp.StatusCode, string(body)[:min(200, len(body))])
+			// Don't retry on 4xx errors (except 401/403)
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				break
+			}
+			continue
+		}
+
+		var result SearchResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			lastErr = fmt.Errorf("decode error: %w", err)
+			continue
+		}
+
+		if result.Total == 0 {
+			return nil, fmt.Errorf("no results found for shikimori_id %s", shikimoriID)
+		}
+
+		return result.Results, nil
 	}
 
-	var result SearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode error: %w", err)
-	}
-
-	if result.Total == 0 {
-		return nil, fmt.Errorf("no results found for shikimori_id %s", shikimoriID)
-	}
-
-	return result.Results, nil
+	return nil, lastErr
 }
 
 // SearchByTitle searches for anime by title
 func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
-	params := url.Values{}
-	params.Set("token", c.token)
-	params.Set("title", title)
-	params.Set("types", "anime,anime-serial")
-	params.Set("with_episodes", "true")
-	params.Set("limit", "50")
-
-	resp, err := c.httpClient.PostForm(APIEndpoint+"/search", params)
-	if err != nil {
-		return nil, fmt.Errorf("search request failed: %w", err)
+	// Refresh token if needed
+	if err := c.refreshTokenIfNeeded(); err != nil {
+		// Continue with existing token, it might still work
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	var lastErr error
+	maxRetries := 3
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+		}
+
+		params := url.Values{}
+		params.Set("token", c.token)
+		params.Set("title", title)
+		params.Set("types", "anime,anime-serial")
+		params.Set("with_episodes", "true")
+		params.Set("limit", "50")
+
+		resp, err := c.httpClient.PostForm(APIEndpoint+"/search", params)
+		if err != nil {
+			lastErr = fmt.Errorf("search request failed: %w", err)
+			continue
+		}
+
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("search failed: status %d, body: %s", resp.StatusCode, string(body)[:min(200, len(body))])
+		resp.Body.Close()
+
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			if newToken, refreshErr := c.getToken(); refreshErr == nil {
+				c.token = newToken
+				c.tokenExpires = time.Now().Add(12 * time.Hour)
+				lastErr = fmt.Errorf("token refresh needed, retrying")
+				continue
+			}
+		}
+
+		if resp.StatusCode != 200 {
+			lastErr = fmt.Errorf("search failed: status %d, body: %s", resp.StatusCode, string(body)[:min(200, len(body))])
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				break
+			}
+			continue
+		}
+
+		var result SearchResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			lastErr = fmt.Errorf("decode error: %w", err)
+			continue
+		}
+
+		if result.Total == 0 {
+			return nil, fmt.Errorf("no results found for title: %s", title)
+		}
+
+		return result.Results, nil
 	}
 
-	var result SearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode error: %w", err)
-	}
-
-	if result.Total == 0 {
-		return nil, fmt.Errorf("no results found for title: %s", title)
-	}
-
-	return result.Results, nil
+	return nil, lastErr
 }
 
 // GetTranslations returns all available translations for an anime by Shikimori ID
@@ -325,14 +411,45 @@ func (c *Client) GetTranslations(shikimoriID string) ([]Translation, error) {
 		return nil, err
 	}
 
-	// Deduplicate translations
-	seen := make(map[int]bool)
-	var translations []Translation
+	// Deduplicate translations and track episode count
+	seen := make(map[int]*Translation)
 	for _, r := range results {
-		if r.Translation != nil && !seen[r.Translation.ID] {
-			seen[r.Translation.ID] = true
-			translations = append(translations, *r.Translation)
+		if r.Translation == nil {
+			continue
 		}
+
+		// Determine episode count: use last_episode if available, otherwise episodes_count
+		episodeCount := r.LastEpisode
+		if episodeCount == 0 {
+			episodeCount = r.EpisodesCount
+		}
+		// If still 0, count episodes from seasons data
+		if episodeCount == 0 && r.Seasons != nil {
+			for _, season := range r.Seasons {
+				if season.Episodes != nil {
+					episodeCount += len(season.Episodes)
+				}
+			}
+		}
+
+		if existing, ok := seen[r.Translation.ID]; ok {
+			// Keep the higher episode count
+			if episodeCount > existing.EpisodesCount {
+				existing.EpisodesCount = episodeCount
+			}
+		} else {
+			seen[r.Translation.ID] = &Translation{
+				ID:            r.Translation.ID,
+				Title:         r.Translation.Title,
+				Type:          r.Translation.Type,
+				EpisodesCount: episodeCount,
+			}
+		}
+	}
+
+	var translations []Translation
+	for _, t := range seen {
+		translations = append(translations, *t)
 	}
 
 	return translations, nil
