@@ -1,4 +1,6 @@
-.PHONY: all build test lint clean generate dev help
+.PHONY: all build test lint clean generate dev help \
+	k8s-apply k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
+	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod
 
 # Variables
 SERVICES := auth catalog streaming player social rooms scheduler gateway notifications
@@ -15,7 +17,7 @@ help: ## Show this help
 	@echo '  ${YELLOW}make${RESET} ${GREEN}<target>${RESET}'
 	@echo ''
 	@echo 'Targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  ${YELLOW}%-20s${RESET} %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  ${YELLOW}%-20s${RESET} %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ============================================================================
 # Development
@@ -152,29 +154,101 @@ docker-push-%: ## Push Docker image for a specific service
 	docker push $(DOCKER_REGISTRY)/$*:latest
 
 # ============================================================================
-# Kubernetes / Helm
+# Kubernetes / Kustomize
 # ============================================================================
 
-helm-deps: ## Update Helm dependencies
-	@for chart in infra/helm/*/; do \
-		echo "Updating dependencies for $$chart..."; \
-		helm dependency update $$chart; \
+KUSTOMIZE_BASE := deploy/kustomize/base
+NAMESPACE := animeenigma
+
+k8s-apply: ## Apply Kustomize manifests to current cluster
+	kubectl apply -k $(KUSTOMIZE_BASE)
+	@echo "Waiting for deployments to be ready..."
+	@$(MAKE) k8s-wait
+
+k8s-delete: ## Delete all resources from cluster
+	kubectl delete -k $(KUSTOMIZE_BASE) --ignore-not-found
+
+k8s-diff: ## Show diff between local and cluster state
+	kubectl diff -k $(KUSTOMIZE_BASE) || true
+
+k8s-wait: ## Wait for all deployments to be ready
+	@for deploy in gateway auth catalog streaming player rooms scheduler web; do \
+		echo "Waiting for $$deploy..."; \
+		kubectl rollout status deployment/$$deploy -n $(NAMESPACE) --timeout=120s || true; \
 	done
 
-helm-lint: ## Lint Helm charts
-	@for chart in infra/helm/*/; do \
-		echo "Linting $$chart..."; \
-		helm lint $$chart; \
-	done
+k8s-status: ## Show status of all deployments
+	@echo "=== Deployments ==="
+	kubectl get deployments -n $(NAMESPACE)
+	@echo ""
+	@echo "=== Pods ==="
+	kubectl get pods -n $(NAMESPACE)
+	@echo ""
+	@echo "=== Services ==="
+	kubectl get services -n $(NAMESPACE)
 
-deploy-dev: ## Deploy to development environment
-	kubectl config use-context dev
-	./scripts/deploy.sh dev
+k8s-restart: ## Restart all deployments
+	kubectl rollout restart deployment -n $(NAMESPACE)
 
-deploy-prod: ## Deploy to production environment
-	@echo "Are you sure you want to deploy to production? [y/N] " && read ans && [ $${ans:-N} = y ]
+k8s-restart-%: ## Restart a specific deployment (e.g., make k8s-restart-catalog)
+	kubectl rollout restart deployment/$* -n $(NAMESPACE)
+
+k8s-logs: ## Show logs from all pods (last 100 lines)
+	kubectl logs -n $(NAMESPACE) -l app.kubernetes.io/part-of=animeenigma --tail=100 --all-containers
+
+k8s-logs-%: ## Show logs from a specific service (e.g., make k8s-logs-catalog)
+	kubectl logs -n $(NAMESPACE) -l app=$* --tail=200 -f
+
+k8s-shell-%: ## Open shell in a service pod (e.g., make k8s-shell-catalog)
+	kubectl exec -it -n $(NAMESPACE) deployment/$* -- /bin/sh
+
+k8s-port-forward: ## Port-forward gateway to localhost:8000
+	kubectl port-forward -n $(NAMESPACE) svc/gateway 8000:8000
+
+k8s-port-forward-grafana: ## Port-forward Grafana to localhost:3000
+	kubectl port-forward -n monitoring svc/grafana 3000:3000
+
+k8s-port-forward-prometheus: ## Port-forward Prometheus to localhost:9090
+	kubectl port-forward -n monitoring svc/prometheus 9090:9090
+
+k8s-monitoring-status: ## Show status of monitoring stack
+	@echo "=== Monitoring Namespace ==="
+	kubectl get all -n monitoring
+
+# ============================================================================
+# Deploy Commands
+# ============================================================================
+
+deploy-docker: ## Deploy using docker-compose (production build)
+	docker compose -f docker/docker-compose.yml up -d --build
+	@echo "Deployed with docker-compose"
+
+deploy-docker-pull: ## Pull latest images and deploy
+	docker compose -f docker/docker-compose.yml pull
+	docker compose -f docker/docker-compose.yml up -d
+	@echo "Deployed with latest images"
+
+deploy-k8s: docker-build docker-push k8s-apply ## Build, push images and deploy to Kubernetes
+	@echo "Full Kubernetes deployment complete"
+
+deploy-dev: ## Deploy to development (docker-compose)
+	@$(MAKE) deploy-docker
+
+deploy-staging: ## Deploy to staging Kubernetes cluster
+	kubectl config use-context staging
+	@$(MAKE) k8s-apply
+	@echo "Deployed to staging"
+
+deploy-prod: ## Deploy to production Kubernetes cluster (with confirmation)
+	@echo "WARNING: You are about to deploy to PRODUCTION"
+	@echo "Are you sure? [y/N] " && read ans && [ $${ans:-N} = y ]
 	kubectl config use-context prod
-	./scripts/deploy.sh prod
+	@$(MAKE) k8s-apply
+	@echo "Deployed to production"
+
+rollback-%: ## Rollback a deployment (e.g., make rollback-catalog)
+	kubectl rollout undo deployment/$* -n $(NAMESPACE)
+	kubectl rollout status deployment/$* -n $(NAMESPACE)
 
 # ============================================================================
 # Sync / Import
@@ -218,3 +292,32 @@ frontend-build: ## Build frontend for production
 
 frontend-preview: ## Preview production build
 	cd frontend/web && bun run preview
+
+# ============================================================================
+# Health & Info
+# ============================================================================
+
+health: ## Check health of all services (docker-compose)
+	@echo "Checking service health..."
+	@curl -sf http://localhost:8000/health > /dev/null && echo "✓ gateway:8000" || echo "✗ gateway:8000"
+	@curl -sf http://localhost:8080/health > /dev/null && echo "✓ auth:8080" || echo "✗ auth:8080"
+	@curl -sf http://localhost:8081/health > /dev/null && echo "✓ catalog:8081" || echo "✗ catalog:8081"
+	@curl -sf http://localhost:8082/health > /dev/null && echo "✓ streaming:8082" || echo "✗ streaming:8082"
+	@curl -sf http://localhost:8083/health > /dev/null && echo "✓ player:8083" || echo "✗ player:8083"
+	@curl -sf http://localhost:8084/health > /dev/null && echo "✓ rooms:8084" || echo "✗ rooms:8084"
+	@curl -sf http://localhost:8085/health > /dev/null && echo "✓ scheduler:8085" || echo "✗ scheduler:8085"
+
+metrics: ## Fetch metrics from all services
+	@echo "=== Gateway Metrics ==="
+	@curl -sf http://localhost:8000/metrics | head -20 || echo "Gateway not available"
+	@echo ""
+
+info: ## Show version info
+	@echo "Docker Compose Services:"
+	@docker compose -f docker/docker-compose.yml ps 2>/dev/null || echo "Docker Compose not running"
+	@echo ""
+	@echo "Docker Registry: $(DOCKER_REGISTRY)"
+	@echo "Services: $(SERVICES)"
+
+ps: ## Show running containers
+	docker compose -f docker/docker-compose.yml ps

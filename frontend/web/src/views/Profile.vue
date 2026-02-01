@@ -201,17 +201,14 @@
                     <!-- Actions -->
                     <td class="py-3 pl-2">
                       <div class="flex items-center justify-center gap-1">
-                        <select
-                          :value="anime.listStatus"
-                          @change="updateAnimeStatus(anime.id, ($event.target as HTMLSelectElement).value)"
-                          class="bg-white/10 text-white text-xs rounded px-2 py-1 border border-white/10 cursor-pointer hover:border-white/20 focus:outline-none focus:border-cyan-500"
-                        >
-                          <option value="watching">{{ $t('profile.watchlist.watching') }}</option>
-                          <option value="plan_to_watch">{{ $t('profile.watchlist.planToWatch') }}</option>
-                          <option value="completed">{{ $t('profile.watchlist.completed') }}</option>
-                          <option value="on_hold">{{ $t('profile.watchlist.onHold') }}</option>
-                          <option value="dropped">{{ $t('profile.watchlist.dropped') }}</option>
-                        </select>
+                        <div class="w-28">
+                          <Select
+                            :model-value="anime.listStatus"
+                            :options="statusOptions"
+                            size="xs"
+                            @change="(val: string | number) => updateAnimeStatus(anime.id, String(val))"
+                          />
+                        </div>
                         <button
                           @click="removeFromList(anime.id)"
                           class="p-1.5 rounded text-white/40 hover:text-pink-400 hover:bg-pink-500/10 transition-colors"
@@ -261,19 +258,15 @@
                 </router-link>
 
                 <!-- Status dropdown -->
-                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <select
-                    :value="anime.listStatus"
-                    @change="updateAnimeStatus(anime.id, ($event.target as HTMLSelectElement).value)"
-                    @click.prevent
-                    class="bg-black/80 backdrop-blur text-white text-xs rounded px-2 py-1 border border-white/20 cursor-pointer"
-                  >
-                    <option value="watching">{{ $t('profile.watchlist.watching') }}</option>
-                    <option value="plan_to_watch">{{ $t('profile.watchlist.planToWatch') }}</option>
-                    <option value="completed">{{ $t('profile.watchlist.completed') }}</option>
-                    <option value="on_hold">{{ $t('profile.watchlist.onHold') }}</option>
-                    <option value="dropped">{{ $t('profile.watchlist.dropped') }}</option>
-                  </select>
+                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10" @click.stop>
+                  <div class="w-28">
+                    <Select
+                      :model-value="anime.listStatus"
+                      :options="statusOptions"
+                      size="xs"
+                      @change="(val: string | number) => updateAnimeStatus(anime.id, String(val))"
+                    />
+                  </div>
                 </div>
 
                 <!-- Remove button -->
@@ -338,14 +331,13 @@
                     <p class="text-white">{{ $t('profile.settings.language') }}</p>
                     <p class="text-white/50 text-sm">{{ $t('profile.settings.languageDesc') }}</p>
                   </div>
-                  <select
-                    v-model="settings.language"
-                    class="bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="ru">Русский</option>
-                    <option value="ja">日本語</option>
-                    <option value="en">English</option>
-                  </select>
+                  <div class="w-32">
+                    <Select
+                      v-model="settings.language"
+                      :options="languageOptions"
+                      size="sm"
+                    />
+                  </div>
                 </div>
                 <div class="flex items-center justify-between">
                   <div>
@@ -389,15 +381,13 @@
                   <div>
                     <p class="text-white">{{ $t('profile.settings.defaultQuality') }}</p>
                   </div>
-                  <select
-                    v-model="settings.defaultQuality"
-                    class="bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="1080p">1080p</option>
-                    <option value="720p">720p</option>
-                    <option value="480p">480p</option>
-                  </select>
+                  <div class="w-28">
+                    <Select
+                      v-model="settings.defaultQuality"
+                      :options="qualityOptions"
+                      size="sm"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -467,7 +457,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, Tabs } from '@/components/ui'
+import { Badge, Button, Tabs, Select, type SelectOption } from '@/components/ui'
 import { userApi } from '@/api/client'
 
 interface WatchlistEntry {
@@ -540,6 +530,27 @@ const settings = reactive({
   autoplay: false,
   defaultQuality: 'auto',
 })
+
+const statusOptions = computed<SelectOption[]>(() => [
+  { value: 'watching', label: t('profile.watchlist.watching') },
+  { value: 'plan_to_watch', label: t('profile.watchlist.planToWatch') },
+  { value: 'completed', label: t('profile.watchlist.completed') },
+  { value: 'on_hold', label: t('profile.watchlist.onHold') },
+  { value: 'dropped', label: t('profile.watchlist.dropped') },
+])
+
+const languageOptions: SelectOption[] = [
+  { value: 'ru', label: 'Русский' },
+  { value: 'ja', label: '日本語' },
+  { value: 'en', label: 'English' },
+]
+
+const qualityOptions: SelectOption[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: '1080p', label: '1080p' },
+  { value: '720p', label: '720p' },
+  { value: '480p', label: '480p' },
+]
 
 const watchlistEntries = ref<WatchlistEntry[]>([])
 const watchlist = ref<Anime[]>([])

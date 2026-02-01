@@ -152,15 +152,13 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="text-white/60 text-sm">{{ $t('player.quality') }}</span>
-            <select
-              v-model="quality"
-              class="bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-cyan-500"
-            >
-              <option value="auto">Auto</option>
-              <option value="1080p">1080p</option>
-              <option value="720p">720p</option>
-              <option value="480p">480p</option>
-            </select>
+            <div class="w-24">
+              <Select
+                v-model="quality"
+                :options="qualityOptions"
+                size="xs"
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -174,7 +172,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAnime } from '@/composables/useAnime'
 import { usePlayerStore, type Episode as PlayerEpisode } from '@/stores/player'
 import VideoPlayer from '@/components/player/VideoPlayer.vue'
-import { Button, Badge } from '@/components/ui'
+import { Button, Badge, Select } from '@/components/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -186,6 +184,13 @@ const episodeId = ref(route.params.episodeId as string)
 const episode = ref<PlayerEpisode | null>(null)
 const autoplay = ref(false)
 const quality = ref('auto')
+
+const qualityOptions = [
+  { value: 'auto', label: 'Auto' },
+  { value: '1080p', label: '1080p' },
+  { value: '720p', label: '720p' },
+  { value: '480p', label: '480p' },
+]
 
 const currentEpisodeIndex = computed(() => {
   return episodes.value.findIndex(ep => ep.id === episodeId.value)
