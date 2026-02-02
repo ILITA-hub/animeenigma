@@ -7,4 +7,8 @@ export { default as Select } from './Select.vue'
 export { default as Skeleton } from './Skeleton.vue'
 export { default as Tabs } from './Tabs.vue'
 
-export type { SelectOption } from './Select.vue'
+// Re-export SelectOption type
+export interface SelectOption {
+  value: string | number
+  label: string
+}

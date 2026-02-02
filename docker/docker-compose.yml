@@ -196,6 +196,11 @@ services:
     container_name: animeenigma-rooms
     environment:
       SERVER_PORT: 8084
+      DB_HOST: 172.29.0.2
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: animeenigma_rooms
       REDIS_HOST: redis
       JWT_SECRET: dev-secret-change-in-production
     ports:
