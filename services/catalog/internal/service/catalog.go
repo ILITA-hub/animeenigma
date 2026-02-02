@@ -56,6 +56,11 @@ func NewCatalogService(
 
 // SearchAnime searches for anime, fetching from Shikimori if not found locally
 func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchFilters) ([]*domain.Anime, int64, error) {
+	// If source=shikimori, force search on Shikimori
+	if filters.Source == "shikimori" && filters.Query != "" {
+		return s.searchShikimori(ctx, filters)
+	}
+
 	// First, try to search locally
 	animes, total, err := s.animeRepo.Search(ctx, filters)
 	if err != nil {
@@ -72,32 +77,38 @@ func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchF
 
 	// No local results - fetch from Shikimori
 	if filters.Query != "" {
-		s.log.Infow("no local results, fetching from Shikimori",
-			"query", filters.Query)
-
-		shikimoriAnimes, err := s.shikimoriClient.SearchAnime(ctx, filters.Query, filters.Page, filters.PageSize)
-		if err != nil {
-			s.log.Warnw("failed to fetch from Shikimori", "error", err)
-			return animes, total, nil // Return empty results
-		}
-
-		// Store fetched anime in database
-		for _, anime := range shikimoriAnimes {
-			if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
-				s.log.Warnw("failed to store anime from Shikimori",
-					"shikimori_id", anime.ShikimoriID, "error", err)
-			}
-		}
-
-		// Enrich with genres
-		for _, anime := range shikimoriAnimes {
-			s.enrichAnime(ctx, anime)
-		}
-
-		return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
+		return s.searchShikimori(ctx, filters)
 	}
 
 	return animes, total, nil
+}
+
+// searchShikimori fetches anime from Shikimori and stores in DB
+func (s *CatalogService) searchShikimori(ctx context.Context, filters domain.SearchFilters) ([]*domain.Anime, int64, error) {
+	s.log.Infow("fetching from Shikimori",
+		"query", filters.Query,
+		"forced", filters.Source == "shikimori")
+
+	shikimoriAnimes, err := s.shikimoriClient.SearchAnime(ctx, filters.Query, filters.Page, filters.PageSize)
+	if err != nil {
+		s.log.Warnw("failed to fetch from Shikimori", "error", err)
+		return nil, 0, nil // Return empty results
+	}
+
+	// Store fetched anime in database
+	for _, anime := range shikimoriAnimes {
+		if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
+			s.log.Warnw("failed to store anime from Shikimori",
+				"shikimori_id", anime.ShikimoriID, "error", err)
+		}
+	}
+
+	// Enrich with genres
+	for _, anime := range shikimoriAnimes {
+		s.enrichAnime(ctx, anime)
+	}
+
+	return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 }
 
 // GetAnime gets anime by ID

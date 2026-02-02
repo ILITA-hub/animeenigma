@@ -113,7 +113,12 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h2 class="text-xl font-bold text-white">Онгоинги</h2>
+            <div class="flex-1">
+              <h2 class="text-xl font-bold text-white">Онгоинги</h2>
+              <p v-if="ongoingUpdatedAt && !loadingOngoing" class="text-xs text-gray-500">
+                Обновлено {{ formatUpdatedAt(ongoingUpdatedAt) }}
+              </p>
+            </div>
           </div>
 
           <div v-if="loadingOngoing" class="space-y-3">
@@ -263,6 +268,7 @@ interface Anime {
   year?: number
   season?: string
   next_episode_at?: string
+  updated_at?: string
 }
 
 const router = useRouter()
@@ -271,6 +277,7 @@ const searchQuery = ref('')
 const announcedAnime = ref<Anime[]>([])
 const ongoingAnime = ref<Anime[]>([])
 const topAnime = ref<Anime[]>([])
+const ongoingUpdatedAt = ref<string | null>(null)
 
 const loadingAnnounced = ref(true)
 const loadingOngoing = ref(true)
@@ -336,6 +343,32 @@ const formatNextEpisode = (dateStr: string) => {
   }
 }
 
+const formatUpdatedAt = (dateStr: string) => {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMinutes = Math.floor(diffMs / (1000 * 60))
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffMinutes < 1) {
+    return 'только что'
+  } else if (diffMinutes < 60) {
+    return `${diffMinutes} мин. назад`
+  } else if (diffHours < 24) {
+    return `${diffHours} ч. назад`
+  } else if (diffDays === 1) {
+    return 'вчера'
+  } else if (diffDays < 7) {
+    return `${diffDays} дн. назад`
+  } else {
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short'
+    })
+  }
+}
+
 onMounted(async () => {
   // Fetch announced anime
   try {
@@ -350,7 +383,17 @@ onMounted(async () => {
   // Fetch ongoing anime
   try {
     const response = await animeApi.getOngoing(15)
-    ongoingAnime.value = response.data?.data || []
+    const animes = response.data?.data || []
+    ongoingAnime.value = animes
+    // Find the most recent updated_at
+    if (animes.length > 0) {
+      const maxUpdated = animes.reduce((max: string | null, anime: Anime) => {
+        if (!anime.updated_at) return max
+        if (!max) return anime.updated_at
+        return new Date(anime.updated_at) > new Date(max) ? anime.updated_at : max
+      }, null as string | null)
+      ongoingUpdatedAt.value = maxUpdated
+    }
   } catch (err) {
     console.error('Failed to load ongoing anime:', err)
   } finally {

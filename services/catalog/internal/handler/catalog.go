@@ -424,6 +424,7 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		Order:    query.Get("order"),
 		Page:     pagination.ParseIntParam(query.Get("page"), 1),
 		PageSize: pagination.ParseIntParam(query.Get("page_size"), 20),
+		Source:   query.Get("source"),
 	}
 
 	if yearStr := query.Get("year"); yearStr != "" {

@@ -157,10 +157,41 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <p class="text-white/50 text-lg">{{ $t('search.noResults') }}</p>
+        <Button
+          v-if="searchQuery"
+          variant="outline"
+          class="mt-4"
+          :loading="loadingShikimori"
+          @click="searchOnShikimori"
+        >
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          Поиск на Shikimori
+        </Button>
       </div>
 
-      <!-- Results Grid -->
-      <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <!-- Results section -->
+      <template v-else>
+        <!-- Search on Shikimori (when results exist but user wants fresh data) -->
+        <div v-if="searchQuery && animeList.length > 0" class="mb-4 flex justify-end">
+          <button
+            class="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors"
+            :disabled="loadingShikimori"
+            @click="searchOnShikimori"
+          >
+            <svg v-if="loadingShikimori" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Обновить с Shikimori
+          </button>
+        </div>
+
+        <!-- Results Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
         <AnimeCardNew
           v-for="anime in animeList"
           :key="anime.id"
@@ -168,12 +199,13 @@
         />
       </div>
 
-      <!-- Load More -->
-      <div v-if="hasMore && animeList.length > 0" class="flex justify-center mt-8">
-        <Button variant="ghost" :loading="loadingMore" @click="loadMore">
-          Load More
-        </Button>
-      </div>
+        <!-- Load More -->
+        <div v-if="hasMore && animeList.length > 0" class="flex justify-center mt-8">
+          <Button variant="ghost" :loading="loadingMore" @click="loadMore">
+            Load More
+          </Button>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -202,6 +234,7 @@ const genreDropdownRef = ref<HTMLElement | null>(null)
 const showLiveResults = ref(false)
 const liveResults = ref<Array<{ id: string; title: string; coverImage: string; releaseYear?: number; episodes?: number; rating?: number }>>([])
 const recentSearches = ref<string[]>([])
+const loadingShikimori = ref(false)
 
 const isSearchMode = computed(() => route.name === 'search')
 const hasActiveFilters = computed(() => !!selectedGenre.value || !!selectedYear.value || sortBy.value !== 'popularity')
@@ -292,6 +325,16 @@ const handleSearch = async () => {
   } else {
     await loadAnime()
     router.replace({ query: { ...route.query, q: undefined } })
+  }
+}
+
+const searchOnShikimori = async () => {
+  if (!searchQuery.value.trim()) return
+  loadingShikimori.value = true
+  try {
+    await searchAnime(searchQuery.value, 'shikimori')
+  } finally {
+    loadingShikimori.value = false
   }
 }
 
