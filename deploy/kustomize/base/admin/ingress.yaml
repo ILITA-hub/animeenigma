@@ -16,10 +16,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - admin.animeenigma.com
+        - admin.animeenigma.ru
       secretName: admin-tls
   rules:
-    - host: admin.animeenigma.com
+    - host: admin.animeenigma.ru
       http:
         paths:
           # Grafana - monitoring dashboards

@@ -299,10 +299,10 @@ Available metrics:
 
 When deployed to Kubernetes, admin interfaces are available at:
 
-- `https://admin.animeenigma.com/grafana` - Grafana dashboards
-- `https://admin.animeenigma.com/prometheus` - Prometheus raw metrics
-- `https://admin.animeenigma.com/pgadmin` - PostgreSQL admin
-- `https://admin.animeenigma.com/k8s` - Kubernetes dashboard
+- `https://admin.animeenigma.ru/grafana` - Grafana dashboards
+- `https://admin.animeenigma.ru/prometheus` - Prometheus raw metrics
+- `https://admin.animeenigma.ru/pgadmin` - PostgreSQL admin
+- `https://admin.animeenigma.ru/k8s` - Kubernetes dashboard
 
 ## File Locations
 

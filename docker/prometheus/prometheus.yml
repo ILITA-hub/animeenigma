@@ -1,0 +1,46 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    metrics_path: /prometheus/metrics
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # AnimeEnigma services
+  - job_name: 'gateway'
+    static_configs:
+      - targets: ['gateway:8000']
+    metrics_path: /metrics
+
+  - job_name: 'auth'
+    static_configs:
+      - targets: ['auth:8080']
+    metrics_path: /metrics
+
+  - job_name: 'catalog'
+    static_configs:
+      - targets: ['catalog:8081']
+    metrics_path: /metrics
+
+  - job_name: 'streaming'
+    static_configs:
+      - targets: ['streaming:8082']
+    metrics_path: /metrics
+
+  - job_name: 'player'
+    static_configs:
+      - targets: ['player:8083']
+    metrics_path: /metrics
+
+  - job_name: 'rooms'
+    static_configs:
+      - targets: ['rooms:8084']
+    metrics_path: /metrics
+
+  - job_name: 'scheduler'
+    static_configs:
+      - targets: ['scheduler:8085']
+    metrics_path: /metrics
