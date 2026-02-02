@@ -190,6 +190,7 @@ type SearchFilters struct {
 	Order    string
 	Page     int
 	PageSize int
+	Source   string // "shikimori" to force external search
 }
 
 // CreateAnimeRequest for admin anime creation

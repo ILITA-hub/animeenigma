@@ -106,7 +106,7 @@ apiClient.interceptors.response.use(
 export const animeApi = {
   getAll: (params?: any) => apiClient.get('/anime', { params }),
   getById: (id: string) => apiClient.get(`/anime/${id}`),
-  search: (query: string) => apiClient.get('/anime/search', { params: { q: query } }),
+  search: (query: string, source?: string) => apiClient.get('/anime/search', { params: { q: query, ...(source && { source }) } }),
   getTrending: () => apiClient.get('/anime/trending'),
   getPopular: () => apiClient.get('/anime/popular'),
   getRecent: () => apiClient.get('/anime/recent'),

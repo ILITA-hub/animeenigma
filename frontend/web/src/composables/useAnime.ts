@@ -90,11 +90,11 @@ export function useAnime() {
     }
   }
 
-  const searchAnime = async (query: string) => {
+  const searchAnime = async (query: string, source?: string) => {
     loading.value = true
     error.value = null
     try {
-      const response = await animeApi.search(query)
+      const response = await animeApi.search(query, source)
       animeList.value = transformAnimeList(response.data)
       return animeList.value
     } catch (err: any) {
