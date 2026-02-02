@@ -61,6 +61,9 @@ func NewRouter(
 			r.HandleFunc("/admin/*", proxyHandler.ProxyToCatalog)
 		})
 
+		// Player service routes - public watchlist
+		r.Get("/users/{userId}/watchlist/public", proxyHandler.ProxyToPlayer)
+
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT))

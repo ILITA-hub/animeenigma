@@ -68,6 +68,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Game Room' }
   },
   {
+    path: '/user/:publicId',
+    name: 'public-profile',
+    component: () => import('@/views/PublicProfile.vue'),
+    meta: { title: 'Профиль' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),

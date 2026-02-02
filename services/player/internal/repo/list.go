@@ -7,6 +7,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type ListRepository struct {
@@ -185,4 +186,29 @@ func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID 
 	}
 	rowsAffected, _ := result.RowsAffected()
 	return rowsAffected > 0, nil
+}
+
+// GetByUserAndStatuses returns anime list entries for a user filtered by multiple statuses
+func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
+	query := `
+		SELECT
+			al.id, al.user_id, al.anime_id,
+			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
+			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
+			al.status, al.score, al.episodes, al.notes,
+			al.tags, al.is_rewatching, al.priority, al.anime_type,
+			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
+			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
+		FROM anime_list al
+		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
+		WHERE al.user_id = $1 AND al.status = ANY($2)
+		ORDER BY al.updated_at DESC
+	`
+
+	var entries []*domain.AnimeListEntry
+	err := r.db.SelectContext(ctx, &entries, query, userID, pq.Array(statuses))
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
 }

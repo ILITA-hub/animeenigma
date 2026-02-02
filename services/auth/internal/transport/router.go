@@ -55,7 +55,12 @@ func NewRouter(
 			r.Use(AuthMiddleware(jwtConfig))
 			r.Get("/auth/me", userHandler.GetCurrentUser)
 			r.Patch("/auth/profile", userHandler.UpdateCurrentUser)
+			r.Put("/auth/profile/public-id", userHandler.UpdatePublicID)
+			r.Put("/auth/profile/privacy", userHandler.UpdatePrivacy)
 		})
+
+		// Public profile by public_id
+		r.Get("/auth/users/{publicId}", userHandler.GetUserByPublicID)
 
 		// User routes
 		r.Route("/users", func(r chi.Router) {

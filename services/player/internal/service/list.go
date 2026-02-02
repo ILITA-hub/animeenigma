@@ -116,3 +116,12 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 	// Return updated entry
 	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
 }
+
+// GetPublicWatchlist returns user's public watchlist filtered by allowed statuses
+func (s *ListService) GetPublicWatchlist(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
+	if len(statuses) == 0 {
+		// If no statuses specified, return all
+		return s.listRepo.GetByUser(ctx, userID)
+	}
+	return s.listRepo.GetByUserAndStatuses(ctx, userID, statuses)
+}

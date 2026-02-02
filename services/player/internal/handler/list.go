@@ -166,3 +166,71 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 
 	httputil.OK(w, entry)
 }
+
+// GetPublicWatchlist returns a user's public watchlist filtered by allowed statuses
+func (h *ListHandler) GetPublicWatchlist(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userId")
+	if userID == "" {
+		httputil.BadRequest(w, "user ID is required")
+		return
+	}
+
+	// Get statuses from query param (comma-separated)
+	statusesParam := r.URL.Query().Get("statuses")
+	var statuses []string
+	if statusesParam != "" {
+		for _, s := range splitAndTrim(statusesParam, ",") {
+			if s != "" {
+				statuses = append(statuses, s)
+			}
+		}
+	}
+
+	list, err := h.listService.GetPublicWatchlist(r.Context(), userID, statuses)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if list == nil {
+		list = []*domain.AnimeListEntry{}
+	}
+
+	httputil.OK(w, list)
+}
+
+func splitAndTrim(s, sep string) []string {
+	var result []string
+	for _, part := range split(s, sep) {
+		trimmed := trim(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func split(s, sep string) []string {
+	var result []string
+	start := 0
+	for i := 0; i <= len(s)-len(sep); i++ {
+		if s[i:i+len(sep)] == sep {
+			result = append(result, s[start:i])
+			start = i + len(sep)
+		}
+	}
+	result = append(result, s[start:])
+	return result
+}
+
+func trim(s string) string {
+	start := 0
+	end := len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
+		end--
+	}
+	return s[start:end]
+}
