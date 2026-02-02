@@ -24,14 +24,14 @@ help: ## Show this help
 # ============================================================================
 
 dev: ## Start local development environment
-	docker compose -f docker/docker-compose.yml up -d
+	docker-compose -f docker/docker-compose.yml up -d
 	@echo "Development environment started"
 
 dev-down: ## Stop local development environment
-	docker compose -f docker/docker-compose.yml down
+	docker-compose -f docker/docker-compose.yml down
 
 dev-logs: ## Show logs from development environment
-	docker compose -f docker/docker-compose.yml logs -f
+	docker-compose -f docker/docker-compose.yml logs -f
 
 # ============================================================================
 # Build
@@ -220,12 +220,12 @@ k8s-monitoring-status: ## Show status of monitoring stack
 # ============================================================================
 
 deploy-docker: ## Deploy using docker-compose (production build)
-	docker compose -f docker/docker-compose.yml up -d --build
+	docker-compose -f docker/docker-compose.yml up -d --build
 	@echo "Deployed with docker-compose"
 
 deploy-docker-pull: ## Pull latest images and deploy
-	docker compose -f docker/docker-compose.yml pull
-	docker compose -f docker/docker-compose.yml up -d
+	docker-compose -f docker/docker-compose.yml pull
+	docker-compose -f docker/docker-compose.yml up -d
 	@echo "Deployed with latest images"
 
 deploy-k8s: docker-build docker-push k8s-apply ## Build, push images and deploy to Kubernetes
@@ -275,7 +275,7 @@ clean: ## Clean build artifacts
 	done
 
 clean-docker: ## Clean Docker resources
-	docker compose -f docker/docker-compose.yml down -v --rmi local
+	docker-compose -f docker/docker-compose.yml down -v --rmi local
 
 # ============================================================================
 # Frontend
@@ -314,10 +314,10 @@ metrics: ## Fetch metrics from all services
 
 info: ## Show version info
 	@echo "Docker Compose Services:"
-	@docker compose -f docker/docker-compose.yml ps 2>/dev/null || echo "Docker Compose not running"
+	@docker-compose -f docker/docker-compose.yml ps 2>/dev/null || echo "Docker Compose not running"
 	@echo ""
 	@echo "Docker Registry: $(DOCKER_REGISTRY)"
 	@echo "Services: $(SERVICES)"
 
 ps: ## Show running containers
-	docker compose -f docker/docker-compose.yml ps
+	docker-compose -f docker/docker-compose.yml ps

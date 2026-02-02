@@ -1,14 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: animeenigma
-
 resources:
+  # Main application namespace and resources
   - namespace.yaml
   - secrets.yaml
   - configmap.yaml
 
-# Service deployments
+  # Service deployments (in animeenigma namespace)
   - services/gateway.yaml
   - services/auth.yaml
   - services/catalog.yaml
@@ -18,7 +17,7 @@ resources:
   - services/scheduler.yaml
   - services/web.yaml
 
-# Monitoring stack
+  # Monitoring stack (in monitoring namespace - has its own namespace spec)
   - monitoring/namespace.yaml
   - monitoring/prometheus/rbac.yaml
   - monitoring/prometheus/configmap.yaml
@@ -32,7 +31,7 @@ resources:
   - monitoring/grafana/deployment.yaml
   - monitoring/grafana/service.yaml
 
-# Admin tools
+  # Admin tools (in monitoring namespace)
   - admin/pgadmin/secret.yaml
   - admin/pgadmin/configmap.yaml
   - admin/pgadmin/deployment.yaml
@@ -43,5 +42,7 @@ resources:
   - admin/basic-auth-secret.yaml
   - admin/ingress.yaml
 
-commonLabels:
-  app.kubernetes.io/part-of: animeenigma
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: animeenigma
+    includeSelectors: false
