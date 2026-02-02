@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "AnimeEnigma Production",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "animeenigma_catalog",
+      "Username": "postgres",
+      "SSLMode": "prefer"
+    }
+  }
+}
