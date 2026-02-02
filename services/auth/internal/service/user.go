@@ -82,3 +82,52 @@ func (s *UserService) Update(ctx context.Context, userID string, req *domain.Upd
 func (s *UserService) Delete(ctx context.Context, userID string) error {
 	return s.userRepo.Delete(ctx, userID)
 }
+
+func (s *UserService) GetPublicProfileByPublicID(ctx context.Context, publicID string) (*domain.PublicUser, error) {
+	user, err := s.userRepo.GetByPublicID(ctx, publicID)
+	if err != nil {
+		return nil, err
+	}
+	return user.ToPublic(), nil
+}
+
+func (s *UserService) UpdatePublicID(ctx context.Context, userID, publicID string) error {
+	// Check if public_id is already taken
+	exists, err := s.userRepo.ExistsByPublicID(ctx, publicID)
+	if err != nil {
+		return err
+	}
+	if exists {
+		// Check if it's the same user
+		user, err := s.userRepo.GetByPublicID(ctx, publicID)
+		if err != nil {
+			return err
+		}
+		if user.ID != userID {
+			return errors.AlreadyExists("public_id")
+		}
+		// Same user, no change needed
+		return nil
+	}
+
+	return s.userRepo.UpdatePublicID(ctx, userID, publicID)
+}
+
+func (s *UserService) UpdatePublicStatuses(ctx context.Context, userID string, statuses []string) error {
+	// Validate statuses
+	validStatuses := map[string]bool{
+		"watching":      true,
+		"completed":     true,
+		"plan_to_watch": true,
+		"on_hold":       true,
+		"dropped":       true,
+	}
+
+	for _, status := range statuses {
+		if !validStatuses[status] {
+			return errors.InvalidInput("invalid status: " + status)
+		}
+	}
+
+	return s.userRepo.UpdatePublicStatuses(ctx, userID, statuses)
+}

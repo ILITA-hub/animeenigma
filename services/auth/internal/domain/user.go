@@ -8,14 +8,16 @@ import (
 
 // User represents a user in the system
 type User struct {
-	ID           string      `db:"id" json:"id"`
-	Username     string      `db:"username" json:"username"`
-	PasswordHash string      `db:"password_hash" json:"-"`
-	TelegramID   *int64      `db:"telegram_id" json:"telegram_id,omitempty"`
-	Role         authz.Role  `db:"role" json:"role"`
-	CreatedAt    time.Time   `db:"created_at" json:"created_at"`
-	UpdatedAt    time.Time   `db:"updated_at" json:"updated_at"`
-	DeletedAt    *time.Time  `db:"deleted_at" json:"-"`
+	ID             string         `db:"id" json:"id"`
+	Username       string         `db:"username" json:"username"`
+	PasswordHash   string         `db:"password_hash" json:"-"`
+	TelegramID     *int64         `db:"telegram_id" json:"telegram_id,omitempty"`
+	PublicID       string         `db:"public_id" json:"public_id"`
+	PublicStatuses []string       `db:"public_statuses" json:"public_statuses"`
+	Role           authz.Role     `db:"role" json:"role"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
+	DeletedAt      *time.Time     `db:"deleted_at" json:"-"`
 }
 
 // Session represents a user session
@@ -88,18 +90,32 @@ type UpdateUserRequest struct {
 	NewPassword     *string `json:"new_password,omitempty"`
 }
 
+// UpdatePublicIDRequest represents a request to change public_id
+type UpdatePublicIDRequest struct {
+	PublicID string `json:"public_id" validate:"required,min=3,max=32,alphanum"`
+}
+
+// UpdatePrivacyRequest represents a request to change public_statuses
+type UpdatePrivacyRequest struct {
+	PublicStatuses []string `json:"public_statuses" validate:"required"`
+}
+
 // PublicUser represents a user visible to other users
 type PublicUser struct {
-	ID        string    `json:"id"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	Username       string    `json:"username"`
+	PublicID       string    `json:"public_id"`
+	PublicStatuses []string  `json:"public_statuses"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // ToPublic converts a User to PublicUser
 func (u *User) ToPublic() *PublicUser {
 	return &PublicUser{
-		ID:        u.ID,
-		Username:  u.Username,
-		CreatedAt: u.CreatedAt,
+		ID:             u.ID,
+		Username:       u.Username,
+		PublicID:       u.PublicID,
+		PublicStatuses: u.PublicStatuses,
+		CreatedAt:      u.CreatedAt,
 	}
 }

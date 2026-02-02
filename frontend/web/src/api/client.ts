@@ -138,6 +138,19 @@ export const userApi = {
   updateProgress: (data: any) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
+  // Privacy settings
+  updatePublicId: (publicId: string) => apiClient.put('/auth/profile/public-id', { public_id: publicId }),
+  updatePrivacy: (publicStatuses: string[]) => apiClient.put('/auth/profile/privacy', { public_statuses: publicStatuses }),
+}
+
+export const publicApi = {
+  // Get public user profile by public_id
+  getUserProfile: (publicId: string) => apiClient.get(`/auth/users/${publicId}`),
+  // Get public watchlist
+  getPublicWatchlist: (userId: string, statuses?: string[]) =>
+    apiClient.get(`/users/${userId}/watchlist/public`, {
+      params: statuses?.length ? { statuses: statuses.join(',') } : {}
+    }),
 }
 
 export const adminApi = {

@@ -70,6 +70,9 @@ func NewRouter(
 			r.Post("/import/mal", malImportHandler.ImportMALList)
 		})
 
+		// Public user watchlist
+		r.Get("/users/{userId}/watchlist/public", listHandler.GetPublicWatchlist)
+
 		// Anime reviews routes
 		r.Route("/anime/{animeId}", func(r chi.Router) {
 			// Public routes
