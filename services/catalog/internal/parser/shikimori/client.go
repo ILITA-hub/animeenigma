@@ -153,6 +153,7 @@ func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int)
 			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
+			malId
 			poster { originalUrl }
 			genres { id name russian }
 		}
@@ -210,6 +211,7 @@ type rawAnime struct {
 	EpisodesAired  int     `json:"episodesAired"`
 	Duration       int     `json:"duration"`
 	NextEpisodeAt  string  `json:"nextEpisodeAt"`
+	MalID          string  `json:"malId"`
 	AiredOn        *struct {
 		Year  int `json:"year"`
 		Month int `json:"month"`
@@ -239,6 +241,7 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 			EpisodesCount:   a.Episodes,
 			EpisodesAired:   a.EpisodesAired,
 			EpisodeDuration: a.Duration,
+			MALID:           a.MalID,
 		}
 		if a.AiredOn != nil {
 			anime.Year = a.AiredOn.Year
@@ -259,7 +262,7 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 		}
 		for _, g := range a.Genres {
 			anime.Genres = append(anime.Genres, domain.Genre{
-				ID:     g.ID,
+				ID:     g.ID, // Shikimori genre ID
 				Name:   g.Name,
 				NameRU: g.Russian,
 			})
@@ -299,6 +302,7 @@ func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*doma
 			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
+			malId
 			poster { originalUrl }
 			genres { id name russian }
 		}
@@ -316,6 +320,7 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
+			malId
 			poster { originalUrl }
 			genres { id name russian }
 		}

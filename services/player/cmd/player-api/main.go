@@ -12,6 +12,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
@@ -29,19 +30,28 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
-	// Initialize database
-	ctx := context.Background()
-	db, err := database.New(ctx, cfg.Database)
+	// Initialize database (auto-creates DB if not exists)
+	db, err := database.New(cfg.Database)
 	if err != nil {
 		log.Fatalw("failed to connect to database", "error", err)
 	}
 	defer db.Close()
 
+	// Auto-migrate schema
+	if err := db.AutoMigrate(
+		&domain.WatchProgress{},
+		&domain.AnimeListEntry{},
+		&domain.WatchHistory{},
+		&domain.Review{},
+	); err != nil {
+		log.Fatalw("failed to migrate database", "error", err)
+	}
+
 	// Initialize repositories
-	progressRepo := repo.NewProgressRepository(db)
-	listRepo := repo.NewListRepository(db)
-	historyRepo := repo.NewHistoryRepository(db)
-	reviewRepo := repo.NewReviewRepository(db)
+	progressRepo := repo.NewProgressRepository(db.DB)
+	listRepo := repo.NewListRepository(db.DB)
+	historyRepo := repo.NewHistoryRepository(db.DB)
+	reviewRepo := repo.NewReviewRepository(db.DB)
 
 	// Initialize services
 	progressService := service.NewProgressService(progressRepo, log)
@@ -49,18 +59,22 @@ func main() {
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(reviewRepo, log)
 
+	// Initialize MAL export service
+	malExportService := service.NewMALExportService(log)
+
 	// Initialize handlers
 	progressHandler := handler.NewProgressHandler(progressService, log)
 	listHandler := handler.NewListHandler(listService, log)
 	historyHandler := handler.NewHistoryHandler(historyService, log)
 	reviewHandler := handler.NewReviewHandler(reviewService, log)
 	malImportHandler := handler.NewMALImportHandler(listService, log)
+	malExportHandler := handler.NewMALExportHandler(malExportService, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
