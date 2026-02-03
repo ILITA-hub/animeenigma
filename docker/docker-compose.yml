@@ -107,9 +107,11 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana"
+      GF_SERVER_DOMAIN: animeenigma.ru
+      GF_SERVER_ROOT_URL: "https://animeenigma.ru/admin/grafana"
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_CSRF_TRUSTED_ORIGINS: "animeenigma.ru localhost:8000 localhost:3004"
     ports:
       - "3004:3000"
     volumes:
@@ -132,6 +134,23 @@ services:
     volumes:
       - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
       - pgadmin_data:/var/lib/pgadmin
+
+  backup:
+    build: ./backup
+    container_name: animeenigma-backup
+    environment:
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-animeenigma}
+      S3_REGION: ${S3_REGION:-default}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BACKUP_CHAT_ID: ${TELEGRAM_BACKUP_CHAT_ID:-}
+    restart: unless-stopped
 
   admin-nginx:
     image: nginx:alpine
@@ -161,14 +180,21 @@ services:
       STREAMING_SERVICE_URL: http://streaming:8082
       PLAYER_SERVICE_URL: http://player:8083
       ROOMS_SERVICE_URL: http://rooms:8084
+      GRAFANA_SERVICE_URL: http://grafana:3000
+      PROMETHEUS_SERVICE_URL: http://prometheus:9090
+      PGADMIN_SERVICE_URL: http://pgadmin:80
       REDIS_HOST: redis
       JWT_SECRET: dev-secret-change-in-production
+      DEV_MODE: "true"
     ports:
       - "8000:8000"
     depends_on:
       - redis
       - auth
       - catalog
+      - grafana
+      - prometheus
+      - pgadmin
 
   auth:
     build:
