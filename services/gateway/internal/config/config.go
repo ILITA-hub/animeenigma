@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	JWT      authz.JWTConfig
-	Services ServiceURLs
+	Server    ServerConfig
+	JWT       authz.JWTConfig
+	Services  ServiceURLs
 	RateLimit RateLimitConfig
+	DevMode   bool // Skip admin auth when true (for local development)
 }
 
 type ServerConfig struct {
@@ -26,11 +27,15 @@ func (s ServerConfig) Address() string {
 }
 
 type ServiceURLs struct {
-	AuthService     string
-	CatalogService  string
-	PlayerService   string
-	RoomsService    string
+	AuthService      string
+	CatalogService   string
+	PlayerService    string
+	RoomsService     string
 	StreamingService string
+	// Admin panel services
+	GrafanaService    string
+	PrometheusService string
+	PgAdminService    string
 }
 
 type RateLimitConfig struct {
@@ -51,17 +56,31 @@ func Load() (*Config, error) {
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Services: ServiceURLs{
-			AuthService:     getEnv("AUTH_SERVICE_URL", "http://auth:8080"),
-			CatalogService:  getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
-			PlayerService:   getEnv("PLAYER_SERVICE_URL", "http://player:8082"),
-			RoomsService:    getEnv("ROOMS_SERVICE_URL", "http://rooms:8083"),
-			StreamingService: getEnv("STREAMING_SERVICE_URL", "http://streaming:8084"),
+			AuthService:      getEnv("AUTH_SERVICE_URL", "http://auth:8080"),
+			CatalogService:   getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
+			PlayerService:    getEnv("PLAYER_SERVICE_URL", "http://player:8083"),
+			RoomsService:     getEnv("ROOMS_SERVICE_URL", "http://rooms:8084"),
+			StreamingService: getEnv("STREAMING_SERVICE_URL", "http://streaming:8082"),
+			// Admin panel services
+			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
+			PrometheusService: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090"),
+			PgAdminService:    getEnv("PGADMIN_SERVICE_URL", "http://pgadmin:80"),
 		},
 		RateLimit: RateLimitConfig{
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),
-			BurstSize:        getEnvInt("RATE_LIMIT_BURST", 200),
+			BurstSize:         getEnvInt("RATE_LIMIT_BURST", 200),
 		},
+		DevMode: getEnvBool("DEV_MODE", false),
 	}, nil
+}
+
+func getEnvBool(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			return b
+		}
+	}
+	return defaultVal
 }
 
 func getEnv(key, defaultVal string) string {

@@ -80,10 +80,26 @@ if err != nil {
 
 ### Database
 
-- Use `libs/database` for connection management
-- Write raw SQL for complex queries, use sqlx for scanning
-- Migrations in `services/{name}/migrations/` with numbered prefixes (001_, 002_)
-- Primary key: UUID strings, not auto-increment
+- Use `libs/database` with GORM for connection management
+- Database and tables are auto-created on service startup
+- Use GORM query methods for most operations
+- For complex queries, use GORM's raw SQL capabilities
+- Primary key: UUID strings with `gen_random_uuid()` default
+
+```go
+// Example: Define model with GORM tags
+type User struct {
+    ID        string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Username  string         `gorm:"size:32;uniqueIndex" json:"username"`
+    CreatedAt time.Time      `json:"created_at"`
+    UpdatedAt time.Time      `json:"updated_at"`
+    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// Example: Auto-migrate in main.go
+db, err := database.New(cfg.Database)  // Auto-creates DB if not exists
+db.AutoMigrate(&domain.User{})         // Creates table if not exists
+```
 
 ### Caching
 
@@ -231,15 +247,41 @@ MINIO_BUCKET
 
 ### Database migrations
 
+Tables are auto-created via GORM's `AutoMigrate()` on service startup. For schema changes:
+
+1. Update the domain model struct with new fields/tags
+2. Restart the service - new columns are added automatically
+3. For destructive changes (dropping columns), use manual SQL or recreate the table
+
+**Note**: GORM only creates new tables/columns, it does NOT modify or drop existing columns to protect data.
+
+## Local Development Commands
+
+Use `make` for all local development operations. Run `make help` to see all available targets.
+
+| Command | Description |
+|---------|-------------|
+| `make dev` | Start full development environment |
+| `make dev-down` | Stop development environment |
+| `make redeploy-<service>` | Rebuild and restart a service (after code changes) |
+| `make restart-<service>` | Restart without rebuilding (after config changes) |
+| `make logs-<service>` | Follow service logs |
+| `make health` | Check health of all services |
+| `make ps` | Show running containers |
+
+Examples:
 ```bash
-# Create new migration
-make migrate-create NAME=add_video_sources
+# After modifying gateway code
+make redeploy-gateway
 
-# Run migrations
-make migrate-up
+# After changing docker-compose.yml env vars (no code changes)
+make restart-grafana
 
-# Rollback
-make migrate-down
+# Debug catalog service
+make logs-catalog
+
+# Check all services are healthy
+make health
 ```
 
 ## Don't Do
@@ -248,7 +290,7 @@ make migrate-down
 - Don't pre-populate the database with anime (on-demand only)
 - Don't store video files for external sources (stream directly)
 - Don't cache video URLs longer than 1 hour (they expire)
-- Don't use ORM magic - write explicit SQL
+- Don't fight GORM - use its conventions for simple queries, raw SQL for complex ones
 - Don't add complex abstractions for simple operations
 
 ## Service Ports

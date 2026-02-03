@@ -44,6 +44,41 @@ func NewRouter(
 	// OpenAPI spec
 	r.Get("/openapi.json", proxyHandler.GetOpenAPISpec)
 
+	// Admin panel routes (protected by admin role, unless DevMode is enabled)
+	r.Route("/admin", func(r chi.Router) {
+		if !cfg.DevMode {
+			r.Use(JWTValidationMiddleware(cfg.JWT))
+			r.Use(AdminRoleMiddleware)
+		}
+
+		// Admin dashboard landing page
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head>
+    <title>AnimeEnigma Admin</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        h1 { color: #333; }
+        a { display: block; padding: 15px; margin: 10px 0; background: #f5f5f5; text-decoration: none; color: #333; border-radius: 8px; }
+        a:hover { background: #e0e0e0; }
+    </style>
+</head>
+<body>
+    <h1>AnimeEnigma Admin</h1>
+    <a href="/admin/grafana/">Grafana - Metrics & Dashboards</a>
+    <a href="/admin/prometheus/">Prometheus - Metrics Database</a>
+    <a href="/admin/pgadmin/">pgAdmin - Database Management</a>
+</body>
+</html>`))
+		})
+
+		r.HandleFunc("/grafana/*", proxyHandler.ProxyToGrafana)
+		r.HandleFunc("/prometheus/*", proxyHandler.ProxyToPrometheus)
+		r.HandleFunc("/pgadmin/*", proxyHandler.ProxyToPgAdmin)
+	})
+
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Auth service routes (public)
@@ -124,4 +159,15 @@ func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Han
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// AdminRoleMiddleware ensures the user has admin role
+func AdminRoleMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !authz.IsAdmin(r.Context()) {
+			httputil.Forbidden(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
