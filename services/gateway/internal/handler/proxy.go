@@ -46,6 +46,16 @@ func (h *ProxyHandler) ProxyToStreaming(w http.ResponseWriter, r *http.Request) 
 	h.proxy(w, r, "streaming")
 }
 
+// ProxyToGrafana proxies requests to Grafana
+func (h *ProxyHandler) ProxyToGrafana(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "grafana")
+}
+
+// ProxyToPrometheus proxies requests to Prometheus
+func (h *ProxyHandler) ProxyToPrometheus(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "prometheus")
+}
+
 func (h *ProxyHandler) proxy(w http.ResponseWriter, r *http.Request, service string) {
 	resp, err := h.proxyService.Forward(r, service)
 	if err != nil {

@@ -31,8 +31,24 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 		return nil, err
 	}
 
-	// Build target URL with original path and query
-	fullURL := targetURL + r.URL.Path
+	// Rewrite path for admin panel services
+	path := r.URL.Path
+	switch service {
+	case "grafana":
+		// /admin/grafana/... -> /admin/grafana/... (Grafana's sub-path, pass through)
+		if path == "" || path == "/admin/grafana" {
+			path = "/admin/grafana/"
+		}
+	case "prometheus":
+		// /admin/prometheus/... -> /prometheus/... (Prometheus's sub-path)
+		path = strings.TrimPrefix(path, "/admin/prometheus")
+		if !strings.HasPrefix(path, "/prometheus") {
+			path = "/prometheus" + path
+		}
+	}
+
+	// Build target URL with path and query
+	fullURL := targetURL + path
 	if r.URL.RawQuery != "" {
 		fullURL += "?" + r.URL.RawQuery
 	}
@@ -71,6 +87,10 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.RoomsService, nil
 	case "streaming":
 		return s.serviceURLs.StreamingService, nil
+	case "grafana":
+		return s.serviceURLs.GrafanaService, nil
+	case "prometheus":
+		return s.serviceURLs.PrometheusService, nil
 	default:
 		return "", errors.NotFound("service")
 	}

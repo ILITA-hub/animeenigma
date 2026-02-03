@@ -69,14 +69,12 @@ func NewRouter(
     <h1>AnimeEnigma Admin</h1>
     <a href="/admin/grafana/">Grafana - Metrics & Dashboards</a>
     <a href="/admin/prometheus/">Prometheus - Metrics Database</a>
-    <a href="/admin/pgadmin/">pgAdmin - Database Management</a>
 </body>
 </html>`))
 		})
 
 		r.HandleFunc("/grafana/*", proxyHandler.ProxyToGrafana)
 		r.HandleFunc("/prometheus/*", proxyHandler.ProxyToPrometheus)
-		r.HandleFunc("/pgadmin/*", proxyHandler.ProxyToPgAdmin)
 	})
 
 	// API routes

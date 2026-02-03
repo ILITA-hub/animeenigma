@@ -35,7 +35,6 @@ type ServiceURLs struct {
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
-	PgAdminService    string
 }
 
 type RateLimitConfig struct {
@@ -64,7 +63,6 @@ func Load() (*Config, error) {
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
 			PrometheusService: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090"),
-			PgAdminService:    getEnv("PGADMIN_SERVICE_URL", "http://pgadmin:80"),
 		},
 		RateLimit: RateLimitConfig{
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),
