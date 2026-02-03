@@ -18,6 +18,7 @@ func NewRouter(
 	historyHandler *handler.HistoryHandler,
 	reviewHandler *handler.ReviewHandler,
 	malImportHandler *handler.MALImportHandler,
+	malExportHandler *handler.MALExportHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -66,8 +67,14 @@ func NewRouter(
 			// User's reviews
 			r.Get("/reviews", reviewHandler.GetUserReviews)
 
-			// MAL Import
+			// MAL Import (sync - immediate)
 			r.Post("/import/mal", malImportHandler.ImportMALList)
+
+			// MAL Export (async - queued)
+			r.Post("/mal-export", malExportHandler.InitiateExport)
+			r.Get("/mal-export", malExportHandler.GetUserExports)
+			r.Get("/mal-export/{exportId}", malExportHandler.GetExportStatus)
+			r.Delete("/mal-export/{exportId}", malExportHandler.CancelExport)
 		})
 
 		// Public user watchlist

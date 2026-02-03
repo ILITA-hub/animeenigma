@@ -13,6 +13,7 @@ import (
 
 func NewRouter(
 	jobHandler *handler.JobHandler,
+	taskHandler *handler.TaskHandler,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
 ) http.Handler {
@@ -43,6 +44,18 @@ func NewRouter(
 			r.Get("/status", jobHandler.GetJobStatus)
 			r.Post("/shikimori-sync", jobHandler.TriggerShikimoriSync)
 			r.Post("/cleanup", jobHandler.TriggerCleanup)
+		})
+
+		// Task management routes for MAL export
+		r.Route("/tasks", func(r chi.Router) {
+			// Export job management
+			r.Post("/anime-load", taskHandler.CreateExportJob)
+			r.Post("/anime-load/tasks", taskHandler.CreateTasks)
+			r.Get("/anime-load/status/{exportId}", taskHandler.GetExportJobStatus)
+			r.Delete("/anime-load/{malId}", taskHandler.DeletePendingTask)
+
+			// Worker status
+			r.Get("/worker/status", taskHandler.GetWorkerStatus)
 		})
 	})
 
