@@ -1,0 +1,4 @@
+ALTER TABLE users ALTER COLUMN public_id DROP NOT NULL;
+DROP INDEX IF EXISTS idx_users_public_id;
+ALTER TABLE users DROP COLUMN IF EXISTS public_statuses;
+ALTER TABLE users DROP COLUMN IF EXISTS public_id;

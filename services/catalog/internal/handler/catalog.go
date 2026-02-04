@@ -528,3 +528,93 @@ func (h *CatalogHandler) UnpinTranslation(w http.ResponseWriter, r *http.Request
 
 	httputil.OK(w, map[string]string{"status": "unpinned"})
 }
+
+// GetHiAnimeEpisodes gets episodes from HiAnime
+func (h *CatalogHandler) GetHiAnimeEpisodes(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodes, err := h.catalogService.GetHiAnimeEpisodes(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, episodes)
+}
+
+// GetHiAnimeServers gets available servers for an episode from HiAnime
+func (h *CatalogHandler) GetHiAnimeServers(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeID := r.URL.Query().Get("episode")
+	if episodeID == "" {
+		httputil.BadRequest(w, "episode ID is required")
+		return
+	}
+
+	servers, err := h.catalogService.GetHiAnimeServers(r.Context(), animeID, episodeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, servers)
+}
+
+// GetHiAnimeStream gets the stream URL from HiAnime
+func (h *CatalogHandler) GetHiAnimeStream(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeID := r.URL.Query().Get("episode")
+	serverID := r.URL.Query().Get("server")
+	category := r.URL.Query().Get("category")
+
+	if episodeID == "" {
+		httputil.BadRequest(w, "episode ID is required")
+		return
+	}
+	if serverID == "" {
+		httputil.BadRequest(w, "server ID is required")
+		return
+	}
+	if category == "" {
+		category = "sub" // Default to sub
+	}
+
+	stream, err := h.catalogService.GetHiAnimeStream(r.Context(), animeID, episodeID, serverID, category)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, stream)
+}
+
+// SearchHiAnime searches for anime on HiAnime
+func (h *CatalogHandler) SearchHiAnime(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" || len(query) < 2 {
+		httputil.BadRequest(w, "search query must be at least 2 characters")
+		return
+	}
+
+	results, err := h.catalogService.SearchHiAnime(r.Context(), query)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, results)
+}

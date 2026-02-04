@@ -17,6 +17,7 @@ type Config struct {
 	Redis     cache.Config
 	JWT       authz.JWTConfig
 	Shikimori ShikimoriConfig
+	HiAnime   HiAnimeConfig
 }
 
 type ServerConfig struct {
@@ -36,6 +37,10 @@ type ShikimoriConfig struct {
 	Timeout     time.Duration
 }
 
+type HiAnimeConfig struct {
+	AniwatchAPIURL string
+}
+
 func Load() (*Config, error) {
 	return &Config{
 		Server: ServerConfig{
@@ -43,15 +48,12 @@ func Load() (*Config, error) {
 			Port: getEnvInt("SERVER_PORT", 8081),
 		},
 		Database: database.Config{
-			Host:            getEnv("DB_HOST", "localhost"),
-			Port:            getEnvInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", "postgres"),
-			Password:        getEnv("DB_PASSWORD", "postgres"),
-			Database:        getEnv("DB_NAME", "animeenigma_catalog"),
-			SSLMode:         getEnv("DB_SSLMODE", "disable"),
-			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
-			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 5),
-			ConnMaxLifetime: time.Hour,
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnvInt("DB_PORT", 5432),
+			User:     getEnv("DB_USER", "postgres"),
+			Password: getEnv("DB_PASSWORD", "postgres"),
+			Database: getEnv("DB_NAME", "animeenigma_catalog"),
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Redis: cache.Config{
 			Host:     getEnv("REDIS_HOST", "localhost"),
@@ -69,6 +71,9 @@ func Load() (*Config, error) {
 			UserAgent:  getEnv("SHIKIMORI_USER_AGENT", "AnimeEnigma/1.0"),
 			RateLimit:  getEnvInt("SHIKIMORI_RATE_LIMIT", 5), // requests per second
 			Timeout:    getEnvDuration("SHIKIMORI_TIMEOUT", 30*time.Second),
+		},
+		HiAnime: HiAnimeConfig{
+			AniwatchAPIURL: getEnv("ANIWATCH_API_URL", "http://aniwatch:4000"),
 		},
 	}, nil
 }

@@ -8,6 +8,8 @@ export interface User {
   email: string
   avatar?: string
   role: string
+  public_id?: string
+  public_statuses?: string[]
 }
 
 export interface LoginCredentials {

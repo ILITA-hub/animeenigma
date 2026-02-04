@@ -13,6 +13,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/service"
@@ -30,13 +31,17 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
-	// Initialize database
-	ctx := context.Background()
-	db, err := database.New(ctx, cfg.Database)
+	// Initialize database (auto-creates DB if not exists)
+	db, err := database.New(cfg.Database)
 	if err != nil {
 		log.Fatalw("failed to connect to database", "error", err)
 	}
 	defer db.Close()
+
+	// Auto-migrate schema
+	if err := db.AutoMigrate(&domain.User{}); err != nil {
+		log.Fatalw("failed to migrate database", "error", err)
+	}
 
 	// Initialize cache
 	redisCache, err := cache.New(cfg.Redis)
@@ -46,7 +51,7 @@ func main() {
 	defer redisCache.Close()
 
 	// Initialize repositories
-	userRepo := repo.NewUserRepository(db)
+	userRepo := repo.NewUserRepository(db.DB)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, log)

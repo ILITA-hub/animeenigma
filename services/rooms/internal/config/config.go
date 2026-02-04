@@ -8,15 +8,13 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/cache"
-	"github.com/ILITA-hub/animeenigma/libs/database"
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database database.Config
-	Redis    cache.Config
-	JWT      authz.JWTConfig
-	Game     GameConfig
+	Server ServerConfig
+	Redis  cache.Config
+	JWT    authz.JWTConfig
+	Game   GameConfig
 }
 
 type ServerConfig struct {
@@ -38,18 +36,7 @@ func Load() (*Config, error) {
 	return &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
-			Port: getEnvInt("SERVER_PORT", 8083),
-		},
-		Database: database.Config{
-			Host:            getEnv("DB_HOST", "localhost"),
-			Port:            getEnvInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", "postgres"),
-			Password:        getEnv("DB_PASSWORD", "postgres"),
-			Database:        getEnv("DB_NAME", "animeenigma_rooms"),
-			SSLMode:         getEnv("DB_SSLMODE", "disable"),
-			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
-			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 5),
-			ConnMaxLifetime: time.Hour,
+			Port: getEnvInt("SERVER_PORT", 8084),
 		},
 		Redis: cache.Config{
 			Host:     getEnv("REDIS_HOST", "localhost"),

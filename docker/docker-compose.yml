@@ -76,6 +76,22 @@ services:
     volumes:
       - meilisearch_data:/meili_data
 
+  aniwatch:
+    image: rz6e/aniwatch-api:latest
+    container_name: animeenigma-aniwatch
+    ports:
+      - "3100:4000"
+    environment:
+      - PORT=4000
+      - ANIWATCH_API_HOSTNAME=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # =============================================================================
   # Monitoring & Admin
   # =============================================================================
@@ -222,10 +238,13 @@ services:
       REDIS_HOST: redis
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
       JWT_SECRET: dev-secret-change-in-production
+      ANIWATCH_API_URL: http://aniwatch:4000
     ports:
       - "8081:8081"
     depends_on:
       redis:
+        condition: service_healthy
+      aniwatch:
         condition: service_healthy
 
   streaming:

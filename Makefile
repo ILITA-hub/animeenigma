@@ -1,6 +1,8 @@
 .PHONY: all build test lint clean generate dev help \
 	k8s-apply k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
-	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod
+	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod \
+	migrate migrate-down migrate-force migrate-version migrate-auth migrate-catalog migrate-player migrate-rooms migrate-all migrate-create migrate-status db-shell \
+	redeploy-all redeploy-web
 
 # Variables
 SERVICES := auth catalog streaming player social rooms scheduler gateway notifications
@@ -121,17 +123,65 @@ generate-graphql: ## Generate GraphQL code
 	cd frontend/web && pnpm graphql-codegen
 
 # ============================================================================
-# Database
+# Database (golang-migrate)
 # ============================================================================
 
-migrate-up: ## Run database migrations
-	./bin/migrator up
+# Database connection settings (can be overridden via environment)
+DB_HOST ?= 172.29.0.2
+DB_PORT ?= 5432
+DB_USER ?= postgres
+DB_PASSWORD ?= postgres
 
-migrate-down: ## Rollback last migration
-	./bin/migrator down
+# Database URL helper
+define DB_URL
+postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/animeenigma_$(1)?sslmode=disable
+endef
 
-migrate-create: ## Create new migration (usage: make migrate-create NAME=create_users)
-	./bin/migrator create $(NAME)
+# Run migrations for a specific service
+migrate: ## Run migrations for SERVICE (usage: make migrate SERVICE=auth)
+	@if [ -z "$(SERVICE)" ]; then echo "Usage: make migrate SERVICE=auth|catalog|player|rooms"; exit 1; fi
+	migrate -path services/$(SERVICE)/migrations -database "$(call DB_URL,$(SERVICE))" up
+
+migrate-down: ## Rollback one migration for SERVICE (usage: make migrate-down SERVICE=auth)
+	@if [ -z "$(SERVICE)" ]; then echo "Usage: make migrate-down SERVICE=auth|catalog|player|rooms"; exit 1; fi
+	migrate -path services/$(SERVICE)/migrations -database "$(call DB_URL,$(SERVICE))" down 1
+
+migrate-force: ## Force set migration version (usage: make migrate-force SERVICE=auth VERSION=3)
+	@if [ -z "$(SERVICE)" ] || [ -z "$(VERSION)" ]; then echo "Usage: make migrate-force SERVICE=auth VERSION=3"; exit 1; fi
+	migrate -path services/$(SERVICE)/migrations -database "$(call DB_URL,$(SERVICE))" force $(VERSION)
+
+migrate-version: ## Show current migration version for SERVICE
+	@if [ -z "$(SERVICE)" ]; then echo "Usage: make migrate-version SERVICE=auth|catalog|player|rooms"; exit 1; fi
+	migrate -path services/$(SERVICE)/migrations -database "$(call DB_URL,$(SERVICE))" version
+
+migrate-auth: ## Run auth service migrations
+	@$(MAKE) migrate SERVICE=auth
+
+migrate-catalog: ## Run catalog service migrations
+	@$(MAKE) migrate SERVICE=catalog
+
+migrate-player: ## Run player service migrations
+	@$(MAKE) migrate SERVICE=player
+
+migrate-rooms: ## Run rooms service migrations
+	@$(MAKE) migrate SERVICE=rooms
+
+migrate-all: migrate-auth migrate-catalog migrate-player migrate-rooms ## Run all migrations
+	@echo "All migrations completed"
+
+migrate-create: ## Create new migration (usage: make migrate-create SERVICE=auth NAME=add_field)
+	@if [ -z "$(SERVICE)" ] || [ -z "$(NAME)" ]; then echo "Usage: make migrate-create SERVICE=auth NAME=add_field"; exit 1; fi
+	migrate create -ext sql -dir services/$(SERVICE)/migrations -seq $(NAME)
+
+migrate-status: ## Show migration status for all services
+	@echo "=== Auth ===" && migrate -path services/auth/migrations -database "$(call DB_URL,auth)" version 2>&1 || true
+	@echo "=== Catalog ===" && migrate -path services/catalog/migrations -database "$(call DB_URL,catalog)" version 2>&1 || true
+	@echo "=== Player ===" && migrate -path services/player/migrations -database "$(call DB_URL,player)" version 2>&1 || true
+	@echo "=== Rooms ===" && migrate -path services/rooms/migrations -database "$(call DB_URL,rooms)" version 2>&1 || true
+
+db-shell: ## Open psql shell to a database (usage: make db-shell SERVICE=auth)
+	@if [ -z "$(SERVICE)" ]; then echo "Usage: make db-shell SERVICE=auth|catalog|player|rooms"; exit 1; fi
+	PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d animeenigma_$(SERVICE)
 
 seed: ## Seed database with sample data
 	go run tools/db-seeder/main.go
@@ -152,6 +202,35 @@ docker-push: $(addprefix docker-push-,$(SERVICES)) ## Push all Docker images
 
 docker-push-%: ## Push Docker image for a specific service
 	docker push $(DOCKER_REGISTRY)/$*:latest
+
+# ============================================================================
+# Redeploy (local docker-compose)
+# ============================================================================
+
+redeploy-web: ## Rebuild and restart web frontend
+	@echo "Rebuilding web frontend..."
+	docker-compose -f docker/docker-compose.yml build web
+	docker stop animeenigma-web || true
+	docker rm animeenigma-web || true
+	docker-compose -f docker/docker-compose.yml up -d --no-deps web
+	@echo "Web frontend redeployed"
+
+redeploy-%: ## Rebuild and restart a service (e.g., make redeploy-gateway)
+	./deploy/scripts/redeploy.sh $*
+	@if [ "$*" = "catalog" ]; then \
+		echo "Purging HiAnime caches..."; \
+		docker exec $$(docker ps -qf "name=redis" | head -1) redis-cli KEYS "hianime:*" | \
+			xargs -r docker exec -i $$(docker ps -qf "name=redis" | head -1) redis-cli DEL 2>/dev/null || true; \
+	fi
+
+redeploy-all: ## Rebuild and restart all backend services
+	./deploy/scripts/redeploy.sh
+
+restart-%: ## Restart a service without rebuilding (e.g., make restart-grafana)
+	cd docker && docker compose restart $*
+
+logs-%: ## Follow logs for a service (e.g., make logs-gateway)
+	cd docker && docker compose logs -f $*
 
 # ============================================================================
 # Kubernetes / Kustomize

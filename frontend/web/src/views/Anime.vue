@@ -264,7 +264,7 @@
         </div>
       </section>
 
-      <!-- Kodik Player -->
+      <!-- Video Player Section -->
       <section class="mt-8">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">
@@ -275,9 +275,38 @@
               {{ $t('anime.watch') || 'Смотреть онлайн' }}
             </span>
           </h2>
+          <!-- Provider selector -->
+          <div class="flex gap-2">
+            <button
+              @click="videoProvider = 'kodik'"
+              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="videoProvider === 'kodik'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+            >
+              Kodik
+            </button>
+            <button
+              @click="videoProvider = 'hianime'"
+              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="videoProvider === 'hianime'
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+            >
+              HiAnime
+            </button>
+          </div>
         </div>
         <div class="glass-card p-4 md:p-6">
+          <!-- Kodik Player -->
           <KodikPlayer
+            v-if="videoProvider === 'kodik'"
+            :anime-id="anime.id"
+            :total-episodes="anime.totalEpisodes"
+          />
+          <!-- HiAnime Player -->
+          <HiAnimePlayer
+            v-else-if="videoProvider === 'hianime'"
             :anime-id="anime.id"
             :total-episodes="anime.totalEpisodes"
           />
@@ -434,7 +463,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
@@ -443,6 +472,7 @@ import { Badge, Button } from '@/components/ui'
 import { GenreChip, AnimeCardNew } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import KodikPlayer from '@/components/player/KodikPlayer.vue'
+import HiAnimePlayer from '@/components/player/HiAnimePlayer.vue'
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
 
 interface AnimeWithExtras {
@@ -491,6 +521,9 @@ const isHidden = ref(false)
 const showShikimoriEdit = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
+const videoProvider = ref<'kodik' | 'hianime'>(
+  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'hianime') || 'kodik'
+)
 
 // Reviews
 const reviews = ref<Review[]>([])
@@ -752,6 +785,11 @@ const retry = () => {
   const animeId = route.params.id as string
   fetchAnime(animeId)
 }
+
+// Save preferred video provider to localStorage
+watch(videoProvider, (newProvider) => {
+  localStorage.setItem('preferred_video_provider', newProvider)
+})
 
 onMounted(async () => {
   const animeId = route.params.id as string

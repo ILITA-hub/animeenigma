@@ -13,6 +13,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -29,14 +30,22 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
-	ctx := context.Background()
-
-	// Initialize database
-	db, err := database.New(ctx, cfg.Database)
+	// Initialize database (auto-creates DB if not exists)
+	db, err := database.New(cfg.Database)
 	if err != nil {
 		log.Fatalw("failed to connect to database", "error", err)
 	}
 	defer db.Close()
+
+	// Auto-migrate schema
+	if err := db.AutoMigrate(
+		&domain.Anime{},
+		&domain.Genre{},
+		&domain.Video{},
+		&domain.PinnedTranslation{},
+	); err != nil {
+		log.Fatalw("failed to migrate database", "error", err)
+	}
 
 	// Initialize cache
 	redisCache, err := cache.New(cfg.Redis)
@@ -49,9 +58,9 @@ func main() {
 	shikimoriClient := shikimori.NewClient(cfg.Shikimori, log)
 
 	// Initialize repositories
-	animeRepo := repo.NewAnimeRepository(db)
-	genreRepo := repo.NewGenreRepository(db)
-	videoRepo := repo.NewVideoRepository(db)
+	animeRepo := repo.NewAnimeRepository(db.DB)
+	genreRepo := repo.NewGenreRepository(db.DB)
+	videoRepo := repo.NewVideoRepository(db.DB)
 
 	// Initialize services
 	catalogService := service.NewCatalogService(
@@ -61,6 +70,9 @@ func main() {
 		shikimoriClient,
 		redisCache,
 		log,
+		service.CatalogServiceOptions{
+			AniwatchAPIURL: cfg.HiAnime.AniwatchAPIURL,
+		},
 	)
 
 	// Initialize handlers

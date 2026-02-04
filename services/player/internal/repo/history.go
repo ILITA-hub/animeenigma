@@ -3,28 +3,28 @@ package repo
 import (
 	"context"
 
-	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
+	"gorm.io/gorm"
 )
 
 type HistoryRepository struct {
-	db *database.DB
+	db *gorm.DB
 }
 
-func NewHistoryRepository(db *database.DB) *HistoryRepository {
-	return &HistoryRepository{
-		db: db,
-	}
+func NewHistoryRepository(db *gorm.DB) *HistoryRepository {
+	return &HistoryRepository{db: db}
 }
 
-// GetByUser returns watch history for a user
 func (r *HistoryRepository) GetByUser(ctx context.Context, userID string, limit int) ([]*domain.WatchHistory, error) {
-	// Stub implementation
-	return []*domain.WatchHistory{}, nil
+	var history []*domain.WatchHistory
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("watched_at DESC").
+		Limit(limit).
+		Find(&history).Error
+	return history, err
 }
 
-// Create adds a new watch history entry
 func (r *HistoryRepository) Create(ctx context.Context, history *domain.WatchHistory) error {
-	// Stub implementation
-	return nil
+	return r.db.WithContext(ctx).Create(history).Error
 }

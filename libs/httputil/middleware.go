@@ -112,19 +112,23 @@ func GetRequestID(ctx context.Context) string {
 	return ""
 }
 
-// BearerToken extracts bearer token from Authorization header
+// BearerToken extracts bearer token from Authorization header or access_token cookie
 func BearerToken(r *http.Request) string {
+	// First check Authorization header
 	auth := r.Header.Get("Authorization")
-	if auth == "" {
-		return ""
+	if auth != "" {
+		parts := strings.SplitN(auth, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+			return parts[1]
+		}
 	}
 
-	parts := strings.SplitN(auth, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		return ""
+	// Fallback to cookie for direct browser navigation
+	if cookie, err := r.Cookie("access_token"); err == nil {
+		return cookie.Value
 	}
 
-	return parts[1]
+	return ""
 }
 
 // ContentType sets Content-Type header to application/json

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
@@ -42,15 +41,12 @@ func Load() (*Config, error) {
 			Port: getEnvInt("SERVER_PORT", 8085),
 		},
 		Database: database.Config{
-			Host:            getEnv("DB_HOST", "localhost"),
-			Port:            getEnvInt("DB_PORT", 5432),
-			User:            getEnv("DB_USER", "postgres"),
-			Password:        getEnv("DB_PASSWORD", "postgres"),
-			Database:        getEnv("DB_NAME", "animeenigma_scheduler"),
-			SSLMode:         getEnv("DB_SSLMODE", "disable"),
-			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
-			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 5),
-			ConnMaxLifetime: time.Hour,
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnvInt("DB_PORT", 5432),
+			User:     getEnv("DB_USER", "postgres"),
+			Password: getEnv("DB_PASSWORD", "postgres"),
+			Database: getEnv("DB_NAME", "animeenigma_catalog"), // Uses catalog database
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Redis: cache.Config{
 			Host:     getEnv("REDIS_HOST", "localhost"),

@@ -1,4 +1,3 @@
--- +migrate Up
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE users (
@@ -13,6 +12,3 @@ CREATE TABLE users (
 
 CREATE INDEX idx_users_username ON users(username) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_role ON users(role) WHERE deleted_at IS NULL;
-
--- +migrate Down
-DROP TABLE IF EXISTS users;

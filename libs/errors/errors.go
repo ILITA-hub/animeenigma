@@ -119,6 +119,13 @@ func RateLimited() *AppError {
 	return New(CodeRateLimited, "rate limit exceeded")
 }
 
+func ServiceUnavailable(message string) *AppError {
+	if message == "" {
+		message = "service temporarily unavailable"
+	}
+	return New(CodeUnavailable, message)
+}
+
 func ExternalAPI(service string, err error) *AppError {
 	return Wrap(err, CodeExternalAPI, fmt.Sprintf("external API error: %s", service))
 }

@@ -67,10 +67,17 @@ func NewRouter(
 			// Kodik video sources
 			r.Get("/{animeId}/kodik/translations", catalogHandler.GetKodikTranslations)
 			r.Get("/{animeId}/kodik/video", catalogHandler.GetKodikVideo)
+			// HiAnime video sources
+			r.Get("/{animeId}/hianime/episodes", catalogHandler.GetHiAnimeEpisodes)
+			r.Get("/{animeId}/hianime/servers", catalogHandler.GetHiAnimeServers)
+			r.Get("/{animeId}/hianime/stream", catalogHandler.GetHiAnimeStream)
 		})
 
 		// Kodik search (for finding anime not in our DB)
 		r.Get("/kodik/search", catalogHandler.SearchKodik)
+
+		// HiAnime search
+		r.Get("/hianime/search", catalogHandler.SearchHiAnime)
 
 		r.Get("/genres", catalogHandler.GetGenres)
 

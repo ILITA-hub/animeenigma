@@ -2,23 +2,24 @@
 
 [🇷🇺 Русская версия](README.ru.md)
 
-A self-hosted anime streaming platform with MAL/Shikimori integration, built as a Go microservices monorepo with a Vue 3 frontend.
+A self-hosted anime streaming platform with MAL/Shikimori integration. Built as a Go microservices monorepo with a Vue 3 frontend.
 
-**Target**: Self-hosted for small groups (no CDN required).
+**Target audience**: Self-hosting for small groups (no CDN required).
 
 ## Features
 
-- 🎬 **Hybrid Video Streaming** - Stream from external APIs (Kodik, Aniboom) or self-hosted MinIO
-- 🔍 **On-demand Catalog** - Anime data fetched from Shikimori in real-time when users search
-- 🎮 **Multiplayer Game** - Anime opening/ending guessing game with real-time WebSocket rooms
-- 📊 **Progress Tracking** - Watch history, anime lists, and playback position sync
-- 🔐 **Authentication** - JWT-based auth with role-based access control (user/admin)
+- **Hybrid Streaming** - Watch via external APIs (Kodik, Aniboom) or self-hosted MinIO storage
+- **On-Demand Catalog** - Anime data is fetched from Shikimori in real-time when searching
+- **Multiplayer Game** - Real-time opening/ending guessing game via WebSocket
+- **Progress Tracking** - Watch history, anime lists, playback position sync
+- **Authentication** - JWT authorization with role-based access (user/admin)
+- **Auto Database Setup** - Databases and tables are created automatically on first run
 
 ## Architecture
 
 ```
 ┌─────────────┐                         ┌──────────────┐
-│   Frontend  │◄───── REST/GraphQL ────►│   Gateway    │
+│  Frontend   │◄───── REST/GraphQL ────►│   Gateway    │
 │   (Vue 3)   │                         └──────┬───────┘
 └──────┬──────┘                                │
        │                     ┌─────────────────┼─────────────────┐
@@ -41,27 +42,27 @@ A self-hosted anime streaming platform with MAL/Shikimori integration, built as 
        └─── proxy stream ────► Streaming Service ────► Aniboom API
 ```
 
-### Video Streaming Flow
+### Video Streams
 
-Videos are sourced in three ways:
+Videos are obtained in three ways:
 
-1. **Iframe Embed (Kodik)** - Frontend embeds Kodik player directly
-2. **Proxied Stream (Aniboom)** - Backend proxies HLS streams for CORS bypass
-3. **Self-hosted (MinIO)** - Admin-uploaded videos served from MinIO storage
+1. **Iframe (Kodik)** - Frontend embeds Kodik player directly
+2. **Proxied Stream (Aniboom)** - Backend proxies HLS streams to bypass CORS
+3. **Self-hosted Storage (MinIO)** - Admin-uploaded videos from MinIO
 
 ### On-Demand Catalog
 
-The anime catalog is **NOT pre-populated**. Instead:
+The anime database is **NOT pre-populated**. Instead:
 
 1. User searches for anime in the frontend
 2. Catalog service queries Shikimori GraphQL API
-3. Results are mapped by **Japanese title** as primary key
-4. Anime metadata is stored in PostgreSQL for future lookups
-5. Video sources are resolved via Kodik/Aniboom by title matching
+3. Results are matched by **Japanese name** as the primary key
+4. Anime metadata is stored in PostgreSQL for future queries
+5. Video sources are determined via Kodik/Aniboom by name matching
 
 ## Quick Start
 
-### Prerequisites
+### Requirements
 
 - Go 1.22+
 - Bun 1.x+
@@ -77,10 +78,10 @@ The anime catalog is **NOT pre-populated**. Instead:
 
 2. **Start backend services:**
    ```bash
-   # In separate terminals or use docker compose
+   # In separate terminals or via docker compose
    cd services/auth && go run ./cmd/auth-api
    cd services/catalog && go run ./cmd/catalog-api
-   # ... etc
+   # ... etc.
    ```
 
 3. **Start frontend:**
@@ -90,7 +91,7 @@ The anime catalog is **NOT pre-populated**. Instead:
    bun run dev
    ```
 
-### Using Docker Compose
+### With Docker Compose
 
 ```bash
 # Start everything
@@ -111,80 +112,81 @@ animeenigma/
 │   ├── auth/           # Authentication service
 │   ├── catalog/        # Anime catalog with Shikimori integration
 │   ├── streaming/      # Video streaming/proxy service
-│   ├── player/         # Watch progress & lists
-│   ├── rooms/          # Game rooms & WebSocket
-│   ├── scheduler/      # Background jobs
+│   ├── player/         # Watch progress and lists
+│   ├── rooms/          # Game rooms and WebSocket
+│   ├── scheduler/      # Background tasks
 │   └── gateway/        # API gateway
 │
 ├── frontend/
 │   └── web/            # Vue 3 SPA
 │
 ├── libs/               # Shared Go libraries
-│   ├── logger/
-│   ├── errors/
-│   ├── cache/
-│   ├── database/
-│   ├── authz/
-│   ├── httputil/
-│   ├── pagination/
-│   ├── animeparser/
-│   ├── videoutils/
-│   └── tracing/
+│   ├── logger/         # Structured logging
+│   ├── errors/         # Error handling
+│   ├── cache/          # Redis caching
+│   ├── database/       # PostgreSQL with GORM (auto-init)
+│   ├── authz/          # JWT authentication
+│   ├── httputil/       # HTTP utilities
+│   ├── pagination/     # Pagination
+│   ├── animeparser/    # Video source parsers (Kodik, Aniboom)
+│   ├── videoutils/     # Video handling and MinIO
+│   ├── metrics/        # Prometheus metrics
+│   └── tracing/        # OpenTelemetry
 │
 ├── api/                # API contracts
-│   ├── openapi/
-│   ├── proto/
-│   ├── graphql/
-│   └── events/
+│   ├── openapi/        # OpenAPI specifications
+│   ├── proto/          # Protobuf definitions
+│   ├── graphql/        # GraphQL schema
+│   └── events/         # CloudEvents for async messaging
 │
-├── docker/             # Docker Compose for local dev
-├── deploy/             # Kubernetes configs
+├── docker/             # Docker Compose for local development
+├── deploy/             # Kubernetes configurations
 │   └── kustomize/
 ├── infra/              # Helm charts
 │   └── helm/
-└── scripts/            # Build & utility scripts
+└── scripts/            # Build scripts and utilities
 ```
 
 ## Services
 
-| Service | Port | Description |
-|---------|------|-------------|
-| Gateway | 8000 | API gateway, rate limiting, routing |
-| Auth | 8080 | Authentication & user management |
-| Catalog | 8081 | Anime catalog, Shikimori integration |
-| Streaming | 8082 | Video streaming/proxy |
-| Player | 8083 | Watch progress & anime lists |
-| Rooms | 8084 | Game rooms & WebSocket |
-| Scheduler | 8085 | Background jobs |
-| Frontend | 3000 | Vue 3 SPA |
+| Service   | Port | Description                          |
+|-----------|------|--------------------------------------|
+| Gateway   | 8000 | API gateway, rate limiting, routing  |
+| Auth      | 8080 | Authentication and user management   |
+| Catalog   | 8081 | Anime catalog, Shikimori integration |
+| Streaming | 8082 | Video streaming/proxy                |
+| Player    | 8083 | Watch progress and anime lists       |
+| Rooms     | 8084 | Game rooms and WebSocket             |
+| Scheduler | 8085 | Background tasks                     |
+| Frontend  | 3000 | Vue 3 SPA                            |
 
 ## Configuration
 
-Services are configured via environment variables. See each service's `internal/config/config.go` for available options.
+Services are configured via environment variables. See `internal/config/config.go` of each service.
 
 ### Core Services
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `JWT_SECRET` | JWT signing secret | - |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | PostgreSQL connection | localhost:5432 |
-| `REDIS_HOST`, `REDIS_PORT` | Redis connection | localhost:6379 |
-| `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | MinIO storage | localhost:9000 |
+| Variable                                              | Description      | Default        |
+|-------------------------------------------------------|------------------|----------------|
+| `JWT_SECRET`                                          | JWT signing key  | -              |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | PostgreSQL       | localhost:5432 |
+| `REDIS_HOST`, `REDIS_PORT`                            | Redis            | localhost:6379 |
+| `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | MinIO storage    | localhost:9000 |
 
 ### Video Providers
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `KODIK_API_KEY` | Kodik API key for video search | For Kodik support |
-| `KODIK_BASE_URL` | Kodik API base URL | `https://kodikapi.com` |
-| `ANIBOOM_BASE_URL` | Aniboom API base URL | For Aniboom support |
-| `SHIKIMORI_CLIENT_ID` | Shikimori OAuth client ID | Optional |
-| `SHIKIMORI_CLIENT_SECRET` | Shikimori OAuth secret | Optional |
+| Variable              | Description                  | Required              |
+|-----------------------|------------------------------|-----------------------|
+| `KODIK_API_KEY`       | Kodik API key for video search | For Kodik support     |
+| `KODIK_BASE_URL`      | Kodik API base URL           | `https://kodikapi.com` |
+| `ANIBOOM_BASE_URL`    | Aniboom API base URL         | For Aniboom support   |
+| `SHIKIMORI_CLIENT_ID` | Shikimori OAuth client ID    | Optional              |
+| `SHIKIMORI_CLIENT_SECRET` | Shikimori OAuth secret   | Optional              |
 
 ### Example `.env`
 
 ```env
-# Database
+# Database (auto-created if not exists)
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=animeenigma
@@ -201,10 +203,10 @@ MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=animeenigma
 
-# Auth
+# Authentication
 JWT_SECRET=your-super-secret-key
 
-# Video Providers
+# Video providers
 KODIK_API_KEY=your-kodik-api-key
 # ANIBOOM_BASE_URL=https://api.aniboom.one
 ```
@@ -249,9 +251,30 @@ helm install animeenigma ./gateway -f gateway/values.yaml
 
 ## API Documentation
 
-- OpenAPI specs: `api/openapi/`
+- OpenAPI specifications: `api/openapi/`
 - GraphQL schema: `api/graphql/schema.graphql`
 - Proto definitions: `api/proto/`
+
+## Multiplayer Game
+
+AnimeEnigma includes an opening/ending guessing game:
+
+1. Create a room with settings (number of rounds, time, mode)
+2. Invite friends via link
+3. Opening/ending video plays
+4. Players enter the anime title
+5. Points are awarded for speed and accuracy
+6. Global and session leaderboards
+
+## Monitoring
+
+Each service exposes Prometheus metrics at `/metrics`:
+
+- `http_requests_total` - Request counter with labels
+- `http_request_duration_seconds` - Latency histogram (p50/p95/p99)
+- `http_response_size_bytes` - Response size histogram
+
+Admin dashboard (local): `http://localhost:8088/grafana`
 
 ## License
 

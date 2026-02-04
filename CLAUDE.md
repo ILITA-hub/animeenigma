@@ -269,6 +269,20 @@ Use `make` for all local development operations. Run `make help` to see all avai
 | `make health` | Check health of all services |
 | `make ps` | Show running containers |
 
+**Frontend Note**: Use `bun` (not npm/pnpm) for frontend development:
+```bash
+cd frontend/web
+bun install          # Install dependencies
+bun run dev          # Development server
+bun run build        # Production build
+bun run test:e2e     # Run e2e tests
+
+# For Playwright, use bunx (not npx):
+bunx playwright test                           # Run all e2e tests
+bunx playwright test hianime-integration       # Run specific test file
+bunx playwright test --reporter=list           # With list reporter
+```
+
 Examples:
 ```bash
 # After modifying gateway code
