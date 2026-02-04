@@ -39,6 +39,9 @@ func NewRouter(
 		metrics.Handler().ServeHTTP(w, r)
 	})
 
+	// Admin check endpoint for nginx auth_request (outside /api for direct access)
+	r.Get("/auth/admin-check", AdminCheckHandler(jwtConfig))
+
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Auth routes (public)
@@ -112,4 +115,31 @@ func AdminMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// AdminCheckHandler validates JWT and checks admin role for nginx auth_request
+// Returns 200 if user is admin, 401 if no token, 403 if not admin
+func AdminCheckHandler(jwtConfig authz.JWTConfig) http.HandlerFunc {
+	jwtManager := authz.NewJWTManager(jwtConfig)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := httputil.BearerToken(r)
+		if token == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		claims, err := jwtManager.ValidateAccessToken(token)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if claims.Role != authz.RoleAdmin {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}
 }

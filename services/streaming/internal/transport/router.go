@@ -41,6 +41,11 @@ func NewRouter(
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// Public HLS proxy routes (no auth required for video playback)
+		r.Get("/hls-proxy", streamHandler.HLSProxy)
+		r.Options("/hls-proxy", streamHandler.HLSProxy) // CORS preflight
+		r.Get("/proxy-status", streamHandler.GetProxyStatus)
+
 		// Public streaming routes (token validated in handler)
 		r.Route("/stream", func(r chi.Router) {
 			r.Get("/proxy", streamHandler.ProxyStream)

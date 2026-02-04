@@ -15,6 +15,7 @@ import (
 const (
 	refreshTokenCookieName = "refresh_token"
 	refreshTokenMaxAge     = 7 * 24 * time.Hour
+	accessTokenCookieName  = "access_token"
 )
 
 type AuthHandler struct {
@@ -64,6 +65,45 @@ func (h *AuthHandler) clearRefreshTokenCookie(w http.ResponseWriter) {
 	})
 }
 
+func (h *AuthHandler) setAccessTokenCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+	sameSite := http.SameSiteLaxMode
+	switch h.cookieConfig.SameSite {
+	case "Strict":
+		sameSite = http.SameSiteStrictMode
+	case "None":
+		sameSite = http.SameSiteNoneMode
+	}
+
+	// Calculate MaxAge from expiration time
+	maxAge := int(time.Until(expiresAt).Seconds())
+	if maxAge < 0 {
+		maxAge = 0
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     accessTokenCookieName,
+		Value:    token,
+		Path:     "/",
+		Domain:   h.cookieConfig.Domain,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   h.cookieConfig.Secure,
+		SameSite: sameSite,
+	})
+}
+
+func (h *AuthHandler) clearAccessTokenCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     accessTokenCookieName,
+		Value:    "",
+		Path:     "/",
+		Domain:   h.cookieConfig.Domain,
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   h.cookieConfig.Secure,
+	})
+}
+
 // Register handles user registration
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req domain.RegisterRequest
@@ -91,6 +131,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	// Set refresh token as httpOnly cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)
 
+	// Set access token as httpOnly cookie for direct browser navigation
+	h.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
+
 	// Return response without refresh token in body
 	httputil.Created(w, resp.ToPublicResponse())
 }
@@ -111,6 +154,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Set refresh token as httpOnly cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)
+
+	// Set access token as httpOnly cookie for direct browser navigation
+	h.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
 
 	// Return response without refresh token in body
 	httputil.OK(w, resp.ToPublicResponse())
@@ -137,6 +183,9 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Set new refresh token cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)
 
+	// Set access token as httpOnly cookie for direct browser navigation
+	h.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
+
 	// Return response without refresh token in body
 	httputil.OK(w, resp.ToPublicResponse())
 }
@@ -148,8 +197,9 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		_ = h.authService.Logout(r.Context(), cookie.Value)
 	}
 
-	// Clear the cookie
+	// Clear the cookies
 	h.clearRefreshTokenCookie(w)
+	h.clearAccessTokenCookie(w)
 	httputil.NoContent(w)
 }
 
@@ -169,6 +219,9 @@ func (h *AuthHandler) TelegramLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Set refresh token as httpOnly cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)
+
+	// Set access token as httpOnly cookie for direct browser navigation
+	h.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
 
 	// Return response without refresh token in body
 	httputil.OK(w, resp.ToPublicResponse())

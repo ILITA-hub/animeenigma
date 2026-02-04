@@ -2,138 +2,93 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
-	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ReviewRepository struct {
-	db *database.DB
+	db *gorm.DB
 }
 
-func NewReviewRepository(db *database.DB) *ReviewRepository {
-	return &ReviewRepository{
-		db: db,
-	}
+func NewReviewRepository(db *gorm.DB) *ReviewRepository {
+	return &ReviewRepository{db: db}
 }
 
-// Upsert creates or updates a review
 func (r *ReviewRepository) Upsert(ctx context.Context, review *domain.Review) error {
-	query := `
-		INSERT INTO reviews (id, user_id, anime_id, anime_title, anime_cover, username, score, review_text, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (user_id, anime_id)
-		DO UPDATE SET
-			anime_title = COALESCE(NULLIF(EXCLUDED.anime_title, ''), reviews.anime_title),
-			anime_cover = COALESCE(NULLIF(EXCLUDED.anime_cover, ''), reviews.anime_cover),
-			username = COALESCE(NULLIF(EXCLUDED.username, ''), reviews.username),
-			score = EXCLUDED.score,
-			review_text = EXCLUDED.review_text,
-			updated_at = EXCLUDED.updated_at
-	`
-
 	now := time.Now()
-	if review.ID == "" {
-		review.ID = uuid.New().String()
-	}
-	review.CreatedAt = now
 	review.UpdatedAt = now
+	if review.CreatedAt.IsZero() {
+		review.CreatedAt = now
+	}
 
-	_, err := r.db.ExecContext(ctx, query,
-		review.ID,
-		review.UserID,
-		review.AnimeID,
-		review.AnimeTitle,
-		review.AnimeCover,
-		review.Username,
-		review.Score,
-		review.ReviewText,
-		review.CreatedAt,
-		review.UpdatedAt,
-	)
-	return err
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "anime_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"anime_title":  gorm.Expr("COALESCE(NULLIF(?, ''), reviews.anime_title)", review.AnimeTitle),
+			"anime_cover":  gorm.Expr("COALESCE(NULLIF(?, ''), reviews.anime_cover)", review.AnimeCover),
+			"username":     gorm.Expr("COALESCE(NULLIF(?, ''), reviews.username)", review.Username),
+			"score":        review.Score,
+			"review_text":  review.ReviewText,
+			"updated_at":   review.UpdatedAt,
+		}),
+	}).Create(review).Error
 }
 
-// GetByAnime returns all reviews for an anime
 func (r *ReviewRepository) GetByAnime(ctx context.Context, animeID string) ([]*domain.Review, error) {
-	query := `
-		SELECT id, user_id, anime_id, anime_title, anime_cover, username, score, review_text, created_at, updated_at
-		FROM reviews
-		WHERE anime_id = $1
-		ORDER BY created_at DESC
-	`
-
 	var reviews []*domain.Review
-	err := r.db.SelectContext(ctx, &reviews, query, animeID)
-	if err != nil {
-		return nil, err
-	}
-	return reviews, nil
+	err := r.db.WithContext(ctx).
+		Where("anime_id = ?", animeID).
+		Order("created_at DESC").
+		Find(&reviews).Error
+	return reviews, err
 }
 
-// GetByUser returns all reviews by a user
 func (r *ReviewRepository) GetByUser(ctx context.Context, userID string) ([]*domain.Review, error) {
-	query := `
-		SELECT id, user_id, anime_id, anime_title, anime_cover, username, score, review_text, created_at, updated_at
-		FROM reviews
-		WHERE user_id = $1
-		ORDER BY created_at DESC
-	`
-
 	var reviews []*domain.Review
-	err := r.db.SelectContext(ctx, &reviews, query, userID)
-	if err != nil {
-		return nil, err
-	}
-	return reviews, nil
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Find(&reviews).Error
+	return reviews, err
 }
 
-// GetByUserAndAnime returns a specific review
 func (r *ReviewRepository) GetByUserAndAnime(ctx context.Context, userID, animeID string) (*domain.Review, error) {
-	query := `
-		SELECT id, user_id, anime_id, anime_title, anime_cover, username, score, review_text, created_at, updated_at
-		FROM reviews
-		WHERE user_id = $1 AND anime_id = $2
-	`
-
 	var review domain.Review
-	err := r.db.GetContext(ctx, &review, query, userID, animeID)
-	if err != nil {
-		return nil, err
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		First(&review).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
 	}
-	return &review, nil
+	return &review, err
 }
 
-// GetAnimeRating returns the average rating for an anime
 func (r *ReviewRepository) GetAnimeRating(ctx context.Context, animeID string) (*domain.AnimeRating, error) {
-	query := `
-		SELECT
-			anime_id,
-			COALESCE(AVG(score)::numeric, 0) as average_score,
-			COUNT(*) as total_reviews
-		FROM reviews
-		WHERE anime_id = $1
-		GROUP BY anime_id
-	`
-
-	var rating domain.AnimeRating
-	err := r.db.GetContext(ctx, &rating, query, animeID)
-	if err != nil {
-		// No reviews yet
-		return &domain.AnimeRating{
-			AnimeID:      animeID,
-			AverageScore: 0,
-			TotalReviews: 0,
-		}, nil
+	var result struct {
+		AverageScore float64
+		TotalReviews int64
 	}
-	return &rating, nil
+	err := r.db.WithContext(ctx).
+		Model(&domain.Review{}).
+		Select("COALESCE(AVG(score), 0) as average_score, COUNT(*) as total_reviews").
+		Where("anime_id = ?", animeID).
+		Scan(&result).Error
+	if err != nil {
+		return &domain.AnimeRating{AnimeID: animeID}, nil
+	}
+	return &domain.AnimeRating{
+		AnimeID:      animeID,
+		AverageScore: result.AverageScore,
+		TotalReviews: int(result.TotalReviews),
+	}, nil
 }
 
-// Delete removes a review
 func (r *ReviewRepository) Delete(ctx context.Context, userID, animeID string) error {
-	query := `DELETE FROM reviews WHERE user_id = $1 AND anime_id = $2`
-	_, err := r.db.ExecContext(ctx, query, userID, animeID)
-	return err
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		Delete(&domain.Review{}).Error
 }

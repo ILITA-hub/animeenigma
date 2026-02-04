@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_anime_hidden;
+ALTER TABLE anime DROP COLUMN IF EXISTS hidden;

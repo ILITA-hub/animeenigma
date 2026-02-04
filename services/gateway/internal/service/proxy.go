@@ -31,7 +31,7 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 		return nil, err
 	}
 
-	// Rewrite path for admin panel services
+	// Rewrite path for services with different internal paths
 	path := r.URL.Path
 	switch service {
 	case "grafana":
@@ -45,6 +45,9 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 		if !strings.HasPrefix(path, "/prometheus") {
 			path = "/prometheus" + path
 		}
+	case "streaming":
+		// /api/streaming/... -> /api/v1/... (streaming service uses /api/v1)
+		path = strings.Replace(path, "/api/streaming/", "/api/v1/", 1)
 	}
 
 	// Build target URL with path and query

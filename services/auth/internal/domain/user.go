@@ -4,31 +4,33 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/lib/pq"
+	"gorm.io/gorm"
 )
 
 // User represents a user in the system
 type User struct {
-	ID             string         `db:"id" json:"id"`
-	Username       string         `db:"username" json:"username"`
-	PasswordHash   string         `db:"password_hash" json:"-"`
-	TelegramID     *int64         `db:"telegram_id" json:"telegram_id,omitempty"`
-	PublicID       string         `db:"public_id" json:"public_id"`
-	PublicStatuses []string       `db:"public_statuses" json:"public_statuses"`
-	Role           authz.Role     `db:"role" json:"role"`
-	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
-	DeletedAt      *time.Time     `db:"deleted_at" json:"-"`
+	ID             string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Username       string         `gorm:"size:32;uniqueIndex" json:"username"`
+	PasswordHash   string         `gorm:"size:255" json:"-"`
+	TelegramID     *int64         `gorm:"uniqueIndex" json:"telegram_id,omitempty"`
+	PublicID       string         `gorm:"size:32;uniqueIndex" json:"public_id"`
+	PublicStatuses pq.StringArray `gorm:"type:text[]" json:"public_statuses"`
+	Role           authz.Role     `gorm:"size:20;default:'user'" json:"role"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // Session represents a user session
 type Session struct {
-	ID           string    `db:"id" json:"id"`
-	UserID       string    `db:"user_id" json:"user_id"`
-	RefreshToken string    `db:"refresh_token" json:"-"`
-	UserAgent    string    `db:"user_agent" json:"user_agent"`
-	IP           string    `db:"ip" json:"ip"`
-	ExpiresAt    time.Time `db:"expires_at" json:"expires_at"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	ID           string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID       string    `gorm:"type:uuid;index" json:"user_id"`
+	RefreshToken string    `json:"-"`
+	UserAgent    string    `json:"user_agent"`
+	IP           string    `json:"ip"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // RegisterRequest represents a registration request
@@ -62,7 +64,7 @@ type TelegramLoginRequest struct {
 // AuthResponse represents an authentication response
 type AuthResponse struct {
 	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"-"` // Not included in JSON, sent via httpOnly cookie
+	RefreshToken string    `json:"-"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	User         *User     `json:"user"`
 }

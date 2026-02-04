@@ -205,6 +205,19 @@ func (h *MALImportHandler) importFromMAL(ctx context.Context, userID, malUsernam
 				listReq.Priority = &priority
 			}
 
+			// Parse and set start/finish dates from MAL
+			if entry.StartDateString != "" && entry.StartDateString != "-" {
+				if startDate := h.parseMALDate(entry.StartDateString); startDate != nil {
+					listReq.StartedAt = startDate
+				}
+			}
+
+			if entry.FinishDateString != "" && entry.FinishDateString != "-" {
+				if finishDate := h.parseMALDate(entry.FinishDateString); finishDate != nil {
+					listReq.CompletedAt = finishDate
+				}
+			}
+
 			if _, err := h.listService.UpdateListEntry(ctx, userID, listReq); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", title, err))
 				result.Skipped++
@@ -276,6 +289,31 @@ func (h *MALImportHandler) convertMALStatus(malStatus int) string {
 	default:
 		return ""
 	}
+}
+
+// parseMALDate parses MAL date strings in various formats
+// MAL can return dates like "01-15-2024", "2024-01-15", "-" (not set), etc.
+func (h *MALImportHandler) parseMALDate(dateStr string) *time.Time {
+	if dateStr == "" || dateStr == "-" {
+		return nil
+	}
+
+	// Try common MAL date formats
+	formats := []string{
+		"01-02-2006", // MM-DD-YYYY
+		"2006-01-02", // YYYY-MM-DD
+		"Jan 2, 2006", // Month Day, Year
+		"02-01-2006", // DD-MM-YYYY
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, dateStr); err == nil {
+			return &t
+		}
+	}
+
+	h.log.Debugw("could not parse MAL date", "date_string", dateStr)
+	return nil
 }
 
 // searchCatalogByMALID searches the catalog service for anime by MAL ID

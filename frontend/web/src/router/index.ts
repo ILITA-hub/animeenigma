@@ -46,8 +46,16 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/profile',
     name: 'profile',
-    component: () => import('@/views/Profile.vue'),
-    meta: { title: 'Profile', requiresAuth: true }
+    component: () => import('@/views/ProfileSetup.vue'),
+    meta: { title: 'Профиль', requiresAuth: true },
+    beforeEnter: (_to, _from, next) => {
+      const authStore = useAuthStore()
+      if (authStore.user?.public_id) {
+        next(`/user/${authStore.user.public_id}`)
+      } else {
+        next()
+      }
+    }
   },
   {
     path: '/schedule',
@@ -70,7 +78,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/user/:publicId',
     name: 'public-profile',
-    component: () => import('@/views/PublicProfile.vue'),
+    component: () => import('@/views/Profile.vue'),
     meta: { title: 'Профиль' }
   },
   {

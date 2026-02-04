@@ -210,3 +210,310 @@ type VideoResolver interface {
 	// ResolveExternal resolves an external video URL
 	ResolveExternal(ctx context.Context, externalURL string) (*StreamResult, error)
 }
+
+// HLSProxyAllowedDomains contains domains allowed for HLS proxying
+// Note: MegaCloud CDNs use dynamically generated domain names, so we allow
+// common TLDs used by streaming CDNs. Rate limiting protects against abuse.
+var HLSProxyAllowedDomains = []string{
+	// Known streaming domains
+	"megacloud.tv",
+	"megacloud.blog",
+	"megacloud.club",
+	"rapid-cloud.co",
+	"rapidcloud.live",
+	"vidstream.pro",
+	"vidstreamz.online",
+	"mcloud.to",
+	"mcloud2.to",
+	"mgstatics.xyz",
+	"netmagcdn.com", // MegaCloud HLS CDN
+}
+
+// HLSProxyAllowedTLDs contains TLDs commonly used by streaming CDNs
+// These CDNs use random domain names like sunburst93.live, haildrop77.pro
+var HLSProxyAllowedTLDs = []string{
+	".live",
+	".pro",
+	".xyz",
+	".club",
+	".tv",
+	".to",
+	".online",
+	".wiki",
+}
+
+// ProxyWithReferer proxies a stream with a custom Referer header
+// This is needed for HLS streams that require specific referer for authentication
+func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) error {
+	// Validate URL
+	parsed, err := url.Parse(sourceURL)
+	if err != nil {
+		return fmt.Errorf("invalid source url: %w", err)
+	}
+
+	// Check if domain is allowed for HLS proxy
+	if !isHLSDomainAllowed(parsed.Host) {
+		return fmt.Errorf("domain not allowed for HLS proxy: %s", parsed.Host)
+	}
+
+	// Create upstream request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	// Set headers for upstream request
+	req.Header.Set("User-Agent", p.config.UserAgent)
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+		// Also set Origin which some CDNs check
+		if parsedReferer, err := url.Parse(referer); err == nil {
+			req.Header.Set("Origin", parsedReferer.Scheme+"://"+parsedReferer.Host)
+		}
+	}
+
+	// Handle range requests for seeking
+	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+
+	// Make upstream request
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("upstream request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check if this is an M3U8 file that needs URL rewriting
+	contentType := resp.Header.Get("Content-Type")
+	isM3U8 := strings.Contains(contentType, "mpegurl") ||
+		strings.Contains(contentType, "x-mpegurl") ||
+		strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
+
+	// Set CORS headers for frontend access
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Range")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
+
+	if isM3U8 && resp.StatusCode == http.StatusOK {
+		// Read and rewrite M3U8 content
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read m3u8 body: %w", err)
+		}
+
+		// Rewrite URLs in the M3U8
+		rewritten := rewriteM3U8URLs(string(body), sourceURL, referer)
+
+		// Set headers (skip Content-Length as it changed)
+		for key, values := range resp.Header {
+			if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" {
+				continue
+			}
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+
+		w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
+		w.WriteHeader(resp.StatusCode)
+		w.Write([]byte(rewritten))
+		return nil
+	}
+
+	// Copy response headers for non-M3U8 content
+	for key, values := range resp.Header {
+		// Skip hop-by-hop headers
+		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	// Write status code
+	w.WriteHeader(resp.StatusCode)
+
+	// Stream the response with rate limiting (5MB/s max per stream)
+	rateLimitedCopy(w, resp.Body, 5*1024*1024) // 5MB/s
+
+	return nil
+}
+
+// rewriteM3U8URLs rewrites URLs in an M3U8 playlist to go through the proxy
+func rewriteM3U8URLs(content, baseURL, referer string) string {
+	// Parse base URL for resolving relative URLs
+	parsedBase, err := url.Parse(baseURL)
+	if err != nil {
+		return content
+	}
+
+	// Get the base path for relative URLs (directory of the M3U8 file)
+	basePath := parsedBase.Scheme + "://" + parsedBase.Host
+	if lastSlash := strings.LastIndex(parsedBase.Path, "/"); lastSlash > 0 {
+		basePath += parsedBase.Path[:lastSlash+1]
+	} else {
+		basePath += "/"
+	}
+
+	var result strings.Builder
+	lines := strings.Split(content, "\n")
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip empty lines and comments (except URI attributes)
+		if trimmed == "" || (strings.HasPrefix(trimmed, "#") && !strings.Contains(trimmed, "URI=\"")) {
+			result.WriteString(line)
+			result.WriteString("\n")
+			continue
+		}
+
+		// Handle lines with URI="..." attributes (like #EXT-X-KEY)
+		if strings.Contains(trimmed, "URI=\"") {
+			rewritten := rewriteURIAttribute(line, basePath, referer)
+			result.WriteString(rewritten)
+			result.WriteString("\n")
+			continue
+		}
+
+		// This is a URL line (not a comment)
+		if !strings.HasPrefix(trimmed, "#") {
+			rewrittenURL := rewriteHLSURL(trimmed, basePath, referer)
+			result.WriteString(rewrittenURL)
+			result.WriteString("\n")
+			continue
+		}
+
+		result.WriteString(line)
+		result.WriteString("\n")
+	}
+
+	return strings.TrimSuffix(result.String(), "\n")
+}
+
+// rewriteHLSURL rewrites a single HLS URL to go through the proxy
+func rewriteHLSURL(urlStr, basePath, referer string) string {
+	// Skip if already a proxy URL (check both encoded and decoded)
+	if strings.Contains(urlStr, "/api/streaming/hls-proxy") ||
+		strings.Contains(urlStr, "%2Fapi%2Fstreaming%2Fhls-proxy") ||
+		strings.Contains(urlStr, "hls-proxy") {
+		return urlStr
+	}
+
+	// Already absolute URL
+	var absoluteURL string
+	if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
+		absoluteURL = urlStr
+	} else if strings.HasPrefix(urlStr, "/") {
+		// Root-relative URL - but skip if it's our proxy path
+		if strings.HasPrefix(urlStr, "/api/streaming/hls-proxy") {
+			return urlStr
+		}
+		parsedBase, _ := url.Parse(basePath)
+		absoluteURL = parsedBase.Scheme + "://" + parsedBase.Host + urlStr
+	} else {
+		// Relative URL
+		absoluteURL = basePath + urlStr
+	}
+
+	// Build proxy URL
+	proxyURL := "/api/streaming/hls-proxy?url=" + url.QueryEscape(absoluteURL)
+	if referer != "" {
+		proxyURL += "&referer=" + url.QueryEscape(referer)
+	}
+
+	return proxyURL
+}
+
+// rewriteURIAttribute rewrites URI="..." attributes in M3U8 tags
+func rewriteURIAttribute(line, basePath, referer string) string {
+	// Find URI="..." and rewrite the URL inside
+	uriStart := strings.Index(line, "URI=\"")
+	if uriStart == -1 {
+		return line
+	}
+	uriStart += 5 // len("URI=\"")
+
+	uriEnd := strings.Index(line[uriStart:], "\"")
+	if uriEnd == -1 {
+		return line
+	}
+
+	originalURI := line[uriStart : uriStart+uriEnd]
+	rewrittenURI := rewriteHLSURL(originalURI, basePath, referer)
+
+	return line[:uriStart] + rewrittenURI + line[uriStart+uriEnd:]
+}
+
+// isHLSDomainAllowed checks if a domain is allowed for HLS proxying
+func isHLSDomainAllowed(host string) bool {
+	host = strings.ToLower(host)
+
+	// Check exact domain matches
+	for _, allowed := range HLSProxyAllowedDomains {
+		allowed = strings.ToLower(allowed)
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return true
+		}
+	}
+
+	// Check allowed TLDs (for dynamically generated CDN domains)
+	for _, tld := range HLSProxyAllowedTLDs {
+		if strings.HasSuffix(host, tld) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// rateLimitedCopy copies data with a rate limit
+func rateLimitedCopy(dst io.Writer, src io.Reader, bytesPerSecond int64) error {
+	buf := make([]byte, 32*1024) // 32KB buffer
+	var written int64
+	startTime := time.Now()
+
+	for {
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw < 0 || nr < nw {
+				nw = 0
+				if ew == nil {
+					ew = fmt.Errorf("invalid write result")
+				}
+			}
+			written += int64(nw)
+
+			// Calculate expected time based on bytes written
+			expectedDuration := time.Duration(float64(written) / float64(bytesPerSecond) * float64(time.Second))
+			elapsed := time.Since(startTime)
+
+			// Sleep if we're ahead of the rate limit
+			if expectedDuration > elapsed {
+				time.Sleep(expectedDuration - elapsed)
+			}
+
+			if ew != nil {
+				// Client disconnected, not an error
+				if strings.Contains(ew.Error(), "broken pipe") ||
+					strings.Contains(ew.Error(), "connection reset") {
+					return nil
+				}
+				return ew
+			}
+			if nr != nw {
+				return io.ErrShortWrite
+			}
+		}
+		if er != nil {
+			if er == io.EOF {
+				return nil
+			}
+			return er
+		}
+	}
+}

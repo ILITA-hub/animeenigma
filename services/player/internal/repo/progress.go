@@ -2,91 +2,58 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
-	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ProgressRepository struct {
-	db *database.DB
+	db *gorm.DB
 }
 
-func NewProgressRepository(db *database.DB) *ProgressRepository {
-	return &ProgressRepository{
-		db: db,
-	}
+func NewProgressRepository(db *gorm.DB) *ProgressRepository {
+	return &ProgressRepository{db: db}
 }
 
-// Upsert creates or updates watch progress
 func (r *ProgressRepository) Upsert(ctx context.Context, progress *domain.WatchProgress) error {
-	query := `
-		INSERT INTO watch_progress (id, user_id, anime_id, episode_number, progress, duration, completed, last_watched_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (user_id, anime_id, episode_number)
-		DO UPDATE SET
-			progress = EXCLUDED.progress,
-			duration = GREATEST(watch_progress.duration, EXCLUDED.duration),
-			completed = EXCLUDED.completed,
-			last_watched_at = EXCLUDED.last_watched_at,
-			updated_at = EXCLUDED.updated_at
-	`
-
-	id := progress.ID
-	if id == "" {
-		id = uuid.New().String()
-	}
-
 	now := time.Now()
+	progress.LastWatchedAt = now
+	progress.UpdatedAt = now
+	if progress.CreatedAt.IsZero() {
+		progress.CreatedAt = now
+	}
 
-	_, err := r.db.ExecContext(ctx, query,
-		id,
-		progress.UserID,
-		progress.AnimeID,
-		progress.EpisodeNumber,
-		progress.Progress,
-		progress.Duration,
-		progress.Completed,
-		now,
-		now,
-		now,
-	)
-
-	return err
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "anime_id"}, {Name: "episode_number"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"progress":        progress.Progress,
+			"duration":        gorm.Expr("GREATEST(watch_progress.duration, ?)", progress.Duration),
+			"completed":       progress.Completed,
+			"last_watched_at": progress.LastWatchedAt,
+			"updated_at":      progress.UpdatedAt,
+		}),
+	}).Create(progress).Error
 }
 
-// GetByUserAndAnime returns watch progress for a user's anime
 func (r *ProgressRepository) GetByUserAndAnime(ctx context.Context, userID, animeID string) ([]*domain.WatchProgress, error) {
-	query := `
-		SELECT id, user_id, anime_id, episode_number, progress, duration, completed, last_watched_at, created_at, updated_at
-		FROM watch_progress
-		WHERE user_id = $1 AND anime_id = $2
-		ORDER BY episode_number
-	`
-
 	var results []*domain.WatchProgress
-	err := r.db.SelectContext(ctx, &results, query, userID, animeID)
-	if err != nil {
-		return nil, err
-	}
-
-	return results, nil
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		Order("episode_number").
+		Find(&results).Error
+	return results, err
 }
 
-// GetByUserAnimeEpisode returns progress for specific episode
 func (r *ProgressRepository) GetByUserAnimeEpisode(ctx context.Context, userID, animeID string, episode int) (*domain.WatchProgress, error) {
-	query := `
-		SELECT id, user_id, anime_id, episode_number, progress, duration, completed, last_watched_at, created_at, updated_at
-		FROM watch_progress
-		WHERE user_id = $1 AND anime_id = $2 AND episode_number = $3
-	`
-
 	var p domain.WatchProgress
-	err := r.db.GetContext(ctx, &p, query, userID, animeID, episode)
-	if err != nil {
-		return nil, err
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND anime_id = ? AND episode_number = ?", userID, animeID, episode).
+		First(&p).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
 	}
-
-	return &p, nil
+	return &p, err
 }

@@ -5,20 +5,20 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
-	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/config"
+	"gorm.io/gorm"
 )
 
 type CleanupJob struct {
-	db     *database.DB
+	db     *gorm.DB
 	cache  *cache.RedisCache
 	config *config.JobsConfig
 	log    *logger.Logger
 }
 
 func NewCleanupJob(
-	db *database.DB,
+	db *gorm.DB,
 	cache *cache.RedisCache,
 	config *config.JobsConfig,
 	log *logger.Logger,

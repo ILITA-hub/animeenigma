@@ -1,4 +1,3 @@
--- +migrate Up
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Anime table
@@ -74,9 +73,3 @@ CREATE TABLE videos (
 CREATE INDEX idx_videos_anime_id ON videos(anime_id);
 CREATE INDEX idx_videos_type ON videos(type);
 CREATE INDEX idx_videos_episode ON videos(anime_id, episode_number);
-
--- +migrate Down
-DROP TABLE IF EXISTS videos;
-DROP TABLE IF EXISTS anime_genres;
-DROP TABLE IF EXISTS genres;
-DROP TABLE IF EXISTS anime;

@@ -2,11 +2,13 @@
 CREATE DATABASE animeenigma_auth;
 CREATE DATABASE animeenigma_catalog;
 CREATE DATABASE animeenigma_player;
+CREATE DATABASE animeenigma_rooms;
 
 -- Grant privileges
 GRANT ALL PRIVILEGES ON DATABASE animeenigma_auth TO postgres;
 GRANT ALL PRIVILEGES ON DATABASE animeenigma_catalog TO postgres;
 GRANT ALL PRIVILEGES ON DATABASE animeenigma_player TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE animeenigma_rooms TO postgres;
 
 -- Connect to auth database and create schema
 \c animeenigma_auth
@@ -124,3 +126,57 @@ CREATE TABLE anime_list (
 
 CREATE INDEX idx_anime_list_user ON anime_list(user_id);
 CREATE INDEX idx_anime_list_status ON anime_list(user_id, status);
+
+-- Connect to rooms database and create schema
+\c animeenigma_rooms
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE rooms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    creator_id UUID NOT NULL,
+    max_players INTEGER NOT NULL DEFAULT 8,
+    status VARCHAR(20) NOT NULL DEFAULT 'waiting',
+    current_round INTEGER NOT NULL DEFAULT 0,
+    total_rounds INTEGER NOT NULL DEFAULT 5,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_rooms_status ON rooms(status);
+CREATE INDEX idx_rooms_creator ON rooms(creator_id);
+
+CREATE TABLE players (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    username VARCHAR(32) NOT NULL,
+    score INTEGER NOT NULL DEFAULT 0,
+    is_ready BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX idx_players_room ON players(room_id);
+CREATE INDEX idx_players_user ON players(user_id);
+
+CREATE TABLE game_rounds (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    round_number INTEGER NOT NULL,
+    anime_id UUID,
+    opening_url TEXT,
+    start_time TIMESTAMP WITH TIME ZONE,
+    end_time TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_game_rounds_room ON game_rounds(room_id);
+
+CREATE TABLE leaderboard (
+    user_id UUID PRIMARY KEY,
+    username VARCHAR(32) NOT NULL,
+    total_score INTEGER NOT NULL DEFAULT 0,
+    games_played INTEGER NOT NULL DEFAULT 0,
+    games_won INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_leaderboard_score ON leaderboard(total_score DESC);

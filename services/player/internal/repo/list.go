@@ -2,213 +2,105 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
-	"github.com/google/uuid"
-	"github.com/lib/pq"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ListRepository struct {
-	db *database.DB
+	db *gorm.DB
 }
 
-func NewListRepository(db *database.DB) *ListRepository {
-	return &ListRepository{
-		db: db,
-	}
+func NewListRepository(db *gorm.DB) *ListRepository {
+	return &ListRepository{db: db}
 }
 
-// Upsert creates or updates an anime list entry
 func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntry) error {
-	query := `
-		INSERT INTO anime_list (id, user_id, anime_id, anime_title, anime_cover, status, score, episodes, notes,
-			tags, is_rewatching, priority, anime_type, anime_total_episodes, mal_id,
-			started_at, completed_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-		ON CONFLICT (user_id, anime_id)
-		DO UPDATE SET
-			anime_title = COALESCE(NULLIF(EXCLUDED.anime_title, ''), anime_list.anime_title),
-			anime_cover = COALESCE(NULLIF(EXCLUDED.anime_cover, ''), anime_list.anime_cover),
-			status = EXCLUDED.status,
-			score = EXCLUDED.score,
-			episodes = EXCLUDED.episodes,
-			notes = COALESCE(NULLIF(EXCLUDED.notes, ''), anime_list.notes),
-			tags = COALESCE(NULLIF(EXCLUDED.tags, ''), anime_list.tags),
-			is_rewatching = EXCLUDED.is_rewatching,
-			priority = COALESCE(NULLIF(EXCLUDED.priority, ''), anime_list.priority),
-			anime_type = COALESCE(NULLIF(EXCLUDED.anime_type, ''), anime_list.anime_type),
-			anime_total_episodes = CASE WHEN EXCLUDED.anime_total_episodes > 0 THEN EXCLUDED.anime_total_episodes ELSE anime_list.anime_total_episodes END,
-			mal_id = COALESCE(EXCLUDED.mal_id, anime_list.mal_id),
-			started_at = EXCLUDED.started_at,
-			completed_at = EXCLUDED.completed_at,
-			updated_at = EXCLUDED.updated_at
-	`
-
 	now := time.Now()
-	if entry.ID == "" {
-		entry.ID = uuid.New().String()
-	}
-	entry.CreatedAt = now
 	entry.UpdatedAt = now
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = now
+	}
 
-	_, err := r.db.ExecContext(ctx, query,
-		entry.ID,
-		entry.UserID,
-		entry.AnimeID,
-		entry.AnimeTitle,
-		entry.AnimeCover,
-		entry.Status,
-		entry.Score,
-		entry.Episodes,
-		entry.Notes,
-		entry.Tags,
-		entry.IsRewatching,
-		entry.Priority,
-		entry.AnimeType,
-		entry.AnimeTotalEpisodes,
-		entry.MalID,
-		entry.StartedAt,
-		entry.CompletedAt,
-		entry.CreatedAt,
-		entry.UpdatedAt,
-	)
-	return err
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "anime_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"anime_title":          gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.anime_title)", entry.AnimeTitle),
+			"anime_cover":          gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.anime_cover)", entry.AnimeCover),
+			"status":               entry.Status,
+			"score":                entry.Score,
+			"episodes":             entry.Episodes,
+			"notes":                gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.notes)", entry.Notes),
+			"tags":                 gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.tags)", entry.Tags),
+			"is_rewatching":        entry.IsRewatching,
+			"priority":             gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.priority)", entry.Priority),
+			"anime_type":           gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.anime_type)", entry.AnimeType),
+			"anime_total_episodes": gorm.Expr("CASE WHEN ? > 0 THEN ? ELSE anime_list.anime_total_episodes END", entry.AnimeTotalEpisodes, entry.AnimeTotalEpisodes),
+			"mal_id":               gorm.Expr("COALESCE(?, anime_list.mal_id)", entry.MalID),
+			"started_at":           gorm.Expr("COALESCE(?, anime_list.started_at)", entry.StartedAt),
+			"completed_at":         gorm.Expr("COALESCE(?, anime_list.completed_at)", entry.CompletedAt),
+			"updated_at":           entry.UpdatedAt,
+		}),
+	}).Create(entry).Error
 }
 
-// GetByUser returns all anime list entries for a user
 func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
-	query := `
-		SELECT
-			al.id, al.user_id, al.anime_id,
-			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
-			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
-			al.status, al.score, al.episodes, al.notes,
-			al.tags, al.is_rewatching, al.priority, al.anime_type,
-			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
-			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
-		FROM anime_list al
-		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
-		WHERE al.user_id = $1
-		ORDER BY al.updated_at DESC
-	`
-
 	var entries []*domain.AnimeListEntry
-	err := r.db.SelectContext(ctx, &entries, query, userID)
-	if err != nil {
-		return nil, err
-	}
-	return entries, nil
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("updated_at DESC").
+		Find(&entries).Error
+	return entries, err
 }
 
-// GetByUserAndStatus returns anime list entries for a user filtered by status
 func (r *ListRepository) GetByUserAndStatus(ctx context.Context, userID, status string) ([]*domain.AnimeListEntry, error) {
-	query := `
-		SELECT
-			al.id, al.user_id, al.anime_id,
-			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
-			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
-			al.status, al.score, al.episodes, al.notes,
-			al.tags, al.is_rewatching, al.priority, al.anime_type,
-			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
-			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
-		FROM anime_list al
-		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
-		WHERE al.user_id = $1 AND al.status = $2
-		ORDER BY al.updated_at DESC
-	`
-
 	var entries []*domain.AnimeListEntry
-	err := r.db.SelectContext(ctx, &entries, query, userID, status)
-	if err != nil {
-		return nil, err
-	}
-	return entries, nil
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND status = ?", userID, status).
+		Order("updated_at DESC").
+		Find(&entries).Error
+	return entries, err
 }
 
-// GetByUserAndAnime returns a single anime list entry for a user
 func (r *ListRepository) GetByUserAndAnime(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
-	query := `
-		SELECT
-			al.id, al.user_id, al.anime_id,
-			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
-			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
-			al.status, al.score, al.episodes, al.notes,
-			al.tags, al.is_rewatching, al.priority, al.anime_type,
-			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
-			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
-		FROM anime_list al
-		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
-		WHERE al.user_id = $1 AND al.anime_id = $2
-	`
-
 	var entry domain.AnimeListEntry
-	err := r.db.GetContext(ctx, &entry, query, userID, animeID)
-	if err != nil {
-		return nil, err
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		First(&entry).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
 	}
-	return &entry, nil
+	return &entry, err
 }
 
-// Delete removes an anime from user's list
 func (r *ListRepository) Delete(ctx context.Context, userID, animeID string) error {
-	query := `DELETE FROM anime_list WHERE user_id = $1 AND anime_id = $2`
-	_, err := r.db.ExecContext(ctx, query, userID, animeID)
-	return err
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		Delete(&domain.AnimeListEntry{}).Error
 }
 
-// IncrementEpisodes increments the watched episodes count if the new episode is higher
-// Returns true if episodes count was updated
 func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID string, episodeNumber int) (bool, error) {
-	query := `
-		UPDATE anime_list al
-		SET episodes = $3,
-			status = CASE
-				WHEN COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) > 0
-					AND $3 >= COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) THEN 'completed'
-				WHEN al.status = 'plan_to_watch' THEN 'watching'
-				ELSE al.status
-			END,
-			started_at = CASE WHEN al.started_at IS NULL THEN NOW() ELSE al.started_at END,
-			completed_at = CASE
-				WHEN COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) > 0
-					AND $3 >= COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) THEN NOW()
-				ELSE al.completed_at
-			END,
-			updated_at = NOW()
-		FROM catalog_anime ca
-		WHERE al.user_id = $1 AND al.anime_id = $2 AND al.episodes < $3 AND ca.id = al.anime_id
-	`
-	result, err := r.db.ExecContext(ctx, query, userID, animeID, episodeNumber)
-	if err != nil {
-		return false, err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	return rowsAffected > 0, nil
+	result := r.db.WithContext(ctx).
+		Model(&domain.AnimeListEntry{}).
+		Where("user_id = ? AND anime_id = ? AND episodes < ?", userID, animeID, episodeNumber).
+		Updates(map[string]interface{}{
+			"episodes":   episodeNumber,
+			"status":     gorm.Expr("CASE WHEN anime_total_episodes > 0 AND ? >= anime_total_episodes THEN 'completed' WHEN status = 'plan_to_watch' THEN 'watching' ELSE status END", episodeNumber),
+			"started_at": gorm.Expr("COALESCE(started_at, NOW())"),
+			"completed_at": gorm.Expr("CASE WHEN anime_total_episodes > 0 AND ? >= anime_total_episodes THEN NOW() ELSE completed_at END", episodeNumber),
+			"updated_at": time.Now(),
+		})
+	return result.RowsAffected > 0, result.Error
 }
 
-// GetByUserAndStatuses returns anime list entries for a user filtered by multiple statuses
 func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
-	query := `
-		SELECT
-			al.id, al.user_id, al.anime_id,
-			COALESCE(ca.name_ru, ca.name, al.anime_title) as anime_title,
-			COALESCE(ca.poster_url, al.anime_cover) as anime_cover,
-			al.status, al.score, al.episodes, al.notes,
-			al.tags, al.is_rewatching, al.priority, al.anime_type,
-			COALESCE(ca.episodes_count, ca.episodes_aired, al.anime_total_episodes) as anime_total_episodes,
-			al.mal_id, al.started_at, al.completed_at, al.created_at, al.updated_at
-		FROM anime_list al
-		LEFT JOIN catalog_anime ca ON al.anime_id = ca.id
-		WHERE al.user_id = $1 AND al.status = ANY($2)
-		ORDER BY al.updated_at DESC
-	`
-
 	var entries []*domain.AnimeListEntry
-	err := r.db.SelectContext(ctx, &entries, query, userID, pq.Array(statuses))
-	if err != nil {
-		return nil, err
-	}
-	return entries, nil
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND status IN ?", userID, statuses).
+		Order("updated_at DESC").
+		Find(&entries).Error
+	return entries, err
 }

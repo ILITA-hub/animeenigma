@@ -36,6 +36,9 @@ func (s *ListService) GetUserAnimeEntry(ctx context.Context, userID, animeID str
 
 // UpdateListEntry updates or creates an anime list entry
 func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *domain.UpdateListRequest) (*domain.AnimeListEntry, error) {
+	// Check if entry already exists to preserve dates
+	existingEntry, _ := s.listRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
+
 	entry := &domain.AnimeListEntry{
 		UserID:             userID,
 		AnimeID:            req.AnimeID,
@@ -77,12 +80,23 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 		entry.MalID = req.MalID
 	}
 
-	// Set timestamps based on status
-	now := time.Now()
-	if req.Status == "watching" && entry.StartedAt == nil {
+	// Handle StartedAt - use provided value, preserve existing, or auto-set
+	if req.StartedAt != nil {
+		entry.StartedAt = req.StartedAt
+	} else if existingEntry != nil && existingEntry.StartedAt != nil {
+		entry.StartedAt = existingEntry.StartedAt
+	} else if req.Status == "watching" {
+		now := time.Now()
 		entry.StartedAt = &now
 	}
-	if req.Status == "completed" {
+
+	// Handle CompletedAt - use provided value, preserve existing, or auto-set
+	if req.CompletedAt != nil {
+		entry.CompletedAt = req.CompletedAt
+	} else if existingEntry != nil && existingEntry.CompletedAt != nil {
+		entry.CompletedAt = existingEntry.CompletedAt
+	} else if req.Status == "completed" {
+		now := time.Now()
 		entry.CompletedAt = &now
 	}
 

@@ -82,11 +82,19 @@ func NewRouter(
 		// Auth service routes (public)
 		r.HandleFunc("/auth/*", proxyHandler.ProxyToAuth)
 
+		// Player service routes - reviews (must be before /anime/* catch-all)
+		r.Get("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
+		r.Get("/anime/{animeId}/reviews/me", proxyHandler.ProxyToPlayer)
+		r.Post("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
+		r.Delete("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
+		r.Get("/anime/{animeId}/rating", proxyHandler.ProxyToPlayer)
+
 		// Catalog service routes (public)
 		r.HandleFunc("/anime", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/anime/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/genres", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/kodik/*", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/hianime/*", proxyHandler.ProxyToCatalog)
 
 		// Admin routes (protected, proxied to catalog)
 		r.Group(func(r chi.Router) {
@@ -109,6 +117,11 @@ func NewRouter(
 			r.HandleFunc("/rooms/*", proxyHandler.ProxyToRooms)
 			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
+
+		// Streaming service routes - public HLS proxy (no auth required for video playback)
+		r.Get("/streaming/hls-proxy", proxyHandler.ProxyToStreaming)
+		r.Options("/streaming/hls-proxy", proxyHandler.ProxyToStreaming) // CORS preflight
+		r.Get("/streaming/proxy-status", proxyHandler.ProxyToStreaming)
 
 		// Streaming service routes (protected)
 		r.Group(func(r chi.Router) {

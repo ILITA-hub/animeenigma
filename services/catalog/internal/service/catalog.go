@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
@@ -10,6 +12,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hianime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kodik"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -22,8 +25,14 @@ type CatalogService struct {
 	shikimoriClient *shikimori.Client
 	aniboomClient   *aniboom.Client
 	kodikClient     *kodik.Client
+	hianimeClient   *hianime.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
+}
+
+// CatalogServiceOptions contains optional configuration for CatalogService
+type CatalogServiceOptions struct {
+	AniwatchAPIURL string
 }
 
 func NewCatalogService(
@@ -33,6 +42,7 @@ func NewCatalogService(
 	shikimoriClient *shikimori.Client,
 	cache *cache.RedisCache,
 	log *logger.Logger,
+	opts ...CatalogServiceOptions,
 ) *CatalogService {
 	// Initialize Kodik client (log warning if fails, don't block service startup)
 	var kodikClient *kodik.Client
@@ -42,6 +52,12 @@ func NewCatalogService(
 		log.Warnw("failed to initialize kodik client, kodik features will be unavailable", "error", err)
 	}
 
+	// Get Aniwatch API URL from options
+	var aniwatchAPIURL string
+	if len(opts) > 0 && opts[0].AniwatchAPIURL != "" {
+		aniwatchAPIURL = opts[0].AniwatchAPIURL
+	}
+
 	return &CatalogService{
 		animeRepo:       animeRepo,
 		genreRepo:       genreRepo,
@@ -49,6 +65,7 @@ func NewCatalogService(
 		shikimoriClient: shikimoriClient,
 		aniboomClient:   aniboom.NewClient(),
 		kodikClient:     kodikClient,
+		hianimeClient:   hianime.NewClientWithAniwatch(aniwatchAPIURL),
 		cache:           cache,
 		log:             log,
 	}
@@ -925,4 +942,255 @@ func (s *CatalogService) UpdateShikimoriID(ctx context.Context, animeID string, 
 	_ = s.cache.Delete(ctx, cache.KeyAnime(animeID))
 
 	return s.animeRepo.UpdateShikimoriID(ctx, animeID, shikimoriID)
+}
+
+// GetHiAnimeEpisodes gets episodes from HiAnime for an anime
+func (s *CatalogService) GetHiAnimeEpisodes(ctx context.Context, animeID string) ([]domain.HiAnimeEpisode, error) {
+	// Get anime to search by name
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check cache first
+	cacheKey := fmt.Sprintf("hianime:episodes:%s", animeID)
+	var cached []domain.HiAnimeEpisode
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	// Search for anime on HiAnime by name
+	hiAnimeID, err := s.findHiAnimeID(ctx, anime)
+	if err != nil {
+		s.log.Warnw("failed to find anime on hianime",
+			"anime_id", animeID,
+			"name", anime.Name,
+			"error", err)
+		return []domain.HiAnimeEpisode{}, nil
+	}
+
+	// Get episodes
+	episodes, err := s.hianimeClient.GetEpisodes(hiAnimeID)
+	if err != nil {
+		s.log.Warnw("failed to get hianime episodes",
+			"anime_id", animeID,
+			"hianime_id", hiAnimeID,
+			"error", err)
+		return []domain.HiAnimeEpisode{}, nil
+	}
+
+	result := make([]domain.HiAnimeEpisode, len(episodes))
+	for i, ep := range episodes {
+		result[i] = domain.HiAnimeEpisode{
+			ID:       ep.ID,
+			Number:   ep.Number,
+			Title:    ep.Title,
+			IsFiller: ep.IsFiller,
+		}
+	}
+
+	// Cache for 1 hour
+	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
+
+	return result, nil
+}
+
+// GetHiAnimeServers gets available servers for an episode from HiAnime
+func (s *CatalogService) GetHiAnimeServers(ctx context.Context, animeID string, episodeID string) ([]domain.HiAnimeServer, error) {
+	// URL-decode the episode ID in case it was encoded in the request
+	decodedEpisodeID, err := url.QueryUnescape(episodeID)
+	if err == nil && decodedEpisodeID != episodeID {
+		episodeID = decodedEpisodeID
+	}
+
+	// Check cache first
+	cacheKey := fmt.Sprintf("hianime:servers:%s:%s", animeID, episodeID)
+	var cached []domain.HiAnimeServer
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	servers, err := s.hianimeClient.GetServers(episodeID)
+	if err != nil {
+		s.log.Warnw("failed to get hianime servers",
+			"anime_id", animeID,
+			"episode_id", episodeID,
+			"error", err)
+		return nil, errors.NotFound("servers not available")
+	}
+
+	result := make([]domain.HiAnimeServer, len(servers))
+	for i, srv := range servers {
+		result[i] = domain.HiAnimeServer{
+			ID:   srv.ID,
+			Name: srv.Name,
+			Type: srv.Type,
+		}
+	}
+
+	// Cache for 30 minutes
+	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
+
+	return result, nil
+}
+
+// GetHiAnimeStream gets the stream URL from HiAnime
+func (s *CatalogService) GetHiAnimeStream(ctx context.Context, animeID string, episodeID string, serverID string, category string) (*domain.HiAnimeStream, error) {
+	// URL-decode the episode ID in case it was encoded in the request
+	decodedEpisodeID, err := url.QueryUnescape(episodeID)
+	if err == nil && decodedEpisodeID != episodeID {
+		episodeID = decodedEpisodeID
+	}
+
+	// Check cache first
+	cacheKey := fmt.Sprintf("hianime:stream:%s:%s:%s:%s", animeID, episodeID, serverID, category)
+	var cached domain.HiAnimeStream
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return &cached, nil
+	}
+
+	stream, err := s.hianimeClient.GetStream(episodeID, serverID, category)
+	if err != nil {
+		s.log.Warnw("failed to get hianime stream",
+			"anime_id", animeID,
+			"episode_id", episodeID,
+			"server_id", serverID,
+			"category", category,
+			"error", err)
+		// Return detailed error message to user
+		return nil, errors.NotFound(fmt.Sprintf("Stream unavailable: %s", err.Error()))
+	}
+
+	// Convert subtitles
+	var subtitles []domain.HiAnimeSubtitle
+	for _, sub := range stream.Subtitles {
+		subtitles = append(subtitles, domain.HiAnimeSubtitle{
+			URL:     sub.URL,
+			Lang:    sub.Lang,
+			Label:   sub.Label,
+			Default: sub.Default,
+		})
+	}
+
+	result := &domain.HiAnimeStream{
+		URL:       stream.URL,
+		Type:      stream.Type,
+		Subtitles: subtitles,
+		Headers:   stream.Headers,
+	}
+
+	if stream.Intro != nil {
+		result.Intro = &domain.HiAnimeTimeRange{
+			Start: stream.Intro.Start,
+			End:   stream.Intro.End,
+		}
+	}
+	if stream.Outro != nil {
+		result.Outro = &domain.HiAnimeTimeRange{
+			Start: stream.Outro.Start,
+			End:   stream.Outro.End,
+		}
+	}
+
+	// Cache for 30 minutes (stream URLs may expire)
+	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
+
+	return result, nil
+}
+
+// SearchHiAnime searches for anime on HiAnime by title
+func (s *CatalogService) SearchHiAnime(ctx context.Context, title string) ([]domain.HiAnimeSearchResult, error) {
+	results, err := s.hianimeClient.Search(title)
+	if err != nil {
+		return nil, err
+	}
+
+	searchResults := make([]domain.HiAnimeSearchResult, len(results))
+	for i, r := range results {
+		searchResults[i] = domain.HiAnimeSearchResult{
+			ID:       r.ID,
+			Name:     r.Name,
+			Poster:   r.Poster,
+			Type:     r.Type,
+			Duration: r.Duration,
+		}
+	}
+
+	return searchResults, nil
+}
+
+// findHiAnimeID finds the HiAnime ID for an anime by searching
+func (s *CatalogService) findHiAnimeID(ctx context.Context, anime *domain.Anime) (string, error) {
+	// Check cache for HiAnime ID mapping
+	cacheKey := fmt.Sprintf("hianime:mapping:%s", anime.ID)
+	var cachedID string
+	if err := s.cache.Get(ctx, cacheKey, &cachedID); err == nil && cachedID != "" {
+		return cachedID, nil
+	}
+
+	// Search by different name variants
+	searchNames := []string{}
+	if anime.Name != "" {
+		searchNames = append(searchNames, anime.Name)
+	}
+	if anime.NameRU != "" && anime.NameRU != anime.Name {
+		searchNames = append(searchNames, anime.NameRU)
+	}
+	if anime.NameJP != "" {
+		searchNames = append(searchNames, anime.NameJP)
+	}
+
+	for _, name := range searchNames {
+		results, err := s.hianimeClient.Search(name)
+		if err != nil {
+			continue
+		}
+
+		// Find best match
+		for _, r := range results {
+			// Simple matching - could be improved with fuzzy matching
+			if matchesAnime(r.Name, anime) {
+				// Cache the mapping for 24 hours
+				_ = s.cache.Set(ctx, cacheKey, r.ID, 24*time.Hour)
+				return r.ID, nil
+			}
+		}
+
+		// If no exact match, use the first result if available
+		if len(results) > 0 {
+			_ = s.cache.Set(ctx, cacheKey, results[0].ID, 24*time.Hour)
+			return results[0].ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("anime not found on HiAnime")
+}
+
+// matchesAnime checks if a search result matches an anime
+func matchesAnime(resultName string, anime *domain.Anime) bool {
+	resultLower := normalizeTitle(resultName)
+
+	if anime.Name != "" && normalizeTitle(anime.Name) == resultLower {
+		return true
+	}
+	if anime.NameRU != "" && normalizeTitle(anime.NameRU) == resultLower {
+		return true
+	}
+	if anime.NameJP != "" && normalizeTitle(anime.NameJP) == resultLower {
+		return true
+	}
+
+	return false
+}
+
+// normalizeTitle normalizes a title for comparison
+func normalizeTitle(title string) string {
+	// Convert to lowercase and remove common variations
+	title = strings.ToLower(title)
+	title = strings.TrimSpace(title)
+	// Remove special characters
+	title = strings.ReplaceAll(title, ":", "")
+	title = strings.ReplaceAll(title, "-", " ")
+	title = strings.ReplaceAll(title, "  ", " ")
+	return title
 }

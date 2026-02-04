@@ -1,39 +1,30 @@
 package database
 
 import (
-	"context"
 	"fmt"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // pgx driver for database/sql
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jmoiron/sqlx"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // Config holds database configuration
 type Config struct {
-	Host            string        `json:"host" yaml:"host"`
-	Port            int           `json:"port" yaml:"port"`
-	User            string        `json:"user" yaml:"user"`
-	Password        string        `json:"password" yaml:"password"`
-	Database        string        `json:"database" yaml:"database"`
-	SSLMode         string        `json:"ssl_mode" yaml:"ssl_mode"`
-	MaxOpenConns    int           `json:"max_open_conns" yaml:"max_open_conns"`
-	MaxIdleConns    int           `json:"max_idle_conns" yaml:"max_idle_conns"`
-	ConnMaxLifetime time.Duration `json:"conn_max_lifetime" yaml:"conn_max_lifetime"`
-	ConnMaxIdleTime time.Duration `json:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+	Host     string `json:"host" yaml:"host"`
+	Port     int    `json:"port" yaml:"port"`
+	User     string `json:"user" yaml:"user"`
+	Password string `json:"password" yaml:"password"`
+	Database string `json:"database" yaml:"database"`
+	SSLMode  string `json:"ssl_mode" yaml:"ssl_mode"`
 }
 
 // DefaultConfig returns sensible defaults
 func DefaultConfig() Config {
 	return Config{
-		Host:            "localhost",
-		Port:            5432,
-		SSLMode:         "disable",
-		MaxOpenConns:    25,
-		MaxIdleConns:    5,
-		ConnMaxLifetime: time.Hour,
-		ConnMaxIdleTime: 30 * time.Minute,
+		Host:    "localhost",
+		Port:    5432,
+		SSLMode: "disable",
 	}
 }
 
@@ -45,103 +36,110 @@ func (c Config) DSN() string {
 	)
 }
 
-// URL returns the connection URL
-func (c Config) URL() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		c.User, c.Password, c.Host, c.Port, c.Database, c.SSLMode,
-	)
-}
-
-// DB wraps database connection with helper methods
+// DB wraps GORM database connection
 type DB struct {
-	*sqlx.DB
-	pool *pgxpool.Pool
+	*gorm.DB
 }
 
-// New creates a new database connection
-func New(ctx context.Context, cfg Config) (*DB, error) {
-	// Create pgx pool for async operations
-	poolConfig, err := pgxpool.ParseConfig(cfg.URL())
-	if err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+// New creates a new database connection with auto-init
+func New(cfg Config) (*DB, error) {
+	// First ensure the database exists
+	if err := ensureDatabaseExists(cfg); err != nil {
+		return nil, fmt.Errorf("ensure database: %w", err)
 	}
 
-	poolConfig.MaxConns = int32(cfg.MaxOpenConns)
-	poolConfig.MinConns = int32(cfg.MaxIdleConns)
-	poolConfig.MaxConnLifetime = cfg.ConnMaxLifetime
-	poolConfig.MaxConnIdleTime = cfg.ConnMaxIdleTime
-
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	// Connect to the target database
+	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Warn),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create pool: %w", err)
+		return nil, fmt.Errorf("connect: %w", err)
 	}
 
-	// Create sqlx connection for convenience methods
-	db, err := sqlx.Connect("pgx", cfg.URL())
+	// Configure connection pool
+	sqlDB, err := db.DB()
 	if err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("connect sqlx: %w", err)
+		return nil, fmt.Errorf("get sql db: %w", err)
 	}
 
-	db.SetMaxOpenConns(cfg.MaxOpenConns)
-	db.SetMaxIdleConns(cfg.MaxIdleConns)
-	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	return &DB{DB: db, pool: pool}, nil
+	return &DB{DB: db}, nil
 }
 
-// Pool returns the pgx pool for async operations
-func (db *DB) Pool() *pgxpool.Pool {
-	return db.pool
-}
+// ensureDatabaseExists creates the database if it doesn't exist
+func ensureDatabaseExists(cfg Config) error {
+	// Connect to postgres default database
+	adminDSN := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=postgres sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.SSLMode,
+	)
 
-// Close closes all database connections
-func (db *DB) Close() error {
-	db.pool.Close()
-	return db.DB.Close()
-}
-
-// Health checks database connectivity
-func (db *DB) Health(ctx context.Context) error {
-	return db.pool.Ping(ctx)
-}
-
-// Transaction wraps a function in a database transaction
-func (db *DB) Transaction(ctx context.Context, fn func(tx *sqlx.Tx) error) error {
-	tx, err := db.BeginTxx(ctx, nil)
+	adminDB, err := gorm.Open(postgres.Open(adminDSN), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return fmt.Errorf("connect to postgres: %w", err)
 	}
 
-	if err := fn(tx); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("rollback failed: %v (original error: %w)", rbErr, err)
+	sqlDB, _ := adminDB.DB()
+	defer sqlDB.Close()
+
+	// Check if database exists
+	var exists bool
+	adminDB.Raw("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = ?)", cfg.Database).Scan(&exists)
+
+	if !exists {
+		// Create database
+		if err := adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", cfg.Database)).Error; err != nil {
+			return fmt.Errorf("create database: %w", err)
 		}
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
 }
 
-// Timestamps provides common timestamp fields for models
-type Timestamps struct {
-	CreatedAt time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt time.Time  `db:"updated_at" json:"updated_at"`
-	DeletedAt *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`
+// AutoMigrate runs GORM auto-migration for the given models
+// It only creates tables that don't exist (doesn't modify existing tables)
+func (db *DB) AutoMigrate(models ...interface{}) error {
+	migrator := db.DB.Migrator()
+
+	for _, model := range models {
+		if !migrator.HasTable(model) {
+			// Table doesn't exist, create it using raw table creation
+			if err := migrator.CreateTable(model); err != nil {
+				return fmt.Errorf("create table: %w", err)
+			}
+		}
+		// Skip existing tables to avoid constraint conflicts
+	}
+	return nil
 }
 
-// SoftDelete provides soft delete functionality
-type SoftDelete struct {
-	DeletedAt *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`
+// Close closes the database connection
+func (db *DB) Close() error {
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
 }
 
-// IsDeleted returns true if the record is soft deleted
-func (s SoftDelete) IsDeleted() bool {
-	return s.DeletedAt != nil
+// Health checks database connectivity
+func (db *DB) Health() error {
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Ping()
+}
+
+// BaseModel provides common fields for all models
+type BaseModel struct {
+	ID        string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }

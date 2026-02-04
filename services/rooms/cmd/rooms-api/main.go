@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
-	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/rooms/internal/config"
@@ -29,15 +28,7 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
-	// Initialize database
-	ctx := context.Background()
-	db, err := database.New(ctx, cfg.Database)
-	if err != nil {
-		log.Fatalw("failed to connect to database", "error", err)
-	}
-	defer db.Close()
-
-	// Initialize cache
+	// Initialize cache (rooms uses Redis for storage)
 	redisCache, err := cache.New(cfg.Redis)
 	if err != nil {
 		log.Fatalw("failed to connect to redis", "error", err)

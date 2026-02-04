@@ -1,6 +1,3 @@
--- Migration: Add pinned translations table
--- This table stores globally pinned translations that appear first in the list for all users
-
 CREATE TABLE IF NOT EXISTS pinned_translations (
     anime_id VARCHAR(255) NOT NULL,
     translation_id INTEGER NOT NULL,

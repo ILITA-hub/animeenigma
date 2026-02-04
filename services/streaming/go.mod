@@ -12,6 +12,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/videoutils v0.0.0
 	github.com/go-chi/chi/v5 v5.0.12
+	golang.org/x/sync v0.6.0
 )
 
 require (

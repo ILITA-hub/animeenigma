@@ -132,6 +132,15 @@ export const userApi = {
     apiClient.post('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover, anime_total_episodes: animeTotalEpisodes }),
   updateWatchlistStatus: (animeId: string, status: string, animeTitle?: string, animeCover?: string, animeTotalEpisodes?: number) =>
     apiClient.put('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover, anime_total_episodes: animeTotalEpisodes }),
+  updateWatchlistEntry: (data: {
+    anime_id: string
+    status: string
+    started_at?: string | null
+    completed_at?: string | null
+    score?: number
+    episodes?: number
+    notes?: string
+  }) => apiClient.put('/users/watchlist', data),
   removeFromWatchlist: (animeId: string) => apiClient.delete(`/users/watchlist/${animeId}`),
   markEpisodeWatched: (animeId: string, episode: number) => apiClient.post(`/users/watchlist/${animeId}/episode`, { episode }),
   getWatchHistory: () => apiClient.get('/users/history'),
@@ -206,6 +215,20 @@ export const kodikApi = {
     }),
   unpinTranslation: (animeId: string, translationId: number) =>
     apiClient.delete(`/anime/${animeId}/pin-translation/${translationId}`)
+}
+
+export const hiAnimeApi = {
+  getEpisodes: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/hianime/episodes`),
+  getServers: (animeId: string, episodeId: string) =>
+    apiClient.get(`/anime/${animeId}/hianime/servers`, {
+      params: { episode: episodeId }
+    }),
+  getStream: (animeId: string, episodeId: string, serverId: string, category: string) =>
+    apiClient.get(`/anime/${animeId}/hianime/stream`, {
+      params: { episode: episodeId, server: serverId, category }
+    }),
+  search: (query: string) => apiClient.get('/hianime/search', { params: { q: query } }),
 }
 
 export default apiClient
