@@ -618,3 +618,72 @@ func (h *CatalogHandler) SearchHiAnime(w http.ResponseWriter, r *http.Request) {
 
 	httputil.OK(w, results)
 }
+
+// ============================================================================
+// Consumet Handlers
+// ============================================================================
+
+// GetConsumetEpisodes gets episodes from Consumet
+func (h *CatalogHandler) GetConsumetEpisodes(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodes, err := h.catalogService.GetConsumetEpisodes(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, episodes)
+}
+
+// GetConsumetServers gets available servers from Consumet
+func (h *CatalogHandler) GetConsumetServers(w http.ResponseWriter, r *http.Request) {
+	servers := h.catalogService.GetConsumetServers(r.Context())
+	httputil.OK(w, servers)
+}
+
+// GetConsumetStream gets the stream URL from Consumet
+func (h *CatalogHandler) GetConsumetStream(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeID := r.URL.Query().Get("episode")
+	serverName := r.URL.Query().Get("server")
+
+	if episodeID == "" {
+		httputil.BadRequest(w, "episode ID is required")
+		return
+	}
+
+	stream, err := h.catalogService.GetConsumetStream(r.Context(), animeID, episodeID, serverName)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, stream)
+}
+
+// SearchConsumet searches for anime on Consumet
+func (h *CatalogHandler) SearchConsumet(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" || len(query) < 2 {
+		httputil.BadRequest(w, "search query must be at least 2 characters")
+		return
+	}
+
+	results, err := h.catalogService.SearchConsumet(r.Context(), query)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, results)
+}

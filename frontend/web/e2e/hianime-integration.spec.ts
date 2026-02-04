@@ -13,7 +13,8 @@ const TEST_ANIME = [
   { id: 'ba5e4764-484b-42b2-9507-9e8f4081e6a6', name: 'Solo Leveling S2' }
 ]
 
-const SERVERS_TO_TEST = ['hd-1', 'hd-2', 'hd-3']
+// Server order: hd-2 first (more reliable), hd-1 often returns 403
+const SERVERS_TO_TEST = ['hd-2', 'hd-1', 'vidstreaming']
 
 test.describe('HiAnime Streaming Integration', () => {
   test('episodes API returns valid data', async ({ request }) => {

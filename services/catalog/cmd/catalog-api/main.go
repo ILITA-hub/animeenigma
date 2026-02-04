@@ -72,6 +72,7 @@ func main() {
 		log,
 		service.CatalogServiceOptions{
 			AniwatchAPIURL: cfg.HiAnime.AniwatchAPIURL,
+			ConsumetAPIURL: cfg.Consumet.APIURL,
 		},
 	)
 

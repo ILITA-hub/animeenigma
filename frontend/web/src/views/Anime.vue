@@ -295,6 +295,15 @@
             >
               HiAnime
             </button>
+            <button
+              @click="videoProvider = 'consumet'"
+              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="videoProvider === 'consumet'
+                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+            >
+              Consumet
+            </button>
           </div>
         </div>
         <div class="glass-card p-4 md:p-6">
@@ -307,6 +316,12 @@
           <!-- HiAnime Player -->
           <HiAnimePlayer
             v-else-if="videoProvider === 'hianime'"
+            :anime-id="anime.id"
+            :total-episodes="anime.totalEpisodes"
+          />
+          <!-- Consumet Player -->
+          <ConsumetPlayer
+            v-else-if="videoProvider === 'consumet'"
             :anime-id="anime.id"
             :total-episodes="anime.totalEpisodes"
           />
@@ -473,6 +488,7 @@ import { GenreChip, AnimeCardNew } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import KodikPlayer from '@/components/player/KodikPlayer.vue'
 import HiAnimePlayer from '@/components/player/HiAnimePlayer.vue'
+import ConsumetPlayer from '@/components/player/ConsumetPlayer.vue'
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
 
 interface AnimeWithExtras {
@@ -521,8 +537,8 @@ const isHidden = ref(false)
 const showShikimoriEdit = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
-const videoProvider = ref<'kodik' | 'hianime'>(
-  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'hianime') || 'kodik'
+const videoProvider = ref<'kodik' | 'hianime' | 'consumet'>(
+  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'hianime' | 'consumet') || 'kodik'
 )
 
 // Reviews

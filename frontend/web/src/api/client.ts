@@ -231,4 +231,16 @@ export const hiAnimeApi = {
   search: (query: string) => apiClient.get('/hianime/search', { params: { q: query } }),
 }
 
+export const consumetApi = {
+  getEpisodes: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/consumet/episodes`),
+  getServers: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/consumet/servers`),
+  getStream: (animeId: string, episodeId: string, serverName?: string) =>
+    apiClient.get(`/anime/${animeId}/consumet/stream`, {
+      params: { episode: episodeId, ...(serverName && { server: serverName }) }
+    }),
+  search: (query: string) => apiClient.get('/consumet/search', { params: { q: query } }),
+}
+
 export default apiClient

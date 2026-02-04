@@ -92,6 +92,21 @@ services:
       retries: 3
       start_period: 10s
 
+  consumet:
+    image: riimuru/consumet-api:latest
+    container_name: animeenigma-consumet
+    ports:
+      - "3101:3000"
+    environment:
+      - PORT=3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   # =============================================================================
   # Monitoring & Admin
   # =============================================================================
@@ -239,12 +254,15 @@ services:
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
       JWT_SECRET: dev-secret-change-in-production
       ANIWATCH_API_URL: http://aniwatch:4000
+      CONSUMET_API_URL: http://consumet:3000
     ports:
       - "8081:8081"
     depends_on:
       redis:
         condition: service_healthy
       aniwatch:
+        condition: service_healthy
+      consumet:
         condition: service_healthy
 
   streaming:

@@ -270,3 +270,40 @@ type HiAnimeSearchResult struct {
 	Type     string `json:"type"`
 	Duration string `json:"duration"`
 }
+
+// ConsumetEpisode represents an episode from Consumet
+type ConsumetEpisode struct {
+	ID       string `json:"id"`
+	Number   int    `json:"number"`
+	Title    string `json:"title"`
+	IsFiller bool   `json:"is_filler"`
+}
+
+// ConsumetServer represents a streaming server from Consumet
+type ConsumetServer struct {
+	Name string `json:"name"`
+}
+
+// ConsumetSubtitle represents a subtitle track
+type ConsumetSubtitle struct {
+	URL  string `json:"url"`
+	Lang string `json:"lang"`
+}
+
+// ConsumetStream represents stream source data from Consumet
+type ConsumetStream struct {
+	URL       string             `json:"url"`
+	IsM3U8    bool               `json:"isM3U8"`
+	Quality   string             `json:"quality"`
+	Headers   map[string]string  `json:"headers,omitempty"`
+	Subtitles []ConsumetSubtitle `json:"subtitles,omitempty"`
+}
+
+// ConsumetSearchResult represents a search result from Consumet
+type ConsumetSearchResult struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Image    string `json:"image"`
+	Type     string `json:"type"`
+	SubOrDub string `json:"subOrDub"`
+}
