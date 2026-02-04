@@ -71,6 +71,10 @@ func NewRouter(
 			r.Get("/{animeId}/hianime/episodes", catalogHandler.GetHiAnimeEpisodes)
 			r.Get("/{animeId}/hianime/servers", catalogHandler.GetHiAnimeServers)
 			r.Get("/{animeId}/hianime/stream", catalogHandler.GetHiAnimeStream)
+			// Consumet video sources
+			r.Get("/{animeId}/consumet/episodes", catalogHandler.GetConsumetEpisodes)
+			r.Get("/{animeId}/consumet/servers", catalogHandler.GetConsumetServers)
+			r.Get("/{animeId}/consumet/stream", catalogHandler.GetConsumetStream)
 		})
 
 		// Kodik search (for finding anime not in our DB)
@@ -78,6 +82,9 @@ func NewRouter(
 
 		// HiAnime search
 		r.Get("/hianime/search", catalogHandler.SearchHiAnime)
+
+		// Consumet search
+		r.Get("/consumet/search", catalogHandler.SearchConsumet)
 
 		r.Get("/genres", catalogHandler.GetGenres)
 

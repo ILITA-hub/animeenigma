@@ -18,7 +18,14 @@ const (
 	BaseURL      = "https://hianime.to"
 	AjaxURL      = "https://hianime.to/ajax"
 	MegaCloudURL = "https://megacloud.tv/embed-2/ajax/e-1/getSources"
+
+	// Retry configuration
+	maxRetries    = 3
+	retryBaseWait = 500 * time.Millisecond
 )
+
+// PreferredServers defines the order of servers to try (hd-2 works, hd-1 is often blocked)
+var PreferredServers = []string{"hd-2", "hd-1", "vidstreaming"}
 
 // Client is the HiAnime API client
 type Client struct {
@@ -428,17 +435,64 @@ func (c *Client) GetServers(episodeID string) ([]Server, error) {
 
 // GetStream gets the stream URL for an episode from a specific server
 // Uses Aniwatch API to get decrypted HLS streams instead of iframe embeds
+// Includes retry logic with exponential backoff and server fallback
 func (c *Client) GetStream(episodeID string, serverID string, category string) (*Stream, error) {
-	// Get HLS stream from Aniwatch API - no iframe fallback
-	stream, err := c.getStreamFromAniwatch(episodeID, serverID, category)
-	if err != nil {
-		// Return the error with details instead of useless iframe fallback
-		return nil, fmt.Errorf("failed to get HLS stream: %w", err)
+	// Build list of servers to try: requested server first, then fallbacks
+	serversToTry := []string{serverID}
+
+	// Add fallback servers if the requested one isn't in the preferred list
+	// or if it's hd-1 (which is often blocked), prioritize hd-2
+	if serverID == "hd-1" {
+		serversToTry = []string{"hd-2", "hd-1"}
+	} else if serverID == "" {
+		serversToTry = PreferredServers
 	}
-	if stream == nil || stream.URL == "" {
-		return nil, fmt.Errorf("no HLS stream available from server %s", serverID)
+
+	var lastErr error
+	for _, server := range serversToTry {
+		stream, err := c.getStreamWithRetry(episodeID, server, category)
+		if err == nil && stream != nil && stream.URL != "" {
+			return stream, nil
+		}
+		lastErr = err
 	}
-	return stream, nil
+
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to get HLS stream after trying servers %v: %w", serversToTry, lastErr)
+	}
+	return nil, fmt.Errorf("no HLS stream available from any server")
+}
+
+// getStreamWithRetry attempts to fetch stream with exponential backoff retry
+func (c *Client) getStreamWithRetry(episodeID string, serverID string, category string) (*Stream, error) {
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 500ms, 1s, 2s
+			wait := retryBaseWait * time.Duration(1<<(attempt-1))
+			time.Sleep(wait)
+		}
+
+		stream, err := c.getStreamFromAniwatch(episodeID, serverID, category)
+		if err == nil && stream != nil && stream.URL != "" {
+			return stream, nil
+		}
+
+		lastErr = err
+
+		// Don't retry on certain errors (invalid format, etc.)
+		if err != nil && strings.Contains(err.Error(), "invalid episode ID format") {
+			return nil, err
+		}
+
+		// Don't retry if we got a 403 (blocked) - try next server instead
+		if err != nil && strings.Contains(err.Error(), "status 403") {
+			return nil, err
+		}
+	}
+
+	return nil, lastErr
 }
 
 // getStreamFromAniwatch fetches stream from Aniwatch API

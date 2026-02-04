@@ -12,6 +12,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/consumet"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hianime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kodik"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
@@ -26,6 +27,7 @@ type CatalogService struct {
 	aniboomClient   *aniboom.Client
 	kodikClient     *kodik.Client
 	hianimeClient   *hianime.Client
+	consumetClient  *consumet.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
 }
@@ -33,6 +35,7 @@ type CatalogService struct {
 // CatalogServiceOptions contains optional configuration for CatalogService
 type CatalogServiceOptions struct {
 	AniwatchAPIURL string
+	ConsumetAPIURL string
 }
 
 func NewCatalogService(
@@ -52,10 +55,11 @@ func NewCatalogService(
 		log.Warnw("failed to initialize kodik client, kodik features will be unavailable", "error", err)
 	}
 
-	// Get Aniwatch API URL from options
-	var aniwatchAPIURL string
-	if len(opts) > 0 && opts[0].AniwatchAPIURL != "" {
+	// Get API URLs from options
+	var aniwatchAPIURL, consumetAPIURL string
+	if len(opts) > 0 {
 		aniwatchAPIURL = opts[0].AniwatchAPIURL
+		consumetAPIURL = opts[0].ConsumetAPIURL
 	}
 
 	return &CatalogService{
@@ -66,6 +70,7 @@ func NewCatalogService(
 		aniboomClient:   aniboom.NewClient(),
 		kodikClient:     kodikClient,
 		hianimeClient:   hianime.NewClientWithAniwatch(aniwatchAPIURL),
+		consumetClient:  consumet.NewClient(consumetAPIURL),
 		cache:           cache,
 		log:             log,
 	}
@@ -1193,4 +1198,209 @@ func normalizeTitle(title string) string {
 	title = strings.ReplaceAll(title, "-", " ")
 	title = strings.ReplaceAll(title, "  ", " ")
 	return title
+}
+
+// ============================================================================
+// Consumet API Methods
+// ============================================================================
+
+// GetConsumetEpisodes gets episodes from Consumet for an anime
+func (s *CatalogService) GetConsumetEpisodes(ctx context.Context, animeID string) ([]domain.ConsumetEpisode, error) {
+	// Get anime to search by name
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check cache first
+	cacheKey := fmt.Sprintf("consumet:episodes:%s", animeID)
+	var cached []domain.ConsumetEpisode
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	// Find anime on Consumet
+	consumetID, err := s.findConsumetID(ctx, anime)
+	if err != nil {
+		s.log.Warnw("failed to find anime on consumet",
+			"anime_id", animeID,
+			"name", anime.Name,
+			"error", err)
+		return []domain.ConsumetEpisode{}, nil
+	}
+
+	// Get episodes
+	episodes, err := s.consumetClient.GetEpisodes(consumetID)
+	if err != nil {
+		s.log.Warnw("failed to get consumet episodes",
+			"anime_id", animeID,
+			"consumet_id", consumetID,
+			"error", err)
+		return []domain.ConsumetEpisode{}, nil
+	}
+
+	result := make([]domain.ConsumetEpisode, len(episodes))
+	for i, ep := range episodes {
+		result[i] = domain.ConsumetEpisode{
+			ID:       ep.ID,
+			Number:   ep.Number,
+			Title:    ep.Title,
+			IsFiller: ep.IsFiller,
+		}
+	}
+
+	// Cache for 1 hour
+	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
+
+	return result, nil
+}
+
+// GetConsumetServers gets available servers from Consumet
+func (s *CatalogService) GetConsumetServers(ctx context.Context) []domain.ConsumetServer {
+	servers := s.consumetClient.GetServers()
+	result := make([]domain.ConsumetServer, len(servers))
+	for i, srv := range servers {
+		result[i] = domain.ConsumetServer{
+			Name: srv.Name,
+		}
+	}
+	return result
+}
+
+// GetConsumetStream gets the stream URL from Consumet
+func (s *CatalogService) GetConsumetStream(ctx context.Context, animeID string, episodeID string, serverName string) (*domain.ConsumetStream, error) {
+	// Check cache first
+	cacheKey := fmt.Sprintf("consumet:stream:%s:%s:%s", animeID, episodeID, serverName)
+	var cached domain.ConsumetStream
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return &cached, nil
+	}
+
+	stream, err := s.consumetClient.GetStream(episodeID, serverName)
+	if err != nil {
+		s.log.Warnw("failed to get consumet stream",
+			"anime_id", animeID,
+			"episode_id", episodeID,
+			"server", serverName,
+			"error", err)
+		return nil, errors.NotFound(fmt.Sprintf("Stream unavailable: %s", err.Error()))
+	}
+
+	if len(stream.Sources) == 0 {
+		return nil, errors.NotFound("no stream sources available")
+	}
+
+	// Get the best quality source
+	source := stream.Sources[0]
+	for _, s := range stream.Sources {
+		if s.Quality == "1080p" || s.Quality == "auto" {
+			source = s
+			break
+		}
+	}
+
+	// Convert subtitles
+	var subtitles []domain.ConsumetSubtitle
+	for _, sub := range stream.Subtitles {
+		subtitles = append(subtitles, domain.ConsumetSubtitle{
+			URL:  sub.URL,
+			Lang: sub.Lang,
+		})
+	}
+
+	result := &domain.ConsumetStream{
+		URL:       source.URL,
+		IsM3U8:    source.IsM3U8,
+		Quality:   source.Quality,
+		Headers:   stream.Headers,
+		Subtitles: subtitles,
+	}
+
+	// Cache for 30 minutes
+	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
+
+	return result, nil
+}
+
+// SearchConsumet searches for anime on Consumet by title
+func (s *CatalogService) SearchConsumet(ctx context.Context, title string) ([]domain.ConsumetSearchResult, error) {
+	results, err := s.consumetClient.Search(title)
+	if err != nil {
+		return nil, err
+	}
+
+	searchResults := make([]domain.ConsumetSearchResult, len(results))
+	for i, r := range results {
+		searchResults[i] = domain.ConsumetSearchResult{
+			ID:       r.ID,
+			Title:    r.Title,
+			Image:    r.Image,
+			Type:     r.Type,
+			SubOrDub: r.SubOrDub,
+		}
+	}
+
+	return searchResults, nil
+}
+
+// findConsumetID finds the Consumet ID for an anime by searching
+func (s *CatalogService) findConsumetID(ctx context.Context, anime *domain.Anime) (string, error) {
+	// Check cache for Consumet ID mapping
+	cacheKey := fmt.Sprintf("consumet:mapping:%s", anime.ID)
+	var cachedID string
+	if err := s.cache.Get(ctx, cacheKey, &cachedID); err == nil && cachedID != "" {
+		return cachedID, nil
+	}
+
+	// Search by different name variants
+	searchNames := []string{}
+	if anime.Name != "" {
+		searchNames = append(searchNames, anime.Name)
+	}
+	if anime.NameRU != "" && anime.NameRU != anime.Name {
+		searchNames = append(searchNames, anime.NameRU)
+	}
+	if anime.NameJP != "" {
+		searchNames = append(searchNames, anime.NameJP)
+	}
+
+	for _, name := range searchNames {
+		results, err := s.consumetClient.Search(name)
+		if err != nil {
+			continue
+		}
+
+		// Find best match
+		for _, r := range results {
+			if matchesConsumetAnime(r.Title, anime) {
+				_ = s.cache.Set(ctx, cacheKey, r.ID, 24*time.Hour)
+				return r.ID, nil
+			}
+		}
+
+		// If no exact match, use the first result if available
+		if len(results) > 0 {
+			_ = s.cache.Set(ctx, cacheKey, results[0].ID, 24*time.Hour)
+			return results[0].ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("anime not found on Consumet")
+}
+
+// matchesConsumetAnime checks if a search result matches an anime
+func matchesConsumetAnime(resultTitle string, anime *domain.Anime) bool {
+	resultLower := normalizeTitle(resultTitle)
+
+	if anime.Name != "" && normalizeTitle(anime.Name) == resultLower {
+		return true
+	}
+	if anime.NameRU != "" && normalizeTitle(anime.NameRU) == resultLower {
+		return true
+	}
+	if anime.NameJP != "" && normalizeTitle(anime.NameJP) == resultLower {
+		return true
+	}
+
+	return false
 }

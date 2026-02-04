@@ -18,6 +18,7 @@ type Config struct {
 	JWT       authz.JWTConfig
 	Shikimori ShikimoriConfig
 	HiAnime   HiAnimeConfig
+	Consumet  ConsumetConfig
 }
 
 type ServerConfig struct {
@@ -39,6 +40,10 @@ type ShikimoriConfig struct {
 
 type HiAnimeConfig struct {
 	AniwatchAPIURL string
+}
+
+type ConsumetConfig struct {
+	APIURL string
 }
 
 func Load() (*Config, error) {
@@ -74,6 +79,9 @@ func Load() (*Config, error) {
 		},
 		HiAnime: HiAnimeConfig{
 			AniwatchAPIURL: getEnv("ANIWATCH_API_URL", "http://aniwatch:4000"),
+		},
+		Consumet: ConsumetConfig{
+			APIURL: getEnv("CONSUMET_API_URL", "http://consumet:3000"),
 		},
 	}, nil
 }
