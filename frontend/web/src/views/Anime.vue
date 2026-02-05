@@ -284,7 +284,7 @@
                 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
                 : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
             >
-              Kodik
+              Kodik <span class="opacity-60">(RU)</span>
             </button>
             <button
               @click="videoProvider = 'hianime'"
@@ -293,7 +293,7 @@
                 ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
                 : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
             >
-              HiAnime
+              HiAnime <span class="opacity-60">(EN)</span>
             </button>
             <button
               @click="videoProvider = 'consumet'"
@@ -302,7 +302,7 @@
                 ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                 : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
             >
-              Consumet
+              Consumet <span class="opacity-60">(EN)</span>
             </button>
           </div>
         </div>
