@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	// DefaultProvider is the provider to use (zoro = HiAnime)
-	DefaultProvider = "zoro"
+	// DefaultProvider is the provider to use
+	// animepahe is more reliable than zoro in the current Consumet Docker image
+	DefaultProvider = "animepahe"
 
 	// Retry configuration
 	maxRetries    = 3
@@ -124,7 +125,8 @@ func (c *Client) Search(title string) ([]SearchResult, error) {
 
 // GetAnimeInfo gets anime info including episodes
 func (c *Client) GetAnimeInfo(animeID string) (*AnimeInfo, error) {
-	infoURL := fmt.Sprintf("%s/anime/%s/info?id=%s", c.baseURL, c.provider, url.QueryEscape(animeID))
+	// Use path-based ID (not query param) for animepahe provider
+	infoURL := fmt.Sprintf("%s/anime/%s/info/%s", c.baseURL, c.provider, url.PathEscape(animeID))
 
 	body, err := c.doRequest(infoURL)
 	if err != nil {

@@ -227,6 +227,8 @@ var HLSProxyAllowedDomains = []string{
 	"mcloud2.to",
 	"mgstatics.xyz",
 	"netmagcdn.com", // MegaCloud HLS CDN
+	"owocdn.top",    // AnimePahe/Kwik CDN
+	"kwik.cx",       // AnimePahe CDN
 }
 
 // HLSProxyAllowedTLDs contains TLDs commonly used by streaming CDNs
@@ -451,6 +453,11 @@ func rewriteURIAttribute(line, basePath, referer string) string {
 // isHLSDomainAllowed checks if a domain is allowed for HLS proxying
 func isHLSDomainAllowed(host string) bool {
 	host = strings.ToLower(host)
+
+	// Strip port number if present
+	if colonIdx := strings.LastIndex(host, ":"); colonIdx != -1 {
+		host = host[:colonIdx]
+	}
 
 	// Check exact domain matches
 	for _, allowed := range HLSProxyAllowedDomains {

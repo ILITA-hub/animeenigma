@@ -118,15 +118,20 @@ func NewRouter(
 			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
 
-		// Streaming service routes - public HLS proxy (no auth required for video playback)
-		r.Get("/streaming/hls-proxy", proxyHandler.ProxyToStreaming)
-		r.Options("/streaming/hls-proxy", proxyHandler.ProxyToStreaming) // CORS preflight
-		r.Get("/streaming/proxy-status", proxyHandler.ProxyToStreaming)
+		// Streaming service routes - most are public, only admin needs auth
+		r.Route("/streaming", func(r chi.Router) {
+			// Public routes (no auth required)
+			r.Get("/hls-proxy", proxyHandler.ProxyToStreaming)
+			r.Options("/hls-proxy", proxyHandler.ProxyToStreaming) // CORS preflight
+			r.Get("/proxy-status", proxyHandler.ProxyToStreaming)
+			r.HandleFunc("/stream/*", proxyHandler.ProxyToStreaming)
+			r.HandleFunc("/internal/*", proxyHandler.ProxyToStreaming)
 
-		// Streaming service routes (protected)
-		r.Group(func(r chi.Router) {
-			r.Use(JWTValidationMiddleware(cfg.JWT))
-			r.HandleFunc("/streaming/*", proxyHandler.ProxyToStreaming)
+			// Admin routes (protected)
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT))
+				r.HandleFunc("/admin/*", proxyHandler.ProxyToStreaming)
+			})
 		})
 	})
 
