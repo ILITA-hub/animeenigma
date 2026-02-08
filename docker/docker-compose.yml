@@ -5,23 +5,22 @@ services:
   # Infrastructure
   # =============================================================================
 
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: animeenigma-postgres
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #     POSTGRES_DB: animeenigma
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #     - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
+  postgres:
+    image: postgres:16-alpine
+    container_name: animeenigma-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: animeenigma
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -237,6 +236,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   catalog:
     build:
@@ -259,6 +260,8 @@ services:
       - "8081:8081"
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
       aniwatch:
         condition: service_healthy
@@ -307,6 +310,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   rooms:
     build:
@@ -326,6 +331,8 @@ services:
       - "8084:8084"
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
   scheduler:
@@ -349,6 +356,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       catalog:
         condition: service_started
 
@@ -370,6 +379,7 @@ services:
       - gateway
 
 volumes:
+  postgres_data:
   redis_data:
   minio_data:
   nats_data:
