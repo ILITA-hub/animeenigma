@@ -169,12 +169,6 @@
           </button>
         </div>
 
-        <!-- Info -->
-        <div class="mt-4 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
-          <p class="text-green-400 text-sm">
-            Consumet использует несколько источников для лучшего качества и стабильности.
-          </p>
-        </div>
       </div>
     </div>
   </div>
@@ -395,7 +389,52 @@ const getLanguageCode = (lang: string): string => {
   return langMap[lang.toLowerCase()] || lang.substring(0, 2).toLowerCase()
 }
 
+const getHlsConfig = () => ({
+  xhrSetup: (xhr: XMLHttpRequest) => {
+    xhr.withCredentials = false
+  },
+  enableWorker: true,
+  lowLatencyMode: false,
+  backBufferLength: 90,
+  maxBufferLength: 30,
+  maxMaxBufferLength: 60,
+  maxBufferSize: 60 * 1000 * 1000, // 60MB
+  maxBufferHole: 0.5,
+  startLevel: -1, // Auto-select quality
+  autoStartLoad: true,
+  fragLoadingTimeOut: 20000,
+  fragLoadingMaxRetry: 6,
+  fragLoadingRetryDelay: 1000,
+  levelLoadingTimeOut: 10000,
+  manifestLoadingTimeOut: 10000,
+})
+
+// Polyfill to fix unsupported audio codecs at the MediaSource level
+// Chrome/Edge don't support AAC Main Profile (mp4a.40.1) but the actual audio is AAC-LC compatible
+const patchMediaSourceForCodecFix = () => {
+  if (typeof MediaSource === 'undefined') return
+
+  const originalAddSourceBuffer = MediaSource.prototype.addSourceBuffer
+  MediaSource.prototype.addSourceBuffer = function(mimeType: string) {
+    // Replace unsupported AAC Main (mp4a.40.1) with AAC-LC (mp4a.40.2)
+    if (mimeType.includes('mp4a.40.1')) {
+      console.log('[Consumet] Fixing unsupported codec mp4a.40.1 -> mp4a.40.2')
+      mimeType = mimeType.replace(/mp4a\.40\.1/g, 'mp4a.40.2')
+    }
+    return originalAddSourceBuffer.call(this, mimeType)
+  }
+}
+
+// Apply the polyfill once
+let polyfillApplied = false
+
 const initHlsPlayer = (url: string, referer: string) => {
+  // Apply codec fix polyfill
+  if (!polyfillApplied) {
+    patchMediaSourceForCodecFix()
+    polyfillApplied = true
+  }
+
   if (hls) {
     hls.destroy()
     hls = null
@@ -407,14 +446,7 @@ const initHlsPlayer = (url: string, referer: string) => {
   const proxyUrl = buildProxyUrl(url, referer)
 
   if (Hls.isSupported()) {
-    hls = new Hls({
-      xhrSetup: (xhr) => {
-        xhr.withCredentials = false
-      },
-      enableWorker: true,
-      lowLatencyMode: false,
-      backBufferLength: 90,
-    })
+    hls = new Hls(getHlsConfig())
 
     hls.loadSource(proxyUrl)
     hls.attachMedia(video)
@@ -424,18 +456,37 @@ const initHlsPlayer = (url: string, referer: string) => {
     })
 
     hls.on(Hls.Events.ERROR, (_event, data) => {
-      console.error('[Consumet HLS Error]', data)
       if (data.fatal) {
+        console.error('[Consumet HLS Error]', data.type, data.details)
+      }
+
+      // Fallback if codec override didn't work
+      if (data.fatal && data.details === 'bufferAddCodecError') {
+        error.value = 'Формат видео не поддерживается браузером. Попробуйте другой сервер.'
+        hls?.destroy()
+        return
+      }
+
+      if (data.fatal) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response = (data as any).response
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            hls?.startLoad()
+            if (response?.code === 503) {
+              error.value = 'Сервер занят. Попробуйте позже.'
+            } else if (response?.code === 403) {
+              error.value = 'Доступ запрещён. Попробуйте другой сервер.'
+            } else if (response?.code === 404) {
+              error.value = 'Видео не найдено.'
+            } else {
+              hls?.startLoad()
+            }
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
             hls?.recoverMediaError()
             break
           default:
             error.value = 'Ошибка воспроизведения видео'
-            break
         }
       }
     })

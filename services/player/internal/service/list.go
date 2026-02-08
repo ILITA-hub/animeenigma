@@ -100,6 +100,17 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 		entry.CompletedAt = &now
 	}
 
+	// When marking as completed, set episodes to total if not explicitly provided
+	if req.Status == "completed" && req.Episodes == nil {
+		totalEpisodes := entry.AnimeTotalEpisodes
+		if totalEpisodes == 0 && existingEntry != nil {
+			totalEpisodes = existingEntry.AnimeTotalEpisodes
+		}
+		if totalEpisodes > 0 {
+			entry.Episodes = totalEpisodes
+		}
+	}
+
 	if err := s.listRepo.Upsert(ctx, entry); err != nil {
 		return nil, err
 	}
@@ -120,7 +131,34 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 	}
 
 	if !updated {
-		s.log.Infow("episode already marked or anime not in list",
+		// Check if the anime is in the user's list at all
+		existing, err := s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
+		if err != nil {
+			return nil, err
+		}
+
+		if existing == nil {
+			// Auto-create watchlist entry with status "watching"
+			s.log.Infow("auto-creating watchlist entry for episode marking",
+				"user_id", userID,
+				"anime_id", animeID,
+				"episode", episode,
+			)
+			now := time.Now()
+			entry := &domain.AnimeListEntry{
+				UserID:    userID,
+				AnimeID:   animeID,
+				Status:    "watching",
+				Episodes:  episode,
+				StartedAt: &now,
+			}
+			if err := s.listRepo.Upsert(ctx, entry); err != nil {
+				return nil, err
+			}
+			return entry, nil
+		}
+
+		s.log.Infow("episode already marked",
 			"user_id", userID,
 			"anime_id", animeID,
 			"episode", episode,

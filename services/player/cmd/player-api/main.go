@@ -57,7 +57,7 @@ func main() {
 	progressService := service.NewProgressService(progressRepo, log)
 	listService := service.NewListService(listRepo, log)
 	historyService := service.NewHistoryService(historyRepo, log)
-	reviewService := service.NewReviewService(reviewRepo, log)
+	reviewService := service.NewReviewService(reviewRepo, listRepo, log)
 
 	// Initialize MAL export service
 	malExportService := service.NewMALExportService(log)

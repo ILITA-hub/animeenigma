@@ -11,12 +11,14 @@ import (
 
 type ReviewService struct {
 	reviewRepo *repo.ReviewRepository
+	listRepo   *repo.ListRepository
 	log        *logger.Logger
 }
 
-func NewReviewService(reviewRepo *repo.ReviewRepository, log *logger.Logger) *ReviewService {
+func NewReviewService(reviewRepo *repo.ReviewRepository, listRepo *repo.ListRepository, log *logger.Logger) *ReviewService {
 	return &ReviewService{
 		reviewRepo: reviewRepo,
+		listRepo:   listRepo,
 		log:        log,
 	}
 }
@@ -39,6 +41,19 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 
 	if err := s.reviewRepo.Upsert(ctx, review); err != nil {
 		return nil, errors.Wrap(err, errors.CodeInternal, "failed to save review")
+	}
+
+	// Sync score to watchlist entry
+	entry, _ := s.listRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
+	if entry != nil {
+		entry.Score = req.Score
+		if err := s.listRepo.Upsert(ctx, entry); err != nil {
+			s.log.Errorw("failed to sync review score to watchlist",
+				"user_id", userID,
+				"anime_id", req.AnimeID,
+				"error", err,
+			)
+		}
 	}
 
 	return review, nil
