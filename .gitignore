@@ -93,3 +93,16 @@ docker-compose.local.yml
 
 # Worktrees
 .worktrees/
+
+# Compiled Go binaries
+**/catalog-api
+**/auth-api
+**/gateway-api
+**/streaming-api
+**/player-api
+**/rooms-api
+**/scheduler-api
+
+# Playwright test artifacts
+frontend/web/playwright-report/
+frontend/web/test-results/

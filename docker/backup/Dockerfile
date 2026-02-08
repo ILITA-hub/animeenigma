@@ -11,9 +11,10 @@ RUN apk add --no-cache \
 ENV TZ=Europe/Moscow
 
 COPY backup.sh /usr/local/bin/backup.sh
+COPY restore.sh /usr/local/bin/restore.sh
 COPY crontab /etc/crontabs/root
 
-RUN chmod +x /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/restore.sh
 
 # Run crond in foreground
 CMD ["crond", "-f", "-l", "2"]

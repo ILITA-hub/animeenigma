@@ -43,26 +43,26 @@ fi
 
 for SERVICE in $SERVICES; do
     log_info "Rebuilding $SERVICE..."
-    docker-compose -f "$COMPOSE_FILE" build "$SERVICE"
+    docker compose -f "$COMPOSE_FILE" build "$SERVICE"
 
     log_info "Stopping $SERVICE..."
-    docker-compose -f "$COMPOSE_FILE" stop "$SERVICE" || true
+    docker compose -f "$COMPOSE_FILE" stop "$SERVICE" || true
 
     log_info "Removing $SERVICE container..."
-    docker-compose -f "$COMPOSE_FILE" rm -f "$SERVICE" || true
+    docker compose -f "$COMPOSE_FILE" rm -f "$SERVICE" || true
 
     log_info "Starting $SERVICE..."
-    docker-compose -f "$COMPOSE_FILE" up -d --no-deps "$SERVICE"
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps "$SERVICE"
 
     # Wait a moment for the service to start
     sleep 2
 
     # Check if it's running
-    if docker-compose -f "$COMPOSE_FILE" ps "$SERVICE" | grep -q "Up"; then
+    if docker compose -f "$COMPOSE_FILE" ps "$SERVICE" | grep -q "Up"; then
         log_info "$SERVICE is running"
     else
         log_error "$SERVICE failed to start!"
-        docker-compose -f "$COMPOSE_FILE" logs --tail=50 "$SERVICE"
+        docker compose -f "$COMPOSE_FILE" logs --tail=50 "$SERVICE"
         exit 1
     fi
 done
