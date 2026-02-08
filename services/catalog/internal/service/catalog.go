@@ -1290,12 +1290,15 @@ func (s *CatalogService) GetConsumetStream(ctx context.Context, animeID string, 
 		return nil, errors.NotFound("no stream sources available")
 	}
 
-	// Get the best quality source
+	// Get the best quality source (prefer 1080p > 720p > others)
 	source := stream.Sources[0]
 	for _, s := range stream.Sources {
-		if s.Quality == "1080p" || s.Quality == "auto" {
+		if strings.Contains(s.Quality, "1080p") || s.Quality == "auto" {
 			source = s
 			break
+		}
+		if strings.Contains(s.Quality, "720p") && !strings.Contains(source.Quality, "1080p") {
+			source = s
 		}
 	}
 

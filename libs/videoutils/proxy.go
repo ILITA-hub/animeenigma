@@ -326,14 +326,19 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 
 	// Copy response headers for non-M3U8 content
 	for key, values := range resp.Header {
-		// Skip hop-by-hop headers
-		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" {
+		// Skip hop-by-hop headers and Content-Type (we'll set it ourselves)
+		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Type" {
 			continue
 		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
 	}
+
+	// Fix Content-Type for HLS segments - some CDNs return wrong types (like image/jpeg)
+	// to obfuscate the content. We need to set the correct type for hls.js to work.
+	correctContentType := getCorrectHLSContentType(parsed.Path, resp.Header.Get("Content-Type"))
+	w.Header().Set("Content-Type", correctContentType)
 
 	// Write status code
 	w.WriteHeader(resp.StatusCode)
@@ -345,7 +350,14 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 }
 
 // rewriteM3U8URLs rewrites URLs in an M3U8 playlist to go through the proxy
+// Also fixes unsupported audio codecs (mp4a.40.1 -> mp4a.40.2)
 func rewriteM3U8URLs(content, baseURL, referer string) string {
+	// Fix unsupported audio codec: AAC Main Profile (mp4a.40.1) -> AAC-LC (mp4a.40.2)
+	// Chrome/Edge don't support mp4a.40.1 but the actual audio is usually AAC-LC compatible
+	if strings.Contains(content, "mp4a.40.1") {
+		content = strings.ReplaceAll(content, "mp4a.40.1", "mp4a.40.2")
+	}
+
 	// Parse base URL for resolving relative URLs
 	parsedBase, err := url.Parse(baseURL)
 	if err != nil {
@@ -448,6 +460,54 @@ func rewriteURIAttribute(line, basePath, referer string) string {
 	rewrittenURI := rewriteHLSURL(originalURI, basePath, referer)
 
 	return line[:uriStart] + rewrittenURI + line[uriStart+uriEnd:]
+}
+
+// getCorrectHLSContentType returns the correct Content-Type for HLS content
+// Some CDNs return incorrect types (like image/jpeg) to obfuscate video content
+func getCorrectHLSContentType(path, upstreamContentType string) string {
+	pathLower := strings.ToLower(path)
+
+	// M3U8 playlists
+	if strings.HasSuffix(pathLower, ".m3u8") {
+		return "application/vnd.apple.mpegurl"
+	}
+
+	// MPEG-TS segments
+	if strings.HasSuffix(pathLower, ".ts") {
+		return "video/mp2t"
+	}
+
+	// Common segment extensions used by various CDNs
+	// Many CDNs use custom extensions or no extension for encrypted segments
+	if strings.HasSuffix(pathLower, ".seg") ||
+		strings.HasSuffix(pathLower, ".segment") ||
+		strings.HasSuffix(pathLower, ".frag") {
+		return "video/mp2t"
+	}
+
+	// If the upstream says it's an image but the content length suggests video
+	// (video segments are typically > 100KB), treat it as video
+	if strings.HasPrefix(upstreamContentType, "image/") {
+		// Assume it's a video segment - CDNs often lie about Content-Type
+		return "video/mp2t"
+	}
+
+	// Key files (AES-128 encryption keys are exactly 16 bytes)
+	if strings.Contains(pathLower, "key") || strings.Contains(pathLower, "enc") {
+		return "application/octet-stream"
+	}
+
+	// If upstream already has a valid media type, use it
+	if strings.Contains(upstreamContentType, "mpegurl") ||
+		strings.Contains(upstreamContentType, "mp2t") ||
+		strings.Contains(upstreamContentType, "octet-stream") ||
+		strings.Contains(upstreamContentType, "video/") ||
+		strings.Contains(upstreamContentType, "audio/") {
+		return upstreamContentType
+	}
+
+	// Default to octet-stream for unknown types
+	return "application/octet-stream"
 }
 
 // isHLSDomainAllowed checks if a domain is allowed for HLS proxying

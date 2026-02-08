@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -152,23 +153,46 @@ func NewClientWithToken(token string) *Client {
 	}
 }
 
+// isValidToken checks if a token looks like a valid Kodik API token (hex string)
+func isValidToken(token string) bool {
+	if len(token) < 10 {
+		return false
+	}
+	for _, c := range token {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 // getToken retrieves the API token from public sources
 func (c *Client) getToken() (string, error) {
-	// Try main source first
+	// Try main source with decoding (most reliable, decoded token)
 	resp, err := c.httpClient.Get(TokenSourceURL)
 	if err == nil && resp.StatusCode == 200 {
-		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err == nil {
 			token := c.extractTokenFromSource(string(body))
-			if token != "" {
+			if isValidToken(token) {
 				return token, nil
 			}
 		}
 	}
 
-	// Fallback to alternative source
-	resp, err = c.httpClient.Get(FallbackTokenURL)
+	// Fallback to direct token extraction from JS
+	token, err := c.getTokenFromFallback()
+	if err == nil && isValidToken(token) {
+		return token, nil
+	}
+
+	return "", fmt.Errorf("failed to get valid kodik token from any source")
+}
+
+// getTokenFromFallback extracts token from the fallback JS source
+func (c *Client) getTokenFromFallback() (string, error) {
+	resp, err := c.httpClient.Get(FallbackTokenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch token source: %w", err)
 	}
@@ -197,35 +221,117 @@ func (c *Client) getToken() (string, error) {
 
 // extractTokenFromSource extracts token using the decode algorithm
 func (c *Client) extractTokenFromSource(source string) string {
-	// Find the encoded secret in the source
+	// Find the Kodik API marker
 	marker := "var embed = 'https://kodikapi.com/search';"
-	startPos := strings.LastIndex(source, marker)
-	if startPos == -1 {
+
+	// Search for all occurrences of the marker and try to find
+	// the Utils.decodeSecret call that precedes it (the token variable)
+	pos := 0
+	for {
+		idx := strings.Index(source[pos:], marker)
+		if idx == -1 {
+			break
+		}
+		markerPos := pos + idx
+
+		// Look backwards from the marker for "var token = Utils.decodeSecret("
+		// within a reasonable range (2000 chars before the marker)
+		searchStart := markerPos - 2000
+		if searchStart < 0 {
+			searchStart = 0
+		}
+		block := source[searchStart:markerPos]
+
+		// Find the last "var token = Utils.decodeSecret([" in the block before the marker
+		tokenPrefix := "var token = Utils.decodeSecret(["
+		tokenIdx := strings.LastIndex(block, tokenPrefix)
+		if tokenIdx == -1 {
+			// Try alternative: "token = Utils.decodeSecret(["
+			tokenPrefix = "token = Utils.decodeSecret(["
+			tokenIdx = strings.LastIndex(block, tokenPrefix)
+		}
+
+		if tokenIdx != -1 {
+			arrayStart := tokenIdx + len(tokenPrefix)
+			rest := block[arrayStart:]
+
+			// Find end of array "],"
+			arrayEnd := strings.Index(rest, "],")
+			if arrayEnd == -1 {
+				arrayEnd = strings.Index(rest, "])")
+			}
+			if arrayEnd == -1 {
+				pos = markerPos + len(marker)
+				continue
+			}
+
+			// Parse the secret array
+			secretStr := rest[:arrayEnd]
+			parts := strings.Split(secretStr, ",")
+			secret := make([]int, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p == "" {
+					continue
+				}
+				n, err := strconv.Atoi(p)
+				if err != nil {
+					continue
+				}
+				secret = append(secret, n)
+			}
+
+			if len(secret) == 0 {
+				pos = markerPos + len(marker)
+				continue
+			}
+
+			// Extract password from atob('...') after the array
+			afterArray := rest[arrayEnd:]
+			password := c.extractAtobPassword(afterArray)
+			if password == "" {
+				password = "kodik" // fallback
+			}
+
+			token := decodeSecret(secret, password)
+			if isValidToken(token) {
+				return token
+			}
+		}
+
+		pos = markerPos + len(marker)
+	}
+
+	return ""
+}
+
+// extractAtobPassword extracts the password from an atob('...') call
+func (c *Client) extractAtobPassword(s string) string {
+	idx := strings.Index(s, "atob('")
+	if idx == -1 {
+		idx = strings.Index(s, `atob("`)
+	}
+	if idx == -1 {
 		return ""
 	}
-
-	// Find decodeSecret call
-	secretStart := strings.Index(source[startPos:], "Utils.decodeSecret([")
-	if secretStart == -1 {
+	start := idx + 6
+	end := strings.IndexAny(s[start:], "'\"")
+	if end == -1 {
 		return ""
 	}
-	secretStart += startPos + 20
-
-	secretEnd := strings.Index(source[secretStart:], "],")
-	if secretEnd == -1 {
-		return ""
+	b64 := s[start : start+end]
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		// Try with padding
+		for len(b64)%4 != 0 {
+			b64 += "="
+		}
+		decoded, err = base64.StdEncoding.DecodeString(b64)
+		if err != nil {
+			return ""
+		}
 	}
-
-	// Parse the secret array
-	secretStr := source[secretStart : secretStart+secretEnd]
-	parts := strings.Split(secretStr, ", ")
-	secret := make([]int, len(parts))
-	for i, p := range parts {
-		fmt.Sscanf(strings.TrimSpace(p), "%d", &secret[i])
-	}
-
-	// Decode with password "kodik"
-	return decodeSecret(secret, "kodik")
+	return string(decoded)
 }
 
 // salt function matches the Python implementation
