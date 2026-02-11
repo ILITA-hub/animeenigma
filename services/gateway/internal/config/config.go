@@ -4,17 +4,19 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 )
 
 type Config struct {
-	Server    ServerConfig
-	JWT       authz.JWTConfig
-	Services  ServiceURLs
-	RateLimit RateLimitConfig
-	DevMode   bool // Skip admin auth when true (for local development)
+	Server      ServerConfig
+	JWT         authz.JWTConfig
+	Services    ServiceURLs
+	RateLimit   RateLimitConfig
+	CORSOrigins []string
+	DevMode     bool // Skip admin auth when true (for local development)
 }
 
 type ServerConfig struct {
@@ -68,7 +70,8 @@ func Load() (*Config, error) {
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),
 			BurstSize:         getEnvInt("RATE_LIMIT_BURST", 200),
 		},
-		DevMode: getEnvBool("DEV_MODE", false),
+		CORSOrigins: strings.Split(getEnv("CORS_ORIGINS", "*"), ","),
+		DevMode:     getEnvBool("DEV_MODE", false),
 	}, nil
 }
 

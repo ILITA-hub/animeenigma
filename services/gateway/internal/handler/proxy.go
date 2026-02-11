@@ -65,8 +65,11 @@ func (h *ProxyHandler) proxy(w http.ResponseWriter, r *http.Request, service str
 	}
 	defer resp.Body.Close()
 
-	// Copy response headers
+	// Copy response headers, skipping CORS headers (gateway middleware handles CORS)
 	for key, values := range resp.Header {
+		if isCORSHeader(key) {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
@@ -77,6 +80,20 @@ func (h *ProxyHandler) proxy(w http.ResponseWriter, r *http.Request, service str
 
 	// Copy response body
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// isCORSHeader checks if a header is a CORS-related header
+func isCORSHeader(key string) bool {
+	switch http.CanonicalHeaderKey(key) {
+	case "Access-Control-Allow-Origin",
+		"Access-Control-Allow-Credentials",
+		"Access-Control-Allow-Headers",
+		"Access-Control-Allow-Methods",
+		"Access-Control-Max-Age",
+		"Access-Control-Expose-Headers":
+		return true
+	}
+	return false
 }
 
 // GetOpenAPISpec aggregates OpenAPI specs from all services

@@ -102,18 +102,33 @@ func ensureDatabaseExists(cfg Config) error {
 }
 
 // AutoMigrate runs GORM auto-migration for the given models
-// It only creates tables that don't exist (doesn't modify existing tables)
+// Creates tables that don't exist and adds missing columns to existing tables
 func (db *DB) AutoMigrate(models ...interface{}) error {
 	migrator := db.DB.Migrator()
 
 	for _, model := range models {
 		if !migrator.HasTable(model) {
-			// Table doesn't exist, create it using raw table creation
 			if err := migrator.CreateTable(model); err != nil {
 				return fmt.Errorf("create table: %w", err)
 			}
+			continue
 		}
-		// Skip existing tables to avoid constraint conflicts
+
+		// Add missing columns to existing tables
+		stmt := &gorm.Statement{DB: db.DB}
+		if err := stmt.Parse(model); err != nil {
+			return fmt.Errorf("parse model: %w", err)
+		}
+		for _, field := range stmt.Schema.Fields {
+			if field.DBName == "" {
+				continue
+			}
+			if !migrator.HasColumn(model, field.DBName) {
+				if err := migrator.AddColumn(model, field.DBName); err != nil {
+					return fmt.Errorf("add column %s: %w", field.DBName, err)
+				}
+			}
+		}
 	}
 	return nil
 }
