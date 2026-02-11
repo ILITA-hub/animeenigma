@@ -84,7 +84,7 @@ const modalRef = ref<HTMLElement | null>(null)
 const titleId = `modal-title-${Math.random().toString(36).slice(2, 9)}`
 
 const modalClasses = computed(() => {
-  const base = 'relative glass-elevated rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto'
+  const base = 'relative glass-elevated rounded-2xl p-4 sm:p-6 w-full max-h-[90vh] overflow-y-auto'
 
   const sizes = {
     sm: 'max-w-sm',

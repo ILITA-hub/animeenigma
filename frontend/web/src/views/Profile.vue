@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen pb-20 md:pb-0">
+  <div class="min-h-screen">
     <!-- Loading State -->
     <div v-if="loading" class="flex justify-center items-center min-h-screen">
       <svg class="w-12 h-12 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
@@ -145,10 +145,10 @@
                       <th class="pb-3 pr-2 w-8">#</th>
                       <th class="pb-3 px-2 w-16">Постер</th>
                       <th class="pb-3 px-2">Название</th>
-                      <th class="pb-3 px-2 w-16 text-center">Оценка</th>
+                      <th class="pb-3 px-2 w-16 text-center hidden md:table-cell">Оценка</th>
                       <th class="pb-3 px-2 w-24">Прогресс</th>
-                      <th class="pb-3 px-2 w-28 text-center">Начало</th>
-                      <th class="pb-3 px-2 w-28 text-center">Конец</th>
+                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">Начало</th>
+                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">Конец</th>
                       <th class="pb-3 pl-2 w-32 text-center">Статус</th>
                     </tr>
                   </thead>
@@ -174,7 +174,7 @@
                           {{ anime.anime_title }}
                         </router-link>
                       </td>
-                      <td class="py-3 px-2 text-center">
+                      <td class="py-3 px-2 text-center hidden md:table-cell">
                         <span v-if="anime.score && anime.score > 0" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
                           {{ anime.score }}
                         </span>
@@ -187,7 +187,7 @@
                           <span class="text-white/60">{{ anime.anime_total_episodes || '?' }}</span>
                         </div>
                       </td>
-                      <td class="py-3 px-2 text-center">
+                      <td class="py-3 px-2 text-center hidden sm:table-cell">
                         <input
                           v-if="isOwnProfile"
                           type="date"
@@ -199,7 +199,7 @@
                           {{ formatDateDisplay(anime.started_at) }}
                         </span>
                       </td>
-                      <td class="py-3 px-2 text-center">
+                      <td class="py-3 px-2 text-center hidden sm:table-cell">
                         <input
                           v-if="isOwnProfile"
                           type="date"

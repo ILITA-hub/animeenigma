@@ -21,8 +21,6 @@
       </div>
     </footer>
 
-    <!-- Mobile Bottom Navigation -->
-    <MobileNav v-if="!isFullscreen" />
   </div>
 </template>
 
@@ -31,7 +29,6 @@ import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/layout/Navbar.vue'
-import MobileNav from '@/components/layout/MobileNav.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -42,7 +39,7 @@ const mainClasses = computed(() => {
   if (isFullscreen.value) {
     return ''
   }
-  return 'pt-16 pb-20 md:pb-0' // Top padding for fixed navbar, bottom for mobile nav
+  return 'pt-16' // Top padding for fixed navbar
 })
 
 // Initialize auth state - fetch user if we have token but no user data

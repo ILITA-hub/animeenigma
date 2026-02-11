@@ -89,7 +89,7 @@
           </div>
 
           <!-- Year Filter -->
-          <div class="w-32">
+          <div class="w-full sm:w-32">
             <Select
               v-model="selectedYear"
               :options="yearOptions"
@@ -100,7 +100,7 @@
           </div>
 
           <!-- Sort -->
-          <div class="w-40">
+          <div class="w-full sm:w-40">
             <Select
               v-model="sortBy"
               :options="sortOptions"
