@@ -106,3 +106,6 @@ docker-compose.local.yml
 # Playwright test artifacts
 frontend/web/playwright-report/
 frontend/web/test-results/
+
+# Database backups
+docker/backup/
