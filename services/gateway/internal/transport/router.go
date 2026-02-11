@@ -1,7 +1,10 @@
 package transport
 
 import (
+	"net"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -27,7 +30,7 @@ func NewRouter(
 	r.Use(metricsCollector.Middleware)
 	r.Use(httputil.RequestLogger(log))
 	r.Use(httputil.Recoverer(log))
-	r.Use(httputil.CORS([]string{"*"}))
+	r.Use(httputil.CORS(cfg.CORSOrigins))
 	r.Use(middleware.RealIP)
 	r.Use(RateLimitMiddleware(cfg.RateLimit))
 
@@ -99,6 +102,7 @@ func NewRouter(
 		// Admin routes (protected, proxied to catalog)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT))
+			r.Use(AdminRoleMiddleware)
 			r.HandleFunc("/admin/*", proxyHandler.ProxyToCatalog)
 		})
 
@@ -162,13 +166,64 @@ func JWTValidationMiddleware(jwtConfig authz.JWTConfig) func(http.Handler) http.
 	}
 }
 
-// RateLimitMiddleware implements rate limiting
+// ipLimiter wraps a rate limiter with a last-seen timestamp for cleanup.
+type ipLimiter struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+// IPRateLimiter manages per-IP rate limiters.
+type IPRateLimiter struct {
+	limiters sync.Map
+	rps      rate.Limit
+	burst    int
+}
+
+// NewIPRateLimiter creates a per-IP rate limiter and starts a background
+// cleanup goroutine that evicts entries not seen for 5 minutes.
+func NewIPRateLimiter(rps rate.Limit, burst int) *IPRateLimiter {
+	rl := &IPRateLimiter{rps: rps, burst: burst}
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			rl.limiters.Range(func(key, value any) bool {
+				entry := value.(*ipLimiter)
+				if time.Since(entry.lastSeen) > 5*time.Minute {
+					rl.limiters.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+
+	return rl
+}
+
+func (rl *IPRateLimiter) getLimiter(ip string) *rate.Limiter {
+	now := time.Now()
+	if v, ok := rl.limiters.Load(ip); ok {
+		entry := v.(*ipLimiter)
+		entry.lastSeen = now
+		return entry.limiter
+	}
+	limiter := rate.NewLimiter(rl.rps, rl.burst)
+	rl.limiters.Store(ip, &ipLimiter{limiter: limiter, lastSeen: now})
+	return limiter
+}
+
+// RateLimitMiddleware implements per-IP rate limiting.
 func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Handler {
-	limiter := rate.NewLimiter(rate.Limit(cfg.RequestsPerSecond), cfg.BurstSize)
+	rl := NewIPRateLimiter(rate.Limit(cfg.RequestsPerSecond), cfg.BurstSize)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !limiter.Allow() {
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
+			if !rl.getLimiter(ip).Allow() {
 				httputil.TooManyRequests(w)
 				return
 			}

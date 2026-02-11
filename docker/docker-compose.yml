@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: animeenigma
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,7 +27,7 @@ services:
     container_name: animeenigma-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -44,8 +44,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -59,8 +59,8 @@ services:
     container_name: animeenigma-nats
     command: ["--jetstream", "--store_dir=/data"]
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
     volumes:
       - nats_data:/data
 
@@ -71,7 +71,7 @@ services:
       MEILI_MASTER_KEY: masterkey
       MEILI_ENV: development
     ports:
-      - "7700:7700"
+      - "127.0.0.1:7700:7700"
     volumes:
       - meilisearch_data:/meili_data
 
@@ -79,7 +79,7 @@ services:
     image: rz6e/aniwatch-api:latest
     container_name: animeenigma-aniwatch
     ports:
-      - "3100:4000"
+      - "127.0.0.1:3100:4000"
     environment:
       - PORT=4000
       - ANIWATCH_API_HOSTNAME=0.0.0.0
@@ -95,7 +95,7 @@ services:
     image: riimuru/consumet-api:latest
     container_name: animeenigma-consumet
     ports:
-      - "3101:3000"
+      - "127.0.0.1:3101:3000"
     environment:
       - PORT=3000
     restart: unless-stopped
@@ -121,7 +121,7 @@ services:
       - "--web.external-url=/prometheus"
       - "--web.route-prefix=/prometheus"
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -146,7 +146,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
       GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
     ports:
-      - "3004:3000"
+      - "127.0.0.1:3004:3000"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -176,7 +176,7 @@ services:
     image: nginx:alpine
     container_name: animeenigma-admin-nginx
     ports:
-      - "8088:80"
+      - "127.0.0.1:8088:80"
     volumes:
       - ./nginx/admin.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -203,9 +203,10 @@ services:
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
       JWT_SECRET: dev-secret-change-in-production
+      CORS_ORIGINS: "http://localhost:3003,http://localhost:8000"
       DEV_MODE: "true"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       - redis
       - auth
@@ -232,7 +233,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       redis:
         condition: service_healthy
@@ -257,7 +258,7 @@ services:
       ANIWATCH_API_URL: http://aniwatch:4000
       CONSUMET_API_URL: http://consumet:3000
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       redis:
         condition: service_healthy
@@ -284,7 +285,7 @@ services:
       JWT_SECRET: dev-secret-change-in-production
       STREAM_TOKEN_SECRET: stream-secret-change-in-production
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     depends_on:
       redis:
         condition: service_healthy
@@ -306,7 +307,7 @@ services:
       REDIS_HOST: redis
       JWT_SECRET: dev-secret-change-in-production
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     depends_on:
       redis:
         condition: service_healthy
@@ -328,7 +329,7 @@ services:
       REDIS_HOST: redis
       JWT_SECRET: dev-secret-change-in-production
     ports:
-      - "8084:8084"
+      - "127.0.0.1:8084:8084"
     depends_on:
       redis:
         condition: service_healthy
@@ -352,7 +353,7 @@ services:
       CATALOG_SERVICE_URL: http://catalog:8081
       SHIKIMORI_SYNC_CRON: "0 2 * * *"
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
     depends_on:
       redis:
         condition: service_healthy
@@ -374,7 +375,7 @@ services:
         VITE_API_URL: /api
     container_name: animeenigma-web
     ports:
-      - "3003:80"
+      - "127.0.0.1:3003:80"
     depends_on:
       - gateway
 

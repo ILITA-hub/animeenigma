@@ -83,6 +83,7 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://animeenigma.ru}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
