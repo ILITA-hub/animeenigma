@@ -106,18 +106,67 @@
 
       <!-- Mobile Menu -->
       <Transition name="mobile-menu">
-        <div v-if="mobileMenuOpen" class="md:hidden py-4 border-t border-white/10">
-          <div class="flex flex-col gap-2">
+        <div v-if="mobileMenuOpen" class="md:hidden py-4 border-t border-white/10 glass-nav rounded-b-2xl">
+          <div class="flex flex-col gap-1">
             <router-link
               v-for="link in navLinks"
               :key="link.to"
               :to="link.to"
-              class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+              class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               active-class="text-cyan-400 bg-cyan-500/10"
               @click="mobileMenuOpen = false"
             >
               {{ $t(link.label) }}
             </router-link>
+
+            <router-link
+              to="/search"
+              class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              active-class="text-cyan-400 bg-cyan-500/10"
+              @click="mobileMenuOpen = false"
+            >
+              {{ $t('nav.search') }}
+            </router-link>
+
+            <!-- Divider -->
+            <div class="my-1 border-t border-white/10" />
+
+            <!-- Profile / Login -->
+            <template v-if="authStore.isAuthenticated">
+              <router-link
+                to="/profile"
+                class="flex items-center gap-3 px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                active-class="text-cyan-400 bg-cyan-500/10"
+                @click="mobileMenuOpen = false"
+              >
+                <div class="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-sm font-medium flex-shrink-0">
+                  {{ userInitials }}
+                </div>
+                {{ $t('nav.profile') }}
+              </router-link>
+            </template>
+            <template v-else>
+              <router-link
+                to="/auth"
+                class="px-4 py-3 text-cyan-400 hover:text-cyan-300 hover:bg-white/10 rounded-lg transition-colors font-medium"
+                @click="mobileMenuOpen = false"
+              >
+                {{ $t('nav.login') }}
+              </router-link>
+            </template>
+
+            <!-- Language -->
+            <div class="flex items-center gap-2 px-4 py-3">
+              <button
+                v-for="lang in languages"
+                :key="lang.code"
+                class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                :class="locale === lang.code ? 'bg-cyan-500/20 text-cyan-400' : 'text-white/50 hover:text-white hover:bg-white/10'"
+                @click="setLocale(lang.code)"
+              >
+                {{ lang.name }}
+              </button>
+            </div>
           </div>
         </div>
       </Transition>

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="anime" class="min-h-screen pb-20 md:pb-0">
+  <div v-if="anime" class="min-h-screen">
     <!-- Hero Banner with Blurred Background -->
     <div class="relative h-[50vh] md:h-[60vh] overflow-hidden">
       <!-- Background Image -->
@@ -266,7 +266,7 @@
 
       <!-- Video Player Section -->
       <section class="mt-8">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
               <svg class="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 24 24">
@@ -276,7 +276,7 @@
             </span>
           </h2>
           <!-- Provider selector -->
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <button
               @click="videoProvider = 'kodik'"
               class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -351,15 +351,15 @@
           <!-- Star Rating -->
           <div class="mb-4">
             <label class="block text-white/60 text-sm mb-2">{{ $t('anime.yourRating') }}</label>
-            <div class="flex gap-1">
+            <div class="flex flex-wrap gap-1">
               <button
                 v-for="star in 10"
                 :key="star"
                 @click="reviewForm.score = star"
-                class="p-1 transition-transform hover:scale-110"
+                class="p-0.5 sm:p-1 transition-transform hover:scale-110"
               >
                 <svg
-                  class="w-8 h-8 transition-colors"
+                  class="w-6 h-6 sm:w-8 sm:h-8 transition-colors"
                   :class="star <= reviewForm.score ? 'text-amber-400' : 'text-white/20'"
                   fill="currentColor"
                   viewBox="0 0 20 20"

@@ -99,7 +99,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
-              {{ episodeMarkedWatched ? 'Просмотрено' : 'Отметить просмотренным' }}
+              <span class="hidden sm:inline">{{ episodeMarkedWatched ? 'Просмотрено' : 'Отметить просмотренным' }}</span>
             </button>
           </div>
           <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
