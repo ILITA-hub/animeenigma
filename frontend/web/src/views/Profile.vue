@@ -15,7 +15,7 @@
       </svg>
       <p class="text-white/60 text-lg">{{ error }}</p>
       <router-link to="/" class="mt-4 text-cyan-400 hover:text-cyan-300">
-        На главную
+        {{ $t('profile.goHome') }}
       </router-link>
     </div>
 
@@ -44,6 +44,7 @@
               </div>
               <button
                 v-if="isOwnProfile"
+                @click="showAvatarModal = true"
                 class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-cyan-500 flex items-center justify-center text-white shadow-lg hover:bg-cyan-400 transition-colors"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,7 +61,7 @@
               <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                 <Badge v-if="isOwnProfile" variant="primary" size="sm">{{ profileUser.role || 'Member' }}</Badge>
                 <span class="text-white/40 text-sm">
-                  {{ isOwnProfile ? `${$t('profile.memberSince')} 2024` : 'Профиль пользователя' }}
+                  {{ isOwnProfile ? `${$t('profile.memberSince')} ${memberSinceYear}` : $t('profile.userProfile') }}
                 </span>
               </div>
             </div>
@@ -76,7 +77,7 @@
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
-                <span>{{ copied ? 'Скопировано!' : 'Поделиться' }}</span>
+                <span>{{ copied ? $t('profile.copied') : $t('profile.share') }}</span>
               </button>
             </div>
           </div>
@@ -97,6 +98,26 @@
             </div>
 
             <div v-else-if="watchlist.length > 0" class="space-y-4">
+              <!-- Stats Bar -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="glass-card p-3 text-center">
+                  <div class="text-2xl font-bold text-cyan-400">{{ watchlistStats.total }}</div>
+                  <div class="text-xs text-white/50">{{ $t('profile.stats.totalAnime') }}</div>
+                </div>
+                <div class="glass-card p-3 text-center">
+                  <div class="text-2xl font-bold text-yellow-400">{{ watchlistStats.avgScore }}</div>
+                  <div class="text-xs text-white/50">{{ $t('profile.stats.avgScore') }}</div>
+                </div>
+                <div class="glass-card p-3 text-center">
+                  <div class="text-2xl font-bold text-green-400">{{ watchlistStats.totalEpisodes }}</div>
+                  <div class="text-xs text-white/50">{{ $t('profile.stats.episodesWatched') }}</div>
+                </div>
+                <div class="glass-card p-3 text-center">
+                  <div class="text-2xl font-bold text-blue-400">{{ watchlistStats.completed }}</div>
+                  <div class="text-xs text-white/50">{{ $t('profile.stats.completed') }}</div>
+                </div>
+              </div>
+
               <!-- Filter Pills -->
               <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 <button
@@ -113,8 +134,25 @@
                 </button>
               </div>
 
-              <!-- View Toggle -->
-              <div class="flex justify-end gap-2">
+              <!-- View Toggle + Sort -->
+              <div class="flex items-center justify-end gap-2">
+                <!-- Sort -->
+                <div class="w-36">
+                  <Select
+                    v-model="sortKey"
+                    :options="sortOptions"
+                    size="sm"
+                  />
+                </div>
+                <button
+                  class="p-2 rounded-lg bg-white/5 text-white/60 hover:text-white transition-colors"
+                  @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'"
+                  :title="sortDirection === 'asc' ? 'Ascending' : 'Descending'"
+                >
+                  <svg class="w-5 h-5 transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                  </svg>
+                </button>
                 <button
                   class="p-2 rounded-lg transition-colors"
                   :class="viewMode === 'table' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-white/60 hover:text-white'"
@@ -143,13 +181,14 @@
                   <thead>
                     <tr class="text-left text-white/60 border-b border-white/10">
                       <th class="pb-3 pr-2 w-8">#</th>
-                      <th class="pb-3 px-2 w-16">Постер</th>
-                      <th class="pb-3 px-2">Название</th>
-                      <th class="pb-3 px-2 w-16 text-center hidden md:table-cell">Оценка</th>
-                      <th class="pb-3 px-2 w-24">Прогресс</th>
-                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">Начало</th>
-                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">Конец</th>
-                      <th class="pb-3 pl-2 w-32 text-center">Статус</th>
+                      <th class="pb-3 px-2 w-16">{{ $t('profile.table.poster') }}</th>
+                      <th class="pb-3 px-2">{{ $t('profile.table.title') }}</th>
+                      <th class="pb-3 px-2 w-16 text-center">{{ $t('profile.table.score') }}</th>
+                      <th class="pb-3 px-2 w-32">{{ $t('profile.table.progress') }}</th>
+                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">{{ $t('profile.table.startDate') }}</th>
+                      <th class="pb-3 px-2 w-28 text-center hidden sm:table-cell">{{ $t('profile.table.endDate') }}</th>
+                      <th class="pb-3 pl-2 w-32 text-center">{{ $t('profile.table.status') }}</th>
+                      <th v-if="isOwnProfile" class="pb-3 pl-2 w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -174,14 +213,63 @@
                           {{ anime.anime_title }}
                         </router-link>
                       </td>
-                      <td class="py-3 px-2 text-center hidden md:table-cell">
-                        <span v-if="anime.score && anime.score > 0" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
-                          {{ anime.score }}
-                        </span>
-                        <span v-else class="text-white/30">-</span>
+                      <!-- Score (inline edit) -->
+                      <td class="py-3 px-2 text-center">
+                        <template v-if="isOwnProfile">
+                          <input
+                            v-if="editingScore === anime.anime_id"
+                            type="number"
+                            min="0"
+                            max="10"
+                            :value="anime.score || 0"
+                            @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
+                            @keydown.enter="(e) => { (e.target as HTMLInputElement).blur(); }"
+                            @keydown.escape="editingScore = null"
+                            class="w-12 h-8 text-center bg-white/10 border border-cyan-500/50 rounded text-cyan-400 font-bold focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            ref="scoreInputRef"
+                          />
+                          <button
+                            v-else
+                            @click="editingScore = anime.anime_id"
+                            class="inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors cursor-pointer"
+                            :class="anime.score && anime.score > 0 ? 'bg-cyan-500/20 text-cyan-400 font-bold hover:bg-cyan-500/30' : 'text-white/30 hover:bg-white/10 hover:text-white/60'"
+                          >
+                            {{ anime.score && anime.score > 0 ? anime.score : '-' }}
+                          </button>
+                        </template>
+                        <template v-else>
+                          <span v-if="anime.score && anime.score > 0" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
+                            {{ anime.score }}
+                          </span>
+                          <span v-else class="text-white/30">-</span>
+                        </template>
                       </td>
+                      <!-- Progress (inline edit) -->
                       <td class="py-3 px-2">
-                        <div class="flex items-center gap-1">
+                        <div v-if="isOwnProfile" class="flex items-center gap-1">
+                          <button
+                            @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) - 1)"
+                            class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
+                            :disabled="(anime.episodes || 0) <= 0"
+                          >-</button>
+                          <input
+                            type="number"
+                            :value="anime.episodes || 0"
+                            min="0"
+                            :max="anime.anime_total_episodes || 9999"
+                            @blur="(e) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
+                            @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
+                            class="w-10 h-6 text-center text-xs bg-white/10 border border-white/10 rounded text-white focus:outline-none focus:border-cyan-500"
+                          />
+                          <span class="text-white/40">/</span>
+                          <span class="text-white/60">{{ anime.anime_total_episodes || '?' }}</span>
+                          <button
+                            @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) + 1)"
+                            class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
+                            :disabled="anime.anime_total_episodes ? (anime.episodes || 0) >= anime.anime_total_episodes : false"
+                          >+</button>
+                        </div>
+                        <div v-else class="flex items-center gap-1">
                           <span class="text-white">{{ anime.episodes || 0 }}</span>
                           <span class="text-white/40">/</span>
                           <span class="text-white/60">{{ anime.anime_total_episodes || '?' }}</span>
@@ -224,6 +312,18 @@
                           {{ statusLabels[anime.status] }}
                         </span>
                       </td>
+                      <!-- Remove button -->
+                      <td v-if="isOwnProfile" class="py-3 pl-2">
+                        <button
+                          @click="removeFromWatchlist(anime.anime_id)"
+                          class="p-1.5 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors"
+                          :title="$t('profile.actions.removeFromList')"
+                        >
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -251,8 +351,30 @@
                       </div>
 
                       <!-- Score Badge -->
-                      <div v-if="anime.score && anime.score > 0" class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-yellow-400 text-sm font-bold">
+                      <div
+                        v-if="anime.score && anime.score > 0"
+                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-yellow-400 text-sm font-bold"
+                        :class="{ 'cursor-pointer hover:bg-black/80': isOwnProfile }"
+                        @click.prevent="isOwnProfile && (editingScoreGrid = anime.anime_id)"
+                      >
                         {{ anime.score }}
+                      </div>
+                      <!-- Score edit popover for grid -->
+                      <div
+                        v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
+                        class="absolute top-2 right-2 z-20"
+                        @click.prevent.stop
+                      >
+                        <input
+                          type="number"
+                          min="0"
+                          max="10"
+                          :value="anime.score || 0"
+                          @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
+                          @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
+                          @keydown.escape="editingScoreGrid = null"
+                          class="w-14 h-8 text-center bg-black/80 border border-cyan-500/50 rounded text-yellow-400 font-bold text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
                       </div>
 
                       <!-- Status Badge -->
@@ -265,15 +387,23 @@
                     <h3 class="mt-2 text-sm font-medium text-white line-clamp-2 group-hover:text-cyan-400 transition-colors">
                       {{ anime.anime_title }}
                     </h3>
-                    <p class="text-xs text-white/50 mt-1">
-                      {{ anime.episodes || 0 }} / {{ anime.anime_total_episodes || '?' }} эп.
-                    </p>
-                    <p v-if="anime.started_at || anime.completed_at" class="text-xs text-white/40 mt-0.5">
-                      <span v-if="anime.started_at">{{ formatDateDisplay(anime.started_at) }}</span>
-                      <span v-if="anime.started_at && anime.completed_at"> - </span>
-                      <span v-if="anime.completed_at">{{ formatDateDisplay(anime.completed_at) }}</span>
-                    </p>
                   </router-link>
+                  <div class="flex items-center gap-1 mt-1">
+                    <p class="text-xs text-white/50">
+                      {{ anime.episodes || 0 }} / {{ anime.anime_total_episodes || '?' }} {{ $t('profile.ep') }}
+                    </p>
+                    <button
+                      v-if="isOwnProfile"
+                      @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) + 1)"
+                      class="w-5 h-5 rounded flex items-center justify-center bg-white/10 text-white/40 hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors opacity-0 group-hover:opacity-100 text-xs"
+                      :disabled="anime.anime_total_episodes ? (anime.episodes || 0) >= anime.anime_total_episodes : false"
+                    >+</button>
+                  </div>
+                  <p v-if="anime.started_at || anime.completed_at" class="text-xs text-white/40 mt-0.5">
+                    <span v-if="anime.started_at">{{ formatDateDisplay(anime.started_at) }}</span>
+                    <span v-if="anime.started_at && anime.completed_at"> - </span>
+                    <span v-if="anime.completed_at">{{ formatDateDisplay(anime.completed_at) }}</span>
+                  </p>
 
                   <!-- Quick actions for own profile -->
                   <template v-if="isOwnProfile">
@@ -296,7 +426,7 @@
               <svg class="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <p class="text-white/50 mb-4">{{ isOwnProfile ? $t('profile.empty.watchlist') : 'Список пуст' }}</p>
+              <p class="text-white/50 mb-4">{{ isOwnProfile ? $t('profile.empty.watchlist') : $t('profile.listEmpty') }}</p>
               <Button v-if="isOwnProfile" variant="outline" @click="$router.push('/browse')">
                 {{ $t('profile.actions.browseCatalog') }}
               </Button>
@@ -449,11 +579,11 @@
 
               <!-- Public Profile -->
               <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">Публичный профиль</h3>
+                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.publicProfile') }}</h3>
                 <div class="space-y-4">
                   <!-- Public ID -->
                   <div>
-                    <label class="block text-white/60 text-sm mb-2">Ссылка на профиль</label>
+                    <label class="block text-white/60 text-sm mb-2">{{ $t('profile.profileLink') }}</label>
                     <div class="flex gap-2">
                       <div class="flex-1 flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
                         <span class="px-3 text-white/40 text-sm">/user/</span>
@@ -474,13 +604,13 @@
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span v-else>Сохранить</span>
+                        <span v-else>{{ $t('profile.save') }}</span>
                       </Button>
                     </div>
                     <p v-if="publicIdError" class="text-pink-400 text-xs mt-2">{{ publicIdError }}</p>
-                    <p v-else-if="publicIdSuccess" class="text-green-400 text-xs mt-2">Ссылка обновлена</p>
+                    <p v-else-if="publicIdSuccess" class="text-green-400 text-xs mt-2">{{ $t('profile.linkUpdated') }}</p>
                     <p class="text-white/40 text-xs mt-2">
-                      Только латинские буквы, цифры и дефис. Минимум 3 символа.
+                      {{ $t('profile.linkValidation') }}
                     </p>
                   </div>
 
@@ -499,7 +629,6 @@
                     <button
                       @click="copyProfileLink"
                       class="ml-auto p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-                      title="Копировать"
                     >
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -509,7 +638,7 @@
 
                   <!-- Privacy Settings -->
                   <div>
-                    <label class="block text-white/60 text-sm mb-2">Какие списки показывать публично</label>
+                    <label class="block text-white/60 text-sm mb-2">{{ $t('profile.privacyLabel') }}</label>
                     <div class="space-y-2">
                       <label
                         v-for="status in allStatuses"
@@ -536,9 +665,9 @@
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Сохранить настройки приватности
+                        {{ $t('profile.savePrivacy') }}
                       </Button>
-                      <p v-if="privacySuccess" class="text-green-400 text-xs mt-2">Настройки сохранены</p>
+                      <p v-if="privacySuccess" class="text-green-400 text-xs mt-2">{{ $t('profile.privacySaved') }}</p>
                     </div>
                   </div>
                 </div>
@@ -561,15 +690,64 @@
         </Tabs>
       </div>
     </template>
+
+    <!-- Avatar Upload Modal -->
+    <Modal v-model="showAvatarModal" :title="$t('profile.avatar.title')" size="sm">
+      <div class="space-y-4">
+        <!-- Preview -->
+        <div class="flex justify-center">
+          <div class="w-40 h-40 rounded-full overflow-hidden ring-4 ring-cyan-500/30 bg-surface">
+            <img
+              v-if="avatarPreview"
+              :src="avatarPreview"
+              class="w-full h-full object-cover"
+            />
+            <div v-else class="w-full h-full flex items-center justify-center text-5xl font-bold text-cyan-400 bg-cyan-500/10">
+              {{ userInitials }}
+            </div>
+          </div>
+        </div>
+        <!-- File Input -->
+        <div class="text-center">
+          <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-white hover:bg-white/20 cursor-pointer transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {{ $t('profile.avatar.selectFile') }}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              class="hidden"
+              @change="handleAvatarFile"
+            />
+          </label>
+          <p class="text-white/40 text-xs mt-2">{{ $t('profile.avatar.formats') }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <Button variant="ghost" @click="showAvatarModal = false">{{ $t('common.cancel') }}</Button>
+        <Button
+          variant="primary"
+          :disabled="!avatarPreview || uploadingAvatar"
+          @click="uploadAvatar"
+        >
+          <svg v-if="uploadingAvatar" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          {{ uploadingAvatar ? $t('profile.avatar.uploading') : $t('profile.avatar.upload') }}
+        </Button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, Tabs, Select, type SelectOption } from '@/components/ui'
+import { Badge, Button, Modal, Tabs, Select, type SelectOption } from '@/components/ui'
 import { userApi, publicApi } from '@/api/client'
 
 interface WatchlistEntry {
@@ -591,6 +769,7 @@ interface ProfileUser {
   public_statuses?: string[]
   role?: string
   avatar?: string
+  created_at?: string
 }
 
 interface HistoryItem {
@@ -610,6 +789,12 @@ const authStore = useAuthStore()
 
 const siteOrigin = window.location.origin
 
+const localeMap: Record<string, string> = {
+  ru: 'ru-RU',
+  en: 'en-US',
+  ja: 'ja-JP',
+}
+
 // Profile state
 const profileUser = ref<ProfileUser | null>(null)
 const loading = ref(true)
@@ -621,6 +806,17 @@ const isOwnProfile = computed(() => {
   if (!authStore.user) return false
   const publicId = route.params.publicId as string
   return publicId && authStore.user.public_id === publicId
+})
+
+// Member since year
+const memberSinceYear = computed(() => {
+  const raw = profileUser.value?.created_at || authStore.user?.created_at
+  if (raw) {
+    try {
+      return new Date(raw).getFullYear()
+    } catch { /* fallback below */ }
+  }
+  return new Date().getFullYear()
 })
 
 // Tabs
@@ -645,14 +841,32 @@ const watchlistFilter = ref('all')
 const viewMode = ref<'table' | 'grid'>('grid')
 const history = ref<HistoryItem[]>([])
 
-const statusLabels: Record<string, string> = {
-  all: 'Все',
-  watching: 'Смотрю',
-  completed: 'Просмотрено',
-  plan_to_watch: 'В планах',
-  on_hold: 'Отложено',
-  dropped: 'Брошено'
-}
+// Inline editing
+const editingScore = ref<string | null>(null)
+const editingScoreGrid = ref<string | null>(null)
+
+// Sorting
+const sortKey = ref<string>(localStorage.getItem('profile_sortKey') || 'title')
+const sortDirection = ref<'asc' | 'desc'>((localStorage.getItem('profile_sortDir') as 'asc' | 'desc') || 'asc')
+
+watch(sortKey, (v) => localStorage.setItem('profile_sortKey', v))
+watch(sortDirection, (v) => localStorage.setItem('profile_sortDir', v))
+
+const sortOptions = computed<SelectOption[]>(() => [
+  { value: 'title', label: t('profile.sort.title') },
+  { value: 'score', label: t('profile.sort.score') },
+  { value: 'progress', label: t('profile.sort.progress') },
+  { value: 'status', label: t('profile.sort.status') },
+])
+
+const statusLabels = computed<Record<string, string>>(() => ({
+  all: t('profile.watchlist.all'),
+  watching: t('profile.watchlist.watching'),
+  completed: t('profile.watchlist.completed'),
+  plan_to_watch: t('profile.watchlist.planToWatch'),
+  on_hold: t('profile.watchlist.onHold'),
+  dropped: t('profile.watchlist.dropped'),
+}))
 
 const statusColors: Record<string, string> = {
   watching: 'bg-green-500/80 text-white',
@@ -660,6 +874,14 @@ const statusColors: Record<string, string> = {
   plan_to_watch: 'bg-purple-500/80 text-white',
   on_hold: 'bg-yellow-500/80 text-black',
   dropped: 'bg-red-500/80 text-white'
+}
+
+const statusOrder: Record<string, number> = {
+  watching: 0,
+  plan_to_watch: 1,
+  completed: 2,
+  on_hold: 3,
+  dropped: 4,
 }
 
 const statusOptions = computed<SelectOption[]>(() => [
@@ -677,7 +899,7 @@ const watchlistFilters = computed(() => {
 
   return statuses.map(status => ({
     value: status,
-    label: statusLabels[status] || status,
+    label: statusLabels.value[status] || status,
     count: status === 'all'
       ? watchlist.value.length
       : watchlist.value.filter(a => a.status === status).length
@@ -685,8 +907,47 @@ const watchlistFilters = computed(() => {
 })
 
 const filteredWatchlist = computed(() => {
-  if (watchlistFilter.value === 'all') return watchlist.value
-  return watchlist.value.filter(a => a.status === watchlistFilter.value)
+  let list = watchlistFilter.value === 'all'
+    ? [...watchlist.value]
+    : watchlist.value.filter(a => a.status === watchlistFilter.value)
+
+  // Sort
+  list.sort((a, b) => {
+    let cmp = 0
+    switch (sortKey.value) {
+      case 'score':
+        cmp = (a.score || 0) - (b.score || 0)
+        break
+      case 'progress':
+        cmp = (a.episodes || 0) - (b.episodes || 0)
+        break
+      case 'status':
+        cmp = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99)
+        break
+      case 'title':
+      default:
+        cmp = (a.anime_title || '').localeCompare(b.anime_title || '')
+        break
+    }
+    return sortDirection.value === 'desc' ? -cmp : cmp
+  })
+
+  return list
+})
+
+// Stats
+const watchlistStats = computed(() => {
+  const list = watchlist.value
+  const scored = list.filter(a => a.score && a.score > 0)
+  const avgScore = scored.length > 0
+    ? (scored.reduce((sum, a) => sum + a.score, 0) / scored.length).toFixed(1)
+    : '-'
+  return {
+    total: list.length,
+    avgScore,
+    totalEpisodes: list.reduce((sum, a) => sum + (a.episodes || 0), 0),
+    completed: list.filter(a => a.status === 'completed').length,
+  }
 })
 
 const userInitials = computed(() => {
@@ -730,13 +991,19 @@ const publicIdError = ref<string | null>(null)
 const publicIdSuccess = ref(false)
 const privacySuccess = ref(false)
 
-const allStatuses = [
-  { value: 'watching', label: 'Смотрю' },
-  { value: 'completed', label: 'Просмотрено' },
-  { value: 'plan_to_watch', label: 'В планах' },
-  { value: 'on_hold', label: 'Отложено' },
-  { value: 'dropped', label: 'Брошено' },
-]
+const allStatuses = computed(() => [
+  { value: 'watching', label: t('profile.watchlist.watching') },
+  { value: 'completed', label: t('profile.watchlist.completed') },
+  { value: 'plan_to_watch', label: t('profile.watchlist.planToWatch') },
+  { value: 'on_hold', label: t('profile.watchlist.onHold') },
+  { value: 'dropped', label: t('profile.watchlist.dropped') },
+])
+
+// Avatar
+const showAvatarModal = ref(false)
+const avatarPreview = ref<string | null>(null)
+const avatarDataUrl = ref<string | null>(null)
+const uploadingAvatar = ref(false)
 
 // Methods
 const fetchProfile = async () => {
@@ -746,7 +1013,7 @@ const fetchProfile = async () => {
   try {
     const publicIdParam = route.params.publicId as string
     if (!publicIdParam) {
-      error.value = 'Пользователь не найден'
+      error.value = t('profile.userNotFound')
       return
     }
 
@@ -766,6 +1033,7 @@ const fetchProfile = async () => {
         public_statuses: authStore.user.public_statuses,
         role: authStore.user.role,
         avatar: authStore.user.avatar,
+        created_at: authStore.user.created_at,
       }
       publicId.value = authStore.user.public_id || ''
       publicStatuses.value = authStore.user.public_statuses || ['watching', 'completed', 'plan_to_watch']
@@ -780,9 +1048,9 @@ const fetchProfile = async () => {
   } catch (err: any) {
     console.error('Failed to load profile:', err)
     if (err.response?.status === 404) {
-      error.value = 'Пользователь не найден'
+      error.value = t('profile.userNotFound')
     } else {
-      error.value = 'Не удалось загрузить профиль'
+      error.value = t('profile.profileLoadError')
     }
   } finally {
     loading.value = false
@@ -843,7 +1111,7 @@ const formatDateDisplay = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '-'
   try {
     const date = new Date(dateStr)
-    return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    return date.toLocaleDateString(localeMap[locale.value] || 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' })
   } catch {
     return '-'
   }
@@ -877,6 +1145,52 @@ const updateAnimeDate = async (animeId: string, field: 'started_at' | 'completed
     anime[field] = dateValue
   } catch (err) {
     console.error('Failed to update date:', err)
+  }
+}
+
+const finishEditScore = async (animeId: string, rawValue: string) => {
+  editingScore.value = null
+  const score = Math.max(0, Math.min(10, parseInt(rawValue) || 0))
+  const anime = watchlist.value.find(a => a.anime_id === animeId)
+  if (!anime) return
+
+  try {
+    await userApi.updateWatchlistEntry({
+      anime_id: animeId,
+      status: anime.status,
+      score,
+    })
+    anime.score = score
+  } catch (err) {
+    console.error('Failed to update score:', err)
+  }
+}
+
+const updateAnimeEpisodes = async (animeId: string, episodes: number) => {
+  const anime = watchlist.value.find(a => a.anime_id === animeId)
+  if (!anime) return
+
+  const maxEp = anime.anime_total_episodes || 9999
+  const clamped = Math.max(0, Math.min(maxEp, episodes))
+
+  try {
+    await userApi.updateWatchlistEntry({
+      anime_id: animeId,
+      status: anime.status,
+      episodes: clamped,
+    })
+    anime.episodes = clamped
+  } catch (err) {
+    console.error('Failed to update episodes:', err)
+  }
+}
+
+const removeFromWatchlist = async (animeId: string) => {
+  try {
+    await userApi.removeFromWatchlist(animeId)
+    watchlist.value = watchlist.value.filter(a => a.anime_id !== animeId)
+  } catch (err) {
+    console.error('Failed to remove from watchlist:', err)
   }
 }
 
@@ -916,7 +1230,7 @@ const savePublicId = async () => {
 
   const validPattern = /^[a-zA-Z0-9-]{3,32}$/
   if (!validPattern.test(publicId.value)) {
-    publicIdError.value = 'Только латинские буквы, цифры и дефис (3-32 символа)'
+    publicIdError.value = t('profile.linkValidation')
     return
   }
 
@@ -932,9 +1246,9 @@ const savePublicId = async () => {
   } catch (err: any) {
     const message = err.response?.data?.message || err.response?.data?.error
     if (message?.includes('already taken') || message?.includes('уже занят')) {
-      publicIdError.value = 'Эта ссылка уже занята'
+      publicIdError.value = t('profile.linkTaken')
     } else {
-      publicIdError.value = message || 'Не удалось сохранить'
+      publicIdError.value = message || t('profile.saveFailed')
     }
   } finally {
     savingPublicId.value = false
@@ -966,6 +1280,64 @@ const savePrivacy = async () => {
   }
 }
 
+// Avatar upload
+const handleAvatarFile = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (file.size > 2 * 1024 * 1024) {
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = () => {
+    const img = new Image()
+    img.onload = () => {
+      // Resize to 256x256 center-crop
+      const canvas = document.createElement('canvas')
+      canvas.width = 256
+      canvas.height = 256
+      const ctx = canvas.getContext('2d')!
+
+      // Center crop to square
+      const size = Math.min(img.width, img.height)
+      const sx = (img.width - size) / 2
+      const sy = (img.height - size) / 2
+
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, 256, 256)
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+      avatarPreview.value = dataUrl
+      avatarDataUrl.value = dataUrl
+    }
+    img.src = reader.result as string
+  }
+  reader.readAsDataURL(file)
+  // Reset input so same file can be re-selected
+  input.value = ''
+}
+
+const uploadAvatar = async () => {
+  if (!avatarDataUrl.value) return
+
+  uploadingAvatar.value = true
+  try {
+    await userApi.updateAvatar(avatarDataUrl.value)
+    await authStore.fetchUser()
+    if (profileUser.value) {
+      profileUser.value.avatar = avatarDataUrl.value
+    }
+    showAvatarModal.value = false
+    avatarPreview.value = null
+    avatarDataUrl.value = null
+  } catch (err) {
+    console.error('Failed to upload avatar:', err)
+  } finally {
+    uploadingAvatar.value = false
+  }
+}
+
 const logout = () => {
   authStore.logout()
   router.push('/')
@@ -975,6 +1347,17 @@ const logout = () => {
 watch(() => route.params.publicId, (newId) => {
   if (newId) {
     fetchProfile()
+  }
+})
+
+// Focus score input when editing starts
+watch(editingScore, (id) => {
+  if (id) {
+    nextTick(() => {
+      const input = document.querySelector('input[type="number"][min="0"][max="10"]') as HTMLInputElement
+      input?.focus()
+      input?.select()
+    })
   }
 })
 
@@ -994,5 +1377,14 @@ onMounted(fetchProfile)
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+/* Hide number input spin buttons */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
 }
 </style>

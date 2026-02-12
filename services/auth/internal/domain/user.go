@@ -16,6 +16,7 @@ type User struct {
 	TelegramID     *int64         `gorm:"uniqueIndex" json:"telegram_id,omitempty"`
 	PublicID       string         `gorm:"size:32;uniqueIndex" json:"public_id"`
 	PublicStatuses pq.StringArray `gorm:"type:text[]" json:"public_statuses"`
+	Avatar         string         `gorm:"type:text" json:"avatar,omitempty"`
 	Role           authz.Role     `gorm:"size:20;default:'user'" json:"role"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
@@ -102,12 +103,18 @@ type UpdatePrivacyRequest struct {
 	PublicStatuses []string `json:"public_statuses" validate:"required"`
 }
 
+// UpdateAvatarRequest represents a request to change the user's avatar
+type UpdateAvatarRequest struct {
+	Avatar string `json:"avatar" validate:"required"`
+}
+
 // PublicUser represents a user visible to other users
 type PublicUser struct {
 	ID             string    `json:"id"`
 	Username       string    `json:"username"`
 	PublicID       string    `json:"public_id"`
 	PublicStatuses []string  `json:"public_statuses"`
+	Avatar         string    `json:"avatar,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -118,6 +125,7 @@ func (u *User) ToPublic() *PublicUser {
 		Username:       u.Username,
 		PublicID:       u.PublicID,
 		PublicStatuses: u.PublicStatuses,
+		Avatar:         u.Avatar,
 		CreatedAt:      u.CreatedAt,
 	}
 }

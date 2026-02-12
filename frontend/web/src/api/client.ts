@@ -114,7 +114,8 @@ export const animeApi = {
   getOngoing: (limit = 20) => apiClient.get('/anime/ongoing', { params: { page_size: limit } }),
   getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'announced', page_size: limit } }),
   getTop: (limit = 20) => apiClient.get('/anime', { params: { sort: 'score', order: 'desc', page_size: limit } }),
-  refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`)
+  refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`),
+  resolveMAL: (malId: string) => apiClient.get(`/anime/mal/${malId}`),
 }
 
 export const episodeApi = {
@@ -147,9 +148,18 @@ export const userApi = {
   updateProgress: (data: any) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
+  migrateListEntry: (oldAnimeId: string, newAnimeId: string, newTitle: string, newCover: string) =>
+    apiClient.post('/users/watchlist/migrate', {
+      old_anime_id: oldAnimeId,
+      new_anime_id: newAnimeId,
+      new_anime_title: newTitle,
+      new_anime_cover: newCover,
+    }),
   // Privacy settings
   updatePublicId: (publicId: string) => apiClient.put('/auth/profile/public-id', { public_id: publicId }),
   updatePrivacy: (publicStatuses: string[]) => apiClient.put('/auth/profile/privacy', { public_statuses: publicStatuses }),
+  // Avatar
+  updateAvatar: (avatar: string) => apiClient.put('/auth/profile/avatar', { avatar }),
 }
 
 export const publicApi = {

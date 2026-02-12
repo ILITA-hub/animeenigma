@@ -119,6 +119,28 @@ func (h *UserHandler) UpdatePublicID(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, map[string]string{"public_id": req.PublicID})
 }
 
+// UpdateAvatar updates the current user's avatar
+func (h *UserHandler) UpdateAvatar(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	var req domain.UpdateAvatarRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if err := h.userService.UpdateAvatar(r.Context(), claims.UserID, req.Avatar); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]string{"status": "ok"})
+}
+
 // UpdatePrivacy updates the current user's public_statuses
 func (h *UserHandler) UpdatePrivacy(w http.ResponseWriter, r *http.Request) {
 	claims, ok := authz.ClaimsFromContext(r.Context())
