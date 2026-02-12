@@ -149,6 +149,36 @@ func (h *AdminHandler) GetHiddenAnime(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, animes)
 }
 
+// LinkMALID links a MAL ID to an existing anime
+func (h *AdminHandler) LinkMALID(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	var req struct {
+		MALID string `json:"mal_id"`
+	}
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if req.MALID == "" {
+		httputil.BadRequest(w, "mal_id is required")
+		return
+	}
+
+	if err := h.catalogService.LinkMALID(r.Context(), animeID, req.MALID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	h.log.Infow("mal_id linked", "anime_id", animeID, "mal_id", req.MALID)
+	httputil.OK(w, map[string]string{"mal_id": req.MALID})
+}
+
 // UpdateShikimoriID updates the Shikimori ID for an anime
 func (h *AdminHandler) UpdateShikimoriID(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")

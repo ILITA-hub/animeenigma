@@ -14,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/consumet"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hianime"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jikan"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kodik"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -28,6 +29,7 @@ type CatalogService struct {
 	kodikClient     *kodik.Client
 	hianimeClient   *hianime.Client
 	consumetClient  *consumet.Client
+	jikanClient     *jikan.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
 }
@@ -71,6 +73,7 @@ func NewCatalogService(
 		kodikClient:     kodikClient,
 		hianimeClient:   hianime.NewClientWithAniwatch(aniwatchAPIURL),
 		consumetClient:  consumet.NewClient(consumetAPIURL),
+		jikanClient:     jikan.NewClient(),
 		cache:           cache,
 		log:             log,
 	}
@@ -186,18 +189,107 @@ func (s *CatalogService) GetAnimeByShikimoriID(ctx context.Context, shikimoriID 
 	return anime, nil
 }
 
-// GetAnimeByMALID gets anime by MAL ID (does not fetch from external)
-func (s *CatalogService) GetAnimeByMALID(ctx context.Context, malID string) (*domain.Anime, error) {
+// ResolveMALAnime resolves a MAL ID by fetching the title from Jikan (MAL),
+// then searching Shikimori by name. Returns "resolved" with anime if exact match,
+// or "ambiguous" with the MAL title for manual search.
+func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*domain.MALResolveResult, error) {
+	// Step 1: Check local DB first
 	existing, err := s.animeRepo.GetByMALID(ctx, malID)
 	if err != nil {
 		return nil, err
 	}
-
 	if existing != nil {
 		s.enrichAnime(ctx, existing)
-		return existing, nil
+		return &domain.MALResolveResult{
+			Status: "resolved",
+			Anime:  existing,
+			MALID:  malID,
+		}, nil
 	}
 
+	// Step 2: Fetch anime info from MAL via Jikan
+	s.log.Infow("resolving MAL ID via Jikan", "mal_id", malID)
+
+	malInfo, err := s.jikanClient.GetAnimeByID(ctx, malID)
+	if err != nil {
+		s.log.Warnw("failed to fetch MAL info via Jikan", "mal_id", malID, "error", err)
+		return &domain.MALResolveResult{
+			Status: "ambiguous",
+			MALID:  malID,
+		}, nil
+	}
+
+	// Step 3: Search Shikimori by romanized title
+	searchTitle := malInfo.Title
+	if searchTitle == "" {
+		searchTitle = malInfo.TitleEnglish
+	}
+
+	shikimoriAnimes, err := s.shikimoriClient.SearchAnime(ctx, searchTitle, 1, 10)
+	if err != nil {
+		s.log.Warnw("Shikimori search failed during MAL resolution",
+			"mal_id", malID, "query", searchTitle, "error", err)
+		return &domain.MALResolveResult{
+			Status:   "ambiguous",
+			MALTitle: searchTitle,
+			MALID:    malID,
+		}, nil
+	}
+
+	// Step 4: Look for an exact name match
+	var matched *domain.Anime
+	for _, anime := range shikimoriAnimes {
+		if titlesMatch(anime.Name, malInfo.Title) ||
+			titlesMatch(anime.NameJP, malInfo.TitleJapanese) ||
+			titlesMatch(anime.Name, malInfo.TitleEnglish) {
+			matched = anime
+			break
+		}
+	}
+
+	if matched == nil {
+		return &domain.MALResolveResult{
+			Status:   "ambiguous",
+			MALTitle: searchTitle,
+			MALID:    malID,
+		}, nil
+	}
+
+	// Step 5: Store matched anime, backfill MAL ID
+	if err := s.upsertAnimeFromExternal(ctx, matched); err != nil {
+		return nil, fmt.Errorf("store resolved anime: %w", err)
+	}
+	if matched.MALID == "" {
+		matched.MALID = malID
+		_ = s.animeRepo.UpdateMALID(ctx, matched.ID, malID)
+	}
+
+	s.enrichAnime(ctx, matched)
+	return &domain.MALResolveResult{
+		Status: "resolved",
+		Anime:  matched,
+		MALID:  malID,
+	}, nil
+}
+
+// titlesMatch compares two titles case-insensitively after normalization
+func titlesMatch(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return normalizeTitle(a) == normalizeTitle(b)
+}
+
+// GetAnimeByMALID is a backward-compatible wrapper for ResolveMALAnime.
+// Returns the anime if resolved, or nil if ambiguous.
+func (s *CatalogService) GetAnimeByMALID(ctx context.Context, malID string) (*domain.Anime, error) {
+	result, err := s.ResolveMALAnime(ctx, malID)
+	if err != nil {
+		return nil, err
+	}
+	if result.Status == "resolved" {
+		return result.Anime, nil
+	}
 	return nil, nil
 }
 
@@ -475,6 +567,9 @@ func (s *CatalogService) CreateAnime(ctx context.Context, req *domain.CreateAnim
 		if req.Description != "" {
 			shikimoriAnime.Description = req.Description
 		}
+		if req.MALID != "" {
+			shikimoriAnime.MALID = req.MALID
+		}
 
 		if err := s.upsertAnimeFromExternal(ctx, shikimoriAnime); err != nil {
 			return nil, err
@@ -494,6 +589,7 @@ func (s *CatalogService) CreateAnime(ctx context.Context, req *domain.CreateAnim
 		Status:        domain.AnimeStatus(req.Status),
 		EpisodesCount: req.EpisodesCount,
 		PosterURL:     req.PosterURL,
+		MALID:         req.MALID,
 	}
 
 	if err := s.animeRepo.Create(ctx, anime); err != nil {
@@ -938,6 +1034,23 @@ func (s *CatalogService) GetHiddenAnime(ctx context.Context) ([]*domain.Anime, e
 	}
 
 	return animes, nil
+}
+
+// LinkMALID links a MAL ID to an existing anime (admin only)
+func (s *CatalogService) LinkMALID(ctx context.Context, animeID string, malID string) error {
+	// Verify anime exists
+	if _, err := s.animeRepo.GetByID(ctx, animeID); err != nil {
+		return err
+	}
+
+	if err := s.animeRepo.UpdateMALID(ctx, animeID, malID); err != nil {
+		return err
+	}
+
+	// Invalidate cache
+	_ = s.cache.Delete(ctx, cache.KeyAnime(animeID))
+
+	return nil
 }
 
 // UpdateShikimoriID updates the Shikimori ID for an anime (admin only)

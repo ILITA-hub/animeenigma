@@ -50,7 +50,10 @@ func (h *ListHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
 // AddToList adds an anime to user's watchlist
 func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		AnimeID string `json:"animeId"`
+		AnimeID            string `json:"anime_id"`
+		AnimeTitle         string `json:"anime_title"`
+		AnimeCover         string `json:"anime_cover"`
+		AnimeTotalEpisodes *int   `json:"anime_total_episodes"`
 	}
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -65,8 +68,11 @@ func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 
 	// Add with default status "plan_to_watch"
 	listReq := &domain.UpdateListRequest{
-		AnimeID: req.AnimeID,
-		Status:  "plan_to_watch",
+		AnimeID:            req.AnimeID,
+		AnimeTitle:         req.AnimeTitle,
+		AnimeCover:         req.AnimeCover,
+		AnimeTotalEpisodes: req.AnimeTotalEpisodes,
+		Status:             "plan_to_watch",
 	}
 
 	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, listReq)
@@ -159,6 +165,44 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 	}
 
 	entry, err := h.listService.MarkEpisodeWatched(r.Context(), claims.UserID, animeID, req.Episode)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, entry)
+}
+
+// MigrateListEntry migrates a list entry from one anime_id to another.
+// Used when resolving mal_XXXXX entries to real UUIDs.
+func (h *ListHandler) MigrateListEntry(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	var req struct {
+		OldAnimeID    string `json:"old_anime_id"`
+		NewAnimeID    string `json:"new_anime_id"`
+		NewAnimeTitle string `json:"new_anime_title"`
+		NewAnimeCover string `json:"new_anime_cover"`
+	}
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if req.OldAnimeID == "" || req.NewAnimeID == "" {
+		httputil.BadRequest(w, "old_anime_id and new_anime_id are required")
+		return
+	}
+
+	entry, err := h.listService.MigrateListEntry(
+		r.Context(), claims.UserID,
+		req.OldAnimeID, req.NewAnimeID,
+		req.NewAnimeTitle, req.NewAnimeCover,
+	)
 	if err != nil {
 		httputil.Error(w, err)
 		return

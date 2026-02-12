@@ -14,7 +14,7 @@
         :placeholder="placeholder"
         :disabled="disabled"
         :readonly="readonly"
-        :class="inputClasses"
+        :class="[inputClasses, $slots.prefix ? 'pl-10' : '', (clearable || $slots.suffix) ? 'pr-10' : '']"
         @focus="focused = true"
         @blur="focused = false"
       />
@@ -99,3 +99,12 @@ const inputClasses = computed(() => {
   ].join(' ')
 })
 </script>
+
+<style scoped>
+/* Hide native search input clear button (browsers add their own "x") */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+</style>

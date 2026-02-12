@@ -211,6 +211,7 @@ type CreateAnimeRequest struct {
 	PosterURL     string   `json:"poster_url"`
 	GenreIDs      []string `json:"genre_ids"`
 	ShikimoriID   string   `json:"shikimori_id"`
+	MALID         string   `json:"mal_id"`
 }
 
 // AddVideoRequest for adding video sources
@@ -306,4 +307,12 @@ type ConsumetSearchResult struct {
 	Image    string `json:"image"`
 	Type     string `json:"type"`
 	SubOrDub string `json:"subOrDub"`
+}
+
+// MALResolveResult represents the result of resolving a MAL ID
+type MALResolveResult struct {
+	Status   string `json:"status"`              // "resolved" or "ambiguous"
+	Anime    *Anime `json:"anime,omitempty"`     // set when resolved
+	MALTitle string `json:"mal_title,omitempty"` // set when ambiguous
+	MALID    string `json:"mal_id,omitempty"`    // always set
 }
