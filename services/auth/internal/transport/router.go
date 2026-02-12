@@ -60,6 +60,7 @@ func NewRouter(
 			r.Patch("/auth/profile", userHandler.UpdateCurrentUser)
 			r.Put("/auth/profile/public-id", userHandler.UpdatePublicID)
 			r.Put("/auth/profile/privacy", userHandler.UpdatePrivacy)
+			r.Put("/auth/profile/avatar", userHandler.UpdateAvatar)
 		})
 
 		// Public profile by public_id

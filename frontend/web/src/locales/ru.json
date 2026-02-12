@@ -158,6 +158,59 @@
     "history": {
       "empty": "История просмотра пуста",
       "episode": "Эпизод"
+    },
+    "publicProfile": "Публичный профиль",
+    "profileLink": "Ссылка на профиль",
+    "save": "Сохранить",
+    "linkUpdated": "Ссылка обновлена",
+    "linkValidation": "Только латинские буквы, цифры и дефис. Минимум 3 символа.",
+    "linkTaken": "Эта ссылка уже занята",
+    "saveFailed": "Не удалось сохранить",
+    "privacyLabel": "Какие списки показывать публично",
+    "savePrivacy": "Сохранить настройки приватности",
+    "privacySaved": "Настройки сохранены",
+    "copied": "Скопировано!",
+    "share": "Поделиться",
+    "userProfile": "Профиль пользователя",
+    "userNotFound": "Пользователь не найден",
+    "profileLoadError": "Не удалось загрузить профиль",
+    "listEmpty": "Список пуст",
+    "ep": "эп.",
+    "goHome": "На главную",
+    "table": {
+      "number": "#",
+      "image": "Обложка",
+      "title": "Название",
+      "score": "Оценка",
+      "type": "Тип",
+      "progress": "Прогресс",
+      "tags": "Теги",
+      "actions": "Действия",
+      "poster": "Постер",
+      "startDate": "Начало",
+      "endDate": "Конец",
+      "status": "Статус"
+    },
+    "sort": {
+      "label": "Сортировка",
+      "title": "Название",
+      "score": "Оценка",
+      "progress": "Прогресс",
+      "dateAdded": "Дата добавления",
+      "status": "Статус"
+    },
+    "stats": {
+      "totalAnime": "Всего аниме",
+      "avgScore": "Средняя оценка",
+      "episodesWatched": "Эпизодов",
+      "completed": "Просмотрено"
+    },
+    "avatar": {
+      "title": "Изменить аватар",
+      "selectFile": "Выбрать изображение",
+      "formats": "JPEG, PNG или WebP, макс. 2 МБ",
+      "upload": "Загрузить",
+      "uploading": "Загрузка..."
     }
   },
   "rooms": {

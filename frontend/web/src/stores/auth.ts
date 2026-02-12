@@ -10,6 +10,7 @@ export interface User {
   role: string
   public_id?: string
   public_statuses?: string[]
+  created_at?: string
 }
 
 export interface LoginCredentials {

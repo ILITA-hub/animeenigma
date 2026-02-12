@@ -157,6 +157,59 @@
     "history": {
       "empty": "視聴履歴がありません",
       "episode": "エピソード"
+    },
+    "publicProfile": "公開プロフィール",
+    "profileLink": "プロフィールリンク",
+    "save": "保存",
+    "linkUpdated": "リンクを更新しました",
+    "linkValidation": "英数字とハイフンのみ。3文字以上。",
+    "linkTaken": "このリンクは既に使用されています",
+    "saveFailed": "保存に失敗しました",
+    "privacyLabel": "公開するリスト",
+    "savePrivacy": "プライバシー設定を保存",
+    "privacySaved": "設定を保存しました",
+    "copied": "コピーしました！",
+    "share": "共有",
+    "userProfile": "ユーザープロフィール",
+    "userNotFound": "ユーザーが見つかりません",
+    "profileLoadError": "プロフィールの読み込みに失敗しました",
+    "listEmpty": "リストは空です",
+    "ep": "話",
+    "goHome": "ホームへ",
+    "table": {
+      "number": "#",
+      "image": "画像",
+      "title": "タイトル",
+      "score": "評価",
+      "type": "タイプ",
+      "progress": "進捗",
+      "tags": "タグ",
+      "actions": "操作",
+      "poster": "ポスター",
+      "startDate": "開始",
+      "endDate": "終了",
+      "status": "状態"
+    },
+    "sort": {
+      "label": "並び替え",
+      "title": "タイトル",
+      "score": "評価",
+      "progress": "進捗",
+      "dateAdded": "追加日",
+      "status": "状態"
+    },
+    "stats": {
+      "totalAnime": "合計アニメ",
+      "avgScore": "平均評価",
+      "episodesWatched": "エピソード数",
+      "completed": "視聴済み"
+    },
+    "avatar": {
+      "title": "アバターを変更",
+      "selectFile": "画像を選択",
+      "formats": "JPEG、PNGまたはWebP、最大2MB",
+      "upload": "アップロード",
+      "uploading": "アップロード中..."
     }
   },
   "rooms": {

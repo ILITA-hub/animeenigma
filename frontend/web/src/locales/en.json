@@ -157,6 +157,59 @@
     "history": {
       "empty": "No watch history yet",
       "episode": "Episode"
+    },
+    "publicProfile": "Public Profile",
+    "profileLink": "Profile Link",
+    "save": "Save",
+    "linkUpdated": "Link updated",
+    "linkValidation": "Only Latin letters, numbers and hyphens. Minimum 3 characters.",
+    "linkTaken": "This link is already taken",
+    "saveFailed": "Failed to save",
+    "privacyLabel": "Which lists to show publicly",
+    "savePrivacy": "Save privacy settings",
+    "privacySaved": "Settings saved",
+    "copied": "Copied!",
+    "share": "Share",
+    "userProfile": "User profile",
+    "userNotFound": "User not found",
+    "profileLoadError": "Failed to load profile",
+    "listEmpty": "List is empty",
+    "ep": "ep.",
+    "goHome": "Go Home",
+    "table": {
+      "number": "#",
+      "image": "Image",
+      "title": "Title",
+      "score": "Score",
+      "type": "Type",
+      "progress": "Progress",
+      "tags": "Tags",
+      "actions": "Actions",
+      "poster": "Poster",
+      "startDate": "Start",
+      "endDate": "End",
+      "status": "Status"
+    },
+    "sort": {
+      "label": "Sort",
+      "title": "Title",
+      "score": "Score",
+      "progress": "Progress",
+      "dateAdded": "Date added",
+      "status": "Status"
+    },
+    "stats": {
+      "totalAnime": "Total Anime",
+      "avgScore": "Avg Score",
+      "episodesWatched": "Episodes",
+      "completed": "Completed"
+    },
+    "avatar": {
+      "title": "Change Avatar",
+      "selectFile": "Select Image",
+      "formats": "JPEG, PNG or WebP, max 2MB",
+      "upload": "Upload",
+      "uploading": "Uploading..."
     }
   },
   "rooms": {

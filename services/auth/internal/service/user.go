@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -111,6 +112,23 @@ func (s *UserService) UpdatePublicID(ctx context.Context, userID, publicID strin
 	}
 
 	return s.userRepo.UpdatePublicID(ctx, userID, publicID)
+}
+
+func (s *UserService) UpdateAvatar(ctx context.Context, userID, avatar string) error {
+	if !strings.HasPrefix(avatar, "data:image/") {
+		return errors.InvalidInput("avatar must be a data:image/* URL")
+	}
+	// Max ~500KB base64 payload
+	if len(avatar) > 500*1024 {
+		return errors.InvalidInput("avatar is too large (max 500KB)")
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	user.Avatar = avatar
+	return s.userRepo.Update(ctx, user)
 }
 
 func (s *UserService) UpdatePublicStatuses(ctx context.Context, userID string, statuses []string) error {
