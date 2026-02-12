@@ -42,10 +42,15 @@
             </div>
           </div>
 
-          <!-- HLS Video Player -->
+          <!-- Video.js Player -->
+          <div v-if="streamUrl && !error && playerType === 'videojs'" class="absolute inset-0">
+            <video ref="videoRef" class="video-js vjs-default-skin vjs-big-play-centered"></video>
+          </div>
+
+          <!-- Native HLS Player -->
           <video
-            v-if="streamUrl && !error"
-            ref="videoRef"
+            v-else-if="streamUrl && !error && playerType === 'native'"
+            ref="nativeVideoRef"
             class="absolute inset-0 w-full h-full"
             controls
             playsinline
@@ -54,7 +59,6 @@
             @pause="handlePause"
             @ended="handleEnded"
           >
-            <!-- Subtitle tracks -->
             <track
               v-for="(sub, index) in subtitles"
               :key="sub.url"
@@ -137,6 +141,35 @@
 
       <!-- Right: Server selector -->
       <div class="lg:w-72 flex-shrink-0">
+        <!-- Player type toggle -->
+        <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Плеер
+        </h3>
+        <div class="flex gap-2 mb-4">
+          <button
+            @click="switchPlayerType('videojs')"
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+            :class="playerType === 'videojs'
+              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            Video.js
+          </button>
+          <button
+            @click="switchPlayerType('native')"
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+            :class="playerType === 'native'
+              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            Native
+          </button>
+        </div>
+
         <h3 class="text-white/60 text-sm mb-3 flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
@@ -176,6 +209,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import videojs from 'video.js'
 import Hls from 'hls.js'
 import { consumetApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -204,6 +238,8 @@ interface ConsumetStream {
   subtitles?: ConsumetSubtitle[]
 }
 
+type PlayerType = 'videojs' | 'native'
+
 const props = defineProps<{
   animeId: string
   totalEpisodes?: number
@@ -217,6 +253,11 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 
+// Player type (persisted)
+const playerType = ref<PlayerType>(
+  (localStorage.getItem('preferred_player') as PlayerType) || 'videojs'
+)
+
 // State
 const episodes = ref<ConsumetEpisode[]>([])
 const servers = ref<ConsumetServer[]>([])
@@ -224,12 +265,15 @@ const selectedEpisode = ref<ConsumetEpisode | null>(null)
 const selectedServer = ref<ConsumetServer | null>(null)
 const streamUrl = ref<string | null>(null)
 const subtitles = ref<ConsumetSubtitle[]>([])
+const streamReferer = ref('')
 
 const loadingEpisodes = ref(false)
 const loadingStream = ref(false)
 const error = ref<string | null>(null)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
+const nativeVideoRef = ref<HTMLVideoElement | null>(null)
+let vjsPlayer: ReturnType<typeof videojs> | null = null
 let hls: Hls | null = null
 
 // Progress tracking
@@ -308,8 +352,22 @@ const selectServer = async (server: ConsumetServer) => {
   }
 }
 
+const disposeCurrentPlayer = () => {
+  if (vjsPlayer) {
+    vjsPlayer.dispose()
+    vjsPlayer = null
+  }
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+}
+
 const fetchStream = async () => {
   if (!selectedEpisode.value) return
+
+  // Dispose existing player before reactive state changes remove the DOM element
+  disposeCurrentPlayer()
 
   loadingStream.value = true
   error.value = null
@@ -330,24 +388,27 @@ const fetchStream = async () => {
     streamUrl.value = data.url
     subtitles.value = data.subtitles || []
 
-    // Initialize HLS player
+    const headers = data.headers || {}
+    const referer = headers['Referer'] || headers['referer'] || ''
+    streamReferer.value = referer
+
+    // Wait for Vue to render the video element
     await nextTick()
 
+    const targetRef = playerType.value === 'videojs' ? videoRef : nativeVideoRef
     let retries = 0
-    while (!videoRef.value && retries < 5) {
+    while (!targetRef.value && retries < 5) {
       await new Promise(resolve => setTimeout(resolve, 50))
       retries++
     }
 
-    if (!videoRef.value) {
+    if (!targetRef.value) {
       console.error('[Consumet] Video element not found')
       error.value = 'Ошибка инициализации плеера'
       return
     }
 
-    const headers = data.headers || {}
-    const referer = headers['Referer'] || headers['referer'] || ''
-    initHlsPlayer(data.url, referer)
+    initPlayer(data.url, referer)
   } catch (err: any) {
     const message = err.response?.data?.error?.message
       || err.response?.data?.message
@@ -389,64 +450,83 @@ const getLanguageCode = (lang: string): string => {
   return langMap[lang.toLowerCase()] || lang.substring(0, 2).toLowerCase()
 }
 
-const getHlsConfig = () => ({
-  xhrSetup: (xhr: XMLHttpRequest) => {
-    xhr.withCredentials = false
-  },
-  enableWorker: true,
-  lowLatencyMode: false,
-  backBufferLength: 90,
-  maxBufferLength: 30,
-  maxMaxBufferLength: 60,
-  maxBufferSize: 60 * 1000 * 1000, // 60MB
-  maxBufferHole: 0.5,
-  startLevel: -1, // Auto-select quality
-  autoStartLoad: true,
-  fragLoadingTimeOut: 20000,
-  fragLoadingMaxRetry: 6,
-  fragLoadingRetryDelay: 1000,
-  levelLoadingTimeOut: 10000,
-  manifestLoadingTimeOut: 10000,
-})
-
-// Polyfill to fix unsupported audio codecs at the MediaSource level
-// Chrome/Edge don't support AAC Main Profile (mp4a.40.1) but the actual audio is AAC-LC compatible
-const patchMediaSourceForCodecFix = () => {
-  if (typeof MediaSource === 'undefined') return
-
-  const originalAddSourceBuffer = MediaSource.prototype.addSourceBuffer
-  MediaSource.prototype.addSourceBuffer = function(mimeType: string) {
-    // Replace unsupported AAC Main (mp4a.40.1) with AAC-LC (mp4a.40.2)
-    if (mimeType.includes('mp4a.40.1')) {
-      console.log('[Consumet] Fixing unsupported codec mp4a.40.1 -> mp4a.40.2')
-      mimeType = mimeType.replace(/mp4a\.40\.1/g, 'mp4a.40.2')
-    }
-    return originalAddSourceBuffer.call(this, mimeType)
+const initPlayer = (url: string, referer: string) => {
+  if (playerType.value === 'videojs') {
+    initVideoJsPlayer(url, referer)
+  } else {
+    initHlsPlayer(url, referer)
   }
 }
 
-// Apply the polyfill once
-let polyfillApplied = false
-
-const initHlsPlayer = (url: string, referer: string) => {
-  // Apply codec fix polyfill
-  if (!polyfillApplied) {
-    patchMediaSourceForCodecFix()
-    polyfillApplied = true
+const initVideoJsPlayer = (url: string, referer: string) => {
+  if (vjsPlayer) {
+    vjsPlayer.dispose()
+    vjsPlayer = null
   }
 
+  if (!videoRef.value) return
+
+  const proxyUrl = buildProxyUrl(url, referer)
+
+  vjsPlayer = videojs(videoRef.value, {
+    controls: true,
+    autoplay: false,
+    preload: 'auto',
+    fill: true,
+    playsinline: true,
+  })
+
+  // Attach events
+  vjsPlayer.on('timeupdate', handleTimeUpdate)
+  vjsPlayer.on('pause', handlePause)
+  vjsPlayer.on('ended', handleEnded)
+  vjsPlayer.on('error', () => {
+    const err = vjsPlayer?.error()
+    if (err) {
+      console.error('[Consumet Video.js Error]', err.code, err.message)
+      error.value = 'Ошибка воспроизведения видео'
+    }
+  })
+
+  // Set source, then add subtitles and play
+  vjsPlayer.src({ src: proxyUrl, type: 'application/x-mpegURL' })
+  vjsPlayer.ready(() => {
+    // Add subtitle tracks after source is set
+    for (let i = 0; i < subtitles.value.length; i++) {
+      const sub = subtitles.value[i]
+      vjsPlayer?.addRemoteTextTrack({
+        kind: 'subtitles',
+        label: sub.lang,
+        srclang: getLanguageCode(sub.lang),
+        src: buildSubtitleProxyUrl(sub.url),
+        default: i === 0,
+      }, false)
+    }
+    vjsPlayer?.play()?.catch(() => {})
+  })
+}
+
+const initHlsPlayer = (url: string, referer: string) => {
   if (hls) {
     hls.destroy()
     hls = null
   }
 
-  const video = videoRef.value
+  const video = nativeVideoRef.value
   if (!video) return
 
   const proxyUrl = buildProxyUrl(url, referer)
 
   if (Hls.isSupported()) {
-    hls = new Hls(getHlsConfig())
+    hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      backBufferLength: 90,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      maxBufferSize: 60 * 1000 * 1000,
+      startLevel: -1,
+    })
 
     hls.loadSource(proxyUrl)
     hls.attachMedia(video)
@@ -458,29 +538,9 @@ const initHlsPlayer = (url: string, referer: string) => {
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (data.fatal) {
         console.error('[Consumet HLS Error]', data.type, data.details)
-      }
-
-      // Fallback if codec override didn't work
-      if (data.fatal && data.details === 'bufferAddCodecError') {
-        error.value = 'Формат видео не поддерживается браузером. Попробуйте другой сервер.'
-        hls?.destroy()
-        return
-      }
-
-      if (data.fatal) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const response = (data as any).response
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            if (response?.code === 503) {
-              error.value = 'Сервер занят. Попробуйте позже.'
-            } else if (response?.code === 403) {
-              error.value = 'Доступ запрещён. Попробуйте другой сервер.'
-            } else if (response?.code === 404) {
-              error.value = 'Видео не найдено.'
-            } else {
-              hls?.startLoad()
-            }
+            hls?.startLoad()
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
             hls?.recoverMediaError()
@@ -498,11 +558,50 @@ const initHlsPlayer = (url: string, referer: string) => {
   }
 }
 
+const switchPlayerType = async (type: PlayerType) => {
+  if (type === playerType.value) return
+
+  disposeCurrentPlayer()
+
+  const savedUrl = streamUrl.value
+  const savedReferer = streamReferer.value
+
+  // Clear stream to remove player DOM elements
+  streamUrl.value = null
+  playerType.value = type
+  localStorage.setItem('preferred_player', type)
+
+  if (savedUrl) {
+    await nextTick()
+
+    streamUrl.value = savedUrl
+    await nextTick()
+
+    const targetRef = type === 'videojs' ? videoRef : nativeVideoRef
+    let retries = 0
+    while (!targetRef.value && retries < 5) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      retries++
+    }
+
+    if (targetRef.value) {
+      initPlayer(savedUrl, savedReferer)
+    }
+  }
+}
+
 // Progress tracking
 const handleTimeUpdate = () => {
-  if (!videoRef.value || !selectedEpisode.value) return
+  if (!selectedEpisode.value) return
 
-  currentTime.value = videoRef.value.currentTime
+  if (vjsPlayer) {
+    currentTime.value = vjsPlayer.currentTime() || 0
+  } else if (nativeVideoRef.value) {
+    currentTime.value = nativeVideoRef.value.currentTime
+  } else {
+    return
+  }
+
   maxTime.value = Math.max(maxTime.value, currentTime.value)
 
   // Save progress periodically
@@ -579,10 +678,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (hls) {
-    hls.destroy()
-    hls = null
-  }
+  disposeCurrentPlayer()
 })
 </script>
 
@@ -604,5 +700,63 @@ onUnmounted(() => {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* Video.js overrides - green accent */
+:deep(.video-js) {
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+}
+
+:deep(.video-js .vjs-big-play-button) {
+  background-color: rgba(74, 222, 128, 0.9);
+  border: none;
+  border-radius: 50%;
+  width: 2em;
+  height: 2em;
+  line-height: 2em;
+  font-size: 3em;
+  transition: all 0.3s;
+}
+
+:deep(.video-js .vjs-big-play-button:hover) {
+  background-color: #4ade80;
+  transform: scale(1.1);
+}
+
+:deep(.video-js:hover .vjs-big-play-button),
+:deep(.video-js .vjs-big-play-button:focus) {
+  background-color: #4ade80;
+}
+
+:deep(.video-js .vjs-control-bar) {
+  background-color: rgba(26, 26, 26, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+:deep(.video-js .vjs-play-progress) {
+  background-color: #4ade80;
+}
+
+:deep(.video-js .vjs-volume-level) {
+  background-color: #4ade80;
+}
+
+:deep(.video-js .vjs-slider-horizontal .vjs-volume-level:before) {
+  color: #4ade80;
+}
+
+:deep(.video-js .vjs-load-progress) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+:deep(.video-js .vjs-progress-holder) {
+  height: 0.5em;
+}
+
+:deep(.video-js .vjs-play-progress:before) {
+  font-size: 1em;
+  top: -0.25em;
 }
 </style>
