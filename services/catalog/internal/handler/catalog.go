@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -143,6 +144,25 @@ func (h *CatalogHandler) GetAnime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Detect MAL-prefixed IDs (e.g. "mal_36726") and resolve via Jikan + Shikimori.
+	// Returns the anime directly if resolved, or 404 if ambiguous/not found.
+	// The dedicated /mal/{malId} endpoint returns the full MALResolveResult for the frontend.
+	if strings.HasPrefix(animeID, "mal_") {
+		malID := strings.TrimPrefix(animeID, "mal_")
+		result, err := h.catalogService.ResolveMALAnime(r.Context(), malID)
+		if err != nil {
+			httputil.Error(w, err)
+			return
+		}
+		if result.Status == "resolved" && result.Anime != nil {
+			httputil.OK(w, result.Anime)
+			return
+		}
+		// Ambiguous or not found — return 404 so the frontend shows an error
+		httputil.NotFound(w, "anime not found")
+		return
+	}
+
 	anime, err := h.catalogService.GetAnime(r.Context(), animeID)
 	if err != nil {
 		httputil.Error(w, err)
@@ -152,26 +172,21 @@ func (h *CatalogHandler) GetAnime(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, anime)
 }
 
-// GetAnimeByMALID handles getting anime by MAL ID
-func (h *CatalogHandler) GetAnimeByMALID(w http.ResponseWriter, r *http.Request) {
+// ResolveMALAnime handles MAL ID resolution via Jikan + Shikimori name matching
+func (h *CatalogHandler) ResolveMALAnime(w http.ResponseWriter, r *http.Request) {
 	malID := chi.URLParam(r, "malId")
 	if malID == "" {
 		httputil.BadRequest(w, "MAL ID is required")
 		return
 	}
 
-	anime, err := h.catalogService.GetAnimeByMALID(r.Context(), malID)
+	result, err := h.catalogService.ResolveMALAnime(r.Context(), malID)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
-	if anime == nil {
-		httputil.NotFound(w, "anime not found")
-		return
-	}
-
-	httputil.OK(w, anime)
+	httputil.OK(w, result)
 }
 
 // RefreshAnime refreshes anime data from Shikimori

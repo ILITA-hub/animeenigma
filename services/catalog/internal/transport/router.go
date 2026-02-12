@@ -53,7 +53,7 @@ func NewRouter(
 			r.Get("/schedule", catalogHandler.GetSchedule)
 			r.Get("/ongoing", catalogHandler.GetOngoingAnime)
 			r.Get("/seasonal/{year}/{season}", catalogHandler.GetSeasonalAnime)
-			r.Get("/mal/{malId}", catalogHandler.GetAnimeByMALID)
+			r.Get("/mal/{malId}", catalogHandler.ResolveMALAnime)
 			r.Get("/{animeId}", catalogHandler.GetAnime)
 			r.Post("/{animeId}/refresh", catalogHandler.RefreshAnime)
 			r.Get("/{animeId}/episodes", catalogHandler.GetAnimeEpisodes)
@@ -105,6 +105,9 @@ func NewRouter(
 
 			// Update shikimori_id
 			r.Patch("/anime/{animeId}/shikimori", adminHandler.UpdateShikimoriID)
+
+			// Link MAL ID
+			r.Patch("/anime/{animeId}/mal", adminHandler.LinkMALID)
 		})
 	})
 

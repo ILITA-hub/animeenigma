@@ -316,7 +316,8 @@ func (h *MALImportHandler) parseMALDate(dateStr string) *time.Time {
 	return nil
 }
 
-// searchCatalogByMALID searches the catalog service for anime by MAL ID
+// searchCatalogByMALID searches the catalog service for anime by MAL ID.
+// The catalog now returns a MALResolveResult with status "resolved" or "ambiguous".
 func (h *MALImportHandler) searchCatalogByMALID(ctx context.Context, malID int) *CatalogAnime {
 	url := fmt.Sprintf("%s/api/anime/mal/%d", h.catalogURL, malID)
 
@@ -336,14 +337,17 @@ func (h *MALImportHandler) searchCatalogByMALID(ctx context.Context, malID int) 
 	}
 
 	var result struct {
-		Data CatalogAnime `json:"data"`
+		Data struct {
+			Status string       `json:"status"`
+			Anime  CatalogAnime `json:"anime"`
+		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil
 	}
 
-	if result.Data.ID != "" {
-		return &result.Data
+	if result.Data.Status == "resolved" && result.Data.Anime.ID != "" {
+		return &result.Data.Anime
 	}
 
 	return nil

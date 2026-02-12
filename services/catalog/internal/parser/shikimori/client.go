@@ -112,6 +112,7 @@ type shikimoriAnime struct {
 	Episodes      graphql.Int      `graphql:"episodes"`
 	EpisodesAired graphql.Int      `graphql:"episodesAired"`
 	Duration      graphql.Int      `graphql:"duration"`
+	MalId         graphql.String   `graphql:"malId"`
 	AiredOn       *shikimoriDate   `graphql:"airedOn"`
 	NextEpisodeAt graphql.String   `graphql:"nextEpisodeAt"`
 	Poster        *shikimoriPoster `graphql:"poster"`
@@ -372,6 +373,7 @@ func (c *Client) mapAnime(sa shikimoriAnime) *domain.Anime {
 		EpisodesCount:   int(sa.Episodes),
 		EpisodesAired:   int(sa.EpisodesAired),
 		EpisodeDuration: int(sa.Duration),
+		MALID:           string(sa.MalId),
 	}
 
 	if sa.AiredOn != nil {

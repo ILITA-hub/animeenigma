@@ -479,7 +479,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
@@ -523,6 +523,7 @@ interface AnimeRating {
 }
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
 const { anime, loading, error, fetchAnime } = useAnime()
@@ -807,13 +808,84 @@ watch(videoProvider, (newProvider) => {
   localStorage.setItem('preferred_video_provider', newProvider)
 })
 
-onMounted(async () => {
-  const animeId = route.params.id as string
-  await fetchAnime(animeId)
+// Shared data-loading function — called on mount and on route param change
+const loadAnimeData = async (animeId: string) => {
+  // Reset state so stale data doesn't flash
+  anime.value = null
+  currentListStatus.value = null
+  reviews.value = []
+  myReview.value = null
+  siteRating.value = null
+  synopsisExpanded.value = false
+  showStatusDropdown.value = false
+  reviewForm.score = 0
+  reviewForm.text = ''
+
+  // Handle MAL-prefixed IDs: resolve via backend
+  if (animeId.startsWith('mal_')) {
+    const malId = animeId.replace('mal_', '')
+    try {
+      const response = await animeApi.resolveMAL(malId)
+      const result = response.data?.data || response.data
+      if (result?.status === 'resolved' && result.anime) {
+        // Migrate list entry if user is authenticated
+        if (authStore.isAuthenticated) {
+          try {
+            await userApi.migrateListEntry(
+              animeId,
+              result.anime.id,
+              result.anime.title || result.anime.name || '',
+              result.anime.poster_url || result.anime.coverImage || ''
+            )
+          } catch (e) {
+            console.warn('List migration failed:', e)
+          }
+        }
+        router.replace(`/anime/${result.anime.id}`)
+        return
+      } else if (result?.status === 'ambiguous') {
+        const searchQuery = result.mal_title || ''
+        router.replace({ path: '/browse', query: { q: searchQuery, bind_mal: animeId } })
+        return
+      }
+    } catch (e) {
+      console.error('MAL resolution failed:', e)
+    }
+  }
+
+  const fetched = await fetchAnime(animeId)
+
+  // Check for pending MAL bind from Browse page
+  const pendingBind = sessionStorage.getItem('pending_mal_bind')
+  if (pendingBind && fetched && authStore.isAuthenticated) {
+    sessionStorage.removeItem('pending_mal_bind')
+    try {
+      await userApi.migrateListEntry(
+        pendingBind,
+        fetched.id,
+        fetched.title || '',
+        fetched.coverImage || ''
+      )
+    } catch (e) {
+      console.warn('Pending MAL bind migration failed:', e)
+    }
+  }
+
   await fetchWatchlistStatus()
   await fetchHiddenStatus()
   await fetchReviews()
+}
+
+// Re-load when route param changes (Vue Router reuses the component for /anime/:id)
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    loadAnimeData(newId as string)
+  }
+})
+
+onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  loadAnimeData(route.params.id as string)
 })
 
 onUnmounted(() => {

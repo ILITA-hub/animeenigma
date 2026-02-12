@@ -372,6 +372,11 @@ onMounted(async () => {
     recentSearches.value = JSON.parse(stored)
   }
 
+  // Store pending MAL bind for later resolution on Anime page
+  if (route.query.bind_mal) {
+    sessionStorage.setItem('pending_mal_bind', route.query.bind_mal as string)
+  }
+
   if (route.query.q) {
     searchQuery.value = route.query.q as string
     await searchAnime(searchQuery.value)

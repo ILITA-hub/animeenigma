@@ -53,6 +53,7 @@ func NewRouter(
 			r.Get("/watchlist", listHandler.GetUserList)
 			r.Post("/watchlist", listHandler.AddToList)
 			r.Put("/watchlist", listHandler.UpdateListEntry)
+			r.Post("/watchlist/migrate", listHandler.MigrateListEntry)
 			r.Get("/watchlist/{animeId}", listHandler.GetUserAnimeEntry)
 			r.Delete("/watchlist/{animeId}", listHandler.DeleteListEntry)
 			r.Post("/watchlist/{animeId}/episode", listHandler.MarkEpisodeWatched)
