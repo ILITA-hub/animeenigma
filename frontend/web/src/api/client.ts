@@ -148,6 +148,8 @@ export const userApi = {
   updateProgress: (data: any) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
+  importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),
+  getShikimoriImportStatus: (jobId: string) => apiClient.get(`/users/import/shikimori/${jobId}`),
   migrateListEntry: (oldAnimeId: string, newAnimeId: string, newTitle: string, newCover: string) =>
     apiClient.post('/users/watchlist/migrate', {
       old_anime_id: oldAnimeId,
@@ -239,6 +241,13 @@ export const hiAnimeApi = {
       params: { episode: episodeId, server: serverId, category }
     }),
   search: (query: string) => apiClient.get('/hianime/search', { params: { q: query } }),
+}
+
+export const jimakuApi = {
+  getSubtitles: (animeId: string, episode: number) =>
+    apiClient.get(`/anime/${animeId}/jimaku/subtitles`, {
+      params: { episode }
+    }),
 }
 
 export const consumetApi = {

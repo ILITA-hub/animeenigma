@@ -4,17 +4,20 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
+	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/consumet"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hianime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jikan"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kodik"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -30,6 +33,8 @@ type CatalogService struct {
 	hianimeClient   *hianime.Client
 	consumetClient  *consumet.Client
 	jikanClient     *jikan.Client
+	jimakuClient    *jimaku.Client
+	idMappingClient *idmapping.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
 }
@@ -38,6 +43,7 @@ type CatalogService struct {
 type CatalogServiceOptions struct {
 	AniwatchAPIURL string
 	ConsumetAPIURL string
+	JimakuAPIKey   string
 }
 
 func NewCatalogService(
@@ -58,10 +64,18 @@ func NewCatalogService(
 	}
 
 	// Get API URLs from options
-	var aniwatchAPIURL, consumetAPIURL string
+	var aniwatchAPIURL, consumetAPIURL, jimakuAPIKey string
 	if len(opts) > 0 {
 		aniwatchAPIURL = opts[0].AniwatchAPIURL
 		consumetAPIURL = opts[0].ConsumetAPIURL
+		jimakuAPIKey = opts[0].JimakuAPIKey
+	}
+
+	jimakuClient := jimaku.NewClient(jimakuAPIKey)
+	if jimakuClient.IsConfigured() {
+		log.Infow("jimaku client initialized")
+	} else {
+		log.Warnw("jimaku client not configured, japanese subtitle features will be unavailable")
 	}
 
 	return &CatalogService{
@@ -74,6 +88,8 @@ func NewCatalogService(
 		hianimeClient:   hianime.NewClientWithAniwatch(aniwatchAPIURL),
 		consumetClient:  consumet.NewClient(consumetAPIURL),
 		jikanClient:     jikan.NewClient(),
+		jimakuClient:    jimakuClient,
+		idMappingClient: idmapping.NewClient(),
 		cache:           cache,
 		log:             log,
 	}
@@ -1210,6 +1226,19 @@ func (s *CatalogService) GetHiAnimeStream(ctx context.Context, animeID string, e
 		}
 	}
 
+	// Persist AniList ID if available and not already set
+	if stream.AnilistID > 0 {
+		anime, aErr := s.animeRepo.GetByID(ctx, animeID)
+		if aErr == nil && anime != nil && anime.AniListID == "" {
+			anilistStr := strconv.Itoa(stream.AnilistID)
+			if uErr := s.animeRepo.UpdateAniListID(ctx, animeID, anilistStr); uErr == nil {
+				s.log.Infow("saved AniList ID from HiAnime stream",
+					"anime_id", animeID,
+					"anilist_id", anilistStr)
+			}
+		}
+	}
+
 	// Cache for 30 minutes (stream URLs may expire)
 	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
 
@@ -1519,4 +1548,120 @@ func matchesConsumetAnime(resultTitle string, anime *domain.Anime) bool {
 	}
 
 	return false
+}
+
+// resolveAniListID tries to resolve the AniList ID for an anime using ARM.
+// It tries ShikimoriID first (source of truth), then MALID as fallback.
+// If resolved, persists the AniList ID to the database and caches it.
+func (s *CatalogService) resolveAniListID(ctx context.Context, anime *domain.Anime) string {
+	// Check cache first
+	cacheKey := fmt.Sprintf("idmap:anilist:%s", anime.ID)
+	var cachedID string
+	if err := s.cache.Get(ctx, cacheKey, &cachedID); err == nil && cachedID != "" {
+		return cachedID
+	}
+
+	var anilistID string
+
+	// Try Shikimori ID first (source of truth)
+	if anime.ShikimoriID != "" {
+		result, err := s.idMappingClient.ResolveByShikimoriID(anime.ShikimoriID)
+		if err != nil {
+			s.log.Warnw("ARM lookup by shikimori_id failed", "shikimori_id", anime.ShikimoriID, "error", err)
+		} else if result != nil && result.AniList != nil {
+			anilistID = strconv.Itoa(*result.AniList)
+		}
+	}
+
+	// Fallback to MAL ID
+	if anilistID == "" && anime.MALID != "" {
+		result, err := s.idMappingClient.ResolveByMALID(anime.MALID)
+		if err != nil {
+			s.log.Warnw("ARM lookup by mal_id failed", "mal_id", anime.MALID, "error", err)
+		} else if result != nil && result.AniList != nil {
+			anilistID = strconv.Itoa(*result.AniList)
+		}
+	}
+
+	if anilistID == "" {
+		return ""
+	}
+
+	// Persist to database
+	if err := s.animeRepo.UpdateAniListID(ctx, anime.ID, anilistID); err != nil {
+		s.log.Warnw("failed to persist resolved AniList ID", "anime_id", anime.ID, "anilist_id", anilistID, "error", err)
+	} else {
+		s.log.Infow("resolved and saved AniList ID via ARM", "anime_id", anime.ID, "anilist_id", anilistID)
+	}
+
+	// Cache for 24 hours
+	_ = s.cache.Set(ctx, cacheKey, anilistID, 24*time.Hour)
+
+	return anilistID
+}
+
+// GetJimakuSubtitles fetches Japanese subtitles from Jimaku for an anime episode
+func (s *CatalogService) GetJimakuSubtitles(ctx context.Context, animeID string, episode int) (*domain.JimakuSubtitleResponse, error) {
+	if !s.jimakuClient.IsConfigured() {
+		return nil, errors.NotFound("jimaku subtitles not configured")
+	}
+
+	// Check cache first
+	cacheKey := fmt.Sprintf("jimaku:subs:%s:%d", animeID, episode)
+	var cached domain.JimakuSubtitleResponse
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return &cached, nil
+	}
+
+	// Look up the anime to get AniList ID
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, errors.NotFound("anime not found")
+	}
+
+	// Resolve AniList ID if missing, using ARM
+	if anime.AniListID == "" {
+		resolved := s.resolveAniListID(ctx, anime)
+		if resolved == "" {
+			return nil, errors.NotFound("no AniList ID available for this anime")
+		}
+		anime.AniListID = resolved
+	}
+
+	anilistID, err := strconv.Atoi(anime.AniListID)
+	if err != nil {
+		return nil, errors.NotFound("invalid AniList ID format")
+	}
+
+	// Query Jimaku API
+	files, entryName, err := s.jimakuClient.GetSubtitlesForEpisode(anilistID, episode)
+	if err != nil {
+		s.log.Warnw("failed to get jimaku subtitles",
+			"anime_id", animeID,
+			"anilist_id", anilistID,
+			"episode", episode,
+			"error", err)
+		return nil, errors.Wrap(err, errors.CodeInternal, "failed to fetch jimaku subtitles")
+	}
+
+	// Map to domain types
+	subtitles := make([]domain.JimakuSubtitle, 0, len(files))
+	for _, f := range files {
+		subtitles = append(subtitles, domain.JimakuSubtitle{
+			URL:      f.URL,
+			FileName: f.Name,
+			Lang:     "Japanese",
+			Format:   jimaku.FileFormat(f.Name),
+		})
+	}
+
+	result := &domain.JimakuSubtitleResponse{
+		Subtitles: subtitles,
+		EntryName: entryName,
+	}
+
+	// Cache for 1 hour
+	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
+
+	return result, nil
 }

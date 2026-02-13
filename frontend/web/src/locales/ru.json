@@ -137,7 +137,9 @@
       "importing": "Импорт...",
       "import": "Импорт",
       "imported": "Импортировано",
-      "skipped": "Пропущено"
+      "skipped": "Пропущено",
+      "shikimoriPlaceholder": "Введите никнейм Shikimori",
+      "shikimoriDescription": "Импортирует ваш список аниме с Shikimori. Ваш профиль должен быть публичным."
     },
     "settings": {
       "appearance": "Внешний вид",

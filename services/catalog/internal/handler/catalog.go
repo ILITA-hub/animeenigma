@@ -163,6 +163,18 @@ func (h *CatalogHandler) GetAnime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Detect Shikimori-prefixed IDs (e.g. "shiki_21") and resolve via Shikimori API
+	if strings.HasPrefix(animeID, "shiki_") {
+		shikimoriID := strings.TrimPrefix(animeID, "shiki_")
+		anime, err := h.catalogService.GetAnimeByShikimoriID(r.Context(), shikimoriID)
+		if err != nil {
+			httputil.Error(w, err)
+			return
+		}
+		httputil.OK(w, anime)
+		return
+	}
+
 	anime, err := h.catalogService.GetAnime(r.Context(), animeID)
 	if err != nil {
 		httputil.Error(w, err)
@@ -187,6 +199,23 @@ func (h *CatalogHandler) ResolveMALAnime(w http.ResponseWriter, r *http.Request)
 	}
 
 	httputil.OK(w, result)
+}
+
+// ResolveShikimoriAnime resolves a Shikimori ID to a local anime (fetching from Shikimori if needed)
+func (h *CatalogHandler) ResolveShikimoriAnime(w http.ResponseWriter, r *http.Request) {
+	shikimoriID := chi.URLParam(r, "shikimoriId")
+	if shikimoriID == "" {
+		httputil.BadRequest(w, "Shikimori ID is required")
+		return
+	}
+
+	anime, err := h.catalogService.GetAnimeByShikimoriID(r.Context(), shikimoriID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, anime)
 }
 
 // RefreshAnime refreshes anime data from Shikimori
@@ -701,4 +730,33 @@ func (h *CatalogHandler) SearchConsumet(w http.ResponseWriter, r *http.Request) 
 	}
 
 	httputil.OK(w, results)
+}
+
+// GetJimakuSubtitles fetches Japanese subtitles from Jimaku for an anime episode
+func (h *CatalogHandler) GetJimakuSubtitles(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeStr := r.URL.Query().Get("episode")
+	if episodeStr == "" {
+		httputil.BadRequest(w, "episode number is required")
+		return
+	}
+
+	episode, err := strconv.Atoi(episodeStr)
+	if err != nil || episode < 1 {
+		httputil.BadRequest(w, "episode must be a positive number")
+		return
+	}
+
+	result, err := h.catalogService.GetJimakuSubtitles(r.Context(), animeID, episode)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, result)
 }

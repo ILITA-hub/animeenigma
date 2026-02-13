@@ -309,6 +309,20 @@ type ConsumetSearchResult struct {
 	SubOrDub string `json:"subOrDub"`
 }
 
+// JimakuSubtitle represents a Japanese subtitle file from Jimaku
+type JimakuSubtitle struct {
+	URL      string `json:"url"`       // Direct download URL from jimaku.cc
+	FileName string `json:"file_name"` // Original filename (e.g. "EP01.ass")
+	Lang     string `json:"lang"`      // Always "Japanese"
+	Format   string `json:"format"`    // "ass", "srt", etc.
+}
+
+// JimakuSubtitleResponse represents the response for Jimaku subtitle lookup
+type JimakuSubtitleResponse struct {
+	Subtitles []JimakuSubtitle `json:"subtitles"`
+	EntryName string           `json:"entry_name,omitempty"`
+}
+
 // MALResolveResult represents the result of resolving a MAL ID
 type MALResolveResult struct {
 	Status   string `json:"status"`              // "resolved" or "ambiguous"

@@ -7,6 +7,7 @@ use (
 	./libs/database
 	./libs/errors
 	./libs/httputil
+	./libs/idmapping
 	./libs/logger
 	./libs/metrics
 	./libs/pagination

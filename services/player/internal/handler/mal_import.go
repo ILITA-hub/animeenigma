@@ -70,6 +70,7 @@ type MALAnimeEntry struct {
 type CatalogAnime struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
+	NameRU      string `json:"name_ru"`
 	MalID       string `json:"mal_id"`
 	ShikimoriID string `json:"shikimori_id"`
 	PosterURL   string `json:"poster_url"`

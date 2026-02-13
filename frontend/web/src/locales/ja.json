@@ -136,7 +136,9 @@
       "importing": "インポート中...",
       "import": "インポート",
       "imported": "インポート済み",
-      "skipped": "スキップ"
+      "skipped": "スキップ",
+      "shikimoriPlaceholder": "Shikimoriのニックネームを入力",
+      "shikimoriDescription": "Shikimoriからアニメリストをインポートします。プロフィールは公開されている必要があります。"
     },
     "settings": {
       "appearance": "外観",

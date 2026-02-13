@@ -69,12 +69,13 @@ func main() {
 	reviewHandler := handler.NewReviewHandler(reviewService, log)
 	malImportHandler := handler.NewMALImportHandler(listService, log)
 	malExportHandler := handler.NewMALExportHandler(malExportService, log)
+	shikimoriImportHandler := handler.NewShikimoriImportHandler(listService, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

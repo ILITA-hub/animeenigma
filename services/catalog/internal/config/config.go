@@ -19,6 +19,7 @@ type Config struct {
 	Shikimori ShikimoriConfig
 	HiAnime   HiAnimeConfig
 	Consumet  ConsumetConfig
+	Jimaku    JimakuConfig
 }
 
 type ServerConfig struct {
@@ -44,6 +45,10 @@ type HiAnimeConfig struct {
 
 type ConsumetConfig struct {
 	APIURL string
+}
+
+type JimakuConfig struct {
+	APIKey string
 }
 
 func Load() (*Config, error) {
@@ -82,6 +87,9 @@ func Load() (*Config, error) {
 		},
 		Consumet: ConsumetConfig{
 			APIURL: getEnv("CONSUMET_API_URL", "http://consumet:3000"),
+		},
+		Jimaku: JimakuConfig{
+			APIKey: getEnv("JIMAKU_API_KEY", ""),
 		},
 	}, nil
 }

@@ -136,7 +136,9 @@
       "importing": "Importing...",
       "import": "Import",
       "imported": "Imported",
-      "skipped": "Skipped"
+      "skipped": "Skipped",
+      "shikimoriPlaceholder": "Enter Shikimori nickname",
+      "shikimoriDescription": "Imports your anime list from Shikimori. Your profile must be public."
     },
     "settings": {
       "appearance": "Appearance",
