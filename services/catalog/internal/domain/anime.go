@@ -291,11 +291,19 @@ type ConsumetSubtitle struct {
 	Lang string `json:"lang"`
 }
 
+// ConsumetSource represents a single video quality source from Consumet
+type ConsumetSource struct {
+	URL     string `json:"url"`
+	Quality string `json:"quality"`
+	IsM3U8  bool   `json:"isM3U8"`
+}
+
 // ConsumetStream represents stream source data from Consumet
 type ConsumetStream struct {
 	URL       string             `json:"url"`
 	IsM3U8    bool               `json:"isM3U8"`
 	Quality   string             `json:"quality"`
+	Sources   []ConsumetSource   `json:"sources,omitempty"`
 	Headers   map[string]string  `json:"headers,omitempty"`
 	Subtitles []ConsumetSubtitle `json:"subtitles,omitempty"`
 }

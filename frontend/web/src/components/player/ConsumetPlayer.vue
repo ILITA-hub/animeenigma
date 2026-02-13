@@ -212,6 +212,29 @@
           </button>
         </div>
 
+        <!-- Quality selector -->
+        <div v-if="availableSources.length > 1" class="mt-4">
+          <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+            </svg>
+            Качество
+          </h3>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="source in availableSources"
+              :key="source.quality"
+              @click="selectQuality(source)"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              :class="selectedQuality === source.quality
+                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+            >
+              {{ source.quality }}
+            </button>
+          </div>
+        </div>
+
         <!-- Subtitles section -->
         <div v-if="subtitles.length > 0 || selectedEpisode" class="mt-4 p-3 rounded-lg bg-white/5">
           <h4 class="text-white/60 text-sm mb-2">Субтитры</h4>
@@ -299,10 +322,17 @@ interface ConsumetSubtitle {
   lang: string
 }
 
+interface ConsumetSource {
+  url: string
+  quality: string
+  isM3U8: boolean
+}
+
 interface ConsumetStream {
   url: string
   isM3U8: boolean
   quality: string
+  sources?: ConsumetSource[]
   headers?: Record<string, string>
   subtitles?: ConsumetSubtitle[]
 }
@@ -335,6 +365,9 @@ const selectedServer = ref<ConsumetServer | null>(null)
 const streamUrl = ref<string | null>(null)
 const subtitles = ref<ConsumetSubtitle[]>([])
 const streamReferer = ref('')
+
+const availableSources = ref<ConsumetSource[]>([])
+const selectedQuality = ref<string | null>(null)
 
 const loadingEpisodes = ref(false)
 const loadingStream = ref(false)
@@ -456,6 +489,30 @@ const selectServer = async (server: ConsumetServer) => {
   }
 }
 
+const selectQuality = async (source: ConsumetSource) => {
+  if (source.url === streamUrl.value) return
+
+  disposeCurrentPlayer()
+  streamUrl.value = null
+  selectedQuality.value = source.quality
+
+  await nextTick()
+
+  streamUrl.value = source.url
+  await nextTick()
+
+  const targetRef = playerType.value === 'videojs' ? videoRef : nativeVideoRef
+  let retries = 0
+  while (!targetRef.value && retries < 5) {
+    await new Promise(resolve => setTimeout(resolve, 50))
+    retries++
+  }
+
+  if (targetRef.value) {
+    initPlayer(source.url, streamReferer.value)
+  }
+}
+
 const disposeCurrentPlayer = () => {
   if (vjsPlayer) {
     vjsPlayer.dispose()
@@ -473,6 +530,7 @@ const fetchStream = async () => {
 
   // Dispose existing player before reactive state changes remove the DOM element
   disposeCurrentPlayer()
+  streamUrl.value = null // Force Vue to remove old video element
 
   loadingStream.value = true
   error.value = null
@@ -489,6 +547,10 @@ const fetchStream = async () => {
       error.value = 'Не удалось получить ссылку на видео'
       return
     }
+
+    // Store all available quality sources
+    availableSources.value = data.sources || []
+    selectedQuality.value = data.quality || null
 
     streamUrl.value = data.url
     subtitles.value = data.subtitles || []
