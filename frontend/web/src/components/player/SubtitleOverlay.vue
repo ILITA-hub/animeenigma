@@ -42,6 +42,14 @@ const cues = ref<SubtitleCue[]>([])
 const currentTime = ref(0)
 let animFrameId: number | null = null
 
+// Dynamic font size based on video dimensions
+const baseFontSize = ref(19)
+
+function updateBaseFontSize() {
+  const height = props.videoElement?.clientHeight || 400
+  baseFontSize.value = Math.max(16, Math.min(48, height * 0.035))
+}
+
 // Fullscreen detection for Teleport
 const fullscreenEl = ref<Element | null>(null)
 
@@ -53,6 +61,8 @@ function onFullscreenChange() {
   } else {
     fullscreenEl.value = null
   }
+  // Recalculate font size after fullscreen change
+  setTimeout(updateBaseFontSize, 100)
 }
 
 // Find active cues for current time
@@ -109,7 +119,7 @@ function cueTextStyle(cue: SubtitleCue): Record<string, string> {
   const style: Record<string, string> = {
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     color: '#ffffff',
-    fontSize: '1.2em',
+    fontSize: `${baseFontSize.value}px`,
     lineHeight: '1.5',
     textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
     whiteSpace: 'pre-wrap',
@@ -192,8 +202,12 @@ watch(() => props.subtitleUrl, (url) => {
 })
 
 watch(() => props.videoElement, (el) => {
-  if (el) startTimeSync()
-  else stopTimeSync()
+  if (el) {
+    startTimeSync()
+    updateBaseFontSize()
+  } else {
+    stopTimeSync()
+  }
 }, { immediate: true })
 
 watch(() => props.visible, (v) => {
@@ -204,6 +218,8 @@ watch(() => props.visible, (v) => {
 onMounted(() => {
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+  window.addEventListener('resize', updateBaseFontSize)
+  updateBaseFontSize()
   if (props.videoElement && props.visible) startTimeSync()
   if (props.subtitleUrl && props.format) {
     loadSubtitles(props.subtitleUrl, props.format)
@@ -213,6 +229,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  window.removeEventListener('resize', updateBaseFontSize)
   stopTimeSync()
 })
 </script>

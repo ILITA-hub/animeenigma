@@ -1293,38 +1293,37 @@ func (s *CatalogService) findHiAnimeID(ctx context.Context, anime *domain.Anime)
 			continue
 		}
 
-		// Find best match
 		for _, r := range results {
-			// Simple matching - could be improved with fuzzy matching
 			if matchesAnime(r.Name, anime) {
-				// Cache the mapping for 24 hours
-				_ = s.cache.Set(ctx, cacheKey, r.ID, 24*time.Hour)
+				_ = s.cache.Set(ctx, cacheKey, r.ID, 6*time.Hour)
 				return r.ID, nil
 			}
-		}
-
-		// If no exact match, use the first result if available
-		if len(results) > 0 {
-			_ = s.cache.Set(ctx, cacheKey, results[0].ID, 24*time.Hour)
-			return results[0].ID, nil
 		}
 	}
 
 	return "", fmt.Errorf("anime not found on HiAnime")
 }
 
-// matchesAnime checks if a search result matches an anime
+// matchesAnime checks if a search result matches an anime using exact and containment matching
 func matchesAnime(resultName string, anime *domain.Anime) bool {
-	resultLower := normalizeTitle(resultName)
+	resultNorm := normalizeTitle(resultName)
 
-	if anime.Name != "" && normalizeTitle(anime.Name) == resultLower {
-		return true
-	}
-	if anime.NameRU != "" && normalizeTitle(anime.NameRU) == resultLower {
-		return true
-	}
-	if anime.NameJP != "" && normalizeTitle(anime.NameJP) == resultLower {
-		return true
+	names := []string{anime.Name, anime.NameRU, anime.NameJP}
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		norm := normalizeTitle(name)
+		// Exact match
+		if norm == resultNorm {
+			return true
+		}
+		// Containment match (bidirectional) — only for names longer than 3 chars to avoid false positives
+		if len(norm) > 3 && len(resultNorm) > 3 {
+			if strings.Contains(resultNorm, norm) || strings.Contains(norm, resultNorm) {
+				return true
+			}
+		}
 	}
 
 	return false
@@ -1444,6 +1443,16 @@ func (s *CatalogService) GetConsumetStream(ctx context.Context, animeID string, 
 		}
 	}
 
+	// Convert all sources for quality selection
+	var allSources []domain.ConsumetSource
+	for _, s := range stream.Sources {
+		allSources = append(allSources, domain.ConsumetSource{
+			URL:     s.URL,
+			Quality: s.Quality,
+			IsM3U8:  s.IsM3U8,
+		})
+	}
+
 	// Convert subtitles
 	var subtitles []domain.ConsumetSubtitle
 	for _, sub := range stream.Subtitles {
@@ -1457,6 +1466,7 @@ func (s *CatalogService) GetConsumetStream(ctx context.Context, animeID string, 
 		URL:       source.URL,
 		IsM3U8:    source.IsM3U8,
 		Quality:   source.Quality,
+		Sources:   allSources,
 		Headers:   stream.Headers,
 		Subtitles: subtitles,
 	}
