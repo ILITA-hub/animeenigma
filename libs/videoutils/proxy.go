@@ -229,6 +229,7 @@ var HLSProxyAllowedDomains = []string{
 	"netmagcdn.com", // MegaCloud HLS CDN
 	"owocdn.top",    // AnimePahe/Kwik CDN
 	"kwik.cx",       // AnimePahe CDN
+	"jimaku.cc",     // Japanese subtitle files
 }
 
 // HLSProxyAllowedTLDs contains TLDs commonly used by streaming CDNs

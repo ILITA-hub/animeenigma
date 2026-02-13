@@ -8,6 +8,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/database v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/idmapping v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/pagination v0.0.0
@@ -61,6 +62,7 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/database => ../../libs/database
 	github.com/ILITA-hub/animeenigma/libs/errors => ../../libs/errors
 	github.com/ILITA-hub/animeenigma/libs/httputil => ../../libs/httputil
+	github.com/ILITA-hub/animeenigma/libs/idmapping => ../../libs/idmapping
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
 	github.com/ILITA-hub/animeenigma/libs/pagination => ../../libs/pagination

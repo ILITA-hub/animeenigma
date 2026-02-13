@@ -54,6 +54,7 @@ func NewRouter(
 			r.Get("/ongoing", catalogHandler.GetOngoingAnime)
 			r.Get("/seasonal/{year}/{season}", catalogHandler.GetSeasonalAnime)
 			r.Get("/mal/{malId}", catalogHandler.ResolveMALAnime)
+			r.Get("/shikimori/{shikimoriId}", catalogHandler.ResolveShikimoriAnime)
 			r.Get("/{animeId}", catalogHandler.GetAnime)
 			r.Post("/{animeId}/refresh", catalogHandler.RefreshAnime)
 			r.Get("/{animeId}/episodes", catalogHandler.GetAnimeEpisodes)
@@ -75,6 +76,8 @@ func NewRouter(
 			r.Get("/{animeId}/consumet/episodes", catalogHandler.GetConsumetEpisodes)
 			r.Get("/{animeId}/consumet/servers", catalogHandler.GetConsumetServers)
 			r.Get("/{animeId}/consumet/stream", catalogHandler.GetConsumetStream)
+			// Jimaku Japanese subtitles
+			r.Get("/{animeId}/jimaku/subtitles", catalogHandler.GetJimakuSubtitles)
 		})
 
 		// Kodik search (for finding anime not in our DB)

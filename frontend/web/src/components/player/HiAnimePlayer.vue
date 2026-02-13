@@ -79,6 +79,16 @@
               <p>Выберите серию для начала просмотра</p>
             </div>
           </div>
+
+          <!-- Japanese Subtitle Overlay (outside v-if chain) -->
+          <SubtitleOverlay
+            :video-element="activeVideoElement"
+            :subtitle-url="activeSubtitleUrl"
+            :format="activeSubtitleFormat"
+            :visible="showJpOverlay"
+            @loading="(v: boolean) => loadingSubOverlay = v"
+            @error="(msg: string) => jimakuError = msg"
+          />
         </div>
 
         <!-- Episode selector below player -->
@@ -237,10 +247,11 @@
           </div>
         </div>
 
-        <!-- Subtitles info -->
-        <div v-if="subtitles.length > 0" class="mt-4 p-3 rounded-lg bg-white/5">
+        <!-- Subtitles section -->
+        <div v-if="subtitles.length > 0 || selectedEpisode" class="mt-4 p-3 rounded-lg bg-white/5">
           <h4 class="text-white/60 text-sm mb-2">Субтитры</h4>
-          <div class="flex flex-wrap gap-2">
+          <!-- Stream subtitles -->
+          <div v-if="subtitles.length > 0" class="flex flex-wrap gap-2 mb-3">
             <span
               v-for="sub in subtitles"
               :key="sub.url"
@@ -248,6 +259,49 @@
             >
               {{ sub.label }}
             </span>
+          </div>
+          <!-- Japanese Subtitles (Jimaku) -->
+          <div v-if="selectedEpisode">
+            <button
+              @click="fetchJimakuSubtitles"
+              :disabled="loadingJimaku"
+              class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="jimakuLoaded
+                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+            >
+              <svg v-if="loadingJimaku" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span v-else>JP</span>
+              {{ jimakuLoaded ? `JP Subs (${jimakuSubtitles.length})` : 'Load JP Subs' }}
+            </button>
+            <div v-if="jimakuError" class="mt-1 text-xs text-red-400/70">{{ jimakuError }}</div>
+            <div v-if="jimakuLoaded && jimakuSubtitles.length > 0" class="mt-2 space-y-1 max-h-32 overflow-y-auto">
+              <button
+                v-for="(sub, index) in jimakuSubtitles"
+                :key="index"
+                @click="activateJimakuSubtitle(sub)"
+                class="w-full text-left px-2 py-1 rounded text-xs transition-all"
+                :class="activeJimakuSub === sub.url
+                  ? 'bg-red-500/20 text-red-400'
+                  : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
+              >
+                {{ sub.file_name }} ({{ sub.format }})
+              </button>
+            </div>
+            <!-- Toggle overlay visibility when active -->
+            <button
+              v-if="activeJimakuSub"
+              @click="showJpOverlay = !showJpOverlay"
+              class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              :class="showJpOverlay
+                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
+            >
+              {{ showJpOverlay ? 'Hide JP Subs' : 'Show JP Subs' }}
+            </button>
           </div>
         </div>
       </div>
@@ -274,8 +328,9 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import videojs from 'video.js'
 import Hls from 'hls.js'
-import { hiAnimeApi, userApi } from '@/api/client'
+import { hiAnimeApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import SubtitleOverlay from './SubtitleOverlay.vue'
 
 interface HiAnimeEpisode {
   id: string
@@ -353,6 +408,7 @@ const serverLoadWarning = ref<string | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const nativeVideoRef = ref<HTMLVideoElement | null>(null)
 let vjsPlayer: ReturnType<typeof videojs> | null = null
+const vjsPlayerReady = ref(false)
 let hls: Hls | null = null
 
 // Progress tracking
@@ -361,6 +417,33 @@ const maxTime = ref(0)
 const lastSaveTime = ref(0)
 const SAVE_INTERVAL = 30
 const AUTO_MARK_THRESHOLD = 20 * 60 // 20 minutes
+
+// Jimaku Japanese subtitles
+interface JimakuSubtitle {
+  url: string
+  file_name: string
+  lang: string
+  format: string
+}
+const jimakuSubtitles = ref<JimakuSubtitle[]>([])
+const loadingJimaku = ref(false)
+const jimakuLoaded = ref(false)
+const jimakuError = ref<string | null>(null)
+const activeJimakuSub = ref<string | null>(null)
+
+// Subtitle overlay state
+const activeSubtitleUrl = ref<string | null>(null)
+const activeSubtitleFormat = ref<'ass' | 'srt' | 'vtt' | null>(null)
+const showJpOverlay = ref(true)
+const loadingSubOverlay = ref(false)
+
+// Computed: get the active video element for subtitle sync
+const activeVideoElement = computed<HTMLVideoElement | null>(() => {
+  if (playerType.value === 'videojs' && vjsPlayerReady.value && vjsPlayer) {
+    return vjsPlayer.el()?.querySelector('video') || null
+  }
+  return nativeVideoRef.value
+})
 
 // Watch tracking
 const markingWatched = ref(false)
@@ -448,6 +531,7 @@ const disposeCurrentPlayer = () => {
   if (vjsPlayer) {
     vjsPlayer.dispose()
     vjsPlayer = null
+    vjsPlayerReady.value = false
   }
   if (hls) {
     hls.destroy()
@@ -536,6 +620,39 @@ const buildSubtitleProxyUrl = (url: string): string => {
   return `/api/streaming/hls-proxy?${params.toString()}`
 }
 
+// Jimaku Japanese subtitles
+const fetchJimakuSubtitles = async () => {
+  if (!selectedEpisode.value || loadingJimaku.value) return
+
+  loadingJimaku.value = true
+  jimakuError.value = null
+
+  try {
+    const response = await jimakuApi.getSubtitles(props.animeId, selectedEpisode.value.number)
+    const data = response.data?.data || response.data
+    jimakuSubtitles.value = data.subtitles || []
+    jimakuLoaded.value = true
+
+    if (jimakuSubtitles.value.length === 0) {
+      jimakuError.value = 'No Japanese subtitles found for this episode'
+    }
+  } catch (err: any) {
+    const msg = err.response?.data?.error || err.response?.data?.message || err.message
+    jimakuError.value = msg || 'Failed to load Japanese subtitles'
+    jimakuLoaded.value = false
+  } finally {
+    loadingJimaku.value = false
+  }
+}
+
+const activateJimakuSubtitle = (sub: JimakuSubtitle) => {
+  activeJimakuSub.value = sub.url
+  // Use the custom subtitle overlay for selectable text rendering
+  activeSubtitleUrl.value = sub.url
+  activeSubtitleFormat.value = (sub.format as 'ass' | 'srt' | 'vtt') || 'ass'
+  showJpOverlay.value = true
+}
+
 const getLanguageCode = (lang: string): string => {
   // Convert full language names to ISO 639-1 codes
   const langMap: Record<string, string> = {
@@ -601,6 +718,7 @@ const initVideoJsPlayer = (url: string, referer: string = '') => {
   // Set source, then add subtitles and play
   vjsPlayer.src({ src: proxyUrl, type: 'application/x-mpegURL' })
   vjsPlayer.ready(() => {
+    vjsPlayerReady.value = true
     // Add subtitle tracks after source is set
     for (let i = 0; i < subtitles.value.length; i++) {
       const sub = subtitles.value[i]
@@ -727,10 +845,16 @@ const selectEpisode = async (episode: HiAnimeEpisode) => {
   maxTime.value = 0
   lastSaveTime.value = 0
 
-  // Reset stream
+  // Reset stream and jimaku state
   streamUrl.value = null
   servers.value = []
   selectedServer.value = null
+  jimakuSubtitles.value = []
+  jimakuLoaded.value = false
+  jimakuError.value = null
+  activeJimakuSub.value = null
+  activeSubtitleUrl.value = null
+  activeSubtitleFormat.value = null
 
   // Fetch servers for this episode
   await fetchServers(episode.id)
@@ -866,6 +990,40 @@ const autoMarkEpisodeWatched = async () => {
   }
 }
 
+// Keyboard shortcuts (document-level so they work regardless of focus)
+const handleKeyDown = (e: KeyboardEvent) => {
+  const target = e.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+  if (!streamUrl.value) return
+
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault()
+      if (playerType.value === 'videojs' && vjsPlayer) {
+        vjsPlayer.paused() ? vjsPlayer.play() : vjsPlayer.pause()
+      } else if (nativeVideoRef.value) {
+        nativeVideoRef.value.paused ? nativeVideoRef.value.play() : nativeVideoRef.value.pause()
+      }
+      break
+    case 'ArrowLeft':
+      e.preventDefault()
+      if (playerType.value === 'videojs' && vjsPlayer) {
+        vjsPlayer.currentTime(Math.max(0, (vjsPlayer.currentTime() || 0) - 5))
+      } else if (nativeVideoRef.value) {
+        nativeVideoRef.value.currentTime = Math.max(0, nativeVideoRef.value.currentTime - 5)
+      }
+      break
+    case 'ArrowRight':
+      e.preventDefault()
+      if (playerType.value === 'videojs' && vjsPlayer) {
+        vjsPlayer.currentTime((vjsPlayer.currentTime() || 0) + 5)
+      } else if (nativeVideoRef.value) {
+        nativeVideoRef.value.currentTime += 5
+      }
+      break
+  }
+}
+
 // Watchers
 watch(selectedCategory, () => {
   // When category changes, select first server of new category
@@ -893,11 +1051,13 @@ watch(() => props.animeId, () => {
 
 // Lifecycle
 onMounted(() => {
+  document.addEventListener('keydown', handleKeyDown)
   fetchEpisodes()
   fetchWatchedEpisodes()
 })
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyDown)
   saveProgress()
   disposeCurrentPlayer()
 })

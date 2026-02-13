@@ -132,6 +132,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       SHIKIMORI_USER_AGENT: ${SHIKIMORI_USER_AGENT:-AnimeEnigma/1.0}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      JIMAKU_API_KEY: ${JIMAKU_API_KEY:-}
     expose:
       - "8081"
     depends_on:

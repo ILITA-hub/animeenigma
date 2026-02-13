@@ -73,6 +73,7 @@ func main() {
 		service.CatalogServiceOptions{
 			AniwatchAPIURL: cfg.HiAnime.AniwatchAPIURL,
 			ConsumetAPIURL: cfg.Consumet.APIURL,
+			JimakuAPIKey:   cfg.Jimaku.APIKey,
 		},
 	)
 

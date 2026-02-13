@@ -19,6 +19,7 @@ func NewRouter(
 	reviewHandler *handler.ReviewHandler,
 	malImportHandler *handler.MALImportHandler,
 	malExportHandler *handler.MALExportHandler,
+	shikimoriImportHandler *handler.ShikimoriImportHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -70,6 +71,11 @@ func NewRouter(
 
 			// MAL Import (sync - immediate)
 			r.Post("/import/mal", malImportHandler.ImportMALList)
+
+			// Shikimori Import (async - background goroutine)
+			r.Post("/import/shikimori", shikimoriImportHandler.ImportShikimoriList)
+			r.Post("/import/shikimori/migrate", shikimoriImportHandler.MigrateShikimoriEntries)
+			r.Get("/import/shikimori/{jobId}", shikimoriImportHandler.GetImportStatus)
 
 			// MAL Export (async - queued)
 			r.Post("/mal-export", malExportHandler.InitiateExport)

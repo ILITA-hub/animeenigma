@@ -170,6 +170,18 @@ func (r *AnimeRepository) UpdateMALID(ctx context.Context, animeID string, malID
 	return nil
 }
 
+func (r *AnimeRepository) UpdateAniListID(ctx context.Context, animeID string, anilistID string) error {
+	result := r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("ani_list_id", anilistID)
+	if result.Error != nil {
+		return fmt.Errorf("update ani_list_id: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return liberrors.NotFound("anime")
+	}
+	return nil
+}
+
 func (r *AnimeRepository) UpdateShikimoriID(ctx context.Context, animeID string, shikimoriID string) error {
 	result := r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
 		Update("shikimori_id", shikimoriID)

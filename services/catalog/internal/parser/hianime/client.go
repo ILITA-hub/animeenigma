@@ -86,6 +86,8 @@ type Stream struct {
 	Headers   map[string]string `json:"headers,omitempty"`
 	Intro     *TimeRange        `json:"intro,omitempty"`
 	Outro     *TimeRange        `json:"outro,omitempty"`
+	AnilistID int               `json:"anilist_id,omitempty"`
+	MalID     int               `json:"mal_id,omitempty"`
 }
 
 // Subtitle represents a subtitle track
@@ -590,9 +592,11 @@ func (c *Client) getStreamFromAniwatch(episodeID string, serverID string, catego
 	}
 
 	stream := &Stream{
-		URL:     source.URL,
-		Type:    "hls",
-		Headers: aniwatchResp.Data.Headers,
+		URL:       source.URL,
+		Type:      "hls",
+		Headers:   aniwatchResp.Data.Headers,
+		AnilistID: aniwatchResp.Data.AnilistID,
+		MalID:     aniwatchResp.Data.MalID,
 	}
 
 	// Add subtitles from tracks (filter out thumbnails)

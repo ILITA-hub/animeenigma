@@ -574,6 +574,52 @@
                       <p class="text-sm text-pink-400">{{ malImportError }}</p>
                     </div>
                   </div>
+
+                  <!-- Shikimori Import -->
+                  <div>
+                    <label class="block text-white/60 text-sm mb-2">Shikimori</label>
+                    <div class="flex gap-2">
+                      <input
+                        v-model="shikimoriNickname"
+                        type="text"
+                        :placeholder="$t('profile.import.shikimoriPlaceholder')"
+                        class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
+                        :disabled="shikimoriImporting"
+                      />
+                      <Button
+                        variant="primary"
+                        :disabled="!shikimoriNickname || shikimoriImporting"
+                        @click="importShikimori"
+                      >
+                        <svg v-if="shikimoriImporting" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {{ shikimoriImporting ? $t('profile.import.importing') : $t('profile.import.import') }}
+                      </Button>
+                    </div>
+                    <p class="text-white/40 text-xs mt-2">
+                      {{ $t('profile.import.shikimoriDescription') }}
+                    </p>
+                    <!-- Progress bar -->
+                    <div v-if="shikimoriImportProgress" class="mt-3">
+                      <div class="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          class="h-full bg-cyan-500 transition-all duration-300"
+                          :style="{ width: (shikimoriImportProgress.total > 0 ? ((shikimoriImportProgress.imported + shikimoriImportProgress.skipped) / shikimoriImportProgress.total * 100) : 0) + '%' }"
+                        />
+                      </div>
+                      <p class="text-sm text-white/60 mt-1">
+                        {{ shikimoriImportProgress.imported + shikimoriImportProgress.skipped }} / {{ shikimoriImportProgress.total }}
+                        <span v-if="shikimoriImportProgress.status === 'completed'" class="text-green-400 ml-2">
+                          {{ $t('profile.import.imported') }}: {{ shikimoriImportProgress.imported }} | {{ $t('profile.import.skipped') }}: {{ shikimoriImportProgress.skipped }}
+                        </span>
+                      </p>
+                    </div>
+                    <div v-if="shikimoriImportError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
+                      <p class="text-sm text-pink-400">{{ shikimoriImportError }}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -743,7 +789,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -981,6 +1027,14 @@ const malUsername = ref('')
 const malImporting = ref(false)
 const malImportResult = ref<{ imported: number; skipped: number; errors?: string[] } | null>(null)
 const malImportError = ref<string | null>(null)
+
+// Shikimori Import
+const shikimoriNickname = ref('')
+const shikimoriImporting = ref(false)
+const shikimoriJobId = ref<string | null>(null)
+const shikimoriImportProgress = ref<{ total: number; imported: number; skipped: number; status: string } | null>(null)
+const shikimoriImportError = ref<string | null>(null)
+let shikimoriPollInterval: ReturnType<typeof setInterval> | null = null
 
 // Public Profile settings
 const publicId = ref('')
@@ -1225,6 +1279,59 @@ const importMAL = async () => {
   }
 }
 
+const importShikimori = async () => {
+  if (!shikimoriNickname.value) return
+
+  shikimoriImporting.value = true
+  shikimoriImportProgress.value = null
+  shikimoriImportError.value = null
+
+  try {
+    const response = await userApi.importShikimori(shikimoriNickname.value)
+    const data = response.data?.data || response.data
+    shikimoriJobId.value = data.job_id
+
+    shikimoriImportProgress.value = {
+      total: data.total,
+      imported: 0,
+      skipped: 0,
+      status: 'processing',
+    }
+
+    // Start polling
+    shikimoriPollInterval = setInterval(async () => {
+      if (!shikimoriJobId.value) return
+
+      try {
+        const statusResp = await userApi.getShikimoriImportStatus(shikimoriJobId.value)
+        const statusData = statusResp.data?.data || statusResp.data
+        shikimoriImportProgress.value = statusData
+
+        if (statusData.status === 'completed' || statusData.status === 'failed') {
+          stopShikimoriPoll()
+          shikimoriImporting.value = false
+          if (statusData.status === 'completed') {
+            await fetchWatchlist(true)
+          }
+        }
+      } catch {
+        stopShikimoriPoll()
+        shikimoriImporting.value = false
+      }
+    }, 2000)
+  } catch (err: any) {
+    shikimoriImportError.value = err.response?.data?.message || 'Failed to import list'
+    shikimoriImporting.value = false
+  }
+}
+
+const stopShikimoriPoll = () => {
+  if (shikimoriPollInterval) {
+    clearInterval(shikimoriPollInterval)
+    shikimoriPollInterval = null
+  }
+}
+
 const savePublicId = async () => {
   if (!publicId.value) return
 
@@ -1362,6 +1469,7 @@ watch(editingScore, (id) => {
 })
 
 onMounted(fetchProfile)
+onUnmounted(stopShikimoriPoll)
 </script>
 
 <style scoped>

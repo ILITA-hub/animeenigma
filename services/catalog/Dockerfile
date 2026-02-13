@@ -14,6 +14,7 @@ COPY libs/cache/go.mod libs/cache/go.sum* ./libs/cache/
 COPY libs/database/go.mod libs/database/go.sum* ./libs/database/
 COPY libs/authz/go.mod libs/authz/go.sum* ./libs/authz/
 COPY libs/httputil/go.mod libs/httputil/go.sum* ./libs/httputil/
+COPY libs/idmapping/go.mod libs/idmapping/go.sum* ./libs/idmapping/
 COPY libs/pagination/go.mod libs/pagination/go.sum* ./libs/pagination/
 COPY libs/animeparser/go.mod libs/animeparser/go.sum* ./libs/animeparser/
 COPY libs/videoutils/go.mod libs/videoutils/go.sum* ./libs/videoutils/

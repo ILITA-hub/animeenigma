@@ -257,6 +257,7 @@ services:
       JWT_SECRET: dev-secret-change-in-production
       ANIWATCH_API_URL: http://aniwatch:4000
       CONSUMET_API_URL: http://consumet:3000
+      JIMAKU_API_KEY: ${JIMAKU_API_KEY:-}
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:
