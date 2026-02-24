@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
@@ -14,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animelib"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/consumet"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hianime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jikan"
@@ -22,6 +24,13 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 )
+
+// hianimeInflight deduplicates concurrent findHiAnimeID lookups for the same anime
+type hianimeInflight struct {
+	done chan struct{}
+	id   string
+	err  error
+}
 
 type CatalogService struct {
 	animeRepo       *repo.AnimeRepository
@@ -34,9 +43,12 @@ type CatalogService struct {
 	consumetClient  *consumet.Client
 	jikanClient     *jikan.Client
 	jimakuClient    *jimaku.Client
+	animelibClient  *animelib.Client
 	idMappingClient *idmapping.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
+
+	hianimeLookups sync.Map // map[string]*hianimeInflight
 }
 
 // CatalogServiceOptions contains optional configuration for CatalogService
@@ -44,6 +56,7 @@ type CatalogServiceOptions struct {
 	AniwatchAPIURL string
 	ConsumetAPIURL string
 	JimakuAPIKey   string
+	AnimeLibToken  string
 }
 
 func NewCatalogService(
@@ -64,11 +77,12 @@ func NewCatalogService(
 	}
 
 	// Get API URLs from options
-	var aniwatchAPIURL, consumetAPIURL, jimakuAPIKey string
+	var aniwatchAPIURL, consumetAPIURL, jimakuAPIKey, animelibToken string
 	if len(opts) > 0 {
 		aniwatchAPIURL = opts[0].AniwatchAPIURL
 		consumetAPIURL = opts[0].ConsumetAPIURL
 		jimakuAPIKey = opts[0].JimakuAPIKey
+		animelibToken = opts[0].AnimeLibToken
 	}
 
 	jimakuClient := jimaku.NewClient(jimakuAPIKey)
@@ -76,6 +90,13 @@ func NewCatalogService(
 		log.Infow("jimaku client initialized")
 	} else {
 		log.Warnw("jimaku client not configured, japanese subtitle features will be unavailable")
+	}
+
+	animelibClient := animelib.NewClient(animelibToken)
+	if animelibToken != "" {
+		log.Infow("animelib client initialized with token")
+	} else {
+		log.Infow("animelib client initialized without token")
 	}
 
 	return &CatalogService{
@@ -89,6 +110,7 @@ func NewCatalogService(
 		consumetClient:  consumet.NewClient(consumetAPIURL),
 		jikanClient:     jikan.NewClient(),
 		jimakuClient:    jimakuClient,
+		animelibClient:  animelibClient,
 		idMappingClient: idmapping.NewClient(),
 		cache:           cache,
 		log:             log,
@@ -1266,20 +1288,59 @@ func (s *CatalogService) SearchHiAnime(ctx context.Context, title string) ([]dom
 	return searchResults, nil
 }
 
-// findHiAnimeID finds the HiAnime ID for an anime by searching
+// findHiAnimeID finds the HiAnime ID for an anime by searching.
+// Uses singleflight to deduplicate concurrent lookups for the same anime.
 func (s *CatalogService) findHiAnimeID(ctx context.Context, anime *domain.Anime) (string, error) {
-	// Check cache for HiAnime ID mapping
 	cacheKey := fmt.Sprintf("hianime:mapping:%s", anime.ID)
+
+	// Check cache first (includes negative cache)
 	var cachedID string
-	if err := s.cache.Get(ctx, cacheKey, &cachedID); err == nil && cachedID != "" {
+	if err := s.cache.Get(ctx, cacheKey, &cachedID); err == nil {
+		if cachedID == "" {
+			return "", fmt.Errorf("anime not found on HiAnime (cached)")
+		}
 		return cachedID, nil
 	}
 
-	// Search by different name variants
+	// Singleflight: deduplicate concurrent lookups for same anime
+	flight := &hianimeInflight{done: make(chan struct{})}
+	if existing, loaded := s.hianimeLookups.LoadOrStore(anime.ID, flight); loaded {
+		// Another goroutine is already looking this up — wait for its result
+		existing := existing.(*hianimeInflight)
+		<-existing.done
+		return existing.id, existing.err
+	}
+
+	// We own this lookup — do the search
+	defer func() {
+		close(flight.done)
+		s.hianimeLookups.Delete(anime.ID)
+	}()
+
+	id, err := s.doHiAnimeSearch(ctx, anime, cacheKey)
+	flight.id = id
+	flight.err = err
+	return id, err
+}
+
+// doHiAnimeSearch performs the actual HiAnime search across name variants.
+func (s *CatalogService) doHiAnimeSearch(ctx context.Context, anime *domain.Anime, cacheKey string) (string, error) {
 	searchNames := []string{}
+	var extraMatchNames []string // additional names for matching (not from anime DB)
+
 	if anime.Name != "" {
 		searchNames = append(searchNames, anime.Name)
 	}
+
+	// Fetch English title from Jikan — HiAnime uses English titles while Shikimori gives romanized Japanese
+	if anime.MALID != "" {
+		jikanInfo, err := s.jikanClient.GetAnimeByID(ctx, anime.MALID)
+		if err == nil && jikanInfo.TitleEnglish != "" && jikanInfo.TitleEnglish != anime.Name {
+			searchNames = append(searchNames, jikanInfo.TitleEnglish)
+			extraMatchNames = append(extraMatchNames, jikanInfo.TitleEnglish)
+		}
+	}
+
 	if anime.NameRU != "" && anime.NameRU != anime.Name {
 		searchNames = append(searchNames, anime.NameRU)
 	}
@@ -1290,25 +1351,30 @@ func (s *CatalogService) findHiAnimeID(ctx context.Context, anime *domain.Anime)
 	for _, name := range searchNames {
 		results, err := s.hianimeClient.Search(name)
 		if err != nil {
+			s.log.Debugw("hianime search failed for variant", "name", name, "error", err)
 			continue
 		}
 
 		for _, r := range results {
-			if matchesAnime(r.Name, anime) {
+			if matchesAnime(r.Name, anime, extraMatchNames...) {
 				_ = s.cache.Set(ctx, cacheKey, r.ID, 6*time.Hour)
 				return r.ID, nil
 			}
 		}
 	}
 
+	// Cache negative result for 10 minutes to avoid hammering HiAnime
+	_ = s.cache.Set(ctx, cacheKey, "", 10*time.Minute)
 	return "", fmt.Errorf("anime not found on HiAnime")
 }
 
-// matchesAnime checks if a search result matches an anime using exact and containment matching
-func matchesAnime(resultName string, anime *domain.Anime) bool {
+// matchesAnime checks if a search result matches an anime using exact and containment matching.
+// Extra names (e.g. English title from Jikan) can be passed for additional matching.
+func matchesAnime(resultName string, anime *domain.Anime, extraNames ...string) bool {
 	resultNorm := normalizeTitle(resultName)
 
 	names := []string{anime.Name, anime.NameRU, anime.NameJP}
+	names = append(names, extraNames...)
 	for _, name := range names {
 		if name == "" {
 			continue
@@ -1557,6 +1623,269 @@ func matchesConsumetAnime(resultTitle string, anime *domain.Anime) bool {
 		return true
 	}
 
+	return false
+}
+
+// ============================================================================
+// AnimeLib API Methods
+// ============================================================================
+
+// GetAnimeLibEpisodes gets episodes from AnimeLib for an anime
+func (s *CatalogService) GetAnimeLibEpisodes(ctx context.Context, animeID string) ([]domain.AnimeLibEpisode, error) {
+	// Get anime to search by name
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check cache first
+	cacheKey := fmt.Sprintf("animelib:episodes:%s", animeID)
+	var cached []domain.AnimeLibEpisode
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	// Find anime on AnimeLib
+	animelibID, err := s.findAnimeLibID(ctx, anime)
+	if err != nil {
+		s.log.Warnw("failed to find anime on animelib",
+			"anime_id", animeID,
+			"name", anime.Name,
+			"error", err)
+		return []domain.AnimeLibEpisode{}, nil
+	}
+
+	// Get episodes
+	episodes, err := s.animelibClient.GetEpisodes(animelibID)
+	if err != nil {
+		s.log.Warnw("failed to get animelib episodes",
+			"anime_id", animeID,
+			"animelib_id", animelibID,
+			"error", err)
+		return []domain.AnimeLibEpisode{}, nil
+	}
+
+	result := make([]domain.AnimeLibEpisode, len(episodes))
+	for i, ep := range episodes {
+		result[i] = domain.AnimeLibEpisode{
+			ID:     ep.ID,
+			Number: ep.Number,
+			Name:   ep.Name,
+		}
+	}
+
+	// Cache for 1 hour
+	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
+
+	return result, nil
+}
+
+// GetAnimeLibTranslations gets available translations for an episode from AnimeLib
+func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID string, episodeID int) ([]domain.AnimeLibTranslation, error) {
+	// Check cache first
+	cacheKey := fmt.Sprintf("animelib:translations:%s:%d", animeID, episodeID)
+	var cached []domain.AnimeLibTranslation
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	// Get episode streams (includes player/translation data)
+	detail, err := s.animelibClient.GetEpisodeStreams(episodeID)
+	if err != nil {
+		s.log.Warnw("failed to get animelib episode streams",
+			"anime_id", animeID,
+			"episode_id", episodeID,
+			"error", err)
+		return []domain.AnimeLibTranslation{}, nil
+	}
+
+	// Collect unique translation teams from Players.
+	// Prefer "Animelib" player (direct video) over "Kodik" (iframe) for same team.
+	type teamEntry struct {
+		translation domain.AnimeLibTranslation
+		playerID    int // the actual player entry ID (for stream lookup)
+	}
+	teamMap := make(map[int]*teamEntry)
+
+	for _, p := range detail.Players {
+		// Map translation type label to internal type
+		translationType := "voice"
+		if p.TranslationType.ID == 1 || strings.Contains(strings.ToLower(p.TranslationType.Label), "субтитр") {
+			translationType = "subtitles"
+		}
+
+		existing, exists := teamMap[p.Team.ID]
+		// Prefer "Animelib" player over "Kodik" for same team
+		if !exists || (p.Player == "Animelib" && existing.translation.Player != "Animelib") {
+			teamMap[p.Team.ID] = &teamEntry{
+				translation: domain.AnimeLibTranslation{
+					ID:       p.ID, // use the player entry ID (not team ID) for stream lookup
+					TeamName: p.Team.Name,
+					Type:     translationType,
+					Player:   p.Player,
+				},
+				playerID: p.ID,
+			}
+		}
+	}
+
+	var result []domain.AnimeLibTranslation
+	for _, entry := range teamMap {
+		result = append(result, entry.translation)
+	}
+
+	if result == nil {
+		result = []domain.AnimeLibTranslation{}
+	}
+
+	// Cache for 1 hour
+	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
+
+	return result, nil
+}
+
+// GetAnimeLibStream gets the stream URL from AnimeLib for a specific episode and translation
+func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, episodeID int, translationID int) (*domain.AnimeLibStream, error) {
+	// Check cache first
+	cacheKey := fmt.Sprintf("animelib:stream:%s:%d:%d", animeID, episodeID, translationID)
+	var cached domain.AnimeLibStream
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return &cached, nil
+	}
+
+	// Get episode streams
+	detail, err := s.animelibClient.GetEpisodeStreams(episodeID)
+	if err != nil {
+		s.log.Warnw("failed to get animelib episode streams",
+			"anime_id", animeID,
+			"episode_id", episodeID,
+			"error", err)
+		return nil, errors.NotFound("stream not available on animelib")
+	}
+
+	// Find the PlayerData matching the translationID (player entry ID)
+	var matched *animelib.PlayerData
+	for i := range detail.Players {
+		if detail.Players[i].ID == translationID {
+			matched = &detail.Players[i]
+			break
+		}
+	}
+
+	if matched == nil {
+		return nil, errors.NotFound("translation not found on animelib")
+	}
+
+	var result *domain.AnimeLibStream
+
+	if matched.Player == "Animelib" && matched.Video != nil && len(matched.Video.Quality) > 0 {
+		// Direct video: build MP4 URLs from quality array
+		sources := make([]domain.AnimeLibSource, len(matched.Video.Quality))
+		for i, q := range matched.Video.Quality {
+			sources[i] = domain.AnimeLibSource{
+				URL:     animelib.BuildVideoURL(q.Href),
+				Quality: q.Quality,
+			}
+		}
+		result = &domain.AnimeLibStream{
+			Sources: sources,
+		}
+	} else if matched.Src != "" {
+		// Kodik iframe fallback
+		iframeURL := matched.Src
+		if strings.HasPrefix(iframeURL, "//") {
+			iframeURL = "https:" + iframeURL
+		}
+		result = &domain.AnimeLibStream{
+			IframeURL: iframeURL,
+		}
+	} else {
+		return nil, errors.NotFound("no video source available on animelib")
+	}
+
+	// Cache for 30 minutes (stream URLs may expire)
+	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
+
+	return result, nil
+}
+
+// SearchAnimeLib searches for anime on AnimeLib by title
+func (s *CatalogService) SearchAnimeLib(ctx context.Context, title string) ([]domain.AnimeLibSearchResult, error) {
+	results, err := s.animelibClient.Search(title)
+	if err != nil {
+		return nil, err
+	}
+
+	searchResults := make([]domain.AnimeLibSearchResult, len(results))
+	for i, r := range results {
+		var poster string
+		if r.Cover != nil {
+			poster = r.Cover.Default
+		}
+		searchResults[i] = domain.AnimeLibSearchResult{
+			ID:      r.ID,
+			Name:    r.Name,
+			RusName: r.RusName,
+			Poster:  poster,
+			SlugURL: r.SlugURL,
+		}
+	}
+
+	return searchResults, nil
+}
+
+// findAnimeLibID finds the AnimeLib integer ID for an anime by searching
+func (s *CatalogService) findAnimeLibID(ctx context.Context, anime *domain.Anime) (int, error) {
+	// Check cache for AnimeLib ID mapping
+	cacheKey := fmt.Sprintf("animelib:mapping:%s", anime.ID)
+	var cachedID int
+	if err := s.cache.Get(ctx, cacheKey, &cachedID); err == nil && cachedID != 0 {
+		return cachedID, nil
+	}
+
+	// Search by different name variants — prefer NameRU since AnimeLib is Russian
+	searchNames := []string{}
+	if anime.NameRU != "" {
+		searchNames = append(searchNames, anime.NameRU)
+	}
+	if anime.Name != "" && anime.Name != anime.NameRU {
+		searchNames = append(searchNames, anime.Name)
+	}
+	if anime.NameJP != "" {
+		searchNames = append(searchNames, anime.NameJP)
+	}
+
+	for _, name := range searchNames {
+		results, err := s.animelibClient.Search(name)
+		if err != nil {
+			s.log.Debugw("animelib search failed for variant", "name", name, "error", err)
+			continue
+		}
+
+		for _, r := range results {
+			if matchesAnimeLibResult(r, anime) {
+				_ = s.cache.Set(ctx, cacheKey, r.ID, 24*time.Hour)
+				return r.ID, nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("anime not found on AnimeLib")
+}
+
+// matchesAnimeLibResult checks if an AnimeLib search result matches an anime
+func matchesAnimeLibResult(result animelib.SearchResult, anime *domain.Anime) bool {
+	// Check against all the AnimeLib result names
+	resultNames := []string{result.Name, result.RusName, result.EngName}
+
+	for _, resultName := range resultNames {
+		if resultName == "" {
+			continue
+		}
+		if matchesAnime(resultName, anime) {
+			return true
+		}
+	}
 	return false
 }
 

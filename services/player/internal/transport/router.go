@@ -87,6 +87,9 @@ func NewRouter(
 		// Public user watchlist
 		r.Get("/users/{userId}/watchlist/public", listHandler.GetPublicWatchlist)
 
+		// Batch anime ratings (public)
+		r.Post("/anime/ratings/batch", reviewHandler.GetBatchAnimeRatings)
+
 		// Anime reviews routes
 		r.Route("/anime/{animeId}", func(r chi.Router) {
 			// Public routes

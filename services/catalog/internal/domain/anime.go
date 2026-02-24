@@ -338,3 +338,41 @@ type MALResolveResult struct {
 	MALTitle string `json:"mal_title,omitempty"` // set when ambiguous
 	MALID    string `json:"mal_id,omitempty"`    // always set
 }
+
+// AnimeLib types
+
+// AnimeLibEpisode represents an episode from AnimeLib
+type AnimeLibEpisode struct {
+	ID     int    `json:"id"`
+	Number string `json:"number"`
+	Name   string `json:"name"`
+}
+
+// AnimeLibTranslation represents an available translation/dubbing from AnimeLib
+type AnimeLibTranslation struct {
+	ID       int    `json:"id"`
+	TeamName string `json:"team_name"`
+	Type     string `json:"type"`   // "voice" or "subtitles"
+	Player   string `json:"player"` // "Animelib" (direct video) or "Kodik" (iframe)
+}
+
+// AnimeLibSource represents a single video quality source from AnimeLib
+type AnimeLibSource struct {
+	URL     string `json:"url"`
+	Quality int    `json:"quality"` // 360, 720, 1080, 2160
+}
+
+// AnimeLibStream represents stream source data from AnimeLib
+type AnimeLibStream struct {
+	Sources   []AnimeLibSource `json:"sources,omitempty"`    // direct MP4 video sources (Animelib player)
+	IframeURL string           `json:"iframe_url,omitempty"` // Kodik iframe fallback
+}
+
+// AnimeLibSearchResult represents a search result from AnimeLib
+type AnimeLibSearchResult struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	RusName string `json:"rus_name"`
+	Poster  string `json:"poster"`
+	SlugURL string `json:"slug_url"`
+}

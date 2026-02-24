@@ -845,7 +845,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, props.totalEpisodes)
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, selectedEpisode.value.number)
     emit('episodeWatched', { episode: selectedEpisode.value.number })

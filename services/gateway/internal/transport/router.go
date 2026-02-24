@@ -86,6 +86,7 @@ func NewRouter(
 		r.HandleFunc("/auth/*", proxyHandler.ProxyToAuth)
 
 		// Player service routes - reviews (must be before /anime/* catch-all)
+		r.Post("/anime/ratings/batch", proxyHandler.ProxyToPlayer)
 		r.Get("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
 		r.Get("/anime/{animeId}/reviews/me", proxyHandler.ProxyToPlayer)
 		r.Post("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
@@ -98,6 +99,8 @@ func NewRouter(
 		r.HandleFunc("/genres", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/kodik/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/hianime/*", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/consumet/*", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/animelib/*", proxyHandler.ProxyToCatalog)
 
 		// Admin routes (protected, proxied to catalog)
 		r.Group(func(r chi.Router) {

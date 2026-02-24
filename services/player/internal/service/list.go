@@ -65,10 +65,14 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 
 	if req.Score != nil {
 		entry.Score = *req.Score
+	} else if existingEntry != nil {
+		entry.Score = existingEntry.Score
 	}
 
 	if req.Episodes != nil {
 		entry.Episodes = *req.Episodes
+	} else if existingEntry != nil {
+		entry.Episodes = existingEntry.Episodes
 	}
 
 	if req.Notes != nil {
@@ -139,7 +143,7 @@ func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID strin
 }
 
 // MarkEpisodeWatched marks an episode as watched and updates the episodes count
-func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, episode int) (*domain.AnimeListEntry, error) {
+func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, episode int, totalEpisodes *int, animeTitle, animeCover string) (*domain.AnimeListEntry, error) {
 	updated, err := s.listRepo.IncrementEpisodes(ctx, userID, animeID, episode)
 	if err != nil {
 		return nil, err
@@ -161,16 +165,29 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			)
 			now := time.Now()
 			entry := &domain.AnimeListEntry{
-				UserID:    userID,
-				AnimeID:   animeID,
-				Status:    "watching",
-				Episodes:  episode,
-				StartedAt: &now,
+				UserID:     userID,
+				AnimeID:    animeID,
+				AnimeTitle: animeTitle,
+				AnimeCover: animeCover,
+				Status:     "watching",
+				Episodes:   episode,
+				StartedAt:  &now,
+			}
+			if totalEpisodes != nil {
+				entry.AnimeTotalEpisodes = *totalEpisodes
 			}
 			if err := s.listRepo.Upsert(ctx, entry); err != nil {
 				return nil, err
 			}
 			return entry, nil
+		}
+
+		// Update total episodes if missing and provided
+		if existing.AnimeTotalEpisodes == 0 && totalEpisodes != nil && *totalEpisodes > 0 {
+			existing.AnimeTotalEpisodes = *totalEpisodes
+			if err := s.listRepo.Upsert(ctx, existing); err != nil {
+				s.log.Warnw("failed to update total episodes", "error", err)
+			}
 		}
 
 		s.log.Infow("episode already marked",

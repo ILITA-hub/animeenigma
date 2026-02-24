@@ -433,109 +433,9 @@
             </div>
           </template>
 
-          <!-- History Tab (own profile only) -->
-          <template v-if="isOwnProfile" #history>
-            <div v-if="history.length > 0" class="space-y-3">
-              <div
-                v-for="item in history"
-                :key="item.id"
-                class="flex gap-4 p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                <router-link :to="`/anime/${item.animeId}`" class="flex-shrink-0 w-16 aspect-[2/3] rounded-lg overflow-hidden">
-                  <img :src="item.coverImage" :alt="item.title" class="w-full h-full object-cover" />
-                </router-link>
-                <div class="flex-1 min-w-0">
-                  <router-link :to="`/anime/${item.animeId}`" class="font-medium text-white hover:text-cyan-400 transition-colors">
-                    {{ item.title }}
-                  </router-link>
-                  <p class="text-white/50 text-sm">{{ $t('profile.history.episode') }} {{ item.episode }}</p>
-                  <div class="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
-                    <div class="h-full bg-cyan-400" :style="{ width: `${item.progress}%` }" />
-                  </div>
-                </div>
-                <div class="text-right text-sm text-white/40">
-                  {{ item.watchedAt }}
-                </div>
-              </div>
-            </div>
-            <div v-else class="text-center py-12">
-              <p class="text-white/50">{{ $t('profile.history.empty') }}</p>
-            </div>
-          </template>
-
           <!-- Settings Tab (own profile only) -->
           <template v-if="isOwnProfile" #settings>
             <div class="space-y-6">
-              <!-- Appearance -->
-              <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.appearance') }}</h3>
-                <div class="space-y-4">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <p class="text-white">{{ $t('profile.settings.language') }}</p>
-                      <p class="text-white/50 text-sm">{{ $t('profile.settings.languageDesc') }}</p>
-                    </div>
-                    <div class="w-32">
-                      <Select
-                        v-model="settings.language"
-                        :options="languageOptions"
-                        size="sm"
-                      />
-                    </div>
-                  </div>
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <p class="text-white">{{ $t('profile.settings.reduceMotion') }}</p>
-                      <p class="text-white/50 text-sm">{{ $t('profile.settings.reduceMotionDesc') }}</p>
-                    </div>
-                    <button
-                      class="w-12 h-7 rounded-full transition-colors relative"
-                      :class="settings.reduceMotion ? 'bg-cyan-500' : 'bg-white/20'"
-                      @click="settings.reduceMotion = !settings.reduceMotion"
-                    >
-                      <span
-                        class="absolute top-1 w-5 h-5 rounded-full bg-white transition-transform"
-                        :class="settings.reduceMotion ? 'left-6' : 'left-1'"
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Playback -->
-              <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.playback') }}</h3>
-                <div class="space-y-4">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <p class="text-white">{{ $t('profile.settings.autoplay') }}</p>
-                    </div>
-                    <button
-                      class="w-12 h-7 rounded-full transition-colors relative"
-                      :class="settings.autoplay ? 'bg-cyan-500' : 'bg-white/20'"
-                      @click="settings.autoplay = !settings.autoplay"
-                    >
-                      <span
-                        class="absolute top-1 w-5 h-5 rounded-full bg-white transition-transform"
-                        :class="settings.autoplay ? 'left-6' : 'left-1'"
-                      />
-                    </button>
-                  </div>
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <p class="text-white">{{ $t('profile.settings.defaultQuality') }}</p>
-                    </div>
-                    <div class="w-28">
-                      <Select
-                        v-model="settings.defaultQuality"
-                        :options="qualityOptions"
-                        size="sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <!-- Import -->
               <div class="glass-card p-6">
                 <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.import.title') }}</h3>
@@ -789,7 +689,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -816,16 +716,6 @@ interface ProfileUser {
   role?: string
   avatar?: string
   created_at?: string
-}
-
-interface HistoryItem {
-  id: string
-  animeId: string
-  title: string
-  coverImage: string
-  episode: number
-  progress: number
-  watchedAt: string
 }
 
 const router = useRouter()
@@ -873,7 +763,6 @@ const tabs = computed(() => {
   ]
   if (isOwnProfile.value) {
     baseTabs.push(
-      { value: 'history', label: t('profile.tabs.history') },
       { value: 'settings', label: t('profile.tabs.settings') }
     )
   }
@@ -885,7 +774,6 @@ const watchlist = ref<WatchlistEntry[]>([])
 const loadingWatchlist = ref(false)
 const watchlistFilter = ref('all')
 const viewMode = ref<'table' | 'grid'>('grid')
-const history = ref<HistoryItem[]>([])
 
 // Inline editing
 const editingScore = ref<string | null>(null)
@@ -1000,27 +888,6 @@ const userInitials = computed(() => {
   if (!profileUser.value?.username) return '?'
   return profileUser.value.username.slice(0, 2).toUpperCase()
 })
-
-// Settings (own profile only)
-const settings = reactive({
-  language: locale.value,
-  reduceMotion: false,
-  autoplay: false,
-  defaultQuality: 'auto',
-})
-
-const languageOptions: SelectOption[] = [
-  { value: 'ru', label: 'Русский' },
-  { value: 'ja', label: '日本語' },
-  { value: 'en', label: 'English' },
-]
-
-const qualityOptions: SelectOption[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: '1080p', label: '1080p' },
-  { value: '720p', label: '720p' },
-  { value: '480p', label: '480p' },
-]
 
 // MAL Import
 const malUsername = ref('')

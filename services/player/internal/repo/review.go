@@ -87,6 +87,33 @@ func (r *ReviewRepository) GetAnimeRating(ctx context.Context, animeID string) (
 	}, nil
 }
 
+func (r *ReviewRepository) GetBatchAnimeRatings(ctx context.Context, animeIDs []string) (map[string]*domain.AnimeRating, error) {
+	var results []struct {
+		AnimeID      string  `gorm:"column:anime_id"`
+		AverageScore float64 `gorm:"column:average_score"`
+		TotalReviews int64   `gorm:"column:total_reviews"`
+	}
+	err := r.db.WithContext(ctx).
+		Model(&domain.Review{}).
+		Select("anime_id, COALESCE(AVG(score), 0) as average_score, COUNT(*) as total_reviews").
+		Where("anime_id IN ?", animeIDs).
+		Group("anime_id").
+		Scan(&results).Error
+	if err != nil {
+		return nil, err
+	}
+
+	ratings := make(map[string]*domain.AnimeRating, len(results))
+	for _, r := range results {
+		ratings[r.AnimeID] = &domain.AnimeRating{
+			AnimeID:      r.AnimeID,
+			AverageScore: r.AverageScore,
+			TotalReviews: int(r.TotalReviews),
+		}
+	}
+	return ratings, nil
+}
+
 func (r *ReviewRepository) Delete(ctx context.Context, userID, animeID string) error {
 	return r.db.WithContext(ctx).
 		Where("user_id = ? AND anime_id = ?", userID, animeID).

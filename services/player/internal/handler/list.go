@@ -151,7 +151,10 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 	animeID := chi.URLParam(r, "animeId")
 
 	var req struct {
-		Episode int `json:"episode"`
+		Episode            int    `json:"episode"`
+		AnimeTotalEpisodes *int   `json:"anime_total_episodes,omitempty"`
+		AnimeTitle         string `json:"anime_title,omitempty"`
+		AnimeCover         string `json:"anime_cover,omitempty"`
 	}
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -164,7 +167,7 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	entry, err := h.listService.MarkEpisodeWatched(r.Context(), claims.UserID, animeID, req.Episode)
+	entry, err := h.listService.MarkEpisodeWatched(r.Context(), claims.UserID, animeID, req.Episode, req.AnimeTotalEpisodes, req.AnimeTitle, req.AnimeCover)
 	if err != nil {
 		httputil.Error(w, err)
 		return

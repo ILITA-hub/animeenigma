@@ -79,6 +79,11 @@ func (s *ReviewService) GetAnimeRating(ctx context.Context, animeID string) (*do
 	return s.reviewRepo.GetAnimeRating(ctx, animeID)
 }
 
+// GetBatchAnimeRatings returns average ratings for multiple anime
+func (s *ReviewService) GetBatchAnimeRatings(ctx context.Context, animeIDs []string) (map[string]*domain.AnimeRating, error) {
+	return s.reviewRepo.GetBatchAnimeRatings(ctx, animeIDs)
+}
+
 // DeleteReview removes a user's review
 func (s *ReviewService) DeleteReview(ctx context.Context, userID, animeID string) error {
 	return s.reviewRepo.Delete(ctx, userID, animeID)

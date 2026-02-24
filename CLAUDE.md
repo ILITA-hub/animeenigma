@@ -8,12 +8,30 @@ AnimeEnigma is a self-hosted anime streaming platform with Shikimori/MAL integra
 
 ## Architecture Principles
 
+### Video Player Architecture
+
+The platform has 4 video players, each targeting different source APIs:
+
+| Player | Lang | Component | Video Tech | Tracking | JP Subs | Quality |
+|--------|------|-----------|-----------|----------|---------|---------|
+| **Kodik** | RU | `KodikPlayer.vue` | Kodik iframe | No | No | No (iframe) |
+| **AnimeLib** | RU | `AnimeLibPlayer.vue` | HTML5 `<video>` (MP4) or Kodik iframe fallback | Yes | No | Yes (MP4) |
+| **HiAnime** | EN | `HiAnimePlayer.vue` | Video.js / HLS.js (switchable) | Yes | Yes | Yes (HLS) |
+| **Consumet** | EN | `ConsumetPlayer.vue` | Video.js / HLS.js (switchable) | Yes | Yes | Yes (HLS) |
+
+**Shared components:**
+- `SubtitleOverlay.vue` — Custom selectable-text JP subtitle renderer (ASS/SRT/VTT). Used by HiAnime + Consumet. Teleports to fullscreen element, time-synced via `requestAnimationFrame`.
+- `subtitle-parser.ts` — Parses ASS (via `ass-compiler`), SRT, VTT into `SubtitleCue[]`
+- `libs/videoutils/proxy.go` — Backend HLS proxy for CORS. Allowed domains include streaming CDNs, `jimaku.cc`, `cdnlibs.org` (AnimeLib).
+
+**Known issue:** AnimeLib subtitles are broken — direct MP4 player can't render soft-subs embedded in the video. Kodik iframe fallback works but may not always be available.
+
 ### Video Streaming Model
 
 Videos are sourced in three ways:
-1. **Direct frontend streaming** - Frontend fetches video URLs from external APIs (Aniboom, Kodik) and streams directly
-2. **Backend proxy/restream** - Backend proxies video streams from external APIs (for CORS/auth)
-3. **Self-hosted storage** - Admin-uploaded videos stored in MinIO
+1. **Kodik iframe** — Frontend embeds Kodik's player iframe (no direct video control)
+2. **Backend proxy/restream** — Backend proxies HLS/MP4 streams from external APIs (HiAnime, Consumet, AnimeLib) for CORS
+3. **Self-hosted storage** — Admin-uploaded videos stored in MinIO
 
 ### On-Demand Catalog Population
 
@@ -27,9 +45,14 @@ The anime catalog is NOT pre-populated. Instead:
 ### External API Integration
 
 Primary data sources:
-- **Shikimori** - Anime metadata (titles, descriptions, posters, genres)
-- **Aniboom/Kodik** - Video streaming sources
-- **MAL** (optional) - Additional metadata, ratings sync
+- **Shikimori** — Anime metadata (titles, descriptions, posters, genres)
+- **Kodik** — RU video streaming (iframe embed). Parser: `services/catalog/internal/parser/kodik/`
+- **AnimeLib** — RU video streaming (direct MP4 + Kodik fallback). Parser: `services/catalog/internal/parser/animelib/`
+- **HiAnime** — EN video streaming (HLS). Parser: `services/catalog/internal/parser/hianime/`
+- **Consumet** — EN video streaming (HLS). Parser: `services/catalog/internal/parser/consumet/`
+- **Jimaku.cc** — Japanese subtitle files (ASS/SRT/VTT). Used by HiAnime + Consumet players.
+- **ARM** (`arm.haglund.dev`) — Anime ID mapping (Shikimori/MAL → AniList). Library: `libs/idmapping/`
+- **MAL** (optional) — Additional metadata, ratings sync
 
 ## Code Conventions
 
@@ -149,26 +172,45 @@ User -> Frontend -> Gateway -> Catalog Service
 
 ### Video Playback Flow
 
+**Kodik (iframe):**
 ```
-User -> Frontend -> Catalog Service (get video sources)
+User -> Frontend -> Catalog (Kodik parser) -> Kodik API
                           |
-        [Return available sources: aniboom, kodik, minio]
+        [Return embed URL with params]
                           |
-User -> Frontend -> [Direct stream from aniboom/kodik]
+User -> Frontend -> KodikPlayer.vue [iframe src=embed URL]
+```
+
+**AnimeLib (MP4 proxy or Kodik fallback):**
+```
+User -> Frontend -> Catalog (AnimeLib parser) -> AnimeLib hapi API
+                          |
+        [Return MP4 URLs + qualities, or Kodik iframe URL]
+                          |
+User -> Frontend -> AnimeLibPlayer.vue -> Backend proxy -> MP4 stream
        OR
-User -> Frontend -> Streaming Service -> [Proxy stream]
-       OR
-User -> Frontend -> Streaming Service -> [Serve from MinIO]
+User -> Frontend -> AnimeLibPlayer.vue [Kodik iframe fallback]
+```
+
+**HiAnime / Consumet (HLS proxy):**
+```
+User -> Frontend -> Catalog (HiAnime/Consumet parser) -> External API
+                          |
+        [Return HLS m3u8 URLs + VTT subtitle URLs]
+                          |
+User -> Frontend -> Player.vue -> Backend HLS proxy -> m3u8 stream
+                          |
+        [Optional: Jimaku.cc JP subs via ARM AniList ID lookup]
 ```
 
 ### Anime Parser Flow
 
 ```
-Catalog Service -> Anime Parser (libs/animeparser)
+Catalog Service -> Anime Parser (services/catalog/internal/parser/{name}/)
                         |
-        [Resolve Shikimori ID -> Aniboom/Kodik ID]
+        [Resolve Shikimori ID -> provider-specific ID]
                         |
-        [Fetch available episodes & qualities]
+        [Fetch available episodes, translations & qualities]
                         |
         [Cache video URLs for 1 hour]
 ```
@@ -194,9 +236,14 @@ query SearchAnime($search: String!, $limit: Int) {
 }
 ```
 
-### Aniboom/Kodik
+### Video Source Providers
 
-These APIs require integration with third-party anime video aggregators. Implementation in `services/catalog/internal/parser/`.
+Each provider has a parser in `services/catalog/internal/parser/{name}/`:
+
+- **Kodik** — RU iframe embed. Returns embed URLs with translation/episode params. No direct video control.
+- **AnimeLib** — RU direct MP4. Uses AnimeLib's hapi API for episode data, MP4 URLs at multiple qualities, and translation info. Falls back to Kodik iframe when direct URLs unavailable.
+- **HiAnime** — EN HLS streaming. Returns m3u8 URLs and VTT subtitle tracks. Proxied through backend for CORS.
+- **Consumet** — EN HLS streaming. Returns m3u8 URLs and VTT subtitle tracks. Proxied through backend for CORS.
 
 ## Testing
 
@@ -218,8 +265,8 @@ Catalog service specific:
 ```
 SHIKIMORI_CLIENT_ID
 SHIKIMORI_CLIENT_SECRET
-ANIBOOM_API_KEY (if using)
 KODIK_API_KEY (if using)
+JIMAKU_API_KEY (if using JP subtitles)
 ```
 
 Streaming service specific:

@@ -458,7 +458,7 @@ const filteredServers = computed(() =>
 )
 
 // Methods
-const fetchEpisodes = async () => {
+const fetchEpisodes = async (retries = 2) => {
   loadingEpisodes.value = true
   error.value = null
 
@@ -479,6 +479,11 @@ const fetchEpisodes = async () => {
       await selectEpisode(initialEp)
     }
   } catch (err: any) {
+    if (retries > 0) {
+      // Retry after a short delay
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      return fetchEpisodes(retries - 1)
+    }
     error.value = err.response?.data?.message || 'Не удалось загрузить список серий'
     episodes.value = []
     loadingEpisodes.value = false
@@ -962,7 +967,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, props.totalEpisodes)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number
@@ -979,7 +984,7 @@ const autoMarkEpisodeWatched = async () => {
   if (!authStore.isAuthenticated || !selectedEpisode.value || episodeMarkedWatched.value) return
 
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, props.totalEpisodes)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number
