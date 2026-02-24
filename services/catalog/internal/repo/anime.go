@@ -92,6 +92,9 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	if filters.Status != "" {
 		query = query.Where("status = ?", filters.Status)
 	}
+	if len(filters.GenreIDs) > 0 {
+		query = query.Where("id IN (SELECT anime_id FROM anime_genres WHERE genre_id IN ?)", filters.GenreIDs)
+	}
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {

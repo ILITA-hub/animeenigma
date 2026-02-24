@@ -15,6 +15,7 @@ export interface Anime {
   episodesAired: number
   nextEpisodeAt?: string
   shikimoriId?: string
+  malId?: string
 }
 
 export interface Episode {
@@ -41,7 +42,8 @@ function transformAnime(apiAnime: any): Anime {
     totalEpisodes: apiAnime.episodes_count || 0,
     episodesAired: apiAnime.episodes_aired || 0,
     nextEpisodeAt: apiAnime.next_episode_at || null,
-    shikimoriId: apiAnime.shikimori_id || null
+    shikimoriId: apiAnime.shikimori_id || null,
+    malId: apiAnime.mal_id || null
   }
 }
 
@@ -153,7 +155,7 @@ export function useAnime() {
     loading.value = true
     error.value = null
     try {
-      const response = await animeApi.getOngoing(50)
+      const response = await animeApi.getOngoing()
       return transformAnimeList(response.data)
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to fetch ongoing'

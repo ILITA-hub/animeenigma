@@ -251,9 +251,8 @@
           <p
             class="text-white/70 leading-relaxed"
             :class="{ 'line-clamp-4': !synopsisExpanded }"
-          >
-            {{ anime.description }}
-          </p>
+            v-html="parsedDescription"
+          />
           <button
             v-if="anime.description && anime.description.length > 300"
             class="mt-2 text-cyan-400 hover:text-cyan-300 transition-colors text-sm"
@@ -275,41 +274,82 @@
               {{ $t('anime.watch') || 'Смотреть онлайн' }}
             </span>
           </h2>
-          <!-- Provider selector -->
+          <!-- Language tabs + Provider sub-tabs -->
           <div class="flex flex-wrap gap-2">
-            <button
-              @click="videoProvider = 'kodik'"
-              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-              :class="videoProvider === 'kodik'
-                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-            >
-              Kodik <span class="opacity-60">(RU)</span>
-            </button>
-            <button
-              @click="videoProvider = 'hianime'"
-              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-              :class="videoProvider === 'hianime'
-                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
-                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-            >
-              HiAnime <span class="opacity-60">(EN)</span>
-            </button>
-            <button
-              @click="videoProvider = 'consumet'"
-              class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-              :class="videoProvider === 'consumet'
-                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-            >
-              Consumet <span class="opacity-60">(EN)</span>
-            </button>
+            <div class="flex gap-1 bg-white/5 rounded-lg p-1">
+              <button
+                @click="switchLanguage('ru')"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+                :class="videoLanguage === 'ru'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/50 hover:text-white/70'"
+              >
+                RU
+              </button>
+              <button
+                @click="switchLanguage('en')"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+                :class="videoLanguage === 'en'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/50 hover:text-white/70'"
+              >
+                EN
+              </button>
+            </div>
+
+            <!-- Provider sub-tabs -->
+            <template v-if="videoLanguage === 'ru'">
+              <button
+                @click="videoProvider = 'kodik'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'kodik'
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                Kodik
+              </button>
+              <button
+                @click="videoProvider = 'animelib'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'animelib'
+                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                AniLib
+              </button>
+            </template>
+            <template v-else>
+              <button
+                @click="videoProvider = 'hianime'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'hianime'
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                HiAnime
+              </button>
+              <button
+                @click="videoProvider = 'consumet'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'consumet'
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                Consumet
+              </button>
+            </template>
           </div>
         </div>
         <div class="glass-card p-4 md:p-6">
           <!-- Kodik Player -->
           <KodikPlayer
             v-if="videoProvider === 'kodik'"
+            :anime-id="anime.id"
+            :total-episodes="anime.totalEpisodes"
+          />
+          <!-- AnimeLib Player -->
+          <AnimeLibPlayer
+            v-else-if="videoProvider === 'animelib'"
             :anime-id="anime.id"
             :total-episodes="anime.totalEpisodes"
           />
@@ -489,7 +529,9 @@ import { Carousel } from '@/components/carousel'
 import KodikPlayer from '@/components/player/KodikPlayer.vue'
 import HiAnimePlayer from '@/components/player/HiAnimePlayer.vue'
 import ConsumetPlayer from '@/components/player/ConsumetPlayer.vue'
+import AnimeLibPlayer from '@/components/player/AnimeLibPlayer.vue'
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
+import { parseDescription } from '@/utils/description-parser'
 
 interface AnimeWithExtras {
   japaneseTitle?: string
@@ -538,8 +580,11 @@ const isHidden = ref(false)
 const showShikimoriEdit = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
-const videoProvider = ref<'kodik' | 'hianime' | 'consumet'>(
-  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'hianime' | 'consumet') || 'kodik'
+const videoLanguage = ref<'ru' | 'en'>(
+  (localStorage.getItem('preferred_video_language') as 'ru' | 'en') || 'ru'
+)
+const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet'>(
+  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet') || 'kodik'
 )
 
 // Reviews
@@ -566,6 +611,10 @@ const statusVariant = computed(() => {
   if (status === 'upcoming' || status === 'announced') return 'warning'
   return 'primary' // ongoing
 })
+
+const parsedDescription = computed(() =>
+  anime.value?.description ? parseDescription(anime.value.description) : ''
+)
 
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr)
@@ -630,9 +679,48 @@ const fetchWatchlistStatus = async () => {
   try {
     const response = await userApi.getWatchlist()
     const entries = response.data?.data || response.data || []
-    const entry = entries.find((e: any) => e.anime_id === anime.value?.id)
+
+    // Direct UUID match
+    let entry = entries.find((e: any) => e.anime_id === anime.value?.id)
+
+    // If not found, check for mal_XXXXX entries that match this anime's MAL ID
+    if (!entry && anime.value.malId) {
+      const malAnimeId = `mal_${anime.value.malId}`
+      entry = entries.find((e: any) => e.anime_id === malAnimeId)
+
+      if (entry) {
+        // Auto-migrate from mal_XXXXX to real UUID
+        try {
+          await userApi.migrateListEntry(
+            malAnimeId,
+            anime.value.id,
+            anime.value.title || '',
+            anime.value.coverImage || ''
+          )
+        } catch (e) {
+          console.warn('Auto-migration of MAL entry failed:', e)
+        }
+      }
+    }
+
     if (entry) {
       currentListStatus.value = entry.status
+
+      // Backfill total episodes if missing in watchlist but known from anime data
+      const knownTotal = anime.value.totalEpisodes || anime.value.episodesAired
+      if ((!entry.anime_total_episodes || entry.anime_total_episodes === 0) && knownTotal > 0) {
+        try {
+          await userApi.updateWatchlistStatus(
+            anime.value.id,
+            entry.status,
+            undefined,
+            undefined,
+            knownTotal,
+          )
+        } catch {
+          // Silent — non-critical backfill
+        }
+      }
     } else {
       currentListStatus.value = null
     }
@@ -803,9 +891,31 @@ const retry = () => {
   fetchAnime(animeId)
 }
 
+// Language / provider switching
+const switchLanguage = (lang: 'ru' | 'en') => {
+  videoLanguage.value = lang
+  // Auto-select first provider in the group
+  if (lang === 'ru') {
+    const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'animelib' | null
+    videoProvider.value = savedRu || 'kodik'
+  } else {
+    const savedEn = localStorage.getItem('preferred_en_provider') as 'hianime' | 'consumet' | null
+    videoProvider.value = savedEn || 'hianime'
+  }
+}
+
 // Save preferred video provider to localStorage
 watch(videoProvider, (newProvider) => {
   localStorage.setItem('preferred_video_provider', newProvider)
+  if (videoLanguage.value === 'ru') {
+    localStorage.setItem('preferred_ru_provider', newProvider)
+  } else {
+    localStorage.setItem('preferred_en_provider', newProvider)
+  }
+})
+
+watch(videoLanguage, (newLang) => {
+  localStorage.setItem('preferred_video_language', newLang)
 })
 
 // Shared data-loading function — called on mount and on route param change
@@ -892,3 +1002,18 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
+
+<style scoped>
+:deep(.shiki-link) {
+  color: rgb(34 211 238);
+  text-decoration: none;
+  border-bottom: 1px dotted rgb(34 211 238 / 0.4);
+}
+:deep(.shiki-link:hover) {
+  text-decoration: underline;
+}
+:deep(.shiki-footnote) {
+  font-size: 0.75rem;
+  color: rgb(255 255 255 / 0.4);
+}
+</style>

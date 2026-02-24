@@ -20,6 +20,7 @@ type Config struct {
 	HiAnime   HiAnimeConfig
 	Consumet  ConsumetConfig
 	Jimaku    JimakuConfig
+	AnimeLib  AnimeLibConfig
 }
 
 type ServerConfig struct {
@@ -49,6 +50,10 @@ type ConsumetConfig struct {
 
 type JimakuConfig struct {
 	APIKey string
+}
+
+type AnimeLibConfig struct {
+	Token string
 }
 
 func Load() (*Config, error) {
@@ -90,6 +95,9 @@ func Load() (*Config, error) {
 		},
 		Jimaku: JimakuConfig{
 			APIKey: getEnv("JIMAKU_API_KEY", ""),
+		},
+		AnimeLib: AnimeLibConfig{
+			Token: getEnv("ANIMELIB_TOKEN", ""),
 		},
 	}, nil
 }

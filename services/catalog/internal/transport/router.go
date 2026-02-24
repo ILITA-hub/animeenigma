@@ -76,6 +76,10 @@ func NewRouter(
 			r.Get("/{animeId}/consumet/episodes", catalogHandler.GetConsumetEpisodes)
 			r.Get("/{animeId}/consumet/servers", catalogHandler.GetConsumetServers)
 			r.Get("/{animeId}/consumet/stream", catalogHandler.GetConsumetStream)
+			// AnimeLib video sources
+			r.Get("/{animeId}/animelib/episodes", catalogHandler.GetAnimeLibEpisodes)
+			r.Get("/{animeId}/animelib/translations", catalogHandler.GetAnimeLibTranslations)
+			r.Get("/{animeId}/animelib/stream", catalogHandler.GetAnimeLibStream)
 			// Jimaku Japanese subtitles
 			r.Get("/{animeId}/jimaku/subtitles", catalogHandler.GetJimakuSubtitles)
 		})
@@ -88,6 +92,9 @@ func NewRouter(
 
 		// Consumet search
 		r.Get("/consumet/search", catalogHandler.SearchConsumet)
+
+		// AnimeLib search
+		r.Get("/animelib/search", catalogHandler.SearchAnimeLib)
 
 		r.Get("/genres", catalogHandler.GetGenres)
 

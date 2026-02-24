@@ -60,32 +60,23 @@
         <!-- Filters -->
         <div class="flex flex-wrap gap-3">
           <!-- Genre Filter -->
-          <div class="relative" ref="genreDropdownRef">
-            <button
-              class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-              @click="genreDropdownOpen = !genreDropdownOpen"
-            >
-              <span>{{ selectedGenre || $t('search.genre') }}</span>
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            <Transition name="dropdown">
-              <div
-                v-if="genreDropdownOpen"
-                class="absolute top-full left-0 mt-2 py-2 w-48 glass-elevated rounded-xl z-10"
-              >
-                <button
-                  v-for="genre in genres"
-                  :key="genre.value"
-                  class="w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors"
-                  :class="selectedGenre === genre.value ? 'text-cyan-400' : 'text-white/70'"
-                  @click="selectGenre(genre.value)"
-                >
-                  {{ genre.label }}
-                </button>
-              </div>
-            </Transition>
+          <div class="w-full sm:w-44">
+            <Select
+              v-model="selectedGenre"
+              :options="genreOptions"
+              size="sm"
+              @change="handleFilter"
+            />
+          </div>
+
+          <!-- Status Filter -->
+          <div class="w-full sm:w-36">
+            <Select
+              v-model="selectedStatus"
+              :options="statusOptions"
+              size="sm"
+              @change="handleFilter"
+            />
           </div>
 
           <!-- Year Filter -->
@@ -93,7 +84,6 @@
             <Select
               v-model="selectedYear"
               :options="yearOptions"
-              :placeholder="$t('search.year')"
               size="sm"
               @change="handleFilter"
             />
@@ -213,10 +203,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { onClickOutside, useDebounceFn } from '@vueuse/core'
+import { useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
 import { Input, Badge, Button, Select } from '@/components/ui'
 import { AnimeCardNew } from '@/components/anime'
+import { animeApi } from '@/api/client'
+
+interface Genre {
+  id: string
+  name: string
+  name_ru?: string
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -225,36 +222,35 @@ const { animeList, loading, error, fetchAnimeList, searchAnime } = useAnime()
 const searchQuery = ref('')
 const selectedGenre = ref('')
 const selectedYear = ref('')
+const selectedStatus = ref('')
 const sortBy = ref('popularity')
 const currentPage = ref(1)
 const hasMore = ref(true)
 const loadingMore = ref(false)
-const genreDropdownOpen = ref(false)
-const genreDropdownRef = ref<HTMLElement | null>(null)
 const showLiveResults = ref(false)
 const liveResults = ref<Array<{ id: string; title: string; coverImage: string; releaseYear?: number; episodes?: number; rating?: number }>>([])
 const recentSearches = ref<string[]>([])
 const loadingShikimori = ref(false)
 
 const isSearchMode = computed(() => route.name === 'search')
-const hasActiveFilters = computed(() => !!selectedGenre.value || !!selectedYear.value || sortBy.value !== 'popularity')
+const hasActiveFilters = computed(() => !!selectedGenre.value || !!selectedYear.value || !!selectedStatus.value || sortBy.value !== 'popularity')
 
-const genres = [
-  { value: '', label: 'All Genres' },
-  { value: 'action', label: 'Action' },
-  { value: 'adventure', label: 'Adventure' },
-  { value: 'comedy', label: 'Comedy' },
-  { value: 'drama', label: 'Drama' },
-  { value: 'fantasy', label: 'Fantasy' },
-  { value: 'romance', label: 'Romance' },
-  { value: 'sci-fi', label: 'Sci-Fi' },
-  { value: 'slice-of-life', label: 'Slice of Life' },
-  { value: 'sports', label: 'Sports' },
-  { value: 'supernatural', label: 'Supernatural' },
+const genres = ref<Genre[]>([])
+
+const genreOptions = computed(() => [
+  { value: '', label: 'Жанр' },
+  ...genres.value.map(g => ({ value: g.id, label: g.name_ru || g.name }))
+])
+
+const statusOptions = [
+  { value: '', label: 'Статус' },
+  { value: 'ongoing', label: 'Онгоинги' },
+  { value: 'announced', label: 'Анонсы' },
+  { value: 'released', label: 'Вышедшие' },
 ]
 
 const yearOptions = [
-  { value: '', label: 'Year' },
+  { value: '', label: 'Год' },
   ...Array.from({ length: 30 }, (_, i) => {
     const year = new Date().getFullYear() - i
     return { value: String(year), label: String(year) }
@@ -262,22 +258,18 @@ const yearOptions = [
 ]
 
 const sortOptions = [
-  { value: 'popularity', label: 'Sort: Popular' },
-  { value: 'rating', label: 'Sort: Rating' },
-  { value: 'year', label: 'Sort: Year' },
-  { value: 'title', label: 'Sort: A-Z' },
+  { value: 'popularity', label: 'Популярные' },
+  { value: 'rating', label: 'По оценке' },
+  { value: 'year', label: 'По году' },
+  { value: 'title', label: 'По названию' },
 ]
-
-const selectGenre = (genre: string) => {
-  selectedGenre.value = genre
-  genreDropdownOpen.value = false
-  handleFilter()
-}
 
 const clearFilters = () => {
   selectedGenre.value = ''
   selectedYear.value = ''
+  selectedStatus.value = ''
   sortBy.value = 'popularity'
+  router.replace({ query: {} })
   handleFilter()
 }
 
@@ -344,11 +336,18 @@ const handleFilter = async () => {
 }
 
 const loadAnime = async () => {
-  const params = {
+  const params: Record<string, any> = {
     page: currentPage.value,
-    genre: selectedGenre.value,
-    year: selectedYear.value,
     sort: sortBy.value,
+  }
+  if (selectedGenre.value) {
+    params.genre = selectedGenre.value
+  }
+  if (selectedYear.value) {
+    params.year = selectedYear.value
+  }
+  if (selectedStatus.value) {
+    params.status = selectedStatus.value
   }
   const results = await fetchAnimeList(params)
   hasMore.value = (results?.length ?? 0) >= 20
@@ -361,10 +360,6 @@ const loadMore = async () => {
   loadingMore.value = false
 }
 
-onClickOutside(genreDropdownRef, () => {
-  genreDropdownOpen.value = false
-})
-
 // Load recent searches from localStorage
 onMounted(async () => {
   const stored = localStorage.getItem('recentSearches')
@@ -372,9 +367,22 @@ onMounted(async () => {
     recentSearches.value = JSON.parse(stored)
   }
 
+  // Load genres from API
+  try {
+    const response = await animeApi.getGenres()
+    const data = response.data?.data || response.data || []
+    genres.value = data.sort((a: Genre, b: Genre) => (a.name_ru || a.name).localeCompare(b.name_ru || b.name, 'ru'))
+  } catch (err) {
+    console.error('Failed to load genres:', err)
+  }
+
   // Store pending MAL bind for later resolution on Anime page
   if (route.query.bind_mal) {
     sessionStorage.setItem('pending_mal_bind', route.query.bind_mal as string)
+  }
+
+  if (route.query.status) {
+    selectedStatus.value = route.query.status as string
   }
 
   if (route.query.q) {
@@ -390,6 +398,14 @@ watch(() => route.query.q, async (newQuery) => {
   if (newQuery && newQuery !== searchQuery.value) {
     searchQuery.value = newQuery as string
     await searchAnime(searchQuery.value)
+  }
+})
+
+watch(() => route.query.status, (newStatus) => {
+  const val = (newStatus as string) || ''
+  if (val !== selectedStatus.value) {
+    selectedStatus.value = val
+    handleFilter()
   }
 })
 </script>

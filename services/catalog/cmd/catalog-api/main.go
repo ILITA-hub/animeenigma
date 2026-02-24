@@ -74,6 +74,7 @@ func main() {
 			AniwatchAPIURL: cfg.HiAnime.AniwatchAPIURL,
 			ConsumetAPIURL: cfg.Consumet.APIURL,
 			JimakuAPIKey:   cfg.Jimaku.APIKey,
+			AnimeLibToken:  cfg.AnimeLib.Token,
 		},
 	)
 

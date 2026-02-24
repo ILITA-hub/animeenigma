@@ -111,11 +111,12 @@ export const animeApi = {
   getPopular: () => apiClient.get('/anime/popular'),
   getRecent: () => apiClient.get('/anime/recent'),
   getSchedule: () => apiClient.get('/anime/schedule'),
-  getOngoing: (limit = 20) => apiClient.get('/anime/ongoing', { params: { page_size: limit } }),
+  getOngoing: () => apiClient.get('/anime/ongoing'),
   getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'announced', page_size: limit } }),
   getTop: (limit = 20) => apiClient.get('/anime', { params: { sort: 'score', order: 'desc', page_size: limit } }),
   refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`),
   resolveMAL: (malId: string) => apiClient.get(`/anime/mal/${malId}`),
+  getGenres: () => apiClient.get('/genres'),
 }
 
 export const episodeApi = {
@@ -143,7 +144,8 @@ export const userApi = {
     notes?: string
   }) => apiClient.put('/users/watchlist', data),
   removeFromWatchlist: (animeId: string) => apiClient.delete(`/users/watchlist/${animeId}`),
-  markEpisodeWatched: (animeId: string, episode: number) => apiClient.post(`/users/watchlist/${animeId}/episode`, { episode }),
+  markEpisodeWatched: (animeId: string, episode: number, animeTotalEpisodes?: number, animeTitle?: string, animeCover?: string) =>
+    apiClient.post(`/users/watchlist/${animeId}/episode`, { episode, anime_total_episodes: animeTotalEpisodes, anime_title: animeTitle, anime_cover: animeCover }),
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: any) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
@@ -201,6 +203,9 @@ export const reviewApi = {
     }),
   // Delete a review
   deleteReview: (animeId: string) => apiClient.delete(`/anime/${animeId}/reviews`),
+  // Get batch ratings for multiple anime
+  getBatchRatings: (animeIds: string[]) =>
+    apiClient.post('/anime/ratings/batch', { anime_ids: animeIds }),
 }
 
 export const gameApi = {
@@ -260,6 +265,20 @@ export const consumetApi = {
       params: { episode: episodeId, ...(serverName && { server: serverName }) }
     }),
   search: (query: string) => apiClient.get('/consumet/search', { params: { q: query } }),
+}
+
+export const animeLibApi = {
+  getEpisodes: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/animelib/episodes`),
+  getTranslations: (animeId: string, episodeId: number) =>
+    apiClient.get(`/anime/${animeId}/animelib/translations`, {
+      params: { episode: episodeId }
+    }),
+  getStream: (animeId: string, episodeId: number, translationId: number) =>
+    apiClient.get(`/anime/${animeId}/animelib/stream`, {
+      params: { episode: episodeId, translation: translationId }
+    }),
+  search: (query: string) => apiClient.get('/animelib/search', { params: { q: query } }),
 }
 
 export default apiClient

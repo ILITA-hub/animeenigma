@@ -48,62 +48,6 @@
     <div class="px-4 lg:px-8 max-w-7xl mx-auto pb-12">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-        <!-- Announcements Column -->
-        <div class="glass-card rounded-2xl p-5">
-          <div class="flex items-center gap-3 mb-5">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h2 class="text-xl font-bold text-white">Анонсы</h2>
-          </div>
-
-          <div v-if="loadingAnnounced" class="space-y-3">
-            <div v-for="i in 5" :key="i" class="animate-pulse">
-              <div class="flex gap-3">
-                <div class="w-16 h-20 bg-white/10 rounded-lg"></div>
-                <div class="flex-1 space-y-2">
-                  <div class="h-4 bg-white/10 rounded w-3/4"></div>
-                  <div class="h-3 bg-white/10 rounded w-1/2"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div v-else class="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
-            <router-link
-              v-for="anime in announcedAnime"
-              :key="anime.id"
-              :to="`/anime/${anime.id}`"
-              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
-            >
-              <img
-                :src="anime.poster_url || '/placeholder.svg'"
-                :alt="anime.name_ru || anime.name"
-                class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
-              />
-              <div class="flex-1 min-w-0">
-                <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
-                  {{ anime.name_ru || anime.name }}
-                </h3>
-                <p class="text-xs text-gray-400 mt-1">
-                  {{ anime.year }} {{ anime.season ? `/ ${translateSeason(anime.season)}` : '' }}
-                </p>
-                <div class="flex items-center gap-2 mt-1">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
-                    Анонс
-                  </span>
-                </div>
-              </div>
-            </router-link>
-
-            <div v-if="announcedAnime.length === 0" class="text-center py-8 text-gray-400">
-              Нет анонсов
-            </div>
-          </div>
-        </div>
-
         <!-- Ongoing Column -->
         <div class="glass-card rounded-2xl p-5">
           <div class="flex items-center gap-3 mb-5">
@@ -119,6 +63,12 @@
                 Обновлено {{ formatUpdatedAt(ongoingUpdatedAt) }}
               </p>
             </div>
+            <router-link
+              to="/browse?status=ongoing"
+              class="ml-auto text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+            >
+              Все
+            </router-link>
           </div>
 
           <div v-if="loadingOngoing" class="space-y-3">
@@ -161,6 +111,12 @@
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
                     {{ anime.score.toFixed(1) }}
+                  </span>
+                  <span v-if="siteRatings[anime.id]?.total_reviews > 0" class="text-xs text-cyan-400 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ siteRatings[anime.id].average_score.toFixed(1) }}
                   </span>
                 </div>
                 <!-- Next episode info -->
@@ -233,6 +189,12 @@
                     </svg>
                     {{ anime.score.toFixed(1) }}
                   </span>
+                  <span v-if="siteRatings[anime.id]?.total_reviews > 0" class="text-xs text-cyan-400 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ siteRatings[anime.id].average_score.toFixed(1) }}
+                  </span>
                   <span class="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">
                     {{ translateStatus(anime.status) }}
                   </span>
@@ -245,6 +207,68 @@
             </div>
           </div>
         </div>
+
+        <!-- Announcements Column -->
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 class="text-xl font-bold text-white">Анонсы</h2>
+            <router-link
+              to="/browse?status=announced"
+              class="ml-auto text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+            >
+              Все
+            </router-link>
+          </div>
+
+          <div v-if="loadingAnnounced" class="space-y-3">
+            <div v-for="i in 5" :key="i" class="animate-pulse">
+              <div class="flex gap-3">
+                <div class="w-16 h-20 bg-white/10 rounded-lg"></div>
+                <div class="flex-1 space-y-2">
+                  <div class="h-4 bg-white/10 rounded w-3/4"></div>
+                  <div class="h-3 bg-white/10 rounded w-1/2"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
+            <router-link
+              v-for="anime in announcedAnime"
+              :key="anime.id"
+              :to="`/anime/${anime.id}`"
+              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+            >
+              <img
+                :src="anime.poster_url || '/placeholder.svg'"
+                :alt="anime.name_ru || anime.name"
+                class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
+              />
+              <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
+                  {{ anime.name_ru || anime.name }}
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">
+                  {{ anime.year }} {{ anime.season ? `/ ${translateSeason(anime.season)}` : '' }}
+                </p>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+                    Анонс
+                  </span>
+                </div>
+              </div>
+            </router-link>
+
+            <div v-if="announcedAnime.length === 0" class="text-center py-8 text-gray-400">
+              Нет анонсов
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -253,7 +277,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { animeApi } from '@/api/client'
+import { animeApi, reviewApi } from '@/api/client'
 
 interface Anime {
   id: string
@@ -278,6 +302,7 @@ const announcedAnime = ref<Anime[]>([])
 const ongoingAnime = ref<Anime[]>([])
 const topAnime = ref<Anime[]>([])
 const ongoingUpdatedAt = ref<string | null>(null)
+const siteRatings = ref<Record<string, { average_score: number, total_reviews: number }>>({})
 
 const loadingAnnounced = ref(true)
 const loadingOngoing = ref(true)
@@ -382,7 +407,7 @@ onMounted(async () => {
 
   // Fetch ongoing anime
   try {
-    const response = await animeApi.getOngoing(15)
+    const response = await animeApi.getOngoing()
     const animes = response.data?.data || []
     ongoingAnime.value = animes
     // Find the most recent updated_at
@@ -408,6 +433,21 @@ onMounted(async () => {
     console.error('Failed to load top anime:', err)
   } finally {
     loadingTop.value = false
+  }
+
+  // Fetch site ratings for all displayed anime
+  const allIds = [
+    ...ongoingAnime.value.map(a => a.id),
+    ...topAnime.value.map(a => a.id),
+  ]
+  if (allIds.length > 0) {
+    try {
+      const uniqueIds = [...new Set(allIds)]
+      const response = await reviewApi.getBatchRatings(uniqueIds)
+      siteRatings.value = response.data?.data?.ratings || response.data?.ratings || {}
+    } catch (err) {
+      console.error('Failed to load site ratings:', err)
+    }
   }
 })
 </script>

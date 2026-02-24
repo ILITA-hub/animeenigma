@@ -46,6 +46,34 @@ func (h *ReviewHandler) CreateOrUpdateReview(w http.ResponseWriter, r *http.Requ
 	httputil.OK(w, review)
 }
 
+// GetBatchAnimeRatings returns average ratings for multiple anime
+func (h *ReviewHandler) GetBatchAnimeRatings(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		AnimeIDs []string `json:"anime_ids"`
+	}
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if len(req.AnimeIDs) == 0 {
+		httputil.OK(w, map[string]interface{}{"ratings": map[string]interface{}{}})
+		return
+	}
+	if len(req.AnimeIDs) > 100 {
+		httputil.BadRequest(w, "maximum 100 anime IDs per request")
+		return
+	}
+
+	ratings, err := h.reviewService.GetBatchAnimeRatings(r.Context(), req.AnimeIDs)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]interface{}{"ratings": ratings})
+}
+
 // GetAnimeReviews returns all reviews for an anime
 func (h *ReviewHandler) GetAnimeReviews(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")

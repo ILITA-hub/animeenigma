@@ -65,7 +65,8 @@ type VideoProxy struct {
 func NewVideoProxy(cfg ProxyConfig) *VideoProxy {
 	return &VideoProxy{
 		client: &http.Client{
-			Timeout: cfg.Timeout,
+			// No timeout on client level — context cancellation handles timeouts.
+			// A global timeout breaks streaming of large MP4 files (100s of MB).
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				// Follow redirects but preserve headers
 				if len(via) >= 10 {
@@ -229,7 +230,9 @@ var HLSProxyAllowedDomains = []string{
 	"netmagcdn.com", // MegaCloud HLS CDN
 	"owocdn.top",    // AnimePahe/Kwik CDN
 	"kwik.cx",       // AnimePahe CDN
-	"jimaku.cc",     // Japanese subtitle files
+	"jimaku.cc",      // Japanese subtitle files
+	"cdnlibs.org",    // AnimeLib video CDN
+	"hentaicdn.org",  // AnimeLib video CDN (mirror)
 }
 
 // HLSProxyAllowedTLDs contains TLDs commonly used by streaming CDNs

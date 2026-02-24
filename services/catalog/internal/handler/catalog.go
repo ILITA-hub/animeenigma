@@ -732,6 +732,114 @@ func (h *CatalogHandler) SearchConsumet(w http.ResponseWriter, r *http.Request) 
 	httputil.OK(w, results)
 }
 
+// ============================================================================
+// AnimeLib Handlers
+// ============================================================================
+
+// GetAnimeLibEpisodes gets episodes from AnimeLib
+func (h *CatalogHandler) GetAnimeLibEpisodes(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodes, err := h.catalogService.GetAnimeLibEpisodes(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, episodes)
+}
+
+// GetAnimeLibTranslations gets available translations for an episode from AnimeLib
+func (h *CatalogHandler) GetAnimeLibTranslations(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeStr := r.URL.Query().Get("episode")
+	if episodeStr == "" {
+		httputil.BadRequest(w, "episode ID is required")
+		return
+	}
+
+	episodeID, err := strconv.Atoi(episodeStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid episode ID")
+		return
+	}
+
+	translations, err := h.catalogService.GetAnimeLibTranslations(r.Context(), animeID, episodeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, translations)
+}
+
+// GetAnimeLibStream gets the stream URL from AnimeLib
+func (h *CatalogHandler) GetAnimeLibStream(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeStr := r.URL.Query().Get("episode")
+	translationStr := r.URL.Query().Get("translation")
+
+	if episodeStr == "" {
+		httputil.BadRequest(w, "episode ID is required")
+		return
+	}
+	if translationStr == "" {
+		httputil.BadRequest(w, "translation ID is required")
+		return
+	}
+
+	episodeID, err := strconv.Atoi(episodeStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid episode ID")
+		return
+	}
+
+	translationID, err := strconv.Atoi(translationStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid translation ID")
+		return
+	}
+
+	stream, err := h.catalogService.GetAnimeLibStream(r.Context(), animeID, episodeID, translationID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, stream)
+}
+
+// SearchAnimeLib searches for anime on AnimeLib
+func (h *CatalogHandler) SearchAnimeLib(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" || len(query) < 2 {
+		httputil.BadRequest(w, "search query must be at least 2 characters")
+		return
+	}
+
+	results, err := h.catalogService.SearchAnimeLib(r.Context(), query)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, results)
+}
+
 // GetJimakuSubtitles fetches Japanese subtitles from Jimaku for an anime episode
 func (h *CatalogHandler) GetJimakuSubtitles(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
