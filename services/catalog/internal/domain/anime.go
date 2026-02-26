@@ -350,10 +350,11 @@ type AnimeLibEpisode struct {
 
 // AnimeLibTranslation represents an available translation/dubbing from AnimeLib
 type AnimeLibTranslation struct {
-	ID       int    `json:"id"`
-	TeamName string `json:"team_name"`
-	Type     string `json:"type"`   // "voice" or "subtitles"
-	Player   string `json:"player"` // "Animelib" (direct video) or "Kodik" (iframe)
+	ID           int    `json:"id"`
+	TeamName     string `json:"team_name"`
+	Type         string `json:"type"`          // "voice" or "subtitles"
+	Player       string `json:"player"`        // "Animelib" (direct video) or "Kodik" (iframe)
+	HasSubtitles bool   `json:"has_subtitles"` // true if external subtitle files exist
 }
 
 // AnimeLibSource represents a single video quality source from AnimeLib
@@ -362,10 +363,17 @@ type AnimeLibSource struct {
 	Quality int    `json:"quality"` // 360, 720, 1080, 2160
 }
 
+// AnimeLibSubtitle represents an external subtitle file from AnimeLib
+type AnimeLibSubtitle struct {
+	Format string `json:"format"` // "ass", "vtt"
+	URL    string `json:"url"`
+}
+
 // AnimeLibStream represents stream source data from AnimeLib
 type AnimeLibStream struct {
-	Sources   []AnimeLibSource `json:"sources,omitempty"`    // direct MP4 video sources (Animelib player)
-	IframeURL string           `json:"iframe_url,omitempty"` // Kodik iframe fallback
+	Sources   []AnimeLibSource   `json:"sources,omitempty"`    // direct MP4 video sources (Animelib player)
+	IframeURL string             `json:"iframe_url,omitempty"` // Kodik iframe fallback
+	Subtitles []AnimeLibSubtitle `json:"subtitles,omitempty"`  // external subtitle files (ASS, VTT)
 }
 
 // AnimeLibSearchResult represents a search result from AnimeLib
