@@ -1719,10 +1719,11 @@ func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID st
 		if !exists || (p.Player == "Animelib" && existing.translation.Player != "Animelib") {
 			teamMap[p.Team.ID] = &teamEntry{
 				translation: domain.AnimeLibTranslation{
-					ID:       p.ID, // use the player entry ID (not team ID) for stream lookup
-					TeamName: p.Team.Name,
-					Type:     translationType,
-					Player:   p.Player,
+					ID:           p.ID, // use the player entry ID (not team ID) for stream lookup
+					TeamName:     p.Team.Name,
+					Type:         translationType,
+					Player:       p.Player,
+					HasSubtitles: len(p.Subtitles) > 0,
 				},
 				playerID: p.ID,
 			}
@@ -1789,6 +1790,18 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 		}
 		result = &domain.AnimeLibStream{
 			Sources: sources,
+		}
+
+		// Add external subtitle files if available
+		if len(matched.Subtitles) > 0 {
+			subs := make([]domain.AnimeLibSubtitle, len(matched.Subtitles))
+			for i, s := range matched.Subtitles {
+				subs[i] = domain.AnimeLibSubtitle{
+					Format: s.Format,
+					URL:    s.Src,
+				}
+			}
+			result.Subtitles = subs
 		}
 	} else if matched.Src != "" {
 		// Kodik iframe fallback

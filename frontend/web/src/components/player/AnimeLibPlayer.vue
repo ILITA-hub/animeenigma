@@ -80,6 +80,17 @@
               <p>Выберите серию для начала просмотра</p>
             </div>
           </div>
+
+          <!-- Subtitle overlay for external subtitle files -->
+          <SubtitleOverlay
+            v-if="streamSubtitles.length > 0"
+            :video-element="videoRef"
+            :subtitle-url="activeSubtitleUrl"
+            :format="activeSubtitleFormat"
+            :visible="showSubtitleOverlay"
+            @loading="() => {}"
+            @error="(msg: string) => subtitleError = msg"
+          />
         </div>
 
         <!-- Episode selector below player -->
@@ -242,6 +253,44 @@
             </button>
           </div>
         </div>
+
+        <!-- Subtitle controls (only for direct video with external subtitles) -->
+        <div v-if="streamSubtitles.length > 0" class="mt-4">
+          <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            </svg>
+            Субтитры
+          </h3>
+
+          <!-- Format selector (if multiple formats available) -->
+          <div v-if="streamSubtitles.length > 1" class="flex flex-wrap gap-2 mb-2">
+            <button
+              v-for="sub in streamSubtitles"
+              :key="sub.url"
+              @click="selectSubtitle(sub)"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all uppercase"
+              :class="activeSubtitleUrl === buildProxyUrl(sub.url)
+                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
+                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+            >
+              {{ sub.format }}
+            </button>
+          </div>
+
+          <!-- Toggle visibility -->
+          <button
+            @click="showSubtitleOverlay = !showSubtitleOverlay"
+            class="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+            :class="showSubtitleOverlay
+              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
+              : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
+          >
+            {{ showSubtitleOverlay ? 'Скрыть субтитры' : 'Показать субтитры' }}
+          </button>
+
+          <div v-if="subtitleError" class="mt-1 text-xs text-red-400/70">{{ subtitleError }}</div>
+        </div>
       </div>
     </div>
   </div>
@@ -251,6 +300,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import SubtitleOverlay from './SubtitleOverlay.vue'
 
 interface AnimeLibEpisode {
   id: number
@@ -263,6 +313,7 @@ interface AnimeLibTranslation {
   team_name: string
   type: string
   player: string // "Animelib" or "Kodik"
+  has_subtitles: boolean
 }
 
 interface AnimeLibSource {
@@ -270,9 +321,15 @@ interface AnimeLibSource {
   quality: number
 }
 
+interface AnimeLibSubtitle {
+  format: string // "ass", "vtt"
+  url: string
+}
+
 interface AnimeLibStream {
   sources?: AnimeLibSource[]
   iframe_url?: string
+  subtitles?: AnimeLibSubtitle[]
 }
 
 const props = defineProps<{
@@ -304,6 +361,13 @@ const error = ref<string | null>(null)
 
 const translationFilter = ref<'all' | 'voice' | 'subtitles'>('all')
 const videoRef = ref<HTMLVideoElement | null>(null)
+
+// Subtitle state
+const streamSubtitles = ref<AnimeLibSubtitle[]>([])
+const activeSubtitleUrl = ref<string | null>(null)
+const activeSubtitleFormat = ref<'ass' | 'srt' | 'vtt' | null>(null)
+const showSubtitleOverlay = ref(false)
+const subtitleError = ref<string | null>(null)
 
 // Progress tracking
 const currentTime = ref(0)
@@ -377,12 +441,23 @@ const selectEpisode = async (ep: AnimeLibEpisode) => {
   iframeUrl.value = null
   availableSources.value = []
   selectedQuality.value = null
+  streamSubtitles.value = []
+  activeSubtitleUrl.value = null
+  activeSubtitleFormat.value = null
+  showSubtitleOverlay.value = false
+  subtitleError.value = null
   await fetchTranslations()
 }
 
 const selectTranslation = async (tr: AnimeLibTranslation) => {
   selectedTranslation.value = tr
   await fetchStream()
+}
+
+const selectSubtitle = (sub: AnimeLibSubtitle) => {
+  activeSubtitleUrl.value = buildProxyUrl(sub.url)
+  activeSubtitleFormat.value = sub.format as 'ass' | 'vtt'
+  showSubtitleOverlay.value = true
 }
 
 const selectQuality = (source: AnimeLibSource) => {
@@ -404,6 +479,11 @@ const fetchStream = async () => {
   iframeUrl.value = null
   availableSources.value = []
   selectedQuality.value = null
+  streamSubtitles.value = []
+  activeSubtitleUrl.value = null
+  activeSubtitleFormat.value = null
+  showSubtitleOverlay.value = false
+  subtitleError.value = null
   loadingStream.value = true
   error.value = null
 
@@ -423,6 +503,18 @@ const fetchStream = async () => {
       const best = availableSources.value[0]
       selectedQuality.value = best.quality
       streamUrl.value = best.url
+
+      // Capture external subtitles if available
+      if (data.subtitles && data.subtitles.length > 0) {
+        streamSubtitles.value = data.subtitles
+        // Prefer ASS for richer styling, fall back to VTT
+        const assSub = data.subtitles.find(s => s.format === 'ass')
+        const activeSub = assSub || data.subtitles[0]
+        activeSubtitleUrl.value = buildProxyUrl(activeSub.url)
+        activeSubtitleFormat.value = activeSub.format as 'ass' | 'vtt'
+        // Auto-enable for subtitle-type translations
+        showSubtitleOverlay.value = selectedTranslation.value?.type === 'subtitles'
+      }
     } else if (data.iframe_url) {
       // Kodik iframe fallback
       iframeUrl.value = data.iframe_url

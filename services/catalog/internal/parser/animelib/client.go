@@ -81,7 +81,8 @@ type PlayerData struct {
 	TranslationType TranslationType `json:"translation_type"` // {"id": 2, "label": "Озвучка"}
 	Team            Team            `json:"team"`
 	Src             string          `json:"src"`             // iframe URL for Kodik players
-	Video           *VideoData      `json:"video,omitempty"` // direct video for Animelib players
+	Video           *VideoData      `json:"video,omitempty"`     // direct video for Animelib players
+	Subtitles       []SubtitleFile  `json:"subtitles,omitempty"` // external subtitle files (ASS, VTT)
 	Views           int             `json:"views"`
 }
 
@@ -95,6 +96,13 @@ type TranslationType struct {
 type Team struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+}
+
+// SubtitleFile represents an external subtitle file from the AnimeLib API
+type SubtitleFile struct {
+	ID     int    `json:"id"`
+	Format string `json:"format"` // "ass", "vtt"
+	Src    string `json:"src"`    // full URL to subtitle file
 }
 
 // VideoData holds quality variants for a direct video
