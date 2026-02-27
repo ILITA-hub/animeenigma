@@ -38,6 +38,12 @@ func main() {
 	}
 	defer db.Close()
 
+	// Start DB pool metrics collector
+	if sqlDB, err := db.DB.DB(); err == nil {
+		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
+		metrics.StartUserMetricsCollector(sqlDB, 60*time.Second)
+	}
+
 	// Auto-migrate schema
 	if err := db.AutoMigrate(&domain.User{}); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)

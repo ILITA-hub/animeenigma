@@ -213,6 +213,18 @@
     <div v-if="error" class="mt-4 p-4 bg-pink-500/20 border border-pink-500/30 rounded-lg text-pink-400">
       {{ error }}
     </div>
+
+    <!-- Report button -->
+    <ReportButton
+      player-type="kodik"
+      :anime-id="animeId"
+      :anime-name="animeName || animeId"
+      :episode-number="selectedEpisode"
+      :server-name="selectedTranslation ? translations.find(t => t.id === selectedTranslation)?.title : undefined"
+      :stream-url="embedUrl"
+      :error-message="error"
+      accent-color="#06b6d4"
+    />
   </div>
 </template>
 
@@ -220,6 +232,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import ReportButton from './ReportButton.vue'
 
 // Watch progress tracking
 const currentTime = ref(0)
@@ -330,6 +343,7 @@ interface PinnedTranslation {
 
 const props = defineProps<{
   animeId: string
+  animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
 }>()

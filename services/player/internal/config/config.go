@@ -14,6 +14,17 @@ type Config struct {
 	Server   ServerConfig
 	Database database.Config
 	JWT      authz.JWTConfig
+	Telegram TelegramConfig
+	Reports  ReportsConfig
+}
+
+type TelegramConfig struct {
+	BotToken    string
+	AdminChatID string
+}
+
+type ReportsConfig struct {
+	Dir string
 }
 
 type ServerConfig struct {
@@ -36,7 +47,7 @@ func Load() (*Config, error) {
 			Port:     getEnvInt("DB_PORT", 5432),
 			User:     getEnv("DB_USER", "postgres"),
 			Password: getEnv("DB_PASSWORD", "postgres"),
-			Database: getEnv("DB_NAME", "animeenigma_player"),
+			Database: getEnv("DB_NAME", "animeenigma"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		JWT: authz.JWTConfig{
@@ -44,6 +55,13 @@ func Load() (*Config, error) {
 			Issuer:          getEnv("JWT_ISSUER", "animeenigma"),
 			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		},
+		Telegram: TelegramConfig{
+			BotToken:    getEnv("TELEGRAM_BOT_TOKEN", ""),
+			AdminChatID: getEnv("TELEGRAM_ADMIN_CHAT_ID", ""),
+		},
+		Reports: ReportsConfig{
+			Dir: getEnv("REPORTS_DIR", "/data/reports"),
 		},
 	}, nil
 }

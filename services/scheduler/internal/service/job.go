@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/jobs"
 	"github.com/robfig/cron/v3"
 )
@@ -37,9 +38,14 @@ func (s *JobService) Start(shikimoriCron, cleanupCron string) error {
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
 		s.log.Info("starting scheduled Shikimori sync")
+		start := time.Now()
 		if err := s.shikimoriJob.Run(ctx); err != nil {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("shikimori_sync", "error").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("shikimori_sync").Observe(time.Since(start).Seconds())
 			s.log.Errorw("Shikimori sync failed", "error", err)
 		} else {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("shikimori_sync", "success").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("shikimori_sync").Observe(time.Since(start).Seconds())
 			s.lastShikimoriRun = time.Now()
 			s.log.Info("Shikimori sync completed successfully")
 		}
@@ -52,9 +58,14 @@ func (s *JobService) Start(shikimoriCron, cleanupCron string) error {
 	_, err = s.cron.AddFunc(cleanupCron, func() {
 		ctx := context.Background()
 		s.log.Info("starting scheduled cleanup")
+		start := time.Now()
 		if err := s.cleanupJob.Run(ctx); err != nil {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("cleanup", "error").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("cleanup").Observe(time.Since(start).Seconds())
 			s.log.Errorw("cleanup failed", "error", err)
 		} else {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("cleanup", "success").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("cleanup").Observe(time.Since(start).Seconds())
 			s.lastCleanupRun = time.Now()
 			s.log.Info("cleanup completed successfully")
 		}

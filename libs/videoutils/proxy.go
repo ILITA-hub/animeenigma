@@ -229,6 +229,7 @@ var HLSProxyAllowedDomains = []string{
 	"mgstatics.xyz",
 	"netmagcdn.com", // MegaCloud HLS CDN
 	"owocdn.top",    // AnimePahe/Kwik CDN
+	"uwucdn.top",    // AnimePahe/Kwik CDN (mirror)
 	"kwik.cx",       // AnimePahe CDN
 	"jimaku.cc",      // Japanese subtitle files
 	"cdnlibs.org",    // AnimeLib video CDN
@@ -246,6 +247,20 @@ var HLSProxyAllowedTLDs = []string{
 	".to",
 	".online",
 	".wiki",
+}
+
+// UpstreamError represents an error from the upstream CDN.
+type UpstreamError struct {
+	StatusCode int
+	Domain     string
+	HTML       bool // true if upstream returned HTML (e.g. Cloudflare challenge)
+}
+
+func (e *UpstreamError) Error() string {
+	if e.HTML {
+		return fmt.Sprintf("upstream returned HTML error page (status %d, domain %s)", e.StatusCode, e.Domain)
+	}
+	return fmt.Sprintf("upstream error (status %d, domain %s)", e.StatusCode, e.Domain)
 }
 
 // ProxyWithReferer proxies a stream with a custom Referer header
@@ -289,6 +304,21 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 		return fmt.Errorf("upstream request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Detect upstream errors (403, 5xx, etc.) — don't forward garbage to HLS.js
+	if resp.StatusCode >= 400 {
+		// Check if upstream returned HTML instead of video data (e.g. Cloudflare challenge)
+		upstreamCT := resp.Header.Get("Content-Type")
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		isHTML := strings.Contains(upstreamCT, "text/html") ||
+			strings.Contains(string(body), "<!DOCTYPE") ||
+			strings.Contains(string(body), "<html")
+
+		if isHTML {
+			return &UpstreamError{StatusCode: resp.StatusCode, Domain: parsed.Host, HTML: true}
+		}
+		return &UpstreamError{StatusCode: resp.StatusCode, Domain: parsed.Host}
+	}
 
 	// Check if this is an M3U8 file that needs URL rewriting
 	contentType := resp.Header.Get("Content-Type")

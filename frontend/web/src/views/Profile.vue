@@ -201,16 +201,16 @@
                       <td class="py-3 px-2">
                         <router-link :to="`/anime/${anime.anime_id}`" class="block w-12 h-16 rounded overflow-hidden bg-surface">
                           <img
-                            v-if="anime.anime_cover"
-                            :src="anime.anime_cover"
-                            :alt="anime.anime_title"
+                            v-if="animeCover(anime)"
+                            :src="animeCover(anime)"
+                            :alt="animeTitle(anime)"
                             class="w-full h-full object-cover"
                           />
                         </router-link>
                       </td>
                       <td class="py-3 px-2">
                         <router-link :to="`/anime/${anime.anime_id}`" class="text-white hover:text-cyan-400 transition-colors font-medium">
-                          {{ anime.anime_title }}
+                          {{ animeTitle(anime) }}
                         </router-link>
                       </td>
                       <!-- Score (inline edit) -->
@@ -256,23 +256,23 @@
                             type="number"
                             :value="anime.episodes || 0"
                             min="0"
-                            :max="anime.anime_total_episodes || 9999"
+                            :max="animeTotalEpisodes(anime) || 9999"
                             @blur="(e) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
                             @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
                             class="w-10 h-6 text-center text-xs bg-white/10 border border-white/10 rounded text-white focus:outline-none focus:border-cyan-500"
                           />
                           <span class="text-white/40">/</span>
-                          <span class="text-white/60">{{ anime.anime_total_episodes || '?' }}</span>
+                          <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
                           <button
                             @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) + 1)"
                             class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
-                            :disabled="anime.anime_total_episodes ? (anime.episodes || 0) >= anime.anime_total_episodes : false"
+                            :disabled="animeTotalEpisodes(anime) ? (anime.episodes || 0) >= animeTotalEpisodes(anime) : false"
                           >+</button>
                         </div>
                         <div v-else class="flex items-center gap-1">
                           <span class="text-white">{{ anime.episodes || 0 }}</span>
                           <span class="text-white/40">/</span>
-                          <span class="text-white/60">{{ anime.anime_total_episodes || '?' }}</span>
+                          <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
                         </div>
                       </td>
                       <td class="py-3 px-2 text-center hidden sm:table-cell">
@@ -339,9 +339,9 @@
                   <router-link :to="`/anime/${anime.anime_id}`" class="block">
                     <div class="aspect-[2/3] rounded-xl overflow-hidden bg-surface relative">
                       <img
-                        v-if="anime.anime_cover"
-                        :src="anime.anime_cover"
-                        :alt="anime.anime_title"
+                        v-if="animeCover(anime)"
+                        :src="animeCover(anime)"
+                        :alt="animeTitle(anime)"
                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                       <div v-else class="w-full h-full flex items-center justify-center text-white/20">
@@ -385,18 +385,18 @@
                       </div>
                     </div>
                     <h3 class="mt-2 text-sm font-medium text-white line-clamp-2 group-hover:text-cyan-400 transition-colors">
-                      {{ anime.anime_title }}
+                      {{ animeTitle(anime) }}
                     </h3>
                   </router-link>
                   <div class="flex items-center gap-1 mt-1">
                     <p class="text-xs text-white/50">
-                      {{ anime.episodes || 0 }} / {{ anime.anime_total_episodes || '?' }} {{ $t('profile.ep') }}
+                      {{ anime.episodes || 0 }} / {{ animeTotalEpisodes(anime) || '?' }} {{ $t('profile.ep') }}
                     </p>
                     <button
                       v-if="isOwnProfile"
                       @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) + 1)"
                       class="w-5 h-5 rounded flex items-center justify-center bg-white/10 text-white/40 hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors opacity-0 group-hover:opacity-100 text-xs"
-                      :disabled="anime.anime_total_episodes ? (anime.episodes || 0) >= anime.anime_total_episodes : false"
+                      :disabled="animeTotalEpisodes(anime) ? (anime.episodes || 0) >= animeTotalEpisodes(anime) : false"
                     >+</button>
                   </div>
                   <p v-if="anime.started_at || anime.completed_at" class="text-xs text-white/40 mt-0.5">
@@ -698,12 +698,16 @@ import { userApi, publicApi } from '@/api/client'
 
 interface WatchlistEntry {
   anime_id: string
-  anime_title: string
-  anime_cover: string
+  anime?: {
+    name: string
+    name_ru?: string
+    poster_url?: string
+    episodes_count: number
+    episodes_aired?: number
+  }
   status: string
   score: number
   episodes: number
-  anime_total_episodes: number
   started_at?: string | null
   completed_at?: string | null
 }
@@ -724,6 +728,14 @@ const { t, locale } = useI18n()
 const authStore = useAuthStore()
 
 const siteOrigin = window.location.origin
+
+// Helpers for nested anime data from Preload
+const animeTitle = (entry: WatchlistEntry): string =>
+  entry.anime?.name_ru || entry.anime?.name || 'Anime'
+const animeCover = (entry: WatchlistEntry): string =>
+  entry.anime?.poster_url || ''
+const animeTotalEpisodes = (entry: WatchlistEntry): number =>
+  entry.anime?.episodes_count || 0
 
 const localeMap: Record<string, string> = {
   ru: 'ru-RU',
@@ -860,7 +872,7 @@ const filteredWatchlist = computed(() => {
         break
       case 'title':
       default:
-        cmp = (a.anime_title || '').localeCompare(b.anime_title || '')
+        cmp = animeTitle(a).localeCompare(animeTitle(b))
         break
     }
     return sortDirection.value === 'desc' ? -cmp : cmp
@@ -989,12 +1001,10 @@ const fetchWatchlist = async (isOwn: boolean) => {
       const entries = response.data?.data || response.data || []
       watchlist.value = entries.map((entry: any) => ({
         anime_id: entry.anime_id,
-        anime_title: entry.anime_title || `Anime ${entry.anime_id}`,
-        anime_cover: entry.anime_cover || '',
+        anime: entry.anime || undefined,
         status: entry.status,
         score: entry.score,
         episodes: entry.episodes,
-        anime_total_episodes: entry.anime_total_episodes,
         started_at: entry.started_at,
         completed_at: entry.completed_at,
       }))
@@ -1091,7 +1101,7 @@ const updateAnimeEpisodes = async (animeId: string, episodes: number) => {
   const anime = watchlist.value.find(a => a.anime_id === animeId)
   if (!anime) return
 
-  const maxEp = anime.anime_total_episodes || 9999
+  const maxEp = animeTotalEpisodes(anime) || 9999
   const clamped = Math.max(0, Math.min(maxEp, episodes))
 
   try {

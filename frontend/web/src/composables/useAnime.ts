@@ -195,13 +195,9 @@ export function useAnime() {
     }
   }
 
-  const addToWatchlist = async (animeId: string, animeTitle?: string, animeCover?: string, totalEpisodes?: number) => {
+  const addToWatchlist = async (animeId: string) => {
     try {
-      // Use current anime data if available and not provided
-      const title = animeTitle ?? anime.value?.title
-      const cover = animeCover ?? anime.value?.coverImage
-      const episodes = totalEpisodes ?? anime.value?.totalEpisodes ?? anime.value?.episodesAired
-      await userApi.addToWatchlist(animeId, 'plan_to_watch', title, cover, episodes)
+      await userApi.addToWatchlist(animeId, 'plan_to_watch')
       return true
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to add to watchlist'

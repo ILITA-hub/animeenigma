@@ -321,6 +321,18 @@
     <div v-if="error" class="mt-4 p-4 bg-pink-500/20 border border-pink-500/30 rounded-lg text-pink-400">
       {{ error }}
     </div>
+
+    <!-- Report button -->
+    <ReportButton
+      player-type="hianime"
+      :anime-id="animeId"
+      :anime-name="animeName || animeId"
+      :episode-number="selectedEpisode?.number"
+      :server-name="selectedServer?.name"
+      :stream-url="streamUrl"
+      :error-message="error"
+      accent-color="#a855f7"
+    />
   </div>
 </template>
 
@@ -331,6 +343,7 @@ import Hls from 'hls.js'
 import { hiAnimeApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
+import ReportButton from './ReportButton.vue'
 
 interface HiAnimeEpisode {
   id: string
@@ -372,6 +385,7 @@ type PlayerType = 'videojs' | 'native'
 
 const props = defineProps<{
   animeId: string
+  animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
 }>()
@@ -967,7 +981,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, props.totalEpisodes)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number
@@ -984,7 +998,7 @@ const autoMarkEpisodeWatched = async () => {
   if (!authStore.isAuthenticated || !selectedEpisode.value || episodeMarkedWatched.value) return
 
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, props.totalEpisodes)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number

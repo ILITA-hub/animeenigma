@@ -2,9 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -13,35 +10,23 @@ import (
 )
 
 type ListService struct {
-	listRepo   *repo.ListRepository
-	log        *logger.Logger
-	catalogURL string
-	httpClient *http.Client
+	listRepo *repo.ListRepository
+	log      *logger.Logger
 }
 
 func NewListService(listRepo *repo.ListRepository, log *logger.Logger) *ListService {
 	return &ListService{
-		listRepo:   listRepo,
-		log:        log,
-		catalogURL: "http://catalog:8081",
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		listRepo: listRepo,
+		log:      log,
 	}
 }
 
 // GetUserList returns user's anime list with optional status filter
 func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([]*domain.AnimeListEntry, error) {
-	var entries []*domain.AnimeListEntry
-	var err error
 	if status != "" {
-		entries, err = s.listRepo.GetByUserAndStatus(ctx, userID, status)
-	} else {
-		entries, err = s.listRepo.GetByUser(ctx, userID)
+		return s.listRepo.GetByUserAndStatus(ctx, userID, status)
 	}
-	if err != nil {
-		return nil, err
-	}
-	s.enrichEntries(ctx, entries)
-	return entries, nil
+	return s.listRepo.GetByUser(ctx, userID)
 }
 
 // GetUserAnimeEntry returns a single anime entry from user's list
@@ -55,12 +40,9 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 	existingEntry, _ := s.listRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
 
 	entry := &domain.AnimeListEntry{
-		UserID:             userID,
-		AnimeID:            req.AnimeID,
-		AnimeTitle:         req.AnimeTitle,
-		AnimeCover:         req.AnimeCover,
-		Status:             req.Status,
-		AnimeType:          req.AnimeType,
+		UserID:  userID,
+		AnimeID: req.AnimeID,
+		Status:  req.Status,
 	}
 
 	if req.Score != nil {
@@ -91,10 +73,6 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 		entry.Priority = *req.Priority
 	}
 
-	if req.AnimeTotalEpisodes != nil {
-		entry.AnimeTotalEpisodes = *req.AnimeTotalEpisodes
-	}
-
 	if req.MalID != nil {
 		entry.MalID = req.MalID
 	}
@@ -121,9 +99,10 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 
 	// When marking as completed, set episodes to total if not explicitly provided
 	if req.Status == "completed" && req.Episodes == nil {
-		totalEpisodes := entry.AnimeTotalEpisodes
-		if totalEpisodes == 0 && existingEntry != nil {
-			totalEpisodes = existingEntry.AnimeTotalEpisodes
+		// Use Preloaded anime info for total episodes
+		var totalEpisodes int
+		if existingEntry != nil && existingEntry.Anime != nil {
+			totalEpisodes = existingEntry.Anime.EpisodesCount
 		}
 		if totalEpisodes > 0 {
 			entry.Episodes = totalEpisodes
@@ -143,7 +122,7 @@ func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID strin
 }
 
 // MarkEpisodeWatched marks an episode as watched and updates the episodes count
-func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, episode int, totalEpisodes *int, animeTitle, animeCover string) (*domain.AnimeListEntry, error) {
+func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, episode int) (*domain.AnimeListEntry, error) {
 	updated, err := s.listRepo.IncrementEpisodes(ctx, userID, animeID, episode)
 	if err != nil {
 		return nil, err
@@ -165,29 +144,16 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			)
 			now := time.Now()
 			entry := &domain.AnimeListEntry{
-				UserID:     userID,
-				AnimeID:    animeID,
-				AnimeTitle: animeTitle,
-				AnimeCover: animeCover,
-				Status:     "watching",
-				Episodes:   episode,
-				StartedAt:  &now,
-			}
-			if totalEpisodes != nil {
-				entry.AnimeTotalEpisodes = *totalEpisodes
+				UserID:    userID,
+				AnimeID:   animeID,
+				Status:    "watching",
+				Episodes:  episode,
+				StartedAt: &now,
 			}
 			if err := s.listRepo.Upsert(ctx, entry); err != nil {
 				return nil, err
 			}
 			return entry, nil
-		}
-
-		// Update total episodes if missing and provided
-		if existing.AnimeTotalEpisodes == 0 && totalEpisodes != nil && *totalEpisodes > 0 {
-			existing.AnimeTotalEpisodes = *totalEpisodes
-			if err := s.listRepo.Upsert(ctx, existing); err != nil {
-				s.log.Warnw("failed to update total episodes", "error", err)
-			}
 		}
 
 		s.log.Infow("episode already marked",
@@ -204,7 +170,7 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 // MigrateListEntry migrates a list entry from oldAnimeID to newAnimeID.
 // Used when resolving mal_XXXXX entries to real UUID entries.
 // Preserves status, score, episodes, dates, and all other fields.
-func (s *ListService) MigrateListEntry(ctx context.Context, userID, oldAnimeID, newAnimeID, newTitle, newCover string) (*domain.AnimeListEntry, error) {
+func (s *ListService) MigrateListEntry(ctx context.Context, userID, oldAnimeID, newAnimeID string) (*domain.AnimeListEntry, error) {
 	oldEntry, err := s.listRepo.GetByUserAndAnime(ctx, userID, oldAnimeID)
 	if err != nil {
 		return nil, err
@@ -223,32 +189,19 @@ func (s *ListService) MigrateListEntry(ctx context.Context, userID, oldAnimeID, 
 	// Delete old entry, create new one with same data
 	_ = s.listRepo.Delete(ctx, userID, oldAnimeID)
 
-	title := newTitle
-	if title == "" {
-		title = oldEntry.AnimeTitle
-	}
-	cover := newCover
-	if cover == "" {
-		cover = oldEntry.AnimeCover
-	}
-
 	newEntry := &domain.AnimeListEntry{
-		UserID:             userID,
-		AnimeID:            newAnimeID,
-		AnimeTitle:         title,
-		AnimeCover:         cover,
-		Status:             oldEntry.Status,
-		Score:              oldEntry.Score,
-		Episodes:           oldEntry.Episodes,
-		Notes:              oldEntry.Notes,
-		Tags:               oldEntry.Tags,
-		IsRewatching:       oldEntry.IsRewatching,
-		Priority:           oldEntry.Priority,
-		AnimeType:          oldEntry.AnimeType,
-		AnimeTotalEpisodes: oldEntry.AnimeTotalEpisodes,
-		MalID:              oldEntry.MalID,
-		StartedAt:          oldEntry.StartedAt,
-		CompletedAt:        oldEntry.CompletedAt,
+		UserID:       userID,
+		AnimeID:      newAnimeID,
+		Status:       oldEntry.Status,
+		Score:        oldEntry.Score,
+		Episodes:     oldEntry.Episodes,
+		Notes:        oldEntry.Notes,
+		Tags:         oldEntry.Tags,
+		IsRewatching: oldEntry.IsRewatching,
+		Priority:     oldEntry.Priority,
+		MalID:        oldEntry.MalID,
+		StartedAt:    oldEntry.StartedAt,
+		CompletedAt:  oldEntry.CompletedAt,
 	}
 
 	if err := s.listRepo.Upsert(ctx, newEntry); err != nil {
@@ -260,91 +213,8 @@ func (s *ListService) MigrateListEntry(ctx context.Context, userID, oldAnimeID, 
 
 // GetPublicWatchlist returns user's public watchlist filtered by allowed statuses
 func (s *ListService) GetPublicWatchlist(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
-	var entries []*domain.AnimeListEntry
-	var err error
 	if len(statuses) == 0 {
-		entries, err = s.listRepo.GetByUser(ctx, userID)
-	} else {
-		entries, err = s.listRepo.GetByUserAndStatuses(ctx, userID, statuses)
+		return s.listRepo.GetByUser(ctx, userID)
 	}
-	if err != nil {
-		return nil, err
-	}
-	s.enrichEntries(ctx, entries)
-	return entries, nil
-}
-
-// enrichEntries fills in missing anime titles/covers by fetching from the catalog service.
-// Also persists the data back to the DB so subsequent requests don't need to fetch again.
-func (s *ListService) enrichEntries(ctx context.Context, entries []*domain.AnimeListEntry) {
-	var missing []*domain.AnimeListEntry
-	for _, e := range entries {
-		if e.AnimeTitle == "" {
-			missing = append(missing, e)
-		}
-	}
-	if len(missing) == 0 {
-		return
-	}
-
-	for _, e := range missing {
-		info := s.fetchAnimeFromCatalog(ctx, e.AnimeID)
-		if info == nil {
-			continue
-		}
-		e.AnimeTitle = info.Name
-		if info.PosterURL != "" {
-			e.AnimeCover = info.PosterURL
-		}
-		// Persist to DB in background so next request has the data
-		entry := *e
-		go func() {
-			if err := s.listRepo.Upsert(context.Background(), &entry); err != nil {
-				s.log.Warnw("failed to backfill anime title", "anime_id", entry.AnimeID, "error", err)
-			}
-		}()
-	}
-}
-
-type catalogAnimeInfo struct {
-	Name      string `json:"name"`
-	NameRU    string `json:"name_ru"`
-	PosterURL string `json:"poster_url"`
-}
-
-func (s *ListService) fetchAnimeFromCatalog(ctx context.Context, animeID string) *catalogAnimeInfo {
-	url := fmt.Sprintf("%s/api/anime/%s", s.catalogURL, animeID)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil
-	}
-
-	var result struct {
-		Data catalogAnimeInfo `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil
-	}
-
-	// Prefer Russian name, fall back to romanized
-	name := result.Data.NameRU
-	if name == "" {
-		name = result.Data.Name
-	}
-	if name == "" {
-		return nil
-	}
-	result.Data.Name = name
-
-	return &result.Data
+	return s.listRepo.GetByUserAndStatuses(ctx, userID, statuses)
 }

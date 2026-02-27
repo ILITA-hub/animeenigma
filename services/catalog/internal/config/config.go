@@ -67,7 +67,7 @@ func Load() (*Config, error) {
 			Port:     getEnvInt("DB_PORT", 5432),
 			User:     getEnv("DB_USER", "postgres"),
 			Password: getEnv("DB_PASSWORD", "postgres"),
-			Database: getEnv("DB_NAME", "animeenigma_catalog"),
+			Database: getEnv("DB_NAME", "animeenigma"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Redis: cache.Config{

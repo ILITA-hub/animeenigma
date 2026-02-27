@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 	"sync/atomic"
 
-	"github.com/ILITA-hub/animeenigma/libs/errors"
+	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/service"
 	"golang.org/x/sync/semaphore"
@@ -55,20 +58,26 @@ func (h *StreamHandler) ProxyStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Wrap writer to count bytes transferred
+	cw := &metrics.CountingResponseWriter{
+		ResponseWriter: w,
+		Counter:        metrics.ProxyBytesTransferredTotal.WithLabelValues("stream"),
+	}
+
 	switch token.SourceType {
 	case videoutils.SourceExternal:
-		if err := h.streamingService.ProxyExternalStream(r.Context(), token, w, r); err != nil {
-			h.log.Errorw("failed to proxy stream", "error", err, "video_id", token.VideoID)
+		if err := h.streamingService.ProxyExternalStream(r.Context(), token, cw, r); err != nil {
+			h.log.Errorw("failed to proxy stream", "error", err, "video_id", token.VideoID, "user_id", token.UserID)
 			// Don't send error response if we've already started writing
 		}
 
 	case videoutils.SourceMinio:
-		if err := h.streamingService.StreamFromStorage(r.Context(), token, w, r); err != nil {
-			h.log.Errorw("failed to stream from storage", "error", err, "video_id", token.VideoID)
+		if err := h.streamingService.StreamFromStorage(r.Context(), token, cw, r); err != nil {
+			h.log.Errorw("failed to stream from storage", "error", err, "video_id", token.VideoID, "user_id", token.UserID)
 		}
 
 	default:
-		httputil.Error(w, errors.InvalidInput("unsupported source type"))
+		httputil.Error(w, apperrors.InvalidInput("unsupported source type"))
 	}
 }
 
@@ -87,12 +96,16 @@ func (h *StreamHandler) DirectStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if token.SourceType != videoutils.SourceMinio {
-		httputil.Error(w, errors.InvalidInput("token is not for direct streaming"))
+		httputil.Error(w, apperrors.InvalidInput("token is not for direct streaming"))
 		return
 	}
 
-	if err := h.streamingService.StreamFromStorage(r.Context(), token, w, r); err != nil {
-		h.log.Errorw("failed to stream from storage", "error", err, "video_id", token.VideoID)
+	cw := &metrics.CountingResponseWriter{
+		ResponseWriter: w,
+		Counter:        metrics.ProxyBytesTransferredTotal.WithLabelValues("storage"),
+	}
+	if err := h.streamingService.StreamFromStorage(r.Context(), token, cw, r); err != nil {
+		h.log.Errorw("failed to stream from storage", "error", err, "video_id", token.VideoID, "user_id", token.UserID)
 	}
 }
 
@@ -160,15 +173,18 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 	if !hlsProxySemaphore.TryAcquire(1) {
 		h.log.Warnw("HLS proxy at capacity", "active_connections", hlsActiveConnections.Load())
 		w.Header().Set("Retry-After", "30")
-		httputil.Error(w, errors.ServiceUnavailable("server busy, try again later"))
+		httputil.Error(w, apperrors.ServiceUnavailable("server busy, try again later"))
 		return
 	}
 
 	// Track active connections
 	hlsActiveConnections.Add(1)
+	metrics.ProxyActiveConnections.Inc()
+	metrics.ProxyRequestsTotal.WithLabelValues("hls").Inc()
 	defer func() {
 		hlsProxySemaphore.Release(1)
 		hlsActiveConnections.Add(-1)
+		metrics.ProxyActiveConnections.Dec()
 	}()
 
 	h.log.Debugw("HLS proxy request",
@@ -177,8 +193,32 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 		"active_connections", hlsActiveConnections.Load(),
 	)
 
+	// Wrap writer to count bytes transferred
+	cw := &metrics.CountingResponseWriter{
+		ResponseWriter: w,
+		Counter:        metrics.ProxyBytesTransferredTotal.WithLabelValues("hls"),
+	}
+
 	// Proxy the request with the provided referer
-	if err := h.videoProxy.ProxyWithReferer(r.Context(), sourceURL, referer, w, r); err != nil {
+	if err := h.videoProxy.ProxyWithReferer(r.Context(), sourceURL, referer, cw, r); err != nil {
+		// Check if this is an upstream CDN error (403, 5xx, Cloudflare block, etc.)
+		var upstreamErr *videoutils.UpstreamError
+		if errors.As(err, &upstreamErr) {
+			metrics.ProxyUpstreamErrors.WithLabelValues(
+				strconv.Itoa(upstreamErr.StatusCode),
+				upstreamErr.Domain,
+			).Inc()
+			h.log.Warnw("upstream CDN error",
+				"status", upstreamErr.StatusCode,
+				"domain", upstreamErr.Domain,
+				"html_response", upstreamErr.HTML,
+				"url", sourceURL,
+			)
+			// Return a clean error so HLS.js stops retrying
+			http.Error(w, "upstream stream unavailable", http.StatusBadGateway)
+			return
+		}
+
 		h.log.Errorw("failed to proxy HLS stream",
 			"error", err,
 			"url", sourceURL,

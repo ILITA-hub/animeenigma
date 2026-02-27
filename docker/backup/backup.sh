@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 DATE=$(date +%Y-%m-%d)
-DATABASES="animeenigma_auth animeenigma_catalog animeenigma_player animeenigma_rooms"
+DATABASES="animeenigma"
 BACKUP_DIR="/tmp/backups"
 S3_PATH="s3://${S3_BUCKET}/backups/${DATE}"
 

@@ -2,6 +2,20 @@ package domain
 
 import "time"
 
+// AnimeInfo is a read-only projection of the animes table.
+// It omits DeletedAt so GORM won't add "WHERE deleted_at IS NULL",
+// ensuring entries referencing soft-deleted anime still return data.
+type AnimeInfo struct {
+	ID            string `gorm:"type:uuid;primaryKey" json:"id"`
+	Name          string `json:"name"`
+	NameRU        string `json:"name_ru,omitempty"`
+	PosterURL     string `json:"poster_url,omitempty"`
+	EpisodesCount int    `json:"episodes_count"`
+	EpisodesAired int    `json:"episodes_aired,omitempty"`
+}
+
+func (AnimeInfo) TableName() string { return "animes" }
+
 type WatchProgress struct {
 	ID            string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID        string    `gorm:"type:uuid;index" json:"user_id"`
@@ -20,25 +34,22 @@ func (WatchProgress) TableName() string {
 }
 
 type AnimeListEntry struct {
-	ID                 string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID             string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"user_id"`
-	AnimeID            string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"anime_id"`
-	AnimeTitle         string     `gorm:"size:500" json:"anime_title"`
-	AnimeCover         string     `gorm:"type:text" json:"anime_cover"`
-	Status             string     `gorm:"size:20;default:'watching';index" json:"status"`
-	Score              int        `json:"score"`
-	Episodes           int        `json:"episodes"`
-	Notes              string     `gorm:"type:text" json:"notes"`
-	Tags               string     `json:"tags"`
-	IsRewatching       bool       `gorm:"default:false" json:"is_rewatching"`
-	Priority           string     `gorm:"size:20" json:"priority"`
-	AnimeType          string     `gorm:"size:20" json:"anime_type"`
-	AnimeTotalEpisodes int        `json:"anime_total_episodes"`
-	MalID              *int       `json:"mal_id,omitempty"`
-	StartedAt          *time.Time `json:"started_at,omitempty"`
-	CompletedAt        *time.Time `json:"completed_at,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID           string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID       string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"user_id"`
+	AnimeID      string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime" json:"anime_id"`
+	Anime        *AnimeInfo `gorm:"foreignKey:AnimeID" json:"anime,omitempty"`
+	Status       string     `gorm:"size:20;default:'watching';index" json:"status"`
+	Score        int        `json:"score"`
+	Episodes     int        `json:"episodes"`
+	Notes        string     `gorm:"type:text" json:"notes"`
+	Tags         string     `json:"tags"`
+	IsRewatching bool       `gorm:"default:false" json:"is_rewatching"`
+	Priority     string     `gorm:"size:20" json:"priority"`
+	MalID        *int       `json:"mal_id,omitempty"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 func (AnimeListEntry) TableName() string {
@@ -58,16 +69,15 @@ func (WatchHistory) TableName() string {
 }
 
 type Review struct {
-	ID         string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID     string    `gorm:"type:uuid;index;uniqueIndex:idx_user_anime_review" json:"user_id"`
-	AnimeID    string    `gorm:"type:uuid;index;uniqueIndex:idx_user_anime_review" json:"anime_id"`
-	AnimeTitle string    `gorm:"size:500" json:"anime_title"`
-	AnimeCover string    `gorm:"type:text" json:"anime_cover"`
-	Username   string    `gorm:"size:32" json:"username"`
-	Score      int       `json:"score"`
-	ReviewText string    `gorm:"type:text" json:"review_text"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID         string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID     string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime_review" json:"user_id"`
+	AnimeID    string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime_review" json:"anime_id"`
+	Anime      *AnimeInfo `gorm:"foreignKey:AnimeID" json:"anime,omitempty"`
+	Username   string     `gorm:"size:32" json:"username"`
+	Score      int        `json:"score"`
+	ReviewText string     `gorm:"type:text" json:"review_text"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 func (Review) TableName() string {
@@ -83,21 +93,17 @@ type UpdateProgressRequest struct {
 }
 
 type UpdateListRequest struct {
-	AnimeID            string     `json:"anime_id"`
-	AnimeTitle         string     `json:"anime_title,omitempty"`
-	AnimeCover         string     `json:"anime_cover,omitempty"`
-	Status             string     `json:"status"`
-	Score              *int       `json:"score,omitempty"`
-	Episodes           *int       `json:"episodes,omitempty"`
-	Notes              *string    `json:"notes,omitempty"`
-	Tags               *string    `json:"tags,omitempty"`
-	IsRewatching       *bool      `json:"is_rewatching,omitempty"`
-	Priority           *string    `json:"priority,omitempty"`
-	AnimeType          string     `json:"anime_type,omitempty"`
-	AnimeTotalEpisodes *int       `json:"anime_total_episodes,omitempty"`
-	MalID              *int       `json:"mal_id,omitempty"`
-	StartedAt          *time.Time `json:"started_at,omitempty"`
-	CompletedAt        *time.Time `json:"completed_at,omitempty"`
+	AnimeID      string     `json:"anime_id"`
+	Status       string     `json:"status"`
+	Score        *int       `json:"score,omitempty"`
+	Episodes     *int       `json:"episodes,omitempty"`
+	Notes        *string    `json:"notes,omitempty"`
+	Tags         *string    `json:"tags,omitempty"`
+	IsRewatching *bool      `json:"is_rewatching,omitempty"`
+	Priority     *string    `json:"priority,omitempty"`
+	MalID        *int       `json:"mal_id,omitempty"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
 }
 
 type AnimeRating struct {
@@ -108,8 +114,6 @@ type AnimeRating struct {
 
 type CreateReviewRequest struct {
 	AnimeID    string `json:"anime_id"`
-	AnimeTitle string `json:"anime_title,omitempty"`
-	AnimeCover string `json:"anime_cover,omitempty"`
 	Score      int    `json:"score"`
 	ReviewText string `json:"review_text"`
 }

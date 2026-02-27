@@ -7,6 +7,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/service"
@@ -124,9 +125,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.authService.Register(r.Context(), &req)
 	if err != nil {
+		metrics.AuthEventsTotal.WithLabelValues("register", "error").Inc()
 		httputil.Error(w, err)
 		return
 	}
+
+	metrics.AuthEventsTotal.WithLabelValues("register", "success").Inc()
 
 	// Set refresh token as httpOnly cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)
@@ -148,9 +152,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.authService.Login(r.Context(), &req)
 	if err != nil {
+		metrics.AuthEventsTotal.WithLabelValues("login", "error").Inc()
 		httputil.Error(w, err)
 		return
 	}
+
+	metrics.AuthEventsTotal.WithLabelValues("login", "success").Inc()
 
 	// Set refresh token as httpOnly cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)
@@ -174,11 +181,14 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	req := &domain.RefreshRequest{RefreshToken: cookie.Value}
 	resp, err := h.authService.RefreshToken(r.Context(), req)
 	if err != nil {
+		metrics.AuthEventsTotal.WithLabelValues("refresh_token", "error").Inc()
 		// Clear invalid cookie
 		h.clearRefreshTokenCookie(w)
 		httputil.Error(w, err)
 		return
 	}
+
+	metrics.AuthEventsTotal.WithLabelValues("refresh_token", "success").Inc()
 
 	// Set new refresh token cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)
@@ -213,9 +223,12 @@ func (h *AuthHandler) TelegramLogin(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.authService.LoginWithTelegram(r.Context(), &req)
 	if err != nil {
+		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "error").Inc()
 		httputil.Error(w, err)
 		return
 	}
+
+	metrics.AuthEventsTotal.WithLabelValues("telegram_login", "success").Inc()
 
 	// Set refresh token as httpOnly cookie
 	h.setRefreshTokenCookie(w, resp.RefreshToken)

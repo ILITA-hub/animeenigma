@@ -37,6 +37,12 @@ func main() {
 	}
 	defer db.Close()
 
+	// Start DB pool metrics collector
+	if sqlDB, err := db.DB.DB(); err == nil {
+		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
+		metrics.StartActivityMetricsCollector(sqlDB, 60*time.Second)
+	}
+
 	// Auto-migrate schema
 	if err := db.AutoMigrate(
 		&domain.WatchProgress{},
@@ -70,12 +76,13 @@ func main() {
 	malImportHandler := handler.NewMALImportHandler(listService, log)
 	malExportHandler := handler.NewMALExportHandler(malExportService, log)
 	shikimoriImportHandler := handler.NewShikimoriImportHandler(listService, log)
+	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

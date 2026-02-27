@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/rooms/internal/service"
 	"github.com/gorilla/websocket"
 )
@@ -35,6 +36,9 @@ func (h *WebSocketHandler) HandleWebSocket(w http.ResponseWriter, r *http.Reques
 		h.log.Errorw("failed to upgrade connection", "error", err)
 		return
 	}
+
+	metrics.WebSocketConnectionsActive.Inc()
+	defer metrics.WebSocketConnectionsActive.Dec()
 
 	h.wsService.HandleConnection(conn, r.Context())
 }

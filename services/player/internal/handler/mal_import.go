@@ -151,35 +151,22 @@ func (h *MALImportHandler) importFromMAL(ctx context.Context, userID, malUsernam
 				continue
 			}
 
-			// Use English title if available, otherwise original
-			title := entry.AnimeTitle
-			if entry.AnimeTitleEng != "" {
-				title = entry.AnimeTitleEng
-			}
-
 			// Try to find anime in catalog by MAL ID
-			animeID := fmt.Sprintf("mal_%d", entry.AnimeID)
-			coverURL := entry.AnimeImagePath
-
 			catalogAnime := h.searchCatalogByMALID(ctx, entry.AnimeID)
-			if catalogAnime != nil {
-				animeID = catalogAnime.ID
-				if catalogAnime.PosterURL != "" {
-					coverURL = catalogAnime.PosterURL
-				}
-				if catalogAnime.Name != "" {
-					title = catalogAnime.Name
-				}
+			if catalogAnime == nil {
+				// Skip unresolved entries — mal_XXXXX IDs break FK constraints
+				h.log.Infow("skipping unresolved MAL entry",
+					"mal_id", entry.AnimeID,
+					"title", entry.AnimeTitle,
+				)
+				result.Skipped++
+				continue
 			}
 
 			listReq := &domain.UpdateListRequest{
-				AnimeID:            animeID,
-				AnimeTitle:         title,
-				AnimeCover:         coverURL,
-				Status:             status,
-				AnimeType:          entry.AnimeMediaTypeString,
-				AnimeTotalEpisodes: &entry.AnimeNumEpisodes,
-				MalID:              &entry.AnimeID,
+				AnimeID: catalogAnime.ID,
+				Status:  status,
+				MalID:   &entry.AnimeID,
 			}
 
 			if entry.Score > 0 {
@@ -220,7 +207,7 @@ func (h *MALImportHandler) importFromMAL(ctx context.Context, userID, malUsernam
 			}
 
 			if _, err := h.listService.UpdateListEntry(ctx, userID, listReq); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", title, err))
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", entry.AnimeTitle, err))
 				result.Skipped++
 			} else {
 				result.Imported++

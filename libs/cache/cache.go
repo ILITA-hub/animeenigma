@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -47,31 +48,47 @@ func New(cfg Config) (*RedisCache, error) {
 }
 
 func (c *RedisCache) Get(ctx context.Context, key string, dest interface{}) error {
+	start := time.Now()
 	data, err := c.client.Get(ctx, key).Bytes()
 	if err != nil {
 		if err == redis.Nil {
+			metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
+			metrics.CacheOperationsTotal.WithLabelValues("get", "miss").Inc()
 			return ErrNotFound
 		}
+		metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("get", "error").Inc()
 		return fmt.Errorf("cache get: %w", err)
 	}
 
 	if err := json.Unmarshal(data, dest); err != nil {
+		metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("get", "error").Inc()
 		return fmt.Errorf("cache unmarshal: %w", err)
 	}
 
+	metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
+	metrics.CacheOperationsTotal.WithLabelValues("get", "hit").Inc()
 	return nil
 }
 
 func (c *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	start := time.Now()
 	data, err := json.Marshal(value)
 	if err != nil {
+		metrics.CacheOperationDuration.WithLabelValues("set").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("set", "error").Inc()
 		return fmt.Errorf("cache marshal: %w", err)
 	}
 
 	if err := c.client.Set(ctx, key, data, ttl).Err(); err != nil {
+		metrics.CacheOperationDuration.WithLabelValues("set").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("set", "error").Inc()
 		return fmt.Errorf("cache set: %w", err)
 	}
 
+	metrics.CacheOperationDuration.WithLabelValues("set").Observe(time.Since(start).Seconds())
+	metrics.CacheOperationsTotal.WithLabelValues("set", "success").Inc()
 	return nil
 }
 
@@ -79,7 +96,13 @@ func (c *RedisCache) Delete(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	return c.client.Del(ctx, keys...).Err()
+	err := c.client.Del(ctx, keys...).Err()
+	if err != nil {
+		metrics.CacheOperationsTotal.WithLabelValues("delete", "error").Inc()
+	} else {
+		metrics.CacheOperationsTotal.WithLabelValues("delete", "success").Inc()
+	}
+	return err
 }
 
 func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {

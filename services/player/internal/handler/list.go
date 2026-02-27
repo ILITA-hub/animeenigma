@@ -6,6 +6,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -50,10 +51,7 @@ func (h *ListHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
 // AddToList adds an anime to user's watchlist
 func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		AnimeID            string `json:"anime_id"`
-		AnimeTitle         string `json:"anime_title"`
-		AnimeCover         string `json:"anime_cover"`
-		AnimeTotalEpisodes *int   `json:"anime_total_episodes"`
+		AnimeID string `json:"anime_id"`
 	}
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -68,11 +66,8 @@ func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 
 	// Add with default status "plan_to_watch"
 	listReq := &domain.UpdateListRequest{
-		AnimeID:            req.AnimeID,
-		AnimeTitle:         req.AnimeTitle,
-		AnimeCover:         req.AnimeCover,
-		AnimeTotalEpisodes: req.AnimeTotalEpisodes,
-		Status:             "plan_to_watch",
+		AnimeID: req.AnimeID,
+		Status:  "plan_to_watch",
 	}
 
 	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, listReq)
@@ -81,6 +76,7 @@ func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metrics.WatchlistOperationsTotal.WithLabelValues("add").Inc()
 	httputil.Created(w, entry)
 }
 
@@ -143,6 +139,7 @@ func (h *ListHandler) DeleteListEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metrics.WatchlistOperationsTotal.WithLabelValues("remove").Inc()
 	httputil.NoContent(w)
 }
 
@@ -151,10 +148,7 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 	animeID := chi.URLParam(r, "animeId")
 
 	var req struct {
-		Episode            int    `json:"episode"`
-		AnimeTotalEpisodes *int   `json:"anime_total_episodes,omitempty"`
-		AnimeTitle         string `json:"anime_title,omitempty"`
-		AnimeCover         string `json:"anime_cover,omitempty"`
+		Episode int `json:"episode"`
 	}
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -167,7 +161,7 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	entry, err := h.listService.MarkEpisodeWatched(r.Context(), claims.UserID, animeID, req.Episode, req.AnimeTotalEpisodes, req.AnimeTitle, req.AnimeCover)
+	entry, err := h.listService.MarkEpisodeWatched(r.Context(), claims.UserID, animeID, req.Episode)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -186,10 +180,8 @@ func (h *ListHandler) MigrateListEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		OldAnimeID    string `json:"old_anime_id"`
-		NewAnimeID    string `json:"new_anime_id"`
-		NewAnimeTitle string `json:"new_anime_title"`
-		NewAnimeCover string `json:"new_anime_cover"`
+		OldAnimeID string `json:"old_anime_id"`
+		NewAnimeID string `json:"new_anime_id"`
 	}
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -204,7 +196,6 @@ func (h *ListHandler) MigrateListEntry(w http.ResponseWriter, r *http.Request) {
 	entry, err := h.listService.MigrateListEntry(
 		r.Context(), claims.UserID,
 		req.OldAnimeID, req.NewAnimeID,
-		req.NewAnimeTitle, req.NewAnimeCover,
 	)
 	if err != nil {
 		httputil.Error(w, err)

@@ -75,7 +75,20 @@
     "autoplay": "Автовоспр.",
     "next": "Следующий",
     "previous": "Предыдущий",
-    "noTranslations": "Нет доступных озвучек"
+    "noTranslations": "Нет доступных озвучек",
+    "reportNotWorking": "Сообщить о проблеме",
+    "reportTitle": "Сообщить о проблеме",
+    "reportSent": "Отчёт отправлен",
+    "reportThankYou": "Спасибо! Мы изучим проблему.",
+    "reportPlayer": "Плеер",
+    "reportAnime": "Аниме",
+    "reportEpisode": "Серия",
+    "reportServer": "Сервер",
+    "reportError": "Ошибка",
+    "reportDescriptionPlaceholder": "Опишите проблему (необязательно)...",
+    "reportDisclaimer": "Будут отправлены данные браузера и логи для диагностики.",
+    "reportSending": "Отправка...",
+    "reportSubmit": "Отправить"
   },
   "search": {
     "placeholder": "Поиск аниме...",

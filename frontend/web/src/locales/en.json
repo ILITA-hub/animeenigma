@@ -74,7 +74,20 @@
     "autoplay": "Autoplay",
     "next": "Next",
     "previous": "Previous",
-    "noTranslations": "No translations available"
+    "noTranslations": "No translations available",
+    "reportNotWorking": "Report a Problem",
+    "reportTitle": "Report a Problem",
+    "reportSent": "Report Sent",
+    "reportThankYou": "Thank you! We'll look into it.",
+    "reportPlayer": "Player",
+    "reportAnime": "Anime",
+    "reportEpisode": "Episode",
+    "reportServer": "Server",
+    "reportError": "Error",
+    "reportDescriptionPlaceholder": "Describe the problem (optional)...",
+    "reportDisclaimer": "Browser data and logs will be sent for diagnostics.",
+    "reportSending": "Sending...",
+    "reportSubmit": "Send Report"
   },
   "search": {
     "placeholder": "Search anime...",

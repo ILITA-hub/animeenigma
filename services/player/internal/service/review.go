@@ -32,8 +32,6 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 	review := &domain.Review{
 		UserID:     userID,
 		AnimeID:    req.AnimeID,
-		AnimeTitle: req.AnimeTitle,
-		AnimeCover: req.AnimeCover,
 		Username:   username,
 		Score:      req.Score,
 		ReviewText: req.ReviewText,

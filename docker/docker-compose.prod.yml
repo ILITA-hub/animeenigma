@@ -103,7 +103,7 @@ services:
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
-      DB_NAME: animeenigma_auth
+      DB_NAME: animeenigma
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
@@ -127,7 +127,7 @@ services:
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
-      DB_NAME: animeenigma_catalog
+      DB_NAME: animeenigma
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       SHIKIMORI_USER_AGENT: ${SHIKIMORI_USER_AGENT:-AnimeEnigma/1.0}
@@ -180,7 +180,7 @@ services:
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
-      DB_NAME: animeenigma_player
+      DB_NAME: animeenigma
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
@@ -221,7 +221,7 @@ services:
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
-      DB_NAME: animeenigma_catalog
+      DB_NAME: animeenigma
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       SHIKIMORI_USER_AGENT: ${SHIKIMORI_USER_AGENT:-AnimeEnigma/1.0}

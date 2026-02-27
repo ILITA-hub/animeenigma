@@ -13,6 +13,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animelib"
@@ -121,6 +122,7 @@ func NewCatalogService(
 func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchFilters) ([]*domain.Anime, int64, error) {
 	// If source=shikimori, force search on Shikimori
 	if filters.Source == "shikimori" && filters.Query != "" {
+		metrics.SearchRequestsTotal.WithLabelValues("shikimori").Inc()
 		return s.searchShikimori(ctx, filters)
 	}
 
@@ -132,6 +134,7 @@ func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchF
 
 	// If we have local results, enrich and return them
 	if len(animes) > 0 {
+		metrics.SearchRequestsTotal.WithLabelValues("local_db").Inc()
 		for _, anime := range animes {
 			s.enrichAnime(ctx, anime)
 		}
@@ -140,6 +143,7 @@ func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchF
 
 	// No local results - fetch from Shikimori
 	if filters.Query != "" {
+		metrics.SearchRequestsTotal.WithLabelValues("shikimori").Inc()
 		return s.searchShikimori(ctx, filters)
 	}
 
@@ -152,11 +156,15 @@ func (s *CatalogService) searchShikimori(ctx context.Context, filters domain.Sea
 		"query", filters.Query,
 		"forced", filters.Source == "shikimori")
 
+	shikiStart := time.Now()
 	shikimoriAnimes, err := s.shikimoriClient.SearchAnime(ctx, filters.Query, filters.Page, filters.PageSize)
+	metrics.ExternalAPIDuration.WithLabelValues("shikimori").Observe(time.Since(shikiStart).Seconds())
 	if err != nil {
+		metrics.ExternalAPIRequestsTotal.WithLabelValues("shikimori", "error").Inc()
 		s.log.Warnw("failed to fetch from Shikimori", "error", err)
 		return nil, 0, nil // Return empty results
 	}
+	metrics.ExternalAPIRequestsTotal.WithLabelValues("shikimori", "success").Inc()
 
 	// Store fetched anime in database
 	for _, anime := range shikimoriAnimes {
@@ -876,7 +884,9 @@ func (s *CatalogService) GetAniboomVideoSource(ctx context.Context, animeID stri
 }
 
 // GetKodikTranslations gets available translations from Kodik for an anime
-func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID string) ([]domain.KodikTranslation, error) {
+func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID string) (_ []domain.KodikTranslation, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("kodik", "get_translations", start, &retErr)
 	if s.kodikClient == nil {
 		s.log.Warnw("kodik client not initialized, returning empty translations",
 			"anime_id", animeID)
@@ -930,7 +940,10 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 }
 
 // GetKodikVideoSource gets video embed link from Kodik for a specific episode
-func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string, episode int, translationID int) (*domain.KodikVideoSource, error) {
+func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string, episode int, translationID int) (_ *domain.KodikVideoSource, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("kodik", "get_stream", start, &retErr)
+	metrics.EpisodeStreamRequestsTotal.WithLabelValues("kodik").Inc()
 	if s.kodikClient == nil {
 		return nil, errors.NotFound("kodik not available")
 	}
@@ -1101,7 +1114,10 @@ func (s *CatalogService) UpdateShikimoriID(ctx context.Context, animeID string, 
 }
 
 // GetHiAnimeEpisodes gets episodes from HiAnime for an anime
-func (s *CatalogService) GetHiAnimeEpisodes(ctx context.Context, animeID string) ([]domain.HiAnimeEpisode, error) {
+func (s *CatalogService) GetHiAnimeEpisodes(ctx context.Context, animeID string) (retEps []domain.HiAnimeEpisode, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("hianime", "get_episodes", start, &retErr)
+
 	// Get anime to search by name
 	anime, err := s.animeRepo.GetByID(ctx, animeID)
 	if err != nil {
@@ -1152,7 +1168,9 @@ func (s *CatalogService) GetHiAnimeEpisodes(ctx context.Context, animeID string)
 }
 
 // GetHiAnimeServers gets available servers for an episode from HiAnime
-func (s *CatalogService) GetHiAnimeServers(ctx context.Context, animeID string, episodeID string) ([]domain.HiAnimeServer, error) {
+func (s *CatalogService) GetHiAnimeServers(ctx context.Context, animeID string, episodeID string) (_ []domain.HiAnimeServer, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("hianime", "get_servers", start, &retErr)
 	// URL-decode the episode ID in case it was encoded in the request
 	decodedEpisodeID, err := url.QueryUnescape(episodeID)
 	if err == nil && decodedEpisodeID != episodeID {
@@ -1191,7 +1209,10 @@ func (s *CatalogService) GetHiAnimeServers(ctx context.Context, animeID string, 
 }
 
 // GetHiAnimeStream gets the stream URL from HiAnime
-func (s *CatalogService) GetHiAnimeStream(ctx context.Context, animeID string, episodeID string, serverID string, category string) (*domain.HiAnimeStream, error) {
+func (s *CatalogService) GetHiAnimeStream(ctx context.Context, animeID string, episodeID string, serverID string, category string) (_ *domain.HiAnimeStream, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("hianime", "get_stream", start, &retErr)
+	metrics.EpisodeStreamRequestsTotal.WithLabelValues("hianime").Inc()
 	// URL-decode the episode ID in case it was encoded in the request
 	decodedEpisodeID, err := url.QueryUnescape(episodeID)
 	if err == nil && decodedEpisodeID != episodeID {
@@ -1412,7 +1433,9 @@ func normalizeTitle(title string) string {
 // ============================================================================
 
 // GetConsumetEpisodes gets episodes from Consumet for an anime
-func (s *CatalogService) GetConsumetEpisodes(ctx context.Context, animeID string) ([]domain.ConsumetEpisode, error) {
+func (s *CatalogService) GetConsumetEpisodes(ctx context.Context, animeID string) (_ []domain.ConsumetEpisode, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("consumet", "get_episodes", start, &retErr)
 	// Get anime to search by name
 	anime, err := s.animeRepo.GetByID(ctx, animeID)
 	if err != nil {
@@ -1475,7 +1498,10 @@ func (s *CatalogService) GetConsumetServers(ctx context.Context) []domain.Consum
 }
 
 // GetConsumetStream gets the stream URL from Consumet
-func (s *CatalogService) GetConsumetStream(ctx context.Context, animeID string, episodeID string, serverName string) (*domain.ConsumetStream, error) {
+func (s *CatalogService) GetConsumetStream(ctx context.Context, animeID string, episodeID string, serverName string) (_ *domain.ConsumetStream, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("consumet", "get_stream", start, &retErr)
+	metrics.EpisodeStreamRequestsTotal.WithLabelValues("consumet").Inc()
 	// Check cache first
 	cacheKey := fmt.Sprintf("consumet:stream:%s:%s:%s", animeID, episodeID, serverName)
 	var cached domain.ConsumetStream
@@ -1631,7 +1657,9 @@ func matchesConsumetAnime(resultTitle string, anime *domain.Anime) bool {
 // ============================================================================
 
 // GetAnimeLibEpisodes gets episodes from AnimeLib for an anime
-func (s *CatalogService) GetAnimeLibEpisodes(ctx context.Context, animeID string) ([]domain.AnimeLibEpisode, error) {
+func (s *CatalogService) GetAnimeLibEpisodes(ctx context.Context, animeID string) (_ []domain.AnimeLibEpisode, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("animelib", "get_episodes", start, &retErr)
 	// Get anime to search by name
 	anime, err := s.animeRepo.GetByID(ctx, animeID)
 	if err != nil {
@@ -1681,7 +1709,9 @@ func (s *CatalogService) GetAnimeLibEpisodes(ctx context.Context, animeID string
 }
 
 // GetAnimeLibTranslations gets available translations for an episode from AnimeLib
-func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID string, episodeID int) ([]domain.AnimeLibTranslation, error) {
+func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID string, episodeID int) (_ []domain.AnimeLibTranslation, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("animelib", "get_translations", start, &retErr)
 	// Check cache first
 	cacheKey := fmt.Sprintf("animelib:translations:%s:%d", animeID, episodeID)
 	var cached []domain.AnimeLibTranslation
@@ -1746,7 +1776,10 @@ func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID st
 }
 
 // GetAnimeLibStream gets the stream URL from AnimeLib for a specific episode and translation
-func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, episodeID int, translationID int) (*domain.AnimeLibStream, error) {
+func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, episodeID int, translationID int) (_ *domain.AnimeLibStream, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("animelib", "get_stream", start, &retErr)
+	metrics.EpisodeStreamRequestsTotal.WithLabelValues("animelib").Inc()
 	// Check cache first
 	cacheKey := fmt.Sprintf("animelib:stream:%s:%d:%d", animeID, episodeID, translationID)
 	var cached domain.AnimeLibStream
@@ -1805,6 +1838,7 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 		}
 	} else if matched.Src != "" {
 		// Kodik iframe fallback
+		metrics.ParserFallbackTotal.WithLabelValues("animelib", "kodik").Inc()
 		iframeURL := matched.Src
 		if strings.HasPrefix(iframeURL, "//") {
 			iframeURL = "https:" + iframeURL
@@ -1917,21 +1951,33 @@ func (s *CatalogService) resolveAniListID(ctx context.Context, anime *domain.Ani
 
 	// Try Shikimori ID first (source of truth)
 	if anime.ShikimoriID != "" {
+		armStart := time.Now()
 		result, err := s.idMappingClient.ResolveByShikimoriID(anime.ShikimoriID)
+		metrics.ExternalAPIDuration.WithLabelValues("arm").Observe(time.Since(armStart).Seconds())
 		if err != nil {
+			metrics.ExternalAPIRequestsTotal.WithLabelValues("arm", "error").Inc()
 			s.log.Warnw("ARM lookup by shikimori_id failed", "shikimori_id", anime.ShikimoriID, "error", err)
-		} else if result != nil && result.AniList != nil {
-			anilistID = strconv.Itoa(*result.AniList)
+		} else {
+			metrics.ExternalAPIRequestsTotal.WithLabelValues("arm", "success").Inc()
+			if result != nil && result.AniList != nil {
+				anilistID = strconv.Itoa(*result.AniList)
+			}
 		}
 	}
 
 	// Fallback to MAL ID
 	if anilistID == "" && anime.MALID != "" {
+		armStart := time.Now()
 		result, err := s.idMappingClient.ResolveByMALID(anime.MALID)
+		metrics.ExternalAPIDuration.WithLabelValues("arm").Observe(time.Since(armStart).Seconds())
 		if err != nil {
+			metrics.ExternalAPIRequestsTotal.WithLabelValues("arm", "error").Inc()
 			s.log.Warnw("ARM lookup by mal_id failed", "mal_id", anime.MALID, "error", err)
-		} else if result != nil && result.AniList != nil {
-			anilistID = strconv.Itoa(*result.AniList)
+		} else {
+			metrics.ExternalAPIRequestsTotal.WithLabelValues("arm", "success").Inc()
+			if result != nil && result.AniList != nil {
+				anilistID = strconv.Itoa(*result.AniList)
+			}
 		}
 	}
 
@@ -1986,8 +2032,12 @@ func (s *CatalogService) GetJimakuSubtitles(ctx context.Context, animeID string,
 	}
 
 	// Query Jimaku API
+	jimakuStart := time.Now()
 	files, entryName, err := s.jimakuClient.GetSubtitlesForEpisode(anilistID, episode)
+	metrics.ExternalAPIDuration.WithLabelValues("jimaku").Observe(time.Since(jimakuStart).Seconds())
 	if err != nil {
+		metrics.ExternalAPIRequestsTotal.WithLabelValues("jimaku", "error").Inc()
+		metrics.SubtitleRequestsTotal.WithLabelValues("jimaku", "error").Inc()
 		s.log.Warnw("failed to get jimaku subtitles",
 			"anime_id", animeID,
 			"anilist_id", anilistID,
@@ -1995,6 +2045,8 @@ func (s *CatalogService) GetJimakuSubtitles(ctx context.Context, animeID string,
 			"error", err)
 		return nil, errors.Wrap(err, errors.CodeInternal, "failed to fetch jimaku subtitles")
 	}
+	metrics.ExternalAPIRequestsTotal.WithLabelValues("jimaku", "success").Inc()
+	metrics.SubtitleRequestsTotal.WithLabelValues("jimaku", "success").Inc()
 
 	// Map to domain types
 	subtitles := make([]domain.JimakuSubtitle, 0, len(files))
