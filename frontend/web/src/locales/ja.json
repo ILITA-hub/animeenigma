@@ -74,7 +74,20 @@
     "autoplay": "自動再生",
     "next": "次へ",
     "previous": "前へ",
-    "noTranslations": "利用可能な翻訳がありません"
+    "noTranslations": "利用可能な翻訳がありません",
+    "reportNotWorking": "問題を報告",
+    "reportTitle": "問題を報告",
+    "reportSent": "レポート送信完了",
+    "reportThankYou": "ありがとうございます！確認いたします。",
+    "reportPlayer": "プレイヤー",
+    "reportAnime": "アニメ",
+    "reportEpisode": "エピソード",
+    "reportServer": "サーバー",
+    "reportError": "エラー",
+    "reportDescriptionPlaceholder": "問題を説明してください（任意）...",
+    "reportDisclaimer": "診断のためにブラウザデータとログが送信されます。",
+    "reportSending": "送信中...",
+    "reportSubmit": "送信"
   },
   "search": {
     "placeholder": "アニメを検索...",

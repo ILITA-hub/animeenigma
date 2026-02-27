@@ -293,6 +293,18 @@
         </div>
       </div>
     </div>
+
+    <!-- Report button -->
+    <ReportButton
+      player-type="animelib"
+      :anime-id="animeId"
+      :anime-name="animeName || animeId"
+      :episode-number="selectedEpisode ? parseInt(selectedEpisode.number) : undefined"
+      :server-name="selectedTranslation?.team_name"
+      :stream-url="streamUrl"
+      :error-message="error"
+      accent-color="#f97316"
+    />
   </div>
 </template>
 
@@ -301,6 +313,7 @@ import { ref, computed, onMounted } from 'vue'
 import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
+import ReportButton from './ReportButton.vue'
 
 interface AnimeLibEpisode {
   id: number
@@ -334,6 +347,7 @@ interface AnimeLibStream {
 
 const props = defineProps<{
   animeId: string
+  animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
 }>()
@@ -562,7 +576,7 @@ const markCurrentEpisodeWatched = async () => {
   markingWatched.value = true
   try {
     const epNum = parseInt(selectedEpisode.value.number)
-    await userApi.markEpisodeWatched(props.animeId, epNum, props.totalEpisodes)
+    await userApi.markEpisodeWatched(props.animeId, epNum)
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, epNum)
     emit('episodeWatched', { episode: epNum })

@@ -295,6 +295,18 @@
 
       </div>
     </div>
+
+    <!-- Report button -->
+    <ReportButton
+      player-type="consumet"
+      :anime-id="animeId"
+      :anime-name="animeName || animeId"
+      :episode-number="selectedEpisode?.number"
+      :server-name="selectedServer?.name"
+      :stream-url="streamUrl"
+      :error-message="error"
+      accent-color="#4ade80"
+    />
   </div>
 </template>
 
@@ -305,6 +317,7 @@ import Hls from 'hls.js'
 import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
+import ReportButton from './ReportButton.vue'
 
 interface ConsumetEpisode {
   id: string
@@ -341,6 +354,7 @@ type PlayerType = 'videojs' | 'native'
 
 const props = defineProps<{
   animeId: string
+  animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
 }>()
@@ -845,7 +859,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, props.totalEpisodes)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, selectedEpisode.value.number)
     emit('episodeWatched', { episode: selectedEpisode.value.number })

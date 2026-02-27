@@ -198,19 +198,7 @@ func (h *ShikimoriImportHandler) MigrateShikimoriEntries(w http.ResponseWriter, 
 			continue
 		}
 
-		title := catalogAnime.NameRU
-		if title == "" {
-			title = catalogAnime.Name
-		}
-		if title == "" {
-			title = entry.AnimeTitle
-		}
-		cover := catalogAnime.PosterURL
-		if cover == "" {
-			cover = entry.AnimeCover
-		}
-
-		if _, err := h.listService.MigrateListEntry(r.Context(), claims.UserID, entry.AnimeID, catalogAnime.ID, title, cover); err != nil {
+		if _, err := h.listService.MigrateListEntry(r.Context(), claims.UserID, entry.AnimeID, catalogAnime.ID); err != nil {
 			failed++
 		} else {
 			migrated++
@@ -249,34 +237,10 @@ func (h *ShikimoriImportHandler) processImport(userID string, job *shikimoriImpo
 		}
 
 		animeID := catalogAnime.ID
-		// Prefer Russian name
-		title := catalogAnime.NameRU
-		if title == "" {
-			title = entry.Anime.Russian
-		}
-		if title == "" {
-			title = catalogAnime.Name
-		}
-		if title == "" {
-			title = entry.Anime.Name
-		}
-		coverURL := catalogAnime.PosterURL
-		if coverURL == "" {
-			coverURL = h.shikimoriBaseURL + entry.Anime.Image.Original
-		}
-
-		totalEp := entry.Anime.Episodes
-		if totalEp == 0 {
-			totalEp = entry.Anime.EpisodesAired
-		}
 
 		listReq := &domain.UpdateListRequest{
-			AnimeID:            animeID,
-			AnimeTitle:         title,
-			AnimeCover:         coverURL,
-			Status:             status,
-			AnimeType:          entry.Anime.Kind,
-			AnimeTotalEpisodes: &totalEp,
+			AnimeID: animeID,
+			Status:  status,
 		}
 
 		if entry.Score > 0 {
@@ -294,7 +258,7 @@ func (h *ShikimoriImportHandler) processImport(userID string, job *shikimoriImpo
 
 		if _, err := h.listService.UpdateListEntry(ctx, userID, listReq); err != nil {
 			job.mu.Lock()
-			job.Errors = append(job.Errors, fmt.Sprintf("%s: %v", title, err))
+			job.Errors = append(job.Errors, fmt.Sprintf("%s: %v", entry.Anime.Name, err))
 			job.Skipped++
 			job.mu.Unlock()
 		} else {

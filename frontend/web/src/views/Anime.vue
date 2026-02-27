@@ -345,24 +345,28 @@
           <KodikPlayer
             v-if="videoProvider === 'kodik'"
             :anime-id="anime.id"
+            :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
           />
           <!-- AnimeLib Player -->
           <AnimeLibPlayer
             v-else-if="videoProvider === 'animelib'"
             :anime-id="anime.id"
+            :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
           />
           <!-- HiAnime Player -->
           <HiAnimePlayer
             v-else-if="videoProvider === 'hianime'"
             :anime-id="anime.id"
+            :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
           />
           <!-- Consumet Player -->
           <ConsumetPlayer
             v-else-if="videoProvider === 'consumet'"
             :anime-id="anime.id"
+            :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
           />
         </div>
@@ -693,9 +697,7 @@ const fetchWatchlistStatus = async () => {
         try {
           await userApi.migrateListEntry(
             malAnimeId,
-            anime.value.id,
-            anime.value.title || '',
-            anime.value.coverImage || ''
+            anime.value.id
           )
         } catch (e) {
           console.warn('Auto-migration of MAL entry failed:', e)
@@ -705,22 +707,6 @@ const fetchWatchlistStatus = async () => {
 
     if (entry) {
       currentListStatus.value = entry.status
-
-      // Backfill total episodes if missing in watchlist but known from anime data
-      const knownTotal = anime.value.totalEpisodes || anime.value.episodesAired
-      if ((!entry.anime_total_episodes || entry.anime_total_episodes === 0) && knownTotal > 0) {
-        try {
-          await userApi.updateWatchlistStatus(
-            anime.value.id,
-            entry.status,
-            undefined,
-            undefined,
-            knownTotal,
-          )
-        } catch {
-          // Silent — non-critical backfill
-        }
-      }
     } else {
       currentListStatus.value = null
     }
@@ -808,9 +794,7 @@ const submitReview = async () => {
     await reviewApi.createReview(
       anime.value.id,
       reviewForm.score,
-      reviewForm.text,
-      anime.value.title,
-      anime.value.coverImage
+      reviewForm.text
     )
     await fetchReviews()
   } catch (err) {
@@ -840,10 +824,7 @@ const setListStatus = async (status: string) => {
   try {
     await userApi.updateWatchlistStatus(
       anime.value.id,
-      status,
-      anime.value.title,
-      anime.value.coverImage,
-      anime.value.totalEpisodes || anime.value.episodesAired
+      status
     )
     currentListStatus.value = status
     showStatusDropdown.value = false
@@ -943,9 +924,7 @@ const loadAnimeData = async (animeId: string) => {
           try {
             await userApi.migrateListEntry(
               animeId,
-              result.anime.id,
-              result.anime.title || result.anime.name || '',
-              result.anime.poster_url || result.anime.coverImage || ''
+              result.anime.id
             )
           } catch (e) {
             console.warn('List migration failed:', e)
@@ -972,9 +951,7 @@ const loadAnimeData = async (animeId: string) => {
     try {
       await userApi.migrateListEntry(
         pendingBind,
-        fetched.id,
-        fetched.title || '',
-        fetched.coverImage || ''
+        fetched.id
       )
     } catch (e) {
       console.warn('Pending MAL bind migration failed:', e)

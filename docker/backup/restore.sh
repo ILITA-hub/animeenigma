@@ -11,7 +11,7 @@ if [ $# -ne 1 ]; then
 fi
 
 RESTORE_DATE="$1"
-DATABASES="animeenigma_auth animeenigma_catalog animeenigma_player animeenigma_rooms"
+DATABASES="animeenigma"
 RESTORE_DIR="/tmp/restore"
 S3_PATH="s3://${S3_BUCKET}/backups/${RESTORE_DATE}"
 

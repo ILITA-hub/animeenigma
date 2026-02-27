@@ -5,6 +5,10 @@ import { MotionPlugin } from '@vueuse/motion'
 import router from './router'
 import App from './App.vue'
 
+// Diagnostics (must init before other imports that use console)
+import { initDiagnostics } from './utils/diagnostics'
+initDiagnostics()
+
 // Styles
 import './styles/main.css'
 import 'video.js/dist/video-js.css'

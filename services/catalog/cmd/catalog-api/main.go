@@ -37,6 +37,11 @@ func main() {
 	}
 	defer db.Close()
 
+	// Start DB pool metrics collector
+	if sqlDB, err := db.DB.DB(); err == nil {
+		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
+	}
+
 	// Auto-migrate schema
 	if err := db.AutoMigrate(
 		&domain.Anime{},

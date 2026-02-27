@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
+import { hookAxiosDiagnostics } from '@/utils/diagnostics'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -102,6 +103,9 @@ apiClient.interceptors.response.use(
   }
 )
 
+// Hook diagnostics capture for network logs
+hookAxiosDiagnostics(apiClient)
+
 // API endpoints
 export const animeApi = {
   getAll: (params?: any) => apiClient.get('/anime', { params }),
@@ -130,10 +134,10 @@ export const userApi = {
   updateProfile: (data: any) => apiClient.patch('/users/profile', data),
   getWatchlist: (status?: string) => apiClient.get('/users/watchlist', { params: status ? { status } : {} }),
   getWatchlistEntry: (animeId: string) => apiClient.get(`/users/watchlist/${animeId}`),
-  addToWatchlist: (animeId: string, status: string = 'plan_to_watch', animeTitle?: string, animeCover?: string, animeTotalEpisodes?: number) =>
-    apiClient.post('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover, anime_total_episodes: animeTotalEpisodes }),
-  updateWatchlistStatus: (animeId: string, status: string, animeTitle?: string, animeCover?: string, animeTotalEpisodes?: number) =>
-    apiClient.put('/users/watchlist', { anime_id: animeId, status, anime_title: animeTitle, anime_cover: animeCover, anime_total_episodes: animeTotalEpisodes }),
+  addToWatchlist: (animeId: string, status: string = 'plan_to_watch') =>
+    apiClient.post('/users/watchlist', { anime_id: animeId, status }),
+  updateWatchlistStatus: (animeId: string, status: string) =>
+    apiClient.put('/users/watchlist', { anime_id: animeId, status }),
   updateWatchlistEntry: (data: {
     anime_id: string
     status: string
@@ -144,26 +148,26 @@ export const userApi = {
     notes?: string
   }) => apiClient.put('/users/watchlist', data),
   removeFromWatchlist: (animeId: string) => apiClient.delete(`/users/watchlist/${animeId}`),
-  markEpisodeWatched: (animeId: string, episode: number, animeTotalEpisodes?: number, animeTitle?: string, animeCover?: string) =>
-    apiClient.post(`/users/watchlist/${animeId}/episode`, { episode, anime_total_episodes: animeTotalEpisodes, anime_title: animeTitle, anime_cover: animeCover }),
+  markEpisodeWatched: (animeId: string, episode: number) =>
+    apiClient.post(`/users/watchlist/${animeId}/episode`, { episode }),
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: any) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
   importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),
   getShikimoriImportStatus: (jobId: string) => apiClient.get(`/users/import/shikimori/${jobId}`),
-  migrateListEntry: (oldAnimeId: string, newAnimeId: string, newTitle: string, newCover: string) =>
+  migrateListEntry: (oldAnimeId: string, newAnimeId: string) =>
     apiClient.post('/users/watchlist/migrate', {
       old_anime_id: oldAnimeId,
       new_anime_id: newAnimeId,
-      new_anime_title: newTitle,
-      new_anime_cover: newCover,
     }),
   // Privacy settings
   updatePublicId: (publicId: string) => apiClient.put('/auth/profile/public-id', { public_id: publicId }),
   updatePrivacy: (publicStatuses: string[]) => apiClient.put('/auth/profile/privacy', { public_statuses: publicStatuses }),
   // Avatar
   updateAvatar: (avatar: string) => apiClient.put('/auth/profile/avatar', { avatar }),
+  // Error reporting
+  reportError: (data: any) => apiClient.post('/users/report', data),
 }
 
 export const publicApi = {
@@ -193,13 +197,11 @@ export const reviewApi = {
   // Get current user's review for an anime
   getMyReview: (animeId: string) => apiClient.get(`/anime/${animeId}/reviews/me`),
   // Create or update a review
-  createReview: (animeId: string, score: number, reviewText: string, animeTitle?: string, animeCover?: string) =>
+  createReview: (animeId: string, score: number, reviewText: string) =>
     apiClient.post(`/anime/${animeId}/reviews`, {
       anime_id: animeId,
       score,
       review_text: reviewText,
-      anime_title: animeTitle,
-      anime_cover: animeCover,
     }),
   // Delete a review
   deleteReview: (animeId: string) => apiClient.delete(`/anime/${animeId}/reviews`),

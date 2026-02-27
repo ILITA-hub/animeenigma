@@ -20,6 +20,7 @@ func NewRouter(
 	malImportHandler *handler.MALImportHandler,
 	malExportHandler *handler.MALExportHandler,
 	shikimoriImportHandler *handler.ShikimoriImportHandler,
+	reportHandler *handler.ReportHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -82,6 +83,9 @@ func NewRouter(
 			r.Get("/mal-export", malExportHandler.GetUserExports)
 			r.Get("/mal-export/{exportId}", malExportHandler.GetExportStatus)
 			r.Delete("/mal-export/{exportId}", malExportHandler.CancelExport)
+
+			// Error reports
+			r.Post("/report", reportHandler.SubmitReport)
 		})
 
 		// Public user watchlist
