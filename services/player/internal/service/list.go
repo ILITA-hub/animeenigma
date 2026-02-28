@@ -10,14 +10,16 @@ import (
 )
 
 type ListService struct {
-	listRepo *repo.ListRepository
-	log      *logger.Logger
+	listRepo     *repo.ListRepository
+	activityRepo *repo.ActivityRepository
+	log          *logger.Logger
 }
 
-func NewListService(listRepo *repo.ListRepository, log *logger.Logger) *ListService {
+func NewListService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, log *logger.Logger) *ListService {
 	return &ListService{
-		listRepo: listRepo,
-		log:      log,
+		listRepo:     listRepo,
+		activityRepo: activityRepo,
+		log:          log,
 	}
 }
 
@@ -35,7 +37,7 @@ func (s *ListService) GetUserAnimeEntry(ctx context.Context, userID, animeID str
 }
 
 // UpdateListEntry updates or creates an anime list entry
-func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *domain.UpdateListRequest) (*domain.AnimeListEntry, error) {
+func (s *ListService) UpdateListEntry(ctx context.Context, userID, username string, req *domain.UpdateListRequest) (*domain.AnimeListEntry, error) {
 	// Check if entry already exists to preserve dates
 	existingEntry, _ := s.listRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
 
@@ -111,6 +113,29 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID string, req *d
 
 	if err := s.listRepo.Upsert(ctx, entry); err != nil {
 		return nil, err
+	}
+
+	// Record activity event if status changed (skip for imports with no username)
+	oldStatus := ""
+	if existingEntry != nil {
+		oldStatus = existingEntry.Status
+	}
+	if oldStatus != req.Status && username != "" {
+		activityEvent := &domain.ActivityEvent{
+			UserID:   userID,
+			Username: username,
+			AnimeID:  req.AnimeID,
+			Type:     "status_change",
+			OldValue: oldStatus,
+			NewValue: req.Status,
+		}
+		if err := s.activityRepo.Create(ctx, activityEvent); err != nil {
+			s.log.Errorw("failed to record status change activity",
+				"user_id", userID,
+				"anime_id", req.AnimeID,
+				"error", err,
+			)
+		}
 	}
 
 	return entry, nil

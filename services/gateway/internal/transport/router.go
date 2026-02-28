@@ -1,8 +1,12 @@
 package transport
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,7 +54,7 @@ func NewRouter(
 	// Admin panel routes (protected by admin role, unless DevMode is enabled)
 	r.Route("/admin", func(r chi.Router) {
 		if !cfg.DevMode {
-			r.Use(JWTValidationMiddleware(cfg.JWT))
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(AdminRoleMiddleware)
 		}
 
@@ -104,7 +108,7 @@ func NewRouter(
 
 		// Admin routes (protected, proxied to catalog)
 		r.Group(func(r chi.Router) {
-			r.Use(JWTValidationMiddleware(cfg.JWT))
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(AdminRoleMiddleware)
 			r.HandleFunc("/admin/*", proxyHandler.ProxyToCatalog)
 		})
@@ -112,15 +116,18 @@ func NewRouter(
 		// Player service routes - public watchlist
 		r.Get("/users/{userId}/watchlist/public", proxyHandler.ProxyToPlayer)
 
+		// Public activity feed
+		r.Get("/activity/feed", proxyHandler.ProxyToPlayer)
+
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
-			r.Use(JWTValidationMiddleware(cfg.JWT))
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.HandleFunc("/users/*", proxyHandler.ProxyToPlayer)
 		})
 
 		// Rooms service routes (protected)
 		r.Group(func(r chi.Router) {
-			r.Use(JWTValidationMiddleware(cfg.JWT))
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.HandleFunc("/rooms/*", proxyHandler.ProxyToRooms)
 			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
@@ -136,7 +143,7 @@ func NewRouter(
 
 			// Admin routes (protected)
 			r.Group(func(r chi.Router) {
-				r.Use(JWTValidationMiddleware(cfg.JWT))
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 				r.HandleFunc("/admin/*", proxyHandler.ProxyToStreaming)
 			})
 		})
@@ -145,8 +152,21 @@ func NewRouter(
 	return r
 }
 
-// JWTValidationMiddleware validates JWT tokens
-func JWTValidationMiddleware(jwtConfig authz.JWTConfig) func(http.Handler) http.Handler {
+// apiKeyHTTPClient is a shared HTTP client for API key resolution calls.
+var (
+	apiKeyHTTPClient     *http.Client
+	apiKeyHTTPClientOnce sync.Once
+)
+
+func getApiKeyHTTPClient() *http.Client {
+	apiKeyHTTPClientOnce.Do(func() {
+		apiKeyHTTPClient = &http.Client{Timeout: 5 * time.Second}
+	})
+	return apiKeyHTTPClient
+}
+
+// JWTValidationMiddleware validates JWT tokens and resolves API keys (ak_ prefix).
+func JWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL string) func(http.Handler) http.Handler {
 	jwtManager := authz.NewJWTManager(jwtConfig)
 
 	return func(next http.Handler) http.Handler {
@@ -157,16 +177,77 @@ func JWTValidationMiddleware(jwtConfig authz.JWTConfig) func(http.Handler) http.
 				return
 			}
 
-			claims, err := jwtManager.ValidateAccessToken(token)
-			if err != nil {
-				httputil.Unauthorized(w)
-				return
+			var claims *authz.Claims
+			var err error
+
+			if strings.HasPrefix(token, "ak_") {
+				// Resolve API key via auth service internal endpoint
+				resolved, resolveErr := resolveApiKey(authServiceURL, token)
+				if resolveErr != nil {
+					httputil.Unauthorized(w)
+					return
+				}
+				// Mint a short-lived JWT for downstream services
+				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role)
+				if mintErr != nil {
+					httputil.Unauthorized(w)
+					return
+				}
+				// Replace header so downstream services see a valid JWT
+				r.Header.Set("Authorization", "Bearer "+tokenPair.AccessToken)
+				claims = resolved
+			} else {
+				// Standard JWT validation
+				claims, err = jwtManager.ValidateAccessToken(token)
+				if err != nil {
+					httputil.Unauthorized(w)
+					return
+				}
 			}
 
 			ctx := authz.ContextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// resolveApiKey calls the auth service's internal endpoint to validate an API key.
+func resolveApiKey(authServiceURL, apiKey string) (*authz.Claims, error) {
+	body, err := json.Marshal(map[string]string{"api_key": apiKey})
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := getApiKeyHTTPClient().Post(
+		authServiceURL+"/internal/resolve-api-key",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("auth service returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Data struct {
+			UserID   string    `json:"user_id"`
+			Username string    `json:"username"`
+			Role     authz.Role `json:"role"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return &authz.Claims{
+		UserID:   result.Data.UserID,
+		Username: result.Data.Username,
+		Role:     result.Data.Role,
+	}, nil
 }
 
 // ipLimiter wraps a rate limiter with a last-seen timestamp for cleanup.

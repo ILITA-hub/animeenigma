@@ -2,41 +2,29 @@ package handler
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	mrand "math/rand"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
-	"github.com/go-chi/chi/v5"
 )
 
 type ShikimoriImportHandler struct {
 	listService      *service.ListService
+	syncRepo         *repo.SyncRepository
 	httpClient       *http.Client
 	catalogURL       string
 	shikimoriBaseURL string
 	log              *logger.Logger
-	jobs             sync.Map
-}
-
-type shikimoriImportJob struct {
-	ID       string   `json:"id"`
-	Status   string   `json:"status"`
-	Total    int      `json:"total"`
-	Imported int      `json:"imported"`
-	Skipped  int      `json:"skipped"`
-	Errors   []string `json:"errors,omitempty"`
-	mu       sync.Mutex
 }
 
 type shikimoriAnimeRate struct {
@@ -58,9 +46,10 @@ type shikimoriAnimeRate struct {
 	} `json:"anime"`
 }
 
-func NewShikimoriImportHandler(listService *service.ListService, log *logger.Logger) *ShikimoriImportHandler {
+func NewShikimoriImportHandler(listService *service.ListService, syncRepo *repo.SyncRepository, log *logger.Logger) *ShikimoriImportHandler {
 	return &ShikimoriImportHandler{
 		listService: listService,
+		syncRepo:    syncRepo,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -92,6 +81,20 @@ func (h *ShikimoriImportHandler) ImportShikimoriList(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Check for an already active job
+	activeJob, err := h.syncRepo.GetActiveByUserAndSource(r.Context(), claims.UserID, "shikimori")
+	if err != nil {
+		httputil.Error(w, errors.Wrap(err, errors.CodeInternal, "check active job"))
+		return
+	}
+	if activeJob != nil {
+		httputil.OK(w, map[string]interface{}{
+			"job_id": activeJob.ID,
+			"total":  activeJob.Total,
+		})
+		return
+	}
+
 	h.log.Infow("starting Shikimori import",
 		"user_id", claims.UserID,
 		"shikimori_nickname", nickname,
@@ -109,59 +112,29 @@ func (h *ShikimoriImportHandler) ImportShikimoriList(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Create job
-	job := &shikimoriImportJob{
-		ID:     generateJobID(),
-		Status: "processing",
-		Total:  len(entries),
-		Errors: []string{},
+	// Create job in DB
+	job := &domain.SyncJob{
+		UserID:         claims.UserID,
+		Source:         "shikimori",
+		SourceUsername: nickname,
+		Status:         "processing",
+		Total:          len(entries),
+		StartedAt:      time.Now(),
 	}
-	h.jobs.Store(job.ID, job)
+	if err := h.syncRepo.Create(r.Context(), job); err != nil {
+		httputil.Error(w, errors.Wrap(err, errors.CodeInternal, "create sync job"))
+		return
+	}
+
+	metrics.SyncJobsStartedTotal.WithLabelValues("shikimori").Inc()
 
 	// Process in background
-	go h.processImport(claims.UserID, job, entries)
+	go h.processImport(claims.UserID, job.ID, entries)
 
 	httputil.OK(w, map[string]interface{}{
 		"job_id": job.ID,
 		"total":  job.Total,
 	})
-}
-
-// GetImportStatus returns the current status of a Shikimori import job
-func (h *ShikimoriImportHandler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
-	claims, ok := authz.ClaimsFromContext(r.Context())
-	if !ok || claims == nil {
-		httputil.Unauthorized(w)
-		return
-	}
-
-	jobID := chi.URLParam(r, "jobId")
-	if jobID == "" {
-		httputil.BadRequest(w, "job ID is required")
-		return
-	}
-
-	val, ok := h.jobs.Load(jobID)
-	if !ok {
-		httputil.NotFound(w, "import job not found")
-		return
-	}
-
-	job := val.(*shikimoriImportJob)
-	job.mu.Lock()
-	snapshot := map[string]interface{}{
-		"id":       job.ID,
-		"status":   job.Status,
-		"total":    job.Total,
-		"imported": job.Imported,
-		"skipped":  job.Skipped,
-	}
-	if len(job.Errors) > 0 {
-		snapshot["errors"] = job.Errors
-	}
-	job.mu.Unlock()
-
-	httputil.OK(w, snapshot)
 }
 
 // MigrateShikimoriEntries migrates all shiki_* watchlist entries to real catalog IDs
@@ -213,25 +186,47 @@ func (h *ShikimoriImportHandler) MigrateShikimoriEntries(w http.ResponseWriter, 
 	})
 }
 
-func (h *ShikimoriImportHandler) processImport(userID string, job *shikimoriImportJob, entries []shikimoriAnimeRate) {
+func (h *ShikimoriImportHandler) processImport(userID, jobID string, entries []shikimoriAnimeRate) {
 	ctx := context.Background()
+	startTime := time.Now()
+	imported := 0
+	skipped := 0
 
+	defer func() {
+		if r := recover(); r != nil {
+			h.log.Errorw("Shikimori import panicked",
+				"user_id", userID,
+				"job_id", jobID,
+				"panic", r,
+			)
+			_ = h.syncRepo.Complete(ctx, jobID, "failed", fmt.Sprintf("panic: %v", r), imported, skipped)
+			metrics.SyncJobsTotal.WithLabelValues("shikimori", "failed").Inc()
+			metrics.SyncJobDurationSeconds.WithLabelValues("shikimori").Observe(time.Since(startTime).Seconds())
+		}
+	}()
+
+	processed := 0
 	for _, entry := range entries {
 		status := convertShikimoriStatus(entry.Status)
 		if status == "" {
-			job.mu.Lock()
-			job.Skipped++
-			job.mu.Unlock()
+			skipped++
+			metrics.SyncJobEntriesTotal.WithLabelValues("shikimori", "skipped").Inc()
+			processed++
+			if processed%10 == 0 {
+				_ = h.syncRepo.UpdateProgress(ctx, jobID, imported, skipped)
+			}
 			continue
 		}
 
 		// Always resolve via catalog — get real UUID, English title, poster
 		catalogAnime := h.searchCatalogByShikimoriID(ctx, entry.Anime.ID)
 		if catalogAnime == nil {
-			job.mu.Lock()
-			job.Errors = append(job.Errors, fmt.Sprintf("%s (shiki:%d): catalog resolve failed", entry.Anime.Name, entry.Anime.ID))
-			job.Skipped++
-			job.mu.Unlock()
+			skipped++
+			metrics.SyncJobEntriesTotal.WithLabelValues("shikimori", "skipped").Inc()
+			processed++
+			if processed%10 == 0 {
+				_ = h.syncRepo.UpdateProgress(ctx, jobID, imported, skipped)
+			}
 			time.Sleep(200 * time.Millisecond)
 			continue
 		}
@@ -256,29 +251,32 @@ func (h *ShikimoriImportHandler) processImport(userID string, job *shikimoriImpo
 			listReq.IsRewatching = &isRewatching
 		}
 
-		if _, err := h.listService.UpdateListEntry(ctx, userID, listReq); err != nil {
-			job.mu.Lock()
-			job.Errors = append(job.Errors, fmt.Sprintf("%s: %v", entry.Anime.Name, err))
-			job.Skipped++
-			job.mu.Unlock()
+		if _, err := h.listService.UpdateListEntry(ctx, userID, "", listReq); err != nil {
+			skipped++
+			metrics.SyncJobEntriesTotal.WithLabelValues("shikimori", "skipped").Inc()
 		} else {
-			job.mu.Lock()
-			job.Imported++
-			job.mu.Unlock()
+			imported++
+			metrics.SyncJobEntriesTotal.WithLabelValues("shikimori", "imported").Inc()
+		}
+
+		processed++
+		if processed%10 == 0 {
+			_ = h.syncRepo.UpdateProgress(ctx, jobID, imported, skipped)
 		}
 
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	job.mu.Lock()
-	job.Status = "completed"
-	job.mu.Unlock()
+	_ = h.syncRepo.Complete(ctx, jobID, "completed", "", imported, skipped)
+
+	metrics.SyncJobsTotal.WithLabelValues("shikimori", "completed").Inc()
+	metrics.SyncJobDurationSeconds.WithLabelValues("shikimori").Observe(time.Since(startTime).Seconds())
 
 	h.log.Infow("Shikimori import completed",
 		"user_id", userID,
-		"job_id", job.ID,
-		"imported", job.Imported,
-		"skipped", job.Skipped,
+		"job_id", jobID,
+		"imported", imported,
+		"skipped", skipped,
 	)
 }
 
@@ -324,7 +322,7 @@ func (h *ShikimoriImportHandler) fetchShikimoriPage(ctx context.Context, nicknam
 
 	switch resp.StatusCode {
 	case 404:
-		return nil, errors.NotFound("Shikimori user not found")
+		return nil, errors.New(errors.CodeNotFound, "Shikimori user not found")
 	case 403:
 		return nil, errors.New(errors.CodeForbidden, "Shikimori profile is private")
 	}
@@ -390,15 +388,4 @@ func (h *ShikimoriImportHandler) searchCatalogByShikimoriID(ctx context.Context,
 	}
 
 	return nil
-}
-
-func generateJobID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback to math/rand
-		for i := range b {
-			b[i] = byte(mrand.Intn(256))
-		}
-	}
-	return fmt.Sprintf("%x", b)
 }

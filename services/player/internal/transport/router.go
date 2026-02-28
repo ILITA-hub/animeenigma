@@ -21,6 +21,8 @@ func NewRouter(
 	malExportHandler *handler.MALExportHandler,
 	shikimoriImportHandler *handler.ShikimoriImportHandler,
 	reportHandler *handler.ReportHandler,
+	syncHandler *handler.SyncHandler,
+	activityHandler *handler.ActivityHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -70,13 +72,18 @@ func NewRouter(
 			// User's reviews
 			r.Get("/reviews", reviewHandler.GetUserReviews)
 
-			// MAL Import (sync - immediate)
+			// MAL Import (async - background goroutine)
 			r.Post("/import/mal", malImportHandler.ImportMALList)
 
 			// Shikimori Import (async - background goroutine)
 			r.Post("/import/shikimori", shikimoriImportHandler.ImportShikimoriList)
 			r.Post("/import/shikimori/migrate", shikimoriImportHandler.MigrateShikimoriEntries)
-			r.Get("/import/shikimori/{jobId}", shikimoriImportHandler.GetImportStatus)
+
+			// Unified job status polling
+			r.Get("/import/{jobId}", syncHandler.GetJobStatus)
+
+			// Sync status for page-load resume
+			r.Get("/sync/status", syncHandler.GetSyncStatus)
 
 			// MAL Export (async - queued)
 			r.Post("/mal-export", malExportHandler.InitiateExport)
@@ -90,6 +97,9 @@ func NewRouter(
 
 		// Public user watchlist
 		r.Get("/users/{userId}/watchlist/public", listHandler.GetPublicWatchlist)
+
+		// Public activity feed
+		r.Get("/activity/feed", activityHandler.GetFeed)
 
 		// Batch anime ratings (public)
 		r.Post("/anime/ratings/batch", reviewHandler.GetBatchAnimeRatings)

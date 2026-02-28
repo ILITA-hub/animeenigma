@@ -70,7 +70,7 @@ func (h *ListHandler) AddToList(w http.ResponseWriter, r *http.Request) {
 		Status:  "plan_to_watch",
 	}
 
-	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, listReq)
+	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, claims.Username, listReq)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -94,7 +94,7 @@ func (h *ListHandler) UpdateListEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, &req)
+	entry, err := h.listService.UpdateListEntry(r.Context(), claims.UserID, claims.Username, &req)
 	if err != nil {
 		httputil.Error(w, err)
 		return

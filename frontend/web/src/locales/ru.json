@@ -152,7 +152,13 @@
       "imported": "Импортировано",
       "skipped": "Пропущено",
       "shikimoriPlaceholder": "Введите никнейм Shikimori",
-      "shikimoriDescription": "Импортирует ваш список аниме с Shikimori. Ваш профиль должен быть публичным."
+      "shikimoriDescription": "Импортирует ваш список аниме с Shikimori. Ваш профиль должен быть публичным.",
+      "lastSynced": "Синхр. {time}: импортировано {imported}, пропущено {skipped}",
+      "justNow": "только что",
+      "minutesAgo": "{n} мин назад",
+      "hoursAgo": "{n}ч назад",
+      "daysAgo": "{n}д назад",
+      "alreadyRunning": "Импорт уже выполняется"
     },
     "settings": {
       "appearance": "Внешний вид",
@@ -168,7 +174,19 @@
       "account": "Аккаунт",
       "email": "Email",
       "changePassword": "Сменить пароль",
-      "signOut": "Выйти"
+      "signOut": "Выйти",
+      "apiKey": "API-ключ",
+      "apiKeyDescription": "API-ключ для доступа через CLI/скрипты без пароля. Храните его в секрете.",
+      "generateApiKey": "Сгенерировать API-ключ",
+      "regenerateApiKey": "Перегенерировать",
+      "revokeApiKey": "Отозвать",
+      "apiKeyGenerated": "Ваш API-ключ (показан один раз — скопируйте сейчас):",
+      "apiKeyCopied": "Скопировано!",
+      "apiKeyUsageHint": "Использование:",
+      "apiKeyHasKey": "У вас есть активный API-ключ.",
+      "apiKeyNone": "API-ключ не настроен.",
+      "apiKeyRevokeConfirm": "Вы уверены? Скрипты, использующие этот ключ, перестанут работать.",
+      "apiKeyRevoked": "API-ключ отозван."
     },
     "history": {
       "empty": "История просмотра пуста",
@@ -255,6 +273,21 @@
     "next": "Далее",
     "today": "Сегодня",
     "yesterday": "Вчера"
+  },
+  "activity": {
+    "title": "Активность",
+    "empty": "Пока нет активности",
+    "loadMore": "Показать ещё",
+    "loading": "Загрузка...",
+    "score": "поставил {score}/10 —",
+    "status": {
+      "watching": "начал смотреть",
+      "completed": "завершил",
+      "dropped": "дропнул",
+      "plan_to_watch": "добавил в список",
+      "on_hold": "поставил на паузу",
+      "rewatching": "пересматривает"
+    }
   },
   "footer": {
     "rights": "Все права защищены"

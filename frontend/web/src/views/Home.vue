@@ -270,6 +270,11 @@
           </div>
         </div>
       </div>
+
+      <!-- Activity Feed -->
+      <div class="mt-6">
+        <ActivityFeed />
+      </div>
     </div>
   </div>
 </template>
@@ -278,6 +283,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { animeApi, reviewApi } from '@/api/client'
+import ActivityFeed from '@/components/ActivityFeed.vue'
 
 interface Anime {
   id: string

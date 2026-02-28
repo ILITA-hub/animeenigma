@@ -151,7 +151,13 @@
       "imported": "Imported",
       "skipped": "Skipped",
       "shikimoriPlaceholder": "Enter Shikimori nickname",
-      "shikimoriDescription": "Imports your anime list from Shikimori. Your profile must be public."
+      "shikimoriDescription": "Imports your anime list from Shikimori. Your profile must be public.",
+      "lastSynced": "Synced {time}: imported {imported}, skipped {skipped}",
+      "justNow": "just now",
+      "minutesAgo": "{n} min ago",
+      "hoursAgo": "{n}h ago",
+      "daysAgo": "{n}d ago",
+      "alreadyRunning": "Import already in progress"
     },
     "settings": {
       "appearance": "Appearance",
@@ -167,7 +173,19 @@
       "account": "Account",
       "email": "Email",
       "changePassword": "Change Password",
-      "signOut": "Sign Out"
+      "signOut": "Sign Out",
+      "apiKey": "API Key",
+      "apiKeyDescription": "Use an API key for CLI/script access without a password. Keep it secret.",
+      "generateApiKey": "Generate API Key",
+      "regenerateApiKey": "Regenerate",
+      "revokeApiKey": "Revoke",
+      "apiKeyGenerated": "Your API key (shown once — copy it now):",
+      "apiKeyCopied": "Copied!",
+      "apiKeyUsageHint": "Usage:",
+      "apiKeyHasKey": "You have an active API key.",
+      "apiKeyNone": "No API key configured.",
+      "apiKeyRevokeConfirm": "Are you sure? Any scripts using this key will stop working.",
+      "apiKeyRevoked": "API key revoked."
     },
     "history": {
       "empty": "No watch history yet",
@@ -254,6 +272,21 @@
     "next": "Next",
     "today": "Today",
     "yesterday": "Yesterday"
+  },
+  "activity": {
+    "title": "Activity",
+    "empty": "No activity yet",
+    "loadMore": "Show more",
+    "loading": "Loading...",
+    "score": "rated {score}/10 —",
+    "status": {
+      "watching": "started watching",
+      "completed": "completed",
+      "dropped": "dropped",
+      "plan_to_watch": "added to list",
+      "on_hold": "put on hold",
+      "rewatching": "is rewatching"
+    }
   },
   "footer": {
     "rights": "All rights reserved"
