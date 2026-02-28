@@ -155,7 +155,8 @@ export const userApi = {
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
   importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),
-  getShikimoriImportStatus: (jobId: string) => apiClient.get(`/users/import/shikimori/${jobId}`),
+  getImportJobStatus: (jobId: string) => apiClient.get(`/users/import/${jobId}`),
+  getSyncStatus: () => apiClient.get('/users/sync/status'),
   migrateListEntry: (oldAnimeId: string, newAnimeId: string) =>
     apiClient.post('/users/watchlist/migrate', {
       old_anime_id: oldAnimeId,
@@ -168,6 +169,10 @@ export const userApi = {
   updateAvatar: (avatar: string) => apiClient.put('/auth/profile/avatar', { avatar }),
   // Error reporting
   reportError: (data: any) => apiClient.post('/users/report', data),
+  // API Key management
+  generateApiKey: () => apiClient.post('/auth/api-key'),
+  revokeApiKey: () => apiClient.delete('/auth/api-key'),
+  hasApiKey: () => apiClient.get('/auth/api-key'),
 }
 
 export const publicApi = {
@@ -208,6 +213,13 @@ export const reviewApi = {
   // Get batch ratings for multiple anime
   getBatchRatings: (animeIds: string[]) =>
     apiClient.post('/anime/ratings/batch', { anime_ids: animeIds }),
+}
+
+export const activityApi = {
+  getFeed: (limit: number = 10, before?: string) =>
+    apiClient.get('/activity/feed', {
+      params: { limit, ...(before && { before }) }
+    }),
 }
 
 export const gameApi = {

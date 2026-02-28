@@ -49,6 +49,8 @@ func main() {
 		&domain.AnimeListEntry{},
 		&domain.WatchHistory{},
 		&domain.Review{},
+		&domain.SyncJob{},
+		&domain.ActivityEvent{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -58,12 +60,19 @@ func main() {
 	listRepo := repo.NewListRepository(db.DB)
 	historyRepo := repo.NewHistoryRepository(db.DB)
 	reviewRepo := repo.NewReviewRepository(db.DB)
+	syncRepo := repo.NewSyncRepository(db.DB)
+	activityRepo := repo.NewActivityRepository(db.DB)
+
+	// Mark stale sync jobs as failed on startup
+	if err := syncRepo.MarkStaleJobsFailed(context.Background(), 1*time.Hour); err != nil {
+		log.Errorw("failed to mark stale sync jobs", "error", err)
+	}
 
 	// Initialize services
 	progressService := service.NewProgressService(progressRepo, log)
-	listService := service.NewListService(listRepo, log)
+	listService := service.NewListService(listRepo, activityRepo, log)
 	historyService := service.NewHistoryService(historyRepo, log)
-	reviewService := service.NewReviewService(reviewRepo, listRepo, log)
+	reviewService := service.NewReviewService(reviewRepo, listRepo, activityRepo, log)
 
 	// Initialize MAL export service
 	malExportService := service.NewMALExportService(log)
@@ -73,16 +82,18 @@ func main() {
 	listHandler := handler.NewListHandler(listService, log)
 	historyHandler := handler.NewHistoryHandler(historyService, log)
 	reviewHandler := handler.NewReviewHandler(reviewService, log)
-	malImportHandler := handler.NewMALImportHandler(listService, log)
+	malImportHandler := handler.NewMALImportHandler(listService, syncRepo, log)
 	malExportHandler := handler.NewMALExportHandler(malExportService, log)
-	shikimoriImportHandler := handler.NewShikimoriImportHandler(listService, log)
+	shikimoriImportHandler := handler.NewShikimoriImportHandler(listService, syncRepo, log)
 	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir)
+	syncHandler := handler.NewSyncHandler(syncRepo, log)
+	activityHandler := handler.NewActivityHandler(activityRepo, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

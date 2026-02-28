@@ -151,7 +151,13 @@
       "imported": "インポート済み",
       "skipped": "スキップ",
       "shikimoriPlaceholder": "Shikimoriのニックネームを入力",
-      "shikimoriDescription": "Shikimoriからアニメリストをインポートします。プロフィールは公開されている必要があります。"
+      "shikimoriDescription": "Shikimoriからアニメリストをインポートします。プロフィールは公開されている必要があります。",
+      "lastSynced": "同期 {time}: インポート {imported}、スキップ {skipped}",
+      "justNow": "たった今",
+      "minutesAgo": "{n}分前",
+      "hoursAgo": "{n}時間前",
+      "daysAgo": "{n}日前",
+      "alreadyRunning": "インポート実行中"
     },
     "settings": {
       "appearance": "外観",
@@ -167,7 +173,19 @@
       "account": "アカウント",
       "email": "メール",
       "changePassword": "パスワード変更",
-      "signOut": "ログアウト"
+      "signOut": "ログアウト",
+      "apiKey": "APIキー",
+      "apiKeyDescription": "パスワードなしでCLI/スクリプトからアクセスするためのAPIキーです。秘密にしてください。",
+      "generateApiKey": "APIキーを生成",
+      "regenerateApiKey": "再生成",
+      "revokeApiKey": "取り消し",
+      "apiKeyGenerated": "APIキー（一度だけ表示 — 今すぐコピーしてください）:",
+      "apiKeyCopied": "コピーしました！",
+      "apiKeyUsageHint": "使用方法:",
+      "apiKeyHasKey": "有効なAPIキーがあります。",
+      "apiKeyNone": "APIキーは設定されていません。",
+      "apiKeyRevokeConfirm": "よろしいですか？このキーを使用しているスクリプトは動作しなくなります。",
+      "apiKeyRevoked": "APIキーを取り消しました。"
     },
     "history": {
       "empty": "視聴履歴がありません",
@@ -254,6 +272,21 @@
     "next": "次へ",
     "today": "今日",
     "yesterday": "昨日"
+  },
+  "activity": {
+    "title": "アクティビティ",
+    "empty": "まだアクティビティはありません",
+    "loadMore": "もっと見る",
+    "loading": "読み込み中...",
+    "score": "{score}/10 と評価 —",
+    "status": {
+      "watching": "視聴開始",
+      "completed": "視聴完了",
+      "dropped": "視聴中止",
+      "plan_to_watch": "リストに追加",
+      "on_hold": "一時停止",
+      "rewatching": "再視聴中"
+    }
   },
   "footer": {
     "rights": "All rights reserved"

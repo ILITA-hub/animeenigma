@@ -12,21 +12,25 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
 )
 
 type MALImportHandler struct {
 	listService *service.ListService
+	syncRepo    *repo.SyncRepository
 	httpClient  *http.Client
 	catalogURL  string
 	log         *logger.Logger
 }
 
-func NewMALImportHandler(listService *service.ListService, log *logger.Logger) *MALImportHandler {
+func NewMALImportHandler(listService *service.ListService, syncRepo *repo.SyncRepository, log *logger.Logger) *MALImportHandler {
 	catalogURL := "http://catalog:8081"
 	return &MALImportHandler{
 		listService: listService,
+		syncRepo:    syncRepo,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -38,13 +42,6 @@ func NewMALImportHandler(listService *service.ListService, log *logger.Logger) *
 // MALImportRequest represents the import request
 type MALImportRequest struct {
 	Username string `json:"username"`
-}
-
-// MALImportResponse represents the import result
-type MALImportResponse struct {
-	Imported int      `json:"imported"`
-	Skipped  int      `json:"skipped"`
-	Errors   []string `json:"errors,omitempty"`
 }
 
 // MAL direct JSON endpoint response
@@ -76,7 +73,7 @@ type CatalogAnime struct {
 	PosterURL   string `json:"poster_url"`
 }
 
-// ImportMALList imports a user's MAL anime list
+// ImportMALList imports a user's MAL anime list asynchronously
 func (h *MALImportHandler) ImportMALList(w http.ResponseWriter, r *http.Request) {
 	claims, ok := authz.ClaimsFromContext(r.Context())
 	if !ok || claims == nil {
@@ -98,14 +95,37 @@ func (h *MALImportHandler) ImportMALList(w http.ResponseWriter, r *http.Request)
 	// Clean username
 	username := strings.TrimSpace(req.Username)
 
+	// Check for existing active job
+	activeJob, err := h.syncRepo.GetActiveByUserAndSource(r.Context(), claims.UserID, "mal")
+	if err != nil {
+		h.log.Errorw("failed to check active sync jobs",
+			"user_id", claims.UserID,
+			"error", err,
+		)
+		httputil.Error(w, errors.Wrap(err, errors.CodeInternal, "check active jobs"))
+		return
+	}
+	if activeJob != nil {
+		h.log.Infow("returning existing active MAL import job",
+			"user_id", claims.UserID,
+			"job_id", activeJob.ID,
+		)
+		httputil.OK(w, map[string]interface{}{
+			"job_id": activeJob.ID,
+			"total":  activeJob.Total,
+		})
+		return
+	}
+
 	h.log.Infow("starting MAL import",
 		"user_id", claims.UserID,
 		"mal_username", username,
 	)
 
-	result, err := h.importFromMAL(r.Context(), claims.UserID, username)
+	// Fetch all MAL entries first to validate username and get total count
+	entries, err := h.fetchAllMALEntries(r.Context(), username)
 	if err != nil {
-		h.log.Errorw("MAL import failed",
+		h.log.Errorw("MAL import failed to fetch entries",
 			"user_id", claims.UserID,
 			"mal_username", username,
 			"error", err,
@@ -114,28 +134,50 @@ func (h *MALImportHandler) ImportMALList(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.log.Infow("MAL import completed",
-		"user_id", claims.UserID,
-		"mal_username", username,
-		"imported", result.Imported,
-		"skipped", result.Skipped,
-	)
-
-	httputil.OK(w, result)
-}
-
-func (h *MALImportHandler) importFromMAL(ctx context.Context, userID, malUsername string) (*MALImportResponse, error) {
-	result := &MALImportResponse{
-		Errors: []string{},
+	// Create sync job in DB
+	job := &domain.SyncJob{
+		UserID:         claims.UserID,
+		Source:         "mal",
+		SourceUsername: username,
+		Status:         "processing",
+		Total:          len(entries),
+		StartedAt:      time.Now(),
+	}
+	if err := h.syncRepo.Create(r.Context(), job); err != nil {
+		h.log.Errorw("failed to create sync job",
+			"user_id", claims.UserID,
+			"error", err,
+		)
+		httputil.Error(w, errors.Wrap(err, errors.CodeInternal, "create sync job"))
+		return
 	}
 
-	// Fetch all entries using MAL direct JSON endpoint
-	// status=7 means all statuses, 300 entries per page
+	// Record metric
+	metrics.SyncJobsStartedTotal.WithLabelValues("mal").Inc()
+
+	// Launch background processing
+	go h.processMALImport(claims.UserID, job.ID, entries)
+
+	h.log.Infow("MAL import job created",
+		"user_id", claims.UserID,
+		"job_id", job.ID,
+		"total", len(entries),
+	)
+
+	httputil.OK(w, map[string]interface{}{
+		"job_id": job.ID,
+		"total":  len(entries),
+	})
+}
+
+// fetchAllMALEntries fetches all entries from a MAL user's anime list
+func (h *MALImportHandler) fetchAllMALEntries(ctx context.Context, username string) ([]MALAnimeEntry, error) {
+	var allEntries []MALAnimeEntry
 	offset := 0
 	batchSize := 300
 
 	for {
-		entries, err := h.fetchMALPage(ctx, malUsername, offset)
+		entries, err := h.fetchMALPage(ctx, username, offset)
 		if err != nil {
 			return nil, err
 		}
@@ -144,75 +186,7 @@ func (h *MALImportHandler) importFromMAL(ctx context.Context, userID, malUsernam
 			break
 		}
 
-		for _, entry := range entries {
-			status := h.convertMALStatus(entry.Status)
-			if status == "" {
-				result.Skipped++
-				continue
-			}
-
-			// Try to find anime in catalog by MAL ID
-			catalogAnime := h.searchCatalogByMALID(ctx, entry.AnimeID)
-			if catalogAnime == nil {
-				// Skip unresolved entries — mal_XXXXX IDs break FK constraints
-				h.log.Infow("skipping unresolved MAL entry",
-					"mal_id", entry.AnimeID,
-					"title", entry.AnimeTitle,
-				)
-				result.Skipped++
-				continue
-			}
-
-			listReq := &domain.UpdateListRequest{
-				AnimeID: catalogAnime.ID,
-				Status:  status,
-				MalID:   &entry.AnimeID,
-			}
-
-			if entry.Score > 0 {
-				listReq.Score = &entry.Score
-			}
-
-			if entry.NumWatchedEpisodes > 0 {
-				listReq.Episodes = &entry.NumWatchedEpisodes
-			}
-
-			if entry.Tags != "" {
-				listReq.Tags = &entry.Tags
-			}
-
-			if entry.Notes != "" {
-				listReq.Notes = &entry.Notes
-			}
-
-			isRewatching := entry.IsRewatching == 1
-			listReq.IsRewatching = &isRewatching
-
-			priority := strings.ToLower(entry.PriorityString)
-			if priority != "" {
-				listReq.Priority = &priority
-			}
-
-			// Parse and set start/finish dates from MAL
-			if entry.StartDateString != "" && entry.StartDateString != "-" {
-				if startDate := h.parseMALDate(entry.StartDateString); startDate != nil {
-					listReq.StartedAt = startDate
-				}
-			}
-
-			if entry.FinishDateString != "" && entry.FinishDateString != "-" {
-				if finishDate := h.parseMALDate(entry.FinishDateString); finishDate != nil {
-					listReq.CompletedAt = finishDate
-				}
-			}
-
-			if _, err := h.listService.UpdateListEntry(ctx, userID, listReq); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", entry.AnimeTitle, err))
-				result.Skipped++
-			} else {
-				result.Imported++
-			}
-		}
+		allEntries = append(allEntries, entries...)
 
 		if len(entries) < batchSize {
 			break
@@ -223,7 +197,163 @@ func (h *MALImportHandler) importFromMAL(ctx context.Context, userID, malUsernam
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	return result, nil
+	return allEntries, nil
+}
+
+// processMALImport processes MAL entries in the background
+func (h *MALImportHandler) processMALImport(userID, jobID string, entries []MALAnimeEntry) {
+	ctx := context.Background()
+	startTime := time.Now()
+	imported := 0
+	skipped := 0
+
+	// Recover from panics so we can mark the job as failed
+	defer func() {
+		if r := recover(); r != nil {
+			errMsg := fmt.Sprintf("panic: %v", r)
+			h.log.Errorw("MAL import panicked",
+				"user_id", userID,
+				"job_id", jobID,
+				"error", errMsg,
+			)
+			if err := h.syncRepo.Complete(ctx, jobID, "failed", errMsg, imported, skipped); err != nil {
+				h.log.Errorw("failed to mark sync job as failed after panic",
+					"job_id", jobID,
+					"error", err,
+				)
+			}
+			metrics.SyncJobsTotal.WithLabelValues("mal", "failed").Inc()
+			metrics.SyncJobDurationSeconds.WithLabelValues("mal").Observe(time.Since(startTime).Seconds())
+		}
+	}()
+
+	for i, entry := range entries {
+		status := h.convertMALStatus(entry.Status)
+		if status == "" {
+			skipped++
+			metrics.SyncJobEntriesTotal.WithLabelValues("mal", "skipped").Inc()
+
+			// Update progress every 10 entries
+			if (i+1)%10 == 0 {
+				if err := h.syncRepo.UpdateProgress(ctx, jobID, imported, skipped); err != nil {
+					h.log.Errorw("failed to update sync progress",
+						"job_id", jobID,
+						"error", err,
+					)
+				}
+			}
+			continue
+		}
+
+		// Try to find anime in catalog by MAL ID
+		catalogAnime := h.searchCatalogByMALID(ctx, entry.AnimeID)
+		if catalogAnime == nil {
+			h.log.Infow("skipping unresolved MAL entry",
+				"mal_id", entry.AnimeID,
+				"title", entry.AnimeTitle,
+			)
+			skipped++
+			metrics.SyncJobEntriesTotal.WithLabelValues("mal", "skipped").Inc()
+
+			// Update progress every 10 entries
+			if (i+1)%10 == 0 {
+				if err := h.syncRepo.UpdateProgress(ctx, jobID, imported, skipped); err != nil {
+					h.log.Errorw("failed to update sync progress",
+						"job_id", jobID,
+						"error", err,
+					)
+				}
+			}
+
+			// Small delay to be nice to catalog service
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+
+		listReq := &domain.UpdateListRequest{
+			AnimeID: catalogAnime.ID,
+			Status:  status,
+			MalID:   &entry.AnimeID,
+		}
+
+		if entry.Score > 0 {
+			listReq.Score = &entry.Score
+		}
+
+		if entry.NumWatchedEpisodes > 0 {
+			listReq.Episodes = &entry.NumWatchedEpisodes
+		}
+
+		if entry.Tags != "" {
+			listReq.Tags = &entry.Tags
+		}
+
+		if entry.Notes != "" {
+			listReq.Notes = &entry.Notes
+		}
+
+		isRewatching := entry.IsRewatching == 1
+		listReq.IsRewatching = &isRewatching
+
+		priority := strings.ToLower(entry.PriorityString)
+		if priority != "" {
+			listReq.Priority = &priority
+		}
+
+		// Parse and set start/finish dates from MAL
+		if entry.StartDateString != "" && entry.StartDateString != "-" {
+			if startDate := h.parseMALDate(entry.StartDateString); startDate != nil {
+				listReq.StartedAt = startDate
+			}
+		}
+
+		if entry.FinishDateString != "" && entry.FinishDateString != "-" {
+			if finishDate := h.parseMALDate(entry.FinishDateString); finishDate != nil {
+				listReq.CompletedAt = finishDate
+			}
+		}
+
+		if _, err := h.listService.UpdateListEntry(ctx, userID, "", listReq); err != nil {
+			skipped++
+			metrics.SyncJobEntriesTotal.WithLabelValues("mal", "skipped").Inc()
+		} else {
+			imported++
+			metrics.SyncJobEntriesTotal.WithLabelValues("mal", "imported").Inc()
+		}
+
+		// Update progress every 10 entries
+		if (i+1)%10 == 0 {
+			if err := h.syncRepo.UpdateProgress(ctx, jobID, imported, skipped); err != nil {
+				h.log.Errorw("failed to update sync progress",
+					"job_id", jobID,
+					"error", err,
+				)
+			}
+		}
+
+		// Small delay to be nice to catalog service
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	// Mark job as completed
+	if err := h.syncRepo.Complete(ctx, jobID, "completed", "", imported, skipped); err != nil {
+		h.log.Errorw("failed to mark sync job as completed",
+			"job_id", jobID,
+			"error", err,
+		)
+	}
+
+	// Record metrics
+	metrics.SyncJobsTotal.WithLabelValues("mal", "completed").Inc()
+	metrics.SyncJobDurationSeconds.WithLabelValues("mal").Observe(time.Since(startTime).Seconds())
+
+	h.log.Infow("MAL import completed",
+		"user_id", userID,
+		"job_id", jobID,
+		"imported", imported,
+		"skipped", skipped,
+		"duration", time.Since(startTime).String(),
+	)
 }
 
 func (h *MALImportHandler) fetchMALPage(ctx context.Context, username string, offset int) ([]MALAnimeEntry, error) {
@@ -245,7 +375,7 @@ func (h *MALImportHandler) fetchMALPage(ctx context.Context, username string, of
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 400 {
-		return nil, errors.NotFound("MAL user not found or list is private")
+		return nil, errors.New(errors.CodeNotFound, "MAL user not found or list is private")
 	}
 
 	if resp.StatusCode != 200 {
@@ -288,10 +418,10 @@ func (h *MALImportHandler) parseMALDate(dateStr string) *time.Time {
 
 	// Try common MAL date formats
 	formats := []string{
-		"01-02-2006", // MM-DD-YYYY
-		"2006-01-02", // YYYY-MM-DD
+		"01-02-2006",  // MM-DD-YYYY
+		"2006-01-02",  // YYYY-MM-DD
 		"Jan 2, 2006", // Month Day, Year
-		"02-01-2006", // DD-MM-YYYY
+		"02-01-2006",  // DD-MM-YYYY
 	}
 
 	for _, format := range formats {
