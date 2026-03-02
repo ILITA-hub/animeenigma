@@ -26,7 +26,7 @@ test.describe('Schedule Page', () => {
     await page.waitForTimeout(2000)
 
     // Look for "today" indicator
-    const todayIndicator = page.getByText(/today|сегодня/i)
+    const _todayIndicator = page.getByText(/today|сегодня/i)
     // May or may not have special styling
   })
 
@@ -49,7 +49,7 @@ test.describe('Schedule Page', () => {
     await page.waitForTimeout(2000)
 
     // Look for episode number text
-    const episodeText = page.getByText(/episode|ep\.|серия|эпизод/i)
+    const _episodeText = page.getByText(/episode|ep\.|серия|эпизод/i)
 
     // May be visible if schedule has data
   })
@@ -59,7 +59,7 @@ test.describe('Schedule Page', () => {
     await page.waitForTimeout(2000)
 
     // Look for time display (format like 18:00, 6:00 PM, etc.)
-    const timeText = page.getByText(/\d{1,2}:\d{2}/)
+    const _timeText = page.getByText(/\d{1,2}:\d{2}/)
 
     // May be visible if schedule has data
   })
@@ -83,7 +83,7 @@ test.describe('Schedule Page', () => {
     await page.waitForTimeout(2000)
 
     // If no schedule data, should show empty message
-    const emptyMessage = page.getByText(/no schedule|empty|пусто|нет расписания/i)
+    const _emptyMessage = page.getByText(/no schedule|empty|пусто|нет расписания/i)
 
     // May or may not be visible depending on data
   })

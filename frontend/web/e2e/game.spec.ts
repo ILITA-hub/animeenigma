@@ -38,8 +38,8 @@ test.describe('Game Rooms', () => {
       await page.waitForTimeout(3000)
 
       // Check for empty state elements
-      const emptyMessage = page.getByText('No active rooms')
-      const createFirstButton = page.getByRole('button', { name: 'Create the first room' })
+      const _emptyMessage = page.getByText('No active rooms')
+      const _createFirstButton = page.getByRole('button', { name: 'Create the first room' })
 
       // May or may not be visible depending on data
     })

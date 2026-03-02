@@ -76,7 +76,7 @@ test('HLS diagnostic - analyze network and player state', async ({ page }) => {
 
   // Check if HLS.js is attached and its state
   const hlsState = await page.evaluate(() => {
-    // @ts-ignore
+    // @ts-expect-error Hls is a global from hls.js
     if (typeof Hls !== 'undefined') {
       return {
         isSupported: Hls.isSupported(),

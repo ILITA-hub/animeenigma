@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test } from '@playwright/test'
 
 test.describe('HiAnime Player Detailed Debug', () => {
   const testAnimeUrl = '/anime/c076bca7-a93f-4089-90a3-0cb69b9cbf25'

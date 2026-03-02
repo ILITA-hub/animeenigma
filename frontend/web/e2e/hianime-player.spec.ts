@@ -103,7 +103,7 @@ test.describe('HiAnime Player Debug', () => {
     expect(hasError).toBe(false)
   })
 
-  test('debug: check HLS proxy endpoint directly', async ({ page, request }) => {
+  test('debug: check HLS proxy endpoint directly', async ({ page: _page, request }) => {
     // First get a stream URL from the API
     const episodesResponse = await request.get('/api/anime/c076bca7-a93f-4089-90a3-0cb69b9cbf25/hianime/episodes')
     const episodesData = await episodesResponse.json()

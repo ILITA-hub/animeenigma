@@ -328,6 +328,10 @@ bun run test:e2e     # Run e2e tests
 bunx playwright test                           # Run all e2e tests
 bunx playwright test hianime-integration       # Run specific test file
 bunx playwright test --reporter=list           # With list reporter
+
+# For all CLI tools, use bunx (not npx):
+bunx eslint src/                               # Run ESLint
+bunx tsc --noEmit                              # Type-check
 ```
 
 Examples:
