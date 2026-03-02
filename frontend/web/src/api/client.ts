@@ -295,4 +295,19 @@ export const animeLibApi = {
   search: (query: string) => apiClient.get('/animelib/search', { params: { q: query } }),
 }
 
+export const themesApi = {
+  list: (params?: { year?: number; season?: string; type?: string; sort?: string }) =>
+    apiClient.get('/themes', { params }),
+  get: (id: string) => apiClient.get(`/themes/${id}`),
+  rate: (id: string, score: number) => apiClient.post(`/themes/${id}/rate`, { score }),
+  unrate: (id: string) => apiClient.delete(`/themes/${id}/rate`),
+  myRatings: (params?: { year?: number; season?: string }) =>
+    apiClient.get('/themes/my-ratings', { params }),
+}
+
+export const adminThemesApi = {
+  sync: () => apiClient.post('/themes/admin/sync'),
+  syncStatus: () => apiClient.get('/themes/admin/sync/status'),
+}
+
 export default apiClient

@@ -46,6 +46,11 @@ func (h *ProxyHandler) ProxyToStreaming(w http.ResponseWriter, r *http.Request) 
 	h.proxy(w, r, "streaming")
 }
 
+// ProxyToThemes proxies requests to themes service
+func (h *ProxyHandler) ProxyToThemes(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "themes")
+}
+
 // ProxyToGrafana proxies requests to Grafana
 func (h *ProxyHandler) ProxyToGrafana(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "grafana")

@@ -365,6 +365,7 @@ make health
 | player     | 8083 | /metrics  | Watch progress, watchlists     |
 | rooms      | 8084 | /metrics  | Game rooms, WebSocket          |
 | scheduler  | 8085 | /metrics  | Background jobs                |
+| themes     | 8086 | /metrics  | Anime OP/ED ratings            |
 | web        | 80   | -         | Vue 3 frontend (nginx)         |
 
 ### Gateway Routing
@@ -380,6 +381,7 @@ All API requests go through the gateway service:
 - `/api/users/*` → player:8083
 - `/api/rooms/*` → rooms:8084
 - `/api/game/*` → rooms:8084
+- `/api/themes/*` → themes:8086 (public + protected + admin)
 
 ### Monitoring Endpoints
 

@@ -64,6 +64,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Расписание' }
   },
   {
+    path: '/themes',
+    name: 'themes',
+    component: () => import('@/views/Themes.vue'),
+    meta: { title: 'Openings & Endings' }
+  },
+  {
     path: '/game',
     name: 'game',
     component: Game,

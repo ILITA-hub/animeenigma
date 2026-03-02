@@ -448,30 +448,45 @@
                         type="text"
                         :placeholder="$t('profile.import.malPlaceholder')"
                         class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
-                        :disabled="malImporting"
+                        :disabled="malSync.importing"
                       />
                       <Button
                         variant="primary"
-                        :disabled="!malUsername || malImporting"
+                        :disabled="!malUsername || malSync.importing"
                         @click="importMAL"
                       >
-                        <svg v-if="malImporting" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                        <svg v-if="malSync.importing" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        {{ malImporting ? $t('profile.import.importing') : $t('profile.import.import') }}
+                        {{ malSync.importing ? $t('profile.import.importing') : $t('profile.import.import') }}
                       </Button>
                     </div>
                     <p class="text-white/40 text-xs mt-2">
                       {{ $t('profile.import.malDescription') }}
                     </p>
-                    <div v-if="malImportResult" class="mt-3 p-3 rounded-lg" :class="malImportResult.errors?.length ? 'bg-amber-500/20' : 'bg-green-500/20'">
-                      <p class="text-sm" :class="malImportResult.errors?.length ? 'text-amber-400' : 'text-green-400'">
-                        {{ $t('profile.import.imported') }}: {{ malImportResult.imported }} | {{ $t('profile.import.skipped') }}: {{ malImportResult.skipped }}
+                    <!-- Progress bar -->
+                    <div v-if="malSync.progress" class="mt-3">
+                      <div class="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          class="h-full bg-cyan-500 transition-all duration-300"
+                          :style="{ width: (malSync.progress.total > 0 ? ((malSync.progress.imported + malSync.progress.skipped) / malSync.progress.total * 100) : 0) + '%' }"
+                        />
+                      </div>
+                      <p class="text-sm text-white/60 mt-1">
+                        {{ malSync.progress.imported + malSync.progress.skipped }} / {{ malSync.progress.total }}
+                        <span v-if="malSync.progress.status === 'completed'" class="text-green-400 ml-2">
+                          {{ $t('profile.import.imported') }}: {{ malSync.progress.imported }} | {{ $t('profile.import.skipped') }}: {{ malSync.progress.skipped }}
+                        </span>
                       </p>
                     </div>
-                    <div v-if="malImportError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
-                      <p class="text-sm text-pink-400">{{ malImportError }}</p>
+                    <div v-if="malSync.lastSync && !malSync.progress" class="mt-2">
+                      <p class="text-xs text-white/40">
+                        {{ $t('profile.import.lastSynced', { time: timeAgo(malSync.lastSync.completed_at), imported: malSync.lastSync.imported, skipped: malSync.lastSync.skipped }) }}
+                      </p>
+                    </div>
+                    <div v-if="malSync.error" class="mt-3 p-3 rounded-lg bg-pink-500/20">
+                      <p class="text-sm text-pink-400">{{ malSync.error }}</p>
                     </div>
                   </div>
 
@@ -484,40 +499,45 @@
                         type="text"
                         :placeholder="$t('profile.import.shikimoriPlaceholder')"
                         class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
-                        :disabled="shikimoriImporting"
+                        :disabled="shikimoriSync.importing"
                       />
                       <Button
                         variant="primary"
-                        :disabled="!shikimoriNickname || shikimoriImporting"
+                        :disabled="!shikimoriNickname || shikimoriSync.importing"
                         @click="importShikimori"
                       >
-                        <svg v-if="shikimoriImporting" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                        <svg v-if="shikimoriSync.importing" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        {{ shikimoriImporting ? $t('profile.import.importing') : $t('profile.import.import') }}
+                        {{ shikimoriSync.importing ? $t('profile.import.importing') : $t('profile.import.import') }}
                       </Button>
                     </div>
                     <p class="text-white/40 text-xs mt-2">
                       {{ $t('profile.import.shikimoriDescription') }}
                     </p>
                     <!-- Progress bar -->
-                    <div v-if="shikimoriImportProgress" class="mt-3">
+                    <div v-if="shikimoriSync.progress" class="mt-3">
                       <div class="h-2 bg-white/10 rounded-full overflow-hidden">
                         <div
                           class="h-full bg-cyan-500 transition-all duration-300"
-                          :style="{ width: (shikimoriImportProgress.total > 0 ? ((shikimoriImportProgress.imported + shikimoriImportProgress.skipped) / shikimoriImportProgress.total * 100) : 0) + '%' }"
+                          :style="{ width: (shikimoriSync.progress.total > 0 ? ((shikimoriSync.progress.imported + shikimoriSync.progress.skipped) / shikimoriSync.progress.total * 100) : 0) + '%' }"
                         />
                       </div>
                       <p class="text-sm text-white/60 mt-1">
-                        {{ shikimoriImportProgress.imported + shikimoriImportProgress.skipped }} / {{ shikimoriImportProgress.total }}
-                        <span v-if="shikimoriImportProgress.status === 'completed'" class="text-green-400 ml-2">
-                          {{ $t('profile.import.imported') }}: {{ shikimoriImportProgress.imported }} | {{ $t('profile.import.skipped') }}: {{ shikimoriImportProgress.skipped }}
+                        {{ shikimoriSync.progress.imported + shikimoriSync.progress.skipped }} / {{ shikimoriSync.progress.total }}
+                        <span v-if="shikimoriSync.progress.status === 'completed'" class="text-green-400 ml-2">
+                          {{ $t('profile.import.imported') }}: {{ shikimoriSync.progress.imported }} | {{ $t('profile.import.skipped') }}: {{ shikimoriSync.progress.skipped }}
                         </span>
                       </p>
                     </div>
-                    <div v-if="shikimoriImportError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
-                      <p class="text-sm text-pink-400">{{ shikimoriImportError }}</p>
+                    <div v-if="shikimoriSync.lastSync && !shikimoriSync.progress" class="mt-2">
+                      <p class="text-xs text-white/40">
+                        {{ $t('profile.import.lastSynced', { time: timeAgo(shikimoriSync.lastSync.completed_at), imported: shikimoriSync.lastSync.imported, skipped: shikimoriSync.lastSync.skipped }) }}
+                      </p>
+                    </div>
+                    <div v-if="shikimoriSync.error" class="mt-3 p-3 rounded-lg bg-pink-500/20">
+                      <p class="text-sm text-pink-400">{{ shikimoriSync.error }}</p>
                     </div>
                   </div>
                 </div>
@@ -617,6 +637,72 @@
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <!-- API Key -->
+              <div class="glass-card p-6">
+                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.apiKey') }}</h3>
+                <p class="text-white/60 text-sm mb-4">{{ $t('profile.settings.apiKeyDescription') }}</p>
+
+                <!-- Loading state -->
+                <div v-if="apiKeyLoading" class="flex justify-center py-4">
+                  <svg class="w-6 h-6 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </div>
+
+                <template v-else>
+                  <!-- Show generated key (once) -->
+                  <div v-if="generatedApiKey" class="space-y-3">
+                    <p class="text-sm text-yellow-400 font-medium">{{ $t('profile.settings.apiKeyGenerated') }}</p>
+                    <div class="flex items-center gap-2 p-3 bg-white/5 rounded-lg font-mono text-sm text-white break-all">
+                      <span class="flex-1">{{ generatedApiKey }}</span>
+                      <button
+                        @click="copyApiKey"
+                        class="flex-shrink-0 p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                      >
+                        <svg v-if="apiKeyCopied" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p v-if="apiKeyCopied" class="text-green-400 text-xs">{{ $t('profile.settings.apiKeyCopied') }}</p>
+                    <div class="p-3 bg-white/5 rounded-lg">
+                      <p class="text-white/40 text-xs mb-1">{{ $t('profile.settings.apiKeyUsageHint') }}</p>
+                      <code class="text-xs text-cyan-400 break-all">curl -H "Authorization: Bearer {{ generatedApiKey }}" {{ siteOrigin }}/api/users/import/mal -d '{"username":"..."}'</code>
+                    </div>
+                  </div>
+
+                  <!-- Has key state -->
+                  <div v-else-if="hasApiKey" class="space-y-3">
+                    <p class="text-sm text-green-400">{{ $t('profile.settings.apiKeyHasKey') }}</p>
+                    <div class="flex gap-2">
+                      <Button variant="primary" size="sm" :disabled="apiKeyActioning" @click="regenerateApiKey">
+                        {{ $t('profile.settings.regenerateApiKey') }}
+                      </Button>
+                      <Button variant="secondary" size="sm" :disabled="apiKeyActioning" @click="revokeApiKey">
+                        {{ $t('profile.settings.revokeApiKey') }}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <!-- No key state -->
+                  <div v-else class="space-y-3">
+                    <p class="text-sm text-white/40">{{ $t('profile.settings.apiKeyNone') }}</p>
+                    <Button variant="primary" size="sm" :disabled="apiKeyActioning" @click="generateApiKey">
+                      {{ $t('profile.settings.generateApiKey') }}
+                    </Button>
+                  </div>
+
+                  <div v-if="apiKeyError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
+                    <p class="text-sm text-pink-400">{{ apiKeyError }}</p>
+                  </div>
+                  <p v-if="apiKeyRevoked" class="text-green-400 text-xs mt-2">{{ $t('profile.settings.apiKeyRevoked') }}</p>
+                </template>
               </div>
 
               <!-- Account -->
@@ -901,19 +987,29 @@ const userInitials = computed(() => {
   return profileUser.value.username.slice(0, 2).toUpperCase()
 })
 
-// MAL Import
-const malUsername = ref('')
-const malImporting = ref(false)
-const malImportResult = ref<{ imported: number; skipped: number; errors?: string[] } | null>(null)
-const malImportError = ref<string | null>(null)
+// Unified import state
+interface ImportJobState {
+  jobId: string | null
+  importing: boolean
+  progress: { total: number; imported: number; skipped: number; status: string } | null
+  error: string | null
+  lastSync: { completed_at: string; imported: number; skipped: number } | null
+}
 
-// Shikimori Import
+const malUsername = ref('')
+const malSync = ref<ImportJobState>({
+  jobId: null, importing: false, progress: null, error: null, lastSync: null,
+})
+
 const shikimoriNickname = ref('')
-const shikimoriImporting = ref(false)
-const shikimoriJobId = ref<string | null>(null)
-const shikimoriImportProgress = ref<{ total: number; imported: number; skipped: number; status: string } | null>(null)
-const shikimoriImportError = ref<string | null>(null)
-let shikimoriPollInterval: ReturnType<typeof setInterval> | null = null
+const shikimoriSync = ref<ImportJobState>({
+  jobId: null, importing: false, progress: null, error: null, lastSync: null,
+})
+
+const pollIntervals: Record<string, ReturnType<typeof setInterval> | null> = {
+  mal: null,
+  shikimori: null,
+}
 
 // Public Profile settings
 const publicId = ref('')
@@ -937,6 +1033,15 @@ const showAvatarModal = ref(false)
 const avatarPreview = ref<string | null>(null)
 const avatarDataUrl = ref<string | null>(null)
 const uploadingAvatar = ref(false)
+
+// API Key
+const apiKeyLoading = ref(false)
+const hasApiKey = ref(false)
+const generatedApiKey = ref<string | null>(null)
+const apiKeyCopied = ref(false)
+const apiKeyActioning = ref(false)
+const apiKeyError = ref<string | null>(null)
+const apiKeyRevoked = ref(false)
 
 // Methods
 const fetchProfile = async () => {
@@ -1138,75 +1243,134 @@ const copyProfileLink = async () => {
   }
 }
 
-const importMAL = async () => {
-  if (!malUsername.value) return
+const getSyncState = (source: 'mal' | 'shikimori') =>
+  source === 'mal' ? malSync : shikimoriSync
 
-  malImporting.value = true
-  malImportResult.value = null
-  malImportError.value = null
+const startPolling = (source: 'mal' | 'shikimori', jobId: string) => {
+  stopPolling(source)
+  const state = getSyncState(source)
 
-  try {
-    const response = await userApi.importMAL(malUsername.value)
-    malImportResult.value = response.data?.data || response.data
-    await fetchWatchlist(true)
-  } catch (err: any) {
-    malImportError.value = err.response?.data?.message || 'Failed to import list'
-  } finally {
-    malImporting.value = false
+  pollIntervals[source] = setInterval(async () => {
+    try {
+      const resp = await userApi.getImportJobStatus(jobId)
+      const data = resp.data?.data || resp.data
+      state.value.progress = {
+        total: data.total,
+        imported: data.imported,
+        skipped: data.skipped,
+        status: data.status,
+      }
+
+      if (data.status === 'completed' || data.status === 'failed') {
+        stopPolling(source)
+        state.value.importing = false
+        if (data.status === 'completed') {
+          state.value.lastSync = {
+            completed_at: data.completed_at,
+            imported: data.imported,
+            skipped: data.skipped,
+          }
+          await fetchWatchlist(true)
+        } else {
+          state.value.error = data.error_message || 'Import failed'
+        }
+      }
+    } catch {
+      stopPolling(source)
+      state.value.importing = false
+    }
+  }, 2000)
+}
+
+const stopPolling = (source: 'mal' | 'shikimori') => {
+  if (pollIntervals[source]) {
+    clearInterval(pollIntervals[source]!)
+    pollIntervals[source] = null
   }
 }
 
-const importShikimori = async () => {
-  if (!shikimoriNickname.value) return
+const startImport = async (source: 'mal' | 'shikimori') => {
+  const state = getSyncState(source)
+  const username = source === 'mal' ? malUsername.value : shikimoriNickname.value
+  if (!username) return
 
-  shikimoriImporting.value = true
-  shikimoriImportProgress.value = null
-  shikimoriImportError.value = null
+  state.value.importing = true
+  state.value.progress = null
+  state.value.error = null
 
   try {
-    const response = await userApi.importShikimori(shikimoriNickname.value)
+    const response = source === 'mal'
+      ? await userApi.importMAL(username)
+      : await userApi.importShikimori(username)
     const data = response.data?.data || response.data
-    shikimoriJobId.value = data.job_id
 
-    shikimoriImportProgress.value = {
+    state.value.jobId = data.job_id
+    state.value.progress = {
       total: data.total,
       imported: 0,
       skipped: 0,
       status: 'processing',
     }
 
-    // Start polling
-    shikimoriPollInterval = setInterval(async () => {
-      if (!shikimoriJobId.value) return
-
-      try {
-        const statusResp = await userApi.getShikimoriImportStatus(shikimoriJobId.value)
-        const statusData = statusResp.data?.data || statusResp.data
-        shikimoriImportProgress.value = statusData
-
-        if (statusData.status === 'completed' || statusData.status === 'failed') {
-          stopShikimoriPoll()
-          shikimoriImporting.value = false
-          if (statusData.status === 'completed') {
-            await fetchWatchlist(true)
-          }
-        }
-      } catch {
-        stopShikimoriPoll()
-        shikimoriImporting.value = false
-      }
-    }, 2000)
+    startPolling(source, data.job_id)
   } catch (err: any) {
-    shikimoriImportError.value = err.response?.data?.message || 'Failed to import list'
-    shikimoriImporting.value = false
+    state.value.error = err.response?.data?.message || 'Failed to import list'
+    state.value.importing = false
   }
 }
 
-const stopShikimoriPoll = () => {
-  if (shikimoriPollInterval) {
-    clearInterval(shikimoriPollInterval)
-    shikimoriPollInterval = null
+const importMAL = () => startImport('mal')
+const importShikimori = () => startImport('shikimori')
+
+const checkActiveSyncJobs = async () => {
+  try {
+    const resp = await userApi.getSyncStatus()
+    const data = resp.data?.data || resp.data
+    if (!data) return
+
+    for (const source of ['mal', 'shikimori'] as const) {
+      const sourceData = data[source]
+      if (!sourceData) continue
+      const state = getSyncState(source)
+
+      if (sourceData.last_sync) {
+        state.value.lastSync = {
+          completed_at: sourceData.last_sync.completed_at,
+          imported: sourceData.last_sync.imported,
+          skipped: sourceData.last_sync.skipped,
+        }
+      }
+
+      if (sourceData.active) {
+        state.value.jobId = sourceData.active.id
+        state.value.importing = true
+        state.value.progress = {
+          total: sourceData.active.total,
+          imported: sourceData.active.imported,
+          skipped: sourceData.active.skipped,
+          status: sourceData.active.status,
+        }
+        startPolling(source, sourceData.active.id)
+      }
+    }
+  } catch {
+    // Ignore — non-critical
   }
+}
+
+const timeAgo = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return t('profile.import.justNow')
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMin < 1) return t('profile.import.justNow')
+  if (diffMin < 60) return t('profile.import.minutesAgo', { n: diffMin })
+  if (diffHours < 24) return t('profile.import.hoursAgo', { n: diffHours })
+  return t('profile.import.daysAgo', { n: diffDays })
 }
 
 const savePublicId = async () => {
@@ -1322,6 +1486,66 @@ const uploadAvatar = async () => {
   }
 }
 
+// API Key methods
+const fetchApiKeyStatus = async () => {
+  apiKeyLoading.value = true
+  try {
+    const res = await userApi.hasApiKey()
+    hasApiKey.value = res.data?.data?.has_api_key ?? false
+  } catch {
+    hasApiKey.value = false
+  } finally {
+    apiKeyLoading.value = false
+  }
+}
+
+const generateApiKey = async () => {
+  apiKeyActioning.value = true
+  apiKeyError.value = null
+  apiKeyRevoked.value = false
+  generatedApiKey.value = null
+  try {
+    const res = await userApi.generateApiKey()
+    generatedApiKey.value = res.data?.data?.api_key ?? null
+    hasApiKey.value = true
+  } catch (e: any) {
+    apiKeyError.value = e.response?.data?.error?.message || 'Failed to generate API key'
+  } finally {
+    apiKeyActioning.value = false
+  }
+}
+
+const regenerateApiKey = async () => {
+  await generateApiKey()
+}
+
+const revokeApiKey = async () => {
+  if (!confirm(t('profile.settings.apiKeyRevokeConfirm'))) return
+  apiKeyActioning.value = true
+  apiKeyError.value = null
+  generatedApiKey.value = null
+  try {
+    await userApi.revokeApiKey()
+    hasApiKey.value = false
+    apiKeyRevoked.value = true
+  } catch (e: any) {
+    apiKeyError.value = e.response?.data?.error?.message || 'Failed to revoke API key'
+  } finally {
+    apiKeyActioning.value = false
+  }
+}
+
+const copyApiKey = async () => {
+  if (!generatedApiKey.value) return
+  try {
+    await navigator.clipboard.writeText(generatedApiKey.value)
+    apiKeyCopied.value = true
+    setTimeout(() => { apiKeyCopied.value = false }, 2000)
+  } catch {
+    // Fallback
+  }
+}
+
 const logout = () => {
   authStore.logout()
   router.push('/')
@@ -1345,8 +1569,17 @@ watch(editingScore, (id) => {
   }
 })
 
-onMounted(fetchProfile)
-onUnmounted(stopShikimoriPoll)
+onMounted(async () => {
+  await fetchProfile()
+  if (isOwnProfile.value) {
+    checkActiveSyncJobs()
+    fetchApiKeyStatus()
+  }
+})
+onUnmounted(() => {
+  stopPolling('mal')
+  stopPolling('shikimori')
+})
 </script>
 
 <style scoped>

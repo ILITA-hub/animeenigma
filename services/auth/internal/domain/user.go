@@ -17,6 +17,7 @@ type User struct {
 	PublicID       string         `gorm:"size:32;uniqueIndex" json:"public_id"`
 	PublicStatuses pq.StringArray `gorm:"type:text[]" json:"public_statuses"`
 	Avatar         string         `gorm:"type:text" json:"avatar,omitempty"`
+	ApiKeyHash     *string        `gorm:"size:64;uniqueIndex" json:"-"`
 	Role           authz.Role     `gorm:"size:20;default:'user'" json:"role"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
@@ -106,6 +107,16 @@ type UpdatePrivacyRequest struct {
 // UpdateAvatarRequest represents a request to change the user's avatar
 type UpdateAvatarRequest struct {
 	Avatar string `json:"avatar" validate:"required"`
+}
+
+// ApiKeyResponse is returned when generating an API key
+type ApiKeyResponse struct {
+	ApiKey string `json:"api_key"`
+}
+
+// ResolveApiKeyRequest is the request body for the internal resolve endpoint
+type ResolveApiKeyRequest struct {
+	ApiKey string `json:"api_key" validate:"required"`
 }
 
 // PublicUser represents a user visible to other users

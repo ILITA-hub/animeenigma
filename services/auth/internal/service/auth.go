@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -227,6 +228,62 @@ func (s *AuthService) verifyTelegramAuth(req *domain.TelegramLoginRequest) bool 
 	calculatedHash := hex.EncodeToString(h.Sum(nil))
 
 	return calculatedHash == req.Hash
+}
+
+// GenerateApiKey generates a new API key for the user, replacing any existing one.
+func (s *AuthService) GenerateApiKey(ctx context.Context, userID string) (string, error) {
+	// Generate 32 random bytes
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate random bytes: %w", err)
+	}
+	rawKey := "ak_" + hex.EncodeToString(b)
+
+	// SHA-256 hash for storage
+	hash := sha256.Sum256([]byte(rawKey))
+	hashStr := hex.EncodeToString(hash[:])
+
+	if err := s.userRepo.UpdateApiKeyHash(ctx, userID, &hashStr); err != nil {
+		return "", err
+	}
+
+	s.log.Infow("generated api key", "user_id", userID)
+	return rawKey, nil
+}
+
+// RevokeApiKey removes the user's API key.
+func (s *AuthService) RevokeApiKey(ctx context.Context, userID string) error {
+	if err := s.userRepo.UpdateApiKeyHash(ctx, userID, nil); err != nil {
+		return err
+	}
+	s.log.Infow("revoked api key", "user_id", userID)
+	return nil
+}
+
+// ResolveApiKey validates an API key and returns claims for the associated user.
+func (s *AuthService) ResolveApiKey(ctx context.Context, apiKey string) (*authz.Claims, error) {
+	hash := sha256.Sum256([]byte(apiKey))
+	hashStr := hex.EncodeToString(hash[:])
+
+	user, err := s.userRepo.GetByApiKeyHash(ctx, hashStr)
+	if err != nil {
+		return nil, errors.Unauthorized("invalid api key")
+	}
+
+	return &authz.Claims{
+		UserID:   user.ID,
+		Username: user.Username,
+		Role:     user.Role,
+	}, nil
+}
+
+// HasApiKey checks if the user has an API key configured.
+func (s *AuthService) HasApiKey(ctx context.Context, userID string) (bool, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return user.ApiKeyHash != nil, nil
 }
 
 func (s *AuthService) generateAuthResponse(user *domain.User) (*domain.AuthResponse, error) {

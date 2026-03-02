@@ -10,7 +10,7 @@ Automated daily PostgreSQL backup system with S3 storage (FirstVDS) and Telegram
 - **Retention:** 14 days
 - **Storage:** FirstVDS S3 (s3.firstvds.ru)
 - **Notifications:** Telegram (success and failure)
-- **Databases:** animeenigma_auth, animeenigma_catalog, animeenigma_player, animeenigma_rooms
+- **Database:** animeenigma (single consolidated database)
 
 ## Architecture
 
@@ -46,10 +46,7 @@ docker/
 ```
 s3://animeenigma/backups/
 ├── 2026-02-02/
-│   ├── animeenigma_auth.sql.gz
-│   ├── animeenigma_catalog.sql.gz
-│   ├── animeenigma_player.sql.gz
-│   └── animeenigma_rooms.sql.gz
+│   └── animeenigma.sql.gz
 └── ...
 ```
 

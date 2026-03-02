@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -238,4 +239,81 @@ func (h *AuthHandler) TelegramLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Return response without refresh token in body
 	httputil.OK(w, resp.ToPublicResponse())
+}
+
+// GenerateApiKey creates a new API key for the authenticated user
+func (h *AuthHandler) GenerateApiKey(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	apiKey, err := h.authService.GenerateApiKey(r.Context(), claims.UserID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, &domain.ApiKeyResponse{ApiKey: apiKey})
+}
+
+// RevokeApiKey removes the API key for the authenticated user
+func (h *AuthHandler) RevokeApiKey(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	if err := h.authService.RevokeApiKey(r.Context(), claims.UserID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.NoContent(w)
+}
+
+// HasApiKey checks whether the authenticated user has an API key
+func (h *AuthHandler) HasApiKey(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	has, err := h.authService.HasApiKey(r.Context(), claims.UserID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]bool{"has_api_key": has})
+}
+
+// ResolveApiKey is an internal endpoint that validates an API key and returns claims.
+// This is called by the gateway to resolve ak_ tokens.
+func (h *AuthHandler) ResolveApiKey(w http.ResponseWriter, r *http.Request) {
+	var req domain.ResolveApiKeyRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if req.ApiKey == "" {
+		httputil.Error(w, errors.InvalidInput("api_key is required"))
+		return
+	}
+
+	claims, err := h.authService.ResolveApiKey(r.Context(), req.ApiKey)
+	if err != nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	httputil.OK(w, map[string]interface{}{
+		"user_id":  claims.UserID,
+		"username": claims.Username,
+		"role":     claims.Role,
+	})
 }

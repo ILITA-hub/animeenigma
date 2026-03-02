@@ -139,6 +139,28 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *UserRepository) GetByApiKeyHash(ctx context.Context, hash string) (*domain.User, error) {
+	var user domain.User
+	if err := r.db.WithContext(ctx).First(&user, "api_key_hash = ?", hash).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, liberrors.NotFound("user")
+		}
+		return nil, fmt.Errorf("get user by api key hash: %w", err)
+	}
+	return &user, nil
+}
+
+func (r *UserRepository) UpdateApiKeyHash(ctx context.Context, userID string, hash *string) error {
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("api_key_hash", hash)
+	if result.Error != nil {
+		return fmt.Errorf("update api key hash: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return liberrors.NotFound("user")
+	}
+	return nil
+}
+
 func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).Model(&domain.User{}).Where("username = ?", username).Count(&count).Error; err != nil {

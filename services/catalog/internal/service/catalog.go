@@ -235,11 +235,12 @@ func (s *CatalogService) GetAnimeByShikimoriID(ctx context.Context, shikimoriID 
 	return anime, nil
 }
 
-// ResolveMALAnime resolves a MAL ID by fetching the title from Jikan (MAL),
-// then searching Shikimori by name. Returns "resolved" with anime if exact match,
-// or "ambiguous" with the MAL title for manual search.
+// ResolveMALAnime resolves a MAL ID to a local anime record.
+// First tries direct Shikimori lookup (since Shikimori IDs = MAL IDs),
+// then falls back to Jikan title matching. Returns "resolved" with anime
+// if found, or "ambiguous" with the MAL title for manual search.
 func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*domain.MALResolveResult, error) {
-	// Step 1: Check local DB first
+	// Step 1: Check local DB first (by mal_id)
 	existing, err := s.animeRepo.GetByMALID(ctx, malID)
 	if err != nil {
 		return nil, err
@@ -253,7 +254,27 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 		}, nil
 	}
 
-	// Step 2: Fetch anime info from MAL via Jikan
+	// Step 2: Shikimori IDs = MAL IDs, so try direct Shikimori lookup
+	// This avoids Jikan rate limits and is deterministic (no title matching)
+	anime, err := s.GetAnimeByShikimoriID(ctx, malID)
+	if err == nil && anime != nil {
+		// Backfill MAL ID if not already set
+		if anime.MALID == "" {
+			anime.MALID = malID
+			_ = s.animeRepo.UpdateMALID(ctx, anime.ID, malID)
+		}
+		return &domain.MALResolveResult{
+			Status: "resolved",
+			Anime:  anime,
+			MALID:  malID,
+		}, nil
+	}
+	if err != nil {
+		s.log.Warnw("Shikimori direct lookup failed, falling back to Jikan",
+			"mal_id", malID, "error", err)
+	}
+
+	// Step 3: Fall back to Jikan title matching (for IDs Shikimori doesn't recognize)
 	s.log.Infow("resolving MAL ID via Jikan", "mal_id", malID)
 
 	malInfo, err := s.jikanClient.GetAnimeByID(ctx, malID)
@@ -265,7 +286,7 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 		}, nil
 	}
 
-	// Step 3: Search Shikimori by romanized title
+	// Step 4: Search Shikimori by romanized title
 	searchTitle := malInfo.Title
 	if searchTitle == "" {
 		searchTitle = malInfo.TitleEnglish
@@ -282,7 +303,7 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 		}, nil
 	}
 
-	// Step 4: Look for an exact name match
+	// Step 5: Look for an exact name match
 	var matched *domain.Anime
 	for _, anime := range shikimoriAnimes {
 		if titlesMatch(anime.Name, malInfo.Title) ||
@@ -301,7 +322,7 @@ func (s *CatalogService) ResolveMALAnime(ctx context.Context, malID string) (*do
 		}, nil
 	}
 
-	// Step 5: Store matched anime, backfill MAL ID
+	// Step 6: Store matched anime, backfill MAL ID
 	if err := s.upsertAnimeFromExternal(ctx, matched); err != nil {
 		return nil, fmt.Errorf("store resolved anime: %w", err)
 	}
