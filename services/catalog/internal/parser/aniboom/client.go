@@ -107,7 +107,7 @@ func (c *Client) warmupSession() error {
 	}
 	defer resp.Body.Close()
 	// Just consume the body to complete the request
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
 

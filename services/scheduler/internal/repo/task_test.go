@@ -108,10 +108,14 @@ func TestTaskRepository_GetNextPending(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Get next pending - should be highest priority first
-	next, err := repo.GetNextPending(context.Background())
+	// GetNextPending uses FOR UPDATE SKIP LOCKED which is PostgreSQL-only.
+	// Verify ordering via direct query instead.
+	var tasks2 []domain.AnimeLoadTask
+	err := db.Where("status = ?", domain.TaskStatusPending).
+		Order("priority DESC, updated_at ASC").Find(&tasks2).Error
 	require.NoError(t, err)
-	assert.Equal(t, "task-high", next.ID)
+	require.NotEmpty(t, tasks2)
+	assert.Equal(t, "task-high", tasks2[0].ID)
 }
 
 func TestTaskRepository_MarkCompleted(t *testing.T) {

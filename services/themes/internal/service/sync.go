@@ -99,6 +99,6 @@ func (s *SyncService) syncSeason(year int, season string) error {
 }
 
 // GetStatus returns the current sync status.
-func (s *SyncService) GetStatus() domain.SyncStatus {
+func (s *SyncService) GetStatus() domain.SyncStatusResponse {
 	return s.status.Get()
 }

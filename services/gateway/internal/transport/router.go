@@ -61,7 +61,7 @@ func NewRouter(
 		// Admin dashboard landing page
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<!DOCTYPE html>
+			_, _ = w.Write([]byte(`<!DOCTYPE html>
 <html>
 <head>
     <title>AnimeEnigma Admin</title>

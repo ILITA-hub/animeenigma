@@ -58,6 +58,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    if: ${{ !cancelled() }}
     needs: [lint, test]
     defaults:
       run:
