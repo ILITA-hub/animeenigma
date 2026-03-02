@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -340,7 +339,7 @@ func salt(input string) string {
 	for i := 0; i < len(input); i++ {
 		c := int(input[i])
 		hash = (hash << 5) - hash + c
-		hash = hash & hash // Convert to 32-bit integer
+		hash &= 0xFFFFFFFF // Convert to 32-bit integer
 	}
 
 	result := ""
@@ -383,9 +382,7 @@ func decodeSecret(input []int, password string) string {
 // SearchByShikimoriID searches for anime by Shikimori ID
 func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error) {
 	// Refresh token if needed
-	if err := c.refreshTokenIfNeeded(); err != nil {
-		// Continue with existing token, it might still work
-	}
+	_ = c.refreshTokenIfNeeded() // Continue with existing token if refresh fails
 
 	var lastErr error
 	maxRetries := 3
@@ -449,9 +446,7 @@ func (c *Client) SearchByShikimoriID(shikimoriID string) ([]SearchResult, error)
 // SearchByTitle searches for anime by title
 func (c *Client) SearchByTitle(title string) ([]SearchResult, error) {
 	// Refresh token if needed
-	if err := c.refreshTokenIfNeeded(); err != nil {
-		// Continue with existing token, it might still work
-	}
+	_ = c.refreshTokenIfNeeded() // Continue with existing token if refresh fails
 
 	var lastErr error
 	maxRetries := 3
@@ -628,13 +623,6 @@ func (c *Client) GetVideoURL(embedLink string) (*VideoSource, error) {
 
 	html := string(body)
 
-	// Extract urlParams from the page
-	urlParamsMatch := regexp.MustCompile(`urlParams\s*=\s*'([^']+)'`).FindStringSubmatch(html)
-	if len(urlParamsMatch) < 2 {
-		// Try alternative pattern
-		urlParamsMatch = regexp.MustCompile(`urlParams\s*=\s*\{([^}]+)\}`).FindStringSubmatch(html)
-	}
-
 	// Extract video hash and id
 	videoType := extractBetween(html, ".type = '", "'")
 	videoHash := extractBetween(html, ".hash = '", "'")
@@ -674,8 +662,8 @@ func extractBetween(s, start, end string) string {
 	return s[startIdx : startIdx+endIdx]
 }
 
-// convertChar is used for ROT cipher decryption
-func convertChar(char rune, num int) rune {
+// convertChar is used for ROT cipher decryption (kept for future Kodik URL extraction).
+func convertChar(char rune, num int) rune { //nolint:unused
 	alph := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	upper := strings.ToUpper(string(char))
 	idx := strings.Index(alph, upper)
@@ -691,8 +679,8 @@ func convertChar(char rune, num int) rune {
 	return result
 }
 
-// decryptVideoURL decrypts the video URL using ROT cipher + base64
-func decryptVideoURL(encrypted string) (string, error) {
+// decryptVideoURL decrypts the video URL using ROT cipher + base64 (kept for future Kodik URL extraction).
+func decryptVideoURL(encrypted string) (string, error) { //nolint:unused
 	// Try different ROT values
 	for rot := 0; rot < 26; rot++ {
 		var converted strings.Builder

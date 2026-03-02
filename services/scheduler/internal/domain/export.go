@@ -49,10 +49,10 @@ const (
 
 // ExportJob tracks the overall progress of a MAL export
 type ExportJob struct {
-	ID             string          `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ID             string          `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID         string          `gorm:"type:uuid;not null" json:"user_id"`
 	MALUsername    string          `gorm:"column:mal_username;size:255;not null" json:"mal_username"`
-	Status         ExportJobStatus `gorm:"size:20;default:pending" json:"status"`
+	Status         ExportJobStatus `gorm:"size:20;default:'pending'" json:"status"`
 	TotalAnime     int             `gorm:"default:0" json:"total_anime"`
 	ProcessedAnime int             `gorm:"default:0" json:"processed_anime"`
 	LoadedAnime    int             `gorm:"default:0" json:"loaded_anime"`
@@ -85,14 +85,14 @@ func (e *ExportJob) ProgressPercent() float64 {
 
 // AnimeLoadTask represents a single anime to be loaded from Shikimori
 type AnimeLoadTask struct {
-	ID                  string           `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ID                  string           `gorm:"type:uuid;primaryKey" json:"id"`
 	ExportJobID         string           `gorm:"type:uuid" json:"export_job_id"`
 	UserID              string           `gorm:"type:uuid;not null" json:"user_id"`
 	MALID               int              `gorm:"column:mal_id;not null" json:"mal_id"`
 	MALTitle            string           `gorm:"column:mal_title;size:500;not null" json:"mal_title"`
 	MALTitleJapanese    string           `gorm:"column:mal_title_japanese;size:500" json:"mal_title_japanese,omitempty"`
 	MALTitleEnglish     string           `gorm:"column:mal_title_english;size:500" json:"mal_title_english,omitempty"`
-	Status              TaskStatus       `gorm:"size:20;default:pending" json:"status"`
+	Status              TaskStatus       `gorm:"size:20;default:'pending'" json:"status"`
 	Priority            int              `gorm:"default:0" json:"priority"`
 	AttemptCount        int              `gorm:"default:0" json:"attempt_count"`
 	MaxAttempts         int              `gorm:"default:3" json:"max_attempts"`

@@ -88,8 +88,10 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    if: ${{ !cancelled() }}
     needs: [lint, test]
     strategy:
+      fail-fast: false
       matrix:
         service:
           - auth
@@ -99,6 +101,7 @@ jobs:
           - rooms
           - scheduler
           - gateway
+          - themes
 
     steps:
       - uses: actions/checkout@v4

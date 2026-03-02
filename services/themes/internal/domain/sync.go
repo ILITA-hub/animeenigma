@@ -56,10 +56,21 @@ func (s *SyncStatus) SetError(err string) {
 	s.Error = err
 }
 
-func (s *SyncStatus) Get() SyncStatus {
+// SyncStatusResponse is a mutex-free snapshot for JSON serialization.
+type SyncStatusResponse struct {
+	Running   bool   `json:"running"`
+	Status    string `json:"status"`
+	Total     int    `json:"total"`
+	Processed int    `json:"processed"`
+	Error     string `json:"error,omitempty"`
+	Year      int    `json:"year,omitempty"`
+	Season    string `json:"season,omitempty"`
+}
+
+func (s *SyncStatus) Get() SyncStatusResponse {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return SyncStatus{
+	return SyncStatusResponse{
 		Running:   s.Running,
 		Status:    s.Status,
 		Total:     s.Total,

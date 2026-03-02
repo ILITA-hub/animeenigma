@@ -18,6 +18,7 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
         service:
           - auth
@@ -27,6 +28,7 @@ jobs:
           - rooms
           - scheduler
           - gateway
+          - themes
 
     steps:
       - uses: actions/checkout@v4

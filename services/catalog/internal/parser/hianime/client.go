@@ -630,8 +630,8 @@ func (c *Client) getStreamFromAniwatch(episodeID string, serverID string, catego
 	return stream, nil
 }
 
-// getStreamDirect gets stream using direct HiAnime scraping (fallback)
-func (c *Client) getStreamDirect(serverID string) (*Stream, error) {
+// getStreamDirect gets stream using direct HiAnime scraping (fallback, kept for future use).
+func (c *Client) getStreamDirect(serverID string) (*Stream, error) { //nolint:unused
 	sourcesURL := fmt.Sprintf("%s/v2/episode/sources?id=%s", AjaxURL, serverID)
 
 	req, err := http.NewRequest("GET", sourcesURL, nil)
@@ -679,8 +679,8 @@ func (c *Client) getStreamDirect(serverID string) (*Stream, error) {
 	}, nil
 }
 
-// extractStreamFromEmbed extracts stream URL from embed page
-func (c *Client) extractStreamFromEmbed(embedURL string) (*Stream, error) {
+// extractStreamFromEmbed extracts stream URL from embed page (kept for future use).
+func (c *Client) extractStreamFromEmbed(embedURL string) (*Stream, error) { //nolint:unused
 	// Determine the provider from URL
 	if strings.Contains(embedURL, "megacloud") || strings.Contains(embedURL, "rapid-cloud") {
 		return c.extractMegaCloudStream(embedURL)
@@ -693,8 +693,8 @@ func (c *Client) extractStreamFromEmbed(embedURL string) (*Stream, error) {
 	}, nil
 }
 
-// extractMegaCloudStream extracts stream from MegaCloud/RapidCloud
-func (c *Client) extractMegaCloudStream(embedURL string) (*Stream, error) {
+// extractMegaCloudStream extracts stream from MegaCloud/RapidCloud (kept for future use).
+func (c *Client) extractMegaCloudStream(embedURL string) (*Stream, error) { //nolint:unused
 	// Fetch the embed page
 	req, err := http.NewRequest("GET", embedURL, nil)
 	if err != nil {
