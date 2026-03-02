@@ -1,11 +1,12 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # Configuration
 DATE=$(date +%Y-%m-%d)
 DATABASES="animeenigma"
 BACKUP_DIR="/tmp/backups"
 S3_PATH="s3://${S3_BUCKET}/backups/${DATE}"
+EXPECTED_COUNT=$(echo ${DATABASES} | wc -w | tr -d ' ')
 
 # AWS CLI configuration for S3-compatible storage
 export AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY}"
@@ -14,6 +15,20 @@ export AWS_DEFAULT_REGION="${S3_REGION:-default}"
 
 # S3 endpoint URL
 S3_ENDPOINT_URL="https://${S3_ENDPOINT}"
+
+# Format bytes to human-readable (KB/MB/GB)
+format_size() {
+    local bytes=$1
+    if [ "${bytes}" -ge 1073741824 ]; then
+        echo "$(awk "BEGIN {printf \"%.1f GB\", ${bytes}/1073741824}")"
+    elif [ "${bytes}" -ge 1048576 ]; then
+        echo "$(awk "BEGIN {printf \"%.1f MB\", ${bytes}/1048576}")"
+    elif [ "${bytes}" -ge 1024 ]; then
+        echo "$(awk "BEGIN {printf \"%.1f KB\", ${bytes}/1024}")"
+    else
+        echo "${bytes} B"
+    fi
+}
 
 # Telegram notification function
 send_telegram() {
@@ -39,8 +54,9 @@ for DB in ${DATABASES}; do
     echo "Backing up ${DB}..."
     BACKUP_FILE="${BACKUP_DIR}/${DB}.sql.gz"
 
-    # Create backup (pg_dump will fail if database doesn't exist)
-    if PGPASSWORD="${DB_PASSWORD}" pg_dump -h "${DB_HOST}" -U "${DB_USER}" "${DB}" 2>/dev/null | gzip > "${BACKUP_FILE}"; then
+    # Create backup
+    DUMP_ERR="${BACKUP_DIR}/${DB}.err"
+    if PGPASSWORD="${DB_PASSWORD}" pg_dump -h "${DB_HOST}" -U "${DB_USER}" "${DB}" 2>"${DUMP_ERR}" | gzip > "${BACKUP_FILE}"; then
         # Check if backup file is not empty (empty gzip is 20 bytes)
         FILE_SIZE=$(stat -c%s "${BACKUP_FILE}" 2>/dev/null || stat -f%z "${BACKUP_FILE}" 2>/dev/null || echo "0")
 
@@ -49,22 +65,25 @@ for DB in ${DATABASES}; do
 
             # Upload to S3
             if aws s3 cp "${BACKUP_FILE}" "${S3_PATH}/${DB}.sql.gz" --endpoint-url "${S3_ENDPOINT_URL}" --quiet; then
-                echo "  Uploaded ${DB}.sql.gz ($(numfmt --to=iec ${FILE_SIZE} 2>/dev/null || echo "${FILE_SIZE} bytes"))"
+                echo "  Uploaded ${DB}.sql.gz ($(format_size ${FILE_SIZE}))"
                 SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
             else
                 echo "  ERROR: Failed to upload ${DB}.sql.gz to S3"
-                FAILED_DBS="${FAILED_DBS} ${DB}"
+                FAILED_DBS="${FAILED_DBS} ${DB}(upload-failed)"
             fi
         else
-            echo "  SKIP: Database ${DB} is empty or does not exist"
+            echo "  ERROR: Database ${DB} backup is empty (${FILE_SIZE} bytes)"
+            [ -s "${DUMP_ERR}" ] && echo "  pg_dump stderr: $(cat "${DUMP_ERR}")"
+            FAILED_DBS="${FAILED_DBS} ${DB}(empty)"
         fi
 
-        # Remove local backup
-        rm -f "${BACKUP_FILE}"
+        # Remove local files
+        rm -f "${BACKUP_FILE}" "${DUMP_ERR}"
     else
         echo "  ERROR: Failed to backup ${DB}"
-        FAILED_DBS="${FAILED_DBS} ${DB}"
-        rm -f "${BACKUP_FILE}"
+        [ -s "${DUMP_ERR}" ] && echo "  pg_dump stderr: $(cat "${DUMP_ERR}")"
+        FAILED_DBS="${FAILED_DBS} ${DB}(dump-failed)"
+        rm -f "${BACKUP_FILE}" "${DUMP_ERR}"
     fi
 done
 
@@ -73,6 +92,7 @@ RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 echo "Cleaning up backups older than ${RETENTION_DAYS} days..."
 
 # List all backup folders and delete old ones
+# || true to prevent pipefail from killing the script before notification
 aws s3 ls "s3://${S3_BUCKET}/backups/" --endpoint-url "${S3_ENDPOINT_URL}" 2>/dev/null | while read -r line; do
     FOLDER_DATE=$(echo "${line}" | awk '{print $2}' | tr -d '/')
     if [ -n "${FOLDER_DATE}" ]; then
@@ -86,28 +106,28 @@ aws s3 ls "s3://${S3_BUCKET}/backups/" --endpoint-url "${S3_ENDPOINT_URL}" 2>/de
             aws s3 rm "s3://${S3_BUCKET}/backups/${FOLDER_DATE}/" --recursive --endpoint-url "${S3_ENDPOINT_URL}" --quiet
         fi
     fi
-done
+done || true
 
 # Format total size
-TOTAL_SIZE_HUMAN=$(numfmt --to=iec ${TOTAL_SIZE} 2>/dev/null || echo "${TOTAL_SIZE} bytes")
+TOTAL_SIZE_HUMAN=$(format_size ${TOTAL_SIZE})
 
 echo "=== Backup completed at $(date) ==="
 
 # Send notification
-if [ -z "${FAILED_DBS}" ]; then
-    send_telegram "<b>Backup completed</b>
+if [ -z "${FAILED_DBS}" ] && [ "${SUCCESS_COUNT}" -eq "${EXPECTED_COUNT}" ]; then
+    send_telegram "<b>✅ Backup completed</b>
 
 <b>Date:</b> ${DATE}
-<b>Databases:</b> ${SUCCESS_COUNT}
+<b>Databases:</b> ${SUCCESS_COUNT}/${EXPECTED_COUNT}
 <b>Total size:</b> ${TOTAL_SIZE_HUMAN}
 <b>Retention:</b> ${RETENTION_DAYS} days"
 else
-    send_telegram "<b>Backup FAILED</b>
+    send_telegram "<b>❌ Backup FAILED</b>
 
 <b>Date:</b> ${DATE}
-<b>Successful:</b> ${SUCCESS_COUNT}
-<b>Failed:</b>${FAILED_DBS}
+<b>Successful:</b> ${SUCCESS_COUNT}/${EXPECTED_COUNT}
+<b>Failed:</b>${FAILED_DBS:- none, but expected ${EXPECTED_COUNT}}
 
-Please check the logs!"
+Check logs: docker logs animeenigma-backup"
     exit 1
 fi

@@ -189,6 +189,7 @@ const authStore = useAuthStore()
 const navLinks = [
   { to: '/', label: 'nav.home' },
   { to: '/browse', label: 'nav.catalog' },
+  { to: '/themes', label: 'nav.themes' },
   { to: '/game', label: 'nav.rooms' },
 ]
 

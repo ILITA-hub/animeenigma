@@ -132,6 +132,32 @@ func NewRouter(
 			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
 
+		// Themes service routes
+		r.Route("/themes", func(r chi.Router) {
+			// Public routes (with optional auth handled by themes service)
+			r.Get("/", proxyHandler.ProxyToThemes)
+			r.Get("/{id}", proxyHandler.ProxyToThemes)
+			// Video/audio proxy (public)
+			r.Get("/video/{basename}", proxyHandler.ProxyToThemes)
+			r.Get("/audio/{basename}", proxyHandler.ProxyToThemes)
+
+			// Protected routes (rate themes)
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Post("/{id}/rate", proxyHandler.ProxyToThemes)
+				r.Delete("/{id}/rate", proxyHandler.ProxyToThemes)
+				r.Get("/my-ratings", proxyHandler.ProxyToThemes)
+			})
+
+			// Admin routes (sync)
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(AdminRoleMiddleware)
+				r.Post("/admin/sync", proxyHandler.ProxyToThemes)
+				r.Get("/admin/sync/status", proxyHandler.ProxyToThemes)
+			})
+		})
+
 		// Streaming service routes - most are public, only admin needs auth
 		r.Route("/streaming", func(r chi.Router) {
 			// Public routes (no auth required)
@@ -160,7 +186,18 @@ var (
 
 func getApiKeyHTTPClient() *http.Client {
 	apiKeyHTTPClientOnce.Do(func() {
-		apiKeyHTTPClient = &http.Client{Timeout: 5 * time.Second}
+		apiKeyHTTPClient = &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   2 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				MaxIdleConns:        5,
+				MaxIdleConnsPerHost: 2,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		}
 	})
 	return apiKeyHTTPClient
 }

@@ -2,8 +2,10 @@ package service
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -19,7 +21,18 @@ type ProxyService struct {
 func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyService {
 	return &ProxyService{
 		serviceURLs: serviceURLs,
-		client:      &http.Client{},
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   3 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 		log:         log,
 	}
 }
@@ -90,6 +103,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.RoomsService, nil
 	case "streaming":
 		return s.serviceURLs.StreamingService, nil
+	case "themes":
+		return s.serviceURLs.ThemesService, nil
 	case "grafana":
 		return s.serviceURLs.GrafanaService, nil
 	case "prometheus":

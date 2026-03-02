@@ -42,6 +42,9 @@ func NewRouter(
 	// Admin check endpoint for nginx auth_request (outside /api for direct access)
 	r.Get("/auth/admin-check", AdminCheckHandler(jwtConfig))
 
+	// Internal endpoints (only reachable within Docker network)
+	r.Post("/internal/resolve-api-key", authHandler.ResolveApiKey)
+
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Auth routes (public)
@@ -61,6 +64,9 @@ func NewRouter(
 			r.Put("/auth/profile/public-id", userHandler.UpdatePublicID)
 			r.Put("/auth/profile/privacy", userHandler.UpdatePrivacy)
 			r.Put("/auth/profile/avatar", userHandler.UpdateAvatar)
+			r.Post("/auth/api-key", authHandler.GenerateApiKey)
+			r.Delete("/auth/api-key", authHandler.RevokeApiKey)
+			r.Get("/auth/api-key", authHandler.HasApiKey)
 		})
 
 		// Public profile by public_id

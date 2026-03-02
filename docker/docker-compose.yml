@@ -199,6 +199,7 @@ services:
       STREAMING_SERVICE_URL: http://streaming:8082
       PLAYER_SERVICE_URL: http://player:8083
       ROOMS_SERVICE_URL: http://rooms:8084
+      THEMES_SERVICE_URL: http://themes:8086
       GRAFANA_SERVICE_URL: http://grafana:3000
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
@@ -211,6 +212,7 @@ services:
       - redis
       - auth
       - catalog
+      - themes
       - grafana
       - prometheus
 
@@ -361,6 +363,25 @@ services:
         condition: service_healthy
       catalog:
         condition: service_started
+
+  themes:
+    build:
+      context: ..
+      dockerfile: services/themes/Dockerfile
+    container_name: animeenigma-themes
+    environment:
+      SERVER_PORT: 8086
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: animeenigma
+      JWT_SECRET: dev-secret-change-in-production
+    ports:
+      - "127.0.0.1:8086:8086"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # =============================================================================
   # Frontend

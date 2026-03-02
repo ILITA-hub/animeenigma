@@ -20,4 +20,5 @@ use (
 	./services/rooms
 	./services/scheduler
 	./services/streaming
+	./services/themes
 )
