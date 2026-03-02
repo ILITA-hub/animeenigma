@@ -72,7 +72,7 @@ test.describe('Home Page', () => {
       await page.waitForTimeout(3000)
 
       // Look for time indicators
-      const timeIndicators = page.getByText(/today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|сегодня|завтра|понедельник|вторник|среда|четверг|пятница|суббота|воскресенье/i)
+      const _timeIndicators = page.getByText(/today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|сегодня|завтра|понедельник|вторник|среда|четверг|пятница|суббота|воскресенье/i)
 
       // May be visible if ongoing anime exist
     })

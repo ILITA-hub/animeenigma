@@ -19,7 +19,7 @@ test.describe('Browse/Search Page', () => {
       await page.waitForTimeout(500)
 
       // Look for dropdown results
-      const dropdown = page.locator('[class*="dropdown"], [class*="results"], [class*="suggestions"]')
+      const _dropdown = page.locator('[class*="dropdown"], [class*="results"], [class*="suggestions"]')
       // May show results dropdown
     })
 
@@ -58,7 +58,7 @@ test.describe('Browse/Search Page', () => {
     })
 
     test('should display year filter', async ({ page }) => {
-      const yearFilter = page.locator('select, button').filter({
+      const _yearFilter = page.locator('select, button').filter({
         hasText: /year|год/i
       }).or(page.getByText(/year|год/i))
 
@@ -149,7 +149,7 @@ test.describe('Browse/Search Page', () => {
     test('should display load more button', async ({ page }) => {
       await page.waitForTimeout(2000)
 
-      const loadMoreButton = page.getByRole('button', { name: /load more|показать еще|больше/i })
+      const _loadMoreButton = page.getByRole('button', { name: /load more|показать еще|больше/i })
 
       // May be visible if there are more results
     })
@@ -184,7 +184,7 @@ test.describe('Browse/Search Page', () => {
       await page.goto('/browse')
 
       // Check for recent searches section
-      const recentSection = page.getByText(/recent|недавние/i)
+      const _recentSection = page.getByText(/recent|недавние/i)
       // May be visible
     })
   })
@@ -197,7 +197,7 @@ test.describe('Browse/Search Page', () => {
 
       await page.waitForTimeout(2000)
 
-      const emptyMessage = page.getByText(/no results|not found|ничего не найдено|нет результатов/i)
+      const _emptyMessage = page.getByText(/no results|not found|ничего не найдено|нет результатов/i)
       // May be visible for empty results
     })
   })

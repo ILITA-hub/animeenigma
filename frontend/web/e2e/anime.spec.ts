@@ -54,7 +54,7 @@ test.describe('Anime Detail Page', () => {
       await expect(page).toHaveURL(/\/anime\//)
 
       // Look for genre badges/chips
-      const genreSection = page.getByText(/genre|жанр/i)
+      const _genreSection = page.getByText(/genre|жанр/i)
       // Genres may or may not be visible depending on data
     })
 
@@ -105,7 +105,7 @@ test.describe('Anime Detail Page', () => {
       await expect(page).toHaveURL(/\/anime\//)
 
       // Look for watchlist dropdown/button
-      const watchlistButton = page.locator('select, button').filter({
+      const _watchlistButton = page.locator('select, button').filter({
         hasText: /watching|plan|completed|hold|dropped|смотрю|запланировано|просмотрено|отложено|брошено|add to list|добавить/i
       }).first()
 
@@ -120,7 +120,7 @@ test.describe('Anime Detail Page', () => {
       await expect(page).toHaveURL(/\/anime\//)
 
       // Look for review form elements
-      const reviewTextarea = page.locator('textarea')
+      const _reviewTextarea = page.locator('textarea')
       // May be visible if authenticated
     })
   })

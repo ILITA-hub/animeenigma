@@ -24,7 +24,7 @@ test.describe('Watchlist Management', () => {
       await expect(page).toHaveURL(/\/anime\//)
 
       // Look for watchlist dropdown or button
-      const watchlistControl = page.locator('select, button').filter({
+      const _watchlistControl = page.locator('select, button').filter({
         hasText: /watching|plan|completed|hold|dropped|add|смотрю|запланировано|просмотрено|добавить/i
       })
 
@@ -102,7 +102,7 @@ test.describe('Watchlist Management', () => {
       await page.waitForTimeout(2000)
 
       // In table view, should show score, type, progress
-      const tableHeader = page.locator('th').filter({
+      const _tableHeader = page.locator('th').filter({
         hasText: /score|type|progress|очки|тип|прогресс/i
       })
 
@@ -135,7 +135,7 @@ test.describe('Watchlist Management', () => {
       const watchlistSelect = page.locator('select').first()
 
       if (await watchlistSelect.isVisible()) {
-        const selectedValue = await watchlistSelect.inputValue()
+        const _selectedValue = await watchlistSelect.inputValue()
         // Value should be one of the statuses
       }
     })
@@ -146,7 +146,7 @@ test.describe('Watchlist Management', () => {
 
       // Get anime link
       const animeLink = page.locator('a[href^="/anime/"]').first()
-      const href = await animeLink.getAttribute('href')
+      const _href = await animeLink.getAttribute('href')
 
       await animeLink.click()
       await expect(page).toHaveURL(/\/anime\//)
@@ -242,7 +242,7 @@ test.describe('MAL Import', () => {
     await page.waitForTimeout(10000)
 
     // Should show imported/skipped counts
-    const resultText = page.getByText(/imported|skipped|импортировано|пропущено/i)
+    const _resultText = page.getByText(/imported|skipped|импортировано|пропущено/i)
     // May be visible after import completes
   })
 })

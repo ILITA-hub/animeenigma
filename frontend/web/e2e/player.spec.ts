@@ -24,7 +24,7 @@ test.describe('Video Player', () => {
       await page.waitForTimeout(3000)
 
       // Look for translation dropdown or tabs
-      const translationSelector = page.locator('select, button, [class*="translation"]').filter({
+      const _translationSelector = page.locator('select, button, [class*="translation"]').filter({
         hasText: /dub|sub|озвучка|субтитр|voice/i
       })
 
@@ -41,7 +41,7 @@ test.describe('Video Player', () => {
       await page.waitForTimeout(3000)
 
       // Look for episode list or selector
-      const episodeSelector = page.locator('[class*="episode"], button, select').filter({
+      const _episodeSelector = page.locator('[class*="episode"], button, select').filter({
         hasText: /episode|ep\.|серия|эпизод|\d+/i
       })
 
@@ -78,7 +78,7 @@ test.describe('Video Player', () => {
       await page.waitForTimeout(3000)
 
       // Look for pin/unpin buttons or pinned indicators
-      const pinButton = page.locator('button').filter({
+      const _pinButton = page.locator('button').filter({
         has: page.locator('svg, [class*="pin"], [class*="star"]')
       })
 
@@ -121,7 +121,7 @@ test.describe('Video Player', () => {
 
         await page.waitForTimeout(3000)
 
-        const player = page.locator('video, iframe, [class*="player"]')
+        const _player = page.locator('video, iframe, [class*="player"]')
         // May be visible on watch page
       }
     })
@@ -140,8 +140,8 @@ test.describe('Video Player', () => {
         await page.waitForTimeout(3000)
 
         // Look for prev/next buttons
-        const prevButton = page.getByRole('button', { name: /prev|previous|назад|предыдущ/i })
-        const nextButton = page.getByRole('button', { name: /next|следующ|далее/i })
+        const _prevButton = page.getByRole('button', { name: /prev|previous|назад|предыдущ/i })
+        const _nextButton = page.getByRole('button', { name: /next|следующ|далее/i })
 
         // May be visible on watch page
       }
@@ -161,7 +161,7 @@ test.describe('Video Player', () => {
         await page.waitForTimeout(3000)
 
         // Look for episode list
-        const episodeList = page.locator('[class*="episode"]')
+        const _episodeList = page.locator('[class*="episode"]')
         // May be visible on watch page
       }
     })
@@ -180,7 +180,7 @@ test.describe('Video Player', () => {
         await page.waitForTimeout(3000)
 
         // Look for autoplay toggle
-        const autoplayToggle = page.getByText(/autoplay|автовоспроизведение/i)
+        const _autoplayToggle = page.getByText(/autoplay|автовоспроизведение/i)
         // May be visible on watch page
       }
     })
@@ -199,7 +199,7 @@ test.describe('Video Player', () => {
         await page.waitForTimeout(3000)
 
         // Look for quality selector
-        const qualitySelector = page.locator('select').filter({
+        const _qualitySelector = page.locator('select').filter({
           has: page.locator('option', { hasText: /1080|720|480|auto/i })
         })
         // May be visible on watch page

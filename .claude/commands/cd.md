@@ -33,7 +33,25 @@ Apply these rules to the changed file paths:
 
 Deduplicate the service list.
 
-### 3. Show deployment plan and confirm
+### 3. Run lint checks
+
+Run lint checks for the affected areas before deploying:
+
+**If Go services or libs changed:**
+```bash
+cd /data/animeenigma && golangci-lint run ./libs/... ./services/... 2>&1 || true
+```
+If `golangci-lint` is not installed locally, skip Go lint (CI will catch it).
+
+**If frontend changed:**
+```bash
+cd /data/animeenigma/frontend/web && bun lint 2>&1
+```
+Frontend lint must pass with 0 errors (warnings are OK). If there are errors, fix them before deploying.
+
+If any lint check fails, stop and fix the issues before proceeding to deployment.
+
+### 4. Show deployment plan and confirm
 
 Present the list of services to redeploy and why, then ask the user to confirm before proceeding. Example:
 
@@ -43,13 +61,13 @@ Present the list of services to redeploy and why, then ask the user to confirm b
 >
 > Proceed?
 
-### 4. Deploy
+### 5. Deploy
 
 Run `make redeploy-<service>` for each service sequentially from the project root. For frontend, use `make redeploy-web`.
 
 If any redeploy fails, stop and report the error. Do not continue to the next service.
 
-### 5. Health check
+### 6. Health check
 
 After all deployments complete:
 
@@ -57,7 +75,7 @@ After all deployments complete:
 make health
 ```
 
-### 6. Commit
+### 7. Commit
 
 After successful deployment and health check, commit all changes:
 
@@ -71,7 +89,7 @@ After successful deployment and health check, commit all changes:
    ```
 4. Create the commit
 
-### 7. Report
+### 8. Report
 
 Summarize:
 - Which services were redeployed

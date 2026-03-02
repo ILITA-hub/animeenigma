@@ -99,7 +99,7 @@ test.describe('Profile Page', () => {
         await page.goto('/profile')
 
         // If list is empty, should show empty message
-        const emptyMessage = page.getByText(/empty|пуст|no anime|нет аниме/i)
+        const _emptyMessage = page.getByText(/empty|пуст|no anime|нет аниме/i)
         // May or may not be visible depending on data
       })
     })
@@ -143,7 +143,7 @@ test.describe('Profile Page', () => {
         }
 
         // Look for language dropdown
-        const languageSelect = page.locator('select').filter({
+        const _languageSelect = page.locator('select').filter({
           has: page.locator('option', { hasText: /english|русский|日本語/i })
         })
 
