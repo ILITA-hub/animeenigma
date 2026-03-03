@@ -99,6 +99,7 @@ func AuthMiddleware(jwtConfig authz.JWTConfig) func(http.Handler) http.Handler {
 }
 
 // OptionalAuthMiddleware extracts JWT claims if present, but doesn't reject anonymous requests.
+// If token is present but expired/invalid, sets X-Token-Expired header so frontend can refresh.
 func OptionalAuthMiddleware(jwtConfig authz.JWTConfig) func(http.Handler) http.Handler {
 	jwtManager := authz.NewJWTManager(jwtConfig)
 
@@ -110,6 +111,8 @@ func OptionalAuthMiddleware(jwtConfig authz.JWTConfig) func(http.Handler) http.H
 				if err == nil {
 					ctx := authz.ContextWithClaims(r.Context(), claims)
 					r = r.WithContext(ctx)
+				} else {
+					w.Header().Set("X-Token-Expired", "true")
 				}
 			}
 			next.ServeHTTP(w, r)

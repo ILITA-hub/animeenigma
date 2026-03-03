@@ -14,6 +14,7 @@ export const apiClient: AxiosInstance = axios.create({
 
 // Flag to prevent multiple refresh attempts
 let isRefreshing = false
+let refreshPromise: Promise<string | null> | null = null
 let failedQueue: Array<{
   resolve: (token: string) => void
   reject: (error: AxiosError) => void
@@ -30,10 +31,58 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = []
 }
 
-// Request interceptor
+// Check if JWT token is expired or about to expire (within 30s)
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.exp * 1000 < Date.now() + 30_000
+  } catch {
+    return true
+  }
+}
+
+// Shared token refresh logic — deduplicates concurrent refresh calls
+async function doTokenRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise
+
+  isRefreshing = true
+  refreshPromise = (async () => {
+    try {
+      const response = await axios.post(`${BASE_URL}/auth/refresh`, {}, {
+        withCredentials: true,
+      })
+      const data = response.data?.data || response.data
+      const newAccessToken = data.access_token
+      localStorage.setItem('token', newAccessToken)
+      processQueue(null, newAccessToken)
+      return newAccessToken as string
+    } catch (refreshError) {
+      processQueue(refreshError as AxiosError, null)
+      localStorage.removeItem('token')
+      window.location.href = '/'
+      return null
+    } finally {
+      isRefreshing = false
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
+// Request interceptor — proactively refresh expired tokens before sending
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('token')
+  async (config: InternalAxiosRequestConfig) => {
+    // Skip refresh for auth endpoints to avoid loops
+    if (config.url?.includes('/auth/refresh') || config.url?.includes('/auth/login')) {
+      return config
+    }
+
+    let token = localStorage.getItem('token')
+    if (token && isTokenExpired(token)) {
+      const newToken = await doTokenRefresh()
+      token = newToken
+    }
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -44,9 +93,21 @@ apiClient.interceptors.request.use(
   }
 )
 
-// Response interceptor with token refresh
+// Response interceptor — handles 401 errors and X-Token-Expired fallback
 apiClient.interceptors.response.use(
-  (response: AxiosResponse) => {
+  async (response: AxiosResponse) => {
+    // Fallback: backend signals token was present but expired on optional-auth endpoints
+    if (response.headers['x-token-expired'] === 'true') {
+      const newToken = await doTokenRefresh()
+      if (newToken) {
+        const config = response.config as InternalAxiosRequestConfig & { _tokenRetry?: boolean }
+        if (!config._tokenRetry) {
+          config._tokenRetry = true
+          config.headers.Authorization = `Bearer ${newToken}`
+          return apiClient(config)
+        }
+      }
+    }
     return response
   },
   async (error: AxiosError) => {
@@ -72,30 +133,10 @@ apiClient.interceptors.response.use(
       }
 
       originalRequest._retry = true
-      isRefreshing = true
-
-      try {
-        // Refresh token is sent automatically via httpOnly cookie
-        const response = await axios.post(`${BASE_URL}/auth/refresh`, {}, {
-          withCredentials: true
-        })
-
-        const data = response.data?.data || response.data
-        const newAccessToken = data.access_token
-
-        localStorage.setItem('token', newAccessToken)
-
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
-        processQueue(null, newAccessToken)
-
+      const newToken = await doTokenRefresh()
+      if (newToken) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
         return apiClient(originalRequest)
-      } catch (refreshError) {
-        processQueue(refreshError as AxiosError, null)
-        localStorage.removeItem('token')
-        window.location.href = '/'
-        return Promise.reject(refreshError)
-      } finally {
-        isRefreshing = false
       }
     }
 
