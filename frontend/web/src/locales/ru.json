@@ -119,7 +119,8 @@
       "planToWatch": "Запланировано",
       "completed": "Просмотрено",
       "onHold": "Отложено",
-      "dropped": "Брошено"
+      "dropped": "Брошено",
+      "searchPlaceholder": "Поиск аниме..."
     },
     "table": {
       "number": "#",

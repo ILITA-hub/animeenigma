@@ -1,6 +1,30 @@
 import { ref } from 'vue'
 import { animeApi, episodeApi, userApi } from '@/api/client'
 
+interface ApiGenre {
+  name_ru?: string
+  name?: string
+}
+
+interface ApiAnime {
+  id: string
+  name?: string
+  name_ru?: string
+  name_jp?: string
+  description?: string
+  poster_url?: string
+  banner_url?: string
+  genres?: ApiGenre[]
+  status?: string
+  year?: number
+  score?: number
+  episodes_count?: number
+  episodes_aired?: number
+  next_episode_at?: string | null
+  shikimori_id?: string | null
+  mal_id?: string | null
+}
+
 export interface Anime {
   id: string
   title: string
@@ -28,28 +52,28 @@ export interface Episode {
 }
 
 // Transform API response to frontend Anime interface
-function transformAnime(apiAnime: any): Anime {
+function transformAnime(apiAnime: ApiAnime): Anime {
   return {
     id: apiAnime.id,
     title: apiAnime.name_ru || apiAnime.name || apiAnime.name_jp || '',
     description: apiAnime.description || '',
     coverImage: apiAnime.poster_url || '',
     bannerImage: apiAnime.banner_url,
-    genres: apiAnime.genres?.map((g: any) => g.name_ru || g.name) || [],
+    genres: apiAnime.genres?.map((g: ApiGenre) => g.name_ru || g.name || '') || [],
     status: apiAnime.status || '',
     releaseYear: apiAnime.year || 0,
     rating: apiAnime.score || 0,
     totalEpisodes: apiAnime.episodes_count || 0,
     episodesAired: apiAnime.episodes_aired || 0,
-    nextEpisodeAt: apiAnime.next_episode_at || null,
-    shikimoriId: apiAnime.shikimori_id || null,
-    malId: apiAnime.mal_id || null
+    nextEpisodeAt: apiAnime.next_episode_at || undefined,
+    shikimoriId: apiAnime.shikimori_id || undefined,
+    malId: apiAnime.mal_id || undefined
   }
 }
 
-function transformAnimeList(apiList: any): Anime[] {
+function transformAnimeList(apiList: { data?: ApiAnime[] } | ApiAnime[] | null | undefined): Anime[] {
   if (!apiList) return []
-  const list = apiList.data || apiList
+  const list = Array.isArray(apiList) ? apiList : apiList.data
   if (!Array.isArray(list)) return []
   return list.map(transformAnime)
 }
@@ -69,23 +93,25 @@ export function useAnime() {
       const data = response.data?.data || response.data
       anime.value = transformAnime(data)
       return anime.value
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch anime'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to fetch anime'
       throw err
     } finally {
       loading.value = false
     }
   }
 
-  const fetchAnimeList = async (params?: any) => {
+  const fetchAnimeList = async (params?: Record<string, unknown>) => {
     loading.value = true
     error.value = null
     try {
       const response = await animeApi.getAll(params)
       animeList.value = transformAnimeList(response.data)
       return animeList.value
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch anime list'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to fetch anime list'
       throw err
     } finally {
       loading.value = false
@@ -99,8 +125,9 @@ export function useAnime() {
       const response = await animeApi.search(query, source)
       animeList.value = transformAnimeList(response.data)
       return animeList.value
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Search failed'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Search failed'
       throw err
     } finally {
       loading.value = false
@@ -114,8 +141,9 @@ export function useAnime() {
       const response = await animeApi.getTrending()
       animeList.value = transformAnimeList(response.data)
       return animeList.value
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch trending'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to fetch trending'
       throw err
     } finally {
       loading.value = false
@@ -128,8 +156,9 @@ export function useAnime() {
     try {
       const response = await animeApi.getPopular()
       return transformAnimeList(response.data)
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch popular'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to fetch popular'
       throw err
     } finally {
       loading.value = false
@@ -143,8 +172,9 @@ export function useAnime() {
       const response = await animeApi.getSchedule()
       const data = response.data?.data || response.data
       return Array.isArray(data) ? data : []
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch schedule'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to fetch schedule'
       throw err
     } finally {
       loading.value = false
@@ -157,8 +187,9 @@ export function useAnime() {
     try {
       const response = await animeApi.getOngoing()
       return transformAnimeList(response.data)
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch ongoing'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to fetch ongoing'
       throw err
     } finally {
       loading.value = false
@@ -173,7 +204,7 @@ export function useAnime() {
       const data = response.data?.data || response.data
       episodes.value = Array.isArray(data) ? data : []
       return episodes.value
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Don't set global error for episodes failure
       console.error('Failed to fetch episodes:', err)
       episodes.value = []
@@ -187,8 +218,9 @@ export function useAnime() {
     try {
       const response = await episodeApi.getById(episodeId)
       return response.data
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch episode'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to fetch episode'
       throw err
     } finally {
       loading.value = false
@@ -199,8 +231,9 @@ export function useAnime() {
     try {
       await userApi.addToWatchlist(animeId, 'plan_to_watch')
       return true
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to add to watchlist'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to add to watchlist'
       return false
     }
   }
@@ -209,8 +242,9 @@ export function useAnime() {
     try {
       await userApi.removeFromWatchlist(animeId)
       return true
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to remove from watchlist'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Failed to remove from watchlist'
       return false
     }
   }

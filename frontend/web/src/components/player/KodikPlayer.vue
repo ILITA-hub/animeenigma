@@ -445,8 +445,9 @@ const fetchTranslations = async () => {
       isInitialized.value = true
       await loadVideo()
     }
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось загрузить список озвучек'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось загрузить список озвучек'
     translations.value = []
   } finally {
     loadingTranslations.value = false
@@ -472,8 +473,9 @@ const loadVideo = async () => {
     } else {
       error.value = 'Видео не найдено'
     }
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось загрузить видео'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось загрузить видео'
   } finally {
     loadingVideo.value = false
   }
@@ -549,8 +551,9 @@ const markCurrentEpisodeWatched = async () => {
       watchedEpisodes.value = selectedEpisode.value
     }
     emit('episodeWatched', { episode: selectedEpisode.value })
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось отметить серию'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось отметить серию'
   } finally {
     markingWatched.value = false
   }
@@ -588,8 +591,9 @@ const togglePin = async (translation: KodikTranslation) => {
       ...t,
       pinned: pinnedIds.value.has(t.id)
     }))
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось изменить закрепление'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось изменить закрепление'
   }
 }
 

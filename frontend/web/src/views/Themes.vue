@@ -197,7 +197,7 @@ const fetchThemes = async () => {
       sort: sortBy.value,
     })
     themes.value = resp.data?.data || resp.data || []
-  } catch (err: any) {
+  } catch (err: unknown) {
     error.value = 'Failed to load themes'
     console.error('Failed to fetch themes:', err)
   } finally {

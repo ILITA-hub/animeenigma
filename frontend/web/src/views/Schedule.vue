@@ -56,8 +56,18 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAnime } from '@/composables/useAnime'
 
+interface ScheduleAnime {
+  id: string
+  name?: string
+  name_ru?: string
+  name_jp?: string
+  poster_url?: string
+  next_episode_at?: string | null
+  episodes_aired?: number
+}
+
 const { fetchSchedule, loading } = useAnime()
-const schedule = ref<any[]>([])
+const schedule = ref<ScheduleAnime[]>([])
 
 const dayNames = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
 
@@ -68,7 +78,7 @@ const scheduleByDay = computed(() => {
   const todayDay = today.getDay()
 
   // Group by day of week
-  const grouped: Record<number, any[]> = {}
+  const grouped: Record<number, ScheduleAnime[]> = {}
 
   for (const anime of schedule.value) {
     if (!anime.next_episode_at) continue

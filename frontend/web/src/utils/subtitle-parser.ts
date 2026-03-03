@@ -83,7 +83,7 @@ export async function parseASS(content: string): Promise<SubtitleCue[]> {
   const cues: SubtitleCue[] = []
 
   for (const event of parsed.events.dialogue) {
-    const rawText = event.Text?.combined || event.Text?.parsed?.map((p: any) => {
+    const rawText = event.Text?.combined || event.Text?.parsed?.map((p: { text?: string } | string) => {
       if (typeof p === 'string') return p
       if (p.text) return p.text
       return ''

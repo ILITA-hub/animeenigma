@@ -120,6 +120,12 @@
 
               <!-- Filter Pills -->
               <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  :placeholder="$t('profile.watchlist.searchPlaceholder')"
+                  class="flex-shrink-0 w-48 px-3 py-2 rounded-full text-sm bg-white/5 text-white/80 border border-transparent focus:border-cyan-500/30 focus:outline-none placeholder-white/40"
+                >
                 <button
                   v-for="filter in watchlistFilters"
                   :key="filter.value"
@@ -782,6 +788,26 @@ import { useAuthStore } from '@/stores/auth'
 import { Badge, Button, Modal, Tabs, Select, type SelectOption } from '@/components/ui'
 import { userApi, publicApi } from '@/api/client'
 
+interface ApiError {
+  response?: {
+    status?: number
+    data?: {
+      message?: string
+      error?: string
+    }
+  }
+}
+
+interface ApiKeyError {
+  response?: {
+    data?: {
+      error?: {
+        message?: string
+      }
+    }
+  }
+}
+
 interface WatchlistEntry {
   anime_id: string
   anime?: {
@@ -871,6 +897,7 @@ const tabs = computed(() => {
 const watchlist = ref<WatchlistEntry[]>([])
 const loadingWatchlist = ref(false)
 const watchlistFilter = ref('all')
+const searchQuery = ref('')
 const viewMode = ref<'table' | 'grid'>('grid')
 
 // Inline editing
@@ -942,6 +969,14 @@ const filteredWatchlist = computed(() => {
   let list = watchlistFilter.value === 'all'
     ? [...watchlist.value]
     : watchlist.value.filter(a => a.status === watchlistFilter.value)
+
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(a => {
+      const title = animeTitle(a).toLowerCase()
+      return title.includes(q)
+    })
+  }
 
   // Sort
   list.sort((a, b) => {
@@ -1083,9 +1118,9 @@ const fetchProfile = async () => {
     }
 
     await fetchWatchlist(isOwn)
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to load profile:', err)
-    if (err.response?.status === 404) {
+    if ((err as ApiError).response?.status === 404) {
       error.value = t('profile.userNotFound')
     } else {
       error.value = t('profile.profileLoadError')
@@ -1104,7 +1139,7 @@ const fetchWatchlist = async (isOwn: boolean) => {
       // Fetch own watchlist
       const response = await userApi.getWatchlist()
       const entries = response.data?.data || response.data || []
-      watchlist.value = entries.map((entry: any) => ({
+      watchlist.value = entries.map((entry: WatchlistEntry) => ({
         anime_id: entry.anime_id,
         anime: entry.anime || undefined,
         status: entry.status,
@@ -1313,8 +1348,8 @@ const startImport = async (source: 'mal' | 'shikimori') => {
     }
 
     startPolling(source, data.job_id)
-  } catch (err: any) {
-    state.value.error = err.response?.data?.message || 'Failed to import list'
+  } catch (err: unknown) {
+    state.value.error = (err as ApiError).response?.data?.message || 'Failed to import list'
     state.value.importing = false
   }
 }
@@ -1391,8 +1426,9 @@ const savePublicId = async () => {
     publicIdSuccess.value = true
     await authStore.fetchUser()
     setTimeout(() => { publicIdSuccess.value = false }, 3000)
-  } catch (err: any) {
-    const message = err.response?.data?.message || err.response?.data?.error
+  } catch (err: unknown) {
+    const apiErr = err as ApiError
+    const message = apiErr.response?.data?.message || apiErr.response?.data?.error
     if (message?.includes('already taken') || message?.includes('уже занят')) {
       publicIdError.value = t('profile.linkTaken')
     } else {
@@ -1421,7 +1457,7 @@ const savePrivacy = async () => {
     privacySuccess.value = true
     await authStore.fetchUser()
     setTimeout(() => { privacySuccess.value = false }, 3000)
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to save privacy:', err)
   } finally {
     savingPrivacy.value = false
@@ -1508,8 +1544,8 @@ const generateApiKey = async () => {
     const res = await userApi.generateApiKey()
     generatedApiKey.value = res.data?.data?.api_key ?? null
     hasApiKey.value = true
-  } catch (e: any) {
-    apiKeyError.value = e.response?.data?.error?.message || 'Failed to generate API key'
+  } catch (e: unknown) {
+    apiKeyError.value = (e as ApiKeyError).response?.data?.error?.message || 'Failed to generate API key'
   } finally {
     apiKeyActioning.value = false
   }
@@ -1528,8 +1564,8 @@ const revokeApiKey = async () => {
     await userApi.revokeApiKey()
     hasApiKey.value = false
     apiKeyRevoked.value = true
-  } catch (e: any) {
-    apiKeyError.value = e.response?.data?.error?.message || 'Failed to revoke API key'
+  } catch (e: unknown) {
+    apiKeyError.value = (e as ApiKeyError).response?.data?.error?.message || 'Failed to revoke API key'
   } finally {
     apiKeyActioning.value = false
   }

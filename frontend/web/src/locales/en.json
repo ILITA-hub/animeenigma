@@ -118,7 +118,8 @@
       "planToWatch": "Plan to Watch",
       "completed": "Completed",
       "onHold": "On Hold",
-      "dropped": "Dropped"
+      "dropped": "Dropped",
+      "searchPlaceholder": "Search anime..."
     },
     "table": {
       "number": "#",

@@ -454,8 +454,9 @@ const fetchEpisodes = async () => {
         : episodes.value[0]
       await selectEpisode(initialEp)
     }
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось загрузить список серий'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось загрузить список серий'
     episodes.value = []
     loadingEpisodes.value = false
   }
@@ -471,7 +472,7 @@ const fetchServers = async () => {
     if (servers.value.length > 0) {
       selectedServer.value = servers.value[0]
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to fetch servers:', err)
     // Use default servers if API fails
     servers.value = [
@@ -590,9 +591,10 @@ const fetchStream = async () => {
     }
 
     initPlayer(data.url, referer)
-  } catch (err: any) {
-    const message = err.response?.data?.error?.message
-      || err.response?.data?.message
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+    const message = e.response?.data?.error?.message
+      || e.response?.data?.message
       || 'Не удалось загрузить видео'
     error.value = message
     streamUrl.value = null
@@ -632,8 +634,9 @@ const fetchJimakuSubtitles = async () => {
     if (jimakuSubtitles.value.length === 0) {
       jimakuError.value = 'No Japanese subtitles found for this episode'
     }
-  } catch (err: any) {
-    const msg = err.response?.data?.error || err.response?.data?.message || err.message
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { error?: string; message?: string } }; message?: string }
+    const msg = e.response?.data?.error || e.response?.data?.message || e.message
     jimakuError.value = msg || 'Failed to load Japanese subtitles'
     jimakuLoaded.value = false
   } finally {

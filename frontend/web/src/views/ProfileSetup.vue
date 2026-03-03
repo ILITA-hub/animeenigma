@@ -60,6 +60,15 @@ import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui'
 import { userApi } from '@/api/client'
 
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string
+      error?: string
+    }
+  }
+}
+
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -83,8 +92,9 @@ const save = async () => {
     await userApi.updatePublicId(publicId.value)
     await authStore.fetchUser()
     router.push(`/user/${publicId.value}`)
-  } catch (err: any) {
-    const message = err.response?.data?.message || err.response?.data?.error
+  } catch (err: unknown) {
+    const apiErr = err as ApiError
+    const message = apiErr.response?.data?.message || apiErr.response?.data?.error
     if (message?.includes('already taken') || message?.includes('уже занят')) {
       error.value = 'Эта ссылка уже занята'
     } else {
