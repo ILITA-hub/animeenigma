@@ -9,6 +9,7 @@ type AnimeInfo struct {
 	ID            string `gorm:"type:uuid;primaryKey" json:"id"`
 	Name          string `json:"name"`
 	NameRU        string `json:"name_ru,omitempty"`
+	NameJP        string `json:"name_jp,omitempty"`
 	PosterURL     string `json:"poster_url,omitempty"`
 	EpisodesCount int    `json:"episodes_count"`
 	EpisodesAired int    `json:"episodes_aired,omitempty"`

@@ -120,12 +120,6 @@
 
               <!-- Filter Pills -->
               <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  :placeholder="$t('profile.watchlist.searchPlaceholder')"
-                  class="flex-shrink-0 w-48 px-3 py-2 rounded-full text-sm bg-white/5 text-white/80 border border-transparent focus:border-cyan-500/30 focus:outline-none placeholder-white/40"
-                >
                 <button
                   v-for="filter in watchlistFilters"
                   :key="filter.value"
@@ -142,6 +136,12 @@
 
               <!-- View Toggle + Sort -->
               <div class="flex items-center justify-end gap-2">
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  :placeholder="$t('profile.watchlist.searchPlaceholder')"
+                  class="flex-shrink-0 w-48 px-3 py-2 rounded-full text-sm bg-white/5 text-white/80 border border-transparent focus:border-cyan-500/30 focus:outline-none placeholder-white/40 mr-auto"
+                >
                 <!-- Sort -->
                 <div class="w-36">
                   <Select
@@ -813,6 +813,7 @@ interface WatchlistEntry {
   anime?: {
     name: string
     name_ru?: string
+    name_jp?: string
     poster_url?: string
     episodes_count: number
     episodes_aired?: number
@@ -973,8 +974,10 @@ const filteredWatchlist = computed(() => {
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(a => {
-      const title = animeTitle(a).toLowerCase()
-      return title.includes(q)
+      const name = a.anime?.name?.toLowerCase() || ''
+      const nameRu = a.anime?.name_ru?.toLowerCase() || ''
+      const nameJp = a.anime?.name_jp?.toLowerCase() || ''
+      return name.includes(q) || nameRu.includes(q) || nameJp.includes(q)
     })
   }
 

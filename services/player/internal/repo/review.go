@@ -70,14 +70,22 @@ func (r *ReviewRepository) GetByUserAndAnime(ctx context.Context, userID, animeI
 
 func (r *ReviewRepository) GetAnimeRating(ctx context.Context, animeID string) (*domain.AnimeRating, error) {
 	var result struct {
-		AverageScore float64
-		TotalReviews int64
+		AverageScore float64 `gorm:"column:average_score"`
+		TotalReviews int64   `gorm:"column:total_reviews"`
 	}
-	err := r.db.WithContext(ctx).
-		Model(&domain.Review{}).
-		Select("COALESCE(AVG(score), 0) as average_score, COUNT(*) as total_reviews").
-		Where("anime_id = ?", animeID).
-		Scan(&result).Error
+	query := `
+		SELECT COALESCE(AVG(score), 0) AS average_score, COUNT(*) AS total_reviews
+		FROM (
+			SELECT user_id, score FROM reviews WHERE anime_id = ? AND score > 0
+			UNION ALL
+			SELECT user_id, score FROM anime_list
+			WHERE anime_id = ? AND score > 0
+				AND NOT EXISTS (
+					SELECT 1 FROM reviews r WHERE r.user_id = anime_list.user_id AND r.anime_id = anime_list.anime_id
+				)
+		) combined
+	`
+	err := r.db.WithContext(ctx).Raw(query, animeID, animeID).Scan(&result).Error
 	if err != nil {
 		return &domain.AnimeRating{AnimeID: animeID}, nil
 	}
@@ -94,12 +102,20 @@ func (r *ReviewRepository) GetBatchAnimeRatings(ctx context.Context, animeIDs []
 		AverageScore float64 `gorm:"column:average_score"`
 		TotalReviews int64   `gorm:"column:total_reviews"`
 	}
-	err := r.db.WithContext(ctx).
-		Model(&domain.Review{}).
-		Select("anime_id, COALESCE(AVG(score), 0) as average_score, COUNT(*) as total_reviews").
-		Where("anime_id IN ?", animeIDs).
-		Group("anime_id").
-		Scan(&results).Error
+	query := `
+		SELECT anime_id, COALESCE(AVG(score), 0) AS average_score, COUNT(*) AS total_reviews
+		FROM (
+			SELECT anime_id, user_id, score FROM reviews WHERE anime_id IN (?) AND score > 0
+			UNION ALL
+			SELECT anime_id, user_id, score FROM anime_list
+			WHERE anime_id IN (?) AND score > 0
+				AND NOT EXISTS (
+					SELECT 1 FROM reviews r WHERE r.user_id = anime_list.user_id AND r.anime_id = anime_list.anime_id
+				)
+		) combined
+		GROUP BY anime_id
+	`
+	err := r.db.WithContext(ctx).Raw(query, animeIDs, animeIDs).Scan(&results).Error
 	if err != nil {
 		return nil, err
 	}
