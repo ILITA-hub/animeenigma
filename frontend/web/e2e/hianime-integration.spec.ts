@@ -46,7 +46,7 @@ test.describe('HiAnime Streaming Integration', () => {
       params: { episode: episodes[0].id }
     })
     const { data: servers } = await srvRes.json()
-    const server = servers.find((s: any) => s.type === 'sub')
+    const server = servers.find((s: { type: string; name: string }) => s.type === 'sub')
 
     const res = await request.get(`/api/anime/${ANIME_ID}/hianime/stream`, {
       params: {

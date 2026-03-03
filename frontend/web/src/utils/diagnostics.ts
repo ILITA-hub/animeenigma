@@ -3,6 +3,7 @@
  * Intercepts console logs and network requests to provide
  * comprehensive diagnostic data when users report issues.
  */
+import type { AxiosInstance, AxiosResponse } from 'axios'
 
 interface ConsoleEntry {
   time: string
@@ -141,18 +142,15 @@ export function initDiagnostics() {
  * Hook into an Axios instance to capture API request/response logs.
  * Call after creating the Axios instance.
  */
-export function hookAxiosDiagnostics(axiosInstance: {
-  interceptors: {
-    response: {
-      use: (
-        onFulfilled: (response: any) => any,
-        onRejected: (error: any) => any,
-      ) => void
-    }
-  }
-}) {
+interface AxiosLikeError {
+  config?: { method?: string; url?: string }
+  response?: { status?: number }
+  message?: string
+}
+
+export function hookAxiosDiagnostics(axiosInstance: AxiosInstance) {
   axiosInstance.interceptors.response.use(
-    (response: any) => {
+    (response: AxiosResponse) => {
       addNetworkEntry({
         time: new Date().toISOString(),
         method: response.config?.method?.toUpperCase() || 'GET',
@@ -163,7 +161,7 @@ export function hookAxiosDiagnostics(axiosInstance: {
       })
       return response
     },
-    (error: any) => {
+    (error: AxiosLikeError) => {
       addNetworkEntry({
         time: new Date().toISOString(),
         method: error.config?.method?.toUpperCase() || 'GET',

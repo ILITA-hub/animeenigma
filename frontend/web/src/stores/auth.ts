@@ -80,8 +80,9 @@ export const useAuthStore = defineStore('auth', () => {
       setToken(data.access_token)
       setUser(data.user)
       return true
-    } catch (err: any) {
-      error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка входа'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+      error.value = e.response?.data?.error?.message || e.response?.data?.message || 'Ошибка входа'
       return false
     } finally {
       loading.value = false
@@ -98,8 +99,9 @@ export const useAuthStore = defineStore('auth', () => {
       setToken(respData.access_token)
       setUser(respData.user)
       return true
-    } catch (err: any) {
-      error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка регистрации'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+      error.value = e.response?.data?.error?.message || e.response?.data?.message || 'Ошибка регистрации'
       return false
     } finally {
       loading.value = false
@@ -139,8 +141,9 @@ export const useAuthStore = defineStore('auth', () => {
       setToken(data.access_token)
       setUser(data.user)
       return true
-    } catch (err: any) {
-      error.value = err.response?.data?.error?.message || err.response?.data?.message || 'Ошибка входа через Telegram'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+      error.value = e.response?.data?.error?.message || e.response?.data?.message || 'Ошибка входа через Telegram'
       return false
     } finally {
       loading.value = false
@@ -183,8 +186,9 @@ export const useAuthStore = defineStore('auth', () => {
       const userData = response.data?.data || response.data
       setUser(userData)
       return true
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Update failed'
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      error.value = e.response?.data?.message || 'Update failed'
       return false
     } finally {
       loading.value = false

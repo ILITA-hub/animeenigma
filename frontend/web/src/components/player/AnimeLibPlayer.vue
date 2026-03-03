@@ -419,8 +419,9 @@ const fetchEpisodes = async () => {
         : episodes.value[0]
       await selectEpisode(initialEp)
     }
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось загрузить список серий'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось загрузить список серий'
     episodes.value = []
     loadingEpisodes.value = false
   }
@@ -439,7 +440,7 @@ const fetchTranslations = async () => {
     if (translations.value.length > 0) {
       await selectTranslation(translations.value[0])
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to fetch translations:', err)
     translations.value = []
   } finally {
@@ -535,9 +536,10 @@ const fetchStream = async () => {
     } else {
       error.value = 'Не удалось получить ссылку на видео'
     }
-  } catch (err: any) {
-    const message = err.response?.data?.error?.message
-      || err.response?.data?.message
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+    const message = e.response?.data?.error?.message
+      || e.response?.data?.message
       || 'Не удалось загрузить видео'
     error.value = message
   } finally {

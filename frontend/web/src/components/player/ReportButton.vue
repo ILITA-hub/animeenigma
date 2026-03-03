@@ -154,8 +154,9 @@ async function submitReport() {
     await userApi.reportError(report)
     submitted.value = true
     description.value = ''
-  } catch (err: any) {
-    submitError.value = err.response?.data?.error?.message || err.message || 'Ошибка отправки'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { error?: { message?: string } } }; message?: string }
+    submitError.value = e.response?.data?.error?.message || e.message || 'Ошибка отправки'
   } finally {
     submitting.value = false
   }

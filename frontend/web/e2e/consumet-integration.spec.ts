@@ -38,7 +38,7 @@ test.describe('Consumet Streaming Integration', () => {
     expect(data.success).toBe(true)
     expect(data.data.length).toBeGreaterThan(0)
 
-    console.log('Available servers:', data.data.map((s: any) => s.name).join(', '))
+    console.log('Available servers:', data.data.map((s: { name: string }) => s.name).join(', '))
   })
 
   test('stream API returns HLS URL', async ({ request }) => {

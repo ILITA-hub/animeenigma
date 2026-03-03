@@ -149,7 +149,7 @@ hookAxiosDiagnostics(apiClient)
 
 // API endpoints
 export const animeApi = {
-  getAll: (params?: any) => apiClient.get('/anime', { params }),
+  getAll: (params?: Record<string, unknown>) => apiClient.get('/anime', { params }),
   getById: (id: string) => apiClient.get(`/anime/${id}`),
   search: (query: string, source?: string) => apiClient.get('/anime/search', { params: { q: query, ...(source && { source }) } }),
   getTrending: () => apiClient.get('/anime/trending'),
@@ -172,7 +172,7 @@ export const episodeApi = {
 
 export const userApi = {
   getProfile: () => apiClient.get('/users/profile'),
-  updateProfile: (data: any) => apiClient.patch('/users/profile', data),
+  updateProfile: (data: Record<string, unknown>) => apiClient.patch('/users/profile', data),
   getWatchlist: (status?: string) => apiClient.get('/users/watchlist', { params: status ? { status } : {} }),
   getWatchlistEntry: (animeId: string) => apiClient.get(`/users/watchlist/${animeId}`),
   addToWatchlist: (animeId: string, status: string = 'plan_to_watch') =>
@@ -192,7 +192,7 @@ export const userApi = {
   markEpisodeWatched: (animeId: string, episode: number) =>
     apiClient.post(`/users/watchlist/${animeId}/episode`, { episode }),
   getWatchHistory: () => apiClient.get('/users/history'),
-  updateProgress: (data: any) => apiClient.post('/users/progress', data),
+  updateProgress: (data: Record<string, unknown>) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
   importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),
@@ -209,7 +209,7 @@ export const userApi = {
   // Avatar
   updateAvatar: (avatar: string) => apiClient.put('/auth/profile/avatar', { avatar }),
   // Error reporting
-  reportError: (data: any) => apiClient.post('/users/report', data),
+  reportError: (data: Record<string, unknown>) => apiClient.post('/users/report', data),
   // API Key management
   generateApiKey: () => apiClient.post('/auth/api-key'),
   revokeApiKey: () => apiClient.delete('/auth/api-key'),
@@ -266,7 +266,7 @@ export const activityApi = {
 export const gameApi = {
   getRooms: () => apiClient.get('/game/rooms'),
   getRoom: (id: string) => apiClient.get(`/game/rooms/${id}`),
-  createRoom: (data: any) => apiClient.post('/game/rooms', data),
+  createRoom: (data: Record<string, unknown>) => apiClient.post('/game/rooms', data),
   joinRoom: (id: string) => apiClient.post(`/game/rooms/${id}/join`),
   leaveRoom: (id: string) => apiClient.post(`/game/rooms/${id}/leave`)
 }

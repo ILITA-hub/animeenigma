@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import type { LoginCredentials, RegisterData } from '@/stores/auth'
+import type { LoginCredentials, RegisterData, User } from '@/stores/auth'
 
 export function useAuth() {
   const authStore = useAuthStore()
@@ -45,7 +45,7 @@ export function useAuth() {
     router.push('/')
   }
 
-  const updateProfile = async (data: any) => {
+  const updateProfile = async (data: Partial<User>) => {
     isLoading.value = true
     try {
       return await authStore.updateProfile(data)

@@ -54,7 +54,7 @@ function updateBaseFontSize() {
 const fullscreenEl = ref<Element | null>(null)
 
 function onFullscreenChange() {
-  const el = document.fullscreenElement || (document as any).webkitFullscreenElement || null
+  const el = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement || null
   // Only teleport to non-video elements (can't add children to <video>)
   if (el && el.tagName !== 'VIDEO') {
     fullscreenEl.value = el
@@ -186,8 +186,9 @@ async function loadSubtitles(url: string, format: string) {
           cues.value = parseSRT(content)
         }
     }
-  } catch (err: any) {
-    emit('error', err.message || 'Failed to load subtitles')
+  } catch (err: unknown) {
+    const e = err as { message?: string }
+    emit('error', e.message || 'Failed to load subtitles')
   } finally {
     emit('loading', false)
   }

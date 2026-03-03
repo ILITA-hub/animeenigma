@@ -492,13 +492,14 @@ const fetchEpisodes = async (retries = 2) => {
         : episodes.value[0]
       await selectEpisode(initialEp)
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (retries > 0) {
       // Retry after a short delay
       await new Promise(resolve => setTimeout(resolve, 1000))
       return fetchEpisodes(retries - 1)
     }
-    error.value = err.response?.data?.message || 'Не удалось загрузить список серий'
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось загрузить список серий'
     episodes.value = []
     loadingEpisodes.value = false
   }
@@ -521,8 +522,9 @@ const fetchServers = async (episodeId: string) => {
       selectedCategory.value = servers.value[0].type as 'sub' | 'dub'
       await selectServer(servers.value[0])
     }
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось загрузить серверы'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось загрузить серверы'
     servers.value = []
   } finally {
     loadingServers.value = false
@@ -610,10 +612,11 @@ const fetchStream = async () => {
 
       initPlayer(data.url, referer)
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Show detailed error from backend
-    const message = err.response?.data?.error?.message
-      || err.response?.data?.message
+    const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+    const message = e.response?.data?.error?.message
+      || e.response?.data?.message
       || 'Не удалось загрузить видео'
     error.value = message
     streamUrl.value = null
@@ -655,8 +658,9 @@ const fetchJimakuSubtitles = async () => {
     if (jimakuSubtitles.value.length === 0) {
       jimakuError.value = 'No Japanese subtitles found for this episode'
     }
-  } catch (err: any) {
-    const msg = err.response?.data?.error || err.response?.data?.message || err.message
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { error?: string; message?: string } }; message?: string }
+    const msg = e.response?.data?.error || e.response?.data?.message || e.message
     jimakuError.value = msg || 'Failed to load Japanese subtitles'
     jimakuLoaded.value = false
   } finally {
@@ -987,8 +991,9 @@ const markCurrentEpisodeWatched = async () => {
       watchedEpisodes.value = selectedEpisode.value.number
     }
     emit('episodeWatched', { episode: selectedEpisode.value.number })
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Не удалось отметить серию'
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || 'Не удалось отметить серию'
   } finally {
     markingWatched.value = false
   }

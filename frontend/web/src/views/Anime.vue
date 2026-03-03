@@ -540,6 +540,8 @@ import { parseDescription } from '@/utils/description-parser'
 interface AnimeWithExtras {
   japaneseTitle?: string
   type?: string
+  hidden?: boolean
+  shikimoriId?: string
 }
 
 interface RelatedAnime {
@@ -659,7 +661,7 @@ const formatNextEpisode = (dateStr: string) => {
   }
 }
 
-const formatEpisodeCount = (anime: any) => {
+const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: number; status?: string }) => {
   const aired = anime.episodesAired || 0
   const total = anime.totalEpisodes || 0
 
@@ -685,12 +687,12 @@ const fetchWatchlistStatus = async () => {
     const entries = response.data?.data || response.data || []
 
     // Direct UUID match
-    let entry = entries.find((e: any) => e.anime_id === anime.value?.id)
+    let entry = entries.find((e: { anime_id: string; status: string }) => e.anime_id === anime.value?.id)
 
     // If not found, check for mal_XXXXX entries that match this anime's MAL ID
     if (!entry && anime.value.malId) {
       const malAnimeId = `mal_${anime.value.malId}`
-      entry = entries.find((e: any) => e.anime_id === malAnimeId)
+      entry = entries.find((e: { anime_id: string; status: string }) => e.anime_id === malAnimeId)
 
       if (entry) {
         // Auto-migrate from mal_XXXXX to real UUID
@@ -718,8 +720,8 @@ const fetchWatchlistStatus = async () => {
 const fetchHiddenStatus = () => {
   // Hidden status comes from the anime object itself
   if (anime.value) {
-    isHidden.value = (anime.value as any).hidden || false
-    editShikimoriId.value = (anime.value as any).shikimoriId || ''
+    isHidden.value = (anime.value as AnimeWithExtras).hidden || false
+    editShikimoriId.value = (anime.value as AnimeWithExtras).shikimoriId || ''
   }
 }
 

@@ -336,7 +336,7 @@ const handleFilter = async () => {
 }
 
 const loadAnime = async () => {
-  const params: Record<string, any> = {
+  const params: Record<string, string | number | boolean> = {
     page: currentPage.value,
     sort: sortBy.value,
   }
