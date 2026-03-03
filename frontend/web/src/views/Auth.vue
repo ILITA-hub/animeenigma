@@ -26,8 +26,15 @@
         </div>
 
         <!-- Telegram Login Widget -->
-        <div ref="telegramLoginContainer" class="flex justify-center">
-          <!-- Telegram widget will be inserted here -->
+        <div ref="telegramLoginContainer" class="flex justify-center min-h-[40px] items-center">
+          <!-- Loading spinner shown while widget loads -->
+          <div v-if="!widgetLoaded" class="flex items-center gap-2 text-white/40 text-sm">
+            <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Загрузка...
+          </div>
         </div>
       </div>
 
@@ -42,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, type TelegramAuthData } from '@/stores/auth'
 
@@ -50,6 +57,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const telegramLoginContainer = ref<HTMLElement | null>(null)
+const widgetLoaded = ref(false)
+let widgetObserver: MutationObserver | null = null
 
 // Telegram bot name from environment or default
 const TELEGRAM_BOT_NAME = import.meta.env.VITE_TELEGRAM_BOT_NAME || ''
@@ -75,6 +84,20 @@ onMounted(() => {
 
   // Only load widget if bot name is configured
   if (TELEGRAM_BOT_NAME && telegramLoginContainer.value) {
+    // Watch for the iframe the widget script injects
+    widgetObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node instanceof HTMLIFrameElement) {
+            widgetLoaded.value = true
+            widgetObserver?.disconnect()
+            return
+          }
+        }
+      }
+    })
+    widgetObserver.observe(telegramLoginContainer.value, { childList: true, subtree: true })
+
     // Create and append Telegram Login Widget script
     const script = document.createElement('script')
     script.async = true
@@ -87,5 +110,9 @@ onMounted(() => {
     script.setAttribute('data-userpic', 'false')
     telegramLoginContainer.value.appendChild(script)
   }
+})
+
+onUnmounted(() => {
+  widgetObserver?.disconnect()
 })
 </script>
