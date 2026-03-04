@@ -8,47 +8,63 @@ A self-hosted anime streaming platform with MAL/Shikimori integration. Built as 
 
 ## Features
 
-- **Hybrid Streaming** - Watch via external APIs (Kodik, Aniboom) or self-hosted MinIO storage
-- **On-Demand Catalog** - Anime data is fetched from Shikimori in real-time when searching
-- **Multiplayer Game** - Real-time opening/ending guessing game via WebSocket
-- **Progress Tracking** - Watch history, anime lists, playback position sync
-- **Authentication** - JWT authorization with role-based access (user/admin)
-- **Auto Database Setup** - Databases and tables are created automatically on first run
+- **Multi-Source Streaming** — 4 video providers: Kodik (RU iframe), AnimeLib (RU MP4), HiAnime (EN HLS), Consumet (EN HLS), plus self-hosted MinIO storage
+- **On-Demand Catalog** — Anime data is fetched from Shikimori in real-time when searching
+- **Japanese Subtitles** — Selectable-text JP subtitle overlay (ASS/SRT/VTT) via Jimaku.cc
+- **OP/ED Ratings** — Rate and browse anime openings and endings
+- **Multiplayer Game** — Real-time opening/ending guessing game via WebSocket
+- **Progress Tracking** — Watch history, watchlists, playback position sync
+- **Browse & Schedule** — Genre filtering, status filtering, airing schedule
+- **Multi-Language UI** — English, Russian, and Japanese
+- **Error Reporting** — In-player bug reports with diagnostics and Telegram notifications
+- **API Key Auth** — API keys for programmatic access (e.g. MAL watchlist import)
+- **Authentication** — JWT authorization with role-based access (user/admin)
+- **Auto Database Setup** — Databases and tables are created automatically on first run
 
 ## Architecture
 
 ```
 ┌─────────────┐                         ┌──────────────┐
-│  Frontend   │◄───── REST/GraphQL ────►│   Gateway    │
+│  Frontend   │◄───── REST/WS ─────────►│   Gateway    │
 │   (Vue 3)   │                         └──────┬───────┘
 └──────┬──────┘                                │
-       │                     ┌─────────────────┼─────────────────┐
-       │                     │                 │                 │
-       │               ┌─────▼─────┐     ┌─────▼─────┐     ┌─────▼─────┐
-       │               │   Auth    │     │  Catalog  │     │ Streaming │
-       │               └───────────┘     │(Shikimori)│     │  (Proxy)  │
-       │                                 └─────┬─────┘     └─────┬─────┘
-       │                                       │                 │
-       │    ┌──────────────────────────────────┘                 │
-       │    │                                                    │
-       │    ▼                                                    ▼
-       │ ┌──────────┐   ┌──────────┐                    ┌──────────────┐
-       │ │ Shikimori│   │  Kodik   │                    │    MinIO     │
-       │ │   API    │   │   API    │                    │  (uploads)   │
-       │ └──────────┘   └────┬─────┘                    └──────────────┘
+       │              ┌────────┬───────┬───────┼────────┬──────────┐
+       │              │        │       │       │        │          │
+       │         ┌────▼──┐ ┌──▼───┐ ┌─▼────┐ ┌▼─────┐ ┌▼──────┐ ┌▼───────┐
+       │         │ Auth  │ │Catalog│ │Stream│ │Player│ │ Rooms │ │ Themes │
+       │         └───────┘ └──┬───┘ └──┬───┘ └──────┘ └───────┘ └────────┘
+       │                      │        │
+       │         ┌────────────┤        │
+       │         │            │        │
+       │         ▼            ▼        ▼
+       │   ┌──────────┐ ┌─────────┐ ┌──────┐
+       │   │Shikimori │ │ Parsers │ │MinIO │
+       │   │  API     │ │         │ └──────┘
+       │   └──────────┘ └────┬────┘
        │                     │
-       └─────── iframe ──────┘ (direct playback)
-              OR
-       └─── proxy stream ────► Streaming Service ────► Aniboom API
+       │    ┌────────┬───────┼────────┐
+       │    ▼        ▼       ▼        ▼
+       │ Kodik  AnimeLib  HiAnime  Consumet
+       │ (iframe) (MP4)    (HLS)    (HLS)
+       └────┘
 ```
 
-### Video Streams
+### Video Players
+
+The platform has 4 video players, each targeting a different source:
+
+| Player | Language | Video Tech | Features |
+|--------|----------|-----------|----------|
+| **Kodik** | RU | Iframe embed | No direct video control |
+| **AnimeLib** | RU | HTML5 MP4 (or Kodik fallback) | Quality selection |
+| **HiAnime** | EN | HLS via Video.js | JP subs, quality selection, progress tracking |
+| **Consumet** | EN | HLS via Video.js | JP subs, quality selection, progress tracking |
 
 Videos are obtained in three ways:
 
-1. **Iframe (Kodik)** - Frontend embeds Kodik player directly
-2. **Proxied Stream (Aniboom)** - Backend proxies HLS streams to bypass CORS
-3. **Self-hosted Storage (MinIO)** - Admin-uploaded videos from MinIO
+1. **Iframe (Kodik)** — Frontend embeds Kodik player directly
+2. **Proxied Stream (HiAnime, Consumet, AnimeLib)** — Backend proxies HLS/MP4 streams for CORS
+3. **Self-hosted Storage (MinIO)** — Admin-uploaded videos
 
 ### On-Demand Catalog
 
@@ -58,7 +74,7 @@ The anime database is **NOT pre-populated**. Instead:
 2. Catalog service queries Shikimori GraphQL API
 3. Results are matched by **Japanese name** as the primary key
 4. Anime metadata is stored in PostgreSQL for future queries
-5. Video sources are determined via Kodik/Aniboom by name matching
+5. Video sources are resolved via parsers (Kodik, AnimeLib, HiAnime, Consumet)
 
 ## Quick Start
 
@@ -112,9 +128,10 @@ animeenigma/
 │   ├── auth/           # Authentication service
 │   ├── catalog/        # Anime catalog with Shikimori integration
 │   ├── streaming/      # Video streaming/proxy service
-│   ├── player/         # Watch progress and lists
+│   ├── player/         # Watch progress, watchlists, error reports
 │   ├── rooms/          # Game rooms and WebSocket
 │   ├── scheduler/      # Background tasks
+│   ├── themes/         # OP/ED ratings
 │   └── gateway/        # API gateway
 │
 ├── frontend/
@@ -128,8 +145,9 @@ animeenigma/
 │   ├── authz/          # JWT authentication
 │   ├── httputil/       # HTTP utilities
 │   ├── pagination/     # Pagination
-│   ├── animeparser/    # Video source parsers (Kodik, Aniboom)
-│   ├── videoutils/     # Video handling and MinIO
+│   ├── animeparser/    # Video source parser interface
+│   ├── idmapping/      # Anime ID mapping (MAL/Shikimori → AniList via ARM)
+│   ├── videoutils/     # Video handling, HLS proxy, MinIO
 │   ├── metrics/        # Prometheus metrics
 │   └── tracing/        # OpenTelemetry
 │
@@ -149,16 +167,17 @@ animeenigma/
 
 ## Services
 
-| Service   | Port | Description                          |
-|-----------|------|--------------------------------------|
-| Gateway   | 8000 | API gateway, rate limiting, routing  |
-| Auth      | 8080 | Authentication and user management   |
-| Catalog   | 8081 | Anime catalog, Shikimori integration |
-| Streaming | 8082 | Video streaming/proxy                |
-| Player    | 8083 | Watch progress and anime lists       |
-| Rooms     | 8084 | Game rooms and WebSocket             |
-| Scheduler | 8085 | Background tasks                     |
-| Frontend  | 3000 | Vue 3 SPA                            |
+| Service   | Port | Description                              |
+|-----------|------|------------------------------------------|
+| Gateway   | 8000 | API gateway, rate limiting, routing       |
+| Auth      | 8080 | Authentication, JWT, API keys             |
+| Catalog   | 8081 | Anime catalog, Shikimori, video parsers   |
+| Streaming | 8082 | Video streaming/proxy, MinIO              |
+| Player    | 8083 | Watch progress, watchlists, error reports |
+| Rooms     | 8084 | Game rooms and WebSocket                  |
+| Scheduler | 8085 | Background tasks                          |
+| Themes    | 8086 | OP/ED ratings                             |
+| Frontend  | 80   | Vue 3 SPA (nginx)                         |
 
 ## Configuration
 
@@ -173,15 +192,17 @@ Services are configured via environment variables. See `internal/config/config.g
 | `REDIS_HOST`, `REDIS_PORT`                            | Redis            | localhost:6379 |
 | `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | MinIO storage    | localhost:9000 |
 
-### Video Providers
+### Video & External Services
 
-| Variable              | Description                  | Required              |
-|-----------------------|------------------------------|-----------------------|
-| `KODIK_API_KEY`       | Kodik API key for video search | For Kodik support     |
-| `KODIK_BASE_URL`      | Kodik API base URL           | `https://kodikapi.com` |
-| `ANIBOOM_BASE_URL`    | Aniboom API base URL         | For Aniboom support   |
-| `SHIKIMORI_CLIENT_ID` | Shikimori OAuth client ID    | Optional              |
-| `SHIKIMORI_CLIENT_SECRET` | Shikimori OAuth secret   | Optional              |
+| Variable              | Description                          | Required                  |
+|-----------------------|--------------------------------------|---------------------------|
+| `KODIK_API_KEY`       | Kodik API key for RU video search    | For Kodik support         |
+| `SHIKIMORI_CLIENT_ID` | Shikimori OAuth client ID            | Optional                  |
+| `SHIKIMORI_CLIENT_SECRET` | Shikimori OAuth secret           | Optional                  |
+| `JIMAKU_API_KEY`      | Jimaku.cc API key for JP subtitles   | For JP subtitle support   |
+| `TELEGRAM_ADMIN_CHAT_ID` | Telegram chat ID for admin notifications | For error report alerts |
+
+HiAnime and Consumet are configured via their sidecar containers in docker-compose. AnimeLib requires no API key.
 
 ### Example `.env`
 
@@ -208,7 +229,10 @@ JWT_SECRET=your-super-secret-key
 
 # Video providers
 KODIK_API_KEY=your-kodik-api-key
-# ANIBOOM_BASE_URL=https://api.aniboom.one
+
+# Optional
+JIMAKU_API_KEY=your-jimaku-api-key
+TELEGRAM_ADMIN_CHAT_ID=your-telegram-chat-id
 ```
 
 ## Development
@@ -228,6 +252,15 @@ make generate
 
 # Build Docker images
 make docker-build
+
+# Redeploy a single service after code changes
+make redeploy-catalog
+
+# Follow service logs
+make logs-catalog
+
+# Check health of all services
+make health
 ```
 
 ## Deployment
@@ -274,7 +307,7 @@ Each service exposes Prometheus metrics at `/metrics`:
 - `http_request_duration_seconds` - Latency histogram (p50/p95/p99)
 - `http_response_size_bytes` - Response size histogram
 
-Admin dashboard (local): `http://localhost:8088/grafana`
+Grafana dashboard and Prometheus are available via the admin-nginx container when deployed.
 
 ## License
 

@@ -6,18 +6,16 @@
     <div class="card-hover rounded-xl overflow-hidden bg-white/5 border border-white/10">
       <!-- Poster Container -->
       <div class="relative aspect-[2/3] overflow-hidden bg-surface">
-        <!-- Lazy Loaded Image -->
+        <!-- Placeholder (visible until image loads) -->
+        <div class="absolute inset-0 bg-gradient-to-b from-white/5 to-white/10 animate-pulse" />
+        <!-- Lazy Loaded Image (fades in over placeholder) -->
         <img
-          v-if="imageLoaded"
           :src="anime.coverImage"
           :alt="anime.title"
-          class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+          class="absolute inset-0 w-full h-full object-cover transition-[opacity,transform] duration-300 group-hover:scale-110"
+          :class="imageLoaded ? 'opacity-100' : 'opacity-0'"
           loading="lazy"
-        />
-        <!-- Blur Placeholder -->
-        <div
-          v-else
-          class="absolute inset-0 bg-gradient-to-b from-white/5 to-white/10 animate-pulse"
+          @load="imageLoaded = true"
         />
 
         <!-- Overlay Gradient -->
@@ -76,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import Badge from '@/components/ui/Badge.vue'
 
 interface Anime {
@@ -108,13 +106,4 @@ const primaryGenre = computed(() => {
   return props.anime.genres?.[0] ?? ''
 })
 
-onMounted(() => {
-  if (props.anime.coverImage) {
-    const img = new Image()
-    img.onload = () => {
-      imageLoaded.value = true
-    }
-    img.src = props.anime.coverImage
-  }
-})
 </script>
