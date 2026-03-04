@@ -235,6 +235,10 @@
       "status": "Статус",
       "genre": "Жанр"
     },
+    "genreFilter": {
+      "all": "Все жанры",
+      "search": "Поиск жанра..."
+    },
     "stats": {
       "totalAnime": "Всего аниме",
       "avgScore": "Средняя оценка",
