@@ -100,7 +100,8 @@
     "genre": "Genre",
     "status": "Status",
     "sort": "Sort",
-    "type": "Type"
+    "type": "Type",
+    "viewAll": "View all results"
   },
   "profile": {
     "memberSince": "Member since",

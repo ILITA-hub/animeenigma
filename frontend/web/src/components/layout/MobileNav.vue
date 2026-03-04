@@ -64,20 +64,6 @@ const RoomsIcon: FunctionalComponent = () => h('svg', {
   })
 ])
 
-const SearchIcon: FunctionalComponent = () => h('svg', {
-  class: 'w-6 h-6',
-  fill: 'none',
-  stroke: 'currentColor',
-  viewBox: '0 0 24 24'
-}, [
-  h('path', {
-    'stroke-linecap': 'round',
-    'stroke-linejoin': 'round',
-    'stroke-width': '2',
-    d: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'
-  })
-])
-
 const ProfileIcon: FunctionalComponent = () => h('svg', {
   class: 'w-6 h-6',
   fill: 'none',
@@ -96,7 +82,6 @@ const navItems = [
   { to: '/', label: 'nav.home', icon: HomeIcon },
   { to: '/browse', label: 'nav.catalog', icon: CatalogIcon },
   { to: '/game', label: 'nav.rooms', icon: RoomsIcon },
-  { to: '/search', label: 'nav.search', icon: SearchIcon },
   { to: '/profile', label: 'nav.profile', icon: ProfileIcon },
 ]
 

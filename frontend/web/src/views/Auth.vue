@@ -50,10 +50,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, type TelegramAuthData } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const telegramLoginContainer = ref<HTMLElement | null>(null)
@@ -63,7 +64,7 @@ let widgetObserver: MutationObserver | null = null
 // Telegram bot name from environment or default
 const TELEGRAM_BOT_NAME = import.meta.env.VITE_TELEGRAM_BOT_NAME || ''
 
-// Telegram Login Widget callback
+// Handle Telegram auth data (from redirect query params)
 const handleTelegramAuth = async (telegramUser: TelegramAuthData) => {
   const success = await authStore.loginWithTelegram(telegramUser)
   if (success) {
@@ -71,16 +72,28 @@ const handleTelegramAuth = async (telegramUser: TelegramAuthData) => {
   }
 }
 
-// Expose callback to window for Telegram widget
-declare global {
-  interface Window {
-    onTelegramAuth: (user: TelegramAuthData) => void
+// Check if Telegram redirected back with auth params in the URL
+const checkTelegramRedirect = () => {
+  const q = route.query
+  if (q.id && q.hash && q.auth_date) {
+    const telegramUser: TelegramAuthData = {
+      id: Number(q.id),
+      first_name: (q.first_name as string) || '',
+      last_name: (q.last_name as string) || undefined,
+      username: (q.username as string) || undefined,
+      photo_url: (q.photo_url as string) || undefined,
+      auth_date: Number(q.auth_date),
+      hash: q.hash as string,
+    }
+    handleTelegramAuth(telegramUser)
+    return true
   }
+  return false
 }
 
 onMounted(() => {
-  // Set up global callback for Telegram widget
-  window.onTelegramAuth = handleTelegramAuth
+  // If Telegram redirected back with auth params, handle login immediately
+  if (checkTelegramRedirect()) return
 
   // Only load widget if bot name is configured
   if (TELEGRAM_BOT_NAME && telegramLoginContainer.value) {
@@ -99,13 +112,15 @@ onMounted(() => {
     widgetObserver.observe(telegramLoginContainer.value, { childList: true, subtree: true })
 
     // Create and append Telegram Login Widget script
+    // Uses redirect mode (data-auth-url) instead of popup callback (data-onauth)
+    // to avoid Chrome's cross-origin popup restrictions
     const script = document.createElement('script')
     script.async = true
     script.src = 'https://telegram.org/js/telegram-widget.js?22'
     script.setAttribute('data-telegram-login', TELEGRAM_BOT_NAME)
     script.setAttribute('data-size', 'large')
     script.setAttribute('data-radius', '8')
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)')
+    script.setAttribute('data-auth-url', `${window.location.origin}/auth`)
     script.setAttribute('data-request-access', 'write')
     script.setAttribute('data-userpic', 'false')
     telegramLoginContainer.value.appendChild(script)

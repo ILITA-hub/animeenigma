@@ -34,15 +34,84 @@
         <!-- Right Section -->
         <div class="hidden md:flex items-center gap-4">
           <!-- Search -->
-          <button
-            class="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-            :aria-label="$t('nav.search')"
-            @click="$router.push('/search')"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </button>
+          <div class="relative" ref="searchContainerRef">
+            <button
+              v-if="!searchOpen"
+              class="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              :aria-label="$t('nav.search')"
+              @click="openSearch"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+            <div v-else class="flex items-center gap-2">
+              <div class="relative">
+                <input
+                  ref="searchInputRef"
+                  v-model="searchQuery"
+                  type="text"
+                  :placeholder="$t('search.placeholder')"
+                  class="w-64 px-3 py-1.5 pl-9 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:bg-white/15 transition-all"
+                  @input="onSearchInput"
+                  @keydown.enter="goToSearch"
+                  @keydown.escape="closeSearch"
+                  @keydown.down.prevent="highlightNext"
+                  @keydown.up.prevent="highlightPrev"
+                />
+                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <!-- Autocomplete Dropdown -->
+                <Transition name="dropdown">
+                  <div
+                    v-if="searchResults.length > 0"
+                    class="absolute top-full left-0 mt-2 glass-elevated rounded-xl overflow-hidden z-50"
+                    style="min-width: 320px"
+                  >
+                    <router-link
+                      v-for="(result, index) in searchResults"
+                      :key="result.id"
+                      :to="`/anime/${result.id}`"
+                      class="flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 transition-colors"
+                      :class="{ 'bg-white/10': highlightedIndex === index }"
+                      @click="closeSearch"
+                    >
+                      <img
+                        :src="result.coverImage"
+                        :alt="result.title"
+                        class="w-10 h-14 rounded-md object-cover flex-shrink-0"
+                      />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-white text-sm font-medium truncate">{{ result.title }}</p>
+                        <p class="text-white/40 text-xs">
+                          {{ result.releaseYear || '' }}{{ result.releaseYear && result.totalEpisodes ? ' \u00b7 ' : '' }}{{ result.totalEpisodes ? result.totalEpisodes + ' \u044d\u043f.' : '' }}
+                        </p>
+                      </div>
+                      <span v-if="result.rating" class="text-cyan-400 text-xs font-medium flex-shrink-0">
+                        {{ result.rating.toFixed(1) }}
+                      </span>
+                    </router-link>
+                    <router-link
+                      :to="{ path: '/browse', query: { q: searchQuery } }"
+                      class="block px-3 py-2.5 text-center text-sm text-cyan-400 hover:bg-white/10 transition-colors border-t border-white/10"
+                      @click="closeSearch"
+                    >
+                      {{ $t('search.viewAll') }}
+                    </router-link>
+                  </div>
+                </Transition>
+              </div>
+              <button
+                class="p-1.5 text-white/40 hover:text-white transition-colors"
+                @click="closeSearch"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
 
           <!-- Language Selector -->
           <div class="relative" ref="langDropdownRef">
@@ -119,15 +188,6 @@
               {{ $t(link.label) }}
             </router-link>
 
-            <router-link
-              to="/search"
-              class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-              active-class="text-cyan-400 bg-cyan-500/10"
-              @click="mobileMenuOpen = false"
-            >
-              {{ $t('nav.search') }}
-            </router-link>
-
             <!-- Divider -->
             <div class="my-1 border-t border-white/10" />
 
@@ -175,11 +235,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { onClickOutside } from '@vueuse/core'
+import { onClickOutside, useDebounceFn } from '@vueuse/core'
+import { animeApi } from '@/api/client'
 import Button from '@/components/ui/Button.vue'
 
 const router = useRouter()
@@ -230,6 +291,80 @@ const handleScroll = () => {
 
   lastScrollY.value = currentScrollY
 }
+
+// Search state
+const searchOpen = ref(false)
+const searchQuery = ref('')
+const searchResults = ref<Array<{ id: string; title: string; coverImage: string; releaseYear?: number; totalEpisodes?: number; rating?: number }>>([])
+const highlightedIndex = ref(-1)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+const searchContainerRef = ref<HTMLElement | null>(null)
+
+const openSearch = async () => {
+  searchOpen.value = true
+  await nextTick()
+  searchInputRef.value?.focus()
+}
+
+const closeSearch = () => {
+  searchOpen.value = false
+  searchQuery.value = ''
+  searchResults.value = []
+  highlightedIndex.value = -1
+}
+
+const debouncedSearch = useDebounceFn(async (query: string) => {
+  if (query.length < 2) {
+    searchResults.value = []
+    return
+  }
+  try {
+    const response = await animeApi.search(query, undefined, 5)
+    const data = response.data?.data || response.data
+    const list = Array.isArray(data) ? data : []
+    searchResults.value = list.map((a: Record<string, unknown>) => ({
+      id: a.id as string,
+      title: (a.name_ru || a.name || a.name_jp || '') as string,
+      coverImage: (a.poster_url || '') as string,
+      releaseYear: a.year as number | undefined,
+      totalEpisodes: a.episodes_count as number | undefined,
+      rating: a.score as number | undefined,
+    }))
+  } catch {
+    searchResults.value = []
+  }
+}, 300)
+
+const onSearchInput = () => {
+  highlightedIndex.value = -1
+  debouncedSearch(searchQuery.value)
+}
+
+const goToSearch = () => {
+  if (highlightedIndex.value >= 0 && highlightedIndex.value < searchResults.value.length) {
+    const result = searchResults.value[highlightedIndex.value]
+    router.push(`/anime/${result.id}`)
+  } else if (searchQuery.value.trim()) {
+    router.push({ path: '/browse', query: { q: searchQuery.value } })
+  }
+  closeSearch()
+}
+
+const highlightNext = () => {
+  if (searchResults.value.length === 0) return
+  highlightedIndex.value = (highlightedIndex.value + 1) % searchResults.value.length
+}
+
+const highlightPrev = () => {
+  if (searchResults.value.length === 0) return
+  highlightedIndex.value = highlightedIndex.value <= 0
+    ? searchResults.value.length - 1
+    : highlightedIndex.value - 1
+}
+
+onClickOutside(searchContainerRef, () => {
+  if (searchOpen.value) closeSearch()
+})
 
 onClickOutside(langDropdownRef, () => {
   langDropdownOpen.value = false

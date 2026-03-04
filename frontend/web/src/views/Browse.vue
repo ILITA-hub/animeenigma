@@ -4,7 +4,7 @@
       <!-- Search Header -->
       <div class="mb-8">
         <h1 class="text-2xl md:text-3xl font-bold text-white mb-6">
-          {{ isSearchMode ? $t('nav.search') : $t('nav.catalog') }}
+          {{ $t('nav.catalog') }}
         </h1>
 
         <!-- Search Input -->
@@ -115,7 +115,7 @@
       </div>
 
       <!-- Recent Searches (when no query) -->
-      <div v-if="isSearchMode && !searchQuery && recentSearches.length > 0" class="mb-8">
+      <div v-if="!searchQuery && recentSearches.length > 0" class="mb-8">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-semibold text-white">{{ $t('search.recent') }}</h2>
           <button class="text-sm text-pink-400 hover:text-pink-300" @click="clearRecentSearches">
@@ -236,7 +236,6 @@ const liveResults = ref<Array<{ id: string; title: string; coverImage: string; r
 const recentSearches = ref<string[]>([])
 const loadingShikimori = ref(false)
 
-const isSearchMode = computed(() => route.name === 'search')
 const hasActiveFilters = computed(() => !!selectedGenre.value || !!selectedYear.value || !!selectedStatus.value || sortBy.value !== 'popularity')
 
 const genres = ref<Genre[]>([])
@@ -290,10 +289,17 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
   }
 
   try {
-    // Mock live results - would call API
-    liveResults.value = animeList.value.filter(a =>
-      a.title.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 5) as typeof liveResults.value
+    const response = await animeApi.search(query, undefined, 5)
+    const data = response.data?.data || response.data
+    const list = Array.isArray(data) ? data : []
+    liveResults.value = list.map((a: Record<string, unknown>) => ({
+      id: a.id as string,
+      title: (a.name_ru || a.name || a.name_jp || '') as string,
+      coverImage: (a.poster_url || '') as string,
+      releaseYear: a.year as number | undefined,
+      episodes: a.episodes_count as number | undefined,
+      rating: a.score as number | undefined,
+    }))
     showLiveResults.value = true
   } catch (err) {
     console.error('Live search error:', err)
