@@ -234,6 +234,10 @@
       "status": "Status",
       "genre": "Genre"
     },
+    "genreFilter": {
+      "all": "All genres",
+      "search": "Search genres..."
+    },
     "stats": {
       "totalAnime": "Total Anime",
       "avgScore": "Avg Score",

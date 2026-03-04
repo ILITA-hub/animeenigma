@@ -233,6 +233,10 @@
       "status": "状態",
       "genre": "ジャンル"
     },
+    "genreFilter": {
+      "all": "全ジャンル",
+      "search": "ジャンル検索..."
+    },
     "stats": {
       "totalAnime": "合計アニメ",
       "avgScore": "平均評価",

@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen pt-20">
+  <div class="min-h-screen">
     <!-- Loading State -->
-    <div v-if="loading" class="flex justify-center items-center min-h-screen">
+    <div v-if="loading" class="flex justify-center items-center min-h-screen pt-20">
       <svg class="w-12 h-12 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -9,7 +9,7 @@
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="flex flex-col items-center justify-center min-h-screen px-4">
+    <div v-else-if="error" class="flex flex-col items-center justify-center min-h-screen pt-20 px-4">
       <svg class="w-16 h-16 text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
@@ -142,6 +142,18 @@
                   :placeholder="$t('profile.watchlist.searchPlaceholder')"
                   class="flex-shrink-0 w-48 px-3 py-2 rounded-full text-sm bg-white/5 text-white/80 border border-transparent focus:border-cyan-500/30 focus:outline-none placeholder-white/40 mr-auto"
                 >
+                <!-- Genre Filter -->
+                <div class="w-44">
+                  <GenreFilterPopup
+                    v-model="selectedGenre"
+                    :genres="watchlistGenres"
+                    :placeholder="$t('profile.sort.genre')"
+                    :all-label="$t('profile.genreFilter.all')"
+                    :search-placeholder="$t('profile.genreFilter.search')"
+                    size="sm"
+                    show-emoji
+                  />
+                </div>
                 <!-- Sort -->
                 <div class="w-36">
                   <Select
@@ -785,7 +797,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, Modal, Tabs, Select, type SelectOption } from '@/components/ui'
+import { Badge, Button, Modal, Tabs, Select, GenreFilterPopup, type SelectOption } from '@/components/ui'
 import { userApi, publicApi } from '@/api/client'
 
 interface ApiError {
@@ -817,6 +829,7 @@ interface WatchlistEntry {
     poster_url?: string
     episodes_count: number
     episodes_aired?: number
+    genres?: Array<{ id: string; name: string; name_ru?: string }>
   }
   status: string
   score: number
@@ -912,12 +925,25 @@ const sortDirection = ref<'asc' | 'desc'>((localStorage.getItem('profile_sortDir
 watch(sortKey, (v) => localStorage.setItem('profile_sortKey', v))
 watch(sortDirection, (v) => localStorage.setItem('profile_sortDir', v))
 
+// Genre filter
+const selectedGenre = ref('')
+const watchlistGenres = computed(() => {
+  const map = new Map<string, { id: string; name: string; name_ru?: string; count: number }>()
+  for (const entry of watchlist.value) {
+    for (const g of entry.anime?.genres || []) {
+      const existing = map.get(g.id)
+      if (existing) existing.count++
+      else map.set(g.id, { id: g.id, name: g.name, name_ru: g.name_ru, count: 1 })
+    }
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
+})
+
 const sortOptions = computed<SelectOption[]>(() => [
   { value: 'title', label: t('profile.sort.title') },
   { value: 'score', label: t('profile.sort.score') },
   { value: 'progress', label: t('profile.sort.progress') },
   { value: 'status', label: t('profile.sort.status') },
-  { value: 'genre', label: t('profile.sort.genre') },
 ])
 
 const statusLabels = computed<Record<string, string>>(() => ({
@@ -982,6 +1008,11 @@ const filteredWatchlist = computed(() => {
     })
   }
 
+  // Genre filter
+  if (selectedGenre.value) {
+    list = list.filter(a => a.anime?.genres?.some(g => g.id === selectedGenre.value))
+  }
+
   // Sort
   list.sort((a, b) => {
     let cmp = 0
@@ -995,12 +1026,6 @@ const filteredWatchlist = computed(() => {
       case 'status':
         cmp = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99)
         break
-      case 'genre': {
-        const gA = a.anime?.genres?.[0]?.name || ''
-        const gB = b.anime?.genres?.[0]?.name || ''
-        cmp = gA.localeCompare(gB)
-        break
-      }
       case 'title':
       default:
         cmp = animeTitle(a).localeCompare(animeTitle(b))

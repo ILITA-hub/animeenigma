@@ -14,6 +14,7 @@
 
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
+import { getGenreEmoji } from '@/utils/genre-emoji'
 
 const props = defineProps<{
   genre: string
@@ -22,32 +23,8 @@ const props = defineProps<{
   emoji?: string
 }>()
 
-// Default emoji mapping for common genres
-const genreEmojis: Record<string, string> = {
-  'Action': '⚔️',
-  'Adventure': '🗺️',
-  'Comedy': '😂',
-  'Drama': '🎭',
-  'Fantasy': '🧙',
-  'Horror': '👻',
-  'Mystery': '🔍',
-  'Romance': '💕',
-  'Sci-Fi': '🚀',
-  'Slice of Life': '☕',
-  'Sports': '⚽',
-  'Supernatural': '✨',
-  'Thriller': '😱',
-  'Mecha': '🤖',
-  'Music': '🎵',
-  'Psychological': '🧠',
-  'School': '🏫',
-  'Shounen': '👊',
-  'Shoujo': '🌸',
-  'Isekai': '🌀',
-}
-
 const emoji = computed(() => {
   if (props.emoji) return props.emoji
-  return genreEmojis[props.genre] || '🎬'
+  return getGenreEmoji(props.genre)
 })
 </script>

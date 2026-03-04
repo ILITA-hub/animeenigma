@@ -61,10 +61,14 @@
         <div class="flex flex-wrap gap-3">
           <!-- Genre Filter -->
           <div class="w-full sm:w-44">
-            <Select
+            <GenreFilterPopup
               v-model="selectedGenre"
-              :options="genreOptions"
+              :genres="browseGenres"
+              :placeholder="$t('search.genre')"
+              :all-label="$t('profile.genreFilter.all')"
+              :search-placeholder="$t('profile.genreFilter.search')"
               size="sm"
+              show-emoji
               @change="handleFilter"
             />
           </div>
@@ -205,7 +209,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
-import { Input, Badge, Button, Select } from '@/components/ui'
+import { Input, Badge, Button, Select, GenreFilterPopup } from '@/components/ui'
 import { AnimeCardNew } from '@/components/anime'
 import { animeApi } from '@/api/client'
 
@@ -237,10 +241,9 @@ const hasActiveFilters = computed(() => !!selectedGenre.value || !!selectedYear.
 
 const genres = ref<Genre[]>([])
 
-const genreOptions = computed(() => [
-  { value: '', label: 'Жанр' },
-  ...genres.value.map(g => ({ value: g.id, label: g.name_ru || g.name }))
-])
+const browseGenres = computed(() =>
+  genres.value.map(g => ({ id: g.id, name: g.name, name_ru: g.name_ru }))
+)
 
 const statusOptions = [
   { value: '', label: 'Статус' },
@@ -385,6 +388,10 @@ onMounted(async () => {
     selectedStatus.value = route.query.status as string
   }
 
+  if (route.query.genre) {
+    selectedGenre.value = route.query.genre as string
+  }
+
   if (route.query.q) {
     searchQuery.value = route.query.q as string
     await searchAnime(searchQuery.value)
@@ -405,6 +412,14 @@ watch(() => route.query.status, (newStatus) => {
   const val = (newStatus as string) || ''
   if (val !== selectedStatus.value) {
     selectedStatus.value = val
+    handleFilter()
+  }
+})
+
+watch(() => route.query.genre, (newGenre) => {
+  const val = (newGenre as string) || ''
+  if (val !== selectedGenre.value) {
+    selectedGenre.value = val
     handleFilter()
   }
 })
