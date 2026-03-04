@@ -6,7 +6,7 @@
     <!-- Main Content -->
     <main :class="mainClasses">
       <router-view v-slot="{ Component }">
-        <Transition name="page" mode="out-in">
+        <Transition name="page">
           <component :is="Component" />
         </Transition>
       </router-view>
@@ -49,13 +49,11 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page-enter-active,
-.page-leave-active {
+.page-enter-active {
   transition: opacity 0.2s ease;
 }
 
-.page-enter-from,
-.page-leave-to {
+.page-enter-from {
   opacity: 0;
 }
 </style>

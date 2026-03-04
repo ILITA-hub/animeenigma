@@ -139,7 +139,7 @@ body {
   align-items: center;
   justify-content: center;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
 .btn:focus-visible {
@@ -162,7 +162,7 @@ body {
   background-color: var(--color-cyan-500);
   color: var(--color-base);
   border-radius: 0.75rem;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .btn-primary:hover {
@@ -184,7 +184,7 @@ body {
   background-color: var(--color-pink-500);
   color: white;
   border-radius: 0.75rem;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .btn-secondary:hover {
@@ -207,7 +207,7 @@ body {
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.5rem;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .btn-ghost:hover {
@@ -217,7 +217,8 @@ body {
 
 /* Card hover effect */
 .card-hover {
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  will-change: transform;
 }
 
 .card-hover:hover {

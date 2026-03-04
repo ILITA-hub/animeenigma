@@ -389,47 +389,47 @@ const formatUpdatedAt = (dateStr: string) => {
 }
 
 onMounted(async () => {
-  // Fetch announced anime
-  try {
-    const response = await animeApi.getAnnounced(15)
-    announcedAnime.value = response.data?.data || []
-  } catch (err) {
-    console.error('Failed to load announced anime:', err)
-  } finally {
-    loadingAnnounced.value = false
-  }
+  // Fetch all three columns in parallel
+  await Promise.allSettled([
+    // Fetch announced anime
+    animeApi.getAnnounced(15).then(response => {
+      announcedAnime.value = response.data?.data || []
+    }).catch(err => {
+      console.error('Failed to load announced anime:', err)
+    }).finally(() => {
+      loadingAnnounced.value = false
+    }),
 
-  // Fetch ongoing anime
-  try {
-    const response = await animeApi.getOngoing()
-    const animes = response.data?.data || []
-    ongoingAnime.value = animes
-    // Find the most recent updated_at
-    if (animes.length > 0) {
-      const maxUpdated = animes.reduce((max: string | null, anime: Anime) => {
-        if (!anime.updated_at) return max
-        if (!max) return anime.updated_at
-        return new Date(anime.updated_at) > new Date(max) ? anime.updated_at : max
-      }, null as string | null)
-      ongoingUpdatedAt.value = maxUpdated
-    }
-  } catch (err) {
-    console.error('Failed to load ongoing anime:', err)
-  } finally {
-    loadingOngoing.value = false
-  }
+    // Fetch ongoing anime
+    animeApi.getOngoing().then(response => {
+      const animes = response.data?.data || []
+      ongoingAnime.value = animes
+      // Find the most recent updated_at
+      if (animes.length > 0) {
+        const maxUpdated = animes.reduce((max: string | null, anime: Anime) => {
+          if (!anime.updated_at) return max
+          if (!max) return anime.updated_at
+          return new Date(anime.updated_at) > new Date(max) ? anime.updated_at : max
+        }, null as string | null)
+        ongoingUpdatedAt.value = maxUpdated
+      }
+    }).catch(err => {
+      console.error('Failed to load ongoing anime:', err)
+    }).finally(() => {
+      loadingOngoing.value = false
+    }),
 
-  // Fetch top anime
-  try {
-    const response = await animeApi.getTop(15)
-    topAnime.value = response.data?.data || []
-  } catch (err) {
-    console.error('Failed to load top anime:', err)
-  } finally {
-    loadingTop.value = false
-  }
+    // Fetch top anime
+    animeApi.getTop(15).then(response => {
+      topAnime.value = response.data?.data || []
+    }).catch(err => {
+      console.error('Failed to load top anime:', err)
+    }).finally(() => {
+      loadingTop.value = false
+    }),
+  ])
 
-  // Fetch site ratings for all displayed anime
+  // Fetch site ratings after all columns are loaded (needs their IDs)
   const allIds = [
     ...ongoingAnime.value.map(a => a.id),
     ...topAnime.value.map(a => a.id),
