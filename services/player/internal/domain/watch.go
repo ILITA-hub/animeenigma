@@ -22,7 +22,7 @@ type AnimeInfo struct {
 	PosterURL     string      `json:"poster_url,omitempty"`
 	EpisodesCount int         `json:"episodes_count"`
 	EpisodesAired int         `json:"episodes_aired,omitempty"`
-	Genres        []GenreInfo `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
+	Genres        []GenreInfo `gorm:"many2many:anime_genres;joinForeignKey:anime_id;joinReferences:genre_id" json:"genres,omitempty"`
 }
 
 func (AnimeInfo) TableName() string { return "animes" }
