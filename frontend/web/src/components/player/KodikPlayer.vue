@@ -173,7 +173,7 @@
                       </span>
                       <p class="text-white font-medium truncate" :title="t.title">{{ t.title }}</p>
                     </div>
-                    <span class="text-white/40 text-xs">{{ t.episodes_count }} эп.</span>
+                    <span class="text-white/40 text-xs">{{ t.episodes_count || 1 }} эп.</span>
                   </div>
                   <div
                     v-if="selectedTranslation === t.id"

@@ -532,6 +532,10 @@ func (c *Client) GetTranslations(shikimoriID string) ([]Translation, error) {
 				}
 			}
 		}
+		// Movies (type "anime") have no episode data — they are 1 episode
+		if episodeCount == 0 && r.Type == "anime" {
+			episodeCount = 1
+		}
 
 		if existing, ok := seen[r.Translation.ID]; ok {
 			// Keep the higher episode count

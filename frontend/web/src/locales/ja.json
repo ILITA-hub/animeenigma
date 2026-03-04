@@ -100,7 +100,8 @@
     "genre": "ジャンル",
     "status": "状態",
     "sort": "並び替え",
-    "type": "タイプ"
+    "type": "タイプ",
+    "viewAll": "すべての結果を見る"
   },
   "profile": {
     "memberSince": "登録日",

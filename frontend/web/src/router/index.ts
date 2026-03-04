@@ -27,9 +27,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/search',
-    name: 'search',
-    component: Browse,
-    meta: { title: 'Search Anime' }
+    redirect: (to) => ({ path: '/browse', query: to.query }),
   },
   {
     path: '/anime/:id',
