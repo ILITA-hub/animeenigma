@@ -36,10 +36,8 @@ const authStore = useAuthStore()
 const isFullscreen = computed(() => route.name === 'watch')
 
 const mainClasses = computed(() => {
-  if (isFullscreen.value) {
-    return ''
-  }
-  return 'pt-16' // Top padding for fixed navbar
+  if (isFullscreen.value) return ''
+  return '' // Pages handle their own top padding; glass nav floats over backgrounds
 })
 
 // Initialize auth state - fetch user if we have token but no user data

@@ -64,7 +64,7 @@ func (rl *rateLimiter) acquire() {
 // NewClient creates a new Jikan API client
 func NewClient() *Client {
 	return &Client{
-		httpClient:  &http.Client{Timeout: 15 * time.Second},
+		httpClient:  &http.Client{Timeout: 10 * time.Second},
 		baseURL:     "https://api.jikan.moe/v4",
 		rateLimiter: newRateLimiter(2),
 	}

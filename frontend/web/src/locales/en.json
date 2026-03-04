@@ -231,7 +231,8 @@
       "score": "Score",
       "progress": "Progress",
       "dateAdded": "Date added",
-      "status": "Status"
+      "status": "Status",
+      "genre": "Genre"
     },
     "stats": {
       "totalAnime": "Total Anime",

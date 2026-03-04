@@ -120,10 +120,24 @@ func NewCatalogService(
 
 // SearchAnime searches for anime, fetching from Shikimori if not found locally
 func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchFilters) ([]*domain.Anime, int64, error) {
-	// If source=shikimori, force search on Shikimori
+	// If source=shikimori, force search on Shikimori (skip cache)
 	if filters.Source == "shikimori" && filters.Query != "" {
 		metrics.SearchRequestsTotal.WithLabelValues("shikimori").Inc()
 		return s.searchShikimori(ctx, filters)
+	}
+
+	// Check search result cache for simple query searches
+	var searchCacheKey string
+	if filters.Query != "" {
+		searchCacheKey = cache.KeySearchResults(filters.Query, filters.Page)
+		var cached struct {
+			Animes []*domain.Anime `json:"animes"`
+			Total  int64           `json:"total"`
+		}
+		if err := s.cache.Get(ctx, searchCacheKey, &cached); err == nil {
+			metrics.SearchRequestsTotal.WithLabelValues("cache").Inc()
+			return cached.Animes, cached.Total, nil
+		}
 	}
 
 	// First, try to search locally
@@ -135,8 +149,13 @@ func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchF
 	// If we have local results, enrich and return them
 	if len(animes) > 0 {
 		metrics.SearchRequestsTotal.WithLabelValues("local_db").Inc()
-		for _, anime := range animes {
-			s.enrichAnime(ctx, anime)
+		s.enrichAnimesBatch(ctx, animes)
+		// Cache the result
+		if searchCacheKey != "" {
+			_ = s.cache.Set(ctx, searchCacheKey, struct {
+				Animes []*domain.Anime `json:"animes"`
+				Total  int64           `json:"total"`
+			}{Animes: animes, Total: total}, cache.TTLSearchResults)
 		}
 		return animes, total, nil
 	}
@@ -144,7 +163,14 @@ func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchF
 	// No local results - fetch from Shikimori
 	if filters.Query != "" {
 		metrics.SearchRequestsTotal.WithLabelValues("shikimori").Inc()
-		return s.searchShikimori(ctx, filters)
+		shikiAnimes, shikiTotal, shikiErr := s.searchShikimori(ctx, filters)
+		if shikiErr == nil && len(shikiAnimes) > 0 && searchCacheKey != "" {
+			_ = s.cache.Set(ctx, searchCacheKey, struct {
+				Animes []*domain.Anime `json:"animes"`
+				Total  int64           `json:"total"`
+			}{Animes: shikiAnimes, Total: shikiTotal}, cache.TTLSearchResults)
+		}
+		return shikiAnimes, shikiTotal, shikiErr
 	}
 
 	return animes, total, nil
@@ -174,10 +200,8 @@ func (s *CatalogService) searchShikimori(ctx context.Context, filters domain.Sea
 		}
 	}
 
-	// Enrich with genres
-	for _, anime := range shikimoriAnimes {
-		s.enrichAnime(ctx, anime)
-	}
+	// Enrich with genres and video sources (batch)
+	s.enrichAnimesBatch(ctx, shikimoriAnimes)
 
 	return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 }
@@ -811,6 +835,59 @@ func (s *CatalogService) enrichAnime(ctx context.Context, anime *domain.Anime) {
 	}
 }
 
+// enrichAnimesBatch loads genres and video sources for multiple anime in bulk (2 queries instead of N*2).
+func (s *CatalogService) enrichAnimesBatch(ctx context.Context, animes []*domain.Anime) {
+	if len(animes) == 0 {
+		return
+	}
+
+	ids := make([]string, len(animes))
+	for i, a := range animes {
+		ids[i] = a.ID
+	}
+
+	genresMap, err := s.genreRepo.GetForAnimes(ctx, ids)
+	if err != nil {
+		s.log.Warnw("batch genre load failed, falling back to individual", "error", err)
+		for _, anime := range animes {
+			s.enrichAnime(ctx, anime)
+		}
+		return
+	}
+
+	videosMap, err := s.videoRepo.GetForAnimes(ctx, ids)
+	if err != nil {
+		s.log.Warnw("batch video load failed, falling back to individual", "error", err)
+		for _, anime := range animes {
+			s.enrichAnime(ctx, anime)
+		}
+		return
+	}
+
+	for _, anime := range animes {
+		if len(anime.Genres) == 0 {
+			anime.Genres = genresMap[anime.ID]
+		}
+		videos := videosMap[anime.ID]
+		if len(videos) > 0 {
+			sourceMap := make(map[string]domain.VideoSource)
+			for _, v := range videos {
+				key := fmt.Sprintf("%s-%s-%s", v.SourceType, v.Quality, v.Language)
+				if _, exists := sourceMap[key]; !exists {
+					sourceMap[key] = domain.VideoSource{
+						Type:     v.SourceType,
+						Quality:  v.Quality,
+						Language: v.Language,
+					}
+				}
+			}
+			for _, vs := range sourceMap {
+				anime.VideoSources = append(anime.VideoSources, vs)
+			}
+		}
+	}
+}
+
 // GetAniboomTranslations gets available translations from Aniboom for an anime
 func (s *CatalogService) GetAniboomTranslations(ctx context.Context, animeID string) ([]domain.AniboomTranslation, error) {
 	// Get anime to get names for search
@@ -1365,8 +1442,11 @@ func (s *CatalogService) findHiAnimeID(ctx context.Context, anime *domain.Anime)
 	return id, err
 }
 
-// doHiAnimeSearch performs the actual HiAnime search across name variants.
+// doHiAnimeSearch performs the actual HiAnime search across name variants in parallel.
 func (s *CatalogService) doHiAnimeSearch(ctx context.Context, anime *domain.Anime, cacheKey string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	searchNames := []string{}
 	var extraMatchNames []string // additional names for matching (not from anime DB)
 
@@ -1374,10 +1454,18 @@ func (s *CatalogService) doHiAnimeSearch(ctx context.Context, anime *domain.Anim
 		searchNames = append(searchNames, anime.Name)
 	}
 
-	// Fetch English title from Jikan — HiAnime uses English titles while Shikimori gives romanized Japanese
+	// Fetch English title from Jikan (cached) — HiAnime uses English titles while Shikimori gives romanized Japanese
 	if anime.MALID != "" {
-		jikanInfo, err := s.jikanClient.GetAnimeByID(ctx, anime.MALID)
-		if err == nil && jikanInfo.TitleEnglish != "" && jikanInfo.TitleEnglish != anime.Name {
+		jikanCacheKey := fmt.Sprintf("jikan:title:%s", anime.MALID)
+		var jikanInfo jikan.AnimeInfo
+		if err := s.cache.Get(ctx, jikanCacheKey, &jikanInfo); err != nil {
+			fetched, fetchErr := s.jikanClient.GetAnimeByID(ctx, anime.MALID)
+			if fetchErr == nil && fetched != nil {
+				jikanInfo = *fetched
+				_ = s.cache.Set(ctx, jikanCacheKey, jikanInfo, 7*24*time.Hour) // stable data
+			}
+		}
+		if jikanInfo.TitleEnglish != "" && jikanInfo.TitleEnglish != anime.Name {
 			searchNames = append(searchNames, jikanInfo.TitleEnglish)
 			extraMatchNames = append(extraMatchNames, jikanInfo.TitleEnglish)
 		}
@@ -1390,19 +1478,47 @@ func (s *CatalogService) doHiAnimeSearch(ctx context.Context, anime *domain.Anim
 		searchNames = append(searchNames, anime.NameJP)
 	}
 
-	for _, name := range searchNames {
-		results, err := s.hianimeClient.Search(name)
-		if err != nil {
-			s.log.Debugw("hianime search failed for variant", "name", name, "error", err)
-			continue
-		}
+	if len(searchNames) == 0 {
+		_ = s.cache.Set(ctx, cacheKey, "", 10*time.Minute)
+		return "", fmt.Errorf("anime not found on HiAnime")
+	}
 
-		for _, r := range results {
-			if matchesAnime(r.Name, anime, extraMatchNames...) {
-				_ = s.cache.Set(ctx, cacheKey, r.ID, 6*time.Hour)
-				return r.ID, nil
+	// Launch all name-variant searches in parallel, return first match
+	type searchResult struct{ id string }
+	ch := make(chan searchResult, 1)
+	var wg sync.WaitGroup
+
+	for _, name := range searchNames {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			results, err := s.hianimeClient.Search(name)
+			if err != nil {
+				s.log.Debugw("hianime search failed for variant", "name", name, "error", err)
+				return
 			}
-		}
+			for _, r := range results {
+				if matchesAnime(r.Name, anime, extraMatchNames...) {
+					select {
+					case ch <- searchResult{id: r.ID}:
+					default:
+					}
+					return
+				}
+			}
+		}(name)
+	}
+
+	// Close channel when all goroutines finish
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	if found, ok := <-ch; ok {
+		cancel() // stop remaining goroutines from starting new work
+		_ = s.cache.Set(ctx, cacheKey, found.id, 6*time.Hour)
+		return found.id, nil
 	}
 
 	// Cache negative result for 10 minutes to avoid hammering HiAnime
@@ -1611,8 +1727,11 @@ func (s *CatalogService) SearchConsumet(ctx context.Context, title string) ([]do
 	return searchResults, nil
 }
 
-// findConsumetID finds the Consumet ID for an anime by searching
+// findConsumetID finds the Consumet ID for an anime by searching name variants in parallel
 func (s *CatalogService) findConsumetID(ctx context.Context, anime *domain.Anime) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	// Check cache for Consumet ID mapping
 	cacheKey := fmt.Sprintf("consumet:mapping:%s", anime.ID)
 	var cachedID string
@@ -1632,25 +1751,62 @@ func (s *CatalogService) findConsumetID(ctx context.Context, anime *domain.Anime
 		searchNames = append(searchNames, anime.NameJP)
 	}
 
+	if len(searchNames) == 0 {
+		return "", fmt.Errorf("anime not found on Consumet")
+	}
+
+	// Launch all name-variant searches in parallel
+	type searchResult struct {
+		id    string
+		exact bool // true if matched by title, false if first-result fallback
+	}
+	exactCh := make(chan searchResult, 1)
+	fallbackCh := make(chan searchResult, 1)
+	var wg sync.WaitGroup
+
 	for _, name := range searchNames {
-		results, err := s.consumetClient.Search(name)
-		if err != nil {
-			continue
-		}
-
-		// Find best match
-		for _, r := range results {
-			if matchesConsumetAnime(r.Title, anime) {
-				_ = s.cache.Set(ctx, cacheKey, r.ID, 24*time.Hour)
-				return r.ID, nil
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			results, err := s.consumetClient.Search(name)
+			if err != nil || len(results) == 0 {
+				return
 			}
-		}
+			// Check for exact match first
+			for _, r := range results {
+				if matchesConsumetAnime(r.Title, anime) {
+					select {
+					case exactCh <- searchResult{id: r.ID, exact: true}:
+					default:
+					}
+					return
+				}
+			}
+			// Fallback: first result
+			select {
+			case fallbackCh <- searchResult{id: results[0].ID}:
+			default:
+			}
+		}(name)
+	}
 
-		// If no exact match, use the first result if available
-		if len(results) > 0 {
-			_ = s.cache.Set(ctx, cacheKey, results[0].ID, 24*time.Hour)
-			return results[0].ID, nil
-		}
+	// Close channels when all goroutines finish
+	go func() {
+		wg.Wait()
+		close(exactCh)
+		close(fallbackCh)
+	}()
+
+	// Prefer exact match
+	if found, ok := <-exactCh; ok {
+		_ = s.cache.Set(ctx, cacheKey, found.id, 24*time.Hour)
+		return found.id, nil
+	}
+
+	// Fall back to first result from any search
+	if found, ok := <-fallbackCh; ok {
+		_ = s.cache.Set(ctx, cacheKey, found.id, 24*time.Hour)
+		return found.id, nil
 	}
 
 	return "", fmt.Errorf("anime not found on Consumet")
@@ -1902,8 +2058,11 @@ func (s *CatalogService) SearchAnimeLib(ctx context.Context, title string) ([]do
 	return searchResults, nil
 }
 
-// findAnimeLibID finds the AnimeLib integer ID for an anime by searching
+// findAnimeLibID finds the AnimeLib integer ID for an anime by searching name variants in parallel
 func (s *CatalogService) findAnimeLibID(ctx context.Context, anime *domain.Anime) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	// Check cache for AnimeLib ID mapping
 	cacheKey := fmt.Sprintf("animelib:mapping:%s", anime.ID)
 	var cachedID int
@@ -1923,19 +2082,44 @@ func (s *CatalogService) findAnimeLibID(ctx context.Context, anime *domain.Anime
 		searchNames = append(searchNames, anime.NameJP)
 	}
 
-	for _, name := range searchNames {
-		results, err := s.animelibClient.Search(name)
-		if err != nil {
-			s.log.Debugw("animelib search failed for variant", "name", name, "error", err)
-			continue
-		}
+	if len(searchNames) == 0 {
+		return 0, fmt.Errorf("anime not found on AnimeLib")
+	}
 
-		for _, r := range results {
-			if matchesAnimeLibResult(r, anime) {
-				_ = s.cache.Set(ctx, cacheKey, r.ID, 24*time.Hour)
-				return r.ID, nil
+	// Launch all name-variant searches in parallel
+	type searchResult struct{ id int }
+	ch := make(chan searchResult, 1)
+	var wg sync.WaitGroup
+
+	for _, name := range searchNames {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			results, err := s.animelibClient.Search(name)
+			if err != nil {
+				s.log.Debugw("animelib search failed for variant", "name", name, "error", err)
+				return
 			}
-		}
+			for _, r := range results {
+				if matchesAnimeLibResult(r, anime) {
+					select {
+					case ch <- searchResult{id: r.ID}:
+					default:
+					}
+					return
+				}
+			}
+		}(name)
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	if found, ok := <-ch; ok {
+		_ = s.cache.Set(ctx, cacheKey, found.id, 24*time.Hour)
+		return found.id, nil
 	}
 
 	return 0, fmt.Errorf("anime not found on AnimeLib")

@@ -1,6 +1,9 @@
 package cache
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // TTL strategies for different data types in anime streaming service
 var (
@@ -49,7 +52,7 @@ func KeyAnime(id string) string {
 }
 
 func KeyAnimeList(page, limit int, filters string) string {
-	return PrefixAnime + "list:" + filters + ":" + string(rune(page)) + ":" + string(rune(limit))
+	return fmt.Sprintf("%slist:%s:%d:%d", PrefixAnime, filters, page, limit)
 }
 
 func KeyEpisode(animeID, episodeNum string) string {
@@ -65,7 +68,7 @@ func KeyUserSession(sessionID string) string {
 }
 
 func KeySearchResults(query string, page int) string {
-	return PrefixSearch + query + ":" + string(rune(page))
+	return fmt.Sprintf("%s%s:%d", PrefixSearch, query, page)
 }
 
 func KeyWatchProgress(userID, animeID string) string {

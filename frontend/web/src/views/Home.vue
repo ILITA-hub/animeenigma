@@ -1,46 +1,34 @@
 <template>
   <div class="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black">
-    <!-- Header -->
-    <div class="pt-8 pb-6 px-4 lg:px-8 max-w-7xl mx-auto">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">
-            AnimeEnigma
-          </h1>
-          <p class="text-gray-400">
-            Смотри аниме онлайн бесплатно
-          </p>
+    <!-- Search Bar -->
+    <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+      <div class="flex items-center gap-3">
+        <div class="relative flex-1">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Поиск аниме..."
+            class="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all"
+            @keyup.enter="goToSearch"
+          />
+          <button
+            @click="goToSearch"
+            class="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
         </div>
         <router-link
           to="/schedule"
-          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+          class="flex items-center gap-2 px-4 py-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <span class="hidden sm:inline">Расписание</span>
         </router-link>
-      </div>
-    </div>
-
-    <!-- Search Bar -->
-    <div class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-      <div class="relative">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Поиск аниме..."
-          class="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all"
-          @keyup.enter="goToSearch"
-        />
-        <button
-          @click="goToSearch"
-          class="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition-colors"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </button>
       </div>
     </div>
 
