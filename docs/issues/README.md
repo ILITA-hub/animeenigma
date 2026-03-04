@@ -33,6 +33,45 @@ Track issues discovered during development. Each entry should include root cause
 - **Fix:** Added `uwucdn.top` to `HLSProxyAllowedDomains` in `libs/videoutils/proxy.go`
 - **Status:** Fixed
 
+### ISS-005: Gateway P95 latency stuck at ~10s in Grafana
+- **Date:** 2026-03-04
+- **Severity:** High (user-visible latency on search and episode lookups)
+- **Affected:** All requests proxied through gateway, worst on HiAnime/Consumet/AnimeLib episode routes
+- **Symptom:** Grafana "P95 Latency" panel showed gateway P95 at ~10s. After extending histogram buckets (Phase 1), the value was confirmed as real latency, not a bucket cap artifact.
+- **Root causes (multiple):**
+  1. **Histogram bucket cap at 10s** — `libs/metrics/metrics.go` had max bucket of 10. Grafana `histogram_quantile(0.95, ...)` couldn't compute above 10s. Fixed by adding 15 and 30 buckets.
+  2. **Sequential external API searches** — `doHiAnimeSearch`, `findConsumetID`, `findAnimeLibID` in `services/catalog/internal/service/catalog.go` tried name variants sequentially. Worst case: Jikan (2s) + 3 HiAnime searches (9s) = 11s+.
+  3. **N+1 enrichAnime queries** — Search results called `enrichAnime()` per-anime (2 DB queries each). Fixed with `enrichAnimesBatch()` using batch repo methods.
+  4. **Uncached Jikan lookups** — Jikan English title fetched on every HiAnime search. Fixed with 7-day cache.
+  5. **No search result caching** — Same query repeated within minutes hit Shikimori API again. Fixed with 15-min cache.
+  6. **chi `middleware.Timeout(30s)` incompatible with proxy** — Uses `http.TimeoutHandler` which buffers entire responses in memory. Incompatible with `io.Copy(w, resp.Body)` in gateway proxy handler. Removed.
+  7. **External API client timeouts too long (30s)** — HiAnime/Consumet/AnimeLib HTTP clients waited 30s per request. Reduced to 10s.
+  8. **No overall deadline on parallel search** — Parallel goroutines had no collective timeout. Added `context.WithTimeout(ctx, 10s)` to all three search functions.
+- **Fix applied (Phase 1):**
+  - Extended histogram buckets: added 15, 30 to `libs/metrics/metrics.go`
+  - Parallelized all three ID search functions (goroutines, first-match-wins)
+  - Added `enrichAnimesBatch()` with `GetForAnimes()` batch repo methods
+  - Cached Jikan lookups (7-day TTL)
+  - Added search result caching (15-min TTL via `cache.KeySearchResults`)
+  - Fixed `KeySearchResults` / `KeyAnimeList` cache key bug (`string(rune(page))` → `fmt.Sprintf`)
+- **Fix applied (Phase 2):**
+  - Removed `middleware.Timeout(30s)` from gateway router
+  - Reduced external API client timeouts: HiAnime/Consumet/AnimeLib 30s→10s, Jikan 15s→10s
+  - Added 10s `context.WithTimeout` to `doHiAnimeSearch`, `findConsumetID`, `findAnimeLibID`
+  - Reduced gateway proxy client timeout 30s→15s
+- **Key files:**
+  - `libs/metrics/metrics.go` — histogram buckets
+  - `libs/cache/ttl.go` — cache key functions
+  - `services/catalog/internal/service/catalog.go` — parallel search, batch enrichment, caching
+  - `services/catalog/internal/repo/genre.go` — `GetForAnimes()` batch method
+  - `services/catalog/internal/repo/video.go` — `GetForAnimes()` batch method
+  - `services/catalog/internal/parser/{hianime,consumet,animelib,jikan}/client.go` — client timeouts
+  - `services/gateway/internal/transport/router.go` — middleware removal
+  - `services/gateway/internal/service/proxy.go` — proxy client timeout
+- **Grafana query:** `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (service, le))`
+- **Lesson learned:** Don't use chi `middleware.Timeout` on a reverse proxy gateway — it buffers responses via `http.TimeoutHandler`. Rely on server `WriteTimeout` and per-client HTTP timeouts instead.
+- **Status:** Fix deployed, monitoring
+
 ## Resolved Issues
 
 ### ISS-003: Error reports received with empty fields

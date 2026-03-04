@@ -230,7 +230,8 @@
       "score": "評価",
       "progress": "進捗",
       "dateAdded": "追加日",
-      "status": "状態"
+      "status": "状態",
+      "genre": "ジャンル"
     },
     "stats": {
       "totalAnime": "合計アニメ",

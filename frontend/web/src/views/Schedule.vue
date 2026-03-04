@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-base">
+  <div class="min-h-screen bg-base pt-20">
     <div class="container mx-auto px-4 py-8">
       <h1 class="text-3xl font-bold text-white mb-8">Расписание выхода серий</h1>
 

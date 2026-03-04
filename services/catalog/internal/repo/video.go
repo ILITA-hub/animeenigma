@@ -86,6 +86,29 @@ func (r *VideoRepository) GetRandomVideos(ctx context.Context, videoType domain.
 	return videos, nil
 }
 
+// GetForAnimes loads videos for multiple anime IDs in a single query.
+// Returns a map from anime ID to its videos.
+func (r *VideoRepository) GetForAnimes(ctx context.Context, animeIDs []string) (map[string][]*domain.Video, error) {
+	if len(animeIDs) == 0 {
+		return make(map[string][]*domain.Video), nil
+	}
+
+	var videos []*domain.Video
+	err := r.db.WithContext(ctx).
+		Where("anime_id IN ?", animeIDs).
+		Order("anime_id, episode_number, type").
+		Find(&videos).Error
+	if err != nil {
+		return nil, fmt.Errorf("get videos for animes batch: %w", err)
+	}
+
+	result := make(map[string][]*domain.Video, len(animeIDs))
+	for _, v := range videos {
+		result[v.AnimeID] = append(result[v.AnimeID], v)
+	}
+	return result, nil
+}
+
 func (r *VideoRepository) HasVideosForAnime(ctx context.Context, animeID string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.Video{}).

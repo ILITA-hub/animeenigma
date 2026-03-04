@@ -2,17 +2,27 @@ package domain
 
 import "time"
 
+// GenreInfo is a read-only projection of the genres table.
+type GenreInfo struct {
+	ID     string `gorm:"size:50;primaryKey" json:"id"`
+	Name   string `json:"name"`
+	NameRU string `json:"name_ru,omitempty"`
+}
+
+func (GenreInfo) TableName() string { return "genres" }
+
 // AnimeInfo is a read-only projection of the animes table.
 // It omits DeletedAt so GORM won't add "WHERE deleted_at IS NULL",
 // ensuring entries referencing soft-deleted anime still return data.
 type AnimeInfo struct {
-	ID            string `gorm:"type:uuid;primaryKey" json:"id"`
-	Name          string `json:"name"`
-	NameRU        string `json:"name_ru,omitempty"`
-	NameJP        string `json:"name_jp,omitempty"`
-	PosterURL     string `json:"poster_url,omitempty"`
-	EpisodesCount int    `json:"episodes_count"`
-	EpisodesAired int    `json:"episodes_aired,omitempty"`
+	ID            string      `gorm:"type:uuid;primaryKey" json:"id"`
+	Name          string      `json:"name"`
+	NameRU        string      `json:"name_ru,omitempty"`
+	NameJP        string      `json:"name_jp,omitempty"`
+	PosterURL     string      `json:"poster_url,omitempty"`
+	EpisodesCount int         `json:"episodes_count"`
+	EpisodesAired int         `json:"episodes_aired,omitempty"`
+	Genres        []GenreInfo `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
 }
 
 func (AnimeInfo) TableName() string { return "animes" }

@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen">
+  <div class="min-h-screen pt-20">
     <!-- Loading State -->
     <div v-if="loading" class="flex justify-center items-center min-h-screen">
       <svg class="w-12 h-12 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
@@ -917,6 +917,7 @@ const sortOptions = computed<SelectOption[]>(() => [
   { value: 'score', label: t('profile.sort.score') },
   { value: 'progress', label: t('profile.sort.progress') },
   { value: 'status', label: t('profile.sort.status') },
+  { value: 'genre', label: t('profile.sort.genre') },
 ])
 
 const statusLabels = computed<Record<string, string>>(() => ({
@@ -994,6 +995,12 @@ const filteredWatchlist = computed(() => {
       case 'status':
         cmp = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99)
         break
+      case 'genre': {
+        const gA = a.anime?.genres?.[0]?.name || ''
+        const gB = b.anime?.genres?.[0]?.name || ''
+        cmp = gA.localeCompare(gB)
+        break
+      }
       case 'title':
       default:
         cmp = animeTitle(a).localeCompare(animeTitle(b))

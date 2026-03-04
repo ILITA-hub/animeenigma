@@ -232,7 +232,8 @@
       "score": "Оценка",
       "progress": "Прогресс",
       "dateAdded": "Дата добавления",
-      "status": "Статус"
+      "status": "Статус",
+      "genre": "Жанр"
     },
     "stats": {
       "totalAnime": "Всего аниме",

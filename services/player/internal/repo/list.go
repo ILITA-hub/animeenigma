@@ -46,7 +46,7 @@ func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntr
 func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
 	var entries []*domain.AnimeListEntry
 	err := r.db.WithContext(ctx).
-		Preload("Anime").
+		Preload("Anime").Preload("Anime.Genres").
 		Where("user_id = ?", userID).
 		Order("updated_at DESC").
 		Find(&entries).Error
@@ -56,7 +56,7 @@ func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domai
 func (r *ListRepository) GetByUserAndStatus(ctx context.Context, userID, status string) ([]*domain.AnimeListEntry, error) {
 	var entries []*domain.AnimeListEntry
 	err := r.db.WithContext(ctx).
-		Preload("Anime").
+		Preload("Anime").Preload("Anime.Genres").
 		Where("user_id = ? AND status = ?", userID, status).
 		Order("updated_at DESC").
 		Find(&entries).Error
@@ -66,7 +66,7 @@ func (r *ListRepository) GetByUserAndStatus(ctx context.Context, userID, status 
 func (r *ListRepository) GetByUserAndAnime(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
 	var entry domain.AnimeListEntry
 	err := r.db.WithContext(ctx).
-		Preload("Anime").
+		Preload("Anime").Preload("Anime.Genres").
 		Where("user_id = ? AND anime_id = ?", userID, animeID).
 		First(&entry).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -105,7 +105,7 @@ func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID 
 func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
 	var entries []*domain.AnimeListEntry
 	err := r.db.WithContext(ctx).
-		Preload("Anime").
+		Preload("Anime").Preload("Anime.Genres").
 		Where("user_id = ? AND status IN ?", userID, statuses).
 		Order("updated_at DESC").
 		Find(&entries).Error

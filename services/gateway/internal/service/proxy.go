@@ -22,7 +22,7 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 	return &ProxyService{
 		serviceURLs: serviceURLs,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
 					Timeout:   3 * time.Second,

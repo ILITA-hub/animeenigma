@@ -56,6 +56,46 @@ func (r *GenreRepository) GetForAnime(ctx context.Context, animeID string) ([]do
 	return anime.Genres, nil
 }
 
+// GetForAnimes loads genres for multiple anime IDs in a single query.
+// Returns a map from anime ID to its genres.
+func (r *GenreRepository) GetForAnimes(ctx context.Context, animeIDs []string) (map[string][]domain.Genre, error) {
+	if len(animeIDs) == 0 {
+		return make(map[string][]domain.Genre), nil
+	}
+
+	// Query the join table + genres in one query
+	type row struct {
+		AnimeID string
+		Genre   domain.Genre
+	}
+
+	var rows []struct {
+		AnimeID string       `gorm:"column:anime_id"`
+		ID      string       `gorm:"column:id"`
+		Name    string       `gorm:"column:name"`
+		NameRU  string       `gorm:"column:name_ru"`
+	}
+	err := r.db.WithContext(ctx).
+		Table("anime_genres").
+		Select("anime_genres.anime_id, genres.id, genres.name, genres.name_ru").
+		Joins("JOIN genres ON genres.id = anime_genres.genre_id").
+		Where("anime_genres.anime_id IN ?", animeIDs).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("get genres for animes batch: %w", err)
+	}
+
+	result := make(map[string][]domain.Genre, len(animeIDs))
+	for _, r := range rows {
+		result[r.AnimeID] = append(result[r.AnimeID], domain.Genre{
+			ID:     r.ID,
+			Name:   r.Name,
+			NameRU: r.NameRU,
+		})
+	}
+	return result, nil
+}
+
 func (r *GenreRepository) SetAnimeGenres(ctx context.Context, animeID string, genreIDs []string) error {
 	var anime domain.Anime
 	if err := r.db.WithContext(ctx).First(&anime, "id = ?", animeID).Error; err != nil {
