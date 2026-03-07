@@ -345,7 +345,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import videojs from 'video.js'
 import Hls from 'hls.js'
 import { hiAnimeApi, jimakuApi, userApi } from '@/api/client'
@@ -432,6 +432,7 @@ const nativeVideoRef = ref<HTMLVideoElement | null>(null)
 let vjsPlayer: ReturnType<typeof videojs> | null = null
 const vjsPlayerReady = ref(false)
 let hls: Hls | null = null
+let decodeErrorCount = 0
 
 // Progress tracking
 const currentTime = ref(0)
@@ -571,6 +572,7 @@ const fetchStream = async () => {
 
   // Dispose existing player BEFORE reactive state changes remove the DOM element
   disposeCurrentPlayer()
+  streamUrl.value = null // Force Vue to remove old video element and create fresh one
 
   loadingStream.value = true
   error.value = null
@@ -719,6 +721,11 @@ const initVideoJsPlayer = (url: string, referer: string = '') => {
     const err = vjsPlayer?.error()
     if (err) {
       console.error('[HiAnime Video.js Error]', err.code, err.message)
+      if (err.code === 3 && decodeErrorCount < 1) {
+        decodeErrorCount++
+        tryNextServer()
+        return
+      }
       error.value = 'Ошибка воспроизведения видео'
     }
   })
@@ -772,7 +779,12 @@ const initHlsPlayer = (url: string, referer: string = '') => {
               hls?.startLoad()
               break
             case Hls.ErrorTypes.MEDIA_ERROR:
-              hls?.recoverMediaError()
+              if (decodeErrorCount < 1) {
+                decodeErrorCount++
+                hls?.recoverMediaError()
+              } else {
+                tryNextServer()
+              }
               break
             default:
               error.value = 'Ошибка воспроизведения видео'
@@ -856,10 +868,24 @@ const selectEpisode = async (episode: HiAnimeEpisode) => {
   await fetchServers(episode.id)
 }
 
+const tryNextServer = async () => {
+  const currentServers = filteredServers.value
+  const currentIdx = currentServers.findIndex(s => s.id === selectedServer.value?.id)
+  const nextServer = currentServers[currentIdx + 1]
+  if (nextServer) {
+    console.warn(`[HiAnime] Decode error, switching to server: ${nextServer.name}`)
+    error.value = `Ошибка декодирования. Переключаю на ${nextServer.name}...`
+    await selectServer(nextServer)
+  } else {
+    error.value = 'Ошибка декодирования видео. Попробуйте другой плеер (Kodik).'
+  }
+}
+
 const selectServer = async (server: HiAnimeServer) => {
   if (selectedServer.value?.id === server.id) return
 
   selectedServer.value = server
+  decodeErrorCount = 0
   await fetchStream()
 }
 
@@ -1053,7 +1079,7 @@ onMounted(() => {
   fetchWatchedEpisodes()
 })
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
   saveProgress()
   disposeCurrentPlayer()

@@ -72,7 +72,7 @@ func Load() (*Config, error) {
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),
 			BurstSize:         getEnvInt("RATE_LIMIT_BURST", 200),
 		},
-		CORSOrigins: strings.Split(getEnv("CORS_ORIGINS", "*"), ","),
+		CORSOrigins: strings.Split(getEnv("CORS_ORIGINS", ""), ","),
 		DevMode:     getEnvBool("DEV_MODE", false),
 	}, nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -305,9 +306,9 @@ func (h *ShikimoriImportHandler) fetchAllShikimoriRates(ctx context.Context, nic
 }
 
 func (h *ShikimoriImportHandler) fetchShikimoriPage(ctx context.Context, nickname string, page int) ([]shikimoriAnimeRate, error) {
-	url := fmt.Sprintf("%s/api/users/%s/anime_rates?limit=5000&page=%d", h.shikimoriBaseURL, nickname, page)
+	reqURL := fmt.Sprintf("%s/api/users/%s/anime_rates?limit=5000&page=%d", h.shikimoriBaseURL, url.PathEscape(nickname), page)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.CodeInternal, "create request")
 	}

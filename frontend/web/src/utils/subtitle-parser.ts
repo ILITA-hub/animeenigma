@@ -124,7 +124,7 @@ export function parseSRT(content: string): SubtitleCue[] {
 
   for (const block of blocks) {
     const lines = block.trim().split('\n')
-    if (lines.length < 3) continue
+    if (lines.length < 2) continue
 
     // Find the timing line (contains "-->")
     const timingIndex = lines.findIndex(l => l.includes('-->'))

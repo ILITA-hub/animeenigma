@@ -27,6 +27,10 @@ func NewRouter(
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
 ) http.Handler {
+	if cfg.DevMode {
+		log.Warnw("⚠️  DEV MODE ENABLED — admin auth is BYPASSED. Do NOT use in production!")
+	}
+
 	r := chi.NewRouter()
 
 	// Middleware
@@ -35,6 +39,7 @@ func NewRouter(
 	r.Use(httputil.RequestLogger(log))
 	r.Use(httputil.Recoverer(log))
 	r.Use(httputil.CORS(cfg.CORSOrigins))
+	r.Use(httputil.SecurityHeaders)
 	r.Use(middleware.RealIP)
 	r.Use(RateLimitMiddleware(cfg.RateLimit))
 

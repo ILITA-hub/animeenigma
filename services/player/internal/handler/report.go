@@ -19,6 +19,11 @@ import (
 
 const maxReportBodySize = 2 * 1024 * 1024 // 2MB
 
+// allowedPlayerTypes is a whitelist of valid player types for report filenames.
+var allowedPlayerTypes = map[string]bool{
+	"hianime": true, "consumet": true, "kodik": true, "animelib": true,
+}
+
 type ReportHandler struct {
 	log             *logger.Logger
 	telegramToken   string
@@ -127,6 +132,12 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 		return '_'
 	}, username)
 
+	// Validate player type against allowlist to prevent path traversal
+	if !allowedPlayerTypes[report.PlayerType] {
+		h.log.Warnw("invalid player type in report", "player_type", report.PlayerType)
+		return ""
+	}
+
 	filename := fmt.Sprintf("%s_%s_%s.json", ts, username, report.PlayerType)
 	filePath := filepath.Join(h.reportsDir, filename)
 
@@ -158,7 +169,7 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 		return ""
 	}
 
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		h.log.Errorw("failed to write report file", "path", filePath, "error", err)
 		return ""
 	}

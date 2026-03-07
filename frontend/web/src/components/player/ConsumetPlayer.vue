@@ -319,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import videojs from 'video.js'
 import Hls from 'hls.js'
 import { consumetApi, jimakuApi, userApi } from '@/api/client'
@@ -400,6 +400,7 @@ const nativeVideoRef = ref<HTMLVideoElement | null>(null)
 let vjsPlayer: ReturnType<typeof videojs> | null = null
 const vjsPlayerReady = ref(false)
 let hls: Hls | null = null
+let decodeErrorCount = 0
 
 // Progress tracking
 const currentTime = ref(0)
@@ -502,8 +503,21 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
   await fetchStream()
 }
 
+const tryNextServer = async () => {
+  const currentIdx = servers.value.findIndex(s => s.name === selectedServer.value?.name)
+  const nextServer = servers.value[currentIdx + 1]
+  if (nextServer) {
+    console.warn(`[Consumet] Decode error, switching to server: ${nextServer.name}`)
+    error.value = `Ошибка декодирования. Переключаю на ${nextServer.name}...`
+    await selectServer(nextServer)
+  } else {
+    error.value = 'Ошибка декодирования видео. Попробуйте другой плеер (Kodik).'
+  }
+}
+
 const selectServer = async (server: ConsumetServer) => {
   selectedServer.value = server
+  decodeErrorCount = 0
   if (selectedEpisode.value) {
     await fetchStream()
   }
@@ -695,6 +709,11 @@ const initVideoJsPlayer = (url: string, referer: string) => {
     const err = vjsPlayer?.error()
     if (err) {
       console.error('[Consumet Video.js Error]', err.code, err.message)
+      if (err.code === 3 && decodeErrorCount < 1) {
+        decodeErrorCount++
+        tryNextServer()
+        return
+      }
       error.value = 'Ошибка воспроизведения видео'
     }
   })
@@ -744,7 +763,12 @@ const initHlsPlayer = (url: string, referer: string) => {
             hls?.startLoad()
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
-            hls?.recoverMediaError()
+            if (decodeErrorCount < 1) {
+              decodeErrorCount++
+              hls?.recoverMediaError()
+            } else {
+              tryNextServer()
+            }
             break
           default:
             error.value = 'Ошибка воспроизведения видео'
@@ -913,7 +937,7 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
   disposeCurrentPlayer()
 })
