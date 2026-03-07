@@ -59,15 +59,6 @@
             @pause="handlePause"
             @ended="handleEnded"
           >
-            <track
-              v-for="(sub, index) in subtitles"
-              :key="sub.url"
-              kind="subtitles"
-              :label="sub.lang"
-              :srclang="getLanguageCode(sub.lang)"
-              :src="buildSubtitleProxyUrl(sub.url)"
-              :default="index === 0"
-            />
           </video>
 
           <!-- Placeholder when no video loaded -->
@@ -83,12 +74,12 @@
             </div>
           </div>
 
-          <!-- Japanese Subtitle Overlay (outside v-if chain) -->
+          <!-- Subtitle Overlay (renders all subtitle types) -->
           <SubtitleOverlay
             :video-element="activeVideoElement"
             :subtitle-url="activeSubtitleUrl"
             :format="activeSubtitleFormat"
-            :visible="showJpOverlay"
+            :visible="showSubtitleOverlay"
             @loading="(v: boolean) => loadingSubOverlay = v"
             @error="(msg: string) => jimakuError = msg"
           />
@@ -238,59 +229,76 @@
         <!-- Subtitles section -->
         <div v-if="subtitles.length > 0 || selectedEpisode" class="mt-4 p-3 rounded-lg bg-white/5">
           <h4 class="text-white/60 text-sm mb-2">Субтитры</h4>
-          <!-- Stream subtitles -->
-          <div v-if="subtitles.length > 0" class="flex flex-wrap gap-2 mb-3">
-            <span
+
+          <div class="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+            <!-- "Off" option -->
+            <button
+              @click="deactivateSubtitle"
+              class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+              :class="!activeSubtitleUrl
+                ? 'bg-green-500/20 text-green-400'
+                : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
+            >
+              Off
+            </button>
+
+            <!-- Stream subtitles (EN, etc.) -->
+            <button
               v-for="sub in subtitles"
               :key="sub.url"
-              class="px-2 py-1 text-xs rounded bg-white/10 text-white/70"
+              @click="activateStreamSubtitle(sub)"
+              class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+              :class="activeSubtitleUrl === sub.url
+                ? 'bg-green-500/20 text-green-400'
+                : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
             >
               {{ sub.lang }}
-            </span>
-          </div>
-          <!-- Japanese Subtitles (Jimaku) -->
-          <div v-if="selectedEpisode">
-            <button
-              @click="fetchJimakuSubtitles"
-              :disabled="loadingJimaku"
-              class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-              :class="jimakuLoaded
-                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-            >
-              <svg v-if="loadingJimaku" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span v-else>JP</span>
-              {{ jimakuLoaded ? `JP Subs (${jimakuSubtitles.length})` : 'Load JP Subs' }}
             </button>
-            <div v-if="jimakuError" class="mt-1 text-xs text-red-400/70">{{ jimakuError }}</div>
-            <div v-if="jimakuLoaded && jimakuSubtitles.length > 0" class="mt-2 space-y-1 max-h-32 overflow-y-auto">
-              <button
-                v-for="(sub, index) in jimakuSubtitles"
-                :key="index"
-                @click="activateJimakuSubtitle(sub)"
-                class="w-full text-left px-2 py-1 rounded text-xs transition-all"
-                :class="activeJimakuSub === sub.url
-                  ? 'bg-red-500/20 text-red-400'
-                  : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
-              >
-                {{ sub.file_name }} ({{ sub.format }})
-              </button>
-            </div>
-            <!-- Toggle overlay visibility when active -->
+
+            <!-- Jimaku JP subs -->
             <button
-              v-if="activeJimakuSub"
-              @click="showJpOverlay = !showJpOverlay"
-              class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              :class="showJpOverlay
-                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
+              v-for="(sub, index) in jimakuSubtitles"
+              :key="'jp-' + index"
+              @click="activateJimakuSubtitle(sub)"
+              class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+              :class="activeSubtitleUrl === sub.url
+                ? 'bg-red-500/20 text-red-400'
+                : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
             >
-              {{ showJpOverlay ? 'Hide JP Subs' : 'Show JP Subs' }}
+              JP {{ sub.file_name }} ({{ sub.format }})
             </button>
           </div>
+
+          <!-- Load JP Subs button -->
+          <button
+            v-if="selectedEpisode && !jimakuLoaded"
+            @click="fetchJimakuSubtitles"
+            :disabled="loadingJimaku"
+            class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+            :class="loadingJimaku
+              ? 'bg-white/5 text-white/40'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            <svg v-if="loadingJimaku" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span v-else>JP</span>
+            Load JP Subs
+          </button>
+          <div v-if="jimakuError" class="mt-1 text-xs text-red-400/70">{{ jimakuError }}</div>
+
+          <!-- Toggle visibility -->
+          <button
+            v-if="activeSubtitleUrl"
+            @click="showSubtitleOverlay = !showSubtitleOverlay"
+            class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="showSubtitleOverlay
+              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+              : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
+          >
+            {{ showSubtitleOverlay ? 'Hide Subs' : 'Show Subs' }}
+          </button>
         </div>
 
       </div>
@@ -411,12 +419,10 @@ const jimakuSubtitles = ref<JimakuSubtitle[]>([])
 const loadingJimaku = ref(false)
 const jimakuLoaded = ref(false)
 const jimakuError = ref<string | null>(null)
-const activeJimakuSub = ref<string | null>(null)
-
 // Subtitle overlay state
 const activeSubtitleUrl = ref<string | null>(null)
 const activeSubtitleFormat = ref<'ass' | 'srt' | 'vtt' | null>(null)
-const showJpOverlay = ref(true)
+const showSubtitleOverlay = ref(true)
 const loadingSubOverlay = ref(false)
 
 // Computed: get the active video element for subtitle sync
@@ -491,7 +497,6 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
   jimakuSubtitles.value = []
   jimakuLoaded.value = false
   jimakuError.value = null
-  activeJimakuSub.value = null
   activeSubtitleUrl.value = null
   activeSubtitleFormat.value = null
   await fetchStream()
@@ -612,12 +617,6 @@ const buildProxyUrl = (url: string, referer: string): string => {
   return `/api/streaming/hls-proxy?${params.toString()}`
 }
 
-const buildSubtitleProxyUrl = (url: string): string => {
-  const params = new URLSearchParams()
-  params.set('url', url)
-  return `/api/streaming/hls-proxy?${params.toString()}`
-}
-
 // Jimaku Japanese subtitles
 const fetchJimakuSubtitles = async () => {
   if (!selectedEpisode.value || loadingJimaku.value) return
@@ -644,27 +643,22 @@ const fetchJimakuSubtitles = async () => {
   }
 }
 
-const activateJimakuSubtitle = (sub: JimakuSubtitle) => {
-  activeJimakuSub.value = sub.url
-  // Use the custom subtitle overlay for selectable text rendering
+const activateStreamSubtitle = (sub: { url: string; lang: string }) => {
   activeSubtitleUrl.value = sub.url
-  activeSubtitleFormat.value = (sub.format as 'ass' | 'srt' | 'vtt') || 'ass'
-  showJpOverlay.value = true
+  activeSubtitleFormat.value = 'vtt' // Consumet stream subs are VTT
+  showSubtitleOverlay.value = true
 }
 
-const getLanguageCode = (lang: string): string => {
-  const langMap: Record<string, string> = {
-    'english': 'en',
-    'japanese': 'ja',
-    'russian': 'ru',
-    'spanish': 'es',
-    'french': 'fr',
-    'german': 'de',
-    'italian': 'it',
-    'portuguese': 'pt',
-    'arabic': 'ar',
-  }
-  return langMap[lang.toLowerCase()] || lang.substring(0, 2).toLowerCase()
+const deactivateSubtitle = () => {
+  activeSubtitleUrl.value = ''
+  activeSubtitleFormat.value = null
+  showSubtitleOverlay.value = false
+}
+
+const activateJimakuSubtitle = (sub: JimakuSubtitle) => {
+  activeSubtitleUrl.value = sub.url
+  activeSubtitleFormat.value = (sub.format as 'ass' | 'srt' | 'vtt') || 'ass'
+  showSubtitleOverlay.value = true
 }
 
 const initPlayer = (url: string, referer: string) => {
@@ -709,17 +703,6 @@ const initVideoJsPlayer = (url: string, referer: string) => {
   vjsPlayer.src({ src: proxyUrl, type: 'application/x-mpegURL' })
   vjsPlayer.ready(() => {
     vjsPlayerReady.value = true
-    // Add subtitle tracks after source is set
-    for (let i = 0; i < subtitles.value.length; i++) {
-      const sub = subtitles.value[i]
-      vjsPlayer?.addRemoteTextTrack({
-        kind: 'subtitles',
-        label: sub.lang,
-        srclang: getLanguageCode(sub.lang),
-        src: buildSubtitleProxyUrl(sub.url),
-        default: i === 0,
-      }, false)
-    }
     vjsPlayer?.play()?.catch(() => {})
   })
 }

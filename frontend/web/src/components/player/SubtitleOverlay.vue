@@ -195,8 +195,8 @@ async function loadSubtitles(url: string, format: string) {
 }
 
 watch(() => props.subtitleUrl, (url) => {
-  if (url && props.format) {
-    loadSubtitles(url, props.format)
+  if (url) {
+    loadSubtitles(url, props.format || 'auto')
   } else {
     cues.value = []
   }
@@ -222,8 +222,8 @@ onMounted(() => {
   window.addEventListener('resize', updateBaseFontSize)
   updateBaseFontSize()
   if (props.videoElement && props.visible) startTimeSync()
-  if (props.subtitleUrl && props.format) {
-    loadSubtitles(props.subtitleUrl, props.format)
+  if (props.subtitleUrl) {
+    loadSubtitles(props.subtitleUrl, props.format || 'auto')
   }
 })
 
