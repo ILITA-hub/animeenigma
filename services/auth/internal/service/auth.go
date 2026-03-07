@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -227,7 +228,7 @@ func (s *AuthService) verifyTelegramAuth(req *domain.TelegramLoginRequest) bool 
 	h.Write([]byte(dataCheckString))
 	calculatedHash := hex.EncodeToString(h.Sum(nil))
 
-	return calculatedHash == req.Hash
+	return subtle.ConstantTimeCompare([]byte(calculatedHash), []byte(req.Hash)) == 1
 }
 
 // GenerateApiKey generates a new API key for the user, replacing any existing one.

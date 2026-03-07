@@ -118,6 +118,28 @@ func TestConvertShikimoriStatus(t *testing.T) {
 	}
 }
 
+func TestFetchShikimoriPage_NicknameURLEncoding(t *testing.T) {
+	// Create a test server that captures the request URL
+	var capturedRawPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// RawPath preserves percent-encoding; Path is the decoded form.
+		capturedRawPath = r.URL.RawPath
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("[]"))
+	}))
+	defer srv.Close()
+
+	log := logger.Default()
+	handler := NewShikimoriImportHandler(nil, nil, log)
+	handler.shikimoriBaseURL = srv.URL
+
+	_, err := handler.fetchShikimoriPage(context.Background(), "user/with spaces&special", 1)
+	require.NoError(t, err)
+
+	// Verify the nickname was URL-encoded in the path (PathEscape encodes / and spaces)
+	assert.Equal(t, "/api/users/user%2Fwith%20spaces&special/anime_rates", capturedRawPath)
+}
+
 func TestShikimoriImportHandler_MigrateShikimoriEntries_Unauthorized(t *testing.T) {
 	log := logger.Default()
 	handler := NewShikimoriImportHandler(nil, nil, log)

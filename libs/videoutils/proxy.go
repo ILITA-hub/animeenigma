@@ -179,11 +179,11 @@ func (p *VideoProxy) GetStreamInfo(ctx context.Context, sourceURL string) (*Vide
 	}, nil
 }
 
-// isDomainAllowed checks if a domain is in the allowed list
+// isDomainAllowed checks if a domain is in the allowed list.
+// Returns false when AllowedDomains is empty (fail-closed).
 func (p *VideoProxy) isDomainAllowed(host string) bool {
-	// Allow all domains if list is empty
 	if len(p.config.AllowedDomains) == 0 {
-		return true
+		return false
 	}
 
 	host = strings.ToLower(host)
@@ -234,19 +234,6 @@ var HLSProxyAllowedDomains = []string{
 	"jimaku.cc",      // Japanese subtitle files
 	"cdnlibs.org",    // AnimeLib video CDN
 	"hentaicdn.org",  // AnimeLib video CDN (mirror)
-}
-
-// HLSProxyAllowedTLDs contains TLDs commonly used by streaming CDNs
-// These CDNs use random domain names like sunburst93.live, haildrop77.pro
-var HLSProxyAllowedTLDs = []string{
-	".live",
-	".pro",
-	".xyz",
-	".club",
-	".tv",
-	".to",
-	".online",
-	".wiki",
 }
 
 // UpstreamError represents an error from the upstream CDN.
@@ -557,13 +544,6 @@ func isHLSDomainAllowed(host string) bool {
 	for _, allowed := range HLSProxyAllowedDomains {
 		allowed = strings.ToLower(allowed)
 		if host == allowed || strings.HasSuffix(host, "."+allowed) {
-			return true
-		}
-	}
-
-	// Check allowed TLDs (for dynamically generated CDN domains)
-	for _, tld := range HLSProxyAllowedTLDs {
-		if strings.HasSuffix(host, tld) {
 			return true
 		}
 	}

@@ -55,31 +55,40 @@ func Recoverer(log *logger.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// CORS returns a CORS middleware
+// CORS returns a CORS middleware.
+// When allowedOrigins is empty or contains only empty strings, no CORS headers are set.
 func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
+	// Filter out empty strings from allowed origins
+	var filtered []string
+	for _, o := range allowedOrigins {
+		if o != "" {
+			filtered = append(filtered, o)
+		}
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 
-			// Check if origin is allowed
-			allowed := false
-			for _, o := range allowedOrigins {
-				if o == "*" || o == origin {
-					allowed = true
-					break
+			// Skip CORS headers entirely when no origins are configured
+			if len(filtered) > 0 {
+				// Check if origin is allowed
+				allowed := false
+				for _, o := range filtered {
+					if o == "*" || o == origin {
+						allowed = true
+						break
+					}
 				}
-			}
 
-			if allowed {
-				if origin == "" {
-					origin = "*"
+				if allowed && origin != "" {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
+					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+					w.Header().Set("Access-Control-Expose-Headers", "X-Token-Expired")
+					w.Header().Set("Access-Control-Max-Age", "86400")
 				}
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Access-Control-Allow-Credentials", "true")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Expose-Headers", "X-Token-Expired")
-				w.Header().Set("Access-Control-Max-Age", "86400")
 			}
 
 			if r.Method == http.MethodOptions {
@@ -90,6 +99,17 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// SecurityHeaders adds security-related HTTP headers to all responses.
+func SecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // RequestID adds a request ID to the context
