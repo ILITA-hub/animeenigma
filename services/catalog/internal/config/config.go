@@ -21,6 +21,7 @@ type Config struct {
 	Consumet  ConsumetConfig
 	Jimaku    JimakuConfig
 	AnimeLib  AnimeLibConfig
+	Telegram  TelegramConfig
 }
 
 type ServerConfig struct {
@@ -54,6 +55,10 @@ type JimakuConfig struct {
 
 type AnimeLibConfig struct {
 	Token string
+}
+
+type TelegramConfig struct {
+	NewsChannel string
 }
 
 func Load() (*Config, error) {
@@ -98,6 +103,9 @@ func Load() (*Config, error) {
 		},
 		AnimeLib: AnimeLibConfig{
 			Token: getEnv("ANIMELIB_TOKEN", ""),
+		},
+		Telegram: TelegramConfig{
+			NewsChannel: getEnv("TELEGRAM_NEWS_CHANNEL", "animeenigmanews"),
 		},
 	}, nil
 }
