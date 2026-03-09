@@ -5,10 +5,6 @@ import router from './router'
 import i18n from './i18n'
 import App from './App.vue'
 
-// Diagnostics (must init before other imports that use console)
-import { initDiagnostics } from './utils/diagnostics'
-initDiagnostics()
-
 // Styles
 import './styles/main.css'
 
@@ -20,3 +16,9 @@ app.use(i18n)
 app.use(MotionPlugin)
 
 app.mount('#app')
+
+// Defer diagnostics init to after first paint to reduce long task duration
+const deferInit = window.requestIdleCallback || ((cb: () => void) => setTimeout(cb, 100))
+deferInit(() => {
+  import('./utils/diagnostics').then(({ initDiagnostics }) => initDiagnostics())
+})

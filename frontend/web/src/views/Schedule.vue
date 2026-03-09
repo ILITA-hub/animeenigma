@@ -53,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { getLocalizedTitle } from '@/utils/title'
@@ -127,11 +127,18 @@ const formatTime = (dateStr: string) => {
   return t('schedule.timeMsk', { time: timeStr })
 }
 
+let active = true
+
 onMounted(async () => {
   try {
-    schedule.value = await fetchSchedule()
+    const data = await fetchSchedule()
+    if (active) schedule.value = data
   } catch (err) {
     console.error('Failed to fetch schedule:', err)
   }
+})
+
+onBeforeUnmount(() => {
+  active = false
 })
 </script>

@@ -54,7 +54,7 @@ export const useHomeStore = defineStore('home', () => {
         }),
 
         animeApi.getOngoing().then(response => {
-          const animes = response.data?.data || []
+          const animes = (response.data?.data || []).slice(0, 20)
           ongoingAnime.value = animes
           if (animes.length > 0) {
             const maxUpdated = animes.reduce((max: string | null, anime: HomeAnime) => {
