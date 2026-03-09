@@ -6,7 +6,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
-      <h2 class="text-xl font-bold text-white">Активность</h2>
+      <h2 class="text-xl font-bold text-white">{{ $t('activity.title') }}</h2>
     </div>
 
     <!-- Loading skeleton -->
@@ -35,7 +35,7 @@
         >
           <img
             :src="event.anime?.poster_url || '/placeholder.svg'"
-            :alt="event.anime?.name_ru || event.anime?.name || ''"
+            :alt="getLocalizedTitle(event.anime?.name, event.anime?.name_ru) || ''"
             class="w-12 h-16 object-cover rounded-lg"
           />
         </router-link>
@@ -62,7 +62,7 @@
 
       <!-- Empty state -->
       <div v-if="events.length === 0 && !loading" class="text-center py-8 text-gray-400">
-        Пока нет активности
+        {{ $t('activity.empty') }}
       </div>
 
       <!-- Load more button -->
@@ -72,7 +72,7 @@
         :disabled="loading"
         class="w-full mt-3 py-2.5 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-colors disabled:opacity-50"
       >
-        {{ loading ? 'Загрузка...' : 'Показать ещё' }}
+        {{ loading ? $t('common.loading') : $t('activity.loadMore') }}
       </button>
     </div>
   </div>
@@ -80,7 +80,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { activityApi } from '@/api/client'
+import { getLocalizedTitle } from '@/utils/title'
 
 interface ActivityEvent {
   id: string
@@ -99,6 +101,7 @@ interface ActivityEvent {
   created_at: string
 }
 
+const { t, locale } = useI18n()
 const events = ref<ActivityEvent[]>([])
 const hasMore = ref(false)
 const loading = ref(true)
@@ -131,22 +134,14 @@ const loadMore = () => {
 
 const actionText = (event: ActivityEvent): string => {
   if (event.type === 'score') {
-    return `поставил ${event.new_value}/10 — `
+    return t('activity.score', { score: event.new_value })
   }
-  const statusTexts: Record<string, string> = {
-    watching: 'начал смотреть ',
-    completed: 'завершил ',
-    dropped: 'дропнул ',
-    plan_to_watch: 'добавил в список ',
-    on_hold: 'поставил на паузу ',
-    rewatching: 'пересматривает ',
-  }
-  return statusTexts[event.new_value] || `обновил статус — `
+  return t(`activity.status.${event.new_value}`) + ' '
 }
 
 const animeName = (event: ActivityEvent): string => {
-  if (!event.anime) return 'Неизвестное аниме'
-  return event.anime.name_ru || event.anime.name || 'Неизвестное аниме'
+  if (!event.anime) return t('home.noData')
+  return getLocalizedTitle(event.anime.name, event.anime.name_ru) || t('home.noData')
 }
 
 const formatRelativeTime = (dateStr: string): string => {
@@ -157,12 +152,12 @@ const formatRelativeTime = (dateStr: string): string => {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffMinutes < 1) return 'только что'
-  if (diffMinutes < 60) return `${diffMinutes} мин. назад`
-  if (diffHours < 24) return `${diffHours} ч. назад`
-  if (diffDays === 1) return 'вчера'
-  if (diffDays < 7) return `${diffDays} дн. назад`
-  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+  if (diffMinutes < 1) return t('time.justNow')
+  if (diffMinutes < 60) return t('time.minutesAgo', { n: diffMinutes })
+  if (diffHours < 24) return t('time.hoursAgo', { n: diffHours })
+  if (diffDays === 1) return t('common.yesterday')
+  if (diffDays < 7) return t('time.daysAgo', { n: diffDays })
+  return date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'short' })
 }
 
 onMounted(() => {

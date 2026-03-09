@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiClient } from '@/api/client'
+import i18n from '@/i18n'
 
 export interface User {
   id: string
@@ -82,7 +83,7 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
-      error.value = e.response?.data?.error?.message || e.response?.data?.message || 'Ошибка входа'
+      error.value = e.response?.data?.error?.message || e.response?.data?.message || i18n.global.t('auth.loginError')
       return false
     } finally {
       loading.value = false
@@ -101,7 +102,7 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
-      error.value = e.response?.data?.error?.message || e.response?.data?.message || 'Ошибка регистрации'
+      error.value = e.response?.data?.error?.message || e.response?.data?.message || i18n.global.t('auth.registerError')
       return false
     } finally {
       loading.value = false
@@ -143,7 +144,7 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
-      error.value = e.response?.data?.error?.message || e.response?.data?.message || 'Ошибка входа через Telegram'
+      error.value = e.response?.data?.error?.message || e.response?.data?.message || i18n.global.t('auth.telegramLoginError')
       return false
     } finally {
       loading.value = false

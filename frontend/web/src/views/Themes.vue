@@ -4,7 +4,7 @@
       <!-- Header -->
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-2xl font-bold text-white">Openings & Endings</h1>
+          <h1 class="text-2xl font-bold text-white">{{ $t('themes.title') }}</h1>
           <p class="text-white/50 text-sm mt-1">
             {{ seasonLabel }} {{ currentYear }}
           </p>
@@ -27,7 +27,7 @@
           <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          {{ syncing ? `Syncing ${syncProgress}` : 'Sync Season' }}
+          {{ syncing ? $t('themes.syncing', { progress: syncProgress }) : $t('themes.syncButton') }}
         </button>
       </div>
 
@@ -53,9 +53,9 @@
           v-model="sortBy"
           class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/70 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
         >
-          <option value="rating">By Rating</option>
-          <option value="name">By Name</option>
-          <option value="newest">Newest</option>
+          <option value="rating">{{ $t('themes.sortRating') }}</option>
+          <option value="name">{{ $t('themes.sortName') }}</option>
+          <option value="newest">{{ $t('themes.sortNewest') }}</option>
         </select>
 
         <!-- Season selector -->
@@ -86,8 +86,8 @@
         <svg class="w-16 h-16 mx-auto text-white/10 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
         </svg>
-        <p class="text-white/40">No themes found for this season</p>
-        <p v-if="authStore.isAdmin" class="text-white/30 text-sm mt-2">Click "Sync Season" to fetch themes</p>
+        <p class="text-white/40">{{ $t('themes.noThemes') }}</p>
+        <p v-if="authStore.isAdmin" class="text-white/30 text-sm mt-2">{{ $t('themes.syncHint') }}</p>
       </div>
 
       <!-- Theme Cards Grid -->
@@ -106,10 +106,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { themesApi, adminThemesApi } from '@/api/client'
 import ThemeCard from '@/components/themes/ThemeCard.vue'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 
 interface Theme {
@@ -198,7 +200,7 @@ const fetchThemes = async () => {
     })
     themes.value = resp.data?.data || resp.data || []
   } catch (err: unknown) {
-    error.value = 'Failed to load themes'
+    error.value = t('themes.loadError')
     console.error('Failed to fetch themes:', err)
   } finally {
     loading.value = false

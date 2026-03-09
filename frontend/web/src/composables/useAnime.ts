@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { animeApi, episodeApi, userApi } from '@/api/client'
+import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
 
 interface ApiGenre {
   name_ru?: string
@@ -28,10 +29,14 @@ interface ApiAnime {
 export interface Anime {
   id: string
   title: string
+  name?: string
+  nameRu?: string
+  nameJp?: string
   description: string
   coverImage: string
   bannerImage?: string
   genres: string[]
+  rawGenres?: { name?: string; nameRu?: string }[]
   status: string
   releaseYear: number
   rating: number
@@ -55,11 +60,15 @@ export interface Episode {
 function transformAnime(apiAnime: ApiAnime): Anime {
   return {
     id: apiAnime.id,
-    title: apiAnime.name_ru || apiAnime.name || apiAnime.name_jp || '',
+    title: getLocalizedTitle(apiAnime.name, apiAnime.name_ru, apiAnime.name_jp),
+    name: apiAnime.name || undefined,
+    nameRu: apiAnime.name_ru || undefined,
+    nameJp: apiAnime.name_jp || undefined,
     description: apiAnime.description || '',
     coverImage: apiAnime.poster_url || '',
     bannerImage: apiAnime.banner_url,
-    genres: apiAnime.genres?.map((g: ApiGenre) => g.name_ru || g.name || '') || [],
+    genres: apiAnime.genres?.map((g: ApiGenre) => getLocalizedGenre(g.name, g.name_ru)) || [],
+    rawGenres: apiAnime.genres?.map((g: ApiGenre) => ({ name: g.name, nameRu: g.name_ru })) || [],
     status: apiAnime.status || '',
     releaseYear: apiAnime.year || 0,
     rating: apiAnime.score || 0,

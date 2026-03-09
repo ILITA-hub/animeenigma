@@ -2,13 +2,12 @@
   "nav": {
     "home": "Главная",
     "catalog": "Каталог",
-    "genres": "Жанры",
     "rooms": "Комнаты",
     "themes": "OP/ED",
     "search": "Поиск",
     "profile": "Профиль",
     "login": "Войти",
-    "logout": "Выйти"
+    "schedule": "Расписание"
   },
   "hero": {
     "tagline": "Смотри аниме по-своему",
@@ -17,23 +16,28 @@
     "scroll": "Прокрутите вниз"
   },
   "home": {
-    "continueWatching": "Продолжить просмотр",
-    "recommended": "Рекомендации для вас",
-    "trending": "Сейчас в тренде",
-    "newEpisodes": "Новые эпизоды",
-    "genres": "Жанры",
-    "popular": "Популярное",
-    "seeAll": "Все"
+    "seeAll": "Все",
+    "todayAt": "Сегодня {time}",
+    "tomorrowAt": "Завтра {time}",
+    "dayAt": "{day} {time}",
+    "ongoing": "Онгоинги",
+    "topAnime": "Топ аниме",
+    "announcements": "Анонсы",
+    "noOngoing": "Нет онгоингов",
+    "noData": "Нет данных",
+    "noAnnounced": "Нет анонсов",
+    "updated": "Обновлено {time}",
+    "airing": "Выходит",
+    "announced": "Анонс",
+    "episodeCount": "{count} эп."
   },
   "anime": {
     "watch": "Смотреть",
     "addToList": "В список",
-    "removeFromList": "Убрать из списка",
+    "removeFromList": "Удалить из списка",
     "episodes": "Эпизоды",
     "synopsis": "Описание",
-    "characters": "Персонажи",
     "related": "Связанные",
-    "recommendations": "Рекомендации",
     "episode": "Эпизод",
     "of": "из",
     "reviews": "Отзывы",
@@ -54,13 +58,19 @@
     "refreshTooltip": "Обновить данные с Shikimori",
     "showMore": "Показать полностью",
     "showLess": "Скрыть",
-    "removeFromList": "Удалить из списка",
     "nextEpisode": "Эп. {episode}:",
     "todayAt": "Сегодня в {time} МСК",
     "tomorrowAt": "Завтра в {time} МСК",
+    "dayAtTime": "В {day} в {time} МСК",
+    "timeMsk": "{time} МСК",
+    "save": "Сохранить",
+    "examplePlaceholder": "например: 59459",
+    "episodeProgress": "{aired} / {total} эп.",
+    "episodeTotal": "{total} эп.",
+    "episodeAiredUnknown": "{aired} / ? эп.",
+    "episodeUnknown": "? эп.",
     "hide": "Скрыть",
     "unhide": "Показать",
-    "hidden": "Скрыто",
     "status": {
       "ongoing": "Онгоинг",
       "released": "Вышло",
@@ -72,7 +82,6 @@
   "player": {
     "quality": "Качество",
     "subtitles": "Субтитры",
-    "audio": "Аудио",
     "autoplay": "Автовоспр.",
     "next": "Следующий",
     "previous": "Предыдущий",
@@ -89,30 +98,64 @@
     "reportDescriptionPlaceholder": "Опишите проблему (необязательно)...",
     "reportDisclaimer": "Будут отправлены данные браузера и логи для диагностики.",
     "reportSending": "Отправка...",
-    "reportSubmit": "Отправить"
+    "reportSubmit": "Отправить",
+    "loadingEpisode": "Загрузка серии {n}...",
+    "selectEpisode": "Выберите серию для начала просмотра",
+    "selectVoice": "Выберите озвучку для начала просмотра",
+    "episodesCount": "Серии ({count})",
+    "watched": "Просмотрено",
+    "markWatched": "Отметить просмотренным",
+    "playerLabel": "Плеер",
+    "voiceActing": "Озвучки",
+    "voiceActingCount": "Озвучка ({count})",
+    "subtitlesCount": "Субтитры ({count})",
+    "allCount": "Все ({count})",
+    "noVoiceActing": "Нет доступных озвучек",
+    "noSubtitlesAvailable": "Нет доступных субтитров",
+    "noDubAvailable": "Нет доступного дубляжа",
+    "hideSubtitles": "Скрыть субтитры",
+    "showSubtitles": "Показать субтитры",
+    "servers": "Серверы",
+    "off": "Выкл",
+    "sub": "Субтитры",
+    "dub": "Озвучка",
+    "pin": "Закрепить",
+    "unpin": "Открепить",
+    "native": "Нативный",
+    "recommendedVoice": "Рекомендуемая озвучка",
+    "episodeShort": "эп.",
+    "error": {
+      "loadEpisodes": "Не удалось загрузить список серий",
+      "loadTranslations": "Не удалось загрузить список озвучек",
+      "loadServers": "Не удалось загрузить серверы",
+      "videoNotFound": "Видео не найдено",
+      "loadVideo": "Не удалось загрузить видео",
+      "getVideoUrl": "Не удалось получить ссылку на видео",
+      "playerInit": "Ошибка инициализации плеера",
+      "playback": "Ошибка воспроизведения видео",
+      "markWatched": "Не удалось отметить серию",
+      "pinTranslation": "Не удалось изменить закрепление",
+      "decoding": "Ошибка декодирования. Переключаю на {server}...",
+      "decodingFallback": "Ошибка декодирования видео. Попробуйте другой плеер (Kodik).",
+      "serverBusy": "Сервер занят. Попробуйте позже или используйте Kodik.",
+      "hlsUnsupported": "Ваш браузер не поддерживает HLS",
+      "serverLoaded": "Сервер загружен. Если видео тормозит, попробуйте Kodik.",
+      "submitReport": "Ошибка отправки"
+    }
   },
   "search": {
     "placeholder": "Поиск аниме...",
     "recent": "Недавние поиски",
     "clearAll": "Очистить всё",
     "noResults": "Ничего не найдено",
-    "filters": "Фильтры",
-    "year": "Год",
     "genre": "Жанр",
-    "status": "Статус",
-    "sort": "Сортировка",
-    "type": "Тип",
     "viewAll": "Все результаты"
   },
   "profile": {
     "memberSince": "Участник с",
-    "editProfile": "Редактировать",
     "tabs": {
       "watchlist": "Мои списки",
-      "history": "История",
-      "favorites": "Избранное",
-      "settings": "Настройки",
-      "hidden": "Скрытое"
+      "settings": "Настройки"
     },
     "watchlist": {
       "all": "Все",
@@ -124,28 +167,21 @@
       "searchPlaceholder": "Поиск аниме..."
     },
     "table": {
-      "number": "#",
-      "image": "Обложка",
       "title": "Название",
       "score": "Оценка",
-      "type": "Тип",
       "progress": "Прогресс",
-      "tags": "Теги",
-      "actions": "Действия"
+      "poster": "Постер",
+      "startDate": "Начало",
+      "endDate": "Конец",
+      "status": "Статус"
     },
     "empty": {
-      "watchlist": "Ваш список пуст",
-      "history": "История просмотра пуста",
-      "hidden": "Нет скрытых аниме"
+      "watchlist": "Ваш список пуст"
     },
     "actions": {
       "browseCatalog": "Каталог",
-      "removeFromList": "Удалить из списка",
-      "tableView": "Таблица",
-      "gridView": "Сетка"
+      "removeFromList": "Удалить из списка"
     },
-    "rewatching": "Пересматриваю",
-    "noPoster": "Нет постера",
     "import": {
       "title": "Импорт списка",
       "malPlaceholder": "Введите имя пользователя MAL",
@@ -160,22 +196,10 @@
       "justNow": "только что",
       "minutesAgo": "{n} мин назад",
       "hoursAgo": "{n}ч назад",
-      "daysAgo": "{n}д назад",
-      "alreadyRunning": "Импорт уже выполняется"
+      "daysAgo": "{n}д назад"
     },
     "settings": {
-      "appearance": "Внешний вид",
-      "language": "Язык",
-      "languageDesc": "Язык интерфейса",
-      "autoplay": "Автовоспроизведение",
-      "reduceMotion": "Уменьшить анимацию",
-      "reduceMotionDesc": "Уменьшить анимации",
-      "playback": "Воспроизведение",
-      "defaultQuality": "Качество по умолчанию",
-      "preferredAudio": "Предпочитаемое аудио",
-      "subtitles": "Субтитры",
       "account": "Аккаунт",
-      "email": "Email",
       "changePassword": "Сменить пароль",
       "signOut": "Выйти",
       "apiKey": "API-ключ",
@@ -190,10 +214,6 @@
       "apiKeyNone": "API-ключ не настроен.",
       "apiKeyRevokeConfirm": "Вы уверены? Скрипты, использующие этот ключ, перестанут работать.",
       "apiKeyRevoked": "API-ключ отозван."
-    },
-    "history": {
-      "empty": "История просмотра пуста",
-      "episode": "Эпизод"
     },
     "publicProfile": "Публичный профиль",
     "profileLink": "Ссылка на профиль",
@@ -213,26 +233,10 @@
     "listEmpty": "Список пуст",
     "ep": "эп.",
     "goHome": "На главную",
-    "table": {
-      "number": "#",
-      "image": "Обложка",
-      "title": "Название",
-      "score": "Оценка",
-      "type": "Тип",
-      "progress": "Прогресс",
-      "tags": "Теги",
-      "actions": "Действия",
-      "poster": "Постер",
-      "startDate": "Начало",
-      "endDate": "Конец",
-      "status": "Статус"
-    },
     "sort": {
-      "label": "Сортировка",
       "title": "Название",
       "score": "Оценка",
       "progress": "Прогресс",
-      "dateAdded": "Дата добавления",
       "status": "Статус",
       "genre": "Жанр"
     },
@@ -257,7 +261,6 @@
   "rooms": {
     "title": "Игровые комнаты",
     "create": "Создать комнату",
-    "join": "Войти",
     "players": "игроков",
     "host": "Хост",
     "round": "Раунд",
@@ -267,26 +270,44 @@
       "finished": "Завершено"
     },
     "leaderboard": "Таблица лидеров",
-    "leave": "Покинуть"
+    "leave": "Покинуть",
+    "description": "Играй в аниме-игры с другими фанатами!",
+    "availableRooms": "Доступные комнаты",
+    "noRooms": "Нет активных комнат",
+    "createFirst": "Создайте первую комнату",
+    "playersList": "Игроки ({count})",
+    "waitingDescription": "Игра начнётся, когда присоединится достаточно игроков",
+    "loadingQuestion": "Загрузка вопроса...",
+    "chat": "Чат",
+    "messagePlaceholder": "Введите сообщение...",
+    "roomNameLabel": "Название комнаты",
+    "roomNamePlaceholder": "Введите название",
+    "gameTypeLabel": "Тип игры",
+    "maxPlayersLabel": "Макс. игроков",
+    "gameType": {
+      "animeQuiz": "Аниме Квиз",
+      "characterGuess": "Угадай персонажа",
+      "openingQuiz": "Опенинг Квиз"
+    }
   },
   "common": {
     "loading": "Загрузка...",
-    "error": "Ошибка",
     "retry": "Повторить",
     "cancel": "Отмена",
-    "save": "Сохранить",
     "delete": "Удалить",
-    "confirm": "Подтвердить",
     "back": "Назад",
     "next": "Далее",
-    "today": "Сегодня",
     "yesterday": "Вчера"
+  },
+  "updates": {
+    "title": "Последние обновления",
+    "empty": "Нет обновлений",
+    "error": "Не удалось загрузить обновления"
   },
   "activity": {
     "title": "Активность",
     "empty": "Пока нет активности",
     "loadMore": "Показать ещё",
-    "loading": "Загрузка...",
     "score": "поставил {score}/10 —",
     "status": {
       "watching": "начал смотреть",
@@ -296,6 +317,94 @@
       "on_hold": "поставил на паузу",
       "rewatching": "пересматривает"
     }
+  },
+  "schedule": {
+    "title": "Расписание выхода серий",
+    "today": "(Сегодня)",
+    "noData": "Нет данных о расписании",
+    "hint": "Расписание обновится при добавлении онгоингов в базу",
+    "episode": "Эп. {n}",
+    "timeMsk": "{time} МСК",
+    "daysShort": {
+      "sunday": "Вс",
+      "monday": "Пн",
+      "tuesday": "Вт",
+      "wednesday": "Ср",
+      "thursday": "Чт",
+      "friday": "Пт",
+      "saturday": "Сб"
+    },
+    "days": {
+      "sunday": "Воскресенье",
+      "monday": "Понедельник",
+      "tuesday": "Вторник",
+      "wednesday": "Среда",
+      "thursday": "Четверг",
+      "friday": "Пятница",
+      "saturday": "Суббота"
+    }
+  },
+  "auth": {
+    "telegramLogin": "Войти через Telegram",
+    "loading": "Загрузка...",
+    "backHome": "Вернуться на главную",
+    "loginError": "Ошибка входа",
+    "registerError": "Ошибка регистрации",
+    "telegramLoginError": "Ошибка входа через Telegram"
+  },
+  "notFound": {
+    "code": "404",
+    "title": "Страница не найдена",
+    "description": "Страница, которую вы ищете, не существует или была перемещена.",
+    "goHome": "На главную"
+  },
+  "time": {
+    "justNow": "только что",
+    "minutesAgo": "{n} мин. назад",
+    "hoursAgo": "{n} ч. назад",
+    "daysAgo": "{n} дн. назад"
+  },
+  "seasons": {
+    "winter": "Зима",
+    "spring": "Весна",
+    "summer": "Лето",
+    "fall": "Осень"
+  },
+  "browse": {
+    "filterStatus": "Статус",
+    "filterOngoing": "Онгоинги",
+    "filterAnnounced": "Анонсы",
+    "filterReleased": "Вышедшие",
+    "filterYear": "Год",
+    "sortPopular": "Популярные",
+    "sortRating": "По оценке",
+    "sortYear": "По году",
+    "sortTitle": "По названию",
+    "searchShikimori": "Поиск на Shikimori",
+    "refreshShikimori": "Обновить с Shikimori"
+  },
+  "themes": {
+    "title": "Опенинги и Эндинги",
+    "syncButton": "Синхронизировать",
+    "syncing": "Синхронизация {progress}",
+    "sortRating": "По рейтингу",
+    "sortName": "По названию",
+    "sortNewest": "Новые",
+    "noThemes": "Нет тем для этого сезона",
+    "syncHint": "Нажмите \"Синхронизировать\" для загрузки тем",
+    "loadError": "Не удалось загрузить темы"
+  },
+  "profileSetup": {
+    "title": "Настройка профиля",
+    "description": "Создай уникальную ссылку на свой профиль, чтобы делиться списком аниме",
+    "profileLink": "Ссылка на профиль",
+    "validation": "Только латинские буквы, цифры и дефис. Минимум 3 символа.",
+    "validationError": "Только латинские буквы, цифры и дефис (3-32 символа)",
+    "saving": "Сохранение...",
+    "createProfile": "Создать профиль",
+    "later": "Позже",
+    "taken": "Эта ссылка уже занята",
+    "saveFailed": "Не удалось сохранить"
   },
   "footer": {
     "rights": "Все права защищены"

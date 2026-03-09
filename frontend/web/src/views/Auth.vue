@@ -18,7 +18,7 @@
 
       <!-- Auth Card -->
       <div class="glass-card p-6 md:p-8">
-        <h2 class="text-center text-white text-lg font-medium mb-6">Войти через Telegram</h2>
+        <h2 class="text-center text-white text-lg font-medium mb-6">{{ $t('auth.telegramLogin') }}</h2>
 
         <!-- Error -->
         <div v-if="authStore.error" class="mb-4 p-3 bg-pink-500/20 border border-pink-500/30 rounded-lg text-pink-400 text-sm">
@@ -33,7 +33,7 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Загрузка...
+            {{ $t('auth.loading') }}
           </div>
         </div>
       </div>
@@ -41,7 +41,7 @@
       <!-- Back to home -->
       <p class="text-center mt-6 text-white/40 text-sm">
         <router-link to="/" class="hover:text-white transition-colors">
-          ← Вернуться на главную
+          {{ '← ' + $t('auth.backHome') }}
         </router-link>
       </p>
     </div>
@@ -51,7 +51,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore, type TelegramAuthData } from '@/stores/auth'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const route = useRoute()

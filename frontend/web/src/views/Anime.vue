@@ -66,7 +66,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span class="text-cyan-400 font-medium">
-                Эп. {{ (anime.episodesAired || 0) + 1 }}:
+                {{ $t('anime.nextEpisode', { episode: (anime.episodesAired || 0) + 1 }) }}
               </span>
               <span class="text-white">
                 {{ formatNextEpisode(anime.nextEpisodeAt) }}
@@ -221,14 +221,14 @@
                 v-model="editShikimoriId"
                 type="text"
                 class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
-                placeholder="например: 59459"
+                :placeholder="$t('anime.examplePlaceholder')"
               />
               <button
                 @click="saveShikimoriId"
                 :disabled="savingShikimoriId"
                 class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg transition-colors disabled:opacity-50 text-sm"
               >
-                {{ savingShikimoriId ? '...' : 'Сохранить' }}
+                {{ savingShikimoriId ? '...' : $t('anime.save') }}
               </button>
             </div>
           </div>
@@ -572,7 +572,7 @@ interface AnimeRating {
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const { anime, loading, error, fetchAnime } = useAnime()
 
@@ -643,22 +643,13 @@ const formatNextEpisode = (dateStr: string) => {
     timeZone: 'Europe/Moscow'
   })
 
-  if (diffDays === 0) {
-    return `Сегодня в ${timeStr} МСК`
-  } else if (diffDays === 1) {
-    return `Завтра в ${timeStr} МСК`
-  } else if (diffDays > 1 && diffDays < 7) {
-    const dayNames = ['воскресенье', 'понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу']
-    return `В ${dayNames[date.getDay()]} в ${timeStr} МСК`
-  } else {
-    return date.toLocaleDateString('ru-RU', {
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Europe/Moscow'
-    }) + ' МСК'
+  if (diffDays === 0) return t('anime.todayAt', { time: timeStr })
+  if (diffDays === 1) return t('anime.tomorrowAt', { time: timeStr })
+  if (diffDays > 1 && diffDays < 7) {
+    const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    return t('anime.dayAtTime', { day: t(`schedule.days.${dayKeys[date.getDay()]}`), time: timeStr })
   }
+  return t('anime.timeMsk', { time: date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }) })
 }
 
 const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: number; status?: string }) => {
@@ -668,15 +659,15 @@ const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: num
   if (total > 0) {
     // Total known - show "aired / total" for ongoing, or just "total" for completed
     if (anime.status === 'ongoing' && aired > 0 && aired < total) {
-      return `${aired} / ${total} эп.`
+      return t('anime.episodeProgress', { aired, total })
     }
-    return `${total} эп.`
+    return t('anime.episodeTotal', { total })
   } else if (aired > 0) {
     // Total unknown but some aired
-    return `${aired} / ? эп.`
+    return t('anime.episodeAiredUnknown', { aired })
   }
   // Nothing known
-  return '? эп.'
+  return t('anime.episodeUnknown')
 }
 
 const fetchWatchlistStatus = async () => {

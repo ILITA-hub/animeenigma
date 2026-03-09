@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import i18n from '@/i18n'
 import Home from '@/views/Home.vue'
 import Browse from '@/views/Browse.vue'
 import Anime from '@/views/Anime.vue'
@@ -17,7 +18,7 @@ const routes: RouteRecordRaw[] = [
     path: '/auth',
     name: 'auth',
     component: () => import('@/views/Auth.vue'),
-    meta: { title: 'Вход' }
+    meta: { titleKey: 'nav.login' }
   },
   {
     path: '/browse',
@@ -45,7 +46,7 @@ const routes: RouteRecordRaw[] = [
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfileSetup.vue'),
-    meta: { title: 'Профиль', requiresAuth: true },
+    meta: { titleKey: 'nav.profile', requiresAuth: true },
     beforeEnter: (_to, _from, next) => {
       const authStore = useAuthStore()
       if (authStore.user?.public_id) {
@@ -59,7 +60,7 @@ const routes: RouteRecordRaw[] = [
     path: '/schedule',
     name: 'schedule',
     component: () => import('@/views/Schedule.vue'),
-    meta: { title: 'Расписание' }
+    meta: { titleKey: 'schedule.title' }
   },
   {
     path: '/themes',
@@ -83,7 +84,7 @@ const routes: RouteRecordRaw[] = [
     path: '/user/:publicId',
     name: 'public-profile',
     component: () => import('@/views/Profile.vue'),
-    meta: { title: 'Профиль' }
+    meta: { titleKey: 'nav.profile' }
   },
   {
     path: '/:pathMatch(.*)*',
@@ -110,9 +111,15 @@ router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
 
   // Update page title
-  document.title = to.meta.title
-    ? `${to.meta.title} - AnimeEnigma`
-    : 'AnimeEnigma'
+  const titleKey = to.meta.titleKey as string | undefined
+  const title = to.meta.title as string | undefined
+  if (titleKey) {
+    document.title = `${i18n.global.t(titleKey)} - AnimeEnigma`
+  } else if (title) {
+    document.title = `${title} - AnimeEnigma`
+  } else {
+    document.title = 'AnimeEnigma'
+  }
 
   // Check authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {

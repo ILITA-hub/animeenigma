@@ -8,12 +8,12 @@
           </svg>
         </div>
 
-        <h1 class="text-2xl font-bold text-white mb-2">Настройка профиля</h1>
-        <p class="text-white/60 mb-6">Создай уникальную ссылку на свой профиль, чтобы делиться списком аниме</p>
+        <h1 class="text-2xl font-bold text-white mb-2">{{ $t('profileSetup.title') }}</h1>
+        <p class="text-white/60 mb-6">{{ $t('profileSetup.description') }}</p>
 
         <div class="space-y-4">
           <div>
-            <label class="block text-white/60 text-sm mb-2 text-left">Ссылка на профиль</label>
+            <label class="block text-white/60 text-sm mb-2 text-left">{{ $t('profileSetup.profileLink') }}</label>
             <div class="flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
               <span class="px-3 text-white/40 text-sm">/user/</span>
               <input
@@ -27,7 +27,7 @@
             </div>
             <p v-if="error" class="text-pink-400 text-xs mt-2 text-left">{{ error }}</p>
             <p class="text-white/40 text-xs mt-2 text-left">
-              Только латинские буквы, цифры и дефис. Минимум 3 символа.
+              {{ $t('profileSetup.validation') }}
             </p>
           </div>
 
@@ -41,11 +41,11 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            {{ saving ? 'Сохранение...' : 'Создать профиль' }}
+            {{ saving ? $t('profileSetup.saving') : $t('profileSetup.createProfile') }}
           </Button>
 
           <Button variant="ghost" full-width @click="$router.push('/')">
-            Позже
+            {{ $t('profileSetup.later') }}
           </Button>
         </div>
       </div>
@@ -56,6 +56,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui'
 import { userApi } from '@/api/client'
@@ -70,6 +71,7 @@ interface ApiError {
 }
 
 const router = useRouter()
+const { t } = useI18n()
 const authStore = useAuthStore()
 
 const publicId = ref('')
@@ -81,7 +83,7 @@ const save = async () => {
 
   const validPattern = /^[a-zA-Z0-9-]{3,32}$/
   if (!validPattern.test(publicId.value)) {
-    error.value = 'Только латинские буквы, цифры и дефис (3-32 символа)'
+    error.value = t('profileSetup.validationError')
     return
   }
 
@@ -96,9 +98,9 @@ const save = async () => {
     const apiErr = err as ApiError
     const message = apiErr.response?.data?.message || apiErr.response?.data?.error
     if (message?.includes('already taken') || message?.includes('уже занят')) {
-      error.value = 'Эта ссылка уже занята'
+      error.value = t('profileSetup.taken')
     } else {
-      error.value = message || 'Не удалось сохранить'
+      error.value = message || t('profileSetup.saveFailed')
     }
   } finally {
     saving.value = false

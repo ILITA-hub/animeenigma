@@ -207,7 +207,10 @@ docker-push-%: ## Push Docker image for a specific service
 # Redeploy (local docker-compose)
 # ============================================================================
 
-redeploy-web: ## Rebuild and restart web frontend
+i18n-lint: ## Run i18n lint checks (missing keys, hardcoded text, unused keys)
+	@cd frontend/web && bash scripts/i18n-lint.sh
+
+redeploy-web: i18n-lint ## Rebuild and restart web frontend (runs i18n lint first)
 	@echo "Rebuilding web frontend..."
 	docker compose -f docker/docker-compose.yml build web
 	docker stop animeenigma-web || true

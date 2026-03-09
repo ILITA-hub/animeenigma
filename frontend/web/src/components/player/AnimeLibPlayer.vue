@@ -25,7 +25,7 @@
           >
             <div class="text-center">
               <div class="w-10 h-10 border-2 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p class="text-white/60 text-sm">Загрузка серии {{ selectedEpisode?.number }}...</p>
+              <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}</p>
             </div>
           </div>
 
@@ -77,7 +77,7 @@
               <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              <p>Выберите серию для начала просмотра</p>
+              <p>{{ $t('player.selectEpisode') }}</p>
             </div>
           </div>
 
@@ -100,7 +100,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
-              Серии ({{ episodes.length }})
+              {{ $t('player.episodesCount', { count: episodes.length }) }}
             </h3>
             <!-- Mark as watched button -->
             <button
@@ -115,7 +115,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
-              {{ episodeMarkedWatched ? 'Просмотрено' : 'Отметить просмотренным' }}
+              {{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}
             </button>
           </div>
           <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
@@ -154,7 +154,7 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
           </svg>
-          Озвучки
+          {{ $t('player.voiceActing') }}
         </h3>
 
         <!-- Voice / Subtitles tabs -->
@@ -167,7 +167,7 @@
                 ? 'bg-white/15 text-white'
                 : 'text-white/50 hover:text-white/70'"
             >
-              Все ({{ translations.length }})
+              {{ $t('player.allCount', { count: translations.length }) }}
             </button>
             <button
               @click="translationFilter = 'voice'"
@@ -176,7 +176,7 @@
                 ? 'bg-white/15 text-white'
                 : 'text-white/50 hover:text-white/70'"
             >
-              Озвучка ({{ voiceTranslations.length }})
+              {{ $t('player.voiceActingCount', { count: voiceTranslations.length }) }}
             </button>
             <button
               @click="translationFilter = 'subtitles'"
@@ -185,7 +185,7 @@
                 ? 'bg-white/15 text-white'
                 : 'text-white/50 hover:text-white/70'"
             >
-              Субтитры ({{ subTranslations.length }})
+              {{ $t('player.subtitlesCount', { count: subTranslations.length }) }}
             </button>
           </div>
 
@@ -204,7 +204,7 @@
                 <div class="min-w-0">
                   <p class="text-white font-medium text-sm truncate">{{ tr.team_name }}</p>
                   <p class="text-white/40 text-xs">
-                    {{ tr.type === 'voice' ? 'Озвучка' : 'Субтитры' }}
+                    {{ tr.type === 'voice' ? $t('player.dub') : $t('player.sub') }}
                     <span v-if="tr.player === 'Animelib'" class="text-orange-400 ml-1">HD</span>
                   </p>
                 </div>
@@ -228,7 +228,7 @@
 
         <!-- No translations -->
         <div v-else-if="selectedEpisode && !loadingTranslations" class="text-center py-4 text-white/40 text-sm">
-          Озвучки не найдены
+          {{ $t('player.noVoiceActing') }}
         </div>
 
         <!-- Quality selector (only for direct video) -->
@@ -237,7 +237,7 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
             </svg>
-            Качество
+            {{ $t('player.quality') }}
           </h3>
           <div class="flex flex-wrap gap-2">
             <button
@@ -260,7 +260,7 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
             </svg>
-            Субтитры
+            {{ $t('player.subtitles') }}
           </h3>
 
           <!-- Format selector (if multiple formats available) -->
@@ -286,7 +286,7 @@
               ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
               : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
           >
-            {{ showSubtitleOverlay ? 'Скрыть субтитры' : 'Показать субтитры' }}
+            {{ showSubtitleOverlay ? $t('player.hideSubtitles') : $t('player.showSubtitles') }}
           </button>
 
           <div v-if="subtitleError" class="mt-1 text-xs text-red-400/70">{{ subtitleError }}</div>
@@ -310,6 +310,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
@@ -357,6 +358,7 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 // State
 const episodes = ref<AnimeLibEpisode[]>([])
@@ -421,7 +423,7 @@ const fetchEpisodes = async () => {
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
-    error.value = e.response?.data?.message || 'Не удалось загрузить список серий'
+    error.value = e.response?.data?.message || t('player.error.loadEpisodes')
     episodes.value = []
     loadingEpisodes.value = false
   }
@@ -534,13 +536,13 @@ const fetchStream = async () => {
       // Kodik iframe fallback
       iframeUrl.value = data.iframe_url
     } else {
-      error.value = 'Не удалось получить ссылку на видео'
+      error.value = t('player.error.getVideoUrl')
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
     const message = e.response?.data?.error?.message
       || e.response?.data?.message
-      || 'Не удалось загрузить видео'
+      || t('player.error.loadVideo')
     error.value = message
   } finally {
     loadingStream.value = false

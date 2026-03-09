@@ -7,7 +7,7 @@
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Поиск аниме..."
+            :placeholder="$t('search.placeholder')"
             class="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all"
             @keyup.enter="goToSearch"
           />
@@ -27,7 +27,7 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <span class="hidden sm:inline">Расписание</span>
+          <span class="hidden sm:inline">{{ $t('nav.schedule') }}</span>
         </router-link>
       </div>
     </div>
@@ -46,16 +46,16 @@
               </svg>
             </div>
             <div class="flex-1">
-              <h2 class="text-xl font-bold text-white">Онгоинги</h2>
+              <h2 class="text-xl font-bold text-white">{{ $t('home.ongoing') }}</h2>
               <p v-if="ongoingUpdatedAt && !loadingOngoing" class="text-xs text-gray-500">
-                Обновлено {{ formatUpdatedAt(ongoingUpdatedAt) }}
+                {{ $t('home.updated', { time: formatUpdatedAt(ongoingUpdatedAt) }) }}
               </p>
             </div>
             <router-link
               to="/browse?status=ongoing"
               class="ml-auto text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
             >
-              Все
+              {{ $t('home.seeAll') }}
             </router-link>
           </div>
 
@@ -80,19 +80,19 @@
             >
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
-                :alt="anime.name_ru || anime.name"
+                :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
                 class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
               />
               <div class="flex-1 min-w-0">
                 <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
-                  {{ anime.name_ru || anime.name }}
+                  {{ getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) }}
                 </h3>
                 <p class="text-xs text-gray-400 mt-1">
-                  {{ anime.episodes_count ? `${anime.episodes_count} эп.` : '' }}
+                  {{ anime.episodes_count ? $t('home.episodeCount', { count: anime.episodes_count }) : '' }}
                 </p>
                 <div class="flex items-center gap-2 mt-1">
                   <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
-                    Выходит
+                    {{ $t('home.airing') }}
                   </span>
                   <span v-if="anime.score" class="text-xs text-yellow-400 flex items-center gap-1">
                     <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -112,13 +112,13 @@
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Эп. {{ (anime.episodes_aired || 0) + 1 }}: {{ formatNextEpisode(anime.next_episode_at) }}
+                  {{ $t('schedule.episode', { n: (anime.episodes_aired || 0) + 1 }) }}: {{ formatNextEpisode(anime.next_episode_at) }}
                 </p>
               </div>
             </router-link>
 
             <div v-if="ongoingAnime.length === 0" class="text-center py-8 text-gray-400">
-              Нет онгоингов
+              {{ $t('home.noOngoing') }}
             </div>
           </div>
         </div>
@@ -131,7 +131,7 @@
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
               </svg>
             </div>
-            <h2 class="text-xl font-bold text-white">Топ аниме</h2>
+            <h2 class="text-xl font-bold text-white">{{ $t('home.topAnime') }}</h2>
           </div>
 
           <div v-if="loadingTop" class="space-y-3">
@@ -160,15 +160,15 @@
               </div>
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
-                :alt="anime.name_ru || anime.name"
+                :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
                 class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
               />
               <div class="flex-1 min-w-0">
                 <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
-                  {{ anime.name_ru || anime.name }}
+                  {{ getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) }}
                 </h3>
                 <p class="text-xs text-gray-400 mt-1">
-                  {{ anime.year }} {{ anime.episodes_count ? `/ ${anime.episodes_count} эп.` : '' }}
+                  {{ anime.year }} {{ anime.episodes_count ? `/ ${$t('home.episodeCount', { count: anime.episodes_count })}` : '' }}
                 </p>
                 <div class="flex items-center gap-2 mt-1">
                   <span v-if="anime.score" class="text-xs text-yellow-400 flex items-center gap-1">
@@ -184,14 +184,14 @@
                     {{ siteRatings[anime.id].average_score.toFixed(1) }}
                   </span>
                   <span class="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">
-                    {{ translateStatus(anime.status) }}
+                    {{ anime.status ? $t(`anime.status.${anime.status}`) : '' }}
                   </span>
                 </div>
               </div>
             </router-link>
 
             <div v-if="topAnime.length === 0" class="text-center py-8 text-gray-400">
-              Нет данных
+              {{ $t('home.noData') }}
             </div>
           </div>
         </div>
@@ -204,12 +204,12 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </div>
-            <h2 class="text-xl font-bold text-white">Анонсы</h2>
+            <h2 class="text-xl font-bold text-white">{{ $t('home.announcements') }}</h2>
             <router-link
               to="/browse?status=announced"
               class="ml-auto text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
             >
-              Все
+              {{ $t('home.seeAll') }}
             </router-link>
           </div>
 
@@ -234,34 +234,35 @@
             >
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
-                :alt="anime.name_ru || anime.name"
+                :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
                 class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
               />
               <div class="flex-1 min-w-0">
                 <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
-                  {{ anime.name_ru || anime.name }}
+                  {{ getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) }}
                 </h3>
                 <p class="text-xs text-gray-400 mt-1">
-                  {{ anime.year }} {{ anime.season ? `/ ${translateSeason(anime.season)}` : '' }}
+                  {{ anime.year }} {{ anime.season ? `/ ${$t(`seasons.${anime.season}`)}` : '' }}
                 </p>
                 <div class="flex items-center gap-2 mt-1">
                   <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
-                    Анонс
+                    {{ $t('home.announced') }}
                   </span>
                 </div>
               </div>
             </router-link>
 
             <div v-if="announcedAnime.length === 0" class="text-center py-8 text-gray-400">
-              Нет анонсов
+              {{ $t('home.noAnnounced') }}
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Activity Feed -->
-      <div class="mt-6">
+      <!-- Activity Feed + Last Updates -->
+      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
         <ActivityFeed />
+        <LastUpdates />
       </div>
     </div>
   </div>
@@ -270,8 +271,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { animeApi, reviewApi } from '@/api/client'
+import { getLocalizedTitle } from '@/utils/title'
 import ActivityFeed from '@/components/ActivityFeed.vue'
+import LastUpdates from '@/components/LastUpdates.vue'
 
 interface Anime {
   id: string
@@ -290,6 +294,7 @@ interface Anime {
 }
 
 const router = useRouter()
+const { t } = useI18n()
 
 const searchQuery = ref('')
 const announcedAnime = ref<Anime[]>([])
@@ -306,26 +311,6 @@ const goToSearch = () => {
   if (searchQuery.value.trim()) {
     router.push({ path: '/browse', query: { q: searchQuery.value.trim() } })
   }
-}
-
-const translateSeason = (season: string) => {
-  const seasons: Record<string, string> = {
-    winter: 'Зима',
-    spring: 'Весна',
-    summer: 'Лето',
-    fall: 'Осень'
-  }
-  return seasons[season] || season
-}
-
-const translateStatus = (status?: string) => {
-  if (!status) return ''
-  const statuses: Record<string, string> = {
-    released: 'Вышло',
-    ongoing: 'Выходит',
-    anons: 'Анонс'
-  }
-  return statuses[status] || status
 }
 
 const getRankClass = (index: number) => {
@@ -348,12 +333,12 @@ const formatNextEpisode = (dateStr: string) => {
   })
 
   if (diffDays === 0) {
-    return `Сегодня ${timeStr}`
+    return t('home.todayAt', { time: timeStr })
   } else if (diffDays === 1) {
-    return `Завтра ${timeStr}`
+    return t('home.tomorrowAt', { time: timeStr })
   } else if (diffDays > 1 && diffDays < 7) {
-    const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
-    return `${dayNames[date.getDay()]} ${timeStr}`
+    const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    return t('home.dayAt', { day: t(`schedule.daysShort.${dayKeys[date.getDay()]}`), time: timeStr })
   } else {
     return date.toLocaleDateString('ru-RU', {
       day: 'numeric',
@@ -371,15 +356,15 @@ const formatUpdatedAt = (dateStr: string) => {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   if (diffMinutes < 1) {
-    return 'только что'
+    return t('time.justNow')
   } else if (diffMinutes < 60) {
-    return `${diffMinutes} мин. назад`
+    return t('time.minutesAgo', { n: diffMinutes })
   } else if (diffHours < 24) {
-    return `${diffHours} ч. назад`
+    return t('time.hoursAgo', { n: diffHours })
   } else if (diffDays === 1) {
-    return 'вчера'
+    return t('common.yesterday')
   } else if (diffDays < 7) {
-    return `${diffDays} дн. назад`
+    return t('time.daysAgo', { n: diffDays })
   } else {
     return date.toLocaleDateString('ru-RU', {
       day: 'numeric',

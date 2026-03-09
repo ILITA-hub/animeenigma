@@ -25,7 +25,7 @@
           >
             <div class="text-center">
               <div class="w-10 h-10 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p class="text-white/60 text-sm">Загрузка серии {{ selectedEpisode?.number }}...</p>
+              <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}</p>
             </div>
           </div>
 
@@ -70,7 +70,7 @@
               <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              <p>Выберите серию для начала просмотра</p>
+              <p>{{ $t('player.selectEpisode') }}</p>
             </div>
           </div>
 
@@ -92,7 +92,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
-              Серии ({{ episodes.length }})
+              {{ $t('player.episodesCount', { count: episodes.length }) }}
             </h3>
             <!-- Mark as watched button -->
             <button
@@ -107,7 +107,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
-              {{ episodeMarkedWatched ? 'Просмотрено' : 'Отметить просмотренным' }}
+              {{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}
             </button>
           </div>
           <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
@@ -148,7 +148,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Плеер
+          {{ $t('player.playerLabel') }}
         </h3>
         <div class="flex gap-2 mb-4">
           <button
@@ -167,7 +167,7 @@
               ? 'bg-green-500/20 text-green-400 border border-green-500/50'
               : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
           >
-            Native
+            {{ $t('player.native') }}
           </button>
         </div>
 
@@ -175,7 +175,7 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
           </svg>
-          Серверы
+          {{ $t('player.servers') }}
         </h3>
 
         <!-- Server list -->
@@ -209,7 +209,7 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
             </svg>
-            Качество
+            {{ $t('player.quality') }}
           </h3>
           <div class="flex flex-wrap gap-2">
             <button
@@ -228,7 +228,7 @@
 
         <!-- Subtitles section -->
         <div v-if="subtitles.length > 0 || selectedEpisode" class="mt-4 p-3 rounded-lg bg-white/5">
-          <h4 class="text-white/60 text-sm mb-2">Субтитры</h4>
+          <h4 class="text-white/60 text-sm mb-2">{{ $t('player.subtitles') }}</h4>
 
           <div class="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
             <!-- "Off" option -->
@@ -239,7 +239,7 @@
                 ? 'bg-green-500/20 text-green-400'
                 : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
             >
-              Off
+              {{ $t('player.off') }}
             </button>
 
             <!-- Stream subtitles (EN, etc.) -->
@@ -320,6 +320,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import videojs from 'video.js'
 import Hls from 'hls.js'
 import { consumetApi, jimakuApi, userApi } from '@/api/client'
@@ -373,6 +374,7 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 // Player type (persisted)
 const playerType = ref<PlayerType>(
@@ -463,7 +465,7 @@ const fetchEpisodes = async () => {
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
-    error.value = e.response?.data?.message || 'Не удалось загрузить список серий'
+    error.value = e.response?.data?.message || t('player.error.loadEpisodes')
     episodes.value = []
     loadingEpisodes.value = false
   }
@@ -508,10 +510,10 @@ const tryNextServer = async () => {
   const nextServer = servers.value[currentIdx + 1]
   if (nextServer) {
     console.warn(`[Consumet] Decode error, switching to server: ${nextServer.name}`)
-    error.value = `Ошибка декодирования. Переключаю на ${nextServer.name}...`
+    error.value = t('player.error.decoding', { server: nextServer.name })
     await selectServer(nextServer)
   } else {
-    error.value = 'Ошибка декодирования видео. Попробуйте другой плеер (Kodik).'
+    error.value = t('player.error.decodingFallback')
   }
 }
 
@@ -578,7 +580,7 @@ const fetchStream = async () => {
     const data: ConsumetStream = response.data?.data || response.data
 
     if (!data.url) {
-      error.value = 'Не удалось получить ссылку на видео'
+      error.value = t('player.error.getVideoUrl')
       return
     }
 
@@ -605,7 +607,7 @@ const fetchStream = async () => {
 
     if (!targetRef.value) {
       console.error('[Consumet] Video element not found')
-      error.value = 'Ошибка инициализации плеера'
+      error.value = t('player.error.playerInit')
       return
     }
 
@@ -614,7 +616,7 @@ const fetchStream = async () => {
     const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
     const message = e.response?.data?.error?.message
       || e.response?.data?.message
-      || 'Не удалось загрузить видео'
+      || t('player.error.loadVideo')
     error.value = message
     streamUrl.value = null
   } finally {
@@ -714,7 +716,7 @@ const initVideoJsPlayer = (url: string, referer: string) => {
         tryNextServer()
         return
       }
-      error.value = 'Ошибка воспроизведения видео'
+      error.value = t('player.error.playback')
     }
   })
 
@@ -771,7 +773,7 @@ const initHlsPlayer = (url: string, referer: string) => {
             }
             break
           default:
-            error.value = 'Ошибка воспроизведения видео'
+            error.value = t('player.error.playback')
         }
       }
     })

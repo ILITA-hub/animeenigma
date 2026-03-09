@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-base pt-20">
     <div class="container mx-auto px-4 py-8">
-      <h1 class="text-3xl font-bold text-white mb-8">Расписание выхода серий</h1>
+      <h1 class="text-3xl font-bold text-white mb-8">{{ $t('schedule.title') }}</h1>
 
       <!-- Loading -->
       <div v-if="loading" class="flex justify-center py-12">
@@ -14,7 +14,7 @@
           <h2 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
             <span class="w-3 h-3 rounded-full" :class="day.isToday ? 'bg-cyan-500' : 'bg-white/30'"></span>
             {{ day.dayName }}
-            <span v-if="day.isToday" class="text-sm text-cyan-400 font-normal">(Сегодня)</span>
+            <span v-if="day.isToday" class="text-sm text-cyan-400 font-normal">{{ $t('schedule.today') }}</span>
           </h2>
 
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -26,13 +26,13 @@
             >
               <img
                 :src="anime.poster_url || '/placeholder.png'"
-                :alt="anime.name_ru || anime.name"
+                :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
                 class="w-16 h-24 object-cover rounded"
               />
               <div class="flex-1 min-w-0">
-                <h3 class="text-white font-medium truncate">{{ anime.name_ru || anime.name }}</h3>
+                <h3 class="text-white font-medium truncate">{{ getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) }}</h3>
                 <p class="text-white/60 text-sm mt-1">
-                  Эп. {{ (anime.episodes_aired || 0) + 1 }}
+                  {{ $t('schedule.episode', { n: (anime.episodes_aired || 0) + 1 }) }}
                 </p>
                 <p class="text-cyan-400 text-sm mt-1">
                   {{ formatTime(anime.next_episode_at) }}
@@ -45,8 +45,8 @@
 
       <!-- No schedule -->
       <div v-else class="text-center py-12">
-        <p class="text-white/60">Нет данных о расписании</p>
-        <p class="text-white/40 text-sm mt-2">Расписание обновится при добавлении онгоингов в базу</p>
+        <p class="text-white/60">{{ $t('schedule.noData') }}</p>
+        <p class="text-white/40 text-sm mt-2">{{ $t('schedule.hint') }}</p>
       </div>
     </div>
   </div>
@@ -54,7 +54,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
+import { getLocalizedTitle } from '@/utils/title'
 
 interface ScheduleAnime {
   id: string
@@ -66,10 +68,11 @@ interface ScheduleAnime {
   episodes_aired?: number
 }
 
+const { t, locale } = useI18n()
 const { fetchSchedule, loading } = useAnime()
 const schedule = ref<ScheduleAnime[]>([])
 
-const dayNames = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
+const dayNames = computed(() => [t('schedule.days.sunday'), t('schedule.days.monday'), t('schedule.days.tuesday'), t('schedule.days.wednesday'), t('schedule.days.thursday'), t('schedule.days.friday'), t('schedule.days.saturday')])
 
 const scheduleByDay = computed(() => {
   if (!schedule.value.length) return []
@@ -102,7 +105,7 @@ const scheduleByDay = computed(() => {
     if (grouped[dayIndex] && grouped[dayIndex].length > 0) {
       result.push({
         dayIndex,
-        dayName: dayNames[dayIndex],
+        dayName: dayNames.value[dayIndex],
         isToday: i === 0,
         animes: grouped[dayIndex]
       })
@@ -115,11 +118,13 @@ const scheduleByDay = computed(() => {
 const formatTime = (dateStr: string) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleTimeString('ru-RU', {
+  const localeMap: Record<string, string> = { ru: 'ru-RU', en: 'en-US', ja: 'ja-JP' }
+  const timeStr = date.toLocaleTimeString(localeMap[locale.value] || 'en-US', {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Europe/Moscow'
-  }) + ' МСК'
+  })
+  return t('schedule.timeMsk', { time: timeStr })
 }
 
 onMounted(async () => {
