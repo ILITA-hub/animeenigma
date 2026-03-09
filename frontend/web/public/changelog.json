@@ -1,0 +1,302 @@
+[
+  {
+    "date": "2026-03-09",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add Telegram channel news scraper and API endpoint"
+      },
+      {
+        "type": "fix",
+        "message": "Resolve ESLint and TypeScript CI errors"
+      },
+      {
+        "type": "feature",
+        "message": "Add Last Updates section, reactive locale titles, i18n fixes"
+      },
+      {
+        "type": "fix",
+        "message": "Tailwind v4 @apply error in PaginationBar, remove obsolete docker-compose version"
+      },
+      {
+        "type": "feature",
+        "message": "Replace Load More with numbered page navigation in Browse"
+      },
+      {
+        "type": "feature",
+        "message": "Add PaginationBar component and expose pagination meta from useAnime"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-07",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "Security hardening — path traversal, timing attacks, SSRF, CORS, proxy validation"
+      },
+      {
+        "type": "feature",
+        "message": "Unified subtitle selector for HiAnime and Consumet players"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-04",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add global navbar search autocomplete, fix Kodik 0-episode movies"
+      },
+      {
+        "type": "perf",
+        "message": "Reduce perceived lag and layout shifts, update READMEs"
+      },
+      {
+        "type": "feature",
+        "message": "Add genre filter popup to Browse and Profile watchlist"
+      },
+      {
+        "type": "fix",
+        "message": "Specify GORM join keys for anime_genres many2many relation"
+      },
+      {
+        "type": "feature",
+        "message": "Add genre sort to watchlist and misc improvements"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-03",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "Header glassmorphism, Telegram widget UX, watchlist search, and rating aggregation"
+      },
+      {
+        "type": "feature",
+        "message": "Add watchlist search and eliminate all no-explicit-any warnings"
+      },
+      {
+        "type": "fix",
+        "message": "Prevent theme ratings disappearing after JWT token expiry"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-02",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "Resolve CI lint failures for Go and frontend workflows"
+      },
+      {
+        "type": "fix",
+        "message": "Resolve lint errors, test failures, and update CI workflows"
+      },
+      {
+        "type": "feature",
+        "message": "Add themes service, API key auth, Shikimori sync, and gateway latency fix"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-28",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add activity feed on home page showing user status changes and ratings"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-27",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Consolidate to single database, add metrics library, error reporting, and Grafana alerting"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-26",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add external subtitle support to AnimeLib player"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-24",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add AnimeLib parser, player improvements, and update video architecture docs"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-13",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "HiAnime matching, Consumet quality/server switch, and fullscreen subtitle sizing"
+      },
+      {
+        "type": "feature",
+        "message": "Japanese subtitles with selectable text overlay, ARM ID mapping, and fullscreen support"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-12",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add Video.js player with native HLS.js fallback and player selector"
+      },
+      {
+        "type": "feature",
+        "message": "Enrich profile page with avatar upload, inline editing, sorting, i18n, and stats"
+      },
+      {
+        "type": "feature",
+        "message": "Add Jikan parser, favicons, MAL import improvements, and catalog enhancements"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-11",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "Harden gateway CORS, per-IP rate limiting, and bind ports to localhost"
+      },
+      {
+        "type": "fix",
+        "message": "Mobile layout improvements and navigation overhaul"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-08",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "Kodik token extraction broken by upstream source change"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-05",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "HLS proxy routing and Consumet provider improvements"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-04",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add Consumet as alternative English anime provider"
+      },
+      {
+        "type": "feature",
+        "message": "Add HiAnime parser, database backup system, and GORM refactoring"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-03",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Enable Grafana anonymous auth and remove pgAdmin"
+      },
+      {
+        "type": "feature",
+        "message": "Add admin panel proxy with dev mode and fix Grafana CSRF"
+      },
+      {
+        "type": "feature",
+        "message": "Add MAL export microservice with delayed anime loading"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-02",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add Docker monitoring stack with Prometheus, Grafana, pgAdmin"
+      },
+      {
+        "type": "feature",
+        "message": "Add public profile feature for sharing anime watchlists"
+      },
+      {
+        "type": "feature",
+        "message": "Add Shikimori search button and show last updated date for ongoings"
+      },
+      {
+        "type": "fix",
+        "message": "Update docker-compose syntax, kustomize labels, and add metrics lib to Dockerfiles"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-01",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Replace native selects with custom Select component"
+      },
+      {
+        "type": "feature",
+        "message": "Add Prometheus monitoring, admin interfaces, and E2E tests"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-31",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add MAL import and MAL-style profile list view"
+      },
+      {
+        "type": "feature",
+        "message": "Redesign home page with 3 columns layout"
+      },
+      {
+        "type": "fix",
+        "message": "Remove kind filter from Shikimori search to include ONA/OVA/movies"
+      },
+      {
+        "type": "fix",
+        "message": "Update docker-compose for external postgres and Go 1.22"
+      },
+      {
+        "type": "feature",
+        "message": "Add secure refresh token, watchlist, and reviews system"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-30",
+    "entries": [
+      {
+        "type": "feature",
+        "message": "Add Playwright e2e tests for critical flows"
+      },
+      {
+        "type": "feature",
+        "message": "Add polish - skeleton loaders and CSS utilities"
+      }
+    ]
+  }
+]

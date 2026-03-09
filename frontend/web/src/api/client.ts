@@ -162,6 +162,7 @@ export const animeApi = {
   refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`),
   resolveMAL: (malId: string) => apiClient.get(`/anime/mal/${malId}`),
   getGenres: () => apiClient.get('/genres'),
+  getNews: () => apiClient.get('/anime/news'),
 }
 
 export const episodeApi = {

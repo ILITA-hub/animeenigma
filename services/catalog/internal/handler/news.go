@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
@@ -40,10 +41,10 @@ func (h *NewsHandler) GetNews(w http.ResponseWriter, r *http.Request) {
 	err := h.cache.GetOrSet(ctx, newsRedisKey, &items, newsTTL, func() (interface{}, error) {
 		h.log.Infow("fetching news from telegram channel")
 
-		fetched, err := h.telegramClient.FetchNews()
+		fetched, err := h.telegramClient.FetchNews(ctx)
 		if err != nil {
 			h.log.Errorw("failed to fetch telegram news", "error", err)
-			return nil, err
+			return nil, errors.ExternalAPI("telegram", err)
 		}
 
 		h.log.Infow("fetched telegram news", "count", len(fetched))
