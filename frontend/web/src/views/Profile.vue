@@ -797,6 +797,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useWatchlistStore } from '@/stores/watchlist'
 import { Badge, Button, Modal, Tabs, Select, GenreFilterPopup, type SelectOption } from '@/components/ui'
 import { userApi, publicApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
@@ -833,8 +834,8 @@ interface WatchlistEntry {
     genres?: Array<{ id: string; name: string; name_ru?: string }>
   }
   status: string
-  score: number
-  episodes: number
+  score?: number
+  episodes?: number
   started_at?: string | null
   completed_at?: string | null
 }
@@ -853,6 +854,7 @@ const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
+const watchlistStore = useWatchlistStore()
 
 const siteOrigin = window.location.origin
 
@@ -1043,7 +1045,7 @@ const watchlistStats = computed(() => {
   const list = watchlist.value
   const scored = list.filter(a => a.score && a.score > 0)
   const avgScore = scored.length > 0
-    ? (scored.reduce((sum, a) => sum + a.score, 0) / scored.length).toFixed(1)
+    ? (scored.reduce((sum, a) => sum + (a.score || 0), 0) / scored.length).toFixed(1)
     : '-'
   return {
     total: list.length,
@@ -1172,17 +1174,17 @@ const fetchWatchlist = async (isOwn: boolean) => {
   loadingWatchlist.value = true
   try {
     if (isOwn) {
-      // Fetch own watchlist
-      const response = await userApi.getWatchlist()
-      const entries = response.data?.data || response.data || []
-      watchlist.value = entries.map((entry: WatchlistEntry) => ({
-        anime_id: entry.anime_id,
-        anime: entry.anime || undefined,
-        status: entry.status,
-        score: entry.score,
-        episodes: entry.episodes,
-        started_at: entry.started_at,
-        completed_at: entry.completed_at,
+      // Fetch own watchlist via shared store
+      await watchlistStore.fetchWatchlist(true)
+      const entries = watchlistStore.entries
+      watchlist.value = entries.map((entry) => ({
+        anime_id: entry.anime_id as string,
+        anime: (entry.anime as WatchlistEntry['anime']) || undefined,
+        status: entry.status as string,
+        score: entry.score as number | undefined,
+        episodes: entry.episodes as number | undefined,
+        started_at: entry.started_at as string | undefined,
+        completed_at: entry.completed_at as string | undefined,
       }))
     } else {
       // Fetch public watchlist
@@ -1231,6 +1233,7 @@ const updateAnimeStatus = async (animeId: string, newStatus: string) => {
     if (anime) {
       anime.status = newStatus
     }
+    watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update status:', err)
   }
@@ -1250,6 +1253,7 @@ const updateAnimeDate = async (animeId: string, field: 'started_at' | 'completed
 
     // Update local state
     anime[field] = dateValue
+    watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update date:', err)
   }
@@ -1268,6 +1272,7 @@ const finishEditScore = async (animeId: string, rawValue: string) => {
       score,
     })
     anime.score = score
+    watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update score:', err)
   }
@@ -1287,6 +1292,7 @@ const updateAnimeEpisodes = async (animeId: string, episodes: number) => {
       episodes: clamped,
     })
     anime.episodes = clamped
+    watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update episodes:', err)
   }
@@ -1296,6 +1302,7 @@ const removeFromWatchlist = async (animeId: string) => {
   try {
     await userApi.removeFromWatchlist(animeId)
     watchlist.value = watchlist.value.filter(a => a.anime_id !== animeId)
+    watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to remove from watchlist:', err)
   }

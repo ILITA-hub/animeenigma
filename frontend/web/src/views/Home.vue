@@ -272,40 +272,27 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { animeApi, reviewApi } from '@/api/client'
+import { storeToRefs } from 'pinia'
 import { getLocalizedTitle } from '@/utils/title'
+import { useHomeStore } from '@/stores/home'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
 
-interface Anime {
-  id: string
-  name: string
-  name_ru?: string
-  name_jp?: string
-  poster_url?: string
-  score?: number
-  status?: string
-  episodes_count?: number
-  episodes_aired?: number
-  year?: number
-  season?: string
-  next_episode_at?: string
-  updated_at?: string
-}
-
 const router = useRouter()
 const { t } = useI18n()
+const homeStore = useHomeStore()
 
 const searchQuery = ref('')
-const announcedAnime = ref<Anime[]>([])
-const ongoingAnime = ref<Anime[]>([])
-const topAnime = ref<Anime[]>([])
-const ongoingUpdatedAt = ref<string | null>(null)
-const siteRatings = ref<Record<string, { average_score: number, total_reviews: number }>>({})
-
-const loadingAnnounced = ref(true)
-const loadingOngoing = ref(true)
-const loadingTop = ref(true)
+const {
+  announcedAnime,
+  ongoingAnime,
+  topAnime,
+  siteRatings,
+  ongoingUpdatedAt,
+  loadingAnnounced,
+  loadingOngoing,
+  loadingTop,
+} = storeToRefs(homeStore)
 
 const goToSearch = () => {
   if (searchQuery.value.trim()) {
@@ -373,61 +360,8 @@ const formatUpdatedAt = (dateStr: string) => {
   }
 }
 
-onMounted(async () => {
-  // Fetch all three columns in parallel
-  await Promise.allSettled([
-    // Fetch announced anime
-    animeApi.getAnnounced(15).then(response => {
-      announcedAnime.value = response.data?.data || []
-    }).catch(err => {
-      console.error('Failed to load announced anime:', err)
-    }).finally(() => {
-      loadingAnnounced.value = false
-    }),
-
-    // Fetch ongoing anime
-    animeApi.getOngoing().then(response => {
-      const animes = response.data?.data || []
-      ongoingAnime.value = animes
-      // Find the most recent updated_at
-      if (animes.length > 0) {
-        const maxUpdated = animes.reduce((max: string | null, anime: Anime) => {
-          if (!anime.updated_at) return max
-          if (!max) return anime.updated_at
-          return new Date(anime.updated_at) > new Date(max) ? anime.updated_at : max
-        }, null as string | null)
-        ongoingUpdatedAt.value = maxUpdated
-      }
-    }).catch(err => {
-      console.error('Failed to load ongoing anime:', err)
-    }).finally(() => {
-      loadingOngoing.value = false
-    }),
-
-    // Fetch top anime
-    animeApi.getTop(15).then(response => {
-      topAnime.value = response.data?.data || []
-    }).catch(err => {
-      console.error('Failed to load top anime:', err)
-    }).finally(() => {
-      loadingTop.value = false
-    }),
-  ])
-
-  // Fetch site ratings after all columns are loaded (needs their IDs)
-  const allIds = [
-    ...ongoingAnime.value.map(a => a.id),
-    ...topAnime.value.map(a => a.id),
-  ]
-  if (allIds.length > 0) {
-    try {
-      const uniqueIds = [...new Set(allIds)]
-      const response = await reviewApi.getBatchRatings(uniqueIds)
-      siteRatings.value = response.data?.data?.ratings || response.data?.ratings || {}
-    } catch (err) {
-      console.error('Failed to load site ratings:', err)
-    }
-  }
+onMounted(() => {
+  homeStore.fetchAll()
 })
 </script>
 
