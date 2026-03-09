@@ -4,13 +4,13 @@
       <!-- Header -->
       <div class="mb-8">
         <h1 class="text-2xl md:text-3xl font-bold text-white mb-2">{{ $t('rooms.title') }}</h1>
-        <p class="text-white/60">Play anime-themed games with other fans!</p>
+        <p class="text-white/60">{{ $t('rooms.description') }}</p>
       </div>
 
       <!-- Room List View -->
       <template v-if="!currentRoom">
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-semibold text-white">Available Rooms</h2>
+          <h2 class="text-xl font-semibold text-white">{{ $t('rooms.availableRooms') }}</h2>
           <Button @click="showCreateModal = true">
             <template #icon>
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,8 +31,8 @@
           <svg class="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
-          <p class="text-white/50 text-lg mb-4">No active rooms</p>
-          <Button variant="outline" @click="showCreateModal = true">Create the first room</Button>
+          <p class="text-white/50 text-lg mb-4">{{ $t('rooms.noRooms') }}</p>
+          <Button variant="outline" @click="showCreateModal = true">{{ $t('rooms.createFirst') }}</Button>
         </div>
 
         <!-- Rooms Grid -->
@@ -52,7 +52,7 @@
                 {{ $t(`rooms.status.${room.status}`) }}
               </Badge>
             </div>
-            <p class="text-cyan-400 mb-3 capitalize">{{ room.gameType.replace('-', ' ') }}</p>
+            <p class="text-cyan-400 mb-3 capitalize">{{ gameTypeLabel(room.gameType) }}</p>
             <div class="flex items-center justify-between text-sm text-white/50">
               <span class="flex items-center gap-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,7 +74,7 @@
         <div class="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
           <div>
             <h2 class="text-xl font-semibold text-white">{{ currentRoom.name }}</h2>
-            <p class="text-cyan-400 capitalize">{{ currentRoom.gameType?.replace('-', ' ') }}</p>
+            <p class="text-cyan-400 capitalize">{{ gameTypeLabel(currentRoom.gameType ?? '') }}</p>
           </div>
           <Button variant="secondary" size="sm" @click="leaveRoom">
             {{ $t('rooms.leave') }}
@@ -87,7 +87,7 @@
           <div class="lg:col-span-1">
             <div class="glass-card p-4 sticky top-24">
               <h3 class="text-lg font-semibold text-white mb-4">
-                Players ({{ currentRoom.players?.length || 0 }})
+                {{ $t('rooms.playersList', { count: currentRoom.players?.length || 0 }) }}
               </h3>
               <div class="space-y-2">
                 <div
@@ -132,7 +132,7 @@
               <div v-if="currentRoom.status === 'waiting'" class="text-center">
                 <div class="w-16 h-16 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin mx-auto mb-4" />
                 <h3 class="text-xl font-semibold text-white mb-2">{{ $t('rooms.status.waiting') }}</h3>
-                <p class="text-white/50">Game will start when enough players join</p>
+                <p class="text-white/50">{{ $t('rooms.waitingDescription') }}</p>
                 <p class="text-cyan-400 mt-4">
                   {{ $t('rooms.round') }} {{ currentRoom.currentRound || 1 }}
                 </p>
@@ -145,7 +145,7 @@
                     {{ $t('rooms.round') }} {{ currentRoom.currentRound || 1 }}
                   </Badge>
                   <h3 class="text-xl md:text-2xl font-semibold text-white">
-                    {{ currentRoom.currentQuestion?.text || 'Loading question...' }}
+                    {{ currentRoom.currentQuestion?.text || $t('rooms.loadingQuestion') }}
                   </h3>
                 </div>
 
@@ -172,7 +172,7 @@
           <!-- Chat Sidebar -->
           <div class="lg:col-span-1">
             <div class="glass-card p-4 h-[500px] flex flex-col">
-              <h3 class="text-lg font-semibold text-white mb-4">Chat</h3>
+              <h3 class="text-lg font-semibold text-white mb-4">{{ $t('rooms.chat') }}</h3>
 
               <!-- Messages -->
               <div ref="chatMessagesRef" class="flex-1 overflow-y-auto space-y-2 mb-4 scrollbar-hide">
@@ -190,7 +190,7 @@
               <div class="flex gap-2">
                 <Input
                   v-model="chatInput"
-                  placeholder="Type a message..."
+                  :placeholder="$t('rooms.messagePlaceholder')"
                   size="sm"
                   @keyup.enter="sendMessage"
                 />
@@ -211,17 +211,17 @@
       <form @submit.prevent="createRoom" class="space-y-4">
         <Input
           v-model="newRoom.name"
-          label="Room Name"
-          placeholder="Enter room name"
+          :label="$t('rooms.roomNameLabel')"
+          :placeholder="$t('rooms.roomNamePlaceholder')"
           required
         />
         <Select
           v-model="newRoom.gameType"
           :options="gameTypeOptions"
-          label="Game Type"
+          :label="$t('rooms.gameTypeLabel')"
         />
         <div>
-          <label class="block text-sm font-medium text-white/70 mb-2">Max Players</label>
+          <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('rooms.maxPlayersLabel') }}</label>
           <input
             v-model.number="newRoom.maxPlayers"
             type="number"
@@ -243,9 +243,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { gameApi } from '@/api/client'
 import { io, Socket } from 'socket.io-client'
 import { Button, Badge, Input, Modal, Select } from '@/components/ui'
+
+const { t } = useI18n()
 
 interface Player {
   id: string
@@ -300,11 +303,22 @@ const newRoom = ref({
   maxPlayers: 10
 })
 
-const gameTypeOptions = [
-  { value: 'anime-quiz', label: 'Anime Quiz' },
-  { value: 'character-guess', label: 'Character Guess' },
-  { value: 'opening-quiz', label: 'Opening Quiz' },
-]
+const gameTypeKeys: Record<string, string> = {
+  'anime-quiz': 'rooms.gameType.animeQuiz',
+  'character-guess': 'rooms.gameType.characterGuess',
+  'opening-quiz': 'rooms.gameType.openingQuiz',
+}
+
+const gameTypeLabel = (gameType: string): string => {
+  const key = gameTypeKeys[gameType]
+  return key ? t(key) : gameType.replace('-', ' ')
+}
+
+const gameTypeOptions = computed(() => [
+  { value: 'anime-quiz', label: t('rooms.gameType.animeQuiz') },
+  { value: 'character-guess', label: t('rooms.gameType.characterGuess') },
+  { value: 'opening-quiz', label: t('rooms.gameType.openingQuiz') },
+])
 
 const sortedPlayers = computed(() => {
   if (!currentRoom.value?.players) return []

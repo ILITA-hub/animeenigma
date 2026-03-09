@@ -25,7 +25,7 @@
           >
             <div class="text-center">
               <div class="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p class="text-white/60 text-sm">Загрузка серии {{ selectedEpisode }}...</p>
+              <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode }) }}</p>
             </div>
           </div>
 
@@ -49,7 +49,7 @@
               <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              <p>Выберите озвучку для начала просмотра</p>
+              <p>{{ $t('player.selectVoice') }}</p>
             </div>
           </div>
         </div>
@@ -76,7 +76,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
-              <span class="hidden sm:inline">{{ episodeMarkedWatched ? 'Просмотрено' : 'Отметить просмотренным' }}</span>
+              <span class="hidden sm:inline">{{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}</span>
             </button>
           </div>
           <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
@@ -122,7 +122,7 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
-            Озвучка
+            {{ $t('player.dub') }}
             <span class="text-xs opacity-70">({{ voiceTranslations.length }})</span>
           </button>
           <button
@@ -135,7 +135,7 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
             </svg>
-            Субтитры
+            {{ $t('player.sub') }}
             <span class="text-xs opacity-70">({{ subtitleTranslations.length }})</span>
           </button>
         </div>
@@ -165,7 +165,7 @@
                       <span
                         v-if="t.pinned"
                         class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400"
-                        title="Рекомендуемая озвучка"
+                        :title="$t('player.recommendedVoice')"
                       >
                         <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -173,7 +173,7 @@
                       </span>
                       <p class="text-white font-medium truncate" :title="t.title">{{ t.title }}</p>
                     </div>
-                    <span class="text-white/40 text-xs">{{ t.episodes_count || 1 }} эп.</span>
+                    <span class="text-white/40 text-xs">{{ t.episodes_count || 1 }} {{ $t('player.episodeShort') }}</span>
                   </div>
                   <div
                     v-if="selectedTranslation === t.id"
@@ -194,7 +194,7 @@
                 :class="t.pinned
                   ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
                   : 'bg-white/10 text-white/40 hover:bg-white/20 hover:text-white'"
-                :title="t.pinned ? 'Открепить' : 'Закрепить'"
+                :title="t.pinned ? $t('player.unpin') : $t('player.pin')"
               >
                 <svg class="w-4 h-4" :fill="t.pinned ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -203,7 +203,7 @@
             </div>
           </template>
           <div v-else class="text-center py-8 text-white/40">
-            <p>{{ translationType === 'voice' ? 'Нет доступных озвучек' : 'Нет доступных субтитров' }}</p>
+            <p>{{ translationType === 'voice' ? $t('player.noVoiceActing') : $t('player.noSubtitlesAvailable') }}</p>
           </div>
         </div>
       </div>
@@ -230,6 +230,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import ReportButton from './ReportButton.vue'
@@ -241,6 +242,7 @@ const lastSaveTime = ref(0)
 const SAVE_INTERVAL = 30 // Save every 30 seconds of playback
 const AUTO_MARK_THRESHOLD = 20 * 60 // Auto-mark as watched after 20 minutes (1200 seconds)
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 // Mark episode as watched
 const markingWatched = ref(false)
@@ -447,7 +449,7 @@ const fetchTranslations = async () => {
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
-    error.value = e.response?.data?.message || 'Не удалось загрузить список озвучек'
+    error.value = e.response?.data?.message || t('player.error.loadTranslations')
     translations.value = []
   } finally {
     loadingTranslations.value = false
@@ -471,11 +473,11 @@ const loadVideo = async () => {
       url += `${separator}hide_selectors=true&only_season=true`
       embedUrl.value = url
     } else {
-      error.value = 'Видео не найдено'
+      error.value = t('player.error.videoNotFound')
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
-    error.value = e.response?.data?.message || 'Не удалось загрузить видео'
+    error.value = e.response?.data?.message || t('player.error.loadVideo')
   } finally {
     loadingVideo.value = false
   }
@@ -553,7 +555,7 @@ const markCurrentEpisodeWatched = async () => {
     emit('episodeWatched', { episode: selectedEpisode.value })
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
-    error.value = e.response?.data?.message || 'Не удалось отметить серию'
+    error.value = e.response?.data?.message || t('player.error.markWatched')
   } finally {
     markingWatched.value = false
   }
@@ -593,7 +595,7 @@ const togglePin = async (translation: KodikTranslation) => {
     }))
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
-    error.value = e.response?.data?.message || 'Не удалось изменить закрепление'
+    error.value = e.response?.data?.message || t('player.error.pinTranslation')
   }
 }
 

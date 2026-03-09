@@ -91,7 +91,7 @@
           >
             <span class="flex items-center gap-2 min-w-0">
               <span v-if="showEmoji" class="text-base leading-none flex-shrink-0">{{ getGenreEmoji(g.name) }}</span>
-              <span class="truncate">{{ g.name_ru || g.name }}</span>
+              <span class="truncate">{{ getLocalizedGenre(g.name, g.name_ru) }}</span>
             </span>
             <span class="flex items-center gap-2 flex-shrink-0">
               <span v-if="g.count" class="text-xs text-white/30">{{ g.count }}</span>
@@ -119,6 +119,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { getGenreEmoji } from '@/utils/genre-emoji'
+import { getLocalizedGenre } from '@/utils/title'
 
 export interface GenreOption {
   id: string
@@ -162,7 +163,7 @@ const selectedGenre = computed(() =>
 
 const selectedLabel = computed(() => {
   const g = selectedGenre.value
-  return g ? (g.name_ru || g.name) : ''
+  return g ? getLocalizedGenre(g.name, g.name_ru) : ''
 })
 
 const selectedEmoji = computed(() => {

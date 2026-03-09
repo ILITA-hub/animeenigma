@@ -96,6 +96,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/client'
 import { collectDiagnostics } from '@/utils/diagnostics'
@@ -117,6 +118,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const authStore = useAuthStore()
+const { t } = useI18n()
 const showModal = ref(false)
 const description = ref('')
 const submitting = ref(false)
@@ -156,7 +158,7 @@ async function submitReport() {
     description.value = ''
   } catch (err: unknown) {
     const e = err as { response?: { data?: { error?: { message?: string } } }; message?: string }
-    submitError.value = e.response?.data?.error?.message || e.message || 'Ошибка отправки'
+    submitError.value = e.response?.data?.error?.message || e.message || t('player.error.submitReport')
   } finally {
     submitting.value = false
   }

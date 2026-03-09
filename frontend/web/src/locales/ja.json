@@ -2,13 +2,12 @@
   "nav": {
     "home": "ホーム",
     "catalog": "カタログ",
-    "genres": "ジャンル",
     "rooms": "ルーム",
     "themes": "OP/ED",
     "search": "検索",
     "profile": "プロフィール",
     "login": "ログイン",
-    "logout": "ログアウト"
+    "schedule": "スケジュール"
   },
   "hero": {
     "tagline": "あなただけのアニメ体験",
@@ -17,13 +16,20 @@
     "scroll": "スクロールしてください"
   },
   "home": {
-    "continueWatching": "視聴を続ける",
-    "recommended": "おすすめ",
-    "trending": "トレンド",
-    "newEpisodes": "新着エピソード",
-    "genres": "ジャンル",
-    "popular": "人気",
-    "seeAll": "すべて見る"
+    "seeAll": "すべて見る",
+    "todayAt": "今日 {time}",
+    "tomorrowAt": "明日 {time}",
+    "dayAt": "{day} {time}",
+    "ongoing": "放送中",
+    "topAnime": "トップアニメ",
+    "announcements": "放送予定",
+    "noOngoing": "放送中のアニメはありません",
+    "noData": "データなし",
+    "noAnnounced": "放送予定はありません",
+    "updated": "更新 {time}",
+    "airing": "放送中",
+    "announced": "放送予定",
+    "episodeCount": "{count}話"
   },
   "anime": {
     "watch": "視聴する",
@@ -31,9 +37,7 @@
     "removeFromList": "リストから削除",
     "episodes": "エピソード",
     "synopsis": "あらすじ",
-    "characters": "キャラクター",
     "related": "関連作品",
-    "recommendations": "おすすめ",
     "episode": "話",
     "of": "/",
     "reviews": "レビュー",
@@ -57,9 +61,16 @@
     "nextEpisode": "第{episode}話:",
     "todayAt": "今日 {time} MSK",
     "tomorrowAt": "明日 {time} MSK",
+    "dayAtTime": "{day} {time} MSK",
+    "timeMsk": "{time} MSK",
+    "save": "保存",
+    "examplePlaceholder": "例: 59459",
+    "episodeProgress": "{aired} / {total}話",
+    "episodeTotal": "{total}話",
+    "episodeAiredUnknown": "{aired} / ?話",
+    "episodeUnknown": "?話",
     "hide": "非表示",
     "unhide": "表示",
-    "hidden": "非表示中",
     "status": {
       "ongoing": "放送中",
       "released": "放送終了",
@@ -71,7 +82,6 @@
   "player": {
     "quality": "画質",
     "subtitles": "字幕",
-    "audio": "音声",
     "autoplay": "自動再生",
     "next": "次へ",
     "previous": "前へ",
@@ -88,30 +98,64 @@
     "reportDescriptionPlaceholder": "問題を説明してください（任意）...",
     "reportDisclaimer": "診断のためにブラウザデータとログが送信されます。",
     "reportSending": "送信中...",
-    "reportSubmit": "送信"
+    "reportSubmit": "送信",
+    "loadingEpisode": "エピソード{n}を読み込み中...",
+    "selectEpisode": "エピソードを選択して視聴を開始",
+    "selectVoice": "吹替を選択して視聴を開始",
+    "episodesCount": "エピソード ({count})",
+    "watched": "視聴済み",
+    "markWatched": "視聴済みにする",
+    "playerLabel": "プレイヤー",
+    "voiceActing": "吹替",
+    "voiceActingCount": "吹替 ({count})",
+    "subtitlesCount": "字幕 ({count})",
+    "allCount": "すべて ({count})",
+    "noVoiceActing": "利用可能な吹替がありません",
+    "noSubtitlesAvailable": "利用可能な字幕がありません",
+    "noDubAvailable": "利用可能な吹替がありません",
+    "hideSubtitles": "字幕を非表示",
+    "showSubtitles": "字幕を表示",
+    "servers": "サーバー",
+    "off": "オフ",
+    "sub": "字幕",
+    "dub": "吹替",
+    "pin": "固定",
+    "unpin": "固定解除",
+    "native": "ネイティブ",
+    "recommendedVoice": "おすすめの吹替",
+    "episodeShort": "話",
+    "error": {
+      "loadEpisodes": "エピソードリストの読み込みに失敗しました",
+      "loadTranslations": "吹替リストの読み込みに失敗しました",
+      "loadServers": "サーバーの読み込みに失敗しました",
+      "videoNotFound": "動画が見つかりません",
+      "loadVideo": "動画の読み込みに失敗しました",
+      "getVideoUrl": "動画URLの取得に失敗しました",
+      "playerInit": "プレイヤーの初期化エラー",
+      "playback": "動画の再生エラー",
+      "markWatched": "視聴済みの記録に失敗しました",
+      "pinTranslation": "固定の変更に失敗しました",
+      "decoding": "デコードエラー。{server}に切り替え中...",
+      "decodingFallback": "動画のデコードエラー。別のプレイヤー（Kodik）をお試しください。",
+      "serverBusy": "サーバーがビジーです。後でもう一度試すか、Kodikをご利用ください。",
+      "hlsUnsupported": "お使いのブラウザはHLSに対応していません",
+      "serverLoaded": "サーバーが混雑しています。動画がカクつく場合、Kodikをお試しください。",
+      "submitReport": "レポート送信エラー"
+    }
   },
   "search": {
     "placeholder": "アニメを検索...",
     "recent": "最近の検索",
     "clearAll": "すべて削除",
     "noResults": "結果が見つかりません",
-    "filters": "フィルター",
-    "year": "年",
     "genre": "ジャンル",
-    "status": "状態",
-    "sort": "並び替え",
-    "type": "タイプ",
     "viewAll": "すべての結果を見る"
   },
   "profile": {
     "memberSince": "登録日",
-    "editProfile": "編集",
     "tabs": {
       "watchlist": "マイリスト",
-      "history": "履歴",
-      "favorites": "お気に入り",
-      "settings": "設定",
-      "hidden": "非表示"
+      "settings": "設定"
     },
     "watchlist": {
       "all": "すべて",
@@ -119,31 +163,25 @@
       "planToWatch": "視聴予定",
       "completed": "視聴済み",
       "onHold": "保留中",
-      "dropped": "中断"
+      "dropped": "中断",
+      "searchPlaceholder": "アニメを検索..."
     },
     "table": {
-      "number": "#",
-      "image": "画像",
       "title": "タイトル",
       "score": "評価",
-      "type": "タイプ",
       "progress": "進捗",
-      "tags": "タグ",
-      "actions": "操作"
+      "poster": "ポスター",
+      "startDate": "開始",
+      "endDate": "終了",
+      "status": "状態"
     },
     "empty": {
-      "watchlist": "リストは空です",
-      "history": "視聴履歴がありません",
-      "hidden": "非表示のアニメはありません"
+      "watchlist": "リストは空です"
     },
     "actions": {
       "browseCatalog": "カタログを見る",
-      "removeFromList": "リストから削除",
-      "tableView": "テーブル表示",
-      "gridView": "グリッド表示"
+      "removeFromList": "リストから削除"
     },
-    "rewatching": "再視聴中",
-    "noPoster": "ポスターなし",
     "import": {
       "title": "リストをインポート",
       "malPlaceholder": "MALユーザー名を入力",
@@ -158,22 +196,10 @@
       "justNow": "たった今",
       "minutesAgo": "{n}分前",
       "hoursAgo": "{n}時間前",
-      "daysAgo": "{n}日前",
-      "alreadyRunning": "インポート実行中"
+      "daysAgo": "{n}日前"
     },
     "settings": {
-      "appearance": "外観",
-      "language": "言語",
-      "languageDesc": "インターフェース言語",
-      "autoplay": "自動再生",
-      "reduceMotion": "モーション軽減",
-      "reduceMotionDesc": "アニメーションを軽減",
-      "playback": "再生",
-      "defaultQuality": "デフォルト画質",
-      "preferredAudio": "優先音声",
-      "subtitles": "字幕",
       "account": "アカウント",
-      "email": "メール",
       "changePassword": "パスワード変更",
       "signOut": "ログアウト",
       "apiKey": "APIキー",
@@ -188,10 +214,6 @@
       "apiKeyNone": "APIキーは設定されていません。",
       "apiKeyRevokeConfirm": "よろしいですか？このキーを使用しているスクリプトは動作しなくなります。",
       "apiKeyRevoked": "APIキーを取り消しました。"
-    },
-    "history": {
-      "empty": "視聴履歴がありません",
-      "episode": "エピソード"
     },
     "publicProfile": "公開プロフィール",
     "profileLink": "プロフィールリンク",
@@ -211,26 +233,10 @@
     "listEmpty": "リストは空です",
     "ep": "話",
     "goHome": "ホームへ",
-    "table": {
-      "number": "#",
-      "image": "画像",
-      "title": "タイトル",
-      "score": "評価",
-      "type": "タイプ",
-      "progress": "進捗",
-      "tags": "タグ",
-      "actions": "操作",
-      "poster": "ポスター",
-      "startDate": "開始",
-      "endDate": "終了",
-      "status": "状態"
-    },
     "sort": {
-      "label": "並び替え",
       "title": "タイトル",
       "score": "評価",
       "progress": "進捗",
-      "dateAdded": "追加日",
       "status": "状態",
       "genre": "ジャンル"
     },
@@ -255,7 +261,6 @@
   "rooms": {
     "title": "ゲームルーム",
     "create": "ルーム作成",
-    "join": "参加",
     "players": "人",
     "host": "ホスト",
     "round": "ラウンド",
@@ -265,26 +270,44 @@
       "finished": "終了"
     },
     "leaderboard": "ランキング",
-    "leave": "退出"
+    "leave": "退出",
+    "description": "他のファンとアニメゲームを楽しもう！",
+    "availableRooms": "利用可能なルーム",
+    "noRooms": "アクティブなルームがありません",
+    "createFirst": "最初のルームを作成",
+    "playersList": "プレイヤー ({count})",
+    "waitingDescription": "十分なプレイヤーが参加するとゲームが開始されます",
+    "loadingQuestion": "問題を読み込み中...",
+    "chat": "チャット",
+    "messagePlaceholder": "メッセージを入力...",
+    "roomNameLabel": "ルーム名",
+    "roomNamePlaceholder": "ルーム名を入力",
+    "gameTypeLabel": "ゲームタイプ",
+    "maxPlayersLabel": "最大プレイヤー数",
+    "gameType": {
+      "animeQuiz": "アニメクイズ",
+      "characterGuess": "キャラクター当て",
+      "openingQuiz": "オープニングクイズ"
+    }
   },
   "common": {
     "loading": "読み込み中...",
-    "error": "エラー",
     "retry": "再試行",
     "cancel": "キャンセル",
-    "save": "保存",
     "delete": "削除",
-    "confirm": "確認",
     "back": "戻る",
     "next": "次へ",
-    "today": "今日",
     "yesterday": "昨日"
+  },
+  "updates": {
+    "title": "最新の更新",
+    "empty": "まだ更新はありません",
+    "error": "更新の読み込みに失敗しました"
   },
   "activity": {
     "title": "アクティビティ",
     "empty": "まだアクティビティはありません",
     "loadMore": "もっと見る",
-    "loading": "読み込み中...",
     "score": "{score}/10 と評価 —",
     "status": {
       "watching": "視聴開始",
@@ -294,6 +317,94 @@
       "on_hold": "一時停止",
       "rewatching": "再視聴中"
     }
+  },
+  "schedule": {
+    "title": "放送スケジュール",
+    "today": "(今日)",
+    "noData": "スケジュールデータがありません",
+    "hint": "放送中のアニメがデータベースに追加されるとスケジュールが更新されます",
+    "episode": "第{n}話",
+    "timeMsk": "{time} MSK",
+    "daysShort": {
+      "sunday": "日",
+      "monday": "月",
+      "tuesday": "火",
+      "wednesday": "水",
+      "thursday": "木",
+      "friday": "金",
+      "saturday": "土"
+    },
+    "days": {
+      "sunday": "日曜日",
+      "monday": "月曜日",
+      "tuesday": "火曜日",
+      "wednesday": "水曜日",
+      "thursday": "木曜日",
+      "friday": "金曜日",
+      "saturday": "土曜日"
+    }
+  },
+  "auth": {
+    "telegramLogin": "Telegramでログイン",
+    "loading": "読み込み中...",
+    "backHome": "ホームに戻る",
+    "loginError": "ログインエラー",
+    "registerError": "登録エラー",
+    "telegramLoginError": "Telegramログインエラー"
+  },
+  "notFound": {
+    "code": "404",
+    "title": "ページが見つかりません",
+    "description": "お探しのページは存在しないか、移動されました。",
+    "goHome": "ホームへ"
+  },
+  "time": {
+    "justNow": "たった今",
+    "minutesAgo": "{n}分前",
+    "hoursAgo": "{n}時間前",
+    "daysAgo": "{n}日前"
+  },
+  "seasons": {
+    "winter": "冬",
+    "spring": "春",
+    "summer": "夏",
+    "fall": "秋"
+  },
+  "browse": {
+    "filterStatus": "状態",
+    "filterOngoing": "放送中",
+    "filterAnnounced": "放送予定",
+    "filterReleased": "放送終了",
+    "filterYear": "年",
+    "sortPopular": "人気",
+    "sortRating": "評価順",
+    "sortYear": "年順",
+    "sortTitle": "タイトル順",
+    "searchShikimori": "Shikimoriで検索",
+    "refreshShikimori": "Shikimoriから更新"
+  },
+  "themes": {
+    "title": "オープニング＆エンディング",
+    "syncButton": "シーズン同期",
+    "syncing": "同期中 {progress}",
+    "sortRating": "評価順",
+    "sortName": "名前順",
+    "sortNewest": "新しい順",
+    "noThemes": "このシーズンのテーマが見つかりません",
+    "syncHint": "「シーズン同期」をクリックしてテーマを取得",
+    "loadError": "テーマの読み込みに失敗しました"
+  },
+  "profileSetup": {
+    "title": "プロフィール設定",
+    "description": "アニメリストを共有するためのユニークなプロフィールリンクを作成",
+    "profileLink": "プロフィールリンク",
+    "validation": "英数字とハイフンのみ。3文字以上。",
+    "validationError": "英数字とハイフンのみ（3-32文字）",
+    "saving": "保存中...",
+    "createProfile": "プロフィールを作成",
+    "later": "後で",
+    "taken": "このリンクは既に使用されています",
+    "saveFailed": "保存に失敗しました"
   },
   "footer": {
     "rights": "All rights reserved"

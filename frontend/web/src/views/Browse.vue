@@ -161,7 +161,7 @@
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          Поиск на Shikimori
+          {{ $t('browse.searchShikimori') }}
         </Button>
       </div>
 
@@ -180,7 +180,7 @@
             <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            Обновить с Shikimori
+            {{ $t('browse.refreshShikimori') }}
           </button>
         </div>
 
@@ -190,6 +190,7 @@
           v-for="anime in animeList"
           :key="anime.id"
           :anime="anime"
+          :list-status="getListStatus(anime.id)"
         />
       </div>
 
@@ -209,9 +210,14 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
+import { useAuthStore } from '@/stores/auth'
 import { Input, Badge, Button, Select, GenreFilterPopup, PaginationBar } from '@/components/ui'
 import { AnimeCardNew } from '@/components/anime'
-import { animeApi } from '@/api/client'
+import { animeApi, userApi } from '@/api/client'
+import { useI18n } from 'vue-i18n'
+import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
+
+const { t } = useI18n()
 
 interface Genre {
   id: string
@@ -221,7 +227,32 @@ interface Genre {
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const { animeList, loading, error, fetchAnimeList, searchAnime, paginationMeta } = useAnime()
+
+// Watchlist status map: animeId -> status
+const watchlistMap = ref<Map<string, string>>(new Map())
+
+const fetchWatchlistMap = async () => {
+  if (!authStore.isAuthenticated) return
+  try {
+    const response = await userApi.getWatchlist()
+    const entries = response.data?.data || response.data || []
+    const map = new Map<string, string>()
+    for (const entry of entries) {
+      if (entry.anime_id && entry.status) {
+        map.set(entry.anime_id, entry.status)
+      }
+    }
+    watchlistMap.value = map
+  } catch {
+    // Silently fail — badge is non-critical
+  }
+}
+
+const getListStatus = (animeId: string | number): string | null => {
+  return watchlistMap.value.get(String(animeId)) || null
+}
 
 const searchQuery = ref('')
 const selectedGenre = ref('')
@@ -230,7 +261,7 @@ const selectedStatus = ref('')
 const sortBy = ref('popularity')
 const currentPage = ref(1)
 const showLiveResults = ref(false)
-const liveResults = ref<Array<{ id: string; title: string; coverImage: string; releaseYear?: number; episodes?: number; rating?: number }>>([])
+const liveResults = ref<Array<{ id: string; title: string; name?: string; nameRu?: string; nameJp?: string; coverImage: string; releaseYear?: number; episodes?: number; rating?: number }>>([])
 const recentSearches = ref<string[]>([])
 const loadingShikimori = ref(false)
 
@@ -244,27 +275,27 @@ const browseGenres = computed(() =>
   genres.value.map(g => ({ id: g.id, name: g.name, name_ru: g.name_ru }))
 )
 
-const statusOptions = [
-  { value: '', label: 'Статус' },
-  { value: 'ongoing', label: 'Онгоинги' },
-  { value: 'announced', label: 'Анонсы' },
-  { value: 'released', label: 'Вышедшие' },
-]
+const statusOptions = computed(() => [
+  { value: '', label: t('browse.filterStatus') },
+  { value: 'ongoing', label: t('browse.filterOngoing') },
+  { value: 'announced', label: t('browse.filterAnnounced') },
+  { value: 'released', label: t('browse.filterReleased') },
+])
 
-const yearOptions = [
-  { value: '', label: 'Год' },
+const yearOptions = computed(() => [
+  { value: '', label: t('browse.filterYear') },
   ...Array.from({ length: 30 }, (_, i) => {
     const year = new Date().getFullYear() - i
     return { value: String(year), label: String(year) }
   })
-]
+])
 
-const sortOptions = [
-  { value: 'popularity', label: 'Популярные' },
-  { value: 'rating', label: 'По оценке' },
-  { value: 'year', label: 'По году' },
-  { value: 'title', label: 'По названию' },
-]
+const sortOptions = computed(() => [
+  { value: 'popularity', label: t('browse.sortPopular') },
+  { value: 'rating', label: t('browse.sortRating') },
+  { value: 'year', label: t('browse.sortYear') },
+  { value: 'title', label: t('browse.sortTitle') },
+])
 
 const clearFilters = () => {
   selectedGenre.value = ''
@@ -294,7 +325,10 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
     const list = Array.isArray(data) ? data : []
     liveResults.value = list.map((a: Record<string, unknown>) => ({
       id: a.id as string,
-      title: (a.name || a.name_ru || a.name_jp || '') as string,
+      title: getLocalizedTitle(a.name as string, a.name_ru as string, a.name_jp as string),
+      name: a.name as string | undefined,
+      nameRu: a.name_ru as string | undefined,
+      nameJp: a.name_jp as string | undefined,
       coverImage: (a.poster_url || '') as string,
       releaseYear: a.year as number | undefined,
       episodes: a.episodes_count as number | undefined,
@@ -378,14 +412,17 @@ onMounted(async () => {
     recentSearches.value = JSON.parse(stored)
   }
 
-  // Load genres from API
-  try {
-    const response = await animeApi.getGenres()
+  // Load genres and watchlist in parallel
+  const genrePromise = animeApi.getGenres().then(response => {
     const data = response.data?.data || response.data || []
-    genres.value = data.sort((a: Genre, b: Genre) => (a.name_ru || a.name).localeCompare(b.name_ru || b.name, 'ru'))
-  } catch (err) {
+    genres.value = data.sort((a: Genre, b: Genre) => getLocalizedGenre(a.name, a.name_ru).localeCompare(getLocalizedGenre(b.name, b.name_ru)))
+  }).catch(err => {
     console.error('Failed to load genres:', err)
-  }
+  })
+
+  const watchlistPromise = fetchWatchlistMap()
+
+  await Promise.all([genrePromise, watchlistPromise])
 
   // Store pending MAL bind for later resolution on Anime page
   if (route.query.bind_mal) {

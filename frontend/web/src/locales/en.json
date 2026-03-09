@@ -2,13 +2,12 @@
   "nav": {
     "home": "Home",
     "catalog": "Catalog",
-    "genres": "Genres",
     "rooms": "Rooms",
     "themes": "OP/ED",
     "search": "Search",
     "profile": "Profile",
     "login": "Sign In",
-    "logout": "Sign Out"
+    "schedule": "Schedule"
   },
   "hero": {
     "tagline": "Stream anime, your way",
@@ -17,13 +16,20 @@
     "scroll": "Scroll down"
   },
   "home": {
-    "continueWatching": "Continue Watching",
-    "recommended": "Recommended for You",
-    "trending": "Trending Now",
-    "newEpisodes": "New Episodes",
-    "genres": "Genres",
-    "popular": "Popular",
-    "seeAll": "See All"
+    "seeAll": "See All",
+    "todayAt": "Today {time}",
+    "tomorrowAt": "Tomorrow {time}",
+    "dayAt": "{day} {time}",
+    "ongoing": "Ongoing",
+    "topAnime": "Top Anime",
+    "announcements": "Announcements",
+    "noOngoing": "No ongoing anime",
+    "noData": "No data",
+    "noAnnounced": "No announcements",
+    "updated": "Updated {time}",
+    "airing": "Airing",
+    "announced": "Announced",
+    "episodeCount": "{count} ep."
   },
   "anime": {
     "watch": "Watch",
@@ -31,9 +37,7 @@
     "removeFromList": "Remove from List",
     "episodes": "Episodes",
     "synopsis": "Synopsis",
-    "characters": "Characters",
     "related": "Related",
-    "recommendations": "Recommendations",
     "episode": "Episode",
     "of": "of",
     "reviews": "Reviews",
@@ -57,9 +61,16 @@
     "nextEpisode": "Ep. {episode}:",
     "todayAt": "Today at {time} MSK",
     "tomorrowAt": "Tomorrow at {time} MSK",
+    "dayAtTime": "On {day} at {time} MSK",
+    "timeMsk": "{time} MSK",
+    "save": "Save",
+    "examplePlaceholder": "e.g.: 59459",
+    "episodeProgress": "{aired} / {total} ep.",
+    "episodeTotal": "{total} ep.",
+    "episodeAiredUnknown": "{aired} / ? ep.",
+    "episodeUnknown": "? ep.",
     "hide": "Hide",
     "unhide": "Unhide",
-    "hidden": "Hidden",
     "status": {
       "ongoing": "Ongoing",
       "released": "Released",
@@ -71,7 +82,6 @@
   "player": {
     "quality": "Quality",
     "subtitles": "Subtitles",
-    "audio": "Audio",
     "autoplay": "Autoplay",
     "next": "Next",
     "previous": "Previous",
@@ -88,30 +98,64 @@
     "reportDescriptionPlaceholder": "Describe the problem (optional)...",
     "reportDisclaimer": "Browser data and logs will be sent for diagnostics.",
     "reportSending": "Sending...",
-    "reportSubmit": "Send Report"
+    "reportSubmit": "Send Report",
+    "loadingEpisode": "Loading episode {n}...",
+    "selectEpisode": "Select an episode to start watching",
+    "selectVoice": "Select voice acting to start watching",
+    "episodesCount": "Episodes ({count})",
+    "watched": "Watched",
+    "markWatched": "Mark as watched",
+    "playerLabel": "Player",
+    "voiceActing": "Voice Acting",
+    "voiceActingCount": "Voice ({count})",
+    "subtitlesCount": "Subtitles ({count})",
+    "allCount": "All ({count})",
+    "noVoiceActing": "No voice acting available",
+    "noSubtitlesAvailable": "No subtitles available",
+    "noDubAvailable": "No dub available",
+    "hideSubtitles": "Hide subtitles",
+    "showSubtitles": "Show subtitles",
+    "servers": "Servers",
+    "off": "Off",
+    "sub": "Sub",
+    "dub": "Dub",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "native": "Native",
+    "recommendedVoice": "Recommended voice acting",
+    "episodeShort": "ep.",
+    "error": {
+      "loadEpisodes": "Failed to load episode list",
+      "loadTranslations": "Failed to load translations",
+      "loadServers": "Failed to load servers",
+      "videoNotFound": "Video not found",
+      "loadVideo": "Failed to load video",
+      "getVideoUrl": "Failed to get video URL",
+      "playerInit": "Player initialization error",
+      "playback": "Video playback error",
+      "markWatched": "Failed to mark episode as watched",
+      "pinTranslation": "Failed to change pin",
+      "decoding": "Decoding error. Switching to {server}...",
+      "decodingFallback": "Video decoding error. Try another player (Kodik).",
+      "serverBusy": "Server is busy. Try later or use Kodik.",
+      "hlsUnsupported": "Your browser doesn't support HLS",
+      "serverLoaded": "Server is loaded. If video lags, try Kodik.",
+      "submitReport": "Report submission error"
+    }
   },
   "search": {
     "placeholder": "Search anime...",
     "recent": "Recent Searches",
     "clearAll": "Clear All",
     "noResults": "No results found",
-    "filters": "Filters",
-    "year": "Year",
     "genre": "Genre",
-    "status": "Status",
-    "sort": "Sort",
-    "type": "Type",
     "viewAll": "View all results"
   },
   "profile": {
     "memberSince": "Member since",
-    "editProfile": "Edit Profile",
     "tabs": {
       "watchlist": "My Lists",
-      "history": "History",
-      "favorites": "Favorites",
-      "settings": "Settings",
-      "hidden": "Hidden"
+      "settings": "Settings"
     },
     "watchlist": {
       "all": "All",
@@ -123,28 +167,21 @@
       "searchPlaceholder": "Search anime..."
     },
     "table": {
-      "number": "#",
-      "image": "Image",
       "title": "Title",
       "score": "Score",
-      "type": "Type",
       "progress": "Progress",
-      "tags": "Tags",
-      "actions": "Actions"
+      "poster": "Poster",
+      "startDate": "Start",
+      "endDate": "End",
+      "status": "Status"
     },
     "empty": {
-      "watchlist": "Your list is empty",
-      "history": "No watch history yet",
-      "hidden": "No hidden anime"
+      "watchlist": "Your list is empty"
     },
     "actions": {
       "browseCatalog": "Browse Catalog",
-      "removeFromList": "Remove from list",
-      "tableView": "Table view",
-      "gridView": "Grid view"
+      "removeFromList": "Remove from list"
     },
-    "rewatching": "Rewatching",
-    "noPoster": "No poster",
     "import": {
       "title": "Import List",
       "malPlaceholder": "Enter MAL username",
@@ -159,22 +196,10 @@
       "justNow": "just now",
       "minutesAgo": "{n} min ago",
       "hoursAgo": "{n}h ago",
-      "daysAgo": "{n}d ago",
-      "alreadyRunning": "Import already in progress"
+      "daysAgo": "{n}d ago"
     },
     "settings": {
-      "appearance": "Appearance",
-      "language": "Language",
-      "languageDesc": "Interface language",
-      "autoplay": "Autoplay next",
-      "reduceMotion": "Reduce motion",
-      "reduceMotionDesc": "Reduce animations",
-      "playback": "Playback",
-      "defaultQuality": "Default quality",
-      "preferredAudio": "Preferred audio",
-      "subtitles": "Subtitles",
       "account": "Account",
-      "email": "Email",
       "changePassword": "Change Password",
       "signOut": "Sign Out",
       "apiKey": "API Key",
@@ -189,10 +214,6 @@
       "apiKeyNone": "No API key configured.",
       "apiKeyRevokeConfirm": "Are you sure? Any scripts using this key will stop working.",
       "apiKeyRevoked": "API key revoked."
-    },
-    "history": {
-      "empty": "No watch history yet",
-      "episode": "Episode"
     },
     "publicProfile": "Public Profile",
     "profileLink": "Profile Link",
@@ -212,26 +233,10 @@
     "listEmpty": "List is empty",
     "ep": "ep.",
     "goHome": "Go Home",
-    "table": {
-      "number": "#",
-      "image": "Image",
-      "title": "Title",
-      "score": "Score",
-      "type": "Type",
-      "progress": "Progress",
-      "tags": "Tags",
-      "actions": "Actions",
-      "poster": "Poster",
-      "startDate": "Start",
-      "endDate": "End",
-      "status": "Status"
-    },
     "sort": {
-      "label": "Sort",
       "title": "Title",
       "score": "Score",
       "progress": "Progress",
-      "dateAdded": "Date added",
       "status": "Status",
       "genre": "Genre"
     },
@@ -256,7 +261,6 @@
   "rooms": {
     "title": "Game Rooms",
     "create": "Create Room",
-    "join": "Join",
     "players": "players",
     "host": "Host",
     "round": "Round",
@@ -266,26 +270,44 @@
       "finished": "Finished"
     },
     "leaderboard": "Leaderboard",
-    "leave": "Leave"
+    "leave": "Leave",
+    "description": "Play anime-themed games with other fans!",
+    "availableRooms": "Available Rooms",
+    "noRooms": "No active rooms",
+    "createFirst": "Create the first room",
+    "playersList": "Players ({count})",
+    "waitingDescription": "Game will start when enough players join",
+    "loadingQuestion": "Loading question...",
+    "chat": "Chat",
+    "messagePlaceholder": "Type a message...",
+    "roomNameLabel": "Room Name",
+    "roomNamePlaceholder": "Enter room name",
+    "gameTypeLabel": "Game Type",
+    "maxPlayersLabel": "Max Players",
+    "gameType": {
+      "animeQuiz": "Anime Quiz",
+      "characterGuess": "Character Guess",
+      "openingQuiz": "Opening Quiz"
+    }
   },
   "common": {
     "loading": "Loading...",
-    "error": "Error",
     "retry": "Retry",
     "cancel": "Cancel",
-    "save": "Save",
     "delete": "Delete",
-    "confirm": "Confirm",
     "back": "Back",
     "next": "Next",
-    "today": "Today",
     "yesterday": "Yesterday"
+  },
+  "updates": {
+    "title": "Last Updates",
+    "empty": "No updates yet",
+    "error": "Failed to load updates"
   },
   "activity": {
     "title": "Activity",
     "empty": "No activity yet",
     "loadMore": "Show more",
-    "loading": "Loading...",
     "score": "rated {score}/10 —",
     "status": {
       "watching": "started watching",
@@ -295,6 +317,94 @@
       "on_hold": "put on hold",
       "rewatching": "is rewatching"
     }
+  },
+  "schedule": {
+    "title": "Episode Schedule",
+    "today": "(Today)",
+    "noData": "No schedule data",
+    "hint": "Schedule will update when ongoing anime are added to the database",
+    "episode": "Ep. {n}",
+    "timeMsk": "{time} MSK",
+    "daysShort": {
+      "sunday": "Sun",
+      "monday": "Mon",
+      "tuesday": "Tue",
+      "wednesday": "Wed",
+      "thursday": "Thu",
+      "friday": "Fri",
+      "saturday": "Sat"
+    },
+    "days": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    }
+  },
+  "auth": {
+    "telegramLogin": "Login via Telegram",
+    "loading": "Loading...",
+    "backHome": "Back to Home",
+    "loginError": "Login error",
+    "registerError": "Registration error",
+    "telegramLoginError": "Telegram login error"
+  },
+  "notFound": {
+    "code": "404",
+    "title": "Page Not Found",
+    "description": "The page you're looking for doesn't exist or has been moved.",
+    "goHome": "Go Home"
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{n} min ago",
+    "hoursAgo": "{n}h ago",
+    "daysAgo": "{n}d ago"
+  },
+  "seasons": {
+    "winter": "Winter",
+    "spring": "Spring",
+    "summer": "Summer",
+    "fall": "Fall"
+  },
+  "browse": {
+    "filterStatus": "Status",
+    "filterOngoing": "Ongoing",
+    "filterAnnounced": "Announced",
+    "filterReleased": "Released",
+    "filterYear": "Year",
+    "sortPopular": "Popular",
+    "sortRating": "By Rating",
+    "sortYear": "By Year",
+    "sortTitle": "By Title",
+    "searchShikimori": "Search on Shikimori",
+    "refreshShikimori": "Refresh from Shikimori"
+  },
+  "themes": {
+    "title": "Openings & Endings",
+    "syncButton": "Sync Season",
+    "syncing": "Syncing {progress}",
+    "sortRating": "By Rating",
+    "sortName": "By Name",
+    "sortNewest": "Newest",
+    "noThemes": "No themes found for this season",
+    "syncHint": "Click \"Sync Season\" to fetch themes",
+    "loadError": "Failed to load themes"
+  },
+  "profileSetup": {
+    "title": "Profile Setup",
+    "description": "Create a unique link to your profile to share your anime list",
+    "profileLink": "Profile Link",
+    "validation": "Only Latin letters, numbers and hyphens. Minimum 3 characters.",
+    "validationError": "Only Latin letters, numbers and hyphens (3-32 characters)",
+    "saving": "Saving...",
+    "createProfile": "Create Profile",
+    "later": "Later",
+    "taken": "This link is already taken",
+    "saveFailed": "Failed to save"
   },
   "footer": {
     "rights": "All rights reserved"

@@ -799,6 +799,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button, Modal, Tabs, Select, GenreFilterPopup, type SelectOption } from '@/components/ui'
 import { userApi, publicApi } from '@/api/client'
+import { getLocalizedTitle } from '@/utils/title'
 
 interface ApiError {
   response?: {
@@ -857,7 +858,7 @@ const siteOrigin = window.location.origin
 
 // Helpers for nested anime data from Preload
 const animeTitle = (entry: WatchlistEntry): string =>
-  entry.anime?.name_ru || entry.anime?.name || 'Anime'
+  getLocalizedTitle(entry.anime?.name, entry.anime?.name_ru, entry.anime?.name_jp) || 'Anime'
 const animeCover = (entry: WatchlistEntry): string =>
   entry.anime?.poster_url || ''
 const animeTotalEpisodes = (entry: WatchlistEntry): number =>
