@@ -193,12 +193,12 @@
         />
       </div>
 
-        <!-- Load More -->
-        <div v-if="hasMore && animeList.length > 0" class="flex justify-center mt-8">
-          <Button variant="ghost" :loading="loadingMore" @click="loadMore">
-            Load More
-          </Button>
-        </div>
+        <!-- Pagination -->
+        <PaginationBar
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          @update:current-page="goToPage"
+        />
       </template>
     </div>
   </div>
@@ -209,7 +209,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
-import { Input, Badge, Button, Select, GenreFilterPopup } from '@/components/ui'
+import { Input, Badge, Button, Select, GenreFilterPopup, PaginationBar } from '@/components/ui'
 import { AnimeCardNew } from '@/components/anime'
 import { animeApi } from '@/api/client'
 
@@ -221,7 +221,7 @@ interface Genre {
 
 const route = useRoute()
 const router = useRouter()
-const { animeList, loading, error, fetchAnimeList, searchAnime } = useAnime()
+const { animeList, loading, error, fetchAnimeList, searchAnime, paginationMeta } = useAnime()
 
 const searchQuery = ref('')
 const selectedGenre = ref('')
@@ -229,12 +229,12 @@ const selectedYear = ref('')
 const selectedStatus = ref('')
 const sortBy = ref('popularity')
 const currentPage = ref(1)
-const hasMore = ref(true)
-const loadingMore = ref(false)
 const showLiveResults = ref(false)
 const liveResults = ref<Array<{ id: string; title: string; coverImage: string; releaseYear?: number; episodes?: number; rating?: number }>>([])
 const recentSearches = ref<string[]>([])
 const loadingShikimori = ref(false)
+
+const totalPages = computed(() => paginationMeta.value?.total_pages ?? 0)
 
 const hasActiveFilters = computed(() => !!selectedGenre.value || !!selectedYear.value || !!selectedStatus.value || sortBy.value !== 'popularity')
 
@@ -294,7 +294,7 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
     const list = Array.isArray(data) ? data : []
     liveResults.value = list.map((a: Record<string, unknown>) => ({
       id: a.id as string,
-      title: (a.name_ru || a.name || a.name_jp || '') as string,
+      title: (a.name || a.name_ru || a.name_jp || '') as string,
       coverImage: (a.poster_url || '') as string,
       releaseYear: a.year as number | undefined,
       episodes: a.episodes_count as number | undefined,
@@ -322,10 +322,10 @@ const handleSearch = async () => {
     localStorage.setItem('recentSearches', JSON.stringify(recentSearches.value))
 
     await searchAnime(searchQuery.value)
-    router.replace({ query: { ...route.query, q: searchQuery.value } })
+    router.replace({ query: { ...route.query, q: searchQuery.value, page: undefined } })
   } else {
     await loadAnime()
-    router.replace({ query: { ...route.query, q: undefined } })
+    router.replace({ query: { ...route.query, q: undefined, page: undefined } })
   }
 }
 
@@ -341,6 +341,8 @@ const searchOnShikimori = async () => {
 
 const handleFilter = async () => {
   currentPage.value = 1
+  const query = { ...route.query, page: undefined }
+  router.replace({ query })
   await loadAnime()
 }
 
@@ -358,15 +360,15 @@ const loadAnime = async () => {
   if (selectedStatus.value) {
     params.status = selectedStatus.value
   }
-  const results = await fetchAnimeList(params)
-  hasMore.value = (results?.length ?? 0) >= 20
+  await fetchAnimeList(params)
 }
 
-const loadMore = async () => {
-  loadingMore.value = true
-  currentPage.value++
+const goToPage = async (page: number) => {
+  currentPage.value = page
+  const query = { ...route.query, page: page > 1 ? String(page) : undefined }
+  router.replace({ query })
   await loadAnime()
-  loadingMore.value = false
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 // Load recent searches from localStorage
@@ -388,6 +390,10 @@ onMounted(async () => {
   // Store pending MAL bind for later resolution on Anime page
   if (route.query.bind_mal) {
     sessionStorage.setItem('pending_mal_bind', route.query.bind_mal as string)
+  }
+
+  if (route.query.page) {
+    currentPage.value = parseInt(route.query.page as string, 10) || 1
   }
 
   if (route.query.status) {
@@ -427,6 +433,14 @@ watch(() => route.query.genre, (newGenre) => {
   if (val !== selectedGenre.value) {
     selectedGenre.value = val
     handleFilter()
+  }
+})
+
+watch(() => route.query.page, (newPage) => {
+  const page = parseInt(newPage as string, 10) || 1
+  if (page !== currentPage.value) {
+    currentPage.value = page
+    loadAnime()
   }
 })
 </script>
