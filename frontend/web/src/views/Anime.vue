@@ -522,7 +522,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
@@ -530,10 +530,11 @@ import { useAuthStore } from '@/stores/auth'
 import { Badge, Button } from '@/components/ui'
 import { GenreChip, AnimeCardNew } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
-import KodikPlayer from '@/components/player/KodikPlayer.vue'
-import HiAnimePlayer from '@/components/player/HiAnimePlayer.vue'
-import ConsumetPlayer from '@/components/player/ConsumetPlayer.vue'
-import AnimeLibPlayer from '@/components/player/AnimeLibPlayer.vue'
+
+const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
+const HiAnimePlayer = defineAsyncComponent(() => import('@/components/player/HiAnimePlayer.vue'))
+const ConsumetPlayer = defineAsyncComponent(() => import('@/components/player/ConsumetPlayer.vue'))
+const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { parseDescription } from '@/utils/description-parser'

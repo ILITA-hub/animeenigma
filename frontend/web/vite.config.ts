@@ -33,6 +33,7 @@ export default defineConfig({
         manualChunks: {
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
           'video-vendor': ['video.js'],
+          'hls-vendor': ['hls.js'],
           'socket-vendor': ['socket.io-client']
         }
       }
