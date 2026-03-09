@@ -85,12 +85,14 @@ This file is loaded by the `LastUpdates.vue` Changelog tab to show users what's 
 
 **Types:** `feature`, `fix`, `perf`
 
+**Language:** Always write entries in **Russian**.
+
 **Writing style:** Informative + enthusiastic with emojis. Write for anime fans, not developers.
 
 Examples:
-- "🎉 Brand new Telegram anime news feed on the home page! Stay updated with the latest announcements"
-- "🔧 Fixed subtitle rendering for AnimeLib player — smooth subs are back!"
-- "⚡ Faster page loads with optimized caching"
+- "🎉 Новая лента аниме-новостей из Telegram прямо на главной! Будьте в курсе всех анонсов"
+- "🔧 Исправлен рендеринг субтитров в AnimeLib плеере — плавные субтитры снова работают!"
+- "⚡ Ускорена загрузка страниц благодаря оптимизированному кэшированию"
 
 **Rules:**
 - If today's date group already exists at the top, merge new entries into it
