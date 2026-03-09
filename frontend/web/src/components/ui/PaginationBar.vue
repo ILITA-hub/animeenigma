@@ -3,7 +3,7 @@
     <!-- Previous -->
     <button
       :disabled="currentPage <= 1"
-      class="pagination-btn"
+      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors"
       :class="{ 'opacity-30 cursor-not-allowed': currentPage <= 1 }"
       @click="$emit('update:currentPage', currentPage - 1)"
     >
@@ -17,7 +17,7 @@
       <span v-if="page === '...'" class="px-2 text-white/30">...</span>
       <button
         v-else
-        class="pagination-btn"
+        class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors"
         :class="page === currentPage ? 'bg-pink-500/80 text-white' : 'hover:bg-white/10'"
         @click="$emit('update:currentPage', page)"
       >
@@ -28,7 +28,7 @@
     <!-- Next -->
     <button
       :disabled="currentPage >= totalPages"
-      class="pagination-btn"
+      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors"
       :class="{ 'opacity-30 cursor-not-allowed': currentPage >= totalPages }"
       @click="$emit('update:currentPage', currentPage + 1)"
     >
@@ -86,8 +86,3 @@ const visiblePages = computed(() => {
 })
 </script>
 
-<style scoped>
-.pagination-btn {
-  @apply w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors;
-}
-</style>
