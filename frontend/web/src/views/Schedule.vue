@@ -35,7 +35,7 @@
                   {{ $t('schedule.episode', { n: (anime.episodes_aired || 0) + 1 }) }}
                 </p>
                 <p class="text-cyan-400 text-sm mt-1">
-                  {{ formatTime(anime.next_episode_at) }}
+                  {{ formatTime(anime.next_episode_at ?? '') }}
                 </p>
               </div>
             </router-link>
@@ -94,7 +94,7 @@ const scheduleByDay = computed(() => {
   // Sort each day's anime by time
   for (const day in grouped) {
     grouped[day].sort((a, b) =>
-      new Date(a.next_episode_at).getTime() - new Date(b.next_episode_at).getTime()
+      new Date(a.next_episode_at ?? 0).getTime() - new Date(b.next_episode_at ?? 0).getTime()
     )
   }
 

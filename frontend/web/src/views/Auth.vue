@@ -54,7 +54,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, type TelegramAuthData } from '@/stores/auth'
 
-const { t } = useI18n()
+useI18n()
 
 const router = useRouter()
 const route = useRoute()
