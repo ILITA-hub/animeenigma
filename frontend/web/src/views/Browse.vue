@@ -301,7 +301,9 @@ const clearRecentSearches = () => {
   localStorage.removeItem('recentSearches')
 }
 
-// Debounced live search
+// Debounced live search with AbortController to cancel stale requests
+let searchAbortController: AbortController | null = null
+
 const debouncedLiveSearch = useDebounceFn(async (query: string) => {
   if (query.length < 2) {
     liveResults.value = []
@@ -309,8 +311,14 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
     return
   }
 
+  // Cancel previous in-flight search request
+  if (searchAbortController) {
+    searchAbortController.abort()
+  }
+  searchAbortController = new AbortController()
+
   try {
-    const response = await animeApi.search(query, undefined, 5)
+    const response = await animeApi.search(query, undefined, 5, searchAbortController.signal)
     const data = response.data?.data || response.data
     const list = Array.isArray(data) ? data : []
     liveResults.value = list.map((a: Record<string, unknown>) => ({
@@ -326,6 +334,7 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
     }))
     showLiveResults.value = true
   } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return
     console.error('Live search error:', err)
   }
 }, 300)

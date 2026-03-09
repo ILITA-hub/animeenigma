@@ -1,7 +1,7 @@
 <template>
   <router-link :to="`/anime/${anime.id}`" class="anime-card">
     <div class="card-image">
-      <img :src="anime.coverImage" :alt="anime.title" />
+      <img :src="anime.coverImage" :alt="anime.title" loading="lazy" decoding="async" />
       <div class="overlay">
         <button class="play-btn">▶</button>
       </div>
