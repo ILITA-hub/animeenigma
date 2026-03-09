@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import videojs from 'video.js'
+
+// Use a generic type instead of importing video.js (677KB) at app init
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type VideoJsPlayer = any
 
 export interface Episode {
   id: string
@@ -31,7 +34,7 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const volume = ref(1)
   const quality = ref('auto')
-  const player = ref<ReturnType<typeof videojs> | null>(null)
+  const player = ref<VideoJsPlayer | null>(null)
 
   const progress = computed(() => {
     if (duration.value === 0) return 0
@@ -42,7 +45,7 @@ export const usePlayerStore = defineStore('player', () => {
     currentEpisode.value = episode
   }
 
-  const setPlayer = (videoPlayer: ReturnType<typeof videojs>) => {
+  const setPlayer = (videoPlayer: VideoJsPlayer) => {
     player.value = videoPlayer
 
     // Setup event listeners

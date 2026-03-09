@@ -7,6 +7,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import videojs from 'video.js'
+import 'video.js/dist/video-js.css'
 import { usePlayerStore, type Episode } from '@/stores/player'
 
 const props = defineProps<{
