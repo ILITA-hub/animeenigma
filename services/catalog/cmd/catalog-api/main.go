@@ -16,6 +16,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/transport"
@@ -83,15 +84,19 @@ func main() {
 		},
 	)
 
+	// Initialize external clients
+	telegramClient := telegram.NewClient(cfg.Telegram.NewsChannel)
+
 	// Initialize handlers
 	catalogHandler := handler.NewCatalogHandler(catalogService, log)
 	adminHandler := handler.NewAdminHandler(catalogService, log)
+	newsHandler := handler.NewNewsHandler(telegramClient, redisCache, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

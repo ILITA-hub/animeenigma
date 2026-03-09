@@ -16,6 +16,7 @@ import (
 func NewRouter(
 	catalogHandler *handler.CatalogHandler,
 	adminHandler *handler.AdminHandler,
+	newsHandler *handler.NewsHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -42,6 +43,9 @@ func NewRouter(
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
+		// News endpoint (before /anime route to avoid wildcard conflict)
+		r.Get("/anime/news", newsHandler.GetNews)
+
 		// Public catalog routes
 		r.Route("/anime", func(r chi.Router) {
 			r.Get("/", catalogHandler.BrowseAnime) // GET /api/anime - default list
