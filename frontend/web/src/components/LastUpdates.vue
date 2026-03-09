@@ -1,5 +1,5 @@
 <template>
-  <div class="glass-card rounded-2xl p-5">
+  <div class="glass-card rounded-2xl p-5 flex flex-col">
     <!-- Header with tabs -->
     <div class="flex items-center justify-between mb-5">
       <div class="flex items-center gap-3">
@@ -28,7 +28,7 @@
     </div>
 
     <!-- Changelog tab -->
-    <div v-if="activeTab === 'changelog'" class="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
+    <div v-if="activeTab === 'changelog'" class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
       <!-- Loading -->
       <div v-if="changelogLoading" class="space-y-3">
         <div v-for="i in 5" :key="i" class="animate-pulse flex gap-3 p-2">
@@ -69,7 +69,7 @@
     </div>
 
     <!-- News tab -->
-    <div v-else class="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
+    <div v-else class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
       <!-- Loading -->
       <div v-if="newsLoading" class="space-y-3">
         <div v-for="i in 5" :key="i" class="animate-pulse p-2">
