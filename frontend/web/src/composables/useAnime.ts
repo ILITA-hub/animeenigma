@@ -78,12 +78,20 @@ function transformAnimeList(apiList: { data?: ApiAnime[] } | ApiAnime[] | null |
   return list.map(transformAnime)
 }
 
+interface PaginationMeta {
+  page: number
+  page_size: number
+  total_count: number
+  total_pages: number
+}
+
 export function useAnime() {
   const anime = ref<Anime | null>(null)
   const animeList = ref<Anime[]>([])
   const episodes = ref<Episode[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const paginationMeta = ref<PaginationMeta | null>(null)
 
   const fetchAnime = async (id: string) => {
     loading.value = true
@@ -108,6 +116,7 @@ export function useAnime() {
     try {
       const response = await animeApi.getAll(params)
       animeList.value = transformAnimeList(response.data)
+      paginationMeta.value = response.data?.meta || null
       return animeList.value
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
@@ -252,6 +261,7 @@ export function useAnime() {
   return {
     anime,
     animeList,
+    paginationMeta,
     episodes,
     loading,
     error,
