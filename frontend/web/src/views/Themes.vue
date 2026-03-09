@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { themesApi, adminThemesApi } from '@/api/client'
@@ -133,10 +133,15 @@ interface Theme {
 const loading = ref(false)
 const error = ref<string | null>(null)
 const themes = ref<Theme[]>([])
+let componentActive = true
 const syncing = ref(false)
 const syncProcessed = ref(0)
 const syncTotal = ref(0)
 let syncPollInterval: ReturnType<typeof setInterval> | null = null
+
+onBeforeUnmount(() => {
+  componentActive = false
+})
 
 onUnmounted(() => {
   if (syncPollInterval) {
@@ -198,12 +203,14 @@ const fetchThemes = async () => {
       type: typeFilter.value || undefined,
       sort: sortBy.value,
     })
-    themes.value = resp.data?.data || resp.data || []
+    if (componentActive) themes.value = resp.data?.data || resp.data || []
   } catch (err: unknown) {
-    error.value = t('themes.loadError')
-    console.error('Failed to fetch themes:', err)
+    if (componentActive) {
+      error.value = t('themes.loadError')
+      console.error('Failed to fetch themes:', err)
+    }
   } finally {
-    loading.value = false
+    if (componentActive) loading.value = false
   }
 }
 

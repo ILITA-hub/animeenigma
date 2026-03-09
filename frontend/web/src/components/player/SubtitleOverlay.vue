@@ -154,14 +154,20 @@ function stopTimeSync() {
 }
 
 // Fetch and parse subtitles when URL changes
+let subtitleAbortController: AbortController | null = null
+
 async function loadSubtitles(url: string, format: string) {
+  // Cancel any in-flight subtitle fetch
+  subtitleAbortController?.abort()
+  subtitleAbortController = new AbortController()
+
   emit('loading', true)
   cues.value = []
 
   try {
     // Proxy through streaming service for CORS
     const proxyUrl = `/api/streaming/hls-proxy?url=${encodeURIComponent(url)}`
-    const resp = await fetch(proxyUrl)
+    const resp = await fetch(proxyUrl, { signal: subtitleAbortController.signal })
     if (!resp.ok) throw new Error(`Failed to fetch subtitle file: ${resp.status}`)
 
     const content = await resp.text()
@@ -187,6 +193,7 @@ async function loadSubtitles(url: string, format: string) {
         }
     }
   } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === 'AbortError') return
     const e = err as { message?: string }
     emit('error', e.message || 'Failed to load subtitles')
   } finally {
@@ -228,6 +235,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  subtitleAbortController?.abort()
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
   window.removeEventListener('resize', updateBaseFontSize)

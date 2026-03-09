@@ -579,6 +579,7 @@ const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const { anime, loading, error, fetchAnime } = useAnime()
 
+let loadGeneration = 0
 const synopsisExpanded = ref(false)
 const currentListStatus = ref<string | null>(null)
 const showStatusDropdown = ref(false)
@@ -899,6 +900,9 @@ watch(videoLanguage, (newLang) => {
 
 // Shared data-loading function — called on mount and on route param change
 const loadAnimeData = async (animeId: string) => {
+  // Increment generation so previous in-flight calls become stale
+  const gen = ++loadGeneration
+
   // Reset state so stale data doesn't flash
   anime.value = null
   currentListStatus.value = null
@@ -915,6 +919,7 @@ const loadAnimeData = async (animeId: string) => {
     const malId = animeId.replace('mal_', '')
     try {
       const response = await animeApi.resolveMAL(malId)
+      if (gen !== loadGeneration) return
       const result = response.data?.data || response.data
       if (result?.status === 'resolved' && result.anime) {
         // Migrate list entry if user is authenticated
@@ -941,6 +946,7 @@ const loadAnimeData = async (animeId: string) => {
   }
 
   const fetched = await fetchAnime(animeId)
+  if (gen !== loadGeneration) return
 
   // Check for pending MAL bind from Browse page
   const pendingBind = sessionStorage.getItem('pending_mal_bind')
@@ -957,7 +963,9 @@ const loadAnimeData = async (animeId: string) => {
   }
 
   await fetchWatchlistStatus()
+  if (gen !== loadGeneration) return
   await fetchHiddenStatus()
+  if (gen !== loadGeneration) return
   await fetchReviews()
 }
 
@@ -974,6 +982,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  loadGeneration++ // cancel any in-flight loadAnimeData
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
