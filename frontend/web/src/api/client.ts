@@ -151,7 +151,7 @@ hookAxiosDiagnostics(apiClient)
 export const animeApi = {
   getAll: (params?: Record<string, unknown>) => apiClient.get('/anime', { params }),
   getById: (id: string) => apiClient.get(`/anime/${id}`),
-  search: (query: string, source?: string, pageSize?: number) => apiClient.get('/anime/search', { params: { q: query, ...(source && { source }), ...(pageSize && { page_size: pageSize }) } }),
+  search: (query: string, source?: string, pageSize?: number, signal?: AbortSignal) => apiClient.get('/anime/search', { params: { q: query, ...(source && { source }), ...(pageSize && { page_size: pageSize }) }, signal }),
   getTrending: () => apiClient.get('/anime/trending'),
   getPopular: () => apiClient.get('/anime/popular'),
   getRecent: () => apiClient.get('/anime/recent'),
