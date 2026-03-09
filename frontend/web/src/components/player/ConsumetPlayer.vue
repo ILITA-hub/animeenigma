@@ -322,6 +322,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import videojs from 'video.js'
+import 'video.js/dist/video-js.css'
 import Hls from 'hls.js'
 import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'

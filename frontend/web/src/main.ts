@@ -11,7 +11,6 @@ initDiagnostics()
 
 // Styles
 import './styles/main.css'
-import 'video.js/dist/video-js.css'
 
 const app = createApp(App)
 

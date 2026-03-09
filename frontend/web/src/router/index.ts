@@ -1,17 +1,12 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import i18n from '@/i18n'
-import Home from '@/views/Home.vue'
-import Browse from '@/views/Browse.vue'
-import Anime from '@/views/Anime.vue'
-import Watch from '@/views/Watch.vue'
-import Game from '@/views/Game.vue'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
-    component: Home,
+    component: () => import('@/views/Home.vue'),
     meta: { title: 'Home' }
   },
   {
@@ -23,7 +18,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/browse',
     name: 'browse',
-    component: Browse,
+    component: () => import('@/views/Browse.vue'),
     meta: { title: 'Browse Anime' }
   },
   {
@@ -33,13 +28,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/anime/:id',
     name: 'anime',
-    component: Anime,
+    component: () => import('@/views/Anime.vue'),
     meta: { title: 'Anime Details' }
   },
   {
     path: '/watch/:animeId/:episodeId',
     name: 'watch',
-    component: Watch,
+    component: () => import('@/views/Watch.vue'),
     meta: { title: 'Watch', requiresAuth: false }
   },
   {
@@ -71,13 +66,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/game',
     name: 'game',
-    component: Game,
+    component: () => import('@/views/Game.vue'),
     meta: { title: 'Game Rooms' }
   },
   {
     path: '/game/:roomId',
     name: 'game-room',
-    component: Game,
+    component: () => import('@/views/Game.vue'),
     meta: { title: 'Game Room' }
   },
   {
