@@ -535,6 +535,7 @@ import HiAnimePlayer from '@/components/player/HiAnimePlayer.vue'
 import ConsumetPlayer from '@/components/player/ConsumetPlayer.vue'
 import AnimeLibPlayer from '@/components/player/AnimeLibPlayer.vue'
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
+import { useWatchlistStore } from '@/stores/watchlist'
 import { parseDescription } from '@/utils/description-parser'
 
 interface AnimeWithExtras {
@@ -574,6 +575,7 @@ const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
+const watchlistStore = useWatchlistStore()
 const { anime, loading, error, fetchAnime } = useAnime()
 
 const synopsisExpanded = ref(false)
@@ -674,16 +676,16 @@ const fetchWatchlistStatus = async () => {
   if (!authStore.isAuthenticated || !anime.value) return
 
   try {
-    const response = await userApi.getWatchlist()
-    const entries = response.data?.data || response.data || []
+    await watchlistStore.fetchWatchlist()
+    const entries = watchlistStore.entries
 
     // Direct UUID match
-    let entry = entries.find((e: { anime_id: string; status: string }) => e.anime_id === anime.value?.id)
+    let entry = entries.find((e) => e.anime_id === anime.value?.id)
 
     // If not found, check for mal_XXXXX entries that match this anime's MAL ID
     if (!entry && anime.value.malId) {
       const malAnimeId = `mal_${anime.value.malId}`
-      entry = entries.find((e: { anime_id: string; status: string }) => e.anime_id === malAnimeId)
+      entry = entries.find((e) => e.anime_id === malAnimeId)
 
       if (entry) {
         // Auto-migrate from mal_XXXXX to real UUID
@@ -821,6 +823,7 @@ const setListStatus = async (status: string) => {
     )
     currentListStatus.value = status
     showStatusDropdown.value = false
+    watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update list status:', err)
   }
@@ -833,6 +836,7 @@ const removeFromList = async () => {
     await userApi.removeFromWatchlist(anime.value.id)
     currentListStatus.value = null
     showStatusDropdown.value = false
+    watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to remove from list:', err)
   }

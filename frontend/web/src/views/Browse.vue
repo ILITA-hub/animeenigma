@@ -206,14 +206,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Input, Badge, Button, Select, GenreFilterPopup, PaginationBar } from '@/components/ui'
 import { AnimeCardNew } from '@/components/anime'
-import { animeApi, userApi } from '@/api/client'
+import { animeApi } from '@/api/client'
+import { useWatchlistStore } from '@/stores/watchlist'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
 
@@ -230,24 +231,13 @@ const router = useRouter()
 const authStore = useAuthStore()
 const { animeList, loading, error, fetchAnimeList, searchAnime, paginationMeta } = useAnime()
 
-// Watchlist status map: animeId -> status
-const watchlistMap = ref<Map<string, string>>(new Map())
+// Watchlist status map via shared store
+const watchlistStore = useWatchlistStore()
+const watchlistMap = computed(() => watchlistStore.watchlistMap)
 
 const fetchWatchlistMap = async () => {
   if (!authStore.isAuthenticated) return
-  try {
-    const response = await userApi.getWatchlist()
-    const entries = response.data?.data || response.data || []
-    const map = new Map<string, string>()
-    for (const entry of entries) {
-      if (entry.anime_id && entry.status) {
-        map.set(entry.anime_id, entry.status)
-      }
-    }
-    watchlistMap.value = map
-  } catch {
-    // Silently fail — badge is non-critical
-  }
+  await watchlistStore.fetchWatchlist()
 }
 
 const getListStatus = (animeId: string | number): string | null => {

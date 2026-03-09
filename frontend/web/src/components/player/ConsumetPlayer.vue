@@ -403,6 +403,8 @@ let vjsPlayer: ReturnType<typeof videojs> | null = null
 const vjsPlayerReady = ref(false)
 let hls: Hls | null = null
 let decodeErrorCount = 0
+let networkRetryCount = 0
+let serverRotationCount = 0
 
 // Progress tracking
 const currentTime = ref(0)
@@ -496,6 +498,8 @@ const fetchServers = async () => {
 const selectEpisode = async (ep: ConsumetEpisode) => {
   selectedEpisode.value = ep
   episodeMarkedWatched.value = false
+  networkRetryCount = 0
+  serverRotationCount = 0
   // Reset jimaku state on episode change
   jimakuSubtitles.value = []
   jimakuLoaded.value = false
@@ -506,10 +510,15 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
 }
 
 const tryNextServer = async () => {
+  serverRotationCount++
+  if (serverRotationCount > 2) {
+    error.value = t('player.error.playback')
+    return
+  }
   const currentIdx = servers.value.findIndex(s => s.name === selectedServer.value?.name)
   const nextServer = servers.value[currentIdx + 1]
   if (nextServer) {
-    console.warn(`[Consumet] Decode error, switching to server: ${nextServer.name}`)
+    console.warn(`[Consumet] Switching to server: ${nextServer.name}`)
     error.value = t('player.error.decoding', { server: nextServer.name })
     await selectServer(nextServer)
   } else {
@@ -520,6 +529,7 @@ const tryNextServer = async () => {
 const selectServer = async (server: ConsumetServer) => {
   selectedServer.value = server
   decodeErrorCount = 0
+  networkRetryCount = 0
   if (selectedEpisode.value) {
     await fetchStream()
   }
@@ -762,7 +772,18 @@ const initHlsPlayer = (url: string, referer: string) => {
         console.error('[Consumet HLS Error]', data.type, data.details)
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            hls?.startLoad()
+            if (networkRetryCount < 3) {
+              networkRetryCount++
+              const delay = Math.min(1000 * Math.pow(2, networkRetryCount - 1), 8000)
+              console.warn(`[Consumet] Network error, retry ${networkRetryCount}/3 in ${delay}ms`)
+              setTimeout(() => {
+                hls?.startLoad()
+              }, delay)
+            } else {
+              console.warn('[Consumet] Network retries exhausted, trying next server')
+              networkRetryCount = 0
+              tryNextServer()
+            }
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
             if (decodeErrorCount < 1) {
