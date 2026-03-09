@@ -349,6 +349,18 @@ make logs-catalog
 make health
 ```
 
+## After-Update Skill (MUST USE)
+
+After completing any implementation work (features, bug fixes, refactoring), **always invoke** `/animeenigma-after-update` before ending the conversation. This skill:
+
+1. Lints and builds the affected code
+2. Redeploys changed services via `make redeploy-<service>`
+3. Runs health checks
+4. Updates `frontend/web/public/changelog.json` with user-facing changelog entries (informative + enthusiastic tone with emojis) — this is what `LastUpdates.vue` loads in the Changelog tab
+5. Commits all changes with co-authors and pushes to remote
+
+**Do not skip this step.** It ensures every implementation is deployed, verified, documented for users, and pushed.
+
 ## Don't Do
 
 - Don't add CDN-related code (not needed for self-hosted)

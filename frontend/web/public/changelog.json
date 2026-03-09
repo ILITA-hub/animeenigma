@@ -4,27 +4,23 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add Telegram channel news scraper and API endpoint"
+        "message": "\ud83c\udf1f New Updates & News section on the home page! Now with two tabs \u2014 see platform changelog and the latest anime news from our Telegram channel"
+      },
+      {
+        "type": "feature",
+        "message": "\ud83d\udcf0 Anime news feed powered by our Telegram channel \u2014 stay up to date with new seasons, announcements, and premieres!"
+      },
+      {
+        "type": "feature",
+        "message": "\ud83d\udcc4 Platform changelog now shows what\u2019s new in a user-friendly way \u2014 no more confusing developer commit hashes"
+      },
+      {
+        "type": "feature",
+        "message": "\ud83d\udcc3 Browse anime with proper page navigation \u2014 numbered pages instead of endless Load More clicking"
       },
       {
         "type": "fix",
-        "message": "Resolve ESLint and TypeScript CI errors"
-      },
-      {
-        "type": "feature",
-        "message": "Add Last Updates section, reactive locale titles, i18n fixes"
-      },
-      {
-        "type": "fix",
-        "message": "Tailwind v4 @apply error in PaginationBar, remove obsolete docker-compose version"
-      },
-      {
-        "type": "feature",
-        "message": "Replace Load More with numbered page navigation in Browse"
-      },
-      {
-        "type": "feature",
-        "message": "Add PaginationBar component and expose pagination meta from useAnime"
+        "message": "\ud83d\udd27 Fixed various styling and layout issues for a smoother experience"
       }
     ]
   },
@@ -33,11 +29,11 @@
     "entries": [
       {
         "type": "fix",
-        "message": "Security hardening — path traversal, timing attacks, SSRF, CORS, proxy validation"
+        "message": "\ud83d\udee1\ufe0f Security improvements \u2014 stronger protection for your account and data"
       },
       {
         "type": "feature",
-        "message": "Unified subtitle selector for HiAnime and Consumet players"
+        "message": "\ud83c\udfac Unified subtitle selector for English players \u2014 easily pick your preferred subtitle track across HiAnime and Consumet"
       }
     ]
   },
@@ -46,23 +42,19 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add global navbar search autocomplete, fix Kodik 0-episode movies"
+        "message": "\ud83d\udd0d Search autocomplete in the navbar \u2014 find your favorite anime faster as you type!"
       },
       {
         "type": "perf",
-        "message": "Reduce perceived lag and layout shifts, update READMEs"
+        "message": "\u26a1 Faster page loads \u2014 reduced lag and smoother transitions throughout the site"
       },
       {
         "type": "feature",
-        "message": "Add genre filter popup to Browse and Profile watchlist"
-      },
-      {
-        "type": "fix",
-        "message": "Specify GORM join keys for anime_genres many2many relation"
+        "message": "\ud83c\udfa8 Genre filters in Browse and your watchlist \u2014 quickly narrow down by action, romance, comedy, and more"
       },
       {
         "type": "feature",
-        "message": "Add genre sort to watchlist and misc improvements"
+        "message": "\ud83d\udcda Sort your watchlist by genre \u2014 organize your anime collection your way"
       }
     ]
   },
@@ -71,15 +63,15 @@
     "entries": [
       {
         "type": "fix",
-        "message": "Header glassmorphism, Telegram widget UX, watchlist search, and rating aggregation"
+        "message": "\u2728 Polished header design, improved login widget, and better rating display"
       },
       {
         "type": "feature",
-        "message": "Add watchlist search and eliminate all no-explicit-any warnings"
+        "message": "\ud83d\udd0e Search within your watchlist \u2014 instantly find any anime in your collection"
       },
       {
         "type": "fix",
-        "message": "Prevent theme ratings disappearing after JWT token expiry"
+        "message": "\ud83d\udd27 Fixed theme ratings disappearing when your session refreshed"
       }
     ]
   },
@@ -87,16 +79,16 @@
     "date": "2026-03-02",
     "entries": [
       {
-        "type": "fix",
-        "message": "Resolve CI lint failures for Go and frontend workflows"
-      },
-      {
-        "type": "fix",
-        "message": "Resolve lint errors, test failures, and update CI workflows"
+        "type": "feature",
+        "message": "\ud83c\udfb5 New Themes section \u2014 rate your favorite anime openings and endings!"
       },
       {
         "type": "feature",
-        "message": "Add themes service, API key auth, Shikimori sync, and gateway latency fix"
+        "message": "\ud83d\udd11 API key authentication \u2014 integrate your watchlist with external tools"
+      },
+      {
+        "type": "perf",
+        "message": "\u26a1 Gateway latency improvements \u2014 faster API responses across the board"
       }
     ]
   },
@@ -105,7 +97,7 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add activity feed on home page showing user status changes and ratings"
+        "message": "\ud83d\udce2 Activity feed on the home page \u2014 see what other users are watching and rating in real time"
       }
     ]
   },
@@ -114,7 +106,7 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Consolidate to single database, add metrics library, error reporting, and Grafana alerting"
+        "message": "\ud83d\udcca Error reporting and monitoring \u2014 report playback issues directly from the video player"
       }
     ]
   },
@@ -123,7 +115,7 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add external subtitle support to AnimeLib player"
+        "message": "\ud83d\udcdd Subtitle support for AnimeLib player \u2014 watch Russian-dubbed anime with subtitles when available"
       }
     ]
   },
@@ -132,7 +124,7 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add AnimeLib parser, player improvements, and update video architecture docs"
+        "message": "\ud83c\uddf7\ud83c\uddfa AnimeLib player added \u2014 watch anime with Russian dubbing in high quality MP4!"
       }
     ]
   },
@@ -141,11 +133,11 @@
     "entries": [
       {
         "type": "fix",
-        "message": "HiAnime matching, Consumet quality/server switch, and fullscreen subtitle sizing"
+        "message": "\ud83d\udd27 Better subtitle sizing in fullscreen and improved video server switching"
       },
       {
         "type": "feature",
-        "message": "Japanese subtitles with selectable text overlay, ARM ID mapping, and fullscreen support"
+        "message": "\ud83c\uddef\ud83c\uddf5 Japanese subtitles with selectable text \u2014 click any word to study it! Works in fullscreen too"
       }
     ]
   },
@@ -154,15 +146,15 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add Video.js player with native HLS.js fallback and player selector"
+        "message": "\ud83c\udfac Video.js player with HLS.js fallback \u2014 choose your preferred player engine for the best experience"
       },
       {
         "type": "feature",
-        "message": "Enrich profile page with avatar upload, inline editing, sorting, i18n, and stats"
+        "message": "\ud83d\udc64 Profile page upgrade \u2014 custom avatars, inline editing, viewing stats, and multi-language support"
       },
       {
         "type": "feature",
-        "message": "Add Jikan parser, favicons, MAL import improvements, and catalog enhancements"
+        "message": "\ud83d\udcda MAL import improvements \u2014 bring your anime list from MyAnimeList even faster"
       }
     ]
   },
@@ -171,11 +163,11 @@
     "entries": [
       {
         "type": "fix",
-        "message": "Harden gateway CORS, per-IP rate limiting, and bind ports to localhost"
+        "message": "\ud83d\udee1\ufe0f Improved security with rate limiting and CORS hardening"
       },
       {
         "type": "fix",
-        "message": "Mobile layout improvements and navigation overhaul"
+        "message": "\ud83d\udcf1 Better mobile layout and navigation \u2014 smoother experience on phones and tablets"
       }
     ]
   },
@@ -184,7 +176,7 @@
     "entries": [
       {
         "type": "fix",
-        "message": "Kodik token extraction broken by upstream source change"
+        "message": "\ud83d\udd27 Fixed Kodik player \u2014 restored video playback after upstream API change"
       }
     ]
   },
@@ -193,7 +185,7 @@
     "entries": [
       {
         "type": "fix",
-        "message": "HLS proxy routing and Consumet provider improvements"
+        "message": "\ud83d\udd27 Improved HLS streaming reliability for English-subbed anime"
       }
     ]
   },
@@ -202,11 +194,11 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add Consumet as alternative English anime provider"
+        "message": "\ud83c\uddef\ud83c\uddf5 Consumet added as an alternative English anime provider \u2014 more sources, more reliability!"
       },
       {
         "type": "feature",
-        "message": "Add HiAnime parser, database backup system, and GORM refactoring"
+        "message": "\ud83c\udf1f HiAnime player \u2014 watch English-subbed anime with HLS streaming and subtitle support"
       }
     ]
   },
@@ -215,15 +207,11 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Enable Grafana anonymous auth and remove pgAdmin"
+        "message": "\ud83d\udcca Admin dashboard improvements \u2014 better monitoring and system health visibility"
       },
       {
         "type": "feature",
-        "message": "Add admin panel proxy with dev mode and fix Grafana CSRF"
-      },
-      {
-        "type": "feature",
-        "message": "Add MAL export microservice with delayed anime loading"
+        "message": "\ud83d\udce4 MAL export service \u2014 export your watchlist data back to MyAnimeList"
       }
     ]
   },
@@ -232,19 +220,11 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add Docker monitoring stack with Prometheus, Grafana, pgAdmin"
+        "message": "\ud83d\udc65 Public profiles \u2014 share your anime watchlist with friends via a unique link!"
       },
       {
         "type": "feature",
-        "message": "Add public profile feature for sharing anime watchlists"
-      },
-      {
-        "type": "feature",
-        "message": "Add Shikimori search button and show last updated date for ongoings"
-      },
-      {
-        "type": "fix",
-        "message": "Update docker-compose syntax, kustomize labels, and add metrics lib to Dockerfiles"
+        "message": "\ud83d\udd0d Shikimori search button and last-updated dates for ongoing anime"
       }
     ]
   },
@@ -253,11 +233,11 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Replace native selects with custom Select component"
+        "message": "\u2728 Beautiful custom dropdown selectors replacing browser defaults"
       },
       {
         "type": "feature",
-        "message": "Add Prometheus monitoring, admin interfaces, and E2E tests"
+        "message": "\ud83d\udcca Performance monitoring added \u2014 we can now track and improve site speed"
       }
     ]
   },
@@ -266,23 +246,15 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add MAL import and MAL-style profile list view"
+        "message": "\ud83d\udcda MAL import \u2014 bring your entire anime list from MyAnimeList with one click!"
       },
       {
         "type": "feature",
-        "message": "Redesign home page with 3 columns layout"
-      },
-      {
-        "type": "fix",
-        "message": "Remove kind filter from Shikimori search to include ONA/OVA/movies"
-      },
-      {
-        "type": "fix",
-        "message": "Update docker-compose for external postgres and Go 1.22"
+        "message": "\ud83c\udfe0 Home page redesign with a beautiful 3-column layout"
       },
       {
         "type": "feature",
-        "message": "Add secure refresh token, watchlist, and reviews system"
+        "message": "\ud83c\udf1f Watchlist and reviews system \u2014 track your progress and rate anime you've watched"
       }
     ]
   },
@@ -291,11 +263,7 @@
     "entries": [
       {
         "type": "feature",
-        "message": "Add Playwright e2e tests for critical flows"
-      },
-      {
-        "type": "feature",
-        "message": "Add polish - skeleton loaders and CSS utilities"
+        "message": "\u2728 Skeleton loading animations \u2014 smoother experience while content loads"
       }
     ]
   }
