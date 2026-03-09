@@ -300,9 +300,15 @@
     "yesterday": "Yesterday"
   },
   "updates": {
-    "title": "Last Updates",
+    "title": "Updates & News",
+    "changelog": "Changelog",
+    "news": "News",
     "empty": "No updates yet",
-    "error": "Failed to load updates"
+    "newsEmpty": "No news yet",
+    "error": "Failed to load",
+    "feature": "New",
+    "fix": "Fix",
+    "perf": "Improvement"
   },
   "activity": {
     "title": "Activity",

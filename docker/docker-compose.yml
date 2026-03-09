@@ -259,6 +259,7 @@ services:
       CONSUMET_API_URL: http://consumet:3000
       JIMAKU_API_KEY: ${JIMAKU_API_KEY:-}
       ANIMELIB_TOKEN: ${ANIMELIB_TOKEN:-}
+      TELEGRAM_NEWS_CHANNEL: ${TELEGRAM_NEWS_CHANNEL:-animeenigmanews}
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:

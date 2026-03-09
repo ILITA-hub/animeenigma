@@ -1,7 +1,9 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"regexp"
@@ -10,6 +12,8 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+const maxBodySize = 2 * 1024 * 1024 // 2MB
 
 const (
 	baseURL  = "https://t.me/s"
@@ -46,10 +50,10 @@ func NewClient(newsChannel string) *Client {
 var bgImageRegexp = regexp.MustCompile(`background-image:\s*url\(['"]?([^'")\s]+)['"]?\)`)
 
 // FetchNews scrapes the public Telegram channel web preview and returns parsed news items
-func (c *Client) FetchNews() ([]NewsItem, error) {
+func (c *Client) FetchNews(ctx context.Context) ([]NewsItem, error) {
 	url := fmt.Sprintf("%s/%s", baseURL, c.newsChannel)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("telegram: failed to create request: %w", err)
 	}
@@ -66,7 +70,7 @@ func (c *Client) FetchNews() ([]NewsItem, error) {
 		return nil, fmt.Errorf("telegram: unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	doc, err := goquery.NewDocumentFromReader(io.LimitReader(resp.Body, maxBodySize))
 	if err != nil {
 		return nil, fmt.Errorf("telegram: failed to parse HTML: %w", err)
 	}
@@ -161,5 +165,5 @@ func stripHTMLTags(s string) string {
 			result.WriteRune(r)
 		}
 	}
-	return result.String()
+	return html.UnescapeString(result.String())
 }
