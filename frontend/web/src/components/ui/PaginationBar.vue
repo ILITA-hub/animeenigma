@@ -19,7 +19,7 @@
         v-else
         class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors"
         :class="page === currentPage ? 'bg-pink-500/80 text-white' : 'hover:bg-white/10'"
-        @click="$emit('update:currentPage', page)"
+        @click="$emit('update:currentPage', page as number)"
       >
         {{ page }}
       </button>

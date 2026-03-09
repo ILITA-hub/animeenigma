@@ -110,6 +110,7 @@ const fetchCommits = async () => {
     const res = await fetch('https://api.github.com/repos/ILITA-hub/animeenigma/commits?per_page=10')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const parsed: Commit[] = data.map((item: any) => ({
       sha: item.sha,
       shortSha: item.sha.slice(0, 7),

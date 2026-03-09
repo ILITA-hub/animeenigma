@@ -153,7 +153,7 @@ async function submitReport() {
       authStore.user?.username ?? null,
     )
 
-    await userApi.reportError(report)
+    await userApi.reportError(report as unknown as Record<string, unknown>)
     submitted.value = true
     description.value = ''
   } catch (err: unknown) {
