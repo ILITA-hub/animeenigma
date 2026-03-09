@@ -46,10 +46,10 @@
 
       <!-- Content -->
       <template v-else>
-        <div v-if="changelog.length === 0" class="text-center py-8 text-gray-400">
+        <div v-if="limitedChangelog.length === 0" class="text-center py-8 text-gray-400">
           {{ $t('updates.empty') }}
         </div>
-        <div v-for="group in changelog" :key="group.date" class="mb-3">
+        <div v-for="group in limitedChangelog" :key="group.date" class="mb-3">
           <div class="text-xs text-gray-500 font-medium mb-1.5 px-2">{{ formatDate(group.date) }}</div>
           <div
             v-for="(entry, idx) in group.entries"
@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { animeApi } from '@/api/client'
 
@@ -158,9 +158,24 @@ type Tab = typeof tabs[number]
 const { t, locale } = useI18n()
 const activeTab = ref<Tab>('changelog')
 
+const MAX_CHANGELOG_ENTRIES = 20
+
 const changelog = ref<ChangelogGroup[]>([])
 const changelogLoading = ref(true)
 const changelogError = ref(false)
+
+const limitedChangelog = computed(() => {
+  const result: ChangelogGroup[] = []
+  let count = 0
+  for (const group of changelog.value) {
+    if (count >= MAX_CHANGELOG_ENTRIES) break
+    const remaining = MAX_CHANGELOG_ENTRIES - count
+    const entries = group.entries.slice(0, remaining)
+    result.push({ date: group.date, entries })
+    count += entries.length
+  }
+  return result
+})
 
 const news = ref<NewsItem[]>([])
 const newsLoading = ref(true)
