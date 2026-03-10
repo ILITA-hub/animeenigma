@@ -54,7 +54,6 @@
             class="absolute inset-0 w-full h-full"
             controls
             playsinline
-            crossorigin="anonymous"
             @timeupdate="handleTimeUpdate"
             @pause="handlePause"
             @ended="handleEnded"
@@ -405,7 +404,7 @@ const vjsPlayerReady = ref(false)
 let hls: Hls | null = null
 let decodeErrorCount = 0
 let networkRetryCount = 0
-let serverRotationCount = 0
+// serverRotationCount removed — auto-rotation disabled to expose errors
 
 // Progress tracking
 const currentTime = ref(0)
@@ -500,7 +499,7 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
   selectedEpisode.value = ep
   episodeMarkedWatched.value = false
   networkRetryCount = 0
-  serverRotationCount = 0
+  // serverRotationCount removed
   // Reset jimaku state on episode change
   jimakuSubtitles.value = []
   jimakuLoaded.value = false
@@ -508,23 +507,6 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
   activeSubtitleUrl.value = null
   activeSubtitleFormat.value = null
   await fetchStream()
-}
-
-const tryNextServer = async () => {
-  serverRotationCount++
-  if (serverRotationCount > 2) {
-    error.value = t('player.error.playback')
-    return
-  }
-  const currentIdx = servers.value.findIndex(s => s.name === selectedServer.value?.name)
-  const nextServer = servers.value[currentIdx + 1]
-  if (nextServer) {
-    console.warn(`[Consumet] Switching to server: ${nextServer.name}`)
-    error.value = t('player.error.decoding', { server: nextServer.name })
-    await selectServer(nextServer)
-  } else {
-    error.value = t('player.error.decodingFallback')
-  }
 }
 
 const selectServer = async (server: ConsumetServer) => {
@@ -722,12 +704,7 @@ const initVideoJsPlayer = (url: string, referer: string) => {
     const err = vjsPlayer?.error()
     if (err) {
       console.error('[Consumet Video.js Error]', err.code, err.message)
-      if (err.code === 3 && decodeErrorCount < 1) {
-        decodeErrorCount++
-        tryNextServer()
-        return
-      }
-      error.value = t('player.error.playback')
+      error.value = `Video.js error (code ${err.code}): ${err.message || t('player.error.playback')}`
     }
   })
 
@@ -770,7 +747,7 @@ const initHlsPlayer = (url: string, referer: string) => {
 
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (data.fatal) {
-        console.error('[Consumet HLS Error]', data.type, data.details)
+        console.error('[Consumet HLS Error]', data.type, data.details, data)
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
             if (networkRetryCount < 3) {
@@ -781,21 +758,20 @@ const initHlsPlayer = (url: string, referer: string) => {
                 hls?.startLoad()
               }, delay)
             } else {
-              console.warn('[Consumet] Network retries exhausted, trying next server')
-              networkRetryCount = 0
-              tryNextServer()
+              error.value = `Network error: ${data.details}`
             }
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
+            console.error('[Consumet] Media error details:', data.details, 'reason:', (data as unknown as Record<string, unknown>).reason)
             if (decodeErrorCount < 1) {
               decodeErrorCount++
               hls?.recoverMediaError()
             } else {
-              tryNextServer()
+              error.value = `Media error: ${data.details}`
             }
             break
           default:
-            error.value = t('player.error.playback')
+            error.value = `Playback error: ${data.details}`
         }
       }
     })

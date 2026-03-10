@@ -44,7 +44,7 @@
 
           <!-- Direct video player (Animelib native) -->
           <video
-            v-if="streamUrl && !error && !iframeUrl"
+            v-if="streamUrl && !error"
             ref="videoRef"
             :src="streamUrl"
             class="absolute inset-0 w-full h-full"
@@ -54,19 +54,9 @@
             @timeupdate="handleTimeUpdate"
             @pause="handlePause"
             @ended="handleEnded"
+            @error="handleVideoError"
           >
           </video>
-
-          <!-- Kodik iframe player (fallback) -->
-          <iframe
-            v-else-if="iframeUrl && !error"
-            :src="iframeUrl"
-            class="absolute inset-0 w-full h-full"
-            frameborder="0"
-            allowfullscreen
-            allow="autoplay; fullscreen"
-            referrerpolicy="origin"
-          />
 
           <!-- Placeholder when no video loaded -->
           <div
@@ -366,7 +356,7 @@ const translations = ref<AnimeLibTranslation[]>([])
 const selectedEpisode = ref<AnimeLibEpisode | null>(null)
 const selectedTranslation = ref<AnimeLibTranslation | null>(null)
 const streamUrl = ref<string | null>(null)
-const iframeUrl = ref<string | null>(null)
+// iframeUrl removed — Kodik fallback disabled to expose MP4 errors
 const availableSources = ref<AnimeLibSource[]>([])
 const selectedQuality = ref<number | null>(null)
 
@@ -455,7 +445,7 @@ const selectEpisode = async (ep: AnimeLibEpisode) => {
   episodeMarkedWatched.value = false
   selectedTranslation.value = null
   streamUrl.value = null
-  iframeUrl.value = null
+  // iframe fallback removed
   availableSources.value = []
   selectedQuality.value = null
   streamSubtitles.value = []
@@ -493,7 +483,7 @@ const fetchStream = async () => {
   if (!selectedEpisode.value || !selectedTranslation.value) return
 
   streamUrl.value = null
-  iframeUrl.value = null
+  // iframe fallback removed
   availableSources.value = []
   selectedQuality.value = null
   streamSubtitles.value = []
@@ -532,9 +522,6 @@ const fetchStream = async () => {
         // Auto-enable for subtitle-type translations
         showSubtitleOverlay.value = selectedTranslation.value?.type === 'subtitles'
       }
-    } else if (data.iframe_url) {
-      // Kodik iframe fallback
-      iframeUrl.value = data.iframe_url
     } else {
       error.value = t('player.error.getVideoUrl')
     }
@@ -568,6 +555,21 @@ const handleTimeUpdate = () => {
 }
 
 const handlePause = () => {}
+
+const handleVideoError = () => {
+  const video = videoRef.value
+  if (!video?.error) return
+  const mediaError = video.error
+  const codes: Record<number, string> = {
+    1: 'MEDIA_ERR_ABORTED',
+    2: 'MEDIA_ERR_NETWORK',
+    3: 'MEDIA_ERR_DECODE',
+    4: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
+  }
+  const codeName = codes[mediaError.code] || `Unknown (${mediaError.code})`
+  console.error('[AnimeLib] Video error:', codeName, mediaError.message, 'src:', streamUrl.value)
+  error.value = `Video error: ${codeName}${mediaError.message ? ` — ${mediaError.message}` : ''}`
+}
 
 const handleEnded = () => {
   if (!selectedEpisode.value) return
