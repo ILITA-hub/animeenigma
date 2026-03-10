@@ -41,7 +41,6 @@
             class="absolute inset-0 w-full h-full"
             controls
             playsinline
-            crossorigin="anonymous"
             @timeupdate="handleTimeUpdate"
             @pause="handlePause"
             @ended="handleEnded"

@@ -356,16 +356,26 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 		}
 	}
 
-	// Fix Content-Type for HLS segments - some CDNs return wrong types (like image/jpeg)
-	// to obfuscate the content. We need to set the correct type for hls.js to work.
+	// Fix Content-Type — some CDNs return wrong types (like image/jpeg) to obfuscate content
 	correctContentType := getCorrectHLSContentType(parsed.Path, resp.Header.Get("Content-Type"))
 	w.Header().Set("Content-Type", correctContentType)
+
+	// For direct video files (MP4), ensure range request headers are set for seeking
+	isDirectVideo := strings.HasPrefix(correctContentType, "video/mp4") ||
+		strings.HasPrefix(correctContentType, "video/webm")
+	if isDirectVideo {
+		w.Header().Set("Accept-Ranges", "bytes")
+	}
 
 	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Stream the response with rate limiting (5MB/s max per stream)
-	rateLimitedCopy(w, resp.Body, 5*1024*1024) // 5MB/s
+	// Stream the response — rate limit HLS segments (5MB/s) but not direct video files
+	if isDirectVideo {
+		io.Copy(w, resp.Body)
+	} else {
+		rateLimitedCopy(w, resp.Body, 5*1024*1024) // 5MB/s for HLS segments
+	}
 
 	return nil
 }
@@ -483,10 +493,18 @@ func rewriteURIAttribute(line, basePath, referer string) string {
 	return line[:uriStart] + rewrittenURI + line[uriStart+uriEnd:]
 }
 
-// getCorrectHLSContentType returns the correct Content-Type for HLS content
-// Some CDNs return incorrect types (like image/jpeg) to obfuscate video content
+// getCorrectContentType returns the correct Content-Type for proxied content.
+// Some CDNs return incorrect types (like image/jpeg) to obfuscate video content.
 func getCorrectHLSContentType(path, upstreamContentType string) string {
 	pathLower := strings.ToLower(path)
+
+	// Direct video files (MP4, WebM)
+	if strings.HasSuffix(pathLower, ".mp4") || strings.HasSuffix(pathLower, ".m4v") {
+		return "video/mp4"
+	}
+	if strings.HasSuffix(pathLower, ".webm") {
+		return "video/webm"
+	}
 
 	// M3U8 playlists
 	if strings.HasSuffix(pathLower, ".m3u8") {
