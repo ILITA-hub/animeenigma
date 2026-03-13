@@ -48,9 +48,10 @@ func NewRouter(
 		httputil.OK(w, map[string]string{"status": "ok"})
 	})
 
-	// Public status endpoint (aggregated health of all services)
+	// Public status endpoints (aggregated health of all services)
 	statusHandler := handler.NewStatusHandler(cfg.Services, log)
 	r.Get("/api/status", statusHandler.GetStatus)
+	r.Get("/status/health", statusHandler.GetHealthCheck)
 
 	// Metrics endpoint
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {

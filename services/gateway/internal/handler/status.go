@@ -77,6 +77,21 @@ func NewStatusHandler(urls config.ServiceURLs, log *logger.Logger) *StatusHandle
 }
 
 func (h *StatusHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
+	resp := h.runChecks()
+	httputil.OK(w, resp)
+}
+
+// GetHealthCheck returns 200 if all services are up, 503 otherwise.
+func (h *StatusHandler) GetHealthCheck(w http.ResponseWriter, r *http.Request) {
+	resp := h.runChecks()
+	if resp.Overall != "operational" {
+		httputil.JSON(w, http.StatusServiceUnavailable, resp)
+		return
+	}
+	httputil.OK(w, resp)
+}
+
+func (h *StatusHandler) runChecks() StatusResponse {
 	results := make([]ServiceStatus, len(h.services))
 	var wg sync.WaitGroup
 
@@ -104,11 +119,11 @@ func (h *StatusHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		overall = "degraded"
 	}
 
-	httputil.OK(w, StatusResponse{
+	return StatusResponse{
 		Services:  results,
 		Overall:   overall,
 		CheckedAt: time.Now().UTC(),
-	})
+	}
 }
 
 func (h *StatusHandler) checkService(svc serviceCheck) ServiceStatus {
