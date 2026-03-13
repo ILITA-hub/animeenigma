@@ -297,7 +297,8 @@
     "delete": "Delete",
     "back": "Back",
     "next": "Next",
-    "yesterday": "Yesterday"
+    "yesterday": "Yesterday",
+    "close": "Close"
   },
   "updates": {
     "title": "Updates & News",
