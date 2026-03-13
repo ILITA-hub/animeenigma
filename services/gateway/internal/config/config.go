@@ -38,6 +38,11 @@ type ServiceURLs struct {
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
+	// Infrastructure services (for status page)
+	SchedulerService string
+	RedisAddr        string
+	PostgresAddr     string
+	NatsAddr         string
 }
 
 type RateLimitConfig struct {
@@ -67,6 +72,11 @@ func Load() (*Config, error) {
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
 			PrometheusService: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090"),
+			// Infrastructure services (for status page)
+			SchedulerService: getEnv("SCHEDULER_SERVICE_URL", "http://scheduler:8085"),
+			RedisAddr:        getEnv("REDIS_ADDR", "redis:6379"),
+			PostgresAddr:     getEnv("POSTGRES_ADDR", "postgres:5432"),
+			NatsAddr:         getEnv("NATS_ADDR", "nats:4222"),
 		},
 		RateLimit: RateLimitConfig{
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),

@@ -414,5 +414,31 @@
   },
   "footer": {
     "rights": "All rights reserved"
+  },
+  "status": {
+    "title": "システムステータス",
+    "operational": "全システム正常稼働中",
+    "degraded": "一部のサービスに問題が発生しています",
+    "down": "全サービスが停止しています",
+    "serviceUp": "稼働中",
+    "serviceDown": "停止中",
+    "lastChecked": "最終確認: {time}",
+    "autoRefresh": "30秒ごとに自動更新",
+    "refresh": "更新",
+    "appServices": "アプリケーションサービス",
+    "infrastructure": "インフラストラクチャ",
+    "services": {
+      "gateway": "APIゲートウェイ",
+      "auth": "認証",
+      "catalog": "アニメカタログ",
+      "player": "プレイヤー・ウォッチリスト",
+      "rooms": "ゲームルーム",
+      "streaming": "動画ストリーミング",
+      "scheduler": "スケジューラー",
+      "themes": "OP/ED",
+      "postgres": "データベース",
+      "redis": "キャッシュ",
+      "nats": "メッセージキュー"
+    }
   }
 }
