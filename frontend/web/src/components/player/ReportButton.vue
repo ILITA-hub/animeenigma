@@ -1,9 +1,9 @@
 <template>
-  <div v-if="authStore.isAuthenticated" class="mt-3">
+  <div class="mt-3">
     <button
       class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors"
       :class="buttonClasses"
-      @click="showModal = true"
+      @click="handleClick"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -96,6 +96,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/client'
@@ -118,6 +119,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const authStore = useAuthStore()
+const router = useRouter()
 const { t } = useI18n()
 const showModal = ref(false)
 const description = ref('')
@@ -132,6 +134,14 @@ const buttonClasses = computed(() => {
 const submitButtonClasses = computed(() => {
   return `bg-[${props.accentColor}]/20 text-[${props.accentColor}] hover:bg-[${props.accentColor}]/30`
 })
+
+function handleClick() {
+  if (authStore.isAuthenticated) {
+    showModal.value = true
+  } else {
+    router.push({ name: 'auth' })
+  }
+}
 
 async function submitReport() {
   submitting.value = true
