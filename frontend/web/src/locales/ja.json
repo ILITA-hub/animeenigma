@@ -297,7 +297,8 @@
     "delete": "削除",
     "back": "戻る",
     "next": "次へ",
-    "yesterday": "昨日"
+    "yesterday": "昨日",
+    "close": "閉じる"
   },
   "updates": {
     "title": "更新とニュース",
