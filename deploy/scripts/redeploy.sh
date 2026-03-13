@@ -70,19 +70,21 @@ done
 log_info "Deployment complete!"
 log_info "Checking service health..."
 
-# Quick health check
-for SERVICE in $SERVICES; do
-    case $SERVICE in
-        auth)     PORT=8080 ;;
-        catalog)  PORT=8081 ;;
-        streaming) PORT=8082 ;;
-        player)   PORT=8083 ;;
-        rooms)    PORT=8084 ;;
-        scheduler) PORT=8085 ;;
-        gateway)  PORT=8000 ;;
-        *)        PORT="" ;;
-    esac
+# Port mapping for all services (not just redeployed ones)
+declare -A SERVICE_PORTS=(
+    [auth]=8080
+    [catalog]=8081
+    [streaming]=8082
+    [player]=8083
+    [rooms]=8084
+    [scheduler]=8085
+    [gateway]=8000
+    [themes]=8086
+)
 
+# Health check redeployed services
+for SERVICE in $SERVICES; do
+    PORT="${SERVICE_PORTS[$SERVICE]:-}"
     if [ -n "$PORT" ]; then
         if curl -sf "http://localhost:$PORT/health" > /dev/null 2>&1; then
             log_info "$SERVICE:$PORT - healthy"
@@ -91,3 +93,32 @@ for SERVICE in $SERVICES; do
         fi
     fi
 done
+
+# Verify port bindings for ALL running services (docker-proxy can die during container recreation)
+log_info "Verifying port bindings for other services..."
+RESTARTED=""
+for SERVICE in "${!SERVICE_PORTS[@]}"; do
+    PORT="${SERVICE_PORTS[$SERVICE]}"
+    # Skip services we just redeployed (they're fine)
+    if echo "$SERVICES" | grep -qw "$SERVICE"; then
+        continue
+    fi
+    # Check if container is running but port is unreachable
+    if docker compose -f "$COMPOSE_FILE" ps "$SERVICE" 2>/dev/null | grep -q "Up"; then
+        if ! curl -sf --max-time 2 "http://localhost:$PORT/health" > /dev/null 2>&1; then
+            log_warn "$SERVICE:$PORT - port binding lost, restarting..."
+            docker restart "animeenigma-$SERVICE" > /dev/null 2>&1 || true
+            sleep 2
+            if curl -sf --max-time 2 "http://localhost:$PORT/health" > /dev/null 2>&1; then
+                log_info "$SERVICE:$PORT - recovered"
+            else
+                log_error "$SERVICE:$PORT - still unreachable after restart"
+            fi
+            RESTARTED="$RESTARTED $SERVICE"
+        fi
+    fi
+done
+
+if [ -n "$RESTARTED" ]; then
+    log_warn "Had to restart services with lost port bindings:$RESTARTED"
+fi

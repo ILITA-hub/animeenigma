@@ -82,6 +82,12 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'nav.profile' }
   },
   {
+    path: '/status',
+    name: 'status',
+    component: () => import('@/views/StatusPage.vue'),
+    meta: { titleKey: 'status.title' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),

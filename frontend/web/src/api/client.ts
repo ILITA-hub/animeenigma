@@ -352,4 +352,8 @@ export const adminThemesApi = {
   syncStatus: () => apiClient.get('/themes/admin/sync/status'),
 }
 
+export const statusApi = {
+  getStatus: () => apiClient.get('/status'),
+}
+
 export default apiClient

@@ -414,5 +414,31 @@
   },
   "footer": {
     "rights": "All rights reserved"
+  },
+  "status": {
+    "title": "System Status",
+    "operational": "All systems operational",
+    "degraded": "Some services experiencing issues",
+    "down": "All services are down",
+    "serviceUp": "Operational",
+    "serviceDown": "Down",
+    "lastChecked": "Last checked: {time}",
+    "autoRefresh": "Auto-refreshes every 30s",
+    "refresh": "Refresh",
+    "appServices": "Application Services",
+    "infrastructure": "Infrastructure",
+    "services": {
+      "gateway": "API Gateway",
+      "auth": "Authentication",
+      "catalog": "Anime Catalog",
+      "player": "Player & Watchlist",
+      "rooms": "Game Rooms",
+      "streaming": "Video Streaming",
+      "scheduler": "Scheduler",
+      "themes": "Openings & Endings",
+      "postgres": "Database",
+      "redis": "Cache",
+      "nats": "Message Queue"
+    }
   }
 }
