@@ -309,7 +309,7 @@ services:
       DB_NAME: animeenigma
       REDIS_HOST: redis
       JWT_SECRET: dev-secret-change-in-production
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
       REPORTS_DIR: /data/reports
     volumes:

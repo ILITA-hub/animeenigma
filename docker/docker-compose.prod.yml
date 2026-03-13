@@ -185,6 +185,11 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
+      TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
+      REPORTS_DIR: /data/reports
+    volumes:
+      - player_reports:/data/reports
     expose:
       - "8083"
     depends_on:
@@ -254,6 +259,7 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  player_reports:
 
 networks:
   default:
