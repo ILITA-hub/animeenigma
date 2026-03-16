@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { userApi } from '@/api/client'
 
 export const useWatchlistStore = defineStore('watchlist', () => {
-  const statusEntries = ref<Array<{ anime_id: string; status: string }>>([])
+  const statusEntries = ref<Array<{ anime_id: string; status: string; score?: number; episodes?: number }>>([])
   const statusLastFetched = ref<number>(0)
   const statusLoading = ref(false)
   const STATUS_CACHE_TTL = 2 * 60 * 1000 // 2 minutes

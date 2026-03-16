@@ -1073,19 +1073,17 @@ const filteredWatchlist = computed(() => {
 
 // Stats
 const watchlistStats = computed(() => {
-  const list = watchlist.value
-  const scored = list.filter(a => a.score && a.score > 0)
+  // Use the full statuses data from the store (includes score + episodes) for accurate stats
+  const allEntries = watchlistStore.entries
+  const scored = allEntries.filter(a => a.score && a.score > 0)
   const avgScore = scored.length > 0
     ? (scored.reduce((sum, a) => sum + (a.score || 0), 0) / scored.length).toFixed(1)
     : '-'
-  // Use server total count for accurate total; other stats are page-level approximations
-  const completedCount = watchlistStore.watchlistMap.size > 0
-    ? [...watchlistStore.watchlistMap.values()].filter(s => s === 'completed').length
-    : list.filter(a => a.status === 'completed').length
+  const completedCount = allEntries.filter(a => a.status === 'completed').length
   return {
-    total: watchlistTotalCount.value || list.length,
+    total: allEntries.length || watchlistTotalCount.value || watchlist.value.length,
     avgScore,
-    totalEpisodes: list.reduce((sum, a) => sum + (a.episodes || 0), 0),
+    totalEpisodes: allEntries.reduce((sum, a) => sum + (a.episodes || 0), 0),
     completed: completedCount,
   }
 })

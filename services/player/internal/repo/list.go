@@ -140,7 +140,7 @@ func (r *ListRepository) GetByUserStatuses(ctx context.Context, userID string) (
 	var entries []domain.AnimeStatusEntry
 	err := r.db.WithContext(ctx).
 		Model(&domain.AnimeListEntry{}).
-		Select("anime_id, status").
+		Select("anime_id, status, score, episodes").
 		Where("user_id = ?", userID).
 		Scan(&entries).Error
 	return entries, err
