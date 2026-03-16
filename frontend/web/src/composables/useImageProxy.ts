@@ -1,10 +1,14 @@
 import { ref } from 'vue'
 
 const STORAGE_KEY_BLOCKED = 'shikimori_blocked'
-const STORAGE_KEY_FAILURES = 'shikimori_failures'
+const STORAGE_KEY_FAILED_URLS = 'shikimori_failed_urls'
 const FAILURE_THRESHOLD = 20
 
 const SHIKIMORI_DOMAINS = ['shiki.one', 'shikimori.io', 'shikimori.one']
+
+// In-memory set of URLs already counted this session (survives SPA navigation, not reloads)
+// sessionStorage set tracks across reloads — same URL won't be double-counted
+const failedUrlsMemory = new Set<string>()
 
 function isShikimoriUrl(url: string): boolean {
   try {
@@ -23,11 +27,25 @@ function isBlocked(): boolean {
   }
 }
 
-function incrementFailures(): void {
+function trackFailure(url: string): void {
   try {
-    const count = parseInt(sessionStorage.getItem(STORAGE_KEY_FAILURES) || '0', 10) + 1
-    sessionStorage.setItem(STORAGE_KEY_FAILURES, String(count))
-    if (count >= FAILURE_THRESHOLD) {
+    // Skip if this URL was already counted
+    if (failedUrlsMemory.has(url)) return
+
+    // Check sessionStorage set (survives reloads)
+    const storedJson = sessionStorage.getItem(STORAGE_KEY_FAILED_URLS) || '[]'
+    const failedUrls: string[] = JSON.parse(storedJson)
+    if (failedUrls.includes(url)) {
+      failedUrlsMemory.add(url) // sync to memory
+      return
+    }
+
+    // New failure — track it
+    failedUrlsMemory.add(url)
+    failedUrls.push(url)
+    sessionStorage.setItem(STORAGE_KEY_FAILED_URLS, JSON.stringify(failedUrls))
+
+    if (failedUrls.length >= FAILURE_THRESHOLD) {
       sessionStorage.setItem(STORAGE_KEY_BLOCKED, 'true')
     }
   } catch {
@@ -48,7 +66,7 @@ export function getImageUrl(originalUrl: string | undefined | null): string {
 
 export function getImageFallbackUrl(originalUrl: string): string {
   if (isShikimoriUrl(originalUrl)) {
-    incrementFailures()
+    trackFailure(originalUrl)
   }
   return proxyUrl(originalUrl)
 }
