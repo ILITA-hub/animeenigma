@@ -5,7 +5,7 @@
       <!-- Background Image -->
       <div
         class="absolute inset-0 bg-cover bg-center scale-110 blur-sm"
-        :style="{ backgroundImage: `url(${anime.bannerImage || anime.coverImage})` }"
+        :style="{ backgroundImage: `url(${getImageUrl((anime?.bannerImage || anime?.coverImage) ?? '')})` }"
       />
       <!-- Gradient Overlays -->
       <div class="absolute inset-0 bg-gradient-to-t from-base via-base/70 to-transparent" />
@@ -22,6 +22,7 @@
               :src="anime.coverImage"
               :alt="anime.title"
               class="w-full h-full object-cover"
+              @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime?.coverImage ?? '') } }"
             />
           </div>
         </div>
@@ -538,6 +539,7 @@ const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/An
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { parseDescription } from '@/utils/description-parser'
+import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
 interface AnimeWithExtras {
   japaneseTitle?: string

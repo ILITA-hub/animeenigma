@@ -16,6 +16,7 @@
           :class="imageLoaded ? 'opacity-100' : 'opacity-0'"
           loading="lazy"
           @load="imageLoaded = true"
+          @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.coverImage) } }"
         />
 
         <!-- Overlay Gradient -->
@@ -85,6 +86,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '@/components/ui/Badge.vue'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
+import { getImageFallbackUrl } from '@/composables/useImageProxy'
 
 const { t, locale } = useI18n()
 

@@ -223,6 +223,7 @@
                             :src="animeCover(anime)"
                             :alt="animeTitle(anime)"
                             class="w-full h-full object-cover"
+                            @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.anime?.poster_url || '') } }"
                           />
                         </router-link>
                       </td>
@@ -361,6 +362,7 @@
                         :src="animeCover(anime)"
                         :alt="animeTitle(anime)"
                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.anime?.poster_url || '') } }"
                       />
                       <div v-else class="w-full h-full flex items-center justify-center text-white/20">
                         <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -438,6 +440,13 @@
                   </template>
                 </div>
               </div>
+
+              <!-- Pagination -->
+              <PaginationBar
+                :current-page="watchlistPage"
+                :total-pages="watchlistTotalPages"
+                @update:current-page="(p: number) => { watchlistPage = p; fetchWatchlistPage() }"
+              />
             </div>
 
             <div v-else class="text-center py-12">
@@ -798,9 +807,10 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Badge, Button, Modal, Tabs, Select, GenreFilterPopup, type SelectOption } from '@/components/ui'
+import { Badge, Button, Modal, Tabs, Select, GenreFilterPopup, PaginationBar, type SelectOption } from '@/components/ui'
 import { userApi, publicApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
+import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
 interface ApiError {
   response?: {
@@ -862,7 +872,7 @@ const siteOrigin = window.location.origin
 const animeTitle = (entry: WatchlistEntry): string =>
   getLocalizedTitle(entry.anime?.name, entry.anime?.name_ru, entry.anime?.name_jp) || 'Anime'
 const animeCover = (entry: WatchlistEntry): string =>
-  entry.anime?.poster_url || ''
+  getImageUrl(entry.anime?.poster_url) || ''
 const animeTotalEpisodes = (entry: WatchlistEntry): number =>
   entry.anime?.episodes_count || 0
 
@@ -916,6 +926,15 @@ const loadingWatchlist = ref(false)
 const watchlistFilter = ref('all')
 const searchQuery = ref('')
 const viewMode = ref<'table' | 'grid'>('grid')
+
+// Pagination
+const watchlistPage = ref(1)
+const watchlistTotalPages = ref(0)
+const watchlistTotalCount = ref(0)
+const watchlistPerPage = 24
+const watchlistSort = ref('updated_at')
+const watchlistOrder = ref('desc')
+const watchlistPageLoading = ref(false)
 
 // Inline editing
 const editingScore = ref<string | null>(null)
@@ -987,19 +1006,31 @@ const watchlistFilters = computed(() => {
     ? ['all', 'watching', 'plan_to_watch', 'completed', 'on_hold', 'dropped']
     : ['all', ...(profileUser.value?.public_statuses || [])]
 
-  return statuses.map(status => ({
-    value: status,
-    label: statusLabels.value[status] || status,
-    count: status === 'all'
-      ? watchlist.value.length
-      : watchlist.value.filter(a => a.status === status).length
-  }))
+  // Use the status store for accurate per-status counts (all entries, not just current page)
+  const statusMap = isOwnProfile.value ? watchlistStore.watchlistMap : null
+
+  return statuses.map(status => {
+    let count = 0
+    if (status === 'all') {
+      count = watchlistTotalCount.value
+    } else if (statusMap) {
+      // Count from the lightweight statuses endpoint
+      count = [...statusMap.entries()].filter(([, s]) => s === status).length
+    } else {
+      count = watchlist.value.filter(a => a.status === status).length
+    }
+    return {
+      value: status,
+      label: statusLabels.value[status] || status,
+      count,
+    }
+  })
 })
 
 const filteredWatchlist = computed(() => {
-  let list = watchlistFilter.value === 'all'
-    ? [...watchlist.value]
-    : watchlist.value.filter(a => a.status === watchlistFilter.value)
+  // Status filtering is handled server-side via fetchWatchlistPage.
+  // Here we apply search, genre, and sort on the current page's data.
+  let list = [...watchlist.value]
 
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
@@ -1047,11 +1078,15 @@ const watchlistStats = computed(() => {
   const avgScore = scored.length > 0
     ? (scored.reduce((sum, a) => sum + (a.score || 0), 0) / scored.length).toFixed(1)
     : '-'
+  // Use server total count for accurate total; other stats are page-level approximations
+  const completedCount = watchlistStore.watchlistMap.size > 0
+    ? [...watchlistStore.watchlistMap.values()].filter(s => s === 'completed').length
+    : list.filter(a => a.status === 'completed').length
   return {
-    total: list.length,
+    total: watchlistTotalCount.value || list.length,
     avgScore,
     totalEpisodes: list.reduce((sum, a) => sum + (a.episodes || 0), 0),
-    completed: list.filter(a => a.status === 'completed').length,
+    completed: completedCount,
   }
 })
 
@@ -1168,43 +1203,72 @@ const fetchProfile = async () => {
   }
 }
 
-const fetchWatchlist = async (isOwn: boolean) => {
+// Track current profile ownership for fetchWatchlistPage
+const _isOwnProfile = ref(false)
+
+const fetchWatchlistPage = async () => {
   if (!profileUser.value) return
 
-  loadingWatchlist.value = true
+  watchlistPageLoading.value = true
+  loadingWatchlist.value = watchlistPage.value === 1
   try {
-    if (isOwn) {
-      // Fetch own watchlist via shared store
-      await watchlistStore.fetchWatchlist(true)
-      const entries = watchlistStore.entries
-      watchlist.value = entries.map((entry) => ({
-        anime_id: entry.anime_id as string,
-        anime: (entry.anime as WatchlistEntry['anime']) || undefined,
-        status: entry.status as string,
-        score: entry.score as number | undefined,
-        episodes: entry.episodes as number | undefined,
-        started_at: entry.started_at as string | undefined,
-        completed_at: entry.completed_at as string | undefined,
-      }))
+    const statusParam = watchlistFilter.value === 'all' ? undefined : watchlistFilter.value
+
+    if (_isOwnProfile.value) {
+      const response = await userApi.getWatchlist({
+        page: watchlistPage.value,
+        per_page: watchlistPerPage,
+        ...(statusParam && { status: statusParam }),
+        sort: watchlistSort.value,
+        order: watchlistOrder.value,
+      })
+      const data = response.data?.data || response.data || []
+      const meta = response.data?.meta
+      watchlist.value = Array.isArray(data) ? data : []
+      watchlistTotalPages.value = meta?.total_pages || 0
+      watchlistTotalCount.value = meta?.total_count || 0
     } else {
-      // Fetch public watchlist
       const userId = profileUser.value.id
       if (!userId) {
         console.error('No user ID for public watchlist')
         return
       }
-      const response = await publicApi.getPublicWatchlist(
-        userId,
-        profileUser.value.public_statuses || []
-      )
-      watchlist.value = response.data?.data || response.data || []
+      const publicStatuses = profileUser.value.public_statuses || []
+      const response = await publicApi.getPublicWatchlist(userId, {
+        page: watchlistPage.value,
+        per_page: watchlistPerPage,
+        ...(statusParam && { status: statusParam }),
+        ...(publicStatuses.length && !statusParam && { statuses: publicStatuses.join(',') }),
+      })
+      const data = response.data?.data || response.data || []
+      const meta = response.data?.meta
+      watchlist.value = Array.isArray(data) ? data : []
+      watchlistTotalPages.value = meta?.total_pages || 0
+      watchlistTotalCount.value = meta?.total_count || 0
     }
   } catch (err) {
     console.error('Failed to fetch watchlist:', err)
   } finally {
+    watchlistPageLoading.value = false
     loadingWatchlist.value = false
   }
 }
+
+const fetchWatchlist = async (isOwn: boolean) => {
+  _isOwnProfile.value = isOwn
+  if (isOwn) {
+    // Also fetch lightweight statuses for badge map and per-status counts
+    await watchlistStore.fetchStatuses(true)
+  }
+  watchlistPage.value = 1
+  await fetchWatchlistPage()
+}
+
+// Server-side pagination watchers (defined after fetchWatchlistPage)
+watch(watchlistFilter, () => {
+  watchlistPage.value = 1
+  fetchWatchlistPage()
+})
 
 const formatDateForInput = (dateStr: string | null | undefined): string => {
   if (!dateStr) return ''

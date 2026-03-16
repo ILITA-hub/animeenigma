@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { animeApi, episodeApi, userApi } from '@/api/client'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
+import { getImageUrl } from '@/composables/useImageProxy'
 
 interface ApiGenre {
   name_ru?: string
@@ -65,7 +66,7 @@ function transformAnime(apiAnime: ApiAnime): Anime {
     nameRu: apiAnime.name_ru || undefined,
     nameJp: apiAnime.name_jp || undefined,
     description: apiAnime.description || '',
-    coverImage: apiAnime.poster_url || '',
+    coverImage: getImageUrl(apiAnime.poster_url),
     bannerImage: apiAnime.banner_url,
     genres: apiAnime.genres?.map((g: ApiGenre) => getLocalizedGenre(g.name, g.name_ru)) || [],
     rawGenres: apiAnime.genres?.map((g: ApiGenre) => ({ name: g.name, nameRu: g.name_ru })) || [],

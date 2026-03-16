@@ -3,14 +3,14 @@ import { ref, computed } from 'vue'
 import { userApi } from '@/api/client'
 
 export const useWatchlistStore = defineStore('watchlist', () => {
-  const entries = ref<Array<{ anime_id: string; status: string; [key: string]: unknown }>>([])
-  const lastFetched = ref<number>(0)
-  const loading = ref(false)
-  const CACHE_TTL = 2 * 60 * 1000 // 2 minutes
+  const statusEntries = ref<Array<{ anime_id: string; status: string }>>([])
+  const statusLastFetched = ref<number>(0)
+  const statusLoading = ref(false)
+  const STATUS_CACHE_TTL = 2 * 60 * 1000 // 2 minutes
 
   const watchlistMap = computed(() => {
     const map = new Map<string, string>()
-    for (const entry of entries.value) {
+    for (const entry of statusEntries.value) {
       if (entry.anime_id && entry.status) {
         map.set(entry.anime_id, entry.status)
       }
@@ -18,22 +18,27 @@ export const useWatchlistStore = defineStore('watchlist', () => {
     return map
   })
 
-  const isFresh = () => Date.now() - lastFetched.value < CACHE_TTL
+  const isStatusFresh = () => Date.now() - statusLastFetched.value < STATUS_CACHE_TTL
 
-  const fetchWatchlist = async (force = false) => {
-    if (!force && isFresh() && entries.value.length > 0) return
-    if (loading.value) return
+  const fetchStatuses = async (force = false) => {
+    if (!force && isStatusFresh() && statusEntries.value.length > 0) return
+    if (statusLoading.value) return
 
-    loading.value = true
+    statusLoading.value = true
     try {
-      const response = await userApi.getWatchlist()
-      entries.value = response.data?.data || response.data || []
-      lastFetched.value = Date.now()
+      const response = await userApi.getWatchlistStatuses()
+      statusEntries.value = response.data?.data || response.data || []
+      statusLastFetched.value = Date.now()
     } catch {
-      // Silently fail — watchlist is non-critical
+      // Silently fail — status map is non-critical
     } finally {
-      loading.value = false
+      statusLoading.value = false
     }
+  }
+
+  // Backward compat: fetchWatchlist now fetches statuses
+  const fetchWatchlist = async (force = false) => {
+    return fetchStatuses(force)
   }
 
   const getStatus = (animeId: string): string | null => {
@@ -41,23 +46,26 @@ export const useWatchlistStore = defineStore('watchlist', () => {
   }
 
   const getEntry = (animeId: string) => {
-    return entries.value.find(e => e.anime_id === animeId) || null
+    return statusEntries.value.find(e => e.anime_id === animeId) || null
   }
 
   const invalidate = () => {
-    lastFetched.value = 0
+    statusLastFetched.value = 0
   }
 
   const clear = () => {
-    entries.value = []
-    lastFetched.value = 0
+    statusEntries.value = []
+    statusLastFetched.value = 0
   }
+
+  const entries = statusEntries
 
   return {
     entries,
-    loading,
+    loading: statusLoading,
     watchlistMap,
     fetchWatchlist,
+    fetchStatuses,
     getStatus,
     getEntry,
     invalidate,

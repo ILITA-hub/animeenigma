@@ -1,7 +1,7 @@
 <template>
   <router-link :to="`/anime/${anime.id}`" class="anime-card">
     <div class="card-image">
-      <img :src="anime.coverImage" :alt="anime.title" loading="lazy" decoding="async" />
+      <img :src="anime.coverImage" :alt="anime.title" loading="lazy" decoding="async" @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.coverImage) } }" />
       <div class="overlay">
         <button class="play-btn">▶</button>
       </div>
@@ -26,6 +26,7 @@
 
 <script setup lang="ts">
 import { defineProps } from 'vue'
+import { getImageFallbackUrl } from '@/composables/useImageProxy'
 
 interface Anime {
   id: string

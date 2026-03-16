@@ -174,7 +174,9 @@ export const episodeApi = {
 export const userApi = {
   getProfile: () => apiClient.get('/users/profile'),
   updateProfile: (data: Record<string, unknown>) => apiClient.patch('/users/profile', data),
-  getWatchlist: (status?: string) => apiClient.get('/users/watchlist', { params: status ? { status } : {} }),
+  getWatchlist: (params?: { status?: string; page?: number; per_page?: number; sort?: string; order?: string }) =>
+    apiClient.get('/users/watchlist', { params }),
+  getWatchlistStatuses: () => apiClient.get('/users/watchlist/statuses'),
   getWatchlistEntry: (animeId: string) => apiClient.get(`/users/watchlist/${animeId}`),
   addToWatchlist: (animeId: string, status: string = 'plan_to_watch') =>
     apiClient.post('/users/watchlist', { anime_id: animeId, status }),
@@ -221,10 +223,8 @@ export const publicApi = {
   // Get public user profile by public_id
   getUserProfile: (publicId: string) => apiClient.get(`/auth/users/${publicId}`),
   // Get public watchlist
-  getPublicWatchlist: (userId: string, statuses?: string[]) =>
-    apiClient.get(`/users/${userId}/watchlist/public`, {
-      params: statuses?.length ? { statuses: statuses.join(',') } : {}
-    }),
+  getPublicWatchlist: (userId: string, params?: { status?: string; statuses?: string; page?: number; per_page?: number; sort?: string; order?: string }) =>
+    apiClient.get(`/users/${userId}/watchlist/public`, { params }),
 }
 
 export const adminApi = {
