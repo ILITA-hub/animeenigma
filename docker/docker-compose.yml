@@ -6,6 +6,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: animeenigma-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -23,6 +24,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: animeenigma-redis
+    restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
       - "127.0.0.1:6379:6379"
@@ -37,6 +39,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: animeenigma-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -55,6 +58,7 @@ services:
   nats:
     image: nats:2.10-alpine
     container_name: animeenigma-nats
+    restart: unless-stopped
     command: ["--jetstream", "--store_dir=/data"]
     ports:
       - "127.0.0.1:4222:4222"
@@ -65,6 +69,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.6
     container_name: animeenigma-meilisearch
+    restart: unless-stopped
     environment:
       MEILI_MASTER_KEY: masterkey
       MEILI_ENV: development
@@ -111,6 +116,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.50.1
     container_name: animeenigma-prometheus
+    restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -132,6 +138,7 @@ services:
   grafana:
     image: grafana/grafana:10.3.3
     container_name: animeenigma-grafana
+    restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -173,6 +180,7 @@ services:
   admin-nginx:
     image: nginx:alpine
     container_name: animeenigma-admin-nginx
+    restart: unless-stopped
     ports:
       - "127.0.0.1:8088:80"
     volumes:
@@ -190,6 +198,7 @@ services:
       context: ..
       dockerfile: services/gateway/Dockerfile
     container_name: animeenigma-gateway
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8000
       AUTH_SERVICE_URL: http://auth:8080
@@ -219,6 +228,7 @@ services:
       context: ..
       dockerfile: services/auth/Dockerfile
     container_name: animeenigma-auth
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8080
       DB_HOST: postgres
@@ -245,6 +255,7 @@ services:
       context: ..
       dockerfile: services/catalog/Dockerfile
     container_name: animeenigma-catalog
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8081
       DB_HOST: postgres
@@ -277,6 +288,7 @@ services:
       context: ..
       dockerfile: services/streaming/Dockerfile
     container_name: animeenigma-streaming
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8082
       REDIS_HOST: redis
@@ -300,6 +312,7 @@ services:
       context: ..
       dockerfile: services/player/Dockerfile
     container_name: animeenigma-player
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8083
       DB_HOST: postgres
@@ -327,6 +340,7 @@ services:
       context: ..
       dockerfile: services/rooms/Dockerfile
     container_name: animeenigma-rooms
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8084
       REDIS_HOST: redis
@@ -342,6 +356,7 @@ services:
       context: ..
       dockerfile: services/scheduler/Dockerfile
     container_name: animeenigma-scheduler
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8085
       DB_HOST: postgres
@@ -368,6 +383,7 @@ services:
       context: ..
       dockerfile: services/themes/Dockerfile
     container_name: animeenigma-themes
+    restart: unless-stopped
     environment:
       SERVER_PORT: 8086
       DB_HOST: postgres
@@ -394,6 +410,7 @@ services:
         VITE_TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
         VITE_API_URL: /api
     container_name: animeenigma-web
+    restart: unless-stopped
     ports:
       - "127.0.0.1:3003:80"
     depends_on:
