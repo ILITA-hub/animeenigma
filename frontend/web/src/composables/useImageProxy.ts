@@ -2,7 +2,7 @@ import { ref } from 'vue'
 
 const STORAGE_KEY_BLOCKED = 'shikimori_blocked'
 const STORAGE_KEY_FAILURES = 'shikimori_failures'
-const FAILURE_THRESHOLD = 3
+const FAILURE_THRESHOLD = 20
 
 const SHIKIMORI_DOMAINS = ['shiki.one', 'shikimori.io', 'shikimori.one']
 
