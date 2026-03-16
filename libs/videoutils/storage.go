@@ -28,6 +28,16 @@ type Storage struct {
 	bucketName string
 }
 
+// Client returns the underlying MinIO client
+func (s *Storage) Client() *minio.Client {
+	return s.client
+}
+
+// BucketName returns the configured bucket name
+func (s *Storage) BucketName() string {
+	return s.bucketName
+}
+
 // NewStorage creates a new MinIO storage client
 func NewStorage(cfg StorageConfig) (*Storage, error) {
 	client, err := minio.New(cfg.Endpoint, &minio.Options{

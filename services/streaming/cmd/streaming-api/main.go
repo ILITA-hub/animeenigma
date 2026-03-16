@@ -57,11 +57,15 @@ func main() {
 	streamHandler := handler.NewStreamHandler(streamingService, log)
 	uploadHandler := handler.NewUploadHandler(streamingService, log)
 
+	// Initialize image proxy
+	imageProxyService := service.NewImageProxyService(storage, log)
+	imageProxyHandler := handler.NewImageProxyHandler(imageProxyService, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("streaming")
 
 	// Initialize router
-	router := transport.NewRouter(streamHandler, uploadHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(streamHandler, uploadHandler, imageProxyHandler, cfg, log, metricsCollector)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),

@@ -174,6 +174,7 @@ func NewRouter(
 			r.Get("/hls-proxy", proxyHandler.ProxyToStreaming)
 			r.Options("/hls-proxy", proxyHandler.ProxyToStreaming) // CORS preflight
 			r.Get("/proxy-status", proxyHandler.ProxyToStreaming)
+			r.Get("/image-proxy", proxyHandler.ProxyToStreaming)
 			r.HandleFunc("/stream/*", proxyHandler.ProxyToStreaming)
 			r.HandleFunc("/internal/*", proxyHandler.ProxyToStreaming)
 

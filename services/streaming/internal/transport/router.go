@@ -16,6 +16,7 @@ import (
 func NewRouter(
 	streamHandler *handler.StreamHandler,
 	uploadHandler *handler.UploadHandler,
+	imageProxyHandler *handler.ImageProxyHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -45,6 +46,9 @@ func NewRouter(
 		r.Get("/hls-proxy", streamHandler.HLSProxy)
 		r.Options("/hls-proxy", streamHandler.HLSProxy) // CORS preflight
 		r.Get("/proxy-status", streamHandler.GetProxyStatus)
+
+		// Image proxy (public, no auth)
+		r.Get("/image-proxy", imageProxyHandler.ProxyImage)
 
 		// Public streaming routes (token validated in handler)
 		r.Route("/stream", func(r chi.Router) {
