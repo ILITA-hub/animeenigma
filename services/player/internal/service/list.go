@@ -31,6 +31,26 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 	return s.listRepo.GetByUser(ctx, userID)
 }
 
+// GetUserListPaginated returns user's anime list with pagination
+func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+	params.Validate()
+	return s.listRepo.GetByUserPaginated(ctx, userID, status, params)
+}
+
+// GetUserStatuses returns lightweight anime_id+status pairs for the entire list
+func (s *ListService) GetUserStatuses(ctx context.Context, userID string) ([]domain.AnimeStatusEntry, error) {
+	return s.listRepo.GetByUserStatuses(ctx, userID)
+}
+
+// GetPublicWatchlistPaginated returns user's public watchlist with pagination
+func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID string, statuses []string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+	params.Validate()
+	if len(statuses) == 0 {
+		return s.listRepo.GetByUserPaginated(ctx, userID, "", params)
+	}
+	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, params)
+}
+
 // GetUserAnimeEntry returns a single anime entry from user's list
 func (s *ListService) GetUserAnimeEntry(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
 	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)

@@ -128,3 +128,44 @@ type CreateReviewRequest struct {
 	Score      int    `json:"score"`
 	ReviewText string `json:"review_text"`
 }
+
+// PaginationParams holds pagination and sorting options
+type PaginationParams struct {
+	Page    int    `json:"page"`
+	PerPage int    `json:"per_page"`
+	Sort    string `json:"sort"`
+	Order   string `json:"order"`
+}
+
+// Validate checks pagination params and applies defaults
+func (p *PaginationParams) Validate() {
+	if p.Page < 1 {
+		p.Page = 1
+	}
+	if p.PerPage < 1 || p.PerPage > 100 {
+		p.PerPage = 24
+	}
+	allowedSorts := map[string]bool{
+		"updated_at": true,
+		"created_at": true,
+		"score":      true,
+		"status":     true,
+	}
+	if !allowedSorts[p.Sort] {
+		p.Sort = "updated_at"
+	}
+	if p.Order != "asc" {
+		p.Order = "desc"
+	}
+}
+
+// Offset returns the SQL offset
+func (p *PaginationParams) Offset() int {
+	return (p.Page - 1) * p.PerPage
+}
+
+// AnimeStatusEntry is a lightweight entry for the status map
+type AnimeStatusEntry struct {
+	AnimeID string `json:"anime_id" gorm:"column:anime_id"`
+	Status  string `json:"status" gorm:"column:status"`
+}

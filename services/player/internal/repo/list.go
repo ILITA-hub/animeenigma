@@ -111,3 +111,58 @@ func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string
 		Find(&entries).Error
 	return entries, err
 }
+
+func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+	var entries []*domain.AnimeListEntry
+	var total int64
+
+	base := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if status != "" {
+		base = base.Where("status = ?", status)
+	}
+
+	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	orderClause := params.Sort + " " + params.Order
+	err := base.Session(&gorm.Session{}).
+		Preload("Anime").Preload("Anime.Genres").
+		Order(orderClause).
+		Offset(params.Offset()).
+		Limit(params.PerPage).
+		Find(&entries).Error
+
+	return entries, total, err
+}
+
+func (r *ListRepository) GetByUserStatuses(ctx context.Context, userID string) ([]domain.AnimeStatusEntry, error) {
+	var entries []domain.AnimeStatusEntry
+	err := r.db.WithContext(ctx).
+		Model(&domain.AnimeListEntry{}).
+		Select("anime_id, status").
+		Where("user_id = ?", userID).
+		Scan(&entries).Error
+	return entries, err
+}
+
+func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+	var entries []*domain.AnimeListEntry
+	var total int64
+
+	base := r.db.WithContext(ctx).Where("user_id = ? AND status IN ?", userID, statuses)
+
+	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	orderClause := params.Sort + " " + params.Order
+	err := base.Session(&gorm.Session{}).
+		Preload("Anime").Preload("Anime.Genres").
+		Order(orderClause).
+		Offset(params.Offset()).
+		Limit(params.PerPage).
+		Find(&entries).Error
+
+	return entries, total, err
+}

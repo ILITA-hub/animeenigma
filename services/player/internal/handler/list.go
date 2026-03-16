@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -33,19 +34,50 @@ func (h *ListHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := r.URL.Query().Get("status")
+	params := parsePaginationParams(r)
 
-	list, err := h.listService.GetUserList(r.Context(), claims.UserID, status)
+	entries, total, err := h.listService.GetUserListPaginated(r.Context(), claims.UserID, status, params)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
-	// Return empty array instead of null
-	if list == nil {
-		list = []*domain.AnimeListEntry{}
+	if entries == nil {
+		entries = []*domain.AnimeListEntry{}
 	}
 
-	httputil.OK(w, list)
+	totalPages := int(total) / params.PerPage
+	if int(total)%params.PerPage > 0 {
+		totalPages++
+	}
+
+	httputil.JSONWithMeta(w, http.StatusOK, entries, httputil.Meta{
+		Page:       params.Page,
+		PageSize:   params.PerPage,
+		TotalCount: total,
+		TotalPages: totalPages,
+	})
+}
+
+// GetWatchlistStatuses returns lightweight anime_id+status pairs for the user's list
+func (h *ListHandler) GetWatchlistStatuses(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	statuses, err := h.listService.GetUserStatuses(r.Context(), claims.UserID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if statuses == nil {
+		statuses = []domain.AnimeStatusEntry{}
+	}
+
+	httputil.OK(w, statuses)
 }
 
 // AddToList adds an anime to user's watchlist
@@ -213,10 +245,10 @@ func (h *ListHandler) GetPublicWatchlist(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get statuses from query param (comma-separated)
-	statusesParam := r.URL.Query().Get("statuses")
 	var statuses []string
-	if statusesParam != "" {
+	if s := r.URL.Query().Get("status"); s != "" {
+		statuses = []string{s}
+	} else if statusesParam := r.URL.Query().Get("statuses"); statusesParam != "" {
 		for _, s := range splitAndTrim(statusesParam, ",") {
 			if s != "" {
 				statuses = append(statuses, s)
@@ -224,17 +256,44 @@ func (h *ListHandler) GetPublicWatchlist(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	list, err := h.listService.GetPublicWatchlist(r.Context(), userID, statuses)
+	params := parsePaginationParams(r)
+
+	entries, total, err := h.listService.GetPublicWatchlistPaginated(r.Context(), userID, statuses, params)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
-	if list == nil {
-		list = []*domain.AnimeListEntry{}
+	if entries == nil {
+		entries = []*domain.AnimeListEntry{}
 	}
 
-	httputil.OK(w, list)
+	totalPages := int(total) / params.PerPage
+	if int(total)%params.PerPage > 0 {
+		totalPages++
+	}
+
+	httputil.JSONWithMeta(w, http.StatusOK, entries, httputil.Meta{
+		Page:       params.Page,
+		PageSize:   params.PerPage,
+		TotalCount: total,
+		TotalPages: totalPages,
+	})
+}
+
+func parsePaginationParams(r *http.Request) *domain.PaginationParams {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	params := &domain.PaginationParams{
+		Page:    page,
+		PerPage: perPage,
+		Sort:    sort,
+		Order:   order,
+	}
+	params.Validate()
+	return params
 }
 
 func splitAndTrim(s, sep string) []string {
