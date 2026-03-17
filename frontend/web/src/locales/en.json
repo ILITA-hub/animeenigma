@@ -324,6 +324,10 @@
     "empty": "No activity yet",
     "loadMore": "Show more",
     "score": "rated {score}/10 —",
+    "review": {
+      "wrote": "wrote a review ({score}/10) —",
+      "updated": "updated review ({score}/10) —"
+    },
     "status": {
       "watching": "started watching",
       "completed": "completed",

@@ -324,6 +324,10 @@
     "empty": "まだアクティビティはありません",
     "loadMore": "もっと見る",
     "score": "{score}/10 と評価 —",
+    "review": {
+      "wrote": "レビューを投稿 ({score}/10) —",
+      "updated": "レビューを更新 ({score}/10) —"
+    },
     "status": {
       "watching": "視聴開始",
       "completed": "視聴完了",

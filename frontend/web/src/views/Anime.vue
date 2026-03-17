@@ -470,7 +470,12 @@
                   {{ review.username?.slice(0, 2).toUpperCase() || '??' }}
                 </div>
                 <div>
-                  <p class="font-medium text-white">{{ review.username || $t('anime.user') }}</p>
+                  <router-link
+                    :to="`/user/${review.user_id}`"
+                    class="font-medium text-white hover:text-purple-400 transition-colors"
+                  >
+                    {{ review.username || $t('anime.user') }}
+                  </router-link>
                   <p class="text-white/40 text-sm">{{ formatDate(review.created_at) }}</p>
                 </div>
               </div>

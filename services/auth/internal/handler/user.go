@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"regexp"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -10,6 +11,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/service"
 	"github.com/go-chi/chi/v5"
 )
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type UserHandler struct {
 	userService *service.UserService
@@ -80,15 +83,28 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, user)
 }
 
-// GetUserByPublicID returns a user's public profile by public_id
+// GetUserByPublicID returns a user's public profile by public_id or UUID.
+// If the param looks like a UUID, it tries lookup by ID first, then by public_id.
 func (h *UserHandler) GetUserByPublicID(w http.ResponseWriter, r *http.Request) {
-	publicID := chi.URLParam(r, "publicId")
-	if publicID == "" {
+	param := chi.URLParam(r, "publicId")
+	if param == "" {
 		httputil.BadRequest(w, "public ID is required")
 		return
 	}
 
-	user, err := h.userService.GetPublicProfileByPublicID(r.Context(), publicID)
+	var user *domain.PublicUser
+	var err error
+
+	if uuidPattern.MatchString(param) {
+		// Try UUID lookup first
+		user, err = h.userService.GetPublicProfile(r.Context(), param)
+	}
+
+	if user == nil {
+		// Fall back to public_id lookup
+		user, err = h.userService.GetPublicProfileByPublicID(r.Context(), param)
+	}
+
 	if err != nil {
 		httputil.Error(w, err)
 		return

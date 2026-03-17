@@ -1227,6 +1227,11 @@ const fetchProfile = async () => {
       const response = await publicApi.getUserProfile(publicIdParam)
       const data = response.data?.data || response.data
       profileUser.value = data
+
+      // If navigated via UUID and user has a publicId, silently replace URL
+      if (data?.public_id && data.public_id !== publicIdParam) {
+        router.replace({ name: 'public-profile', params: { publicId: data.public_id } })
+      }
     }
 
     await fetchWatchlist(isOwn)

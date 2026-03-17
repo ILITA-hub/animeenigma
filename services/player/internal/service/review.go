@@ -73,6 +73,34 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 		}
 	}
 
+	// Record review activity event (deduplicated per day)
+	isNewReview := existingReview == nil
+	reviewEvent := &domain.ActivityEvent{
+		UserID:   userID,
+		Username: username,
+		AnimeID:  req.AnimeID,
+		Type:     "review",
+		NewValue: strconv.Itoa(req.Score),
+	}
+	if isNewReview {
+		reviewEvent.OldValue = "new"
+	} else {
+		reviewEvent.OldValue = "update"
+	}
+	// Check for existing review event today — update it instead of creating a new one
+	existingEvent, _ := s.activityRepo.GetTodayByUserAnimeType(ctx, userID, req.AnimeID, "review")
+	if existingEvent != nil {
+		existingEvent.NewValue = reviewEvent.NewValue
+		existingEvent.OldValue = reviewEvent.OldValue
+		if err := s.activityRepo.Update(ctx, existingEvent); err != nil {
+			s.log.Errorw("failed to update review activity", "user_id", userID, "anime_id", req.AnimeID, "error", err)
+		}
+	} else {
+		if err := s.activityRepo.Create(ctx, reviewEvent); err != nil {
+			s.log.Errorw("failed to record review activity", "user_id", userID, "anime_id", req.AnimeID, "error", err)
+		}
+	}
+
 	// Sync score to watchlist entry
 	entry, _ := s.listRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
 	if entry != nil {

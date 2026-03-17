@@ -42,9 +42,12 @@
 
         <!-- Event info -->
         <div class="flex-1 min-w-0">
-          <p class="text-xs text-gray-400">
+          <router-link
+            :to="`/user/${event.user_id}`"
+            class="text-xs text-gray-400 hover:text-purple-400 transition-colors"
+          >
             {{ event.username }}
-          </p>
+          </router-link>
           <p class="text-sm text-white mt-0.5">
             <span>{{ actionText(event) }}</span>
             <router-link
@@ -135,6 +138,10 @@ const loadMore = () => {
 const actionText = (event: ActivityEvent): string => {
   if (event.type === 'score') {
     return t('activity.score', { score: event.new_value })
+  }
+  if (event.type === 'review') {
+    const key = event.old_value === 'new' ? 'activity.review.wrote' : 'activity.review.updated'
+    return t(key, { score: event.new_value })
   }
   return t(`activity.status.${event.new_value}`) + ' '
 }
