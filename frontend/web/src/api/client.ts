@@ -121,9 +121,13 @@ apiClient.interceptors.response.use(
         !originalRequest.url?.includes('/auth/login')) {
 
       if (isRefreshing) {
-        // Queue request while refresh is in progress
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
+        // Queue request while refresh is in progress (10s timeout to prevent hanging)
+        return new Promise<string>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Token refresh timeout')), 10_000)
+          failedQueue.push({
+            resolve: (token: string) => { clearTimeout(timeout); resolve(token) },
+            reject: (err: AxiosError) => { clearTimeout(timeout); reject(err) }
+          })
         }).then(token => {
           originalRequest.headers.Authorization = `Bearer ${token}`
           return apiClient(originalRequest)
