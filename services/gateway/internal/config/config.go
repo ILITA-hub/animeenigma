@@ -51,13 +51,17 @@ type RateLimitConfig struct {
 }
 
 func Load() (*Config, error) {
+	if getEnv("JWT_SECRET", "") == "" {
+		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
 			Port: getEnvInt("SERVER_PORT", 8000),
 		},
 		JWT: authz.JWTConfig{
-			Secret:          getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+			Secret:          getEnv("JWT_SECRET", ""),
 			Issuer:          getEnv("JWT_ISSUER", "animeenigma"),
 			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),

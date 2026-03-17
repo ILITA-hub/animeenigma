@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -41,6 +42,7 @@ func NewRouter(
 	r.Use(httputil.CORS(cfg.CORSOrigins))
 	r.Use(httputil.SecurityHeaders)
 	r.Use(middleware.RealIP)
+	r.Use(MaxBodySizeMiddleware(10 * 1024 * 1024)) // 10MB
 	r.Use(RateLimitMiddleware(cfg.RateLimit))
 
 	// Health check
@@ -277,6 +279,7 @@ func resolveApiKey(authServiceURL, apiKey string) (*authz.Claims, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil, fmt.Errorf("auth service returned %d", resp.StatusCode)
 	}
 
@@ -309,28 +312,43 @@ type IPRateLimiter struct {
 	limiters sync.Map
 	rps      rate.Limit
 	burst    int
+	stopCh   chan struct{}
 }
 
 // NewIPRateLimiter creates a per-IP rate limiter and starts a background
 // cleanup goroutine that evicts entries not seen for 5 minutes.
 func NewIPRateLimiter(rps rate.Limit, burst int) *IPRateLimiter {
-	rl := &IPRateLimiter{rps: rps, burst: burst}
+	rl := &IPRateLimiter{
+		rps:    rps,
+		burst:  burst,
+		stopCh: make(chan struct{}),
+	}
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			rl.limiters.Range(func(key, value any) bool {
-				entry := value.(*ipLimiter)
-				if time.Since(entry.lastSeen) > 5*time.Minute {
-					rl.limiters.Delete(key)
-				}
-				return true
-			})
+		for {
+			select {
+			case <-ticker.C:
+				rl.limiters.Range(func(key, value any) bool {
+					entry := value.(*ipLimiter)
+					if time.Since(entry.lastSeen) > 5*time.Minute {
+						rl.limiters.Delete(key)
+					}
+					return true
+				})
+			case <-rl.stopCh:
+				return
+			}
 		}
 	}()
 
 	return rl
+}
+
+// Stop terminates the background cleanup goroutine.
+func (rl *IPRateLimiter) Stop() {
+	close(rl.stopCh)
 }
 
 func (rl *IPRateLimiter) getLimiter(ip string) *rate.Limiter {
@@ -359,6 +377,16 @@ func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Han
 				httputil.TooManyRequests(w)
 				return
 			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// MaxBodySizeMiddleware limits the size of incoming request bodies.
+func MaxBodySizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -140,7 +140,13 @@
       "serverBusy": "Сервер занят. Попробуйте позже или используйте Kodik.",
       "hlsUnsupported": "Ваш браузер не поддерживает HLS",
       "serverLoaded": "Сервер загружен. Если видео тормозит, попробуйте Kodik.",
-      "submitReport": "Ошибка отправки"
+      "submitReport": "Ошибка отправки",
+      "noJpSubs": "Японские субтитры для этой серии не найдены",
+      "loadJpSubs": "Не удалось загрузить японские субтитры",
+      "networkError": "Ошибка сети: {details}",
+      "mediaError": "Ошибка медиа: {details}",
+      "playbackError": "Ошибка воспроизведения: {details}",
+      "videojsError": "Ошибка Video.js (код {code}): {message}"
     }
   },
   "search": {

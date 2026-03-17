@@ -62,6 +62,10 @@ type TelegramConfig struct {
 }
 
 func Load() (*Config, error) {
+	if getEnv("JWT_SECRET", "") == "" {
+		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
@@ -82,7 +86,7 @@ func Load() (*Config, error) {
 			DB:       getEnvInt("REDIS_DB", 0),
 		},
 		JWT: authz.JWTConfig{
-			Secret: getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+			Secret: getEnv("JWT_SECRET", ""),
 			Issuer: getEnv("JWT_ISSUER", "animeenigma"),
 		},
 		Shikimori: ShikimoriConfig{

@@ -140,7 +140,13 @@
       "serverBusy": "サーバーがビジーです。後でもう一度試すか、Kodikをご利用ください。",
       "hlsUnsupported": "お使いのブラウザはHLSに対応していません",
       "serverLoaded": "サーバーが混雑しています。動画がカクつく場合、Kodikをお試しください。",
-      "submitReport": "レポート送信エラー"
+      "submitReport": "レポート送信エラー",
+      "noJpSubs": "このエピソードの日本語字幕が見つかりません",
+      "loadJpSubs": "日本語字幕の読み込みに失敗しました",
+      "networkError": "ネットワークエラー: {details}",
+      "mediaError": "メディアエラー: {details}",
+      "playbackError": "再生エラー: {details}",
+      "videojsError": "Video.jsエラー (コード {code}): {message}"
     }
   },
   "search": {

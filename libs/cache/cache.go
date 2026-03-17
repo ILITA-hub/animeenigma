@@ -131,7 +131,10 @@ func (c *RedisCache) GetOrSet(ctx context.Context, key string, dest interface{},
 		return err
 	}
 
-	data, _ := json.Marshal(value)
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("cache marshal in GetOrSet: %w", err)
+	}
 	return json.Unmarshal(data, dest)
 }
 

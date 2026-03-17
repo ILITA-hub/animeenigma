@@ -14,6 +14,10 @@ app.use(router)
 app.use(i18n)
 app.mount('#app')
 
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[Unhandled Promise Rejection]', event.reason)
+})
+
 // Defer diagnostics init to after first paint to reduce long task duration
 const deferInit = window.requestIdleCallback || ((cb: () => void) => setTimeout(cb, 100))
 deferInit(() => {

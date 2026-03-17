@@ -2,9 +2,10 @@ package repo
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
@@ -34,7 +35,8 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 }
 
 func generatePublicID() string {
-	return fmt.Sprintf("user%d", rand.Intn(9000000)+1000000)
+	n, _ := rand.Int(rand.Reader, big.NewInt(9000000))
+	return fmt.Sprintf("user%d", n.Int64()+1000000)
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {

@@ -640,12 +640,12 @@ const fetchJimakuSubtitles = async () => {
     jimakuLoaded.value = true
 
     if (jimakuSubtitles.value.length === 0) {
-      jimakuError.value = 'No Japanese subtitles found for this episode'
+      jimakuError.value = t('player.error.noJpSubs')
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { error?: string; message?: string } }; message?: string }
     const msg = e.response?.data?.error || e.response?.data?.message || e.message
-    jimakuError.value = msg || 'Failed to load Japanese subtitles'
+    jimakuError.value = msg || t('player.error.loadJpSubs')
     jimakuLoaded.value = false
   } finally {
     loadingJimaku.value = false
@@ -704,7 +704,7 @@ const initVideoJsPlayer = (url: string, referer: string) => {
     const err = vjsPlayer?.error()
     if (err) {
       console.error('[Consumet Video.js Error]', err.code, err.message)
-      error.value = `Video.js error (code ${err.code}): ${err.message || t('player.error.playback')}`
+      error.value = t('player.error.videojsError', { code: err.code, message: err.message || t('player.error.playback') })
     }
   })
 
@@ -758,7 +758,7 @@ const initHlsPlayer = (url: string, referer: string) => {
                 hls?.startLoad()
               }, delay)
             } else {
-              error.value = `Network error: ${data.details}`
+              error.value = t('player.error.networkError', { details: data.details })
             }
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
@@ -767,11 +767,11 @@ const initHlsPlayer = (url: string, referer: string) => {
               decodeErrorCount++
               hls?.recoverMediaError()
             } else {
-              error.value = `Media error: ${data.details}`
+              error.value = t('player.error.mediaError', { details: data.details })
             }
             break
           default:
-            error.value = `Playback error: ${data.details}`
+            error.value = t('player.error.playbackError', { details: data.details })
         }
       }
     })

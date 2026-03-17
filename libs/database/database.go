@@ -11,12 +11,15 @@ import (
 
 // Config holds database configuration
 type Config struct {
-	Host     string `json:"host" yaml:"host"`
-	Port     int    `json:"port" yaml:"port"`
-	User     string `json:"user" yaml:"user"`
-	Password string `json:"password" yaml:"password"`
-	Database string `json:"database" yaml:"database"`
-	SSLMode  string `json:"ssl_mode" yaml:"ssl_mode"`
+	Host            string        `json:"host" yaml:"host"`
+	Port            int           `json:"port" yaml:"port"`
+	User            string        `json:"user" yaml:"user"`
+	Password        string        `json:"password" yaml:"password"`
+	Database        string        `json:"database" yaml:"database"`
+	SSLMode         string        `json:"ssl_mode" yaml:"ssl_mode"`
+	MaxOpenConns    int           `json:"max_open_conns" yaml:"max_open_conns"`
+	MaxIdleConns    int           `json:"max_idle_conns" yaml:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `json:"conn_max_lifetime" yaml:"conn_max_lifetime"`
 }
 
 // DefaultConfig returns sensible defaults
@@ -62,9 +65,22 @@ func New(cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("get sql db: %w", err)
 	}
 
-	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	maxOpenConns := cfg.MaxOpenConns
+	if maxOpenConns <= 0 {
+		maxOpenConns = 25
+	}
+	maxIdleConns := cfg.MaxIdleConns
+	if maxIdleConns <= 0 {
+		maxIdleConns = 5
+	}
+	connMaxLifetime := cfg.ConnMaxLifetime
+	if connMaxLifetime <= 0 {
+		connMaxLifetime = time.Hour
+	}
+
+	sqlDB.SetMaxOpenConns(maxOpenConns)
+	sqlDB.SetMaxIdleConns(maxIdleConns)
+	sqlDB.SetConnMaxLifetime(connMaxLifetime)
 
 	return &DB{DB: db}, nil
 }

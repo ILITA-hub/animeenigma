@@ -659,12 +659,12 @@ const fetchJimakuSubtitles = async () => {
     jimakuLoaded.value = true
 
     if (jimakuSubtitles.value.length === 0) {
-      jimakuError.value = 'No Japanese subtitles found for this episode'
+      jimakuError.value = t('player.error.noJpSubs')
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { error?: string; message?: string } }; message?: string }
     const msg = e.response?.data?.error || e.response?.data?.message || e.message
-    jimakuError.value = msg || 'Failed to load Japanese subtitles'
+    jimakuError.value = msg || t('player.error.loadJpSubs')
     jimakuLoaded.value = false
   } finally {
     loadingJimaku.value = false
@@ -957,7 +957,7 @@ const saveProgress = () => {
       episode_number: selectedEpisode.value.number,
       progress: Math.floor(currentTime.value),
       duration: Math.floor(maxTime.value) || null
-    }).catch(() => {})
+    }).catch((err) => console.warn('[HiAnime] Failed to save progress:', err))
   }
 }
 
@@ -1010,8 +1010,8 @@ const autoMarkEpisodeWatched = async () => {
       watchedEpisodes.value = selectedEpisode.value.number
     }
     emit('episodeWatched', { episode: selectedEpisode.value.number })
-  } catch {
-    // Silent fail
+  } catch (err) {
+    console.warn('[HiAnime] Failed to mark episode watched:', err)
   }
 }
 

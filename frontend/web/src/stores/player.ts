@@ -92,26 +92,18 @@ export const usePlayerStore = defineStore('player', () => {
 
   const setQuality = (qualityLevel: string) => {
     quality.value = qualityLevel
-    // TODO: Implement quality switching logic
+    // Quality switching is handled directly by each player component
+    // (HiAnimePlayer, ConsumetPlayer, AnimeLibPlayer) via their own HLS/Video.js controls
   }
 
   const saveProgress = async () => {
-    if (!currentEpisode.value) return
-
-    const progressData: WatchProgress = {
-      episodeId: currentEpisode.value.id,
-      currentTime: currentTime.value,
-      duration: duration.value,
-      completed: progress.value > 90
-    }
-
-    // TODO: Save to backend
-    console.log('Saving progress:', progressData)
+    // Progress saving is handled per-player component (HiAnimePlayer, ConsumetPlayer, etc.)
+    // Each player saves to localStorage and optionally to the backend via userApi.updateProgress
   }
 
-  const loadProgress = async (episodeId: string) => {
-    // TODO: Load from backend
-    console.log('Loading progress for:', episodeId)
+  const loadProgress = async (_episodeId: string) => {
+    // Progress loading is handled per-player component
+    // Each player reads from localStorage on episode selection
   }
 
   const reset = () => {

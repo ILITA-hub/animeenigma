@@ -54,6 +54,13 @@ type StreamConfig struct {
 }
 
 func Load() (*Config, error) {
+	if getEnv("JWT_SECRET", "") == "" {
+		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
+	}
+	if getEnv("STREAM_TOKEN_SECRET", "") == "" {
+		return nil, fmt.Errorf("STREAM_TOKEN_SECRET environment variable is required")
+	}
+
 	allowedDomains := strings.Split(getEnv("PROXY_ALLOWED_DOMAINS", ""), ",")
 	if len(allowedDomains) == 1 && allowedDomains[0] == "" {
 		allowedDomains = []string{} // Empty means allow all
@@ -85,11 +92,11 @@ func Load() (*Config, error) {
 			AllowedDomains: allowedDomains,
 		},
 		JWT: authz.JWTConfig{
-			Secret: getEnv("JWT_SECRET", "your-secret-key"),
+			Secret: getEnv("JWT_SECRET", ""),
 			Issuer: getEnv("JWT_ISSUER", "animeenigma"),
 		},
 		Stream: StreamConfig{
-			TokenSecret:      getEnv("STREAM_TOKEN_SECRET", "stream-secret-key"),
+			TokenSecret:      getEnv("STREAM_TOKEN_SECRET", ""),
 			TokenTTL:         getEnvDuration("STREAM_TOKEN_TTL", 4*time.Hour),
 			MaxUploadSize:    getEnvInt64("MAX_UPLOAD_SIZE", 2*1024*1024*1024), // 2GB
 			AllowedQualities: []string{"360p", "480p", "720p", "1080p"},

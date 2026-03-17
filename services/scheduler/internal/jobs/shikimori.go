@@ -129,11 +129,11 @@ func (j *ShikimoriSyncJob) fetchOngoingAnime(ctx context.Context) ([]OngoingAnim
 		}
 
 		var response OngoingAnimeResponse
-		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-			resp.Body.Close()
+		err = json.NewDecoder(resp.Body).Decode(&response)
+		resp.Body.Close()
+		if err != nil {
 			return nil, err
 		}
-		resp.Body.Close()
 
 		allAnime = append(allAnime, response.Data...)
 

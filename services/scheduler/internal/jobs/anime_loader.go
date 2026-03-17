@@ -22,6 +22,7 @@ type AnimeLoaderJob struct {
 	rateLimiter *rateLimiter
 
 	// Control
+	ctx     context.Context
 	stopCh  chan struct{}
 	wg      sync.WaitGroup
 	mu      sync.Mutex
@@ -67,6 +68,7 @@ func (j *AnimeLoaderJob) Start(ctx context.Context) error {
 		return nil
 	}
 	j.running = true
+	j.ctx = ctx
 	j.mu.Unlock()
 
 	// Reset stuck tasks on startup
@@ -119,7 +121,7 @@ func (j *AnimeLoaderJob) runWorker() {
 
 // processNextTask fetches and processes the next pending task
 func (j *AnimeLoaderJob) processNextTask() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(j.ctx, 30*time.Second)
 	defer cancel()
 
 	// Wait for rate limiter

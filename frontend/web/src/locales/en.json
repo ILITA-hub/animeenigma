@@ -140,7 +140,13 @@
       "serverBusy": "Server is busy. Try later or use Kodik.",
       "hlsUnsupported": "Your browser doesn't support HLS",
       "serverLoaded": "Server is loaded. If video lags, try Kodik.",
-      "submitReport": "Report submission error"
+      "submitReport": "Report submission error",
+      "noJpSubs": "No Japanese subtitles found for this episode",
+      "loadJpSubs": "Failed to load Japanese subtitles",
+      "networkError": "Network error: {details}",
+      "mediaError": "Media error: {details}",
+      "playbackError": "Playback error: {details}",
+      "videojsError": "Video.js error (code {code}): {message}"
     }
   },
   "search": {

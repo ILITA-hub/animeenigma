@@ -3,12 +3,35 @@ package repo
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// allowedSortFields is a whitelist of column names that can appear in ORDER BY.
+var allowedSortFields = map[string]bool{
+	"updated_at": true,
+	"created_at": true,
+	"score":      true,
+	"status":     true,
+}
+
+// sanitizedOrderClause returns a safe ORDER BY clause built from validated
+// sort field and direction. If either value is invalid, it falls back to
+// "updated_at DESC".
+func sanitizedOrderClause(sort, order string) string {
+	if !allowedSortFields[sort] {
+		return "updated_at DESC"
+	}
+	dir := strings.ToUpper(order)
+	if dir != "ASC" && dir != "DESC" {
+		dir = "DESC"
+	}
+	return sort + " " + dir
+}
 
 type ListRepository struct {
 	db *gorm.DB
@@ -113,6 +136,8 @@ func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string
 }
 
 func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+	params.Validate() // defense in depth
+
 	var entries []*domain.AnimeListEntry
 	var total int64
 
@@ -125,10 +150,9 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status 
 		return nil, 0, err
 	}
 
-	orderClause := params.Sort + " " + params.Order
 	err := base.Session(&gorm.Session{}).
 		Preload("Anime").Preload("Anime.Genres").
-		Order(orderClause).
+		Order(sanitizedOrderClause(params.Sort, params.Order)).
 		Offset(params.Offset()).
 		Limit(params.PerPage).
 		Find(&entries).Error
@@ -147,6 +171,8 @@ func (r *ListRepository) GetByUserStatuses(ctx context.Context, userID string) (
 }
 
 func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+	params.Validate() // defense in depth
+
 	var entries []*domain.AnimeListEntry
 	var total int64
 
@@ -156,10 +182,9 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 		return nil, 0, err
 	}
 
-	orderClause := params.Sort + " " + params.Order
 	err := base.Session(&gorm.Session{}).
 		Preload("Anime").Preload("Anime.Genres").
-		Order(orderClause).
+		Order(sanitizedOrderClause(params.Sort, params.Order)).
 		Offset(params.Offset()).
 		Limit(params.PerPage).
 		Find(&entries).Error
