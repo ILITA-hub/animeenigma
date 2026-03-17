@@ -32,12 +32,8 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 		return nil, errors.InvalidInput("score must be between 1 and 10")
 	}
 
-	// Check existing score for activity tracking
+	// Check if review already exists (for activity dedup + "new" vs "update")
 	existingReview, _ := s.reviewRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
-	var oldScore int
-	if existingReview != nil {
-		oldScore = existingReview.Score
-	}
 
 	review := &domain.Review{
 		UserID:     userID,
@@ -51,29 +47,8 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 		return nil, errors.Wrap(err, errors.CodeInternal, "failed to save review")
 	}
 
-	// Record score activity event (only if score actually changed)
-	if oldScore != req.Score {
-		activityEvent := &domain.ActivityEvent{
-			UserID:   userID,
-			Username: username,
-			AnimeID:  req.AnimeID,
-			Type:     "score",
-			OldValue: "",
-			NewValue: strconv.Itoa(req.Score),
-		}
-		if oldScore > 0 {
-			activityEvent.OldValue = strconv.Itoa(oldScore)
-		}
-		if err := s.activityRepo.Create(ctx, activityEvent); err != nil {
-			s.log.Errorw("failed to record score activity",
-				"user_id", userID,
-				"anime_id", req.AnimeID,
-				"error", err,
-			)
-		}
-	}
-
 	// Record review activity event (deduplicated per day)
+	// The review event already includes the score, so no separate score event needed
 	isNewReview := existingReview == nil
 	reviewEvent := &domain.ActivityEvent{
 		UserID:   userID,
