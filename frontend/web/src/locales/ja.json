@@ -198,6 +198,14 @@
       "hoursAgo": "{n}時間前",
       "daysAgo": "{n}日前"
     },
+    "export": {
+      "title": "リストをエクスポート",
+      "description": "すべてのデータ、スコア、IDを含むアニメリストをJSONファイルとしてダウンロードします。",
+      "button": "JSONにエクスポート",
+      "exporting": "エクスポート中...",
+      "error": "リストのエクスポートに失敗しました。後でもう一度お試しください。",
+      "rateLimited": "再度エクスポートするまで1分お待ちください。"
+    },
     "settings": {
       "account": "アカウント",
       "changePassword": "パスワード変更",

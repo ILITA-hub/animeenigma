@@ -198,6 +198,14 @@
       "hoursAgo": "{n}h ago",
       "daysAgo": "{n}d ago"
     },
+    "export": {
+      "title": "Export List",
+      "description": "Download your full anime list as a JSON file with all data, scores, and IDs.",
+      "button": "Export to JSON",
+      "exporting": "Exporting...",
+      "error": "Failed to export list. Please try again later.",
+      "rateLimited": "Please wait a minute before exporting again."
+    },
     "settings": {
       "account": "Account",
       "changePassword": "Change Password",

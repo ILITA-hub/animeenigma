@@ -85,6 +85,7 @@ func main() {
 	malImportHandler := handler.NewMALImportHandler(listService, syncRepo, log)
 	malExportHandler := handler.NewMALExportHandler(malExportService, log)
 	shikimoriImportHandler := handler.NewShikimoriImportHandler(listService, syncRepo, log)
+	exportHandler := handler.NewExportHandler(listService, log)
 	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir)
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
@@ -93,7 +94,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

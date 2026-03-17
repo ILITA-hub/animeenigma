@@ -201,6 +201,7 @@ export const userApi = {
   importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),
   getImportJobStatus: (jobId: string) => apiClient.get(`/users/import/${jobId}`),
   getSyncStatus: () => apiClient.get('/users/sync/status'),
+  exportJSON: () => apiClient.get('/users/export/json', { responseType: 'blob' }),
   migrateListEntry: (oldAnimeId: string, newAnimeId: string) =>
     apiClient.post('/users/watchlist/migrate', {
       old_anime_id: oldAnimeId,

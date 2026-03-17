@@ -23,6 +23,7 @@ func NewRouter(
 	reportHandler *handler.ReportHandler,
 	syncHandler *handler.SyncHandler,
 	activityHandler *handler.ActivityHandler,
+	exportHandler *handler.ExportHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -91,6 +92,9 @@ func NewRouter(
 			r.Get("/mal-export", malExportHandler.GetUserExports)
 			r.Get("/mal-export/{exportId}", malExportHandler.GetExportStatus)
 			r.Delete("/mal-export/{exportId}", malExportHandler.CancelExport)
+
+			// JSON export
+			r.Get("/export/json", exportHandler.ExportJSON)
 
 			// Error reports
 			r.Post("/report", reportHandler.SubmitReport)

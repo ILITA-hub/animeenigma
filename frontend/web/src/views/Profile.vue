@@ -569,6 +569,29 @@
                 </div>
               </div>
 
+              <!-- Export -->
+              <div class="glass-card p-6">
+                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.export.title') }}</h3>
+                <p class="text-white/60 text-sm mb-4">{{ $t('profile.export.description') }}</p>
+                <Button
+                  variant="primary"
+                  :disabled="exportingJSON"
+                  @click="exportToJSON"
+                >
+                  <svg v-if="exportingJSON" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  {{ exportingJSON ? $t('profile.export.exporting') : $t('profile.export.button') }}
+                </Button>
+                <div v-if="exportError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
+                  <p class="text-sm text-pink-400">{{ exportError }}</p>
+                </div>
+              </div>
+
               <!-- Public Profile -->
               <div class="glass-card p-6">
                 <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.publicProfile') }}</h3>
@@ -1131,6 +1154,10 @@ const pollIntervals: Record<string, ReturnType<typeof setInterval> | null> = {
   shikimori: null,
 }
 
+// Export
+const exportingJSON = ref(false)
+const exportError = ref<string | null>(null)
+
 // Public Profile settings
 const publicId = ref('')
 const publicStatuses = ref<string[]>([])
@@ -1578,6 +1605,32 @@ const startImport = async (source: 'mal' | 'shikimori') => {
 
 const importMAL = () => startImport('mal')
 const importShikimori = () => startImport('shikimori')
+
+const exportToJSON = async () => {
+  exportingJSON.value = true
+  exportError.value = null
+  try {
+    const resp = await userApi.exportJSON()
+    const blob = new Blob([resp.data], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `animeenigma-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err: unknown) {
+    const axiosErr = err as { response?: { status?: number } }
+    if (axiosErr?.response?.status === 429) {
+      exportError.value = t('profile.export.rateLimited')
+    } else {
+      exportError.value = t('profile.export.error')
+    }
+  } finally {
+    exportingJSON.value = false
+  }
+}
 
 const checkActiveSyncJobs = async () => {
   try {
