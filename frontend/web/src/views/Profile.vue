@@ -1345,6 +1345,30 @@ const fetchWatchlist = async (isOwn: boolean) => {
   watchlistPage.value = 1
   await fetchWatchlistPage()
   _watchlistInitialized.value = true
+
+  // Prefetch page 1 of all other status tabs in background for instant switching
+  const allStatuses = isOwn
+    ? ['all', 'watching', 'plan_to_watch', 'completed', 'on_hold', 'dropped']
+    : ['all', ...(profileUser.value?.public_statuses || [])]
+  const currentStatus = watchlistFilter.value
+  for (const status of allStatuses) {
+    if (status === currentStatus) continue
+    // Fire and forget — populate the cache silently
+    const key = pageCacheKey(status, 1)
+    if (!pageCache.has(key)) {
+      const statusParam = status === 'all' ? undefined : status
+      if (isOwn) {
+        userApi.getWatchlist({ page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), sort: 'updated_at', order: 'desc' })
+          .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
+          .catch(() => {})
+      } else if (profileUser.value?.id) {
+        const ps = profileUser.value.public_statuses || []
+        publicApi.getPublicWatchlist(profileUser.value.id, { page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), ...(!statusParam && ps.length && { statuses: ps.join(',') }) })
+          .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
+          .catch(() => {})
+      }
+    }
+  }
 }
 
 // Server-side pagination watchers (defined after fetchWatchlistPage)
