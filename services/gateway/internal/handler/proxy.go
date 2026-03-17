@@ -61,6 +61,11 @@ func (h *ProxyHandler) ProxyToPrometheus(w http.ResponseWriter, r *http.Request)
 	h.proxy(w, r, "prometheus")
 }
 
+// ProxyToLoki proxies requests to Loki
+func (h *ProxyHandler) ProxyToLoki(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "loki")
+}
+
 func (h *ProxyHandler) proxy(w http.ResponseWriter, r *http.Request, service string) {
 	resp, err := h.proxyService.Forward(r, service)
 	if err != nil {

@@ -7,8 +7,8 @@ contactPoints:
       - uid: telegram-alerts
         type: telegram
         settings:
-          bottoken: $__env{TELEGRAM_ALERTS_BOT_TOKEN}
-          chatid: $__env{TELEGRAM_ADMIN_CHAT_ID}
+          bottoken: "BOTTOKEN_PLACEHOLDER"
+          chatid: "CHATID_PLACEHOLDER"
           parse_mode: HTML
           message: |
             {{ if eq .Status "firing" }}🔴{{ else }}🟢{{ end }} <b>{{ .Status | title }}</b>

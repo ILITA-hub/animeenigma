@@ -178,6 +178,15 @@ services:
     image: grafana/grafana:10.3.3
     container_name: animeenigma-grafana
     restart: unless-stopped
+    user: "0"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        rm -rf /etc/grafana/provisioning
+        cp -a /etc/grafana/provisioning-tpl /etc/grafana/provisioning
+        sed -i "s|CHATID_PLACEHOLDER|$$TELEGRAM_ADMIN_CHAT_ID|g;s|BOTTOKEN_PLACEHOLDER|$$TELEGRAM_ALERTS_BOT_TOKEN|g" /etc/grafana/provisioning/alerting/contactpoints.yml
+        exec /run.sh
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -195,7 +204,7 @@ services:
     ports:
       - "127.0.0.1:3004:3000"
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning-tpl:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:

@@ -39,6 +39,7 @@ type ServiceURLs struct {
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
+	LokiService       string
 	// Infrastructure services (for status page)
 	SchedulerService string
 	RedisAddr        string
@@ -77,6 +78,7 @@ func Load() (*Config, error) {
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
 			PrometheusService: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090"),
+			LokiService:       getEnv("LOKI_SERVICE_URL", "http://loki:3100"),
 			// Infrastructure services (for status page)
 			SchedulerService: getEnv("SCHEDULER_SERVICE_URL", "http://scheduler:8085"),
 			RedisAddr:        getEnv("REDIS_ADDR", "redis:6379"),
