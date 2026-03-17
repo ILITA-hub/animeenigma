@@ -209,7 +209,7 @@
               <router-link
                 to="/auth"
                 class="px-4 py-3 text-cyan-400 hover:text-cyan-300 hover:bg-white/10 rounded-lg transition-colors font-medium"
-                @click="mobileMenuOpen = false"
+                @click="() => { showLogin(); mobileMenuOpen = false }"
               >
                 {{ $t('nav.login') }}
               </router-link>
@@ -281,6 +281,7 @@ const setLocale = (code: string) => {
 }
 
 const showLogin = () => {
+  sessionStorage.setItem('returnUrl', router.currentRoute.value.fullPath)
   router.push('/auth')
 }
 

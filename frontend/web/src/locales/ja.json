@@ -375,7 +375,8 @@
     "backHome": "ホームに戻る",
     "loginError": "ログインエラー",
     "registerError": "登録エラー",
-    "telegramLoginError": "Telegramログインエラー"
+    "telegramLoginError": "Telegramログインエラー",
+    "loginWithTelegram": "Telegramでログイン"
   },
   "notFound": {
     "code": "404",

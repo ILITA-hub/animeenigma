@@ -52,6 +52,7 @@ func NewRouter(
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
 			r.Post("/telegram", authHandler.TelegramLogin)
+			r.Get("/telegram/config", authHandler.GetTelegramConfig)
 			r.Post("/refresh", authHandler.RefreshToken)
 			r.Post("/logout", authHandler.Logout)
 		})

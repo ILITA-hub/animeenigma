@@ -12,13 +12,19 @@ export function useAuth() {
   const isAuthenticated = computed(() => authStore.isAuthenticated)
   const error = computed(() => authStore.error)
 
+  const redirectAfterLogin = () => {
+    const returnUrl = sessionStorage.getItem('returnUrl')
+    sessionStorage.removeItem('returnUrl')
+    router.push(returnUrl || '/')
+  }
+
   const login = async (credentials: LoginCredentials) => {
     isLoading.value = true
     try {
       const success = await authStore.login(credentials)
       if (success) {
         await authStore.fetchUser()
-        router.push('/')
+        redirectAfterLogin()
       }
       return success
     } finally {
@@ -32,7 +38,7 @@ export function useAuth() {
       const success = await authStore.register(data)
       if (success) {
         await authStore.fetchUser()
-        router.push('/')
+        redirectAfterLogin()
       }
       return success
     } finally {

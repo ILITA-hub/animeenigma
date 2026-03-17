@@ -72,6 +72,24 @@ Track issues discovered during development. Each entry should include root cause
 - **Lesson learned:** Don't use chi `middleware.Timeout` on a reverse proxy gateway — it buffers responses via `http.TimeoutHandler`. Rely on server `WriteTimeout` and per-client HTTP timeouts instead.
 - **Status:** Fix deployed, monitoring
 
+### ISS-006: HLS bufferAppendError on mobile Safari (iOS)
+- **Date:** 2026-03-17
+- **Severity:** Medium (affects mobile Safari users on Consumet player)
+- **Affected:** Consumet player (vidcloud server), iOS Safari 18.7 (iPhone)
+- **Symptom:** Video fails to play with `Media error: bufferAppendError`. User reported on "Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru" episode 1.
+- **Stream URL:** `vault-16.owocdn.top` m3u8 via vidcloud
+- **Root cause (suspected):** HLS.js buffer append failure on mobile Safari — likely codec mismatch or corrupted segments from upstream CDN. Safari's MSE implementation is stricter than Chrome's and rejects segments that Chrome accepts.
+- **Contributing factors:**
+  - Mobile Safari has limited MSE buffer space compared to desktop
+  - Upstream CDN may serve segments with codec parameters Safari doesn't support (e.g. HEVC when only H.264 expected)
+  - Video.js/HLS.js error recovery may not handle Safari-specific buffer errors correctly
+- **Remaining work:**
+  - Investigate if specific codecs in vidcloud streams cause Safari rejection
+  - Consider adding Safari-specific HLS.js config (e.g. `appendErrorMaxRetry`, `maxBufferLength`)
+  - Auto-switch to alternative server (vidstreaming) when buffer errors occur
+  - Test on iOS Safari with different HLS.js configurations
+- **Status:** Documented, not yet investigated
+
 ## Resolved Issues
 
 ### ISS-003: Error reports received with empty fields

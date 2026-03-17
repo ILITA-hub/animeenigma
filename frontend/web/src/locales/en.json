@@ -375,7 +375,8 @@
     "backHome": "Back to Home",
     "loginError": "Login error",
     "registerError": "Registration error",
-    "telegramLoginError": "Telegram login error"
+    "telegramLoginError": "Telegram login error",
+    "loginWithTelegram": "Log in with Telegram"
   },
   "notFound": {
     "code": "404",

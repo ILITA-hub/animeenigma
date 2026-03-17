@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -21,16 +22,18 @@ const (
 )
 
 type AuthHandler struct {
-	authService  *service.AuthService
-	cookieConfig config.CookieConfig
-	log          *logger.Logger
+	authService    *service.AuthService
+	cookieConfig   config.CookieConfig
+	telegramConfig config.TelegramConfig
+	log            *logger.Logger
 }
 
-func NewAuthHandler(authService *service.AuthService, cookieConfig config.CookieConfig, log *logger.Logger) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, cookieConfig config.CookieConfig, telegramConfig config.TelegramConfig, log *logger.Logger) *AuthHandler {
 	return &AuthHandler{
-		authService:  authService,
-		cookieConfig: cookieConfig,
-		log:          log,
+		authService:    authService,
+		cookieConfig:   cookieConfig,
+		telegramConfig: telegramConfig,
+		log:            log,
 	}
 }
 
@@ -315,5 +318,21 @@ func (h *AuthHandler) ResolveApiKey(w http.ResponseWriter, r *http.Request) {
 		"user_id":  claims.UserID,
 		"username": claims.Username,
 		"role":     claims.Role,
+	})
+}
+
+// GetTelegramConfig returns public Telegram bot info for the frontend OAuth flow.
+// The bot_id is extracted from the bot token (format: "BOT_ID:SECRET").
+func (h *AuthHandler) GetTelegramConfig(w http.ResponseWriter, r *http.Request) {
+	botID := ""
+	if h.telegramConfig.BotToken != "" {
+		if parts := strings.SplitN(h.telegramConfig.BotToken, ":", 2); len(parts) == 2 {
+			botID = parts[0]
+		}
+	}
+
+	httputil.OK(w, map[string]string{
+		"bot_id":   botID,
+		"bot_name": h.telegramConfig.BotName,
 	})
 }

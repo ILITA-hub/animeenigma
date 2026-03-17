@@ -139,6 +139,7 @@ function handleClick() {
   if (authStore.isAuthenticated) {
     showModal.value = true
   } else {
+    sessionStorage.setItem('returnUrl', router.currentRoute.value.fullPath)
     router.push({ name: 'auth' })
   }
 }

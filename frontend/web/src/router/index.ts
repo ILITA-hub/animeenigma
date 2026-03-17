@@ -124,7 +124,8 @@ router.beforeEach((to, _from, next) => {
 
   // Check authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next({ name: 'home' })
+    sessionStorage.setItem('returnUrl', to.fullPath)
+    next({ name: 'auth' })
   } else {
     next()
   }

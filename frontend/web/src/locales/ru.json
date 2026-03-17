@@ -375,7 +375,8 @@
     "backHome": "Вернуться на главную",
     "loginError": "Ошибка входа",
     "registerError": "Ошибка регистрации",
-    "telegramLoginError": "Ошибка входа через Telegram"
+    "telegramLoginError": "Ошибка входа через Telegram",
+    "loginWithTelegram": "Войти через Telegram"
   },
   "notFound": {
     "code": "404",

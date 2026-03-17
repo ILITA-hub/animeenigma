@@ -64,7 +64,7 @@ func main() {
 	userService := service.NewUserService(userRepo, log)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, log)
+	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, cfg.Telegram, log)
 	userHandler := handler.NewUserHandler(userService, log)
 
 	// Initialize metrics collector
