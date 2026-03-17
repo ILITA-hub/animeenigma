@@ -142,18 +142,6 @@
                   :placeholder="$t('profile.watchlist.searchPlaceholder')"
                   class="flex-shrink-0 w-48 px-3 py-2 rounded-full text-sm bg-white/5 text-white/80 border border-transparent focus:border-cyan-500/30 focus:outline-none placeholder-white/40 mr-auto"
                 >
-                <!-- Genre Filter -->
-                <div class="w-44">
-                  <GenreFilterPopup
-                    v-model="selectedGenre"
-                    :genres="watchlistGenres"
-                    :placeholder="$t('profile.sort.genre')"
-                    :all-label="$t('profile.genreFilter.all')"
-                    :search-placeholder="$t('profile.genreFilter.search')"
-                    size="sm"
-                    show-emoji
-                  />
-                </div>
                 <!-- Sort -->
                 <div class="w-36">
                   <Select
@@ -193,6 +181,15 @@
                 </button>
               </div>
 
+              <!-- Table/Grid Content with Loading Overlay -->
+              <div class="relative">
+              <div v-if="watchlistPageLoading && watchlist.length > 0" class="absolute inset-0 bg-black/30 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+                <svg class="w-8 h-8 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+
               <!-- Table View -->
               <div v-if="viewMode === 'table'" class="overflow-x-auto">
                 <table class="w-full text-sm">
@@ -215,7 +212,7 @@
                       :key="anime.anime_id"
                       class="border-b border-white/5 hover:bg-white/5 transition-colors"
                     >
-                      <td class="py-3 pr-2 text-white/40">{{ index + 1 }}</td>
+                      <td class="py-3 pr-2 text-white/40">{{ (watchlistPage - 1) * watchlistPerPage + index + 1 }}</td>
                       <td class="py-3 px-2">
                         <router-link :to="`/anime/${anime.anime_id}`" class="block w-12 h-16 rounded overflow-hidden bg-surface">
                           <img
@@ -440,6 +437,8 @@
                   </template>
                 </div>
               </div>
+
+              </div><!-- end relative wrapper -->
 
               <!-- Pagination -->
               <PaginationBar
@@ -807,7 +806,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Badge, Button, Modal, Tabs, Select, GenreFilterPopup, PaginationBar, type SelectOption } from '@/components/ui'
+import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
 import { userApi, publicApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
@@ -932,9 +931,25 @@ const watchlistPage = ref(1)
 const watchlistTotalPages = ref(0)
 const watchlistTotalCount = ref(0)
 const watchlistPerPage = 24
-const watchlistSort = ref('updated_at')
-const watchlistOrder = ref('desc')
 const watchlistPageLoading = ref(false)
+const _watchlistInitialized = ref(false)
+
+// Page cache
+interface CachedPage {
+  data: WatchlistEntry[]
+  totalPages: number
+  totalCount: number
+  fetchedAt: number
+}
+const pageCache = new Map<string, CachedPage>()
+const PAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+function pageCacheKey(status: string, page: number): string {
+  return `${status}:${page}`
+}
+function clearPageCache() {
+  pageCache.clear()
+}
 
 // Inline editing
 const editingScore = ref<string | null>(null)
@@ -946,20 +961,6 @@ const sortDirection = ref<'asc' | 'desc'>((localStorage.getItem('profile_sortDir
 
 watch(sortKey, (v) => localStorage.setItem('profile_sortKey', v))
 watch(sortDirection, (v) => localStorage.setItem('profile_sortDir', v))
-
-// Genre filter
-const selectedGenre = ref('')
-const watchlistGenres = computed(() => {
-  const map = new Map<string, { id: string; name: string; name_ru?: string; count: number }>()
-  for (const entry of watchlist.value) {
-    for (const g of entry.anime?.genres || []) {
-      const existing = map.get(g.id)
-      if (existing) existing.count++
-      else map.set(g.id, { id: g.id, name: g.name, name_ru: g.name_ru, count: 1 })
-    }
-  }
-  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
-})
 
 const sortOptions = computed<SelectOption[]>(() => [
   { value: 'title', label: t('profile.sort.title') },
@@ -1012,12 +1013,19 @@ const watchlistFilters = computed(() => {
   return statuses.map(status => {
     let count = 0
     if (status === 'all') {
-      count = watchlistTotalCount.value
+      if (isOwnProfile.value) {
+        count = watchlistStore.entries.length
+      } else {
+        // Sum of all public status counts, fallback to server total
+        const sumCounts = Object.values(publicStatusCounts.value).reduce((s, c) => s + c, 0)
+        count = sumCounts || watchlistTotalCount.value
+      }
     } else if (statusMap) {
-      // Count from the lightweight statuses endpoint
+      // Count from the lightweight statuses endpoint (own profile)
       count = [...statusMap.entries()].filter(([, s]) => s === status).length
     } else {
-      count = watchlist.value.filter(a => a.status === status).length
+      // Public profile: use per-status counts from parallel requests
+      count = publicStatusCounts.value[status] ?? 0
     }
     return {
       value: status,
@@ -1040,11 +1048,6 @@ const filteredWatchlist = computed(() => {
       const nameJp = a.anime?.name_jp?.toLowerCase() || ''
       return name.includes(q) || nameRu.includes(q) || nameJp.includes(q)
     })
-  }
-
-  // Genre filter
-  if (selectedGenre.value) {
-    list = list.filter(a => a.anime?.genres?.some(g => g.id === selectedGenre.value))
   }
 
   // Sort
@@ -1073,18 +1076,29 @@ const filteredWatchlist = computed(() => {
 
 // Stats
 const watchlistStats = computed(() => {
-  // Use the full statuses data from the store (includes score + episodes) for accurate stats
-  const allEntries = watchlistStore.entries
-  const scored = allEntries.filter(a => a.score && a.score > 0)
-  const avgScore = scored.length > 0
-    ? (scored.reduce((sum, a) => sum + (a.score || 0), 0) / scored.length).toFixed(1)
-    : '-'
-  const completedCount = allEntries.filter(a => a.status === 'completed').length
-  return {
-    total: allEntries.length || watchlistTotalCount.value || watchlist.value.length,
-    avgScore,
-    totalEpisodes: allEntries.reduce((sum, a) => sum + (a.episodes || 0), 0),
-    completed: completedCount,
+  if (_isOwnProfile.value) {
+    // Own profile: use full statuses data from the store
+    const allEntries = watchlistStore.entries
+    const scored = allEntries.filter(a => a.score && a.score > 0)
+    const avgScore = scored.length > 0
+      ? (scored.reduce((sum, a) => sum + (a.score || 0), 0) / scored.length).toFixed(1)
+      : '-'
+    const completedCount = allEntries.filter(a => a.status === 'completed').length
+    return {
+      total: allEntries.length || watchlistTotalCount.value || watchlist.value.length,
+      avgScore,
+      totalEpisodes: allEntries.reduce((sum, a) => sum + (a.episodes || 0), 0),
+      completed: completedCount,
+    }
+  } else {
+    // Public profile: use publicStatusCounts, show '-' for unavailable stats
+    const sumCounts = Object.values(publicStatusCounts.value).reduce((s, c) => s + c, 0)
+    return {
+      total: sumCounts || watchlistTotalCount.value,
+      avgScore: '-',
+      totalEpisodes: '-',
+      completed: publicStatusCounts.value['completed'] ?? 0,
+    }
   }
 })
 
@@ -1204,66 +1218,138 @@ const fetchProfile = async () => {
 // Track current profile ownership for fetchWatchlistPage
 const _isOwnProfile = ref(false)
 
-const fetchWatchlistPage = async () => {
+// Public profile status counts
+const publicStatusCounts = ref<Record<string, number>>({})
+
+const fetchPublicStatusCounts = async (userId: string, statuses: string[]) => {
+  const promises = statuses.map(async (status) => {
+    try {
+      const response = await publicApi.getPublicWatchlist(userId, {
+        status,
+        page: 1,
+        per_page: 1,
+      })
+      return { status, count: response.data?.meta?.total_count || 0 }
+    } catch {
+      return { status, count: 0 }
+    }
+  })
+  const results = await Promise.all(promises)
+  const counts: Record<string, number> = {}
+  for (const { status, count } of results) {
+    counts[status] = count
+  }
+  publicStatusCounts.value = counts
+}
+
+const fetchWatchlistPage = async (backgroundRefresh = false) => {
   if (!profileUser.value) return
 
-  watchlistPageLoading.value = true
-  loadingWatchlist.value = watchlistPage.value === 1
+  const currentFilter = watchlistFilter.value
+  const currentPage = watchlistPage.value
+  const key = pageCacheKey(currentFilter, currentPage)
+
+  // Show cached data immediately if available
+  const cached = pageCache.get(key)
+  if (cached && !backgroundRefresh) {
+    watchlist.value = cached.data
+    watchlistTotalPages.value = cached.totalPages
+    watchlistTotalCount.value = cached.totalCount
+    // If cache is fresh enough, just do a background refresh
+    if (Date.now() - cached.fetchedAt < PAGE_CACHE_TTL) {
+      fetchWatchlistPage(true) // background refresh, no await
+      return
+    }
+  }
+
+  if (!backgroundRefresh) {
+    watchlistPageLoading.value = true
+    if (currentPage === 1 && !cached) {
+      loadingWatchlist.value = true
+    }
+  }
+
   try {
-    const statusParam = watchlistFilter.value === 'all' ? undefined : watchlistFilter.value
+    const statusParam = currentFilter === 'all' ? undefined : currentFilter
+
+    let data: any[] = []
+    let meta: any
 
     if (_isOwnProfile.value) {
       const response = await userApi.getWatchlist({
-        page: watchlistPage.value,
+        page: currentPage,
         per_page: watchlistPerPage,
         ...(statusParam && { status: statusParam }),
-        sort: watchlistSort.value,
-        order: watchlistOrder.value,
+        sort: 'updated_at',
+        order: 'desc',
       })
-      const data = response.data?.data || response.data || []
-      const meta = response.data?.meta
-      watchlist.value = Array.isArray(data) ? data : []
-      watchlistTotalPages.value = meta?.total_pages || 0
-      watchlistTotalCount.value = meta?.total_count || 0
+      data = response.data?.data || response.data || []
+      meta = response.data?.meta
     } else {
       const userId = profileUser.value.id
-      if (!userId) {
-        console.error('No user ID for public watchlist')
-        return
-      }
-      const publicStatuses = profileUser.value.public_statuses || []
+      if (!userId) return
+      const visibleStatuses = profileUser.value.public_statuses || []
       const response = await publicApi.getPublicWatchlist(userId, {
-        page: watchlistPage.value,
+        page: currentPage,
         per_page: watchlistPerPage,
         ...(statusParam && { status: statusParam }),
-        ...(publicStatuses.length && !statusParam && { statuses: publicStatuses.join(',') }),
+        ...(visibleStatuses.length && !statusParam && { statuses: visibleStatuses.join(',') }),
       })
-      const data = response.data?.data || response.data || []
-      const meta = response.data?.meta
-      watchlist.value = Array.isArray(data) ? data : []
-      watchlistTotalPages.value = meta?.total_pages || 0
-      watchlistTotalCount.value = meta?.total_count || 0
+      data = response.data?.data || response.data || []
+      meta = response.data?.meta
+    }
+
+    const newData = Array.isArray(data) ? data : []
+    const newTotalPages = meta?.total_pages || 0
+    const newTotalCount = meta?.total_count || 0
+
+    // Store in cache
+    pageCache.set(key, {
+      data: newData,
+      totalPages: newTotalPages,
+      totalCount: newTotalCount,
+      fetchedAt: Date.now(),
+    })
+
+    // Race condition guard: only update state if filter/page hasn't changed while we were fetching
+    if (watchlistFilter.value === currentFilter && watchlistPage.value === currentPage) {
+      watchlist.value = newData
+      watchlistTotalPages.value = newTotalPages
+      watchlistTotalCount.value = newTotalCount
     }
   } catch (err) {
     console.error('Failed to fetch watchlist:', err)
   } finally {
-    watchlistPageLoading.value = false
-    loadingWatchlist.value = false
+    if (!backgroundRefresh) {
+      watchlistPageLoading.value = false
+      loadingWatchlist.value = false
+    }
   }
 }
 
 const fetchWatchlist = async (isOwn: boolean) => {
   _isOwnProfile.value = isOwn
+  _watchlistInitialized.value = false
+  watchlistFilter.value = isOwn ? 'watching' : 'all'
   if (isOwn) {
     // Also fetch lightweight statuses for badge map and per-status counts
     await watchlistStore.fetchStatuses(true)
   }
+  // Fetch public status counts in background (fire and forget)
+  if (!isOwn && profileUser.value) {
+    const visibleStatuses = profileUser.value.public_statuses || []
+    if (visibleStatuses.length > 0) {
+      fetchPublicStatusCounts(profileUser.value.id, visibleStatuses)
+    }
+  }
   watchlistPage.value = 1
   await fetchWatchlistPage()
+  _watchlistInitialized.value = true
 }
 
 // Server-side pagination watchers (defined after fetchWatchlistPage)
 watch(watchlistFilter, () => {
+  if (!_watchlistInitialized.value) return
   watchlistPage.value = 1
   fetchWatchlistPage()
 })
@@ -1295,7 +1381,9 @@ const updateAnimeStatus = async (animeId: string, newStatus: string) => {
     if (anime) {
       anime.status = newStatus
     }
+    clearPageCache()
     watchlistStore.invalidate()
+    await watchlistStore.fetchStatuses(true)
   } catch (err) {
     console.error('Failed to update status:', err)
   }
@@ -1315,6 +1403,7 @@ const updateAnimeDate = async (animeId: string, field: 'started_at' | 'completed
 
     // Update local state
     anime[field] = dateValue
+    clearPageCache()
     watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update date:', err)
@@ -1334,6 +1423,7 @@ const finishEditScore = async (animeId: string, rawValue: string) => {
       score,
     })
     anime.score = score
+    clearPageCache()
     watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update score:', err)
@@ -1354,6 +1444,7 @@ const updateAnimeEpisodes = async (animeId: string, episodes: number) => {
       episodes: clamped,
     })
     anime.episodes = clamped
+    clearPageCache()
     watchlistStore.invalidate()
   } catch (err) {
     console.error('Failed to update episodes:', err)
@@ -1364,7 +1455,9 @@ const removeFromWatchlist = async (animeId: string) => {
   try {
     await userApi.removeFromWatchlist(animeId)
     watchlist.value = watchlist.value.filter(a => a.anime_id !== animeId)
+    clearPageCache()
     watchlistStore.invalidate()
+    await watchlistStore.fetchStatuses(true)
   } catch (err) {
     console.error('Failed to remove from watchlist:', err)
   }
