@@ -1,8 +1,8 @@
 <template>
-  <div class="consumet-player">
+  <div class="consumet-player consumet-player-wrapper">
     <!-- Loading state for episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
     </div>
 
     <!-- No episodes available -->
@@ -24,7 +24,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
-              <div class="w-10 h-10 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}</p>
             </div>
           </div>
@@ -100,7 +100,7 @@
               :disabled="markingWatched"
               class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
               :class="episodeMarkedWatched
-                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/10 text-white hover:bg-white/20'"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -117,9 +117,9 @@
               class="relative w-12 h-10 rounded-lg text-sm font-medium transition-all"
               :class="[
                 selectedEpisode?.id === ep.id
-                  ? 'bg-green-500 text-white'
+                  ? 'accent-bg text-white'
                   : isEpisodeWatched(ep.number)
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                    ? 'accent-bg-muted accent-text border accent-border hover:brightness-125'
                     : 'bg-white/10 text-white hover:bg-white/20'
               ]"
               :title="ep.title || `Episode ${ep.number}`"
@@ -128,7 +128,7 @@
               <!-- Watched indicator -->
               <span
                 v-if="isEpisodeWatched(ep.number) && selectedEpisode?.id !== ep.id"
-                class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center"
+                class="absolute -top-1 -right-1 w-3 h-3 accent-bg rounded-full flex items-center justify-center"
               >
                 <svg class="w-2 h-2 text-black" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -154,7 +154,7 @@
             @click="switchPlayerType('videojs')"
             class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
             :class="playerType === 'videojs'
-              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+              ? 'accent-bg-muted accent-text border accent-border'
               : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
           >
             Video.js
@@ -163,7 +163,7 @@
             @click="switchPlayerType('native')"
             class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
             :class="playerType === 'native'
-              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+              ? 'accent-bg-muted accent-text border accent-border'
               : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
           >
             {{ $t('player.native') }}
@@ -185,14 +185,14 @@
             @click="selectServer(server)"
             class="w-full text-left p-3 rounded-lg transition-all"
             :class="selectedServer?.name === server.name
-              ? 'bg-green-500/20 border border-green-500/50'
+              ? 'accent-bg-muted border accent-border'
               : 'bg-white/5 border border-transparent hover:bg-white/10'"
           >
             <div class="flex items-center justify-between gap-2">
               <p class="text-white font-medium">{{ server.name }}</p>
               <div
                 v-if="selectedServer?.name === server.name"
-                class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-green-500"
+                class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 accent-bg"
               >
                 <svg class="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -217,7 +217,7 @@
               @click="selectQuality(source)"
               class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
               :class="selectedQuality === source.quality
-                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
             >
               {{ source.quality }}
@@ -235,7 +235,7 @@
               @click="deactivateSubtitle"
               class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
               :class="!activeSubtitleUrl
-                ? 'bg-green-500/20 text-green-400'
+                ? 'accent-bg-muted accent-text'
                 : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
             >
               {{ $t('player.off') }}
@@ -248,7 +248,7 @@
               @click="activateStreamSubtitle(sub)"
               class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
               :class="activeSubtitleUrl === sub.url
-                ? 'bg-green-500/20 text-green-400'
+                ? 'accent-bg-muted accent-text'
                 : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
             >
               {{ sub.lang }}
@@ -293,7 +293,7 @@
             @click="showSubtitleOverlay = !showSubtitleOverlay"
             class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="showSubtitleOverlay
-              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+              ? 'accent-bg-muted accent-text border accent-border'
               : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
           >
             {{ showSubtitleOverlay ? 'Hide Subs' : 'Show Subs' }}
@@ -312,7 +312,7 @@
       :server-name="selectedServer?.name"
       :stream-url="streamUrl"
       :error-message="error"
-      accent-color="#4ade80"
+      :accent-color="ACCENT_COLOR"
     />
   </div>
 </template>
@@ -327,6 +327,8 @@ import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
+
+const ACCENT_COLOR = '#4ade80'
 
 interface ConsumetEpisode {
   id: string
@@ -944,6 +946,18 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.consumet-player-wrapper {
+  --player-accent: #4ade80;
+  --player-accent-rgb: 74, 222, 128;
+}
+
+.accent-bg { background-color: var(--player-accent); }
+.accent-bg-hover:hover { background-color: color-mix(in srgb, var(--player-accent), black 15%); }
+.accent-text { color: var(--player-accent); }
+.accent-border { border-color: var(--player-accent); }
+.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.2); }
+.accent-ring { --tw-ring-color: rgba(var(--player-accent-rgb), 0.5); }
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -971,7 +985,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.video-js .vjs-big-play-button) {
-  background-color: rgba(74, 222, 128, 0.9);
+  background-color: rgba(var(--player-accent-rgb), 0.9);
   border: none;
   border-radius: 50%;
   width: 2em;
@@ -982,13 +996,13 @@ onBeforeUnmount(() => {
 }
 
 :deep(.video-js .vjs-big-play-button:hover) {
-  background-color: #4ade80;
+  background-color: var(--player-accent);
   transform: scale(1.1);
 }
 
 :deep(.video-js:hover .vjs-big-play-button),
 :deep(.video-js .vjs-big-play-button:focus) {
-  background-color: #4ade80;
+  background-color: var(--player-accent);
 }
 
 :deep(.video-js .vjs-control-bar) {
@@ -997,15 +1011,15 @@ onBeforeUnmount(() => {
 }
 
 :deep(.video-js .vjs-play-progress) {
-  background-color: #4ade80;
+  background-color: var(--player-accent);
 }
 
 :deep(.video-js .vjs-volume-level) {
-  background-color: #4ade80;
+  background-color: var(--player-accent);
 }
 
 :deep(.video-js .vjs-slider-horizontal .vjs-volume-level:before) {
-  color: #4ade80;
+  color: var(--player-accent);
 }
 
 :deep(.video-js .vjs-load-progress) {

@@ -109,28 +109,32 @@ func (j *ShikimoriSyncJob) fetchOngoingAnime(ctx context.Context) ([]OngoingAnim
 	pageSize := 100
 
 	for {
-		url := fmt.Sprintf("%s/api/anime/ongoing?page=%d&page_size=%d",
-			j.config.CatalogServiceURL, page, pageSize)
+		response, err := func() (*OngoingAnimeResponse, error) {
+			url := fmt.Sprintf("%s/api/anime/ongoing?page=%d&page_size=%d",
+				j.config.CatalogServiceURL, page, pageSize)
 
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			return nil, err
-		}
+			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+			if err != nil {
+				return nil, err
+			}
 
-		resp, err := j.client.Do(req)
-		if err != nil {
-			return nil, err
-		}
+			resp, err := j.client.Do(req)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			return nil, fmt.Errorf("catalog service returned status %d: %s", resp.StatusCode, string(body))
-		}
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				return nil, fmt.Errorf("catalog service returned status %d: %s", resp.StatusCode, string(body))
+			}
 
-		var response OngoingAnimeResponse
-		err = json.NewDecoder(resp.Body).Decode(&response)
-		resp.Body.Close()
+			var response OngoingAnimeResponse
+			if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+				return nil, err
+			}
+			return &response, nil
+		}()
 		if err != nil {
 			return nil, err
 		}

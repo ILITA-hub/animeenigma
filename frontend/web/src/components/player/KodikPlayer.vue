@@ -2,7 +2,7 @@
   <div class="kodik-player">
     <!-- Loading state for translations -->
     <div v-if="loadingTranslations" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
     </div>
 
     <!-- No translations available -->
@@ -24,7 +24,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
-              <div class="w-10 h-10 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode }) }}</p>
             </div>
           </div>
@@ -87,7 +87,7 @@
               class="relative w-12 h-10 rounded-lg text-sm font-medium transition-all"
               :class="[
                 selectedEpisode === ep
-                  ? 'bg-cyan-500 text-black'
+                  ? 'accent-bg text-black'
                   : isEpisodeWatched(ep)
                     ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
                     : 'bg-white/10 text-white hover:bg-white/20'
@@ -223,7 +223,7 @@
       :server-name="selectedTranslation ? translations.find(t => t.id === selectedTranslation)?.title : undefined"
       :stream-url="embedUrl"
       :error-message="error"
-      accent-color="#06b6d4"
+      :accent-color="ACCENT_COLOR"
     />
   </div>
 </template>
@@ -234,6 +234,8 @@ import { useI18n } from 'vue-i18n'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import ReportButton from './ReportButton.vue'
+
+const ACCENT_COLOR = '#06b6d4'
 
 // Watch progress tracking
 const currentTime = ref(0)
@@ -655,8 +657,17 @@ onUnmounted(() => {
 
 <style scoped>
 .kodik-player {
+  --player-accent: #06b6d4;
+  --player-accent-rgb: 6, 182, 212;
   width: 100%;
 }
+
+.accent-bg { background-color: var(--player-accent); }
+.accent-bg-hover:hover { background-color: color-mix(in srgb, var(--player-accent), black 15%); }
+.accent-text { color: var(--player-accent); }
+.accent-border { border-color: var(--player-accent); }
+.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.2); }
+.accent-ring { --tw-ring-color: rgba(var(--player-accent-rgb), 0.5); }
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;

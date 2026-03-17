@@ -1,0 +1,1129 @@
+openapi: 3.1.0
+info:
+  title: AnimeEnigma Player API
+  version: 1.0.0
+  description: Watchlist, progress tracking, reviews, ratings, and import/export
+
+servers:
+  - url: /api
+    description: Player API
+
+paths:
+  # =========================================================================
+  # Watchlist (Protected)
+  # =========================================================================
+  /users/watchlist:
+    get:
+      operationId: getUserWatchlist
+      summary: Get authenticated user's watchlist
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/WatchStatus'
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [updated_at, score, title]
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Paginated watchlist
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './common.yaml#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AnimeListEntry'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+
+    post:
+      operationId: addToWatchlist
+      summary: Add anime to watchlist
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anime_id]
+              properties:
+                anime_id:
+                  type: string
+      responses:
+        '201':
+          description: Added to watchlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListEntry'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+
+    put:
+      operationId: updateWatchlistEntry
+      summary: Update a watchlist entry
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateListRequest'
+      responses:
+        '200':
+          description: Entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListEntry'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+  /users/watchlist/statuses:
+    get:
+      operationId: getWatchlistStatuses
+      summary: Get compact status list for all watchlist entries
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Status list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AnimeStatusEntry'
+
+  /users/watchlist/migrate:
+    post:
+      operationId: migrateListEntry
+      summary: Migrate watchlist entry from one anime ID to another
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_anime_id, new_anime_id]
+              properties:
+                old_anime_id:
+                  type: string
+                new_anime_id:
+                  type: string
+      responses:
+        '200':
+          description: Entry migrated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListEntry'
+
+  /users/watchlist/{animeId}:
+    get:
+      operationId: getUserAnimeEntry
+      summary: Get watchlist entry for a specific anime
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Entry found (or null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListEntry'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+
+    delete:
+      operationId: deleteListEntry
+      summary: Remove anime from watchlist
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+
+  /users/watchlist/{animeId}/episode:
+    post:
+      operationId: markEpisodeWatched
+      summary: Mark an episode as watched
+      tags: [Watchlist]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [episode]
+              properties:
+                episode:
+                  type: integer
+      responses:
+        '200':
+          description: Episode marked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeListEntry'
+
+  # =========================================================================
+  # Progress (Protected)
+  # =========================================================================
+  /users/progress:
+    post:
+      operationId: updateProgress
+      summary: Update watch progress for an episode
+      tags: [Progress]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProgressRequest'
+      responses:
+        '200':
+          description: Progress updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchProgress'
+
+  /users/progress/{animeId}:
+    get:
+      operationId: getProgress
+      summary: Get watch progress for all episodes of an anime
+      tags: [Progress]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Progress entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WatchProgress'
+
+  # =========================================================================
+  # History (Protected)
+  # =========================================================================
+  /users/history:
+    get:
+      operationId: getWatchHistory
+      summary: Get watch history
+      tags: [History]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Watch history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WatchHistory'
+
+  # =========================================================================
+  # Reviews & Ratings
+  # =========================================================================
+  /users/reviews:
+    get:
+      operationId: getUserReviews
+      summary: Get authenticated user's reviews
+      tags: [Reviews]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Review'
+
+  /anime/{animeId}/reviews:
+    get:
+      operationId: getAnimeReviews
+      summary: Get all reviews for an anime
+      tags: [Reviews]
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Anime reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Review'
+
+    post:
+      operationId: createOrUpdateReview
+      summary: Create or update a review
+      tags: [Reviews]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '200':
+          description: Review saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+
+    delete:
+      operationId: deleteReview
+      summary: Delete user's review for an anime
+      tags: [Reviews]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /anime/{animeId}/reviews/me:
+    get:
+      operationId: getUserReview
+      summary: Get authenticated user's review for an anime
+      tags: [Reviews]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User review (or null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+
+  /anime/{animeId}/rating:
+    get:
+      operationId: getAnimeRating
+      summary: Get aggregate rating for an anime
+      tags: [Reviews]
+      parameters:
+        - name: animeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Anime rating
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeRating'
+
+  /anime/ratings/batch:
+    post:
+      operationId: getBatchAnimeRatings
+      summary: Get ratings for multiple anime at once
+      tags: [Reviews]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anime_ids]
+              properties:
+                anime_ids:
+                  type: array
+                  items:
+                    type: string
+                  maxItems: 100
+      responses:
+        '200':
+          description: Batch ratings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ratings:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/AnimeRating'
+
+  # =========================================================================
+  # Public Watchlist
+  # =========================================================================
+  /users/{userId}/watchlist/public:
+    get:
+      operationId: getPublicWatchlist
+      summary: Get a user's public watchlist
+      tags: [Public]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/WatchStatus'
+        - name: statuses
+          in: query
+          description: Comma-separated list of statuses
+          schema:
+            type: string
+        - $ref: './common.yaml#/components/parameters/PageParam'
+        - $ref: './common.yaml#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Public watchlist
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './common.yaml#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AnimeListEntry'
+
+  /users/{userId}/watchlist/public/stats:
+    get:
+      operationId: getPublicWatchlistStats
+      summary: Get public watchlist statistics
+      tags: [Public]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: statuses
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Watchlist stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchlistStats'
+
+  # =========================================================================
+  # Activity Feed
+  # =========================================================================
+  /activity/feed:
+    get:
+      operationId: getActivityFeed
+      summary: Get public activity feed
+      tags: [Activity]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 50
+            default: 20
+        - name: before
+          in: query
+          description: Pagination cursor (event ID)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Activity events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityEvent'
+                  has_more:
+                    type: boolean
+
+  # =========================================================================
+  # Error Reports (Protected)
+  # =========================================================================
+  /users/report:
+    post:
+      operationId: submitReport
+      summary: Submit a player error report
+      tags: [Reports]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorReport'
+      responses:
+        '200':
+          description: Report received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: received
+
+  # =========================================================================
+  # Import / Export (Protected, async)
+  # =========================================================================
+  /users/import/mal:
+    post:
+      operationId: importMALList
+      summary: Import anime list from MyAnimeList
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username:
+                  type: string
+      responses:
+        '200':
+          description: Import job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  total:
+                    type: integer
+
+  /users/import/shikimori:
+    post:
+      operationId: importShikimoriList
+      summary: Import anime list from Shikimori
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nickname]
+              properties:
+                nickname:
+                  type: string
+      responses:
+        '200':
+          description: Import job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  total:
+                    type: integer
+
+  /users/import/shikimori/migrate:
+    post:
+      operationId: migrateShikimoriEntries
+      summary: Migrate Shikimori entries to local anime IDs
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Migration result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  migrated:
+                    type: integer
+                  failed:
+                    type: integer
+
+  /users/import/{jobId}:
+    get:
+      operationId: getJobStatus
+      summary: Get import job status
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncJob'
+
+  /users/sync/status:
+    get:
+      operationId: getSyncStatus
+      summary: Get sync status for all sources
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Sync status per source
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mal:
+                    $ref: '#/components/schemas/SourceSyncStatus'
+                  shikimori:
+                    $ref: '#/components/schemas/SourceSyncStatus'
+
+  /users/mal-export:
+    post:
+      operationId: initiateMALExport
+      summary: Start MAL XML export
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mal_username]
+              properties:
+                mal_username:
+                  type: string
+      responses:
+        '201':
+          description: Export job created
+
+    get:
+      operationId: getUserExports
+      summary: List user's MAL exports
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Export list
+
+  /users/mal-export/{exportId}:
+    get:
+      operationId: getExportStatus
+      summary: Get MAL export job status
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Export status
+
+    delete:
+      operationId: cancelExport
+      summary: Cancel a MAL export
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: exportId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Export cancelled
+
+  /users/export/json:
+    get:
+      operationId: exportJSON
+      summary: Export all user data as JSON
+      tags: [Import/Export]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: JSON file download
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exported_at:
+                    type: string
+                    format: date-time
+                  user:
+                    type: string
+                  total_entries:
+                    type: integer
+                  entries:
+                    type: array
+                    items:
+                      type: object
+
+# ==========================================================================
+# Components
+# ==========================================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      $ref: './common.yaml#/components/securitySchemes/BearerAuth'
+
+  schemas:
+    WatchStatus:
+      type: string
+      enum: [watching, completed, on_hold, dropped, plan_to_watch]
+
+    AnimeListEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        anime_id:
+          type: string
+        anime:
+          type: object
+          description: Nested anime info (title, poster, etc.)
+        status:
+          $ref: '#/components/schemas/WatchStatus'
+        score:
+          type: number
+          minimum: 0
+          maximum: 10
+        episodes:
+          type: integer
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        is_rewatching:
+          type: boolean
+        priority:
+          type: integer
+        mal_id:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AnimeStatusEntry:
+      type: object
+      properties:
+        anime_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/WatchStatus'
+        score:
+          type: number
+        episodes:
+          type: integer
+
+    UpdateListRequest:
+      type: object
+      required: [anime_id, status]
+      properties:
+        anime_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/WatchStatus'
+        score:
+          type: number
+        episodes:
+          type: integer
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        is_rewatching:
+          type: boolean
+        priority:
+          type: integer
+        mal_id:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+
+    UpdateProgressRequest:
+      type: object
+      required: [anime_id, episode_number, progress, duration]
+      properties:
+        anime_id:
+          type: string
+        episode_number:
+          type: integer
+        progress:
+          type: number
+          description: Current position in seconds
+        duration:
+          type: number
+          description: Total duration in seconds
+
+    WatchProgress:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        anime_id:
+          type: string
+        episode_number:
+          type: integer
+        progress:
+          type: number
+        duration:
+          type: number
+        completed:
+          type: boolean
+        last_watched_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WatchHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        anime_id:
+          type: string
+        episode_number:
+          type: integer
+        watched_at:
+          type: string
+          format: date-time
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        anime_id:
+          type: string
+        username:
+          type: string
+        score:
+          type: number
+          minimum: 1
+          maximum: 10
+        review_text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateReviewRequest:
+      type: object
+      required: [score]
+      properties:
+        score:
+          type: number
+          minimum: 1
+          maximum: 10
+        review_text:
+          type: string
+
+    AnimeRating:
+      type: object
+      properties:
+        anime_id:
+          type: string
+        average_score:
+          type: number
+        total_reviews:
+          type: integer
+
+    WatchlistStats:
+      type: object
+      properties:
+        avg_score:
+          type: number
+        total_episodes:
+          type: integer
+        total_entries:
+          type: integer
+        completed:
+          type: integer
+
+    ActivityEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        anime_id:
+          type: string
+        anime:
+          type: object
+        type:
+          type: string
+          enum: [watchlist_add, watchlist_update, review, score]
+        old_value:
+          type: string
+        new_value:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ErrorReport:
+      type: object
+      properties:
+        player_type:
+          type: string
+        anime_id:
+          type: string
+        anime_name:
+          type: string
+        episode_number:
+          type: integer
+        server_name:
+          type: string
+        stream_url:
+          type: string
+        error_message:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+        user_agent:
+          type: string
+        screen_size:
+          type: string
+        language:
+          type: string
+        timestamp:
+          type: string
+        console_logs:
+          type: string
+        network_logs:
+          type: string
+        page_html:
+          type: string
+
+    SyncJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum: [mal, shikimori]
+        source_username:
+          type: string
+        status:
+          type: string
+          enum: [processing, completed, failed]
+        total:
+          type: integer
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        error_message:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SourceSyncStatus:
+      type: object
+      properties:
+        active:
+          $ref: '#/components/schemas/SyncJob'
+        last_sync:
+          $ref: '#/components/schemas/SyncJob'

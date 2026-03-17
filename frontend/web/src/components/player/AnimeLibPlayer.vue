@@ -1,8 +1,8 @@
 <template>
-  <div class="animelib-player">
+  <div class="animelib-player animelib-player-wrapper">
     <!-- Loading state for episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
     </div>
 
     <!-- No episodes available -->
@@ -24,7 +24,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
-              <div class="w-10 h-10 border-2 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}</p>
             </div>
           </div>
@@ -99,7 +99,7 @@
               :disabled="markingWatched"
               class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
               :class="episodeMarkedWatched
-                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
+                ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/10 text-white hover:bg-white/20'"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,9 +116,9 @@
               class="relative w-12 h-10 rounded-lg text-sm font-medium transition-all"
               :class="[
                 selectedEpisode?.id === ep.id
-                  ? 'bg-orange-500 text-white'
+                  ? 'accent-bg text-white'
                   : isEpisodeWatched(parseInt(ep.number))
-                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30'
+                    ? 'accent-bg-muted accent-text border accent-border hover:brightness-125'
                     : 'bg-white/10 text-white hover:bg-white/20'
               ]"
               :title="ep.name || `Episode ${ep.number}`"
@@ -126,7 +126,7 @@
               {{ ep.number }}
               <span
                 v-if="isEpisodeWatched(parseInt(ep.number)) && selectedEpisode?.id !== ep.id"
-                class="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full flex items-center justify-center"
+                class="absolute -top-1 -right-1 w-3 h-3 accent-bg rounded-full flex items-center justify-center"
               >
                 <svg class="w-2 h-2 text-black" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -187,7 +187,7 @@
               @click="selectTranslation(tr)"
               class="w-full text-left p-3 rounded-lg transition-all"
               :class="selectedTranslation?.id === tr.id
-                ? 'bg-orange-500/20 border border-orange-500/50'
+                ? 'accent-bg-muted border accent-border'
                 : 'bg-white/5 border border-transparent hover:bg-white/10'"
             >
               <div class="flex items-center justify-between gap-2">
@@ -195,12 +195,12 @@
                   <p class="text-white font-medium text-sm truncate">{{ tr.team_name }}</p>
                   <p class="text-white/40 text-xs">
                     {{ tr.type === 'voice' ? $t('player.dub') : $t('player.sub') }}
-                    <span v-if="tr.player === 'Animelib'" class="text-orange-400 ml-1">HD</span>
+                    <span v-if="tr.player === 'Animelib'" class="accent-text ml-1">HD</span>
                   </p>
                 </div>
                 <div
                   v-if="selectedTranslation?.id === tr.id"
-                  class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-orange-500"
+                  class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 accent-bg"
                 >
                   <svg class="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -213,7 +213,7 @@
 
         <!-- Loading translations -->
         <div v-else-if="loadingTranslations" class="flex items-center justify-center py-6">
-          <div class="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+          <div class="w-6 h-6 border-2 accent-border border-t-transparent rounded-full animate-spin" />
         </div>
 
         <!-- No translations -->
@@ -236,7 +236,7 @@
               @click="selectQuality(source)"
               class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
               :class="selectedQuality === source.quality
-                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
+                ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
             >
               {{ source.quality }}p
@@ -261,7 +261,7 @@
               @click="selectSubtitle(sub)"
               class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all uppercase"
               :class="activeSubtitleUrl === buildProxyUrl(sub.url)
-                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
+                ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
             >
               {{ sub.format }}
@@ -273,7 +273,7 @@
             @click="showSubtitleOverlay = !showSubtitleOverlay"
             class="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
             :class="showSubtitleOverlay
-              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
+              ? 'accent-bg-muted accent-text border accent-border'
               : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
           >
             {{ showSubtitleOverlay ? $t('player.hideSubtitles') : $t('player.showSubtitles') }}
@@ -293,7 +293,7 @@
       :server-name="selectedTranslation?.team_name"
       :stream-url="streamUrl"
       :error-message="error"
-      accent-color="#f97316"
+      :accent-color="ACCENT_COLOR"
     />
   </div>
 </template>
@@ -305,6 +305,8 @@ import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
+
+const ACCENT_COLOR = '#f97316'
 
 interface AnimeLibEpisode {
   id: number
@@ -616,6 +618,18 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.animelib-player-wrapper {
+  --player-accent: #f97316;
+  --player-accent-rgb: 249, 115, 22;
+}
+
+.accent-bg { background-color: var(--player-accent); }
+.accent-bg-hover:hover { background-color: color-mix(in srgb, var(--player-accent), black 15%); }
+.accent-text { color: var(--player-accent); }
+.accent-border { border-color: var(--player-accent); }
+.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.2); }
+.accent-ring { --tw-ring-color: rgba(var(--player-accent-rgb), 0.5); }
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;

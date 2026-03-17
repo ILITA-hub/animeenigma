@@ -16,7 +16,8 @@ type Config struct {
 	Services    ServiceURLs
 	RateLimit   RateLimitConfig
 	CORSOrigins []string
-	DevMode     bool // Skip admin auth when true (for local development)
+	Environment string // "production", "staging", "development", etc.
+	DevMode     bool   // Skip admin auth when true (for local development)
 }
 
 type ServerConfig struct {
@@ -55,7 +56,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
 	}
 
-	return &Config{
+	cfg := &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
 			Port: getEnvInt("SERVER_PORT", 8000),
@@ -87,8 +88,17 @@ func Load() (*Config, error) {
 			BurstSize:         getEnvInt("RATE_LIMIT_BURST", 200),
 		},
 		CORSOrigins: strings.Split(getEnv("CORS_ORIGINS", ""), ","),
+		Environment: strings.ToLower(getEnv("ENVIRONMENT", "")),
 		DevMode:     getEnvBool("DEV_MODE", false),
-	}, nil
+	}
+
+	// Production safeguard: refuse to enable DevMode in production
+	if cfg.DevMode && (cfg.Environment == "production" || cfg.Environment == "prod") {
+		fmt.Fprintf(os.Stderr, "FATAL: DEV_MODE=true is forbidden when ENVIRONMENT=%s — forcing DevMode=false\n", cfg.Environment)
+		cfg.DevMode = false
+	}
+
+	return cfg, nil
 }
 
 func getEnvBool(key string, defaultVal bool) bool {

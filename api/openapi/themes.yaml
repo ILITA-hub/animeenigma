@@ -1,0 +1,386 @@
+openapi: 3.1.0
+info:
+  title: AnimeEnigma Themes API
+  version: 1.0.0
+  description: Anime opening/ending theme ratings and media proxy
+
+servers:
+  - url: /api/themes
+    description: Themes API
+
+paths:
+  /:
+    get:
+      operationId: listThemes
+      summary: List anime themes with optional filters
+      description: Returns user_score field when authenticated
+      tags: [Themes]
+      security:
+        - BearerAuth: []
+        - {}
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: season
+          in: query
+          schema:
+            type: string
+            enum: [winter, spring, summer, fall]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [op, ed]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [rating, name, newest]
+            default: rating
+      responses:
+        '200':
+          description: Theme list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AnimeTheme'
+
+  /{id}:
+    get:
+      operationId: getTheme
+      summary: Get a single theme by ID
+      description: Returns user_score field when authenticated
+      tags: [Themes]
+      security:
+        - BearerAuth: []
+        - {}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Theme details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimeTheme'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+  # =========================================================================
+  # Media Proxy (Public)
+  # =========================================================================
+  /video/{basename}:
+    get:
+      operationId: proxyVideo
+      summary: Proxy anime theme video from animethemes.moe
+      tags: [Media]
+      parameters:
+        - name: basename
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-zA-Z0-9_\-]+\.(webm|ogg)$'
+      responses:
+        '200':
+          description: Video stream (supports Range headers)
+          content:
+            video/webm:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: './common.yaml#/components/responses/BadRequest'
+
+  /audio/{basename}:
+    get:
+      operationId: proxyAudio
+      summary: Proxy anime theme audio from animethemes.moe
+      tags: [Media]
+      parameters:
+        - name: basename
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-zA-Z0-9_\-]+\.(webm|ogg)$'
+      responses:
+        '200':
+          description: Audio stream (supports Range headers)
+          content:
+            audio/ogg:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: './common.yaml#/components/responses/BadRequest'
+
+  # =========================================================================
+  # Ratings (Protected)
+  # =========================================================================
+  /{id}/rate:
+    post:
+      operationId: rateTheme
+      summary: Rate a theme (1-10)
+      tags: [Ratings]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateRequest'
+      responses:
+        '200':
+          description: Rating saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  theme_id:
+                    type: string
+                  score:
+                    type: integer
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+        '404':
+          $ref: './common.yaml#/components/responses/NotFound'
+
+    delete:
+      operationId: unrateTheme
+      summary: Remove rating from a theme
+      tags: [Ratings]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Rating removed
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+
+  /my-ratings:
+    get:
+      operationId: getMyRatings
+      summary: Get authenticated user's theme ratings
+      tags: [Ratings]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: season
+          in: query
+          schema:
+            type: string
+            enum: [winter, spring, summer, fall]
+      responses:
+        '200':
+          description: User's ratings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ThemeRating'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+
+  # =========================================================================
+  # Admin (Protected + Admin role)
+  # =========================================================================
+  /admin/sync:
+    post:
+      operationId: triggerSync
+      summary: Trigger theme sync from animethemes.moe
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: season
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [winter, spring, summer, fall]
+      responses:
+        '200':
+          description: Sync started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatusResponse'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './common.yaml#/components/responses/Forbidden'
+
+  /admin/sync/status:
+    get:
+      operationId: getSyncStatus
+      summary: Get current sync job status
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatusResponse'
+        '401':
+          $ref: './common.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './common.yaml#/components/responses/Forbidden'
+
+# ==========================================================================
+# Components
+# ==========================================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      $ref: './common.yaml#/components/securitySchemes/BearerAuth'
+
+  schemas:
+    AnimeTheme:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        external_id:
+          type: integer
+        anime_name:
+          type: string
+        anime_slug:
+          type: string
+        poster_url:
+          type: string
+        theme_type:
+          type: string
+          enum: [OP, ED]
+        sequence:
+          type: integer
+        slug:
+          type: string
+        song_title:
+          type: string
+        artist_name:
+          type: string
+        video_basename:
+          type: string
+        video_resolution:
+          type: integer
+        audio_basename:
+          type: string
+        mal_id:
+          type: integer
+        year:
+          type: integer
+        season:
+          type: string
+          enum: [winter, spring, summer, fall]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        avg_score:
+          type: number
+          description: Computed average score
+        vote_count:
+          type: integer
+          description: Computed total votes
+        user_score:
+          type: integer
+          description: Current user's score (only when authenticated)
+        anime_id:
+          type: string
+          description: Matched AnimeEnigma anime ID (if available)
+
+    RateRequest:
+      type: object
+      required: [score]
+      properties:
+        score:
+          type: integer
+          minimum: 1
+          maximum: 10
+
+    ThemeRating:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        theme_id:
+          type: string
+          format: uuid
+        score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SyncStatusResponse:
+      type: object
+      properties:
+        running:
+          type: boolean
+        status:
+          type: string
+          enum: [idle, syncing, done, error]
+        total:
+          type: integer
+        processed:
+          type: integer
+        error:
+          type: string
+        year:
+          type: integer
+        season:
+          type: string
