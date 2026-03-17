@@ -57,7 +57,9 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 		Type:     "review",
 		NewValue: strconv.Itoa(req.Score),
 	}
-	if isNewReview {
+	if req.ReviewText == "" {
+		reviewEvent.OldValue = "score"
+	} else if isNewReview {
 		reviewEvent.OldValue = "new"
 	} else {
 		reviewEvent.OldValue = "update"

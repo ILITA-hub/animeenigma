@@ -140,6 +140,9 @@ const actionText = (event: ActivityEvent): string => {
     return t('activity.score', { score: event.new_value })
   }
   if (event.type === 'review') {
+    if (event.old_value === 'score') {
+      return t('activity.score', { score: event.new_value })
+    }
     const key = event.old_value === 'new' ? 'activity.review.wrote' : 'activity.review.updated'
     return t(key, { score: event.new_value })
   }
