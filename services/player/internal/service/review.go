@@ -50,12 +50,18 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 	// Record review activity event (deduplicated per day)
 	// The review event already includes the score, so no separate score event needed
 	isNewReview := existingReview == nil
+	// Truncate review text for activity preview (full text stays in reviews table)
+	contentPreview := req.ReviewText
+	if len([]rune(contentPreview)) > 300 {
+		contentPreview = string([]rune(contentPreview)[:300]) + "…"
+	}
 	reviewEvent := &domain.ActivityEvent{
 		UserID:   userID,
 		Username: username,
 		AnimeID:  req.AnimeID,
 		Type:     "review",
 		NewValue: strconv.Itoa(req.Score),
+		Content:  contentPreview,
 	}
 	if req.ReviewText == "" {
 		reviewEvent.OldValue = "score"
@@ -69,6 +75,7 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 	if existingEvent != nil {
 		existingEvent.NewValue = reviewEvent.NewValue
 		existingEvent.OldValue = reviewEvent.OldValue
+		existingEvent.Content = reviewEvent.Content
 		if err := s.activityRepo.Update(ctx, existingEvent); err != nil {
 			s.log.Errorw("failed to update review activity", "user_id", userID, "anime_id", req.AnimeID, "error", err)
 		}

@@ -57,6 +57,9 @@
               {{ animeName(event) }}
             </router-link>
           </p>
+          <p v-if="event.content" class="text-xs text-gray-400 mt-1 line-clamp-2 italic">
+            {{ event.content }}
+          </p>
           <p class="text-xs text-gray-500 mt-1">
             {{ formatRelativeTime(event.created_at) }}
           </p>
@@ -101,6 +104,7 @@ interface ActivityEvent {
   type: string
   old_value: string
   new_value: string
+  content?: string
   created_at: string
 }
 

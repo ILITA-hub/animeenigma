@@ -15,6 +15,7 @@ type ActivityEvent struct {
 	Type      string         `gorm:"size:20;index" json:"type"`
 	OldValue  string         `gorm:"size:50" json:"old_value"`
 	NewValue  string         `gorm:"size:50" json:"new_value"`
+	Content   string         `gorm:"type:text" json:"content,omitempty"`
 	CreatedAt time.Time      `gorm:"index" json:"created_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
