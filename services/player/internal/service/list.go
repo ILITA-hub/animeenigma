@@ -256,6 +256,11 @@ func (s *ListService) MigrateListEntry(ctx context.Context, userID, oldAnimeID, 
 	return newEntry, nil
 }
 
+// GetPublicWatchlistStats returns aggregate stats for a user's public watchlist
+func (s *ListService) GetPublicWatchlistStats(ctx context.Context, userID string, statuses []string) (*domain.WatchlistStats, error) {
+	return s.listRepo.GetUserWatchlistStats(ctx, userID, statuses)
+}
+
 // GetPublicWatchlist returns user's public watchlist filtered by allowed statuses
 func (s *ListService) GetPublicWatchlist(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
 	if len(statuses) == 0 {

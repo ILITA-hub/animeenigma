@@ -1097,6 +1097,9 @@ const filteredWatchlist = computed(() => {
   return list
 })
 
+// Public profile aggregate stats (fetched from backend)
+const publicWatchlistStats = ref<{ avg_score: number; total_episodes: number; total_entries: number; completed: number } | null>(null)
+
 // Stats
 const watchlistStats = computed(() => {
   if (_isOwnProfile.value) {
@@ -1114,13 +1117,14 @@ const watchlistStats = computed(() => {
       completed: completedCount,
     }
   } else {
-    // Public profile: use publicStatusCounts, show '-' for unavailable stats
+    // Public profile: use server-side aggregate stats
+    const stats = publicWatchlistStats.value
     const sumCounts = Object.values(publicStatusCounts.value).reduce((s, c) => s + c, 0)
     return {
-      total: sumCounts || watchlistTotalCount.value,
-      avgScore: '-',
-      totalEpisodes: '-',
-      completed: publicStatusCounts.value['completed'] ?? 0,
+      total: stats?.total_entries || sumCounts || watchlistTotalCount.value,
+      avgScore: stats ? (stats.avg_score > 0 ? stats.avg_score.toFixed(1) : '-') : '-',
+      totalEpisodes: stats?.total_episodes ?? '-',
+      completed: stats?.completed ?? publicStatusCounts.value['completed'] ?? 0,
     }
   }
 })
@@ -1367,9 +1371,13 @@ const fetchWatchlist = async (isOwn: boolean) => {
     // Also fetch lightweight statuses for badge map and per-status counts
     await watchlistStore.fetchStatuses(true)
   }
-  // Fetch public status counts in background (fire and forget)
+  // Fetch public stats and status counts in background (fire and forget)
   if (!isOwn && profileUser.value) {
     const visibleStatuses = profileUser.value.public_statuses || []
+    // Fetch aggregate stats (avg score, total episodes)
+    publicApi.getPublicWatchlistStats(profileUser.value.id, visibleStatuses.length > 0 ? visibleStatuses : undefined)
+      .then(r => { publicWatchlistStats.value = r.data?.data || r.data || null })
+      .catch(() => {})
     if (visibleStatuses.length > 0) {
       fetchPublicStatusCounts(profileUser.value.id, visibleStatuses)
     }

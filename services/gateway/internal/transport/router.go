@@ -127,6 +127,7 @@ func NewRouter(
 
 		// Player service routes - public watchlist
 		r.Get("/users/{userId}/watchlist/public", proxyHandler.ProxyToPlayer)
+		r.Get("/users/{userId}/watchlist/public/stats", proxyHandler.ProxyToPlayer)
 
 		// Public activity feed
 		r.Get("/activity/feed", proxyHandler.ProxyToPlayer)

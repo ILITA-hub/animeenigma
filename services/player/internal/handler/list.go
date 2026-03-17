@@ -281,6 +281,32 @@ func (h *ListHandler) GetPublicWatchlist(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// GetPublicWatchlistStats returns aggregate stats for a user's public watchlist
+func (h *ListHandler) GetPublicWatchlistStats(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userId")
+	if userID == "" {
+		httputil.BadRequest(w, "user ID is required")
+		return
+	}
+
+	var statuses []string
+	if s := r.URL.Query().Get("statuses"); s != "" {
+		for _, s := range splitAndTrim(s, ",") {
+			if s != "" {
+				statuses = append(statuses, s)
+			}
+		}
+	}
+
+	stats, err := h.listService.GetPublicWatchlistStats(r.Context(), userID, statuses)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, stats)
+}
+
 func parsePaginationParams(r *http.Request) *domain.PaginationParams {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))

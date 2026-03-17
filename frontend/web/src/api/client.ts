@@ -230,6 +230,9 @@ export const publicApi = {
   // Get public watchlist
   getPublicWatchlist: (userId: string, params?: { status?: string; statuses?: string; page?: number; per_page?: number; sort?: string; order?: string }) =>
     apiClient.get(`/users/${userId}/watchlist/public`, { params }),
+  // Get public watchlist stats (avg score, total episodes)
+  getPublicWatchlistStats: (userId: string, statuses?: string[]) =>
+    apiClient.get(`/users/${userId}/watchlist/public/stats`, { params: statuses?.length ? { statuses: statuses.join(',') } : undefined }),
 }
 
 export const adminApi = {

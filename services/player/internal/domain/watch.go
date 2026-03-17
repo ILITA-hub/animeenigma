@@ -164,6 +164,14 @@ func (p *PaginationParams) Offset() int {
 	return (p.Page - 1) * p.PerPage
 }
 
+// WatchlistStats contains aggregate stats for a user's watchlist
+type WatchlistStats struct {
+	AvgScore      float64 `json:"avg_score"`
+	TotalEpisodes int     `json:"total_episodes"`
+	TotalEntries  int     `json:"total_entries"`
+	Completed     int     `json:"completed"`
+}
+
 // AnimeStatusEntry is a lightweight entry for the status map and stats
 type AnimeStatusEntry struct {
 	AnimeID  string `json:"anime_id" gorm:"column:anime_id"`

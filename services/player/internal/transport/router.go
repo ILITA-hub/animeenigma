@@ -102,6 +102,7 @@ func NewRouter(
 
 		// Public user watchlist
 		r.Get("/users/{userId}/watchlist/public", listHandler.GetPublicWatchlist)
+		r.Get("/users/{userId}/watchlist/public/stats", listHandler.GetPublicWatchlistStats)
 
 		// Public activity feed
 		r.Get("/activity/feed", activityHandler.GetFeed)

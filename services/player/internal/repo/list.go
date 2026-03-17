@@ -170,6 +170,24 @@ func (r *ListRepository) GetByUserStatuses(ctx context.Context, userID string) (
 	return entries, err
 }
 
+func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID string, statuses []string) (*domain.WatchlistStats, error) {
+	var stats domain.WatchlistStats
+
+	base := r.db.WithContext(ctx).Model(&domain.AnimeListEntry{}).Where("user_id = ?", userID)
+	if len(statuses) > 0 {
+		base = base.Where("status IN ?", statuses)
+	}
+
+	err := base.Select(
+		"COALESCE(AVG(NULLIF(score, 0)), 0) as avg_score, "+
+			"COALESCE(SUM(episodes), 0) as total_episodes, "+
+			"COUNT(*) as total_entries, "+
+			"COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed",
+	).Scan(&stats).Error
+
+	return &stats, err
+}
+
 func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 
