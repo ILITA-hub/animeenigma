@@ -5,7 +5,7 @@
 	redeploy-all redeploy-web type-check
 
 # Variables
-SERVICES := auth catalog streaming player social rooms scheduler gateway notifications
+SERVICES := auth catalog streaming player rooms scheduler gateway themes
 GO_BUILD_FLAGS := -ldflags="-s -w"
 DOCKER_REGISTRY ?= ghcr.io/ilita-hub/animeenigma
 
@@ -127,7 +127,7 @@ generate-graphql: ## Generate GraphQL code
 # ============================================================================
 
 # Database connection settings (can be overridden via environment)
-DB_HOST ?= 172.29.0.2
+DB_HOST ?= localhost
 DB_PORT ?= 5432
 DB_USER ?= postgres
 DB_PASSWORD ?= postgres
@@ -257,7 +257,7 @@ k8s-diff: ## Show diff between local and cluster state
 	kubectl diff -k $(KUSTOMIZE_BASE) || true
 
 k8s-wait: ## Wait for all deployments to be ready
-	@for deploy in gateway auth catalog streaming player rooms scheduler web; do \
+	@for deploy in gateway auth catalog streaming player rooms scheduler themes web; do \
 		echo "Waiting for $$deploy..."; \
 		kubectl rollout status deployment/$$deploy -n $(NAMESPACE) --timeout=120s || true; \
 	done

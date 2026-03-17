@@ -1,32 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: scheduler
+  name: themes
 spec:
-  replicas: 1  # Only one scheduler instance
+  replicas: 2
   selector:
     matchLabels:
-      app: scheduler
+      app: themes
   template:
     metadata:
       labels:
-        app: scheduler
+        app: themes
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8085"
+        prometheus.io/port: "8086"
         prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: scheduler
-          image: ghcr.io/ilita-hub/animeenigma/scheduler:latest
+        - name: themes
+          image: ghcr.io/ilita-hub/animeenigma/themes:latest
           ports:
-            - containerPort: 8085
+            - containerPort: 8086
           envFrom:
             - configMapRef:
                 name: animeenigma-config
           env:
             - name: SERVER_PORT
-              value: "8085"
+              value: "8086"
             - name: DB_NAME
               value: "animeenigma"
             - name: DB_USER
@@ -44,12 +44,12 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8085
+              port: 8086
             initialDelaySeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8085
+              port: 8086
             initialDelaySeconds: 5
           resources:
             requests:
@@ -65,10 +65,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: scheduler
+  name: themes
 spec:
   selector:
-    app: scheduler
+    app: themes
   ports:
-    - port: 8085
-      targetPort: 8085
+    - port: 8086
+      targetPort: 8086

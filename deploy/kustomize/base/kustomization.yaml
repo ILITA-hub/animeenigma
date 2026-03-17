@@ -16,6 +16,7 @@ resources:
   - services/rooms.yaml
   - services/scheduler.yaml
   - services/web.yaml
+  - services/themes.yaml
 
   # Monitoring stack (in monitoring namespace - has its own namespace spec)
   - monitoring/namespace.yaml
