@@ -168,7 +168,7 @@ groups:
             datasourceUid: PBFA97CFB590B2093
             model:
               expr: |
-                histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{path!~"/admin/.*"}[5m])) by (service, le))
+                histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{path!~"/admin/.*",service!="streaming"}[5m])) by (service, le))
               instant: true
               refId: A
           - refId: B
