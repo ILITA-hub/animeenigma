@@ -67,12 +67,19 @@ func (AnimeListEntry) TableName() string {
 	return "anime_list"
 }
 
+// WatchHistory records a watched episode with full combo context
 type WatchHistory struct {
-	ID            string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID        string    `gorm:"type:uuid;index" json:"user_id"`
-	AnimeID       string    `gorm:"type:uuid;index" json:"anime_id"`
-	EpisodeNumber int       `json:"episode_number"`
-	WatchedAt     time.Time `json:"watched_at"`
+	ID               string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID           string    `gorm:"type:uuid;not null;index:idx_wh_user_combo" json:"user_id"`
+	AnimeID          string    `gorm:"not null;index;index:idx_wh_anime_combo" json:"anime_id"`
+	EpisodeNumber    int       `gorm:"not null" json:"episode_number"`
+	Player           string    `gorm:"size:20;not null;index:idx_wh_user_combo;index:idx_wh_anime_combo" json:"player"`
+	Language         string    `gorm:"size:5;not null;index:idx_wh_user_combo;index:idx_wh_anime_combo" json:"language"`
+	WatchType        string    `gorm:"size:5;not null;index:idx_wh_user_combo;index:idx_wh_anime_combo" json:"watch_type"`
+	TranslationID    string    `gorm:"size:50" json:"translation_id"`
+	TranslationTitle string    `gorm:"size:200" json:"translation_title"`
+	DurationWatched  int       `gorm:"default:0" json:"duration_watched"`
+	WatchedAt        time.Time `gorm:"not null;default:now()" json:"watched_at"`
 }
 
 func (WatchHistory) TableName() string {
@@ -97,10 +104,25 @@ func (Review) TableName() string {
 
 // Request/Response types (not database tables)
 type UpdateProgressRequest struct {
-	AnimeID       string `json:"anime_id"`
-	EpisodeNumber int    `json:"episode_number"`
-	Progress      int    `json:"progress"`
-	Duration      int    `json:"duration"`
+	AnimeID          string `json:"anime_id"`
+	EpisodeNumber    int    `json:"episode_number"`
+	Progress         int    `json:"progress"`
+	Duration         int    `json:"duration"`
+	Player           string `json:"player,omitempty"`
+	Language         string `json:"language,omitempty"`
+	WatchType        string `json:"watch_type,omitempty"`
+	TranslationID    string `json:"translation_id,omitempty"`
+	TranslationTitle string `json:"translation_title,omitempty"`
+}
+
+// MarkEpisodeWatchedRequest extends the episode-watched payload with combo context
+type MarkEpisodeWatchedRequest struct {
+	Episode          int    `json:"episode"`
+	Player           string `json:"player,omitempty"`
+	Language         string `json:"language,omitempty"`
+	WatchType        string `json:"watch_type,omitempty"`
+	TranslationID    string `json:"translation_id,omitempty"`
+	TranslationTitle string `json:"translation_title,omitempty"`
 }
 
 type UpdateListRequest struct {
