@@ -234,6 +234,7 @@ import { useI18n } from 'vue-i18n'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import ReportButton from './ReportButton.vue'
+import type { WatchCombo } from '@/types/preference'
 
 const ACCENT_COLOR = '#06b6d4'
 
@@ -254,6 +255,7 @@ const watchedEpisodes = ref(0) // Number of episodes user has watched
 const emit = defineEmits<{
   (e: 'progress', data: { episode: number; time: number; maxTime: number }): void
   (e: 'episodeWatched', data: { episode: number }): void
+  (e: 'availableTranslations', combos: WatchCombo[]): void
 }>()
 
 // Save progress to localStorage (works without auth)
@@ -273,7 +275,8 @@ const saveProgressServer = async (animeId: string, episode: number, time: number
       anime_id: animeId,
       episode_number: episode,
       progress: Math.floor(time),
-      duration: Math.floor(maxTime.value) || null
+      duration: Math.floor(maxTime.value) || null,
+      ...currentCombo.value
     })
   } catch (err) {
     console.warn('Failed to save progress to server:', err)
@@ -350,6 +353,7 @@ const props = defineProps<{
   animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
+  preferredCombo?: WatchCombo | null
 }>()
 
 const translations = ref<KodikTranslation[]>([])
@@ -377,6 +381,19 @@ const subtitleTranslations = computed(() => {
 const filteredTranslations = computed(() =>
   translationType.value === 'voice' ? voiceTranslations.value : subtitleTranslations.value
 )
+
+const currentCombo = computed((): WatchCombo | null => {
+  if (!selectedTranslation.value) return null
+  const tr = translations.value.find(t => t.id === selectedTranslation.value)
+  if (!tr) return null
+  return {
+    player: 'kodik',
+    language: 'ru',
+    watch_type: translationType.value === 'voice' ? 'dub' : 'sub',
+    translation_id: String(tr.id),
+    translation_title: tr.title
+  }
+})
 
 // Sort translations: pinned first, then by title
 function sortByPinned(list: KodikTranslation[]): KodikTranslation[] {
@@ -425,24 +442,50 @@ const fetchTranslations = async () => {
     }))
 
     if (translations.value.length > 0) {
-      // Prefer pinned voice translations, then any voice, then subtitles
-      const voices = translations.value.filter(t => t.type === 'voice')
-      const subs = translations.value.filter(t => t.type !== 'voice')
-      const pinnedVoice = voices.find(t => t.pinned)
-      const pinnedSub = subs.find(t => t.pinned)
+      // Emit available translations as WatchCombo[]
+      const combos: WatchCombo[] = translations.value.map(tr => ({
+        player: 'kodik' as const,
+        language: 'ru' as const,
+        watch_type: tr.type === 'voice' ? 'dub' as const : 'sub' as const,
+        translation_id: String(tr.id),
+        translation_title: tr.title
+      }))
+      emit('availableTranslations', combos)
 
-      if (pinnedVoice) {
-        translationType.value = 'voice'
-        selectedTranslation.value = pinnedVoice.id
-      } else if (voices.length > 0) {
-        translationType.value = 'voice'
-        selectedTranslation.value = voices[0].id
-      } else if (pinnedSub) {
-        translationType.value = 'subtitles'
-        selectedTranslation.value = pinnedSub.id
-      } else if (subs.length > 0) {
-        translationType.value = 'subtitles'
-        selectedTranslation.value = subs[0].id
+      // Auto-select from preferredCombo if it matches this player
+      let autoSelected = false
+      if (props.preferredCombo?.player === 'kodik') {
+        const match = translations.value.find(
+          t => String(t.id) === props.preferredCombo!.translation_id
+            || t.title === props.preferredCombo!.translation_title
+        )
+        if (match) {
+          translationType.value = match.type === 'voice' ? 'voice' : 'subtitles'
+          selectedTranslation.value = match.id
+          autoSelected = true
+        }
+      }
+
+      if (!autoSelected) {
+        // Prefer pinned voice translations, then any voice, then subtitles
+        const voices = translations.value.filter(t => t.type === 'voice')
+        const subs = translations.value.filter(t => t.type !== 'voice')
+        const pinnedVoice = voices.find(t => t.pinned)
+        const pinnedSub = subs.find(t => t.pinned)
+
+        if (pinnedVoice) {
+          translationType.value = 'voice'
+          selectedTranslation.value = pinnedVoice.id
+        } else if (voices.length > 0) {
+          translationType.value = 'voice'
+          selectedTranslation.value = voices[0].id
+        } else if (pinnedSub) {
+          translationType.value = 'subtitles'
+          selectedTranslation.value = pinnedSub.id
+        } else if (subs.length > 0) {
+          translationType.value = 'subtitles'
+          selectedTranslation.value = subs[0].id
+        }
       }
 
       // Auto-load first video after setting translation
@@ -548,7 +591,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined)
     episodeMarkedWatched.value = true
     // Update watched episodes count
     if (selectedEpisode.value > watchedEpisodes.value) {
@@ -568,7 +611,7 @@ const autoMarkEpisodeWatched = async () => {
   if (!authStore.isAuthenticated || episodeMarkedWatched.value) return
 
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined)
     episodeMarkedWatched.value = true
     // Update watched episodes count
     if (selectedEpisode.value > watchedEpisodes.value) {
@@ -611,7 +654,8 @@ const saveBeforeLeave = () => {
         anime_id: props.animeId,
         episode_number: selectedEpisode.value,
         progress: Math.floor(currentTime.value),
-        duration: Math.floor(maxTime.value) || null
+        duration: Math.floor(maxTime.value) || null,
+        ...currentCombo.value
       })
       navigator.sendBeacon('/api/users/progress', new Blob([data], { type: 'application/json' }))
     }

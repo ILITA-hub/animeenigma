@@ -327,6 +327,7 @@ import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
+import type { WatchCombo } from '@/types/preference'
 
 const ACCENT_COLOR = '#4ade80'
 
@@ -368,11 +369,14 @@ const props = defineProps<{
   animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
+  preferredCombo?: WatchCombo | null
+  subOrDub?: 'sub' | 'dub'
 }>()
 
 const emit = defineEmits<{
   (e: 'progress', data: { episode: number; time: number; maxTime: number }): void
   (e: 'episodeWatched', data: { episode: number }): void
+  (e: 'availableTranslations', combos: WatchCombo[]): void
 }>()
 
 const authStore = useAuthStore()
@@ -445,6 +449,17 @@ const markingWatched = ref(false)
 const episodeMarkedWatched = ref(false)
 const watchedEpisodes = ref(0)
 
+const currentCombo = computed((): WatchCombo | null => {
+  if (!selectedServer.value) return null
+  return {
+    player: 'consumet',
+    language: 'en',
+    watch_type: props.subOrDub === 'dub' ? 'dub' : 'sub',
+    translation_id: selectedServer.value.name,
+    translation_title: selectedServer.value.name
+  }
+})
+
 // Methods
 const fetchEpisodes = async () => {
   loadingEpisodes.value = true
@@ -483,7 +498,32 @@ const fetchServers = async () => {
 
     // Auto-select first server
     if (servers.value.length > 0) {
-      selectedServer.value = servers.value[0]
+      // Emit available translations as WatchCombo[]
+      const combos: WatchCombo[] = servers.value.map(s => ({
+        player: 'consumet' as const,
+        language: 'en' as const,
+        watch_type: (props.subOrDub === 'dub' ? 'dub' : 'sub') as 'dub' | 'sub',
+        translation_id: s.name,
+        translation_title: s.name
+      }))
+      emit('availableTranslations', combos)
+
+      // Auto-select from preferredCombo if it matches this player
+      let autoSelected = false
+      if (props.preferredCombo?.player === 'consumet') {
+        const match = servers.value.find(
+          s => s.name === props.preferredCombo!.translation_id
+            || s.name === props.preferredCombo!.translation_title
+        )
+        if (match) {
+          selectedServer.value = match
+          autoSelected = true
+        }
+      }
+
+      if (!autoSelected) {
+        selectedServer.value = servers.value[0]
+      }
     }
   } catch (err: unknown) {
     console.error('Failed to fetch servers:', err)
@@ -818,6 +858,31 @@ const switchPlayerType = async (type: PlayerType) => {
 }
 
 // Progress tracking
+const saveProgress = () => {
+  if (!selectedEpisode.value || currentTime.value <= 0) return
+
+  // Save to localStorage
+  const key = `watch_progress:${props.animeId}`
+  const data = JSON.parse(localStorage.getItem(key) || '{}')
+  data[selectedEpisode.value.number] = {
+    time: currentTime.value,
+    maxTime: maxTime.value,
+    updatedAt: Date.now()
+  }
+  localStorage.setItem(key, JSON.stringify(data))
+
+  // Save to server if authenticated
+  if (authStore.isAuthenticated) {
+    userApi.updateProgress({
+      anime_id: props.animeId,
+      episode_number: selectedEpisode.value.number,
+      progress: Math.floor(currentTime.value),
+      duration: Math.floor(maxTime.value) || null,
+      ...currentCombo.value
+    }).catch(() => {})
+  }
+}
+
 const handleTimeUpdate = () => {
   if (!selectedEpisode.value) return
 
@@ -834,11 +899,7 @@ const handleTimeUpdate = () => {
   // Save progress periodically
   if (currentTime.value - lastSaveTime.value >= SAVE_INTERVAL) {
     lastSaveTime.value = currentTime.value
-    emit('progress', {
-      episode: selectedEpisode.value.number,
-      time: currentTime.value,
-      maxTime: maxTime.value
-    })
+    saveProgress()
   }
 
   // Auto-mark as watched
@@ -848,22 +909,12 @@ const handleTimeUpdate = () => {
 }
 
 const handlePause = () => {
-  if (!selectedEpisode.value) return
-  emit('progress', {
-    episode: selectedEpisode.value.number,
-    time: currentTime.value,
-    maxTime: maxTime.value
-  })
+  saveProgress()
 }
 
 const handleEnded = () => {
-  if (!selectedEpisode.value) return
+  saveProgress()
   markCurrentEpisodeWatched()
-  emit('progress', {
-    episode: selectedEpisode.value.number,
-    time: currentTime.value,
-    maxTime: maxTime.value
-  })
 }
 
 const markCurrentEpisodeWatched = async () => {
@@ -871,7 +922,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined)
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, selectedEpisode.value.number)
     emit('episodeWatched', { episode: selectedEpisode.value.number })
@@ -941,6 +992,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
+  saveProgress()
   disposeCurrentPlayer()
 })
 </script>

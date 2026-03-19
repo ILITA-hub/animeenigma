@@ -299,12 +299,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
+import type { WatchCombo } from '@/types/preference'
 
 const ACCENT_COLOR = '#f97316'
 
@@ -343,10 +344,12 @@ const props = defineProps<{
   animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
+  preferredCombo?: WatchCombo | null
 }>()
 
 const emit = defineEmits<{
   (e: 'episodeWatched', data: { episode: number }): void
+  (e: 'availableTranslations', combos: WatchCombo[]): void
 }>()
 
 const authStore = useAuthStore()
@@ -380,6 +383,8 @@ const subtitleError = ref<string | null>(null)
 // Progress tracking
 const currentTime = ref(0)
 const maxTime = ref(0)
+const lastSaveTime = ref(0)
+const SAVE_INTERVAL = 30
 const AUTO_MARK_THRESHOLD = 20 * 60
 
 // Computed: filtered translations
@@ -389,6 +394,17 @@ const filteredTranslations = computed(() => {
   if (translationFilter.value === 'voice') return voiceTranslations.value
   if (translationFilter.value === 'subtitles') return subTranslations.value
   return translations.value
+})
+
+const currentCombo = computed((): WatchCombo | null => {
+  if (!selectedTranslation.value) return null
+  return {
+    player: 'animelib',
+    language: 'ru',
+    watch_type: selectedTranslation.value.type === 'voice' ? 'dub' : 'sub',
+    translation_id: String(selectedTranslation.value.id),
+    translation_title: selectedTranslation.value.team_name
+  }
 })
 
 // Watch tracking
@@ -432,7 +448,32 @@ const fetchTranslations = async () => {
     translations.value = Array.isArray(data) ? data : []
 
     if (translations.value.length > 0) {
-      await selectTranslation(translations.value[0])
+      // Emit available translations as WatchCombo[]
+      const combos: WatchCombo[] = translations.value.map(tr => ({
+        player: 'animelib' as const,
+        language: 'ru' as const,
+        watch_type: tr.type === 'voice' ? 'dub' as const : 'sub' as const,
+        translation_id: String(tr.id),
+        translation_title: tr.team_name
+      }))
+      emit('availableTranslations', combos)
+
+      // Auto-select from preferredCombo if it matches this player
+      let autoSelected = false
+      if (props.preferredCombo?.player === 'animelib') {
+        const match = translations.value.find(
+          tr => String(tr.id) === props.preferredCombo!.translation_id
+            || tr.team_name === props.preferredCombo!.translation_title
+        )
+        if (match) {
+          autoSelected = true
+          await selectTranslation(match)
+        }
+      }
+
+      if (!autoSelected) {
+        await selectTranslation(translations.value[0])
+      }
     }
   } catch (err: unknown) {
     console.error('Failed to fetch translations:', err)
@@ -546,17 +587,50 @@ const buildProxyUrl = (url: string): string => {
 }
 
 // Progress tracking
+const saveProgress = () => {
+  if (!selectedEpisode.value || currentTime.value <= 0) return
+
+  // Save to localStorage
+  const key = `watch_progress:${props.animeId}`
+  const existing = JSON.parse(localStorage.getItem(key) || '{}')
+  existing[selectedEpisode.value.number] = {
+    time: currentTime.value,
+    maxTime: maxTime.value,
+    updatedAt: Date.now()
+  }
+  localStorage.setItem(key, JSON.stringify(existing))
+
+  // Save to server if authenticated
+  if (authStore.isAuthenticated && currentCombo.value) {
+    userApi.updateProgress({
+      anime_id: props.animeId,
+      episode_number: parseInt(selectedEpisode.value.number),
+      progress: Math.floor(currentTime.value),
+      duration: Math.floor(maxTime.value) || null,
+      ...currentCombo.value
+    }).catch(() => {})
+  }
+}
+
 const handleTimeUpdate = () => {
   if (!selectedEpisode.value || !videoRef.value) return
   currentTime.value = videoRef.value.currentTime
   maxTime.value = Math.max(maxTime.value, currentTime.value)
+
+  // Save progress every SAVE_INTERVAL seconds
+  if (currentTime.value - lastSaveTime.value >= SAVE_INTERVAL) {
+    lastSaveTime.value = currentTime.value
+    saveProgress()
+  }
 
   if (maxTime.value >= AUTO_MARK_THRESHOLD && !episodeMarkedWatched.value) {
     markCurrentEpisodeWatched()
   }
 }
 
-const handlePause = () => {}
+const handlePause = () => {
+  saveProgress()
+}
 
 const handleVideoError = () => {
   const video = videoRef.value
@@ -575,6 +649,7 @@ const handleVideoError = () => {
 
 const handleEnded = () => {
   if (!selectedEpisode.value) return
+  saveProgress()
   markCurrentEpisodeWatched()
 }
 
@@ -584,7 +659,7 @@ const markCurrentEpisodeWatched = async () => {
   markingWatched.value = true
   try {
     const epNum = parseInt(selectedEpisode.value.number)
-    await userApi.markEpisodeWatched(props.animeId, epNum)
+    await userApi.markEpisodeWatched(props.animeId, epNum, currentCombo.value ?? undefined)
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, epNum)
     emit('episodeWatched', { episode: epNum })
@@ -598,6 +673,22 @@ const markCurrentEpisodeWatched = async () => {
 const isEpisodeWatched = (episodeNumber: number): boolean => {
   return episodeNumber <= watchedEpisodes.value
 }
+
+// Reset when anime changes
+watch(() => props.animeId, () => {
+  saveProgress()
+  streamUrl.value = null
+  episodes.value = []
+  translations.value = []
+  selectedEpisode.value = null
+  selectedTranslation.value = null
+  currentTime.value = 0
+  maxTime.value = 0
+  lastSaveTime.value = 0
+  watchedEpisodes.value = 0
+  episodeMarkedWatched.value = false
+  fetchEpisodes()
+})
 
 // Lifecycle
 onMounted(async () => {

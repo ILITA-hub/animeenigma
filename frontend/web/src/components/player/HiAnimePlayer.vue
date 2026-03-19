@@ -353,6 +353,7 @@ import { hiAnimeApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
+import type { WatchCombo } from '@/types/preference'
 
 const ACCENT_COLOR = '#a855f7'
 
@@ -399,11 +400,13 @@ const props = defineProps<{
   animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
+  preferredCombo?: WatchCombo | null
 }>()
 
 const emit = defineEmits<{
   (e: 'progress', data: { episode: number; time: number; maxTime: number }): void
   (e: 'episodeWatched', data: { episode: number }): void
+  (e: 'availableTranslations', combos: WatchCombo[]): void
 }>()
 
 const authStore = useAuthStore()
@@ -482,6 +485,17 @@ const filteredServers = computed(() =>
   selectedCategory.value === 'sub' ? subServers.value : dubServers.value
 )
 
+const currentCombo = computed((): WatchCombo | null => {
+  if (!selectedServer.value) return null
+  return {
+    player: 'hianime',
+    language: 'en',
+    watch_type: selectedCategory.value === 'dub' ? 'dub' : 'sub',
+    translation_id: selectedServer.value.id,
+    translation_title: selectedServer.value.name
+  }
+})
+
 // Methods
 const fetchEpisodes = async (retries = 2) => {
   loadingEpisodes.value = true
@@ -524,14 +538,40 @@ const fetchServers = async (episodeId: string) => {
     const data = response.data?.data || response.data || []
     servers.value = Array.isArray(data) ? data : []
 
-    // Auto-select first server of preferred category
-    const preferredServers = selectedCategory.value === 'sub' ? subServers.value : dubServers.value
-    if (preferredServers.length > 0) {
-      await selectServer(preferredServers[0])
-    } else if (servers.value.length > 0) {
-      // Fall back to any available server
-      selectedCategory.value = servers.value[0].type as 'sub' | 'dub'
-      await selectServer(servers.value[0])
+    // Emit available translations as WatchCombo[]
+    const combos: WatchCombo[] = servers.value.map(s => ({
+      player: 'hianime' as const,
+      language: 'en' as const,
+      watch_type: s.type === 'dub' ? 'dub' as const : 'sub' as const,
+      translation_id: s.id,
+      translation_title: s.name
+    }))
+    emit('availableTranslations', combos)
+
+    // Auto-select from preferredCombo if it matches this player
+    let autoSelected = false
+    if (props.preferredCombo?.player === 'hianime') {
+      const match = servers.value.find(
+        s => s.id === props.preferredCombo!.translation_id
+          || s.name === props.preferredCombo!.translation_title
+      )
+      if (match) {
+        selectedCategory.value = match.type as 'sub' | 'dub'
+        autoSelected = true
+        await selectServer(match)
+      }
+    }
+
+    if (!autoSelected) {
+      // Auto-select first server of preferred category
+      const preferredServers = selectedCategory.value === 'sub' ? subServers.value : dubServers.value
+      if (preferredServers.length > 0) {
+        await selectServer(preferredServers[0])
+      } else if (servers.value.length > 0) {
+        // Fall back to any available server
+        selectedCategory.value = servers.value[0].type as 'sub' | 'dub'
+        await selectServer(servers.value[0])
+      }
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
@@ -958,7 +998,8 @@ const saveProgress = () => {
       anime_id: props.animeId,
       episode_number: selectedEpisode.value.number,
       progress: Math.floor(currentTime.value),
-      duration: Math.floor(maxTime.value) || null
+      duration: Math.floor(maxTime.value) || null,
+      ...currentCombo.value
     }).catch((err) => console.warn('[HiAnime] Failed to save progress:', err))
   }
 }
@@ -988,7 +1029,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number
@@ -1006,7 +1047,7 @@ const autoMarkEpisodeWatched = async () => {
   if (!authStore.isAuthenticated || !selectedEpisode.value || episodeMarkedWatched.value) return
 
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number

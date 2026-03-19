@@ -348,6 +348,8 @@
             :anime-id="anime.id"
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
+            :preferred-combo="resolvedCombo"
+            @available-translations="handleAvailableTranslations"
           />
           <!-- AnimeLib Player -->
           <AnimeLibPlayer
@@ -355,6 +357,8 @@
             :anime-id="anime.id"
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
+            :preferred-combo="resolvedCombo"
+            @available-translations="handleAvailableTranslations"
           />
           <!-- HiAnime Player -->
           <HiAnimePlayer
@@ -362,6 +366,8 @@
             :anime-id="anime.id"
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
+            :preferred-combo="resolvedCombo"
+            @available-translations="handleAvailableTranslations"
           />
           <!-- Consumet Player -->
           <ConsumetPlayer
@@ -369,6 +375,9 @@
             :anime-id="anime.id"
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
+            :preferred-combo="resolvedCombo"
+            :sub-or-dub="'sub'"
+            @available-translations="handleAvailableTranslations"
           />
         </div>
       </section>
@@ -536,6 +545,8 @@ import { useAuthStore } from '@/stores/auth'
 import { Badge, Button } from '@/components/ui'
 import { GenreChip, AnimeCardNew } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
+import { useWatchPreferences } from '@/composables/useWatchPreferences'
+import type { WatchCombo } from '@/types/preference'
 
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
 const HiAnimePlayer = defineAsyncComponent(() => import('@/components/player/HiAnimePlayer.vue'))
@@ -603,6 +614,44 @@ const videoLanguage = ref<'ru' | 'en'>(
 const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet'>(
   (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet') || 'kodik'
 )
+
+// Watch preference resolution
+const preferenceState = ref<{
+  resolvedCombo: WatchCombo | null
+  resolve: (available: WatchCombo[]) => Promise<void>
+} | null>(null)
+
+const resolvedCombo = computed(() => preferenceState.value?.resolvedCombo ?? null)
+
+const initPreferences = (animeId: string) => {
+  const pref = useWatchPreferences(animeId)
+  preferenceState.value = {
+    resolvedCombo: pref.resolvedCombo.value,
+    resolve: async (available: WatchCombo[]) => {
+      await pref.resolve(available)
+      if (preferenceState.value) {
+        preferenceState.value.resolvedCombo = pref.resolvedCombo.value
+      }
+      // Auto-switch player/language based on resolved combo
+      if (pref.resolvedCombo.value) {
+        const combo = pref.resolvedCombo.value
+        videoLanguage.value = combo.language
+        videoProvider.value = combo.player
+      }
+    }
+  }
+  // If we already have a cached result, apply it
+  if (pref.resolvedCombo.value) {
+    videoLanguage.value = pref.resolvedCombo.value.language
+    videoProvider.value = pref.resolvedCombo.value.player
+  }
+}
+
+const handleAvailableTranslations = (combos: WatchCombo[]) => {
+  if (preferenceState.value) {
+    preferenceState.value.resolve(combos)
+  }
+}
 
 // Reviews
 const reviews = ref<Review[]>([])
@@ -954,6 +1003,11 @@ const loadAnimeData = async (animeId: string) => {
 
   const fetched = await fetchAnime(animeId)
   if (gen !== loadGeneration) return
+
+  // Initialize watch preferences for this anime
+  if (fetched && authStore.isAuthenticated) {
+    initPreferences(fetched.id)
+  }
 
   // Check for pending MAL bind from Browse page
   const pendingBind = sessionStorage.getItem('pending_mal_bind')
