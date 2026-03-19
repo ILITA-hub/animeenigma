@@ -24,6 +24,7 @@ func NewRouter(
 	syncHandler *handler.SyncHandler,
 	activityHandler *handler.ActivityHandler,
 	exportHandler *handler.ExportHandler,
+	preferenceHandler *handler.PreferenceHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -98,6 +99,11 @@ func NewRouter(
 
 			// Error reports
 			r.Post("/report", reportHandler.SubmitReport)
+
+			// Preference routes
+			r.Post("/preferences/resolve", preferenceHandler.ResolvePreference)
+			r.Get("/preferences/global", preferenceHandler.GetGlobalPreferences)
+			r.Get("/preferences/{animeId}", preferenceHandler.GetAnimePreference)
 		})
 
 		// Public user watchlist

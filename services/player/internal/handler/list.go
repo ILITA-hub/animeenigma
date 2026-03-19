@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -179,11 +180,14 @@ func (h *ListHandler) DeleteListEntry(w http.ResponseWriter, r *http.Request) {
 func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
 
-	var req struct {
-		Episode int `json:"episode"`
-	}
+	var req domain.MarkEpisodeWatchedRequest
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
+		return
+	}
+
+	if req.Player != "" && !domain.ValidateCombo(req.Player, req.Language, req.WatchType) {
+		httputil.Error(w, errors.InvalidInput("invalid combo fields: player, language, or watch_type"))
 		return
 	}
 
@@ -193,7 +197,7 @@ func (h *ListHandler) MarkEpisodeWatched(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	entry, err := h.listService.MarkEpisodeWatched(r.Context(), claims.UserID, animeID, req.Episode)
+	entry, err := h.listService.MarkEpisodeWatched(r.Context(), claims.UserID, animeID, &req)
 	if err != nil {
 		httputil.Error(w, err)
 		return

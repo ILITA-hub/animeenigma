@@ -69,9 +69,13 @@ func main() {
 		log.Errorw("failed to mark stale sync jobs", "error", err)
 	}
 
+	// Initialize repositories (preference)
+	prefRepo := repo.NewPreferenceRepository(db.DB)
+
 	// Initialize services
-	progressService := service.NewProgressService(progressRepo, log)
-	listService := service.NewListService(listRepo, activityRepo, log)
+	prefService := service.NewPreferenceService(prefRepo, log)
+	progressService := service.NewProgressService(progressRepo, prefService, log)
+	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, log)
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(reviewRepo, listRepo, activityRepo, log)
 
@@ -87,6 +91,7 @@ func main() {
 	malExportHandler := handler.NewMALExportHandler(malExportService, log)
 	shikimoriImportHandler := handler.NewShikimoriImportHandler(listService, syncRepo, log)
 	exportHandler := handler.NewExportHandler(listService, log)
+	prefHandler := handler.NewPreferenceHandler(prefService, log)
 	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir)
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
@@ -95,7 +100,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

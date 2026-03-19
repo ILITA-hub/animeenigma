@@ -11,12 +11,14 @@ import (
 
 type ProgressService struct {
 	progressRepo *repo.ProgressRepository
+	prefService  *PreferenceService
 	log          *logger.Logger
 }
 
-func NewProgressService(progressRepo *repo.ProgressRepository, log *logger.Logger) *ProgressService {
+func NewProgressService(progressRepo *repo.ProgressRepository, prefService *PreferenceService, log *logger.Logger) *ProgressService {
 	return &ProgressService{
 		progressRepo: progressRepo,
+		prefService:  prefService,
 		log:          log,
 	}
 }
@@ -35,6 +37,11 @@ func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req
 
 	if err := s.progressRepo.Upsert(ctx, progress); err != nil {
 		return nil, err
+	}
+
+	// Upsert anime preference if combo fields are present
+	if req.Player != "" {
+		s.prefService.UpsertAnimePreference(ctx, userID, req)
 	}
 
 	return progress, nil

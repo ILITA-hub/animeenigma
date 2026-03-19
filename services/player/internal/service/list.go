@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 )
@@ -12,13 +13,17 @@ import (
 type ListService struct {
 	listRepo     *repo.ListRepository
 	activityRepo *repo.ActivityRepository
+	prefRepo     *repo.PreferenceRepository
+	progressRepo *repo.ProgressRepository
 	log          *logger.Logger
 }
 
-func NewListService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, log *logger.Logger) *ListService {
+func NewListService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, prefRepo *repo.PreferenceRepository, progressRepo *repo.ProgressRepository, log *logger.Logger) *ListService {
 	return &ListService{
 		listRepo:     listRepo,
 		activityRepo: activityRepo,
+		prefRepo:     prefRepo,
+		progressRepo: progressRepo,
 		log:          log,
 	}
 }
@@ -167,8 +172,8 @@ func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID strin
 }
 
 // MarkEpisodeWatched marks an episode as watched and updates the episodes count
-func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, episode int) (*domain.AnimeListEntry, error) {
-	updated, err := s.listRepo.IncrementEpisodes(ctx, userID, animeID, episode)
+func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, req *domain.MarkEpisodeWatchedRequest) (*domain.AnimeListEntry, error) {
+	updated, err := s.listRepo.IncrementEpisodes(ctx, userID, animeID, req.Episode)
 	if err != nil {
 		return nil, err
 	}
@@ -185,14 +190,14 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			s.log.Infow("auto-creating watchlist entry for episode marking",
 				"user_id", userID,
 				"anime_id", animeID,
-				"episode", episode,
+				"episode", req.Episode,
 			)
 			now := time.Now()
 			entry := &domain.AnimeListEntry{
 				UserID:    userID,
 				AnimeID:   animeID,
 				Status:    "watching",
-				Episodes:  episode,
+				Episodes:  req.Episode,
 				StartedAt: &now,
 			}
 			if err := s.listRepo.Upsert(ctx, entry); err != nil {
@@ -204,8 +209,38 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 		s.log.Infow("episode already marked",
 			"user_id", userID,
 			"anime_id", animeID,
-			"episode", episode,
+			"episode", req.Episode,
 		)
+	}
+
+	// Create watch history with combo context if present
+	if req.Player != "" {
+		progress, _ := s.progressRepo.GetByUserAnimeEpisode(ctx, userID, animeID, req.Episode)
+		durationWatched := 0
+		if progress != nil {
+			durationWatched = progress.Progress
+		}
+		history := &domain.WatchHistory{
+			UserID:           userID,
+			AnimeID:          animeID,
+			EpisodeNumber:    req.Episode,
+			Player:           req.Player,
+			Language:         req.Language,
+			WatchType:        req.WatchType,
+			TranslationID:    req.TranslationID,
+			TranslationTitle: req.TranslationTitle,
+			DurationWatched:  durationWatched,
+			WatchedAt:        time.Now(),
+		}
+		if err := s.prefRepo.CreateWatchHistory(ctx, history); err != nil {
+			s.log.Errorw("failed to create watch history",
+				"user_id", userID,
+				"anime_id", animeID,
+				"episode", req.Episode,
+				"error", err,
+			)
+		}
+		metrics.WatchEpisodesTotal.WithLabelValues(req.Player, req.Language, req.WatchType).Inc()
 	}
 
 	// Return updated entry

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -29,6 +30,11 @@ func (h *ProgressHandler) UpdateProgress(w http.ResponseWriter, r *http.Request)
 	var req domain.UpdateProgressRequest
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
+		return
+	}
+
+	if req.Player != "" && !domain.ValidateCombo(req.Player, req.Language, req.WatchType) {
+		httputil.Error(w, errors.InvalidInput("invalid combo fields: player, language, or watch_type"))
 		return
 	}
 
