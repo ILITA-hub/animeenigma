@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
 import { hookAxiosDiagnostics } from '@/utils/diagnostics'
+import type { WatchCombo, ResolveResponse } from '@/types/preference'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -196,8 +197,8 @@ export const userApi = {
     notes?: string
   }) => apiClient.put('/users/watchlist', data),
   removeFromWatchlist: (animeId: string) => apiClient.delete(`/users/watchlist/${animeId}`),
-  markEpisodeWatched: (animeId: string, episode: number) =>
-    apiClient.post(`/users/watchlist/${animeId}/episode`, { episode }),
+  markEpisodeWatched: (animeId: string, episode: number, combo?: Partial<WatchCombo>) =>
+    apiClient.post(`/users/watchlist/${animeId}/episode`, { episode, ...combo }),
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: Record<string, unknown>) => apiClient.post('/users/progress', data),
   getMyReviews: () => apiClient.get('/users/reviews'),
@@ -222,6 +223,13 @@ export const userApi = {
   generateApiKey: () => apiClient.post('/auth/api-key'),
   revokeApiKey: () => apiClient.delete('/auth/api-key'),
   hasApiKey: () => apiClient.get('/auth/api-key'),
+  // Watch preferences
+  resolvePreference: (animeId: string, available: WatchCombo[]) =>
+    apiClient.post<ResolveResponse>('/users/preferences/resolve', { anime_id: animeId, available }),
+  getAnimePreference: (animeId: string) =>
+    apiClient.get<WatchCombo & { updated_at: string }>(`/users/preferences/${animeId}`),
+  getGlobalPreferences: () =>
+    apiClient.get<{ top_combos: (WatchCombo & { count: number })[] }>('/users/preferences/global'),
 }
 
 export const publicApi = {
