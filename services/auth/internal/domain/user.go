@@ -52,15 +52,36 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
-// TelegramLoginRequest represents Telegram Login Widget data
-type TelegramLoginRequest struct {
+// TelegramWebhookUser represents user data received from Telegram bot webhook
+type TelegramWebhookUser struct {
 	ID        int64  `json:"id"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name,omitempty"`
 	Username  string `json:"username,omitempty"`
-	PhotoURL  string `json:"photo_url,omitempty"`
-	AuthDate  int64  `json:"auth_date"`
-	Hash      string `json:"hash"`
+}
+
+// DeepLinkResponse is returned when creating a new deep link auth token
+type DeepLinkResponse struct {
+	Token       string `json:"token"`
+	DeepLinkURL string `json:"deeplink_url"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
+// DeepLinkCheckResponse is returned when polling deep link auth status
+type DeepLinkCheckResponse struct {
+	Status      string     `json:"status"`
+	AccessToken string     `json:"access_token,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	User        *User      `json:"user,omitempty"`
+}
+
+// TelegramAuthSession is stored in Redis during the deep link auth flow
+type TelegramAuthSession struct {
+	Status     string `json:"status"`
+	TelegramID int64  `json:"telegram_id,omitempty"`
+	FirstName  string `json:"first_name,omitempty"`
+	LastName   string `json:"last_name,omitempty"`
+	Username   string `json:"username,omitempty"`
 }
 
 // AuthResponse represents an authentication response
