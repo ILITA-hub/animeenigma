@@ -24,16 +24,6 @@ export interface RegisterData {
   password: string
 }
 
-export interface TelegramAuthData {
-  id: number
-  first_name: string
-  last_name?: string
-  username?: string
-  photo_url?: string
-  auth_date: number
-  hash: string
-}
-
 // Helper to safely parse user from localStorage
 function loadUserFromStorage(): User | null {
   try {
@@ -132,22 +122,29 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const loginWithTelegram = async (telegramData: TelegramAuthData) => {
-    loading.value = true
+  const requestDeepLink = async (): Promise<{ token: string; deeplink_url: string; expires_in: number } | null> => {
     error.value = null
-
     try {
-      const response = await apiClient.post('/auth/telegram', telegramData)
-      const data = response.data?.data || response.data
-      setToken(data.access_token)
-      setUser(data.user)
-      return true
+      const response = await apiClient.post('/auth/telegram/deeplink')
+      return response.data?.data || response.data
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
       error.value = e.response?.data?.error?.message || e.response?.data?.message || i18n.global.t('auth.telegramLoginError')
-      return false
-    } finally {
-      loading.value = false
+      return null
+    }
+  }
+
+  const checkDeepLink = async (token: string): Promise<{ status: string; access_token?: string; user?: User } | null> => {
+    try {
+      const response = await apiClient.get(`/auth/telegram/check?token=${token}`)
+      const data = response.data?.data || response.data
+      if (data.status === 'confirmed' && data.access_token) {
+        setToken(data.access_token)
+        setUser(data.user)
+      }
+      return data
+    } catch {
+      return { status: 'expired' }
     }
   }
 
@@ -206,7 +203,8 @@ export const useAuthStore = defineStore('auth', () => {
     isRefreshing,
     login,
     register,
-    loginWithTelegram,
+    requestDeepLink,
+    checkDeepLink,
     logout,
     fetchUser,
     updateProfile,
