@@ -10,7 +10,8 @@ var (
 	// Short-lived cache for frequently changing data
 	TTLSession     = 24 * time.Hour
 	TTLRateLimit   = 1 * time.Minute
-	TTLUserOnline  = 5 * time.Minute
+	TTLUserOnline    = 5 * time.Minute
+	TTLTelegramAuth  = 5 * time.Minute
 
 	// Medium-lived cache for moderately stable data
 	TTLAnimeList      = 1 * time.Hour
@@ -44,6 +45,7 @@ const (
 	PrefixExternalID   = "extid:"
 	PrefixRateLimit    = "ratelimit:"
 	PrefixRoom         = "room:"
+	PrefixTelegramAuth = "tgauth:"
 )
 
 // Key builders for consistent cache key formatting
@@ -89,4 +91,8 @@ func KeyRateLimit(identifier, action string) string {
 
 func KeyRoom(roomID string) string {
 	return PrefixRoom + roomID
+}
+
+func KeyTelegramAuth(token string) string {
+	return PrefixTelegramAuth + token
 }
