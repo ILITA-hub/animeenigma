@@ -21,8 +21,10 @@ type Config struct {
 }
 
 type TelegramConfig struct {
-	BotToken string
-	BotName  string
+	BotToken      string
+	BotName       string
+	WebhookSecret string
+	WebhookURL    string
 }
 
 type CookieConfig struct {
@@ -76,8 +78,10 @@ func Load() (*Config, error) {
 			SameSite: getEnv("COOKIE_SAMESITE", "Lax"),
 		},
 		Telegram: TelegramConfig{
-			BotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
-			BotName:  getEnv("TELEGRAM_BOT_NAME", ""),
+			BotToken:      getEnv("TELEGRAM_BOT_TOKEN", ""),
+			BotName:       getEnv("TELEGRAM_BOT_NAME", ""),
+			WebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
+			WebhookURL:    getEnv("TELEGRAM_WEBHOOK_URL", ""),
 		},
 	}, nil
 }
