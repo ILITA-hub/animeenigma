@@ -463,7 +463,6 @@ services:
       context: ../frontend/web
       dockerfile: Dockerfile
       args:
-        VITE_TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
         VITE_API_URL: /api
     container_name: animeenigma-web
     restart: unless-stopped
