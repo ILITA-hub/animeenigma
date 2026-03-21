@@ -376,7 +376,11 @@
     "loginError": "ログインエラー",
     "registerError": "登録エラー",
     "telegramLoginError": "Telegramログインエラー",
-    "loginWithTelegram": "Telegramでログイン"
+    "openInTelegram": "Telegramで開く",
+    "expiresIn": "{seconds}秒後に期限切れ",
+    "sessionExpired": "セッションが期限切れです",
+    "tryAgain": "もう一度試す",
+    "troubleshootingHint": "問題がありますか？Telegramで @animeenigma_auth_bot をブロックしていないか確認してください。"
   },
   "notFound": {
     "code": "404",

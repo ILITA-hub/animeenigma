@@ -376,7 +376,11 @@
     "loginError": "Ошибка входа",
     "registerError": "Ошибка регистрации",
     "telegramLoginError": "Ошибка входа через Telegram",
-    "loginWithTelegram": "Войти через Telegram"
+    "openInTelegram": "Открыть в Telegram",
+    "expiresIn": "Истекает через {seconds} сек",
+    "sessionExpired": "Сессия истекла",
+    "tryAgain": "Попробовать снова",
+    "troubleshootingHint": "Не получается? Убедитесь, что вы не заблокировали @animeenigma_auth_bot в Telegram."
   },
   "notFound": {
     "code": "404",

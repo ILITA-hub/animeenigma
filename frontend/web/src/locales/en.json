@@ -376,7 +376,11 @@
     "loginError": "Login error",
     "registerError": "Registration error",
     "telegramLoginError": "Telegram login error",
-    "loginWithTelegram": "Log in with Telegram"
+    "openInTelegram": "Open in Telegram",
+    "expiresIn": "Expires in {seconds}s",
+    "sessionExpired": "Session expired",
+    "tryAgain": "Try again",
+    "troubleshootingHint": "Having trouble? Make sure you haven't blocked @animeenigma_auth_bot in Telegram."
   },
   "notFound": {
     "code": "404",
