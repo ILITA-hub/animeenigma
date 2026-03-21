@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -217,31 +216,39 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	httputil.NoContent(w)
 }
 
-// TelegramLogin handles Telegram Login Widget authentication
-func (h *AuthHandler) TelegramLogin(w http.ResponseWriter, r *http.Request) {
-	var req domain.TelegramLoginRequest
-	if err := httputil.Bind(r, &req); err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	resp, err := h.authService.LoginWithTelegram(r.Context(), &req)
+// DeepLink creates a new deep link auth token and returns the Telegram bot URL.
+func (h *AuthHandler) DeepLink(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.authService.CreateDeepLinkToken(r.Context(), h.telegramConfig.BotName)
 	if err != nil {
-		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "error").Inc()
 		httputil.Error(w, err)
 		return
 	}
 
-	metrics.AuthEventsTotal.WithLabelValues("telegram_login", "success").Inc()
+	httputil.OK(w, resp)
+}
 
-	// Set refresh token as httpOnly cookie
-	h.setRefreshTokenCookie(w, resp.RefreshToken)
+// CheckDeepLink polls the status of a deep link auth token.
+func (h *AuthHandler) CheckDeepLink(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		httputil.Error(w, errors.InvalidInput("token is required"))
+		return
+	}
 
-	// Set access token as httpOnly cookie for direct browser navigation
-	h.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
+	checkResp, authResp, err := h.authService.CheckDeepLinkToken(r.Context(), token)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
 
-	// Return response without refresh token in body
-	httputil.OK(w, resp.ToPublicResponse())
+	// If confirmed, set auth cookies
+	if authResp != nil {
+		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "success").Inc()
+		h.setRefreshTokenCookie(w, authResp.RefreshToken)
+		h.setAccessTokenCookie(w, authResp.AccessToken, authResp.ExpiresAt)
+	}
+
+	httputil.OK(w, checkResp)
 }
 
 // GenerateApiKey creates a new API key for the authenticated user
@@ -321,18 +328,3 @@ func (h *AuthHandler) ResolveApiKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetTelegramConfig returns public Telegram bot info for the frontend OAuth flow.
-// The bot_id is extracted from the bot token (format: "BOT_ID:SECRET").
-func (h *AuthHandler) GetTelegramConfig(w http.ResponseWriter, r *http.Request) {
-	botID := ""
-	if h.telegramConfig.BotToken != "" {
-		if parts := strings.SplitN(h.telegramConfig.BotToken, ":", 2); len(parts) == 2 {
-			botID = parts[0]
-		}
-	}
-
-	httputil.OK(w, map[string]string{
-		"bot_id":   botID,
-		"bot_name": h.telegramConfig.BotName,
-	})
-}
