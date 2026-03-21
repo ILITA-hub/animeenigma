@@ -265,7 +265,7 @@ services:
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       CORS_ORIGINS: "http://localhost:3003,http://localhost:8000"
-      SITE_URL: "http://localhost:3003"
+      SITE_URL: ${SITE_URL:-https://animeenigma.ru}
       DEV_MODE: "true"
     ports:
       - "127.0.0.1:8000:8000"

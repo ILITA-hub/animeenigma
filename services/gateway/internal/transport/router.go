@@ -51,9 +51,12 @@ func NewRouter(
 	})
 
 	// Open Graph meta tag routes (for social media crawlers)
+	// HEAD is needed because Telegram sends HEAD before GET
 	ogHandler := handler.NewOpenGraphHandler(cfg.Services.CatalogService, cfg.SiteURL, log)
 	r.Get("/og/anime/{animeId}", ogHandler.ServeAnime)
+	r.Head("/og/anime/{animeId}", ogHandler.ServeAnime)
 	r.Get("/og/home", ogHandler.ServeHome)
+	r.Head("/og/home", ogHandler.ServeHome)
 
 	// Public status endpoints (aggregated health of all services)
 	statusHandler := handler.NewStatusHandler(cfg.Services, log)
