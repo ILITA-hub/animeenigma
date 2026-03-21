@@ -11,6 +11,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/go-chi/chi/v5 v5.0.12
+	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.2.0
 	golang.org/x/crypto v0.31.0
 	gorm.io/gorm v1.30.0
