@@ -60,7 +60,10 @@ type ogTemplateData struct {
 	OGType       string
 }
 
-var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
+var (
+	htmlTagRe    = regexp.MustCompile(`<[^>]*>`)
+	bbcodeTagRe  = regexp.MustCompile(`\[[^\]]*\]`)
+)
 
 const ogHTMLTemplate = `<!DOCTYPE html>
 <html lang="en">
@@ -302,9 +305,10 @@ func (h *OpenGraphHandler) renderTemplate(data ogTemplateData) []byte {
 	return []byte(buf.String())
 }
 
-// sanitizeHTML strips HTML tags from a string.
+// sanitizeHTML strips HTML and BBCode tags from a string.
 func sanitizeHTML(s string) string {
 	s = htmlTagRe.ReplaceAllString(s, "")
+	s = bbcodeTagRe.ReplaceAllString(s, "")
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.TrimSpace(s)
 }
