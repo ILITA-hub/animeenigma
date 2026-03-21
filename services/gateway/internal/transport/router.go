@@ -50,6 +50,11 @@ func NewRouter(
 		httputil.OK(w, map[string]string{"status": "ok"})
 	})
 
+	// Open Graph meta tag routes (for social media crawlers)
+	ogHandler := handler.NewOpenGraphHandler(cfg.Services.CatalogService, cfg.SiteURL, log)
+	r.Get("/og/anime/{animeId}", ogHandler.ServeAnime)
+	r.Get("/og/home", ogHandler.ServeHome)
+
 	// Public status endpoints (aggregated health of all services)
 	statusHandler := handler.NewStatusHandler(cfg.Services, log)
 	r.Get("/api/status", statusHandler.GetStatus)

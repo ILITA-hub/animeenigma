@@ -18,6 +18,7 @@ type Config struct {
 	CORSOrigins []string
 	Environment string // "production", "staging", "development", etc.
 	DevMode     bool   // Skip admin auth when true (for local development)
+	SiteURL     string // Public-facing base URL for OG meta tags (e.g. "https://animeenigma.ru")
 }
 
 type ServerConfig struct {
@@ -92,6 +93,7 @@ func Load() (*Config, error) {
 		CORSOrigins: strings.Split(getEnv("CORS_ORIGINS", ""), ","),
 		Environment: strings.ToLower(getEnv("ENVIRONMENT", "")),
 		DevMode:     getEnvBool("DEV_MODE", false),
+		SiteURL:     strings.TrimRight(getEnv("SITE_URL", ""), "/"),
 	}
 
 	// Production safeguard: refuse to enable DevMode in production

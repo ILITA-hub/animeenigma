@@ -24,6 +24,9 @@ data:
   MINIO_BUCKET: "animeenigma"
   MINIO_USE_SSL: "false"
 
+  # Site
+  SITE_URL: "https://animeenigma.ru"
+
   # Shikimori
   SHIKIMORI_BASE_URL: "https://shikimori.one"
   SHIKIMORI_USER_AGENT: "AnimeEnigma/1.0"
