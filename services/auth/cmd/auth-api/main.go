@@ -65,13 +65,23 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, cfg.Telegram, log)
+	telegramBotHandler := handler.NewTelegramBotHandler(authService, cfg.Telegram.BotToken, cfg.Telegram.WebhookSecret, log)
 	userHandler := handler.NewUserHandler(userService, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("auth")
 
 	// Initialize router
-	router := transport.NewRouter(authHandler, userHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, cfg.JWT, log, metricsCollector)
+
+	// Register Telegram webhook (warn on failure, don't block startup)
+	if cfg.Telegram.BotToken != "" && cfg.Telegram.WebhookURL != "" {
+		if err := telegramBotHandler.SetWebhook(cfg.Telegram.WebhookURL); err != nil {
+			log.Warnw("failed to register telegram webhook", "error", err)
+		} else {
+			log.Infow("telegram webhook registered", "url", cfg.Telegram.WebhookURL)
+		}
+	}
 
 	// Create HTTP server
 	srv := &http.Server{
