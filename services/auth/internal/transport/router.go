@@ -14,6 +14,7 @@ import (
 
 func NewRouter(
 	authHandler *handler.AuthHandler,
+	telegramBotHandler *handler.TelegramBotHandler,
 	userHandler *handler.UserHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
@@ -51,8 +52,9 @@ func NewRouter(
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
-			r.Post("/telegram", authHandler.TelegramLogin)
-			r.Get("/telegram/config", authHandler.GetTelegramConfig)
+			r.Post("/telegram/deeplink", authHandler.DeepLink)
+			r.Get("/telegram/check", authHandler.CheckDeepLink)
+			r.Post("/telegram/webhook", telegramBotHandler.HandleWebhook)
 			r.Post("/refresh", authHandler.RefreshToken)
 			r.Post("/logout", authHandler.Logout)
 		})
