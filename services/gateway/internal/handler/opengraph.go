@@ -69,8 +69,8 @@ const ogHTMLTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>{{.Title}} - {{.SiteName}}</title>
-<meta name="title" content="{{.Title}} - {{.SiteName}}">
+<title>{{.Title}}</title>
+<meta name="title" content="{{.Title}}">
 <meta name="description" content="{{.Description}}">
 <meta property="og:type" content="{{.OGType}}">
 <meta property="og:url" content="{{.CanonicalURL}}">
@@ -80,7 +80,7 @@ const ogHTMLTemplate = `<!DOCTYPE html>
 <meta property="og:image:width" content="350">
 <meta property="og:image:height" content="500">
 <meta property="og:site_name" content="{{.SiteName}}">
-<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{{.Title}}">
 <meta name="twitter:description" content="{{.Description}}">
 <meta name="twitter:image" content="{{.ImageURL}}">
@@ -178,7 +178,7 @@ func (h *OpenGraphHandler) ServeAnime(w http.ResponseWriter, r *http.Request) {
 // ServeHome renders OG meta tags for the home page.
 func (h *OpenGraphHandler) ServeHome(w http.ResponseWriter, r *http.Request) {
 	data := ogTemplateData{
-		Title:        "AnimeEnigma",
+		Title:        "AnimeEnigma — Anime Streaming Platform",
 		Description:  "Watch anime for free with subtitles. Stream the latest episodes and classic series in English and Russian.",
 		ImageURL:     h.siteURL + "/logo.png",
 		CanonicalURL: h.siteURL + "/",
@@ -216,8 +216,11 @@ func (h *OpenGraphHandler) fetchAnime(animeID string) (*ogAnime, error) {
 }
 
 func (h *OpenGraphHandler) buildTemplateData(anime *ogAnime) ogTemplateData {
+	// Title: EN / RU combined
 	title := anime.Name
-	if title == "" {
+	if title != "" && anime.NameRU != "" && anime.NameRU != title {
+		title = title + " / " + anime.NameRU
+	} else if title == "" {
 		title = anime.NameRU
 	}
 	if title == "" {
@@ -227,44 +230,47 @@ func (h *OpenGraphHandler) buildTemplateData(anime *ogAnime) ogTemplateData {
 		title = "Anime"
 	}
 
-	description := sanitizeHTML(anime.Description)
-	description = truncateDescription(description, 200)
-
-	// If description is empty, build a synthetic one
-	if description == "" {
-		parts := []string{}
-		if anime.Year > 0 {
-			parts = append(parts, fmt.Sprintf("%d", anime.Year))
-		}
-		if anime.Status != "" {
-			parts = append(parts, anime.Status)
-		}
-		if anime.EpisodesCount > 0 {
-			if anime.EpisodesAired > 0 && anime.EpisodesAired < anime.EpisodesCount {
-				parts = append(parts, fmt.Sprintf("%d/%d episodes", anime.EpisodesAired, anime.EpisodesCount))
-			} else {
-				parts = append(parts, fmt.Sprintf("%d episodes", anime.EpisodesCount))
-			}
-		}
-		if anime.Score > 0 {
-			parts = append(parts, fmt.Sprintf("Score: %.1f/10", anime.Score))
-		}
-		if len(anime.Genres) > 0 {
-			genreNames := make([]string, 0, len(anime.Genres))
-			for _, g := range anime.Genres {
-				if g.Name != "" {
-					genreNames = append(genreNames, g.Name)
-				}
-			}
-			if len(genreNames) > 0 {
-				parts = append(parts, strings.Join(genreNames, ", "))
-			}
-		}
-		if len(parts) > 0 {
-			description = strings.Join(parts, " · ")
+	// Description: metadata line + synopsis
+	metaParts := []string{}
+	if anime.Score > 0 {
+		metaParts = append(metaParts, fmt.Sprintf("★ %.2f", anime.Score))
+	}
+	if anime.EpisodesCount > 0 {
+		if anime.EpisodesAired > 0 && anime.EpisodesAired < anime.EpisodesCount {
+			metaParts = append(metaParts, fmt.Sprintf("%d/%d ep", anime.EpisodesAired, anime.EpisodesCount))
 		} else {
-			description = "Watch on AnimeEnigma"
+			metaParts = append(metaParts, fmt.Sprintf("%d ep", anime.EpisodesCount))
 		}
+	}
+	if anime.Year > 0 {
+		metaParts = append(metaParts, fmt.Sprintf("%d", anime.Year))
+	}
+	if len(anime.Genres) > 0 {
+		genreNames := make([]string, 0, len(anime.Genres))
+		for _, g := range anime.Genres {
+			if g.Name != "" {
+				genreNames = append(genreNames, g.Name)
+			}
+		}
+		if len(genreNames) > 0 {
+			metaParts = append(metaParts, strings.Join(genreNames, ", "))
+		}
+	}
+
+	metaLine := strings.Join(metaParts, " · ")
+
+	synopsis := sanitizeHTML(anime.Description)
+	synopsis = truncateDescription(synopsis, 160)
+
+	var description string
+	if metaLine != "" && synopsis != "" {
+		description = metaLine + "\n\n" + synopsis
+	} else if metaLine != "" {
+		description = metaLine
+	} else if synopsis != "" {
+		description = synopsis
+	} else {
+		description = "Watch on AnimeEnigma"
 	}
 
 	imageURL := anime.PosterURL
@@ -284,7 +290,7 @@ func (h *OpenGraphHandler) buildTemplateData(anime *ogAnime) ogTemplateData {
 
 func (h *OpenGraphHandler) serveDefault(w http.ResponseWriter) {
 	data := ogTemplateData{
-		Title:        "AnimeEnigma",
+		Title:        "AnimeEnigma — Anime Streaming Platform",
 		Description:  "Watch anime for free with subtitles. Stream the latest episodes and classic series.",
 		ImageURL:     h.siteURL + "/logo.png",
 		CanonicalURL: h.siteURL + "/",
