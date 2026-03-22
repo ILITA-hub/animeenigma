@@ -41,6 +41,8 @@
           <!-- Open in Telegram button -->
           <a
             :href="deeplinkUrl"
+            target="_blank"
+            rel="noopener"
             class="inline-flex items-center gap-2 px-6 py-3 bg-[#54a9eb] hover:bg-[#4a96d2] text-white font-medium rounded-lg transition-colors w-full justify-center"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
