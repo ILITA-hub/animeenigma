@@ -172,6 +172,8 @@ func (p *PaginationParams) Validate() {
 		"created_at": true,
 		"score":      true,
 		"status":     true,
+		"episodes":   true,
+		"title":      true,
 	}
 	if !allowedSorts[p.Sort] {
 		p.Sort = "updated_at"

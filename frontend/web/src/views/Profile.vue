@@ -968,7 +968,7 @@ const pageCache = new Map<string, CachedPage>()
 const PAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 function pageCacheKey(status: string, page: number): string {
-  return `${status}:${page}`
+  return `${status}:${page}:${sortKey.value}:${sortDirection.value}`
 }
 function clearPageCache() {
   pageCache.clear()
@@ -992,6 +992,17 @@ const sortOptions = computed<SelectOption[]>(() => [
   { value: 'status', label: t('profile.sort.status') },
 ])
 
+// Map frontend sort keys to backend column names
+const backendSortKey = computed(() => {
+  const map: Record<string, string> = {
+    title: 'title',
+    score: 'score',
+    progress: 'episodes',
+    status: 'status',
+  }
+  return map[sortKey.value] || 'updated_at'
+})
+
 const statusLabels = computed<Record<string, string>>(() => ({
   all: t('profile.watchlist.all'),
   watching: t('profile.watchlist.watching'),
@@ -1007,14 +1018,6 @@ const statusColors: Record<string, string> = {
   plan_to_watch: 'bg-purple-500/80 text-white',
   on_hold: 'bg-yellow-500/80 text-black',
   dropped: 'bg-red-500/80 text-white'
-}
-
-const statusOrder: Record<string, number> = {
-  watching: 0,
-  plan_to_watch: 1,
-  completed: 2,
-  on_hold: 3,
-  dropped: 4,
 }
 
 const statusOptions = computed<SelectOption[]>(() => [
@@ -1059,8 +1062,8 @@ const watchlistFilters = computed(() => {
 })
 
 const filteredWatchlist = computed(() => {
-  // Status filtering is handled server-side via fetchWatchlistPage.
-  // Here we apply search, genre, and sort on the current page's data.
+  // Sorting is handled server-side via fetchWatchlistPage.
+  // Here we only apply client-side search filtering on the current page.
   let list = [...watchlist.value]
 
   if (searchQuery.value) {
@@ -1072,27 +1075,6 @@ const filteredWatchlist = computed(() => {
       return name.includes(q) || nameRu.includes(q) || nameJp.includes(q)
     })
   }
-
-  // Sort
-  list.sort((a, b) => {
-    let cmp = 0
-    switch (sortKey.value) {
-      case 'score':
-        cmp = (a.score || 0) - (b.score || 0)
-        break
-      case 'progress':
-        cmp = (a.episodes || 0) - (b.episodes || 0)
-        break
-      case 'status':
-        cmp = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99)
-        break
-      case 'title':
-      default:
-        cmp = animeTitle(a).localeCompare(animeTitle(b))
-        break
-    }
-    return sortDirection.value === 'desc' ? -cmp : cmp
-  })
 
   return list
 })
@@ -1316,8 +1298,8 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
         page: currentPage,
         per_page: watchlistPerPage,
         ...(statusParam && { status: statusParam }),
-        sort: 'updated_at',
-        order: 'desc',
+        sort: backendSortKey.value,
+        order: sortDirection.value,
       })
       data = response.data?.data || response.data || []
       meta = response.data?.meta
@@ -1330,6 +1312,8 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
         per_page: watchlistPerPage,
         ...(statusParam && { status: statusParam }),
         ...(visibleStatuses.length && !statusParam && { statuses: visibleStatuses.join(',') }),
+        sort: backendSortKey.value,
+        order: sortDirection.value,
       })
       data = response.data?.data || response.data || []
       meta = response.data?.meta
@@ -1398,12 +1382,12 @@ const fetchWatchlist = async (isOwn: boolean) => {
     if (!pageCache.has(key)) {
       const statusParam = status === 'all' ? undefined : status
       if (isOwn) {
-        userApi.getWatchlist({ page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), sort: 'updated_at', order: 'desc' })
+        userApi.getWatchlist({ page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), sort: backendSortKey.value, order: sortDirection.value })
           .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
           .catch(() => {})
       } else if (profileUser.value?.id) {
         const ps = profileUser.value.public_statuses || []
-        publicApi.getPublicWatchlist(profileUser.value.id, { page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), ...(!statusParam && ps.length && { statuses: ps.join(',') }) })
+        publicApi.getPublicWatchlist(profileUser.value.id, { page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), ...(!statusParam && ps.length && { statuses: ps.join(',') }), sort: backendSortKey.value, order: sortDirection.value })
           .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
           .catch(() => {})
       }
@@ -1413,6 +1397,13 @@ const fetchWatchlist = async (isOwn: boolean) => {
 
 // Server-side pagination watchers (defined after fetchWatchlistPage)
 watch(watchlistFilter, () => {
+  if (!_watchlistInitialized.value) return
+  watchlistPage.value = 1
+  fetchWatchlistPage()
+})
+
+// Re-fetch when sort key or direction changes (server-side sorting)
+watch([sortKey, sortDirection], () => {
   if (!_watchlistInitialized.value) return
   watchlistPage.value = 1
   fetchWatchlistPage()

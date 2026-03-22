@@ -17,6 +17,8 @@ var allowedSortFields = map[string]bool{
 	"created_at": true,
 	"score":      true,
 	"status":     true,
+	"episodes":   true,
+	"title":      true, // handled specially via JOIN
 }
 
 // sanitizedOrderClause returns a safe ORDER BY clause built from validated
@@ -30,7 +32,15 @@ func sanitizedOrderClause(sort, order string) string {
 	if dir != "ASC" && dir != "DESC" {
 		dir = "DESC"
 	}
+	if sort == "title" {
+		return "animes.name " + dir
+	}
 	return sort + " " + dir
+}
+
+// isTitleSort returns true when the requested sort requires a JOIN with animes.
+func isTitleSort(sort string) bool {
+	return sort == "title"
 }
 
 type ListRepository struct {
@@ -150,9 +160,12 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status 
 		return nil, 0, err
 	}
 
-	err := base.Session(&gorm.Session{}).
-		Preload("Anime").Preload("Anime.Genres").
-		Order(sanitizedOrderClause(params.Sort, params.Order)).
+	q := base.Session(&gorm.Session{}).
+		Preload("Anime").Preload("Anime.Genres")
+	if isTitleSort(params.Sort) {
+		q = q.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
+	}
+	err := q.Order(sanitizedOrderClause(params.Sort, params.Order)).
 		Offset(params.Offset()).
 		Limit(params.PerPage).
 		Find(&entries).Error
@@ -200,9 +213,12 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 		return nil, 0, err
 	}
 
-	err := base.Session(&gorm.Session{}).
-		Preload("Anime").Preload("Anime.Genres").
-		Order(sanitizedOrderClause(params.Sort, params.Order)).
+	q := base.Session(&gorm.Session{}).
+		Preload("Anime").Preload("Anime.Genres")
+	if isTitleSort(params.Sort) {
+		q = q.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
+	}
+	err := q.Order(sanitizedOrderClause(params.Sort, params.Order)).
 		Offset(params.Offset()).
 		Limit(params.PerPage).
 		Find(&entries).Error
