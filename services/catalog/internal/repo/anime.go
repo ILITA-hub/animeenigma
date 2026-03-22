@@ -234,6 +234,20 @@ func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize in
 	return animes, total, nil
 }
 
+// GetStaleAnime returns anime of a given status that haven't been updated since staleBefore.
+func (r *AnimeRepository) GetStaleAnime(ctx context.Context, status domain.AnimeStatus, staleBefore time.Time) ([]*domain.Anime, error) {
+	var animes []*domain.Anime
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND updated_at < ? AND shikimori_id != '' AND shikimori_id IS NOT NULL AND (hidden = ? OR hidden IS NULL)",
+			string(status), staleBefore, false).
+		Order("updated_at ASC").
+		Find(&animes).Error
+	if err != nil {
+		return nil, fmt.Errorf("get stale %s anime: %w", status, err)
+	}
+	return animes, nil
+}
+
 func mapSortColumn(sort string) string {
 	switch sort {
 	case "popularity", "rating":

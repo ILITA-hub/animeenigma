@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -292,6 +293,29 @@ func (c *Client) GetAnimeByID(ctx context.Context, shikimoriID string) (*domain.
 
 	animes := c.mapAnimeList(q.Animes)
 	return animes[0], nil
+}
+
+// GetAnimeByIDs fetches multiple anime by Shikimori IDs in a single batch request.
+// Caller must chunk to max 50 IDs per call.
+func (c *Client) GetAnimeByIDs(ctx context.Context, shikimoriIDs []string) ([]*domain.Anime, error) {
+	if len(shikimoriIDs) == 0 {
+		return nil, nil
+	}
+	c.rateLimiter.acquire()
+
+	ids := strings.Join(shikimoriIDs, ",")
+	gqlQuery := fmt.Sprintf(`{
+		animes(ids: "%s", limit: %d) {
+			id name russian japanese description score status episodes episodesAired duration
+			airedOn { year month day }
+			nextEpisodeAt
+			malId
+			poster { originalUrl }
+			genres { id name russian }
+		}
+	}`, ids, len(shikimoriIDs))
+
+	return c.executeRawQuery(ctx, gqlQuery)
 }
 
 // GetTrendingAnime fetches trending anime (high score, ongoing)

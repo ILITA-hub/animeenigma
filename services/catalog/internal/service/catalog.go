@@ -439,6 +439,107 @@ func (s *CatalogService) RefreshAnimeFromShikimori(ctx context.Context, animeID 
 	return shikimoriAnime, nil
 }
 
+// BatchRefreshAnime refreshes all stale anime of a given status using batch Shikimori queries.
+// Returns counts of refreshed and failed anime.
+func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.AnimeStatus, staleBefore time.Time) (refreshed, failed int, err error) {
+	staleAnime, err := s.animeRepo.GetStaleAnime(ctx, status, staleBefore)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if len(staleAnime) == 0 {
+		s.log.Infow("no stale anime to refresh", "status", status)
+		return 0, 0, nil
+	}
+
+	s.log.Infow("batch refreshing stale anime",
+		"status", status,
+		"count", len(staleAnime),
+	)
+
+	// Build shikimoriID -> existing anime map
+	existingMap := make(map[string]*domain.Anime, len(staleAnime))
+	var shikimoriIDs []string
+	for _, a := range staleAnime {
+		existingMap[a.ShikimoriID] = a
+		shikimoriIDs = append(shikimoriIDs, a.ShikimoriID)
+	}
+
+	// Process in chunks of 50
+	const batchSize = 50
+	for i := 0; i < len(shikimoriIDs); i += batchSize {
+		select {
+		case <-ctx.Done():
+			return refreshed, failed, ctx.Err()
+		default:
+		}
+
+		end := i + batchSize
+		if end > len(shikimoriIDs) {
+			end = len(shikimoriIDs)
+		}
+		batch := shikimoriIDs[i:end]
+
+		s.log.Infow("fetching batch from Shikimori",
+			"batch", fmt.Sprintf("%d-%d/%d", i+1, end, len(shikimoriIDs)),
+			"status", status,
+		)
+
+		freshAnime, err := s.shikimoriClient.GetAnimeByIDs(ctx, batch)
+		if err != nil {
+			s.log.Warnw("batch fetch failed", "error", err, "batch_start", i)
+			failed += len(batch)
+			continue
+		}
+
+		for _, fresh := range freshAnime {
+			existing, ok := existingMap[fresh.ShikimoriID]
+			if !ok {
+				continue
+			}
+
+			// Preserve local fields
+			fresh.ID = existing.ID
+			fresh.HasVideo = existing.HasVideo
+			fresh.CreatedAt = existing.CreatedAt
+
+			if err := s.animeRepo.Update(ctx, fresh); err != nil {
+				s.log.Warnw("failed to update anime", "id", existing.ID, "error", err)
+				failed++
+				continue
+			}
+
+			// Upsert genres
+			for _, genre := range fresh.Genres {
+				_ = s.genreRepo.Upsert(ctx, &genre)
+			}
+			genreIDs := make([]string, len(fresh.Genres))
+			for j, g := range fresh.Genres {
+				genreIDs[j] = g.ID
+			}
+			if len(genreIDs) > 0 {
+				_ = s.genreRepo.SetAnimeGenres(ctx, fresh.ID, genreIDs)
+			}
+
+			// Invalidate cache
+			_ = s.cache.Delete(ctx, cache.KeyAnime(existing.ID))
+			refreshed++
+		}
+
+		// Rate limit safety between batches
+		if end < len(shikimoriIDs) {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
+	s.log.Infow("batch refresh completed",
+		"status", status,
+		"refreshed", refreshed,
+		"failed", failed,
+	)
+	return refreshed, failed, nil
+}
+
 // GetSeasonalAnime gets anime for a specific season
 func (s *CatalogService) GetSeasonalAnime(ctx context.Context, year int, season string, page, pageSize int) ([]*domain.Anime, int64, error) {
 	// Try local first

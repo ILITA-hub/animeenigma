@@ -33,6 +33,9 @@ type JobsConfig struct {
 	ShikimoriAppName    string
 	CatalogServiceURL   string
 	DataRetentionDays   int
+	OngoingStaleHours   int
+	AnnouncedStaleHours int
+	ReleasedStaleHours  int
 }
 
 func Load() (*Config, error) {
@@ -61,8 +64,11 @@ func Load() (*Config, error) {
 			TopAnimeSyncCron:   getEnv("TOP_ANIME_SYNC_CRON", "0 1 * * *"),     // Daily at 1 AM
 			ShikimoriAPIURL:    getEnv("SHIKIMORI_API_URL", "https://shikimori.one/api"),
 			ShikimoriAppName:   getEnv("SHIKIMORI_APP_NAME", "AnimeEnigma"),
-			CatalogServiceURL:  getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
-			DataRetentionDays:  getEnvInt("DATA_RETENTION_DAYS", 90),
+			CatalogServiceURL:   getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
+			DataRetentionDays:   getEnvInt("DATA_RETENTION_DAYS", 90),
+			OngoingStaleHours:   getEnvInt("ONGOING_STALE_HOURS", 12),
+			AnnouncedStaleHours: getEnvInt("ANNOUNCED_STALE_HOURS", 72),
+			ReleasedStaleHours:  getEnvInt("RELEASED_STALE_HOURS", 168),
 		},
 	}, nil
 }

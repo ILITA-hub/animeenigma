@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -233,6 +234,51 @@ func (h *CatalogHandler) RefreshAnime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.OK(w, anime)
+}
+
+// BatchRefreshAnime refreshes stale anime metadata by status using batch Shikimori queries.
+func (h *CatalogHandler) BatchRefreshAnime(w http.ResponseWriter, r *http.Request) {
+	statusParam := r.URL.Query().Get("status")
+	if statusParam == "" {
+		httputil.BadRequest(w, "status query parameter is required (ongoing, announced, released)")
+		return
+	}
+
+	status := domain.AnimeStatus(statusParam)
+	if status != domain.StatusOngoing && status != domain.StatusAnnounced && status != domain.StatusReleased {
+		httputil.BadRequest(w, "status must be one of: ongoing, announced, released")
+		return
+	}
+
+	// Default staleness: ongoing=12h, announced=72h, released=168h
+	staleHours := 168
+	switch status {
+	case domain.StatusOngoing:
+		staleHours = 12
+	case domain.StatusAnnounced:
+		staleHours = 72
+	}
+
+	if override := r.URL.Query().Get("stale_hours"); override != "" {
+		if h, err := strconv.Atoi(override); err == nil && h > 0 {
+			staleHours = h
+		}
+	}
+
+	staleBefore := time.Now().Add(-time.Duration(staleHours) * time.Hour)
+
+	refreshed, failed, err := h.catalogService.BatchRefreshAnime(r.Context(), status, staleBefore)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]interface{}{
+		"refreshed": refreshed,
+		"failed":    failed,
+		"total":     refreshed + failed,
+		"status":    statusParam,
+	})
 }
 
 // GetSchedule handles getting anime release schedule

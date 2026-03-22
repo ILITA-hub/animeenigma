@@ -56,6 +56,7 @@ func NewRouter(
 			r.Get("/recent", catalogHandler.GetRecentAnime)
 			r.Get("/schedule", catalogHandler.GetSchedule)
 			r.Get("/ongoing", catalogHandler.GetOngoingAnime)
+			r.Post("/batch-refresh", catalogHandler.BatchRefreshAnime)
 			r.Get("/seasonal/{year}/{season}", catalogHandler.GetSeasonalAnime)
 			r.Get("/mal/{malId}", catalogHandler.ResolveMALAnime)
 			r.Get("/shikimori/{shikimoriId}", catalogHandler.ResolveShikimoriAnime)
