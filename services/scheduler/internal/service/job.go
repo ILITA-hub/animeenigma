@@ -11,29 +11,33 @@ import (
 )
 
 type JobService struct {
-	cron             *cron.Cron
-	shikimoriJob     *jobs.ShikimoriSyncJob
-	cleanupJob       *jobs.CleanupJob
-	log              *logger.Logger
-	lastShikimoriRun time.Time
-	lastCleanupRun   time.Time
+	cron              *cron.Cron
+	shikimoriJob      *jobs.ShikimoriSyncJob
+	cleanupJob        *jobs.CleanupJob
+	topAnimeJob       *jobs.TopAnimeSyncJob
+	log               *logger.Logger
+	lastShikimoriRun  time.Time
+	lastCleanupRun    time.Time
+	lastTopAnimeRun   time.Time
 }
 
 func NewJobService(
 	shikimoriJob *jobs.ShikimoriSyncJob,
 	cleanupJob *jobs.CleanupJob,
+	topAnimeJob *jobs.TopAnimeSyncJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
 		cron:         cron.New(),
 		shikimoriJob: shikimoriJob,
 		cleanupJob:   cleanupJob,
+		topAnimeJob:  topAnimeJob,
 		log:          log,
 	}
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -74,6 +78,26 @@ func (s *JobService) Start(shikimoriCron, cleanupCron string) error {
 		return err
 	}
 
+	// Schedule top anime sync job
+	_, err = s.cron.AddFunc(topAnimeCron, func() {
+		ctx := context.Background()
+		s.log.Info("starting scheduled top anime sync")
+		start := time.Now()
+		if err := s.topAnimeJob.Run(ctx); err != nil {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("top_anime_sync", "error").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("top_anime_sync").Observe(time.Since(start).Seconds())
+			s.log.Errorw("top anime sync failed", "error", err)
+		} else {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("top_anime_sync", "success").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("top_anime_sync").Observe(time.Since(start).Seconds())
+			s.lastTopAnimeRun = time.Now()
+			s.log.Info("top anime sync completed successfully")
+		}
+	})
+	if err != nil {
+		return err
+	}
+
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -107,6 +131,17 @@ func (s *JobService) TriggerCleanup(ctx context.Context) {
 	}
 }
 
+// TriggerTopAnimeSync manually triggers the top anime sync job
+func (s *JobService) TriggerTopAnimeSync(ctx context.Context) {
+	s.log.Info("manually triggering top anime sync")
+	if err := s.topAnimeJob.Run(ctx); err != nil {
+		s.log.Errorw("top anime sync failed", "error", err)
+	} else {
+		s.lastTopAnimeRun = time.Now()
+		s.log.Info("top anime sync completed successfully")
+	}
+}
+
 // GetStatus returns the status of all jobs
 func (s *JobService) GetStatus() map[string]interface{} {
 	return map[string]interface{}{
@@ -116,6 +151,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"cleanup": map[string]interface{}{
 			"last_run": s.lastCleanupRun,
+		},
+		"top_anime_sync": map[string]interface{}{
+			"last_run": s.lastTopAnimeRun,
 		},
 	}
 }

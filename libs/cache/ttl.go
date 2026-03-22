@@ -22,6 +22,7 @@ var (
 
 	// Long-lived cache for stable data
 	TTLAnimeDetails   = 6 * time.Hour
+	TTLTopAnime       = 24 * time.Hour
 	TTLGenreList      = 24 * time.Hour
 	TTLStudioList     = 24 * time.Hour
 	TTLVideoManifest  = 12 * time.Hour
@@ -95,4 +96,8 @@ func KeyRoom(roomID string) string {
 
 func KeyTelegramAuth(token string) string {
 	return PrefixTelegramAuth + token
+}
+
+func KeyTopAnime() string {
+	return PrefixAnime + "top:trending"
 }

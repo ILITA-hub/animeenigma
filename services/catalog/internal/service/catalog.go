@@ -476,43 +476,62 @@ func (s *CatalogService) GetSeasonalAnime(ctx context.Context, year int, season 
 	return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 }
 
-// GetTrendingAnime gets trending anime (based on recent score/popularity)
+// GetTrendingAnime gets trending anime from cache (backed by Shikimori).
+// Cache-first: returns cached top anime (24h TTL), on miss fetches from Shikimori and caches.
 func (s *CatalogService) GetTrendingAnime(ctx context.Context, page, pageSize int) ([]*domain.Anime, int64, error) {
-	filters := domain.SearchFilters{
-		Sort:     "score",
-		Order:    "desc",
-		Page:     page,
-		PageSize: pageSize,
-	}
-
-	animes, total, err := s.animeRepo.Search(ctx, filters)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// If empty, fetch from Shikimori
-	if len(animes) == 0 {
-		shikimoriAnimes, err := s.shikimoriClient.GetTrendingAnime(ctx, page, pageSize)
-		if err != nil {
-			s.log.Warnw("failed to fetch trending from Shikimori", "error", err)
-			return animes, total, nil
-		}
-
-		for _, anime := range shikimoriAnimes {
-			if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
-				s.log.Warnw("failed to store anime", "error", err)
+	// Only cache page 1 (the main top anime list)
+	if page == 1 {
+		var cached []*domain.Anime
+		if err := s.cache.Get(ctx, cache.KeyTopAnime(), &cached); err == nil && len(cached) > 0 {
+			// Slice to requested page size
+			result := cached
+			if pageSize < len(result) {
+				result = result[:pageSize]
 			}
+			for _, anime := range result {
+				s.enrichAnime(ctx, anime)
+			}
+			return result, int64(len(cached)), nil
+		}
+	}
+
+	// Cache miss — fetch from Shikimori
+	shikimoriAnimes, err := s.shikimoriClient.GetTrendingAnime(ctx, page, pageSize)
+	if err != nil {
+		s.log.Warnw("failed to fetch trending from Shikimori, falling back to local DB", "error", err)
+		// Fallback to local DB sort
+		filters := domain.SearchFilters{
+			Sort:     "score",
+			Order:    "desc",
+			Page:     page,
+			PageSize: pageSize,
+		}
+		animes, total, dbErr := s.animeRepo.Search(ctx, filters)
+		if dbErr != nil {
+			return nil, 0, dbErr
+		}
+		for _, anime := range animes {
 			s.enrichAnime(ctx, anime)
 		}
-
-		return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
+		return animes, total, nil
 	}
 
-	for _, anime := range animes {
+	// Upsert to DB and cache
+	for _, anime := range shikimoriAnimes {
+		if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
+			s.log.Warnw("failed to store trending anime", "error", err)
+		}
 		s.enrichAnime(ctx, anime)
 	}
 
-	return animes, total, nil
+	// Cache page 1 results for 24 hours
+	if page == 1 && len(shikimoriAnimes) > 0 {
+		if err := s.cache.Set(ctx, cache.KeyTopAnime(), shikimoriAnimes, cache.TTLTopAnime); err != nil {
+			s.log.Warnw("failed to cache top anime", "error", err)
+		}
+	}
+
+	return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
 }
 
 // GetPopularAnime gets popular anime (all time)

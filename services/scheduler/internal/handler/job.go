@@ -38,3 +38,9 @@ func (h *JobHandler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
 	go h.jobService.TriggerCleanup(context.Background())
 	httputil.OK(w, map[string]string{"status": "job triggered"})
 }
+
+// TriggerTopAnimeSync manually triggers the top anime sync job
+func (h *JobHandler) TriggerTopAnimeSync(w http.ResponseWriter, r *http.Request) {
+	go h.jobService.TriggerTopAnimeSync(context.Background())
+	httputil.OK(w, map[string]string{"status": "job triggered"})
+}

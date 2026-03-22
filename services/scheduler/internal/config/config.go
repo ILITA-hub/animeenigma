@@ -28,6 +28,7 @@ func (s ServerConfig) Address() string {
 type JobsConfig struct {
 	ShikimoriSyncCron   string
 	CleanupCron         string
+	TopAnimeSyncCron    string
 	ShikimoriAPIURL     string
 	ShikimoriAppName    string
 	CatalogServiceURL   string
@@ -55,8 +56,9 @@ func Load() (*Config, error) {
 			DB:       getEnvInt("REDIS_DB", 2),
 		},
 		Jobs: JobsConfig{
-			ShikimoriSyncCron:  getEnv("SHIKIMORI_SYNC_CRON", "0 2 * * *"), // Daily at 2 AM
-			CleanupCron:        getEnv("CLEANUP_CRON", "0 3 * * 0"),        // Weekly on Sunday at 3 AM
+			ShikimoriSyncCron:  getEnv("SHIKIMORI_SYNC_CRON", "0 2 * * *"),     // Daily at 2 AM
+			CleanupCron:        getEnv("CLEANUP_CRON", "0 3 * * 0"),            // Weekly on Sunday at 3 AM
+			TopAnimeSyncCron:   getEnv("TOP_ANIME_SYNC_CRON", "0 1 * * *"),     // Daily at 1 AM
 			ShikimoriAPIURL:    getEnv("SHIKIMORI_API_URL", "https://shikimori.one/api"),
 			ShikimoriAppName:   getEnv("SHIKIMORI_APP_NAME", "AnimeEnigma"),
 			CatalogServiceURL:  getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),

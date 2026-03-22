@@ -163,7 +163,7 @@ export const animeApi = {
   getSchedule: () => apiClient.get('/anime/schedule'),
   getOngoing: () => apiClient.get('/anime/ongoing'),
   getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'announced', page_size: limit } }),
-  getTop: (limit = 20) => apiClient.get('/anime', { params: { sort: 'score', order: 'desc', page_size: limit } }),
+  getTop: (limit = 20) => apiClient.get('/anime/trending', { params: { page_size: limit } }),
   refresh: (id: string) => apiClient.post(`/anime/${id}/refresh`),
   resolveMAL: (malId: string) => apiClient.get(`/anime/mal/${malId}`),
   getGenres: () => apiClient.get('/genres'),
