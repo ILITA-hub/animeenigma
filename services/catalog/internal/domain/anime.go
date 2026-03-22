@@ -26,6 +26,7 @@ type Anime struct {
 	AniListID       string         `gorm:"size:50" json:"anilist_id,omitempty"`
 	HasVideo        bool           `gorm:"default:false;index" json:"has_video"`
 	Hidden          bool           `gorm:"default:false" json:"hidden"`
+	SortPriority    int            `gorm:"default:0" json:"sort_priority,omitempty"`
 	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`
 	AiredOn         *time.Time     `json:"aired_on,omitempty"`
 	Genres          []Genre        `gorm:"many2many:anime_genres;" json:"genres,omitempty"`

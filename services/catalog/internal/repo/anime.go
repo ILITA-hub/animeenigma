@@ -101,7 +101,7 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 		return nil, 0, fmt.Errorf("count anime: %w", err)
 	}
 
-	orderBy := "score DESC"
+	orderBy := "sort_priority DESC, score DESC"
 	if filters.Sort != "" {
 		column := mapSortColumn(filters.Sort)
 		order := "DESC"
