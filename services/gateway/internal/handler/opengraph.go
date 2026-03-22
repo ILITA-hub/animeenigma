@@ -236,7 +236,7 @@ func (h *OpenGraphHandler) buildTemplateData(anime *ogAnime) ogTemplateData {
 		metaParts = append(metaParts, fmt.Sprintf("★ %.2f", anime.Score))
 	}
 	if anime.EpisodesCount > 0 {
-		if anime.EpisodesAired > 0 && anime.EpisodesAired < anime.EpisodesCount {
+		if anime.Status == "ongoing" && anime.EpisodesAired > 0 && anime.EpisodesAired < anime.EpisodesCount {
 			metaParts = append(metaParts, fmt.Sprintf("%d/%d ep", anime.EpisodesAired, anime.EpisodesCount))
 		} else {
 			metaParts = append(metaParts, fmt.Sprintf("%d ep", anime.EpisodesCount))
