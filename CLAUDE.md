@@ -292,6 +292,24 @@ MINIO_BUCKET
 2. Implement proxy handler in streaming service if needed
 3. Update frontend player to handle new source
 
+### Pinning anime to the top of listings (sort_priority)
+
+The `Anime` model has a `SortPriority int` field (default 0). Browse/search results are ordered by `sort_priority DESC, score DESC`, so any anime with `sort_priority > 0` appears before others.
+
+**To pin an anime to the top of a listing (e.g. announcements):**
+
+```sql
+-- Via direct DB (replace shikimori_id with target anime)
+UPDATE animes SET sort_priority = 1 WHERE shikimori_id = '57466';
+
+-- To unpin
+UPDATE animes SET sort_priority = 0 WHERE shikimori_id = '57466';
+```
+
+Higher values = higher position. Use `sort_priority = 1` for a single pin; use `2, 1` etc. to control relative ordering among pinned items.
+
+This affects ALL browse queries (announcements, ongoing, released, search results).
+
 ### Database migrations
 
 Tables are auto-created via GORM's `AutoMigrate()` on service startup. For schema changes:
