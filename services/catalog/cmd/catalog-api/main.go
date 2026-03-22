@@ -84,6 +84,19 @@ func main() {
 		},
 	)
 
+	// Start player health checker
+	healthChecker := service.NewPlayerHealthChecker(
+		catalogService.KodikClient(),
+		catalogService.AnimeLibClient(),
+		cfg.HiAnime.AniwatchAPIURL,
+		cfg.Consumet.APIURL,
+		cfg.HealthCheck.Interval,
+		log,
+	)
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	go healthChecker.Start(healthCtx)
+
 	// Initialize external clients
 	telegramClient := telegram.NewClient(cfg.Telegram.NewsChannel)
 

@@ -248,3 +248,141 @@ groups:
         annotations:
           summary: "HLS proxy near capacity"
           description: "HLS proxy is at >80% capacity ({{ $value }} of 50 max connections) for 2 minutes."
+
+      - uid: scheduler-sync-failure
+        title: Scheduler Sync Failure
+        noDataState: OK
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: increase(scheduler_job_executions_total{status="error"}[25h])
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 0s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduler job {{ $labels.job }} failed"
+          description: "Scheduler job {{ $labels.job }} has had errors in the last 25 hours."
+
+      - uid: scheduler-sync-stale
+        title: Scheduler Sync Stale
+        noDataState: Alerting
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: time() - scheduler_job_last_success_timestamp
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [90000]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Scheduler job {{ $labels.job }} hasn't run successfully"
+          description: "Scheduler job {{ $labels.job }} hasn't succeeded in over 25 hours."
+
+      - uid: player-unavailable
+        title: Player Unavailable
+        noDataState: OK
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: player_health_up
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Player {{ $labels.player }} is DOWN"
+          description: "Player {{ $labels.player }} has been unavailable for 5+ minutes. Check external API status."

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	APIEndpoint      = "https://kodikapi.com"
+	APIEndpoint      = "https://kodik-api.com"
 	TokenSourceURL   = "https://raw.githubusercontent.com/nb557/plugins/refs/heads/main/online_mod.js"
 	FallbackTokenURL = "https://kodik-add.com/add-players.min.js?v=2"
 )
@@ -221,7 +221,7 @@ func (c *Client) getTokenFromFallback() (string, error) {
 // extractTokenFromSource extracts token using the decode algorithm
 func (c *Client) extractTokenFromSource(source string) string {
 	// Find the Kodik API marker
-	marker := "var embed = 'https://kodikapi.com/search';"
+	marker := "var embed = 'https://kodik-api.com/search';"
 
 	// Search for all occurrences of the marker and try to find
 	// the Utils.decodeSecret call that precedes it (the token variable)

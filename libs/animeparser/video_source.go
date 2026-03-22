@@ -90,7 +90,7 @@ type KodikProvider struct {
 // NewKodikProvider creates a new Kodik provider
 func NewKodikProvider(cfg KodikConfig) *KodikProvider {
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://kodikapi.com"
+		cfg.BaseURL = "https://kodik-api.com"
 	}
 	return &KodikProvider{
 		config: cfg,

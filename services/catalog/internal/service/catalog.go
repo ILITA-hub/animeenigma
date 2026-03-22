@@ -118,6 +118,16 @@ func NewCatalogService(
 	}
 }
 
+// KodikClient returns the Kodik parser client (may be nil if init failed).
+func (s *CatalogService) KodikClient() *kodik.Client {
+	return s.kodikClient
+}
+
+// AnimeLibClient returns the AnimeLib parser client.
+func (s *CatalogService) AnimeLibClient() *animelib.Client {
+	return s.animelibClient
+}
+
 // SearchAnime searches for anime, fetching from Shikimori if not found locally
 func (s *CatalogService) SearchAnime(ctx context.Context, filters domain.SearchFilters) ([]*domain.Anime, int64, error) {
 	// If source=shikimori, force search on Shikimori (skip cache)

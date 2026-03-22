@@ -20,8 +20,9 @@ type Config struct {
 	HiAnime   HiAnimeConfig
 	Consumet  ConsumetConfig
 	Jimaku    JimakuConfig
-	AnimeLib  AnimeLibConfig
-	Telegram  TelegramConfig
+	AnimeLib    AnimeLibConfig
+	Telegram    TelegramConfig
+	HealthCheck HealthCheckConfig
 }
 
 type ServerConfig struct {
@@ -55,6 +56,10 @@ type JimakuConfig struct {
 
 type AnimeLibConfig struct {
 	Token string
+}
+
+type HealthCheckConfig struct {
+	Interval time.Duration
 }
 
 type TelegramConfig struct {
@@ -110,6 +115,9 @@ func Load() (*Config, error) {
 		},
 		Telegram: TelegramConfig{
 			NewsChannel: getEnv("TELEGRAM_NEWS_CHANNEL", "animeenigmanews"),
+		},
+		HealthCheck: HealthCheckConfig{
+			Interval: getEnvDuration("PLAYER_HEALTH_CHECK_INTERVAL", 5*time.Minute),
 		},
 	}, nil
 }

@@ -50,6 +50,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron string) erro
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("shikimori_sync", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("shikimori_sync").Observe(time.Since(start).Seconds())
+			metrics.SchedulerJobLastSuccess.WithLabelValues("shikimori_sync").SetToCurrentTime()
 			s.lastShikimoriRun = time.Now()
 			s.log.Info("Shikimori sync completed successfully")
 		}
@@ -70,6 +71,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron string) erro
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("cleanup", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("cleanup").Observe(time.Since(start).Seconds())
+			metrics.SchedulerJobLastSuccess.WithLabelValues("cleanup").SetToCurrentTime()
 			s.lastCleanupRun = time.Now()
 			s.log.Info("cleanup completed successfully")
 		}
@@ -90,6 +92,7 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron string) erro
 		} else {
 			metrics.SchedulerJobExecutionsTotal.WithLabelValues("top_anime_sync", "success").Inc()
 			metrics.SchedulerJobDuration.WithLabelValues("top_anime_sync").Observe(time.Since(start).Seconds())
+			metrics.SchedulerJobLastSuccess.WithLabelValues("top_anime_sync").SetToCurrentTime()
 			s.lastTopAnimeRun = time.Now()
 			s.log.Info("top anime sync completed successfully")
 		}
@@ -115,6 +118,7 @@ func (s *JobService) TriggerShikimoriSync(ctx context.Context) {
 	if err := s.shikimoriJob.Run(ctx); err != nil {
 		s.log.Errorw("Shikimori sync failed", "error", err)
 	} else {
+		metrics.SchedulerJobLastSuccess.WithLabelValues("shikimori_sync").SetToCurrentTime()
 		s.lastShikimoriRun = time.Now()
 		s.log.Info("Shikimori sync completed successfully")
 	}
@@ -126,6 +130,7 @@ func (s *JobService) TriggerCleanup(ctx context.Context) {
 	if err := s.cleanupJob.Run(ctx); err != nil {
 		s.log.Errorw("cleanup failed", "error", err)
 	} else {
+		metrics.SchedulerJobLastSuccess.WithLabelValues("cleanup").SetToCurrentTime()
 		s.lastCleanupRun = time.Now()
 		s.log.Info("cleanup completed successfully")
 	}
@@ -137,6 +142,7 @@ func (s *JobService) TriggerTopAnimeSync(ctx context.Context) {
 	if err := s.topAnimeJob.Run(ctx); err != nil {
 		s.log.Errorw("top anime sync failed", "error", err)
 	} else {
+		metrics.SchedulerJobLastSuccess.WithLabelValues("top_anime_sync").SetToCurrentTime()
 		s.lastTopAnimeRun = time.Now()
 		s.log.Info("top anime sync completed successfully")
 	}

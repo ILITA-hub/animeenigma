@@ -24,4 +24,13 @@ var (
 		},
 		[]string{"job"},
 	)
+
+	// SchedulerJobLastSuccess tracks the timestamp of the last successful job execution.
+	SchedulerJobLastSuccess = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "scheduler_job_last_success_timestamp",
+			Help: "Unix timestamp of last successful scheduler job execution",
+		},
+		[]string{"job"},
+	)
 )

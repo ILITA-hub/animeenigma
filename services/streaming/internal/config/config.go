@@ -104,7 +104,7 @@ func Load() (*Config, error) {
 		Providers: ProvidersConfig{
 			Kodik: KodikConfig{
 				APIKey:  getEnv("KODIK_API_KEY", ""),
-				BaseURL: getEnv("KODIK_BASE_URL", "https://kodikapi.com"),
+				BaseURL: getEnv("KODIK_BASE_URL", "https://kodik-api.com"),
 			},
 			Aniboom: AniboomConfig{
 				BaseURL: getEnv("ANIBOOM_BASE_URL", ""),
