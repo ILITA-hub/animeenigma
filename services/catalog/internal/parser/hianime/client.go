@@ -18,7 +18,16 @@ const (
 )
 
 // PreferredServers defines the order of servers to try (hd-2 works, hd-1 is often blocked)
-var PreferredServers = []string{"hd-2", "hd-1", "vidstreaming"}
+var PreferredServers = []string{"hd-2", "hd-1"}
+
+// serverNameMap maps server names returned by the aniwatch servers endpoint
+// to the names the sources endpoint actually accepts.
+// The servers endpoint returns new names (vidsrc, megacloud, t-cloud) but
+// the sources endpoint only works with legacy names (hd-1, hd-2).
+var serverNameMap = map[string]string{
+	"megacloud": "hd-2",
+	"vidsrc":    "hd-1",
+}
 
 // Client is the HiAnime API client
 type Client struct {
@@ -188,23 +197,26 @@ func (c *Client) GetServers(episodeID string) ([]Server, error) {
 
 	var servers []Server
 	for _, s := range resp.Data.Sub {
+		name := mapServerName(s.ServerName)
 		servers = append(servers, Server{
 			ID:   strconv.Itoa(s.ServerID),
-			Name: s.ServerName,
+			Name: name,
 			Type: "sub",
 		})
 	}
 	for _, s := range resp.Data.Dub {
+		name := mapServerName(s.ServerName)
 		servers = append(servers, Server{
 			ID:   strconv.Itoa(s.ServerID),
-			Name: s.ServerName,
+			Name: name,
 			Type: "dub",
 		})
 	}
 	for _, s := range resp.Data.Raw {
+		name := mapServerName(s.ServerName)
 		servers = append(servers, Server{
 			ID:   strconv.Itoa(s.ServerID),
-			Name: s.ServerName,
+			Name: name,
 			Type: "raw",
 		})
 	}
@@ -288,7 +300,7 @@ func (c *Client) getStreamFromAniwatch(episodeID string, serverID string, catego
 	)
 
 	if serverID != "" {
-		apiURL += "&server=" + serverID
+		apiURL += "&server=" + mapServerName(serverID)
 	}
 
 	if category != "" {
@@ -378,6 +390,15 @@ func (c *Client) getStreamFromAniwatch(episodeID string, serverID string, catego
 	}
 
 	return stream, nil
+}
+
+// mapServerName translates new aniwatch API server names to the legacy names
+// that the sources endpoint accepts.
+func mapServerName(name string) string {
+	if mapped, ok := serverNameMap[name]; ok {
+		return mapped
+	}
+	return name
 }
 
 // doGet performs an HTTP GET and returns the response body.
