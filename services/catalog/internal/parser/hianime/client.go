@@ -6,19 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/PuerkitoBio/goquery"
 )
 
 const (
-	BaseURL      = "https://hianime.to"
-	AjaxURL      = "https://hianime.to/ajax"
-	MegaCloudURL = "https://megacloud.tv/embed-2/ajax/e-1/getSources"
-
 	// Retry configuration
 	maxRetries    = 3
 	retryBaseWait = 500 * time.Millisecond
@@ -30,7 +23,6 @@ var PreferredServers = []string{"hd-2", "hd-1", "vidstreaming"}
 // Client is the HiAnime API client
 type Client struct {
 	httpClient     *http.Client
-	baseURL        string
 	aniwatchAPIURL string
 }
 
@@ -40,7 +32,6 @@ func NewClient() *Client {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		baseURL:        BaseURL,
 		aniwatchAPIURL: "http://aniwatch:4000",
 	}
 }
@@ -58,6 +49,7 @@ func NewClientWithAniwatch(aniwatchAPIURL string) *Client {
 type SearchResult struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
+	JName    string `json:"jname"`
 	Poster   string `json:"poster"`
 	Type     string `json:"type"`
 	Duration string `json:"duration"`
@@ -104,340 +96,125 @@ type TimeRange struct {
 	End   int `json:"end"`
 }
 
-// AnimeInfo represents detailed anime information
-type AnimeInfo struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Poster        string   `json:"poster"`
-	Description   string   `json:"description"`
-	Type          string   `json:"type"`
-	Quality       string   `json:"quality"`
-	Rating        string   `json:"rating"`
-	Duration      string   `json:"duration"`
-	Status        string   `json:"status"`
-	EpisodesSub   int      `json:"episodes_sub"`
-	EpisodesDub   int      `json:"episodes_dub"`
-	EpisodesTotal int      `json:"episodes_total"`
-	Genres        []string `json:"genres"`
-	MALId         string   `json:"mal_id"`
-}
-
-// Search searches for anime by title
+// Search searches for anime by title via aniwatch API.
 func (c *Client) Search(title string) ([]SearchResult, error) {
-	searchURL := fmt.Sprintf("%s/search?keyword=%s", c.baseURL, url.QueryEscape(title))
+	apiURL := fmt.Sprintf("%s/api/v2/hianime/search?q=%s&page=1",
+		c.aniwatchAPIURL, url.QueryEscape(title))
 
-	doc, err := c.fetchDocument(searchURL)
+	body, err := c.doGet(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("search request failed: %w", err)
 	}
 
-	var results []SearchResult
-	doc.Find(".film_list-wrap .flw-item").Each(func(i int, s *goquery.Selection) {
-		filmDetail := s.Find(".film-detail")
-		filmPoster := s.Find(".film-poster")
+	var resp struct {
+		Data struct {
+			Animes []SearchResult `json:"animes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse search response: %w", err)
+	}
 
-		name := strings.TrimSpace(filmDetail.Find(".film-name a").Text())
-		href, _ := filmPoster.Find("a").Attr("href")
-
-		// Extract ID from href (e.g., "/watch/death-note-60" -> "death-note-60")
-		id := strings.TrimPrefix(href, "/watch/")
-		id = strings.TrimPrefix(id, "/")
-
-		poster, _ := filmPoster.Find("img").Attr("data-src")
-		if poster == "" {
-			poster, _ = filmPoster.Find("img").Attr("src")
-		}
-
-		animeType := strings.TrimSpace(filmDetail.Find(".fd-infor .fdi-item:first-child").Text())
-		duration := strings.TrimSpace(filmDetail.Find(".fd-infor .fdi-duration").Text())
-
-		if id != "" && name != "" {
-			results = append(results, SearchResult{
-				ID:       id,
-				Name:     name,
-				Poster:   poster,
-				Type:     animeType,
-				Duration: duration,
-			})
-		}
-	})
-
-	return results, nil
+	return resp.Data.Animes, nil
 }
 
-// SearchByMALID searches for anime by MAL ID
-func (c *Client) SearchByMALID(malID string) (*AnimeInfo, error) {
-	// HiAnime doesn't have direct MAL ID lookup, so we need to search
-	// This is a limitation - we might need to search by title instead
-	return nil, fmt.Errorf("MAL ID search not directly supported, use Search by title")
-}
-
-// GetAnimeInfo gets detailed anime information
-func (c *Client) GetAnimeInfo(animeID string) (*AnimeInfo, error) {
-	infoURL := fmt.Sprintf("%s/watch/%s", c.baseURL, animeID)
-
-	doc, err := c.fetchDocument(infoURL)
-	if err != nil {
-		return nil, fmt.Errorf("anime info request failed: %w", err)
-	}
-
-	info := &AnimeInfo{ID: animeID}
-
-	// Parse anime details
-	info.Name = strings.TrimSpace(doc.Find(".anis-content .film-name").Text())
-	info.Poster, _ = doc.Find(".anis-content .film-poster img").Attr("src")
-	info.Description = strings.TrimSpace(doc.Find(".film-description .text").Text())
-
-	// Parse meta info
-	doc.Find(".anisc-info .item").Each(func(i int, s *goquery.Selection) {
-		label := strings.TrimSpace(s.Find(".item-head").Text())
-		value := strings.TrimSpace(s.Find(".name").Text())
-
-		switch strings.ToLower(strings.TrimSuffix(label, ":")) {
-		case "type":
-			info.Type = value
-		case "quality":
-			info.Quality = value
-		case "status":
-			info.Status = value
-		case "duration":
-			info.Duration = value
-		case "mal":
-			// Extract MAL ID from link
-			if link, exists := s.Find("a").Attr("href"); exists {
-				if strings.Contains(link, "myanimelist.net/anime/") {
-					parts := strings.Split(link, "/anime/")
-					if len(parts) > 1 {
-						info.MALId = strings.Split(parts[1], "/")[0]
-					}
-				}
-			}
-		}
-	})
-
-	// Parse genres
-	doc.Find(".anisc-info .item-list a").Each(func(i int, s *goquery.Selection) {
-		genre := strings.TrimSpace(s.Text())
-		if genre != "" {
-			info.Genres = append(info.Genres, genre)
-		}
-	})
-
-	// Parse episode counts from tick items
-	subText := doc.Find(".tick-sub").Text()
-	dubText := doc.Find(".tick-dub").Text()
-	epsText := doc.Find(".tick-eps").Text()
-
-	if n, err := strconv.Atoi(strings.TrimSpace(subText)); err == nil {
-		info.EpisodesSub = n
-	}
-	if n, err := strconv.Atoi(strings.TrimSpace(dubText)); err == nil {
-		info.EpisodesDub = n
-	}
-	if n, err := strconv.Atoi(strings.TrimSpace(epsText)); err == nil {
-		info.EpisodesTotal = n
-	}
-
-	return info, nil
-}
-
-// GetEpisodes gets all episodes for an anime
+// GetEpisodes gets all episodes for an anime via aniwatch API.
 func (c *Client) GetEpisodes(animeID string) ([]Episode, error) {
-	// First, get the anime page to find the data-id
-	infoURL := fmt.Sprintf("%s/watch/%s", c.baseURL, animeID)
+	apiURL := fmt.Sprintf("%s/api/v2/hianime/anime/%s/episodes",
+		c.aniwatchAPIURL, url.PathEscape(animeID))
 
-	doc, err := c.fetchDocument(infoURL)
+	body, err := c.doGet(apiURL)
 	if err != nil {
-		return nil, fmt.Errorf("anime page request failed: %w", err)
+		return nil, fmt.Errorf("episodes request failed: %w", err)
 	}
 
-	// Find the data-id attribute
-	dataID, exists := doc.Find("#watch-main").Attr("data-id")
-	if !exists {
-		// Try alternative selector
-		dataID, exists = doc.Find("[data-id]").First().Attr("data-id")
-		if !exists {
-			return nil, fmt.Errorf("could not find anime data-id")
-		}
+	var resp struct {
+		Data struct {
+			TotalEpisodes int `json:"totalEpisodes"`
+			Episodes      []struct {
+				EpisodeID string `json:"episodeId"`
+				Number    int    `json:"number"`
+				Title     string `json:"title"`
+				IsFiller  bool   `json:"isFiller"`
+			} `json:"episodes"`
+		} `json:"data"`
 	}
-
-	// Fetch episodes via AJAX
-	episodesURL := fmt.Sprintf("%s/v2/episode/list/%s", AjaxURL, dataID)
-
-	req, err := http.NewRequest("GET", episodesURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	c.setHeaders(req)
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("episodes ajax request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse JSON response
-	var ajaxResp struct {
-		Status bool   `json:"status"`
-		HTML   string `json:"html"`
-	}
-
-	if err := json.Unmarshal(body, &ajaxResp); err != nil {
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse episodes response: %w", err)
 	}
 
-	if !ajaxResp.Status {
-		return nil, fmt.Errorf("episodes request returned false status")
-	}
-
-	// Parse HTML from response
-	epDoc, err := goquery.NewDocumentFromReader(strings.NewReader(ajaxResp.HTML))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse episodes HTML: %w", err)
-	}
-
-	var episodes []Episode
-	epDoc.Find(".ep-item").Each(func(i int, s *goquery.Selection) {
-		href, _ := s.Attr("href")
-		dataNumber, _ := s.Attr("data-number")
-		title, _ := s.Attr("title")
-		isFiller := s.HasClass("filler")
-
-		epNum, _ := strconv.Atoi(dataNumber)
-
-		// Extract episode ID from href
-		// href format: /watch/anime-slug?ep=12345
-		epID := strings.TrimPrefix(href, "/watch/")
-
-		if epID != "" {
-			episodes = append(episodes, Episode{
-				ID:       epID,
-				Number:   epNum,
-				Title:    title,
-				IsFiller: isFiller,
-			})
+	episodes := make([]Episode, len(resp.Data.Episodes))
+	for i, ep := range resp.Data.Episodes {
+		episodes[i] = Episode{
+			ID:       ep.EpisodeID,
+			Number:   ep.Number,
+			Title:    ep.Title,
+			IsFiller: ep.IsFiller,
 		}
-	})
+	}
 
 	return episodes, nil
 }
 
-// GetServers gets available servers for an episode
+// GetServers gets available servers for an episode via aniwatch API.
 func (c *Client) GetServers(episodeID string) ([]Server, error) {
-	// episodeID format: "anime-slug?ep=12345" - extract ep number
-	var epNum string
-	if idx := strings.Index(episodeID, "?ep="); idx != -1 {
-		epNum = episodeID[idx+4:]
-	} else {
-		return nil, fmt.Errorf("invalid episode ID format: %s", episodeID)
-	}
+	apiURL := fmt.Sprintf("%s/api/v2/hianime/episode/servers?animeEpisodeId=%s",
+		c.aniwatchAPIURL, url.QueryEscape(episodeID))
 
-	serversURL := fmt.Sprintf("%s/v2/episode/servers?episodeId=%s", AjaxURL, epNum)
-
-	req, err := http.NewRequest("GET", serversURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	c.setHeaders(req)
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-
-	resp, err := c.httpClient.Do(req)
+	body, err := c.doGet(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("servers request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	var resp struct {
+		Data struct {
+			Sub []struct {
+				ServerName string `json:"serverName"`
+				ServerID   int    `json:"serverId"`
+			} `json:"sub"`
+			Dub []struct {
+				ServerName string `json:"serverName"`
+				ServerID   int    `json:"serverId"`
+			} `json:"dub"`
+			Raw []struct {
+				ServerName string `json:"serverName"`
+				ServerID   int    `json:"serverId"`
+			} `json:"raw"`
+		} `json:"data"`
 	}
-
-	var ajaxResp struct {
-		Status bool   `json:"status"`
-		HTML   string `json:"html"`
-	}
-
-	if err := json.Unmarshal(body, &ajaxResp); err != nil {
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse servers response: %w", err)
 	}
 
-	if !ajaxResp.Status {
-		return nil, fmt.Errorf("servers request returned false status")
-	}
-
-	// Parse HTML
-	serversDoc, err := goquery.NewDocumentFromReader(strings.NewReader(ajaxResp.HTML))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse servers HTML: %w", err)
-	}
-
 	var servers []Server
-
-	// Parse sub servers
-	serversDoc.Find(".servers-sub .server-item").Each(func(i int, s *goquery.Selection) {
-		serverID, _ := s.Attr("data-id")
-		serverName := strings.TrimSpace(s.Find("a").Text())
-		if serverName == "" {
-			serverName = strings.TrimSpace(s.Text())
-		}
-
-		if serverID != "" {
-			servers = append(servers, Server{
-				ID:   serverID,
-				Name: serverName,
-				Type: "sub",
-			})
-		}
-	})
-
-	// Parse dub servers
-	serversDoc.Find(".servers-dub .server-item").Each(func(i int, s *goquery.Selection) {
-		serverID, _ := s.Attr("data-id")
-		serverName := strings.TrimSpace(s.Find("a").Text())
-		if serverName == "" {
-			serverName = strings.TrimSpace(s.Text())
-		}
-
-		if serverID != "" {
-			servers = append(servers, Server{
-				ID:   serverID,
-				Name: serverName,
-				Type: "dub",
-			})
-		}
-	})
-
-	// Parse raw servers if any
-	serversDoc.Find(".servers-raw .server-item").Each(func(i int, s *goquery.Selection) {
-		serverID, _ := s.Attr("data-id")
-		serverName := strings.TrimSpace(s.Find("a").Text())
-		if serverName == "" {
-			serverName = strings.TrimSpace(s.Text())
-		}
-
-		if serverID != "" {
-			servers = append(servers, Server{
-				ID:   serverID,
-				Name: serverName,
-				Type: "raw",
-			})
-		}
-	})
+	for _, s := range resp.Data.Sub {
+		servers = append(servers, Server{
+			ID:   strconv.Itoa(s.ServerID),
+			Name: s.ServerName,
+			Type: "sub",
+		})
+	}
+	for _, s := range resp.Data.Dub {
+		servers = append(servers, Server{
+			ID:   strconv.Itoa(s.ServerID),
+			Name: s.ServerName,
+			Type: "dub",
+		})
+	}
+	for _, s := range resp.Data.Raw {
+		servers = append(servers, Server{
+			ID:   strconv.Itoa(s.ServerID),
+			Name: s.ServerName,
+			Type: "raw",
+		})
+	}
 
 	return servers, nil
 }
 
-// GetStream gets the stream URL for an episode from a specific server
-// Uses Aniwatch API to get decrypted HLS streams instead of iframe embeds
-// Includes retry logic with exponential backoff and server fallback
+// GetStream gets the stream URL for an episode from a specific server.
+// Uses Aniwatch API to get decrypted HLS streams.
+// Includes retry logic with exponential backoff and server fallback.
 func (c *Client) GetStream(episodeID string, serverID string, category string) (*Stream, error) {
 	// Build list of servers to try: requested server first, then fallbacks
 	serversToTry := []string{serverID}
@@ -497,60 +274,34 @@ func (c *Client) getStreamWithRetry(episodeID string, serverID string, category 
 	return nil, lastErr
 }
 
-// getStreamFromAniwatch fetches stream from Aniwatch API
-// Aniwatch API handles MegaCloud decryption and returns direct HLS URLs
+// getStreamFromAniwatch fetches stream from Aniwatch API.
+// Aniwatch API handles MegaCloud decryption and returns direct HLS URLs.
 func (c *Client) getStreamFromAniwatch(episodeID string, serverID string, category string) (*Stream, error) {
 	// Validate episode ID format: "anime-slug?ep=12345"
 	if !strings.Contains(episodeID, "?ep=") {
 		return nil, fmt.Errorf("invalid episode ID format: %s", episodeID)
 	}
 
-	// Build Aniwatch API URL
-	// Format: /api/v2/hianime/episode/sources?animeEpisodeId={animeSlug}?ep={epNum}&server={server}&category={category}
-	// The aniwatch-api expects the full episodeId in the format "anime-slug?ep=12345"
 	apiURL := fmt.Sprintf("%s/api/v2/hianime/episode/sources?animeEpisodeId=%s",
 		c.aniwatchAPIURL,
 		url.QueryEscape(episodeID),
 	)
 
-	// Add server if provided (hd-1, hd-2, etc.)
-	// serverID should be the server name like "hd-1", "hd-2" from frontend
 	if serverID != "" {
 		apiURL += "&server=" + serverID
 	}
 
-	// Add category (sub, dub, raw)
 	if category != "" {
 		apiURL += "&category=" + category
 	} else {
 		apiURL += "&category=sub"
 	}
 
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
+	body, err := c.doGet(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("aniwatch API request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("aniwatch API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse Aniwatch API response
-	// Format: {"status":200,"data":{"headers":{},"tracks":[],"intro":{},"outro":{},"sources":[]}}
 	var aniwatchResp struct {
 		Status int `json:"status"`
 		Data   struct {
@@ -585,7 +336,6 @@ func (c *Client) getStreamFromAniwatch(episodeID string, serverID string, catego
 		return nil, fmt.Errorf("no sources found in aniwatch API response (status: %d)", aniwatchResp.Status)
 	}
 
-	// Get the first source (usually the best quality HLS stream)
 	source := aniwatchResp.Data.Sources[0]
 	if source.URL == "" {
 		return nil, fmt.Errorf("no valid source URL found")
@@ -630,21 +380,17 @@ func (c *Client) getStreamFromAniwatch(episodeID string, serverID string, catego
 	return stream, nil
 }
 
-// getStreamDirect gets stream using direct HiAnime scraping (fallback, kept for future use).
-func (c *Client) getStreamDirect(serverID string) (*Stream, error) { //nolint:unused
-	sourcesURL := fmt.Sprintf("%s/v2/episode/sources?id=%s", AjaxURL, serverID)
-
-	req, err := http.NewRequest("GET", sourcesURL, nil)
+// doGet performs an HTTP GET and returns the response body.
+func (c *Client) doGet(apiURL string) ([]byte, error) {
+	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	c.setHeaders(req)
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("sources request failed: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -652,234 +398,10 @@ func (c *Client) getStreamDirect(serverID string) (*Stream, error) { //nolint:un
 	if err != nil {
 		return nil, err
 	}
-
-	var sourcesResp struct {
-		Type   string `json:"type"`
-		Link   string `json:"link"`
-		Server int    `json:"server"`
-	}
-
-	if err := json.Unmarshal(body, &sourcesResp); err != nil {
-		return nil, fmt.Errorf("failed to parse sources response: %w", err)
-	}
-
-	if sourcesResp.Link == "" {
-		return nil, fmt.Errorf("no stream source available")
-	}
-
-	// If it's an iframe type, we need to extract the actual stream
-	if sourcesResp.Type == "iframe" {
-		return c.extractStreamFromEmbed(sourcesResp.Link)
-	}
-
-	// Direct link
-	return &Stream{
-		URL:  sourcesResp.Link,
-		Type: "hls",
-	}, nil
-}
-
-// extractStreamFromEmbed extracts stream URL from embed page (kept for future use).
-func (c *Client) extractStreamFromEmbed(embedURL string) (*Stream, error) { //nolint:unused
-	// Determine the provider from URL
-	if strings.Contains(embedURL, "megacloud") || strings.Contains(embedURL, "rapid-cloud") {
-		return c.extractMegaCloudStream(embedURL)
-	}
-
-	// For other providers, return the embed URL as iframe
-	return &Stream{
-		URL:  embedURL,
-		Type: "iframe",
-	}, nil
-}
-
-// extractMegaCloudStream extracts stream from MegaCloud/RapidCloud (kept for future use).
-func (c *Client) extractMegaCloudStream(embedURL string) (*Stream, error) { //nolint:unused
-	// Fetch the embed page
-	req, err := http.NewRequest("GET", embedURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	c.setHeaders(req)
-	req.Header.Set("Referer", BaseURL+"/")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("embed page request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	html := string(body)
-
-	// Extract the video ID from embed URL
-	// Format: https://megacloud.tv/embed-2/e-1/XXXXXX?k=1
-	videoIDRegex := regexp.MustCompile(`/e-\d+/([^?]+)`)
-	matches := videoIDRegex.FindStringSubmatch(embedURL)
-	if len(matches) < 2 {
-		// Try alternative pattern
-		videoIDRegex = regexp.MustCompile(`embed[^/]*/([^?/]+)`)
-		matches = videoIDRegex.FindStringSubmatch(embedURL)
-	}
-
-	if len(matches) < 2 {
-		// Return embed URL as fallback
-		return &Stream{
-			URL:  embedURL,
-			Type: "iframe",
-		}, nil
-	}
-
-	videoID := matches[1]
-
-	// Get sources from MegaCloud API
-	sourcesURL := fmt.Sprintf("https://megacloud.tv/embed-2/ajax/e-1/getSources?id=%s", videoID)
-
-	req, err = http.NewRequest("GET", sourcesURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", embedURL)
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-
-	resp, err = c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("megacloud sources request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse the sources response
-	var megaResp struct {
-		Sources   interface{} `json:"sources"`
-		Tracks    []struct {
-			File    string `json:"file"`
-			Kind    string `json:"kind"`
-			Label   string `json:"label"`
-			Default bool   `json:"default"`
-		} `json:"tracks"`
-		Intro struct {
-			Start int `json:"start"`
-			End   int `json:"end"`
-		} `json:"intro"`
-		Outro struct {
-			Start int `json:"start"`
-			End   int `json:"end"`
-		} `json:"outro"`
-		Encrypted bool `json:"encrypted"`
-	}
-
-	if err := json.Unmarshal(body, &megaResp); err != nil {
-		// If parsing fails, check for error in HTML
-		if strings.Contains(html, "not available") {
-			return nil, fmt.Errorf("video not available")
-		}
-		return &Stream{
-			URL:  embedURL,
-			Type: "iframe",
-		}, nil
-	}
-
-	stream := &Stream{
-		Type:    "hls",
-		Headers: map[string]string{"Referer": "https://megacloud.tv/"},
-	}
-
-	// Handle sources (can be string or array)
-	switch s := megaResp.Sources.(type) {
-	case string:
-		// Sources might be encrypted
-		if megaResp.Encrypted {
-			// For encrypted sources, return iframe as fallback
-			return &Stream{
-				URL:  embedURL,
-				Type: "iframe",
-			}, nil
-		}
-		stream.URL = s
-	case []interface{}:
-		if len(s) > 0 {
-			if src, ok := s[0].(map[string]interface{}); ok {
-				if file, ok := src["file"].(string); ok {
-					stream.URL = file
-				}
-			}
-		}
-	}
-
-	// Parse subtitles
-	for _, track := range megaResp.Tracks {
-		if track.Kind == "captions" || track.Kind == "subtitles" {
-			stream.Subtitles = append(stream.Subtitles, Subtitle{
-				URL:     track.File,
-				Label:   track.Label,
-				Default: track.Default,
-			})
-		}
-	}
-
-	// Parse intro/outro
-	if megaResp.Intro.End > 0 {
-		stream.Intro = &TimeRange{
-			Start: megaResp.Intro.Start,
-			End:   megaResp.Intro.End,
-		}
-	}
-	if megaResp.Outro.End > 0 {
-		stream.Outro = &TimeRange{
-			Start: megaResp.Outro.Start,
-			End:   megaResp.Outro.End,
-		}
-	}
-
-	if stream.URL == "" {
-		// Fallback to iframe
-		return &Stream{
-			URL:  embedURL,
-			Type: "iframe",
-		}, nil
-	}
-
-	return stream, nil
-}
-
-// fetchDocument fetches and parses HTML document
-func (c *Client) fetchDocument(url string) (*goquery.Document, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	c.setHeaders(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	return goquery.NewDocumentFromReader(resp.Body)
-}
-
-// setHeaders sets common headers for requests
-func (c *Client) setHeaders(req *http.Request) {
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
-	req.Header.Set("Connection", "keep-alive")
+	return body, nil
 }

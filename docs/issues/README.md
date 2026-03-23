@@ -110,6 +110,26 @@ Track issues discovered during development. Each entry should include root cause
 - **Lesson learned:** Don't disable fallback paths without providing an alternative. The "expose MP4 errors" comment suggests this was intentional debugging, but it was left in production. Kodik iframe is the primary player for most AnimeLib translations.
 - **Status:** Fixed (2026-03-23)
 
+### ISS-009: HiAnime Go client used dead hianime.to for Search/GetEpisodes/GetServers
+- **Date:** 2026-03-23
+- **Severity:** Critical (HiAnime player showed "no episodes" for ALL anime)
+- **Affected:** HiAnime player, all anime — not just specific titles
+- **Symptom:** HiAnime player showed "player.noEpisodes" for every anime, including well-known titles. Grafana showed HiAnime as UP.
+- **Root cause:** The HiAnime Go client (`parser/hianime/client.go`) had `Search()`, `GetEpisodes()`, and `GetServers()` methods that scraped HTML from `hianime.to` via goquery. After hianime.to died (ISS-007), these methods all failed with connection timeouts. Meanwhile, the health checker tested the aniwatch API sidecar directly (different code path), so it reported UP. The `GetStream()` method already used the aniwatch API and worked fine — but users never reached it because Search/GetEpisodes failed first.
+- **Secondary issue:** The `SearchResult` struct lacked a `JName` (Japanese name) field. HiAnime returns both English and Japanese names, but matching only used the English name. For anime like "Sousou no Frieren 2nd Season", the English name "Frieren: Beyond Journey's End Season 2" didn't match the DB name, but the Japanese name was an exact match.
+- **Fix applied:**
+  - Rewrote `Search()`, `GetEpisodes()`, and `GetServers()` to use the aniwatch API instead of HTML scraping
+  - Added `JName` field to `SearchResult` struct
+  - Updated `doHiAnimeSearch()` in catalog.go to match against both `r.Name` and `r.JName`
+  - Removed dead HTML scraping code (goquery usage, `fetchDocument`, `setHeaders`, `GetAnimeInfo`, etc.)
+  - Upgraded all 4 health checks to test full playback chain (search → episodes → streams), not just search
+- **Key files:**
+  - `services/catalog/internal/parser/hianime/client.go` — full rewrite from HTML scraping to aniwatch API
+  - `services/catalog/internal/service/catalog.go` — JName matching in `doHiAnimeSearch()`
+  - `services/catalog/internal/service/health_checker.go` — full-chain health checks
+- **Lesson learned:** When a service has multiple access paths to an external API (direct scraping vs API sidecar), the health check must test the SAME path that user-facing code uses. Testing a separate path creates a blind spot.
+- **Status:** Fixed (2026-03-23)
+
 ### ISS-007: HiAnime player DOWN due to upstream domain migration
 - **Date:** 2026-03-22 (detected) / 2026-03-13 (domain shutdown)
 - **Severity:** Critical (HiAnime player completely unusable for ~9 days)

@@ -1628,7 +1628,8 @@ func (s *CatalogService) doHiAnimeSearch(ctx context.Context, anime *domain.Anim
 				return
 			}
 			for _, r := range results {
-				if matchesAnime(r.Name, anime, extraMatchNames...) {
+				if matchesAnime(r.Name, anime, extraMatchNames...) ||
+					(r.JName != "" && matchesAnime(r.JName, anime, extraMatchNames...)) {
 					select {
 					case ch <- searchResult{id: r.ID}:
 					default:
