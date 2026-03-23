@@ -410,6 +410,7 @@ const vjsPlayerReady = ref(false)
 let hls: Hls | null = null
 let decodeErrorCount = 0
 let networkRetryCount = 0
+let codecRetryCount = 0
 // serverRotationCount removed — auto-rotation disabled to expose errors
 
 // Progress tracking
@@ -541,6 +542,7 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
   selectedEpisode.value = ep
   episodeMarkedWatched.value = false
   networkRetryCount = 0
+  codecRetryCount = 0
   // serverRotationCount removed
   // Reset jimaku state on episode change
   jimakuSubtitles.value = []
@@ -555,6 +557,7 @@ const selectServer = async (server: ConsumetServer) => {
   selectedServer.value = server
   decodeErrorCount = 0
   networkRetryCount = 0
+  codecRetryCount = 0
   if (selectedEpisode.value) {
     await fetchStream()
   }
@@ -778,6 +781,7 @@ const initHlsPlayer = (url: string, referer: string) => {
       maxMaxBufferLength: 60,
       maxBufferSize: 60 * 1000 * 1000,
       startLevel: -1,
+      defaultAudioCodec: 'mp4a.40.2',
     })
 
     hls.loadSource(proxyUrl)
@@ -805,6 +809,12 @@ const initHlsPlayer = (url: string, referer: string) => {
             break
           case Hls.ErrorTypes.MEDIA_ERROR:
             console.error('[Consumet] Media error details:', data.details, 'reason:', (data as unknown as Record<string, unknown>).reason)
+            if (data.details === 'bufferAddCodecError' && codecRetryCount < 1) {
+              codecRetryCount++
+              console.warn('[Consumet] Unsupported audio codec (likely mp4a.40.1), reinitializing with AAC-LC fallback')
+              initHlsPlayer(url, referer)
+              break
+            }
             if (decodeErrorCount < 1) {
               decodeErrorCount++
               hls?.recoverMediaError()

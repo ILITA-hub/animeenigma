@@ -440,6 +440,7 @@ let vjsPlayer: ReturnType<typeof videojs> | null = null
 const vjsPlayerReady = ref(false)
 let hls: Hls | null = null
 let decodeErrorCount = 0
+let codecRetryCount = 0
 
 // Progress tracking
 const currentTime = ref(0)
@@ -802,6 +803,7 @@ const initHlsPlayer = (url: string, referer: string = '') => {
       maxMaxBufferLength: 60,
       maxBufferSize: 60 * 1000 * 1000,
       startLevel: -1,
+      defaultAudioCodec: 'mp4a.40.2',
     })
 
     hls.loadSource(proxyUrl)
@@ -823,6 +825,12 @@ const initHlsPlayer = (url: string, referer: string = '') => {
               hls?.startLoad()
               break
             case Hls.ErrorTypes.MEDIA_ERROR:
+              if (data.details === 'bufferAddCodecError' && codecRetryCount < 1) {
+                codecRetryCount++
+                console.warn('[HiAnime] Unsupported audio codec (likely mp4a.40.1), reinitializing with AAC-LC fallback')
+                initHlsPlayer(url, referer)
+                break
+              }
               if (decodeErrorCount < 1) {
                 decodeErrorCount++
                 hls?.recoverMediaError()
@@ -930,6 +938,7 @@ const selectServer = async (server: HiAnimeServer) => {
 
   selectedServer.value = server
   decodeErrorCount = 0
+  codecRetryCount = 0
   await fetchStream()
 }
 
