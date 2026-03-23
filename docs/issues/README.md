@@ -90,6 +90,66 @@ Track issues discovered during development. Each entry should include root cause
   - Test on iOS Safari with different HLS.js configurations
 - **Status:** Documented, not yet investigated
 
+### ISS-008: AnimeLib player broken — Kodik iframe fallback removed
+- **Date:** 2026-03-23
+- **Severity:** High (AnimeLib player unusable for all Kodik-only translations)
+- **Affected:** AnimeLib player, all anime where translations only have Kodik embeds (no direct MP4)
+- **Symptom:** User selects any translation, player shows error "failed to get video URL". Grafana shows AnimeLib as UP (health check passes).
+- **Root cause:** `AnimeLibPlayer.vue` line 364 had `// iframeUrl removed — Kodik fallback disabled to expose MP4 errors`. The `fetchStream()` method only handled `data.sources` (direct MP4) and showed an error for everything else. The backend correctly returned `iframe_url` for Kodik-based translations, but the frontend discarded it.
+- **Why Grafana didn't catch it:** The health check tests `Search("naruto")` against the AnimeLib hapi API, which succeeds. The API is genuinely working — the bug was in frontend rendering, not backend availability.
+- **Context:** Many translations on AnimeLib use Kodik as their player (e.g. AniLot, OnWave, CapySound, AnimeVost). Only translations with `player: "Animelib"` have direct MP4 sources. For some anime, ALL translations are Kodik-only.
+- **Fix applied:**
+  - Restored `iframeUrl` ref in component state
+  - Added `iframe_url` handling in `fetchStream()`: when `sources` is empty but `iframe_url` exists, render Kodik iframe
+  - Added `<iframe>` element in template between direct video and placeholder
+  - Reset `iframeUrl` on episode change, stream fetch, and anime change
+- **Key files:**
+  - `frontend/web/src/components/player/AnimeLibPlayer.vue` — the fix
+  - `services/catalog/internal/service/catalog.go:2146-2155` — backend Kodik fallback (was already correct)
+  - `services/catalog/internal/domain/anime.go:376` — `AnimeLibStream.IframeURL` field
+- **Lesson learned:** Don't disable fallback paths without providing an alternative. The "expose MP4 errors" comment suggests this was intentional debugging, but it was left in production. Kodik iframe is the primary player for most AnimeLib translations.
+- **Status:** Fixed (2026-03-23)
+
+### ISS-007: HiAnime player DOWN due to upstream domain migration
+- **Date:** 2026-03-22 (detected) / 2026-03-13 (domain shutdown)
+- **Severity:** Critical (HiAnime player completely unusable for ~9 days)
+- **Affected:** HiAnime player, all users relying on EN HLS streams
+- **Symptom:** Grafana `Player Unavailable` alert firing for `hianime` since 2026-03-22 12:05 UTC. Aniwatch scraper returned `500 getAnimeSearchResults: fetchError: Something went wrong` on all search/episode requests. Requests timed out after ~8-10s.
+- **Root cause:** HiAnime.to shut down on 2026-03-13 and migrated to a new domain. The aniwatch scraper (`rz6e/aniwatch-api`) image from 2026-03-17 still targeted the old domain. The scraper's own `/health` endpoint passed (it only checks if the Node.js server is alive), but all actual scrape requests to hianime.to failed because the domain was dead.
+- **Key indicators:**
+  - `player_health_up{player="hianime"} = 0` for 20+ hours
+  - Aniwatch logs: `getAnimeSearchResults: fetchError: Something went wrong` (500)
+  - `curl https://hianime.to` → connection timeout (domain dead)
+  - Catalog logs: `failed to find anime on hianime` with 10s+ request durations
+- **Fix applied:**
+  - Pulled latest `rz6e/aniwatch-api:latest` image (updated to target new HiAnime domain)
+  - Recreated aniwatch container: `docker compose up -d aniwatch`
+  - Search latency dropped from 8s+ timeout to ~200ms
+  - All 4 player health metrics returned to UP
+  - Grafana alert auto-resolved
+- **HiAnime domain history (for future reference):**
+  - `zoro.to` → `aniwatch.to` → `hianime.to` (died 2026-03-13) → new domain
+  - This site changes domains periodically due to anti-piracy takedowns
+  - The USTR 2025 report explicitly traced this lineage
+- **How to detect next time:**
+  - Grafana alert `Player Unavailable` will fire within 5 minutes of failure
+  - Aniwatch logs will show `fetchError: Something went wrong` on all scrape endpoints
+  - The aniwatch `/health` endpoint will still return 200 (misleading — it only checks Node.js liveness)
+- **How to fix next time:**
+  1. Check if `rz6e/aniwatch-api:latest` has been updated: `docker pull rz6e/aniwatch-api:latest`
+  2. If new layers pulled → recreate: `docker compose -f docker/docker-compose.yml up -d aniwatch`
+  3. If no update available → check HiAnime community channels for new domain, wait for scraper update
+  4. Verify fix: `curl http://localhost:3100/api/v2/hianime/search?q=naruto&page=1` should return 200 with results
+- **Prevention ideas:**
+  - Consider a cron job or script that checks for aniwatch image updates weekly
+  - The health check could be enhanced to test actual scrape functionality, not just liveness
+- **Key files:**
+  - `docker/docker-compose.yml` — aniwatch service definition
+  - `services/catalog/internal/service/health_checker.go` — health check logic
+  - `services/catalog/internal/parser/hianime/client.go` — HiAnime client
+  - `docker/grafana/provisioning/alerting/rules.yml` — `player-unavailable` alert rule
+- **Status:** Fixed (2026-03-23)
+
 ## Resolved Issues
 
 ### ISS-003: Error reports received with empty fields
