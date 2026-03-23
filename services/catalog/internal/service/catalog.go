@@ -606,8 +606,12 @@ func (s *CatalogService) GetTrendingAnime(ctx context.Context, page, pageSize in
 		}
 	}
 
-	// Cache miss — fetch from Shikimori
-	shikimoriAnimes, err := s.shikimoriClient.GetTrendingAnime(ctx, page, pageSize)
+	// Cache miss — always fetch 20 for the cache to avoid smaller requests poisoning it
+	fetchSize := pageSize
+	if page == 1 && fetchSize < 20 {
+		fetchSize = 20
+	}
+	shikimoriAnimes, err := s.shikimoriClient.GetTrendingAnime(ctx, page, fetchSize)
 	if err != nil {
 		s.log.Warnw("failed to fetch trending from Shikimori, falling back to local DB", "error", err)
 		// Fallback to local DB sort
@@ -642,7 +646,13 @@ func (s *CatalogService) GetTrendingAnime(ctx context.Context, page, pageSize in
 		}
 	}
 
-	return shikimoriAnimes, int64(len(shikimoriAnimes)), nil
+	// Slice to requested page size
+	result := shikimoriAnimes
+	if pageSize < len(result) {
+		result = result[:pageSize]
+	}
+
+	return result, int64(len(shikimoriAnimes)), nil
 }
 
 // GetPopularAnime gets popular anime (all time)
