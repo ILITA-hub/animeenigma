@@ -318,12 +318,12 @@ func (c *Client) GetAnimeByIDs(ctx context.Context, shikimoriIDs []string) ([]*d
 	return c.executeRawQuery(ctx, gqlQuery)
 }
 
-// GetTrendingAnime fetches trending anime (high score, ongoing)
+// GetTrendingAnime fetches top-ranked anime (all statuses, ordered by Shikimori ranking)
 func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*domain.Anime, error) {
 	c.rateLimiter.acquire()
 
 	gqlQuery := fmt.Sprintf(`{
-		animes(limit: %d, page: %d, status: "ongoing", order: ranked, kind: "tv") {
+		animes(limit: %d, page: %d, order: ranked, kind: "tv") {
 			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
