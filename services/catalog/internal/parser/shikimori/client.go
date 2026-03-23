@@ -323,7 +323,7 @@ func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*doma
 	c.rateLimiter.acquire()
 
 	gqlQuery := fmt.Sprintf(`{
-		animes(limit: %d, page: %d, order: ranked, kind: "tv") {
+		animes(limit: %d, page: %d, order: ranked) {
 			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
@@ -341,7 +341,7 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 	c.rateLimiter.acquire()
 
 	gqlQuery := fmt.Sprintf(`{
-		animes(limit: %d, page: %d, order: popularity, kind: "tv") {
+		animes(limit: %d, page: %d, order: popularity) {
 			id name russian japanese description score status episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
