@@ -88,21 +88,46 @@ services:
       timeout: 5s
       retries: 3
 
+  megacloud-extractor:
+    build:
+      context: ./megacloud-extractor
+      dockerfile: Dockerfile
+    container_name: animeenigma-megacloud-extractor
+    ports:
+      - "127.0.0.1:3200:3200"
+    environment:
+      - PORT=3200
+      - BROWSER_TIMEOUT=15000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   aniwatch:
-    image: rz6e/aniwatch-api:latest
+    image: ghcr.io/ghoshritesh12/aniwatch:v2.19.0
     container_name: animeenigma-aniwatch
     ports:
       - "127.0.0.1:3100:4000"
     environment:
       - PORT=4000
       - ANIWATCH_API_HOSTNAME=0.0.0.0
+      - MEGACLOUD_EXTRACTOR_URL=http://megacloud-extractor:3200
+    volumes:
+      - ./megacloud-extractor/patch-aniwatch.sh:/app/patch-aniwatch.sh:ro
+    entrypoint: ["/bin/sh", "/app/patch-aniwatch.sh"]
+    depends_on:
+      megacloud-extractor:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   consumet:
     image: riimuru/consumet-api:latest
