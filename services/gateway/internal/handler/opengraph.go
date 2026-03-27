@@ -18,6 +18,8 @@ import (
 // OpenGraphHandler renders HTML pages with Open Graph meta tags for social media crawlers.
 type OpenGraphHandler struct {
 	catalogURL string
+	authURL    string
+	playerURL  string
 	siteURL    string
 	client     *http.Client
 	tmpl       *template.Template
@@ -92,11 +94,13 @@ const ogHTMLTemplate = `<!DOCTYPE html>
 </body>
 </html>`
 
-func NewOpenGraphHandler(catalogURL, siteURL string, log *logger.Logger) *OpenGraphHandler {
+func NewOpenGraphHandler(catalogURL, authURL, playerURL, siteURL string, log *logger.Logger) *OpenGraphHandler {
 	tmpl := template.Must(template.New("og").Parse(ogHTMLTemplate))
 
 	h := &OpenGraphHandler{
 		catalogURL: catalogURL,
+		authURL:    authURL,
+		playerURL:  playerURL,
 		siteURL:    siteURL,
 		log:        log,
 		tmpl:       tmpl,
@@ -188,6 +192,148 @@ func (h *OpenGraphHandler) ServeHome(w http.ResponseWriter, r *http.Request) {
 	html := h.renderTemplate(data)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(html)
+}
+
+// ogUser is a minimal struct for parsing the auth API response.
+type ogUser struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+}
+
+// ogWatchlistStats is a minimal struct for parsing public watchlist stats.
+type ogWatchlistStats struct {
+	AvgScore      float64 `json:"avg_score"`
+	TotalEpisodes int     `json:"total_episodes"`
+	TotalEntries  int     `json:"total_entries"`
+	Completed     int     `json:"completed"`
+}
+
+// ServeUser renders OG meta tags for a user profile page.
+func (h *OpenGraphHandler) ServeUser(w http.ResponseWriter, r *http.Request) {
+	publicID := chi.URLParam(r, "publicId")
+	if publicID == "" {
+		h.serveDefault(w)
+		return
+	}
+
+	cacheKey := "user:" + publicID
+	if v, ok := h.cache.Load(cacheKey); ok {
+		entry := v.(*ogCacheEntry)
+		if time.Now().Before(entry.expiresAt) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(entry.html)
+			return
+		}
+		h.cache.Delete(cacheKey)
+	}
+
+	user, err := h.fetchUser(publicID)
+	if err != nil {
+		h.log.Warnw("og: auth API call failed, using defaults",
+			"public_id", publicID,
+			"error", err,
+		)
+		h.serveDefault(w)
+		return
+	}
+
+	// Fetch stats in background (best-effort)
+	stats := h.fetchUserStats(user.ID)
+
+	data := h.buildUserTemplateData(user, stats, publicID)
+	html := h.renderTemplate(data)
+
+	h.cache.Store(cacheKey, &ogCacheEntry{
+		html:      html,
+		expiresAt: time.Now().Add(1 * time.Hour),
+	})
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(html)
+}
+
+func (h *OpenGraphHandler) fetchUser(publicID string) (*ogUser, error) {
+	resp, err := h.client.Get(h.authURL + "/api/auth/users/" + publicID)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("auth returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		Data    ogUser `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode failed: %w", err)
+	}
+	if !result.Success {
+		return nil, fmt.Errorf("auth returned success=false")
+	}
+
+	return &result.Data, nil
+}
+
+func (h *OpenGraphHandler) fetchUserStats(userID string) *ogWatchlistStats {
+	resp, err := h.client.Get(h.playerURL + "/api/users/" + userID + "/watchlist/public/stats")
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var result struct {
+		Success bool             `json:"success"`
+		Data    ogWatchlistStats `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil
+	}
+	return &result.Data
+}
+
+func (h *OpenGraphHandler) buildUserTemplateData(user *ogUser, stats *ogWatchlistStats, publicID string) ogTemplateData {
+	title := user.Username + " — AnimeEnigma"
+
+	var descParts []string
+	if stats != nil && stats.TotalEntries > 0 {
+		descParts = append(descParts, fmt.Sprintf("%d anime", stats.TotalEntries))
+		if stats.Completed > 0 {
+			descParts = append(descParts, fmt.Sprintf("%d completed", stats.Completed))
+		}
+		if stats.TotalEpisodes > 0 {
+			descParts = append(descParts, fmt.Sprintf("%d episodes", stats.TotalEpisodes))
+		}
+		if stats.AvgScore > 0 {
+			descParts = append(descParts, fmt.Sprintf("★ %.1f avg", stats.AvgScore))
+		}
+	}
+
+	description := "Anime profile on AnimeEnigma"
+	if len(descParts) > 0 {
+		description = strings.Join(descParts, " · ")
+	}
+
+	imageURL := user.Avatar
+	if imageURL == "" {
+		imageURL = h.siteURL + "/logo.png"
+	}
+
+	return ogTemplateData{
+		Title:        title,
+		Description:  description,
+		ImageURL:     imageURL,
+		CanonicalURL: h.siteURL + "/user/" + publicID,
+		SiteName:     "AnimeEnigma",
+		OGType:       "profile",
+	}
 }
 
 func (h *OpenGraphHandler) fetchAnime(animeID string) (*ogAnime, error) {

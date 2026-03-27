@@ -35,7 +35,7 @@ func sanitizedOrderClause(sort, order string) string {
 	if sort == "title" {
 		return "animes.name " + dir
 	}
-	return sort + " " + dir
+	return "anime_list." + sort + " " + dir
 }
 
 // isTitleSort returns true when the requested sort requires a JOIN with animes.
@@ -139,8 +139,8 @@ func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string
 	var entries []*domain.AnimeListEntry
 	err := r.db.WithContext(ctx).
 		Preload("Anime").Preload("Anime.Genres").
-		Where("user_id = ? AND status IN ?", userID, statuses).
-		Order("updated_at DESC").
+		Where("anime_list.user_id = ? AND anime_list.status IN ?", userID, statuses).
+		Order("anime_list.updated_at DESC").
 		Find(&entries).Error
 	return entries, err
 }
@@ -151,9 +151,9 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status 
 	var entries []*domain.AnimeListEntry
 	var total int64
 
-	base := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	base := r.db.WithContext(ctx).Where("anime_list.user_id = ?", userID)
 	if status != "" {
-		base = base.Where("status = ?", status)
+		base = base.Where("anime_list.status = ?", status)
 	}
 
 	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
@@ -186,16 +186,16 @@ func (r *ListRepository) GetByUserStatuses(ctx context.Context, userID string) (
 func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID string, statuses []string) (*domain.WatchlistStats, error) {
 	var stats domain.WatchlistStats
 
-	base := r.db.WithContext(ctx).Model(&domain.AnimeListEntry{}).Where("user_id = ?", userID)
+	base := r.db.WithContext(ctx).Model(&domain.AnimeListEntry{}).Where("anime_list.user_id = ?", userID)
 	if len(statuses) > 0 {
-		base = base.Where("status IN ?", statuses)
+		base = base.Where("anime_list.status IN ?", statuses)
 	}
 
 	err := base.Select(
-		"COALESCE(AVG(NULLIF(score, 0)), 0) as avg_score, "+
-			"COALESCE(SUM(episodes), 0) as total_episodes, "+
+		"COALESCE(AVG(NULLIF(anime_list.score, 0)), 0) as avg_score, "+
+			"COALESCE(SUM(anime_list.episodes), 0) as total_episodes, "+
 			"COUNT(*) as total_entries, "+
-			"COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed",
+			"COUNT(CASE WHEN anime_list.status = 'completed' THEN 1 END) as completed",
 	).Scan(&stats).Error
 
 	return &stats, err
@@ -207,7 +207,7 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 	var entries []*domain.AnimeListEntry
 	var total int64
 
-	base := r.db.WithContext(ctx).Where("user_id = ? AND status IN ?", userID, statuses)
+	base := r.db.WithContext(ctx).Where("anime_list.user_id = ? AND anime_list.status IN ?", userID, statuses)
 
 	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
 		return nil, 0, err
