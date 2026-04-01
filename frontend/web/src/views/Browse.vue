@@ -217,6 +217,7 @@ import { animeApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
+import { getImageUrl } from '@/composables/useImageProxy'
 
 const { t } = useI18n()
 
@@ -327,7 +328,7 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
       name: a.name as string | undefined,
       nameRu: a.name_ru as string | undefined,
       nameJp: a.name_jp as string | undefined,
-      coverImage: (a.poster_url || '') as string,
+      coverImage: getImageUrl(a.poster_url as string | undefined),
       releaseYear: a.year as number | undefined,
       episodes: a.episodes_count as number | undefined,
       rating: a.score as number | undefined,

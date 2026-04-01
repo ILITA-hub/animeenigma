@@ -25,7 +25,7 @@
               class="flex gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
             >
               <img
-                :src="anime.poster_url || '/placeholder.png'"
+                :src="anime.poster_url || '/placeholder.svg'"
                 :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
                 class="w-16 h-24 object-cover rounded"
               />

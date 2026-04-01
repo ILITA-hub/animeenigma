@@ -58,7 +58,7 @@ function proxyUrl(originalUrl: string): string {
 }
 
 export function getImageUrl(originalUrl: string | undefined | null): string {
-  if (!originalUrl) return ''
+  if (!originalUrl) return '/placeholder.svg'
   if (!isShikimoriUrl(originalUrl)) return originalUrl
   if (isBlocked()) return proxyUrl(originalUrl)
   return originalUrl

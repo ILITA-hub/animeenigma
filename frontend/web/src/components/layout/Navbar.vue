@@ -242,6 +242,7 @@ import { useAuthStore } from '@/stores/auth'
 import { onClickOutside, useDebounceFn } from '@vueuse/core'
 import { animeApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
+import { getImageUrl } from '@/composables/useImageProxy'
 import Button from '@/components/ui/Button.vue'
 
 const router = useRouter()
@@ -327,7 +328,7 @@ const debouncedSearch = useDebounceFn(async (query: string) => {
     searchResults.value = list.map((a: Record<string, unknown>) => ({
       id: a.id as string,
       title: getLocalizedTitle(a.name as string, a.name_ru as string, a.name_jp as string),
-      coverImage: (a.poster_url || '') as string,
+      coverImage: getImageUrl(a.poster_url as string | undefined),
       releaseYear: a.year as number | undefined,
       totalEpisodes: a.episodes_count as number | undefined,
       rating: a.score as number | undefined,
