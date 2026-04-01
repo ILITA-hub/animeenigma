@@ -513,6 +513,15 @@ func (s *CatalogService) BatchRefreshAnime(ctx context.Context, status domain.An
 			fresh.HasVideo = existing.HasVideo
 			fresh.CreatedAt = existing.CreatedAt
 
+			// Preserve or fetch MAL poster if Shikimori has none
+			if fresh.PosterURL == "" {
+				if existing.PosterURL != "" {
+					fresh.PosterURL = existing.PosterURL
+				} else {
+					s.fetchMALPosterIfMissing(ctx, fresh)
+				}
+			}
+
 			if err := s.animeRepo.Update(ctx, fresh); err != nil {
 				s.log.Warnw("failed to update anime", "id", existing.ID, "error", err)
 				failed++
@@ -1046,6 +1055,9 @@ func (s *CatalogService) DeleteVideo(ctx context.Context, videoID string) error 
 
 // upsertAnimeFromExternal stores or updates anime from external source
 func (s *CatalogService) upsertAnimeFromExternal(ctx context.Context, anime *domain.Anime) error {
+	// Fall back to MAL poster if Shikimori has none
+	s.fetchMALPosterIfMissing(ctx, anime)
+
 	// Check if exists
 	existing, err := s.animeRepo.GetByShikimoriID(ctx, anime.ShikimoriID)
 	if err != nil {
@@ -1053,7 +1065,10 @@ func (s *CatalogService) upsertAnimeFromExternal(ctx context.Context, anime *dom
 	}
 
 	if existing != nil {
-		// Update existing
+		// Update existing — preserve MAL poster if Shikimori still has none
+		if anime.PosterURL == "" && existing.PosterURL != "" {
+			anime.PosterURL = existing.PosterURL
+		}
 		anime.ID = existing.ID
 		anime.HasVideo = existing.HasVideo
 		anime.CreatedAt = existing.CreatedAt
@@ -1084,6 +1099,25 @@ func (s *CatalogService) upsertAnimeFromExternal(ctx context.Context, anime *dom
 	}
 
 	return nil
+}
+
+// fetchMALPosterIfMissing tries to get a poster from MAL/Jikan when Shikimori has none.
+// Shikimori IDs equal MAL IDs, so we use ShikimoriID directly.
+func (s *CatalogService) fetchMALPosterIfMissing(ctx context.Context, anime *domain.Anime) {
+	if anime.PosterURL != "" || anime.ShikimoriID == "" {
+		return
+	}
+
+	malInfo, err := s.jikanClient.GetAnimeByID(ctx, anime.ShikimoriID)
+	if err != nil {
+		s.log.Debugw("MAL poster fallback failed", "shikimori_id", anime.ShikimoriID, "error", err)
+		return
+	}
+
+	if poster := malInfo.PosterURL(); poster != "" {
+		anime.PosterURL = poster
+		s.log.Infow("resolved poster from MAL", "shikimori_id", anime.ShikimoriID, "poster_url", poster)
+	}
 }
 
 // enrichAnime adds genres and video sources to anime

@@ -16,12 +16,32 @@ type Client struct {
 	rateLimiter *rateLimiter
 }
 
-// AnimeInfo contains the title information from MAL
+// AnimeInfo contains the title and image information from MAL
 type AnimeInfo struct {
-	MalID         int    `json:"mal_id"`
-	Title         string `json:"title"`
-	TitleEnglish  string `json:"title_english"`
-	TitleJapanese string `json:"title_japanese"`
+	MalID         int        `json:"mal_id"`
+	Title         string     `json:"title"`
+	TitleEnglish  string     `json:"title_english"`
+	TitleJapanese string     `json:"title_japanese"`
+	Images        AnimeImages `json:"images"`
+}
+
+// AnimeImages contains image URLs from MAL
+type AnimeImages struct {
+	JPG ImageSet `json:"jpg"`
+}
+
+// ImageSet contains different sizes of an image
+type ImageSet struct {
+	ImageURL      string `json:"image_url"`
+	LargeImageURL string `json:"large_image_url"`
+}
+
+// PosterURL returns the best available poster URL from MAL images
+func (info *AnimeInfo) PosterURL() string {
+	if info.Images.JPG.LargeImageURL != "" {
+		return info.Images.JPG.LargeImageURL
+	}
+	return info.Images.JPG.ImageURL
 }
 
 type rateLimiter struct {

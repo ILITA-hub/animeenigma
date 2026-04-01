@@ -32,6 +32,7 @@ var (
 		"shikimori.io",
 		"shikimori.one",
 		"cdn.myanimelist.net",
+		"myanimelist.net",
 	}
 
 	shikimoriAnimeIDRe = regexp.MustCompile(`/uploads/poster/animes/(\d+)/`)
