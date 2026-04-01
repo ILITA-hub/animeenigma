@@ -15,16 +15,19 @@ type JobService struct {
 	shikimoriJob      *jobs.ShikimoriSyncJob
 	cleanupJob        *jobs.CleanupJob
 	topAnimeJob       *jobs.TopAnimeSyncJob
+	calendarJob       *jobs.CalendarSyncJob
 	log               *logger.Logger
 	lastShikimoriRun  time.Time
 	lastCleanupRun    time.Time
 	lastTopAnimeRun   time.Time
+	lastCalendarRun   time.Time
 }
 
 func NewJobService(
 	shikimoriJob *jobs.ShikimoriSyncJob,
 	cleanupJob *jobs.CleanupJob,
 	topAnimeJob *jobs.TopAnimeSyncJob,
+	calendarJob *jobs.CalendarSyncJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
@@ -32,12 +35,13 @@ func NewJobService(
 		shikimoriJob: shikimoriJob,
 		cleanupJob:   cleanupJob,
 		topAnimeJob:  topAnimeJob,
+		calendarJob:  calendarJob,
 		log:          log,
 	}
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -101,6 +105,27 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron string) erro
 		return err
 	}
 
+	// Schedule calendar sync job
+	_, err = s.cron.AddFunc(calendarCron, func() {
+		ctx := context.Background()
+		s.log.Info("starting scheduled calendar sync")
+		start := time.Now()
+		if err := s.calendarJob.Run(ctx); err != nil {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("calendar_sync", "error").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("calendar_sync").Observe(time.Since(start).Seconds())
+			s.log.Errorw("calendar sync failed", "error", err)
+		} else {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("calendar_sync", "success").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("calendar_sync").Observe(time.Since(start).Seconds())
+			metrics.SchedulerJobLastSuccess.WithLabelValues("calendar_sync").SetToCurrentTime()
+			s.lastCalendarRun = time.Now()
+			s.log.Info("calendar sync completed successfully")
+		}
+	})
+	if err != nil {
+		return err
+	}
+
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -148,6 +173,18 @@ func (s *JobService) TriggerTopAnimeSync(ctx context.Context) {
 	}
 }
 
+// TriggerCalendarSync manually triggers the calendar sync job
+func (s *JobService) TriggerCalendarSync(ctx context.Context) {
+	s.log.Info("manually triggering calendar sync")
+	if err := s.calendarJob.Run(ctx); err != nil {
+		s.log.Errorw("calendar sync failed", "error", err)
+	} else {
+		metrics.SchedulerJobLastSuccess.WithLabelValues("calendar_sync").SetToCurrentTime()
+		s.lastCalendarRun = time.Now()
+		s.log.Info("calendar sync completed successfully")
+	}
+}
+
 // GetStatus returns the status of all jobs
 func (s *JobService) GetStatus() map[string]interface{} {
 	return map[string]interface{}{
@@ -160,6 +197,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"top_anime_sync": map[string]interface{}{
 			"last_run": s.lastTopAnimeRun,
+		},
+		"calendar_sync": map[string]interface{}{
+			"last_run": s.lastCalendarRun,
 		},
 	}
 }

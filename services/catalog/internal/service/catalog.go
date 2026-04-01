@@ -729,6 +729,151 @@ func (s *CatalogService) GetSchedule(ctx context.Context) ([]*domain.Anime, erro
 	return animes, nil
 }
 
+// SyncCalendar fetches the Shikimori calendar and imports/updates anime schedule data.
+// For anime not in the local DB, fetches full details from Shikimori and creates them.
+// For anime already in the DB, updates next_episode_at.
+// Returns counts of imported, updated, and failed anime.
+func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, failed int, err error) {
+	s.log.Info("starting calendar sync from Shikimori")
+
+	calendar, err := s.shikimoriClient.GetCalendar(ctx)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("fetch calendar: %w", err)
+	}
+
+	s.log.Infow("fetched calendar entries", "count", len(calendar))
+
+	// Deduplicate by anime ID (same anime can appear multiple times for different episodes)
+	type calendarInfo struct {
+		shikimoriID   string
+		nextEpisodeAt *time.Time
+	}
+	seen := make(map[string]*calendarInfo)
+	for _, entry := range calendar {
+		id := strconv.Itoa(entry.Anime.ID)
+		if _, exists := seen[id]; exists {
+			continue // keep the first (earliest) entry
+		}
+		info := &calendarInfo{shikimoriID: id}
+		if entry.NextEpisodeAt != "" {
+			if t, err := time.Parse(time.RFC3339, entry.NextEpisodeAt); err == nil {
+				info.nextEpisodeAt = &t
+			}
+		}
+		seen[id] = info
+	}
+
+	// Check which anime already exist locally
+	var missingIDs []string
+	existingByShikimoriID := make(map[string]*domain.Anime)
+
+	for id := range seen {
+		select {
+		case <-ctx.Done():
+			return imported, updated, failed, ctx.Err()
+		default:
+		}
+
+		existing, err := s.animeRepo.GetByShikimoriID(ctx, id)
+		if err != nil {
+			s.log.Warnw("failed to check anime existence", "shikimori_id", id, "error", err)
+			failed++
+			continue
+		}
+		if existing != nil {
+			existingByShikimoriID[id] = existing
+		} else {
+			missingIDs = append(missingIDs, id)
+		}
+	}
+
+	s.log.Infow("calendar sync status",
+		"total_unique", len(seen),
+		"already_in_db", len(existingByShikimoriID),
+		"missing", len(missingIDs),
+	)
+
+	// Batch-fetch missing anime from Shikimori GraphQL (50 per batch, conservative)
+	const batchSize = 50
+	for i := 0; i < len(missingIDs); i += batchSize {
+		select {
+		case <-ctx.Done():
+			return imported, updated, failed, ctx.Err()
+		default:
+		}
+
+		end := i + batchSize
+		if end > len(missingIDs) {
+			end = len(missingIDs)
+		}
+		batch := missingIDs[i:end]
+
+		s.log.Infow("fetching missing anime batch from Shikimori",
+			"batch", fmt.Sprintf("%d-%d/%d", i+1, end, len(missingIDs)),
+		)
+
+		freshAnime, err := s.shikimoriClient.GetAnimeByIDs(ctx, batch)
+		if err != nil {
+			s.log.Warnw("batch fetch for calendar sync failed", "error", err)
+			failed += len(batch)
+			continue
+		}
+
+		for _, anime := range freshAnime {
+			// Override next_episode_at from calendar data (more accurate)
+			if info, ok := seen[anime.ShikimoriID]; ok && info.nextEpisodeAt != nil {
+				anime.NextEpisodeAt = info.nextEpisodeAt
+			}
+
+			if err := s.upsertAnimeFromExternal(ctx, anime); err != nil {
+				s.log.Warnw("failed to import calendar anime",
+					"shikimori_id", anime.ShikimoriID, "error", err)
+				failed++
+				continue
+			}
+			imported++
+		}
+
+		// Conservative rate limiting between batches
+		if end < len(missingIDs) {
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	// Update next_episode_at for anime already in DB
+	for id, existing := range existingByShikimoriID {
+		info := seen[id]
+		if info.nextEpisodeAt == nil {
+			continue
+		}
+
+		// Only update if the calendar has a different/newer value
+		if existing.NextEpisodeAt != nil && existing.NextEpisodeAt.Equal(*info.nextEpisodeAt) {
+			continue
+		}
+
+		existing.NextEpisodeAt = info.nextEpisodeAt
+		if err := s.animeRepo.Update(ctx, existing); err != nil {
+			s.log.Warnw("failed to update next_episode_at",
+				"id", existing.ID, "shikimori_id", id, "error", err)
+			failed++
+			continue
+		}
+
+		// Invalidate cache
+		_ = s.cache.Delete(ctx, cache.KeyAnime(existing.ID))
+		updated++
+	}
+
+	s.log.Infow("calendar sync completed",
+		"imported", imported,
+		"updated", updated,
+		"failed", failed,
+	)
+
+	return imported, updated, failed, nil
+}
+
 // GetOngoingAnime gets all ongoing anime
 func (s *CatalogService) GetOngoingAnime(ctx context.Context, page, pageSize int) ([]*domain.Anime, int64, error) {
 	animes, total, err := s.animeRepo.GetOngoingAnime(ctx, page, pageSize)

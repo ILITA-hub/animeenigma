@@ -45,6 +45,7 @@ func NewRouter(
 			r.Post("/shikimori-sync", jobHandler.TriggerShikimoriSync)
 			r.Post("/cleanup", jobHandler.TriggerCleanup)
 			r.Post("/top-anime-sync", jobHandler.TriggerTopAnimeSync)
+			r.Post("/calendar-sync", jobHandler.TriggerCalendarSync)
 		})
 
 		// Task management routes for MAL export

@@ -281,6 +281,22 @@ func (h *CatalogHandler) BatchRefreshAnime(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// SyncCalendar triggers a calendar sync from Shikimori (called by scheduler)
+func (h *CatalogHandler) SyncCalendar(w http.ResponseWriter, r *http.Request) {
+	imported, updated, failed, err := h.catalogService.SyncCalendar(r.Context())
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]interface{}{
+		"imported": imported,
+		"updated":  updated,
+		"failed":   failed,
+		"total":    imported + updated + failed,
+	})
+}
+
 // GetSchedule handles getting anime release schedule
 func (h *CatalogHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 	animes, err := h.catalogService.GetSchedule(r.Context())

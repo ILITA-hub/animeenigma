@@ -44,3 +44,9 @@ func (h *JobHandler) TriggerTopAnimeSync(w http.ResponseWriter, r *http.Request)
 	go h.jobService.TriggerTopAnimeSync(context.Background())
 	httputil.OK(w, map[string]string{"status": "job triggered"})
 }
+
+// TriggerCalendarSync manually triggers the calendar sync job
+func (h *JobHandler) TriggerCalendarSync(w http.ResponseWriter, r *http.Request) {
+	go h.jobService.TriggerCalendarSync(context.Background())
+	httputil.OK(w, map[string]string{"status": "job triggered"})
+}

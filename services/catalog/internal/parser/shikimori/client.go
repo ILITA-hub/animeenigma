@@ -511,6 +511,56 @@ func mapVideoKind(kind string) domain.VideoType {
 	}
 }
 
+// CalendarEntry represents an entry from the Shikimori /api/calendar endpoint
+type CalendarEntry struct {
+	NextEpisode   int    `json:"next_episode"`
+	NextEpisodeAt string `json:"next_episode_at"`
+	Anime         struct {
+		ID            int    `json:"id"`
+		Name          string `json:"name"`
+		Russian       string `json:"russian"`
+		Score         string `json:"score"`
+		Status        string `json:"status"`
+		Episodes      int    `json:"episodes"`
+		EpisodesAired int    `json:"episodes_aired"`
+		AiredOn       string `json:"aired_on"`
+		Image         struct {
+			Original string `json:"original"`
+			Preview  string `json:"preview"`
+		} `json:"image"`
+	} `json:"anime"`
+}
+
+// GetCalendar fetches the upcoming episode calendar from Shikimori REST API.
+// Returns a list of calendar entries with anime ID, next episode number, and air time.
+func (c *Client) GetCalendar(ctx context.Context) ([]CalendarEntry, error) {
+	c.rateLimiter.acquire()
+
+	url := c.config.BaseURL + "/api/calendar"
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	req.Header.Set("User-Agent", c.config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.ExternalAPI("shikimori", fmt.Errorf("calendar returned status %d", resp.StatusCode))
+	}
+
+	var entries []CalendarEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, errors.ExternalAPI("shikimori", fmt.Errorf("decode calendar: %w", err))
+	}
+
+	return entries, nil
+}
+
 // ExtractShikimoriID extracts ID from various Shikimori URL formats
 func ExtractShikimoriID(input string) string {
 	// Handle direct ID

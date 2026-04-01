@@ -73,14 +73,15 @@ func main() {
 	shikimoriJob := jobs.NewShikimoriSyncJob(&cfg.Jobs, log)
 	cleanupJob := jobs.NewCleanupJob(db.DB, redisCache, &cfg.Jobs, log)
 	topAnimeJob := jobs.NewTopAnimeSyncJob(&cfg.Jobs, log)
+	calendarJob := jobs.NewCalendarSyncJob(&cfg.Jobs, log)
 	animeLoaderJob := jobs.NewAnimeLoaderJob(taskRepo, exportJobRepo, taskProcessor, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, log)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler
-	if err := jobService.Start(cfg.Jobs.ShikimoriSyncCron, cfg.Jobs.CleanupCron, cfg.Jobs.TopAnimeSyncCron); err != nil {
+	if err := jobService.Start(cfg.Jobs.ShikimoriSyncCron, cfg.Jobs.CleanupCron, cfg.Jobs.TopAnimeSyncCron, cfg.Jobs.CalendarSyncCron); err != nil {
 		log.Fatalw("failed to start job scheduler", "error", err)
 	}
 	defer jobService.Stop()
