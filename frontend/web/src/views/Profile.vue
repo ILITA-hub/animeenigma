@@ -1350,6 +1350,10 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
 const fetchWatchlist = async (isOwn: boolean) => {
   _isOwnProfile.value = isOwn
   _watchlistInitialized.value = false
+  // Own profile defaults to "watching" tab (most actionable for the owner).
+  // Public profile defaults to "all" so visitors see the full picture.
+  // This means sorting (e.g. by score) produces different results because
+  // the underlying datasets differ — own shows one status, public shows all.
   watchlistFilter.value = isOwn ? 'watching' : 'all'
   if (isOwn) {
     // Also fetch lightweight statuses for badge map and per-status counts

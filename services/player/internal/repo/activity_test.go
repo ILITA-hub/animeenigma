@@ -33,6 +33,7 @@ func setupActivityTestDB(t *testing.T) *ActivityRepository {
 		type TEXT,
 		old_value TEXT,
 		new_value TEXT,
+		content TEXT,
 		created_at DATETIME,
 		deleted_at DATETIME
 	)`).Error

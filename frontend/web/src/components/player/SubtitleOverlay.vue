@@ -55,8 +55,18 @@ const fullscreenEl = ref<Element | null>(null)
 
 function onFullscreenChange() {
   const el = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement || null
-  // Only teleport to non-video elements (can't add children to <video>)
-  if (el && el.tagName !== 'VIDEO') {
+  if (el && el.tagName === 'VIDEO') {
+    // Native <video> went fullscreen — subtitles can't render inside it.
+    // Redirect fullscreen to the parent container so the overlay stays visible.
+    const container = el.parentElement
+    if (container) {
+      document.exitFullscreen().then(() => {
+        container.requestFullscreen().catch(() => {})
+      }).catch(() => {})
+    }
+    return
+  }
+  if (el) {
     fullscreenEl.value = el
   } else {
     fullscreenEl.value = null

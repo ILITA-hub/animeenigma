@@ -1,5 +1,5 @@
 {
-  "last_id": 9,
+  "last_id": 10,
   "issues": [
     {
       "id": "AUTO-001",
@@ -129,6 +129,19 @@
       "affected_service": "scheduler",
       "actions": null,
       "resolution": "Alert resolved (no longer firing in Grafana)"
+    },
+    {
+      "id": "AUTO-010",
+      "created_at": "2026-04-02T02:57:05Z",
+      "source": "grafana_alert",
+      "category": "player_unavailable",
+      "priority": "P0",
+      "status": "pending_fix",
+      "title": "Consumet AnimePahe scraper returning HTTP 500",
+      "reporter": "grafana",
+      "telegram_message_id": 0,
+      "affected_service": "catalog",
+      "actions": null
     }
   ]
 }

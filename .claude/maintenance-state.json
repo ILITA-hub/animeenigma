@@ -1,10 +1,19 @@
 {
   "last_update_id": 124398431,
   "last_poll_at": "2026-03-28T00:57:37Z",
-  "session_started": "2026-04-01T23:47:46Z",
-  "reactions_supported": false,
+  "session_started": "2026-04-02T03:41:38Z",
+  "reactions_supported": true,
   "bot_user_id": 8609426278,
-  "active_alerts": {},
+  "active_alerts": {
+    "Player Unavailable:catalog": {
+      "alert_uid": "Player Unavailable",
+      "service": "catalog",
+      "first_seen": "2026-04-02T02:57:05Z",
+      "last_seen": "2026-04-02T02:57:05Z",
+      "issue_id": "AUTO-010",
+      "status": "button_fix"
+    }
+  },
   "cooldowns": {
     "restart:scheduler": "2026-03-30T06:13:01+02:00"
   },
