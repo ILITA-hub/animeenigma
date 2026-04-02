@@ -123,25 +123,13 @@ type StreamResponse struct {
 	Subtitles []Subtitle        `json:"subtitles"`
 }
 
-// Search searches for anime by title, trying fallback providers on failure
+// Search searches for anime by title using the primary provider
 func (c *Client) Search(title string) ([]SearchResult, error) {
-	var lastErr error
-	for _, provider := range c.providerList() {
-		results, err := c.searchWithProvider(title, provider)
-		if err == nil && len(results) > 0 {
-			return results, nil
-		}
-		if err != nil {
-			lastErr = err
-		}
-	}
-	if lastErr != nil {
-		return nil, fmt.Errorf("search failed across all providers: %w", lastErr)
-	}
-	return nil, nil
+	return c.SearchOnProvider(title, c.provider)
 }
 
-func (c *Client) searchWithProvider(title, provider string) ([]SearchResult, error) {
+// SearchOnProvider searches for anime on a specific provider
+func (c *Client) SearchOnProvider(title, provider string) ([]SearchResult, error) {
 	searchURL := fmt.Sprintf("%s/anime/%s/%s", c.baseURL, provider, url.QueryEscape(title))
 
 	body, err := c.doRequest(searchURL)
@@ -160,21 +148,37 @@ func (c *Client) searchWithProvider(title, provider string) ([]SearchResult, err
 	return response.Results, nil
 }
 
-// GetAnimeInfo gets anime info including episodes
+// GetAnimeInfo gets anime info using the primary provider
 func (c *Client) GetAnimeInfo(animeID string) (*AnimeInfo, error) {
-	infoURL := fmt.Sprintf("%s/anime/%s/info/%s", c.baseURL, c.provider, url.PathEscape(animeID))
+	return c.GetAnimeInfoOnProvider(animeID, c.provider)
+}
 
+// GetAnimeInfoOnProvider gets anime info on a specific provider.
+// Some providers (animekai, hianime) use query-param style (?id=), others use path style (/info/{id}).
+func (c *Client) GetAnimeInfoOnProvider(animeID, provider string) (*AnimeInfo, error) {
+	// Try query-param style first (animekai, hianime), fall back to path style (animepahe)
+	infoURL := fmt.Sprintf("%s/anime/%s/info?id=%s", c.baseURL, provider, url.QueryEscape(animeID))
 	body, err := c.doRequest(infoURL)
 	if err != nil {
-		return nil, fmt.Errorf("anime info request failed: %w", err)
+		// Fallback: path-based (for animepahe and others)
+		infoURL = fmt.Sprintf("%s/anime/%s/info/%s", c.baseURL, provider, url.PathEscape(animeID))
+		body, err = c.doRequest(infoURL)
+		if err != nil {
+			return nil, fmt.Errorf("anime info request failed (%s): %w", provider, err)
+		}
 	}
 
 	var info AnimeInfo
 	if err := json.Unmarshal(body, &info); err != nil {
-		return nil, fmt.Errorf("failed to parse anime info: %w", err)
+		return nil, fmt.Errorf("failed to parse anime info (%s): %w", provider, err)
 	}
 
 	return &info, nil
+}
+
+// ProviderList returns the ordered list of providers to try
+func (c *Client) ProviderList() []string {
+	return c.providerList()
 }
 
 // GetEpisodes gets all episodes for an anime
@@ -246,8 +250,13 @@ func (c *Client) getStreamWithRetry(episodeID string, serverName string) (*Strea
 
 // getStreamDirect fetches stream from a specific server
 func (c *Client) getStreamDirect(episodeID string, serverName string) (*StreamResponse, error) {
+	return c.getStreamDirectOnProvider(episodeID, serverName, c.provider)
+}
+
+// getStreamDirectOnProvider fetches stream using a specific provider
+func (c *Client) getStreamDirectOnProvider(episodeID string, serverName string, provider string) (*StreamResponse, error) {
 	watchURL := fmt.Sprintf("%s/anime/%s/watch?episodeId=%s",
-		c.baseURL, c.provider, url.QueryEscape(episodeID))
+		c.baseURL, provider, url.QueryEscape(episodeID))
 
 	if serverName != "" {
 		watchURL += "&server=" + serverName

@@ -1941,23 +1941,27 @@ func (s *CatalogService) GetConsumetEpisodes(ctx context.Context, animeID string
 		return cached, nil
 	}
 
-	// Find anime on Consumet
-	consumetID, err := s.findConsumetID(ctx, anime)
-	if err != nil {
-		s.log.Warnw("failed to find anime on consumet",
-			"anime_id", animeID,
-			"name", anime.Name,
-			"error", err)
-		return []domain.ConsumetEpisode{}, nil
+	// Try each provider end-to-end: search → find ID → get info
+	var episodes []consumet.Episode
+	for _, provider := range s.consumetClient.ProviderList() {
+		consumetID, err := s.findConsumetIDOnProvider(ctx, anime, provider)
+		if err != nil || consumetID == "" {
+			continue
+		}
+		info, err := s.consumetClient.GetAnimeInfoOnProvider(consumetID, provider)
+		if err != nil || info == nil || len(info.Episodes) == 0 {
+			s.log.Debugw("consumet provider info failed, trying next",
+				"provider", provider, "consumet_id", consumetID, "error", err)
+			continue
+		}
+		episodes = info.Episodes
+		// Cache which provider works for this anime (for stream calls)
+		_ = s.cache.Set(ctx, fmt.Sprintf("consumet:provider:%s", animeID), provider, 24*time.Hour)
+		break
 	}
-
-	// Get episodes
-	episodes, err := s.consumetClient.GetEpisodes(consumetID)
-	if err != nil {
-		s.log.Warnw("failed to get consumet episodes",
-			"anime_id", animeID,
-			"consumet_id", consumetID,
-			"error", err)
+	if len(episodes) == 0 {
+		s.log.Warnw("failed to find anime on any consumet provider",
+			"anime_id", animeID, "name", anime.Name)
 		return []domain.ConsumetEpisode{}, nil
 	}
 
@@ -2080,6 +2084,36 @@ func (s *CatalogService) SearchConsumet(ctx context.Context, title string) ([]do
 	}
 
 	return searchResults, nil
+}
+
+// findConsumetIDOnProvider finds the Consumet ID on a specific provider
+func (s *CatalogService) findConsumetIDOnProvider(ctx context.Context, anime *domain.Anime, provider string) (string, error) {
+	searchNames := []string{}
+	if anime.Name != "" {
+		searchNames = append(searchNames, anime.Name)
+	}
+	if anime.NameJP != "" {
+		searchNames = append(searchNames, anime.NameJP)
+	}
+	if len(searchNames) == 0 {
+		return "", fmt.Errorf("no search names available")
+	}
+
+	for _, name := range searchNames {
+		results, err := s.consumetClient.SearchOnProvider(name, provider)
+		if err != nil || len(results) == 0 {
+			continue
+		}
+		// Check for exact match
+		for _, r := range results {
+			if matchesConsumetAnime(r.Title, anime) {
+				return r.ID, nil
+			}
+		}
+		// Fallback to first result
+		return results[0].ID, nil
+	}
+	return "", fmt.Errorf("anime not found on provider %s", provider)
 }
 
 // findConsumetID finds the Consumet ID for an anime by searching name variants in parallel
