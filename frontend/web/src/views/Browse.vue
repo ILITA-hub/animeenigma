@@ -191,6 +191,11 @@
           :key="anime.id"
           :anime="anime"
           :list-status="getListStatus(anime.id)"
+          :site-rating="siteRatings[String(anime.id)]"
+          @contextmenu="openContextMenu($event, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
+          @touchstart="onTouchstart($event, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
+          @touchmove="onTouchmove"
+          @touchend="onTouchend"
         />
       </div>
 
@@ -203,6 +208,17 @@
       </template>
     </div>
   </div>
+
+  <!-- Context Menu -->
+  <AnimeContextMenu
+    :visible="contextMenu.visible"
+    :x="contextMenu.x"
+    :y="contextMenu.y"
+    :anime="contextMenu.anime"
+    :list-status="contextMenu.listStatus"
+    :site-rating="contextMenu.siteRating"
+    @update:visible="contextMenu.visible = $event"
+  />
 </template>
 
 <script setup lang="ts">
@@ -212,12 +228,14 @@ import { useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Input, Badge, Button, Select, GenreFilterPopup, PaginationBar } from '@/components/ui'
-import { AnimeCardNew } from '@/components/anime'
+import { AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { animeApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
+import { useSiteRatings } from '@/composables/useSiteRatings'
+import { useContextMenu } from '@/composables/useContextMenu'
 
 const { t } = useI18n()
 
@@ -244,6 +262,12 @@ const fetchWatchlistMap = async () => {
 const getListStatus = (animeId: string | number): string | null => {
   return watchlistMap.value.get(String(animeId)) || null
 }
+
+// Site ratings for anime cards
+const { ratings: siteRatings, fetchRatings: fetchSiteRatings } = useSiteRatings()
+
+// Context menu
+const { contextMenu, open: openContextMenu, onTouchstart, onTouchmove, onTouchend } = useContextMenu()
 
 const searchQuery = ref('')
 const selectedGenre = ref('')
@@ -478,6 +502,13 @@ watch(() => route.query.page, (newPage) => {
   if (page !== currentPage.value) {
     currentPage.value = page
     loadAnime()
+  }
+})
+
+// Fetch site ratings whenever anime list changes
+watch(animeList, (list) => {
+  if (list.length > 0) {
+    fetchSiteRatings(list.map(a => String(a.id)))
   }
 })
 </script>

@@ -64,6 +64,7 @@ func NewRouter(
 			r.Get("/{animeId}", catalogHandler.GetAnime)
 			r.Post("/{animeId}/refresh", catalogHandler.RefreshAnime)
 			r.Get("/{animeId}/episodes", catalogHandler.GetAnimeEpisodes)
+			r.Get("/{animeId}/related", catalogHandler.GetRelatedAnime)
 			// Pinned translations (public)
 			r.Get("/{animeId}/pinned-translations", catalogHandler.GetPinnedTranslations)
 			r.Post("/{animeId}/pin-translation", catalogHandler.PinTranslation)

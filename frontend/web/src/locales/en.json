@@ -51,6 +51,7 @@
     "publish": "Publish",
     "update": "Update",
     "loginToReview": "Sign in to leave a review",
+    "loginToManage": "Sign in to manage your list",
     "noReviews": "No reviews yet. Be the first!",
     "user": "User",
     "refresh": "Refresh",
@@ -464,5 +465,8 @@
       "redis": "Cache",
       "nats": "Message Queue"
     }
+  },
+  "contextMenu": {
+    "goToPage": "Go to anime page"
   }
 }

@@ -516,7 +516,15 @@
           item-key="id"
         >
           <template #default="{ item }">
-            <AnimeCardNew :anime="(item as RelatedAnime)" />
+            <div>
+              <AnimeCardNew
+                :anime="(item as RelatedAnime)"
+                @contextmenu="openContextMenu($event, (item as RelatedAnime))"
+              />
+              <p v-if="(item as RelatedAnime).relationLabel" class="text-xs text-white/40 mt-1 text-center">
+                {{ (item as RelatedAnime).relationLabel }}
+              </p>
+            </div>
           </template>
         </Carousel>
       </section>
@@ -538,6 +546,17 @@
       <Button variant="outline" @click="retry">{{ $t('common.retry') }}</Button>
     </div>
   </div>
+
+  <!-- Context Menu for related anime -->
+  <AnimeContextMenu
+    :visible="contextMenu.visible"
+    :x="contextMenu.x"
+    :y="contextMenu.y"
+    :anime="contextMenu.anime"
+    :list-status="contextMenu.listStatus"
+    :site-rating="contextMenu.siteRating"
+    @update:visible="contextMenu.visible = $event"
+  />
 </template>
 
 <script setup lang="ts">
@@ -547,9 +566,10 @@ import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button } from '@/components/ui'
-import { GenreChip, AnimeCardNew } from '@/components/anime'
+import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
+import { useContextMenu } from '@/composables/useContextMenu'
 import type { WatchCombo } from '@/types/preference'
 
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
@@ -571,11 +591,14 @@ interface AnimeWithExtras {
 interface RelatedAnime {
   id: string
   title: string
+  name?: string
+  nameRu?: string
   coverImage: string
   rating?: number
   releaseYear?: number
   episodes?: number
   genres?: string[]
+  relationLabel?: string
 }
 
 interface Review {
@@ -600,6 +623,7 @@ const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const { anime, loading, error, fetchAnime } = useAnime()
+const { contextMenu, open: openContextMenu } = useContextMenu()
 
 let loadGeneration = 0
 const synopsisExpanded = ref(false)
@@ -1057,6 +1081,38 @@ const loadAnimeData = async (animeId: string) => {
   await fetchHiddenStatus()
   if (gen !== loadGeneration) return
   await fetchReviews()
+
+  // Fetch related anime (non-blocking)
+  fetchRelatedAnime()
+}
+
+async function fetchRelatedAnime() {
+  if (!anime.value?.id) return
+  try {
+    const resp = await animeApi.getRelated(anime.value.id as string)
+    const data = resp.data as Array<{
+      shikimori_id: string
+      local_id?: string
+      name: string
+      name_ru: string
+      relation_ru: string
+      relation_en: string
+      score: number
+      status: string
+      poster_url: string
+    }>
+    relatedAnime.value = data.map(r => ({
+      id: r.local_id || `shiki_${r.shikimori_id}`,
+      title: r.name,
+      nameRu: r.name_ru,
+      name: r.name,
+      coverImage: getImageUrl(r.poster_url),
+      rating: r.score || undefined,
+      relationLabel: locale.value === 'ru' ? r.relation_ru : r.relation_en,
+    }))
+  } catch (e) {
+    console.warn('Failed to fetch related anime:', e)
+  }
 }
 
 // Re-load when route param changes (Vue Router reuses the component for /anime/:id)

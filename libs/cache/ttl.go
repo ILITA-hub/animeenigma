@@ -101,3 +101,7 @@ func KeyTelegramAuth(token string) string {
 func KeyTopAnime() string {
 	return PrefixAnime + "top:trending"
 }
+
+func KeyRelatedAnime(shikimoriID string) string {
+	return PrefixAnime + "related:" + shikimoriID
+}

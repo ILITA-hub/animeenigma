@@ -2,6 +2,7 @@
   <router-link
     :to="`/anime/${anime.id}`"
     class="group block"
+    @contextmenu="emit('contextmenu', $event)"
   >
     <div class="card-hover rounded-xl overflow-hidden bg-white/5 border border-white/10">
       <!-- Poster Container -->
@@ -30,18 +31,34 @@
           </Badge>
           <span v-else />
 
-          <!-- Rating Badge -->
-          <Badge
-            v-if="anime.rating"
-            :variant="ratingVariant"
-            size="sm"
-            class="flex items-center gap-1"
-          >
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            {{ anime.rating.toFixed(1) }}
-          </Badge>
+          <!-- Rating Badges (stacked vertically) -->
+          <div class="flex flex-col gap-1 items-end">
+            <!-- Shikimori Rating Badge -->
+            <Badge
+              v-if="anime.rating"
+              :variant="ratingVariant"
+              size="sm"
+              class="flex items-center gap-1"
+            >
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              {{ anime.rating.toFixed(1) }}
+            </Badge>
+
+            <!-- Site Rating Badge (cyan) -->
+            <Badge
+              v-if="siteRating && siteRating.total_reviews > 0"
+              variant="primary"
+              size="sm"
+              class="flex items-center gap-1"
+            >
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              {{ siteRating.average_score.toFixed(1) }}
+            </Badge>
+          </div>
         </div>
 
         <!-- Watchlist Status Badge -->
@@ -109,6 +126,11 @@ interface Anime {
 const props = defineProps<{
   anime: Anime
   listStatus?: string | null
+  siteRating?: { average_score: number; total_reviews: number } | null
+}>()
+
+const emit = defineEmits<{
+  contextmenu: [event: MouseEvent]
 }>()
 
 const imageLoaded = ref(false)
@@ -166,5 +188,4 @@ const listBadgeClasses = computed(() => {
   const color = statusColors[props.listStatus || ''] || 'bg-white/20 text-white/90'
   return `inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${color}`
 })
-
 </script>

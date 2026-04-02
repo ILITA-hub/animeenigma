@@ -110,3 +110,4 @@ frontend/web/test-results/
 # Database backups
 docker/backup/
 Trace-*.json.gz
+services/maintenance/maintenance

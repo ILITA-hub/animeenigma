@@ -269,6 +269,39 @@ func (s *CatalogService) GetAnimeByShikimoriID(ctx context.Context, shikimoriID 
 	return anime, nil
 }
 
+// GetRelatedAnime fetches related anime (sequels, prequels, etc.) for the given anime.
+func (s *CatalogService) GetRelatedAnime(ctx context.Context, animeID string) ([]domain.RelatedAnime, error) {
+	anime, err := s.GetAnime(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+	if anime.ShikimoriID == "" {
+		return nil, nil
+	}
+
+	cacheKey := cache.KeyRelatedAnime(anime.ShikimoriID)
+	var cached []domain.RelatedAnime
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	related, err := s.shikimoriClient.GetRelatedAnime(ctx, anime.ShikimoriID)
+	if err != nil {
+		s.log.Warnw("failed to fetch related anime", "anime_id", animeID, "error", err)
+		return nil, nil
+	}
+
+	for i := range related {
+		local, err := s.animeRepo.GetByShikimoriID(ctx, related[i].ShikimoriID)
+		if err == nil && local != nil {
+			related[i].LocalID = local.ID
+		}
+	}
+
+	_ = s.cache.Set(ctx, cacheKey, related, cache.TTLAnimeDetails)
+	return related, nil
+}
+
 // ResolveMALAnime resolves a MAL ID to a local anime record.
 // First tries direct Shikimori lookup (since Shikimori IDs = MAL IDs),
 // then falls back to Jikan title matching. Returns "resolved" with anime

@@ -168,6 +168,7 @@ export const animeApi = {
   resolveMAL: (malId: string) => apiClient.get(`/anime/mal/${malId}`),
   getGenres: () => apiClient.get('/genres'),
   getNews: () => apiClient.get('/anime/news'),
+  getRelated: (animeId: string) => apiClient.get(`/anime/${animeId}/related`),
 }
 
 export const episodeApi = {

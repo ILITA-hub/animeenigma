@@ -185,6 +185,27 @@ func (h *CatalogHandler) GetAnime(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, anime)
 }
 
+// GetRelatedAnime handles fetching related anime (sequels, prequels, etc.)
+func (h *CatalogHandler) GetRelatedAnime(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	related, err := h.catalogService.GetRelatedAnime(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if related == nil {
+		related = []domain.RelatedAnime{}
+	}
+
+	httputil.OK(w, related)
+}
+
 // ResolveMALAnime handles MAL ID resolution via Jikan + Shikimori name matching
 func (h *CatalogHandler) ResolveMALAnime(w http.ResponseWriter, r *http.Request) {
 	malID := chi.URLParam(r, "malId")

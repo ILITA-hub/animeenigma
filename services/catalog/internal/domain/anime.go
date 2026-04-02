@@ -37,6 +37,19 @@ type Anime struct {
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+// RelatedAnime represents a related anime entry fetched from Shikimori (not stored in DB)
+type RelatedAnime struct {
+	ShikimoriID string  `json:"shikimori_id"`
+	LocalID     string  `json:"local_id,omitempty"`
+	Name        string  `json:"name"`
+	NameRU      string  `json:"name_ru"`
+	RelationRU  string  `json:"relation_ru"`
+	RelationEN  string  `json:"relation_en"`
+	Score       float64 `json:"score"`
+	Status      string  `json:"status"`
+	PosterURL   string  `json:"poster_url"`
+}
+
 // AnimeStatus represents the airing status
 type AnimeStatus string
 

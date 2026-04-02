@@ -51,6 +51,7 @@
     "publish": "投稿",
     "update": "更新",
     "loginToReview": "レビューするにはログインしてください",
+    "loginToManage": "リストを管理するにはログインしてください",
     "noReviews": "まだレビューがありません。最初のレビューを書きましょう！",
     "user": "ユーザー",
     "refresh": "更新",
@@ -464,5 +465,8 @@
       "redis": "キャッシュ",
       "nats": "メッセージキュー"
     }
+  },
+  "contextMenu": {
+    "goToPage": "アニメページへ"
   }
 }

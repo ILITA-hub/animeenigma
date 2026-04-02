@@ -351,6 +351,7 @@
                   v-for="anime in filteredWatchlist"
                   :key="anime.anime_id"
                   class="relative group"
+                  @contextmenu="openProfileContextMenu($event, anime)"
                 >
                   <router-link :to="`/anime/${anime.anime_id}`" class="block">
                     <div class="aspect-[2/3] rounded-xl overflow-hidden bg-surface relative">
@@ -821,6 +822,19 @@
       </template>
     </Modal>
   </div>
+
+  <!-- Context Menu for grid cards -->
+  <AnimeContextMenu
+    :visible="profileContextMenu.visible"
+    :x="profileContextMenu.x"
+    :y="profileContextMenu.y"
+    :anime="profileContextMenu.anime"
+    :list-status="profileContextMenu.listStatus"
+    :site-rating="profileContextMenu.siteRating"
+    @update:visible="profileContextMenu.visible = $event"
+    @status-change="fetchWatchlistPage()"
+    @remove-from-list="fetchWatchlistPage()"
+  />
 </template>
 
 <script setup lang="ts">
@@ -830,9 +844,11 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
+import { AnimeContextMenu } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
+import { useContextMenu } from '@/composables/useContextMenu'
 
 interface ApiError {
   response?: {
@@ -889,6 +905,21 @@ const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 
 const siteOrigin = window.location.origin
+
+// Context menu for grid view
+const { contextMenu: profileContextMenu, open: openProfileCtx } = useContextMenu()
+
+function openProfileContextMenu(event: MouseEvent, entry: WatchlistEntry) {
+  openProfileCtx(event, {
+    id: entry.anime_id,
+    title: animeTitle(entry),
+    name: entry.anime?.name,
+    nameRu: entry.anime?.name_ru,
+    nameJp: entry.anime?.name_jp,
+    coverImage: animeCover(entry),
+    episodes: entry.anime?.episodes_count,
+  }, { listStatus: entry.status })
+}
 
 // Helpers for nested anime data from Preload
 const animeTitle = (entry: WatchlistEntry): string =>

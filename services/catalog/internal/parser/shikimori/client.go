@@ -561,6 +561,73 @@ func (c *Client) GetCalendar(ctx context.Context) ([]CalendarEntry, error) {
 	return entries, nil
 }
 
+// relatedEntry represents a single related anime entry from the Shikimori REST API
+type relatedEntry struct {
+	Relation        string `json:"relation"`
+	RelationRussian string `json:"relation_russian"`
+	Anime           *struct {
+		ID      int    `json:"id"`
+		Name    string `json:"name"`
+		Russian string `json:"russian"`
+		Score   string `json:"score"`
+		Status  string `json:"status"`
+		Image   *struct {
+			Original string `json:"original"`
+		} `json:"image"`
+	} `json:"anime"`
+}
+
+// GetRelatedAnime fetches related anime (sequels, prequels, etc.) from the Shikimori REST API.
+func (c *Client) GetRelatedAnime(ctx context.Context, shikimoriID string) ([]domain.RelatedAnime, error) {
+	c.rateLimiter.acquire()
+
+	url := fmt.Sprintf("%s/api/animes/%s/related", c.config.BaseURL, shikimoriID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	req.Header.Set("User-Agent", c.config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.ExternalAPI("shikimori", fmt.Errorf("related returned status %d", resp.StatusCode))
+	}
+
+	var entries []relatedEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, errors.ExternalAPI("shikimori", fmt.Errorf("decode related: %w", err))
+	}
+
+	var result []domain.RelatedAnime
+	for _, e := range entries {
+		if e.Anime == nil {
+			continue // manga-only relation
+		}
+		ra := domain.RelatedAnime{
+			ShikimoriID: strconv.Itoa(e.Anime.ID),
+			Name:        e.Anime.Name,
+			NameRU:      e.Anime.Russian,
+			RelationRU:  e.RelationRussian,
+			RelationEN:  e.Relation,
+			Status:      e.Anime.Status,
+		}
+		if score, err := strconv.ParseFloat(e.Anime.Score, 64); err == nil {
+			ra.Score = score
+		}
+		if e.Anime.Image != nil && e.Anime.Image.Original != "" {
+			ra.PosterURL = "https://shikimori.one" + e.Anime.Image.Original
+		}
+		result = append(result, ra)
+	}
+
+	return result, nil
+}
+
 // ExtractShikimoriID extracts ID from various Shikimori URL formats
 func ExtractShikimoriID(input string) string {
 	// Handle direct ID
