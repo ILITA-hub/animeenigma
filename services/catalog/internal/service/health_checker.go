@@ -264,7 +264,7 @@ func (h *PlayerHealthChecker) checkConsumet() error {
 	}
 
 	// Step 1: Search
-	body, err := h.httpGet(h.consumetURL + "/anime/zoro/naruto")
+	body, err := h.httpGet(h.consumetURL + "/anime/animekai/naruto")
 	if err != nil {
 		return fmt.Errorf("search failed: %w", err)
 	}
@@ -283,7 +283,7 @@ func (h *PlayerHealthChecker) checkConsumet() error {
 	animeID := searchResp.Results[0].ID
 
 	// Step 2: Get info with episodes
-	body, err = h.httpGet(fmt.Sprintf("%s/anime/zoro/info/%s", h.consumetURL, url.PathEscape(animeID)))
+	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/info/%s", h.consumetURL, url.PathEscape(animeID)))
 	if err != nil {
 		return fmt.Errorf("info failed: %w", err)
 	}
@@ -302,7 +302,7 @@ func (h *PlayerHealthChecker) checkConsumet() error {
 	episodeID := infoResp.Episodes[0].ID
 
 	// Step 3: Get stream
-	body, err = h.httpGet(fmt.Sprintf("%s/anime/zoro/watch?episodeId=%s", h.consumetURL, url.QueryEscape(episodeID)))
+	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/watch?episodeId=%s", h.consumetURL, url.QueryEscape(episodeID)))
 	if err != nil {
 		return fmt.Errorf("stream failed: %w", err)
 	}

@@ -12,15 +12,16 @@ import (
 
 const (
 	// DefaultProvider is the primary provider to try first
-	DefaultProvider = "zoro"
+	DefaultProvider = "animekai"
 
 	// Retry configuration
 	maxRetries    = 3
 	retryBaseWait = 500 * time.Millisecond
 )
 
-// FallbackProviders are tried in order when the primary provider fails
-var FallbackProviders = []string{"zoro", "animepahe", "gogoanime"}
+// FallbackProviders are tried in order when the primary provider fails.
+// Available in riimuru/consumet-api: animekai, animepahe, hianime, animesaturn, animeunity, kickassanime
+var FallbackProviders = []string{"animekai", "hianime", "animepahe"}
 
 // PreferredServers defines the order of servers to try
 var PreferredServers = []string{"vidcloud", "streamsb", "vidstreaming"}

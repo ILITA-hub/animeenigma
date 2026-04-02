@@ -158,22 +158,15 @@
     {
       "id": "AUTO-012",
       "created_at": "2026-04-02T08:59:30Z",
-      "resolved_at": "2026-04-02T14:30:00Z",
       "source": "error_report",
       "category": "player_unavailable",
       "priority": "P2",
-      "status": "resolved",
+      "status": "escalated",
       "title": "Consumet animepahe provider returning HTTP 500 for all searches",
       "reporter": "player_service",
       "telegram_message_id": 22,
-      "actions": [
-        {
-          "action": "Switch default provider from animepahe to zoro, add provider fallback chain",
-          "result": "success",
-          "details": "Changed DefaultProvider to zoro. Added FallbackProviders (zoro, animepahe, gogoanime). Search tries all providers on failure. Added CONSUMET_PROVIDER env var. Updated health checker."
-        }
-      ],
-      "resolution": "Fixed by adding provider fallback chain and switching default to zoro"
+      "actions": [],
+      "resolution": "Pending fix expired after 1 hour"
     },
     {
       "id": "AUTO-013",

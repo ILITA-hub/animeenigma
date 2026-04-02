@@ -131,4 +131,13 @@ router.beforeEach((to, _from, next) => {
   }
 })
 
+// Auto-reload when lazy-loaded chunks fail after a deploy
+// (old JS/CSS files are replaced with new hashed versions)
+router.onError((error, to) => {
+  const chunkFailed = /Loading (CSS )?chunk [\w-]+ failed|Failed to fetch dynamically imported module|error loading dynamically imported module/i.test(error.message)
+  if (chunkFailed) {
+    window.location.assign(to.fullPath)
+  }
+})
+
 export default router
