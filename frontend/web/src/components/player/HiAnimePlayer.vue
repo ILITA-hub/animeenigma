@@ -17,7 +17,7 @@
     <div v-else class="flex flex-col lg:flex-row gap-4">
       <!-- Left: Video Player -->
       <div class="flex-1 min-w-0">
-        <div class="relative aspect-video bg-black rounded-xl overflow-hidden">
+        <div ref="playerContainer" class="relative aspect-video bg-black rounded-xl overflow-hidden">
           <!-- Loading overlay -->
           <div
             v-if="loadingStream"
@@ -434,6 +434,7 @@ const loadingStream = ref(false)
 const error = ref<string | null>(null)
 const serverLoadWarning = ref<string | null>(null)
 
+const playerContainer = ref<HTMLDivElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const nativeVideoRef = ref<HTMLVideoElement | null>(null)
 let vjsPlayer: ReturnType<typeof videojs> | null = null
@@ -785,6 +786,15 @@ const initVideoJsPlayer = (url: string, referer: string = '') => {
   vjsPlayer.ready(() => {
     vjsPlayerReady.value = true
     vjsPlayer?.play()?.catch(() => {})
+
+    // Override fullscreen to target the outer container (which includes SubtitleOverlay)
+    // so subtitles remain visible in fullscreen mode.
+    if (playerContainer.value && vjsPlayer) {
+      const container = playerContainer.value
+      const player = vjsPlayer
+      player.requestFullscreen = () => container.requestFullscreen()
+      player.exitFullscreen = () => document.exitFullscreen()
+    }
   })
 }
 
@@ -1131,15 +1141,30 @@ watch(() => props.animeId, () => {
   fetchWatchedEpisodes()
 })
 
+// Sync Video.js fullscreen class when outer container is the fullscreen target
+const handleFullscreenChange = () => {
+  if (!vjsPlayer) return
+  const fsEl = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
+  if (fsEl && playerContainer.value?.contains(fsEl) || fsEl === playerContainer.value) {
+    vjsPlayer.addClass('vjs-fullscreen')
+  } else if (!fsEl) {
+    vjsPlayer.removeClass('vjs-fullscreen')
+  }
+}
+
 // Lifecycle
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
   fetchEpisodes()
   fetchWatchedEpisodes()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
   saveProgress()
   disposeCurrentPlayer()
 })

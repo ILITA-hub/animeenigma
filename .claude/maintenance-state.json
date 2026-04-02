@@ -1,7 +1,7 @@
 {
   "last_update_id": 124398431,
   "last_poll_at": "2026-03-28T00:57:37Z",
-  "session_started": "2026-04-02T07:10:44Z",
+  "session_started": "2026-04-02T08:53:24Z",
   "reactions_supported": true,
   "bot_user_id": 8609426278,
   "active_alerts": {
@@ -24,5 +24,19 @@
       "at": "2026-03-30T04:03:01Z"
     }
   },
-  "pending_fixes": {}
+  "pending_fixes": {
+    "AUTO-012": {
+      "issue_id": "AUTO-012",
+      "proposed_at": "2026-04-02T08:59:30Z",
+      "fix_plan": {
+        "type": "docker_pull",
+        "target": "consumet",
+        "description": "Pull latest consumet image and restart the container: docker pull ghcr.io/consumet/api:latest \u0026\u0026 docker compose -f docker/docker-compose.yml up -d --no-deps consumet",
+        "context": "The animepahe provider scraper is broken in the current image — updates to animepahe.si's page structure break parsing. Pulling the latest consumet image typically includes scraper fixes. This is the same category of fix as ISS-007 for aniwatch.",
+        "verification": "After restart, run: curl http://localhost:3101/anime/animepahe/naruto — should return JSON with results array instead of 'Something went wrong'"
+      },
+      "telegram_message_id": 23,
+      "alert_message_id": 22
+    }
+  }
 }

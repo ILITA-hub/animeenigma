@@ -1,5 +1,5 @@
 {
-  "last_id": 11,
+  "last_id": 12,
   "issues": [
     {
       "id": "AUTO-001",
@@ -154,6 +154,18 @@
       "reporter": "player_service",
       "telegram_message_id": 12,
       "actions": null
+    },
+    {
+      "id": "AUTO-012",
+      "created_at": "2026-04-02T08:59:30Z",
+      "source": "error_report",
+      "category": "player_unavailable",
+      "priority": "P2",
+      "status": "pending_admin_action",
+      "title": "Consumet animepahe provider returning HTTP 500 for all searches",
+      "reporter": "player_service",
+      "telegram_message_id": 22,
+      "actions": []
     }
   ]
 }
