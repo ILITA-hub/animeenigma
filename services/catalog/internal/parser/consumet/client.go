@@ -11,14 +11,16 @@ import (
 )
 
 const (
-	// DefaultProvider is the provider to use
-	// animepahe is more reliable than zoro in the current Consumet Docker image
-	DefaultProvider = "animepahe"
+	// DefaultProvider is the primary provider to try first
+	DefaultProvider = "zoro"
 
 	// Retry configuration
 	maxRetries    = 3
 	retryBaseWait = 500 * time.Millisecond
 )
+
+// FallbackProviders are tried in order when the primary provider fails
+var FallbackProviders = []string{"zoro", "animepahe", "gogoanime"}
 
 // PreferredServers defines the order of servers to try
 var PreferredServers = []string{"vidcloud", "streamsb", "vidstreaming"}
@@ -31,17 +33,34 @@ type Client struct {
 }
 
 // NewClient creates a new Consumet client
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL string, provider ...string) *Client {
 	if baseURL == "" {
 		baseURL = "http://consumet:3000"
+	}
+	p := DefaultProvider
+	if len(provider) > 0 && provider[0] != "" {
+		p = provider[0]
 	}
 	return &Client{
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 		baseURL:  strings.TrimSuffix(baseURL, "/"),
-		provider: DefaultProvider,
+		provider: p,
 	}
+}
+
+// providerList returns the primary provider first, then fallbacks (deduplicated).
+func (c *Client) providerList() []string {
+	seen := map[string]bool{c.provider: true}
+	list := []string{c.provider}
+	for _, p := range FallbackProviders {
+		if !seen[p] {
+			seen[p] = true
+			list = append(list, p)
+		}
+	}
+	return list
 }
 
 // SearchResult represents a search result from Consumet
@@ -103,13 +122,30 @@ type StreamResponse struct {
 	Subtitles []Subtitle        `json:"subtitles"`
 }
 
-// Search searches for anime by title
+// Search searches for anime by title, trying fallback providers on failure
 func (c *Client) Search(title string) ([]SearchResult, error) {
-	searchURL := fmt.Sprintf("%s/anime/%s/%s", c.baseURL, c.provider, url.QueryEscape(title))
+	var lastErr error
+	for _, provider := range c.providerList() {
+		results, err := c.searchWithProvider(title, provider)
+		if err == nil && len(results) > 0 {
+			return results, nil
+		}
+		if err != nil {
+			lastErr = err
+		}
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("search failed across all providers: %w", lastErr)
+	}
+	return nil, nil
+}
+
+func (c *Client) searchWithProvider(title, provider string) ([]SearchResult, error) {
+	searchURL := fmt.Sprintf("%s/anime/%s/%s", c.baseURL, provider, url.QueryEscape(title))
 
 	body, err := c.doRequest(searchURL)
 	if err != nil {
-		return nil, fmt.Errorf("search request failed: %w", err)
+		return nil, fmt.Errorf("search request failed (%s): %w", provider, err)
 	}
 
 	var response struct {
@@ -117,7 +153,7 @@ func (c *Client) Search(title string) ([]SearchResult, error) {
 	}
 
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse search response: %w", err)
+		return nil, fmt.Errorf("failed to parse search response (%s): %w", provider, err)
 	}
 
 	return response.Results, nil
@@ -125,7 +161,6 @@ func (c *Client) Search(title string) ([]SearchResult, error) {
 
 // GetAnimeInfo gets anime info including episodes
 func (c *Client) GetAnimeInfo(animeID string) (*AnimeInfo, error) {
-	// Use path-based ID (not query param) for animepahe provider
 	infoURL := fmt.Sprintf("%s/anime/%s/info/%s", c.baseURL, c.provider, url.PathEscape(animeID))
 
 	body, err := c.doRequest(infoURL)

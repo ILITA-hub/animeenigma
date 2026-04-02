@@ -77,9 +77,10 @@ func main() {
 		redisCache,
 		log,
 		service.CatalogServiceOptions{
-			AniwatchAPIURL: cfg.HiAnime.AniwatchAPIURL,
-			ConsumetAPIURL: cfg.Consumet.APIURL,
-			JimakuAPIKey:   cfg.Jimaku.APIKey,
+			AniwatchAPIURL:   cfg.HiAnime.AniwatchAPIURL,
+			ConsumetAPIURL:   cfg.Consumet.APIURL,
+			ConsumetProvider: cfg.Consumet.Provider,
+			JimakuAPIKey:     cfg.Jimaku.APIKey,
 			AnimeLibToken:  cfg.AnimeLib.Token,
 		},
 	)

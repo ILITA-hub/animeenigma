@@ -54,10 +54,11 @@ type CatalogService struct {
 
 // CatalogServiceOptions contains optional configuration for CatalogService
 type CatalogServiceOptions struct {
-	AniwatchAPIURL string
-	ConsumetAPIURL string
-	JimakuAPIKey   string
-	AnimeLibToken  string
+	AniwatchAPIURL   string
+	ConsumetAPIURL   string
+	ConsumetProvider string
+	JimakuAPIKey     string
+	AnimeLibToken    string
 }
 
 func NewCatalogService(
@@ -78,10 +79,11 @@ func NewCatalogService(
 	}
 
 	// Get API URLs from options
-	var aniwatchAPIURL, consumetAPIURL, jimakuAPIKey, animelibToken string
+	var aniwatchAPIURL, consumetAPIURL, consumetProvider, jimakuAPIKey, animelibToken string
 	if len(opts) > 0 {
 		aniwatchAPIURL = opts[0].AniwatchAPIURL
 		consumetAPIURL = opts[0].ConsumetAPIURL
+		consumetProvider = opts[0].ConsumetProvider
 		jimakuAPIKey = opts[0].JimakuAPIKey
 		animelibToken = opts[0].AnimeLibToken
 	}
@@ -108,7 +110,7 @@ func NewCatalogService(
 		aniboomClient:   aniboom.NewClient(),
 		kodikClient:     kodikClient,
 		hianimeClient:   hianime.NewClientWithAniwatch(aniwatchAPIURL),
-		consumetClient:  consumet.NewClient(consumetAPIURL),
+		consumetClient:  consumet.NewClient(consumetAPIURL, consumetProvider),
 		jikanClient:     jikan.NewClient(),
 		jimakuClient:    jimakuClient,
 		animelibClient:  animelibClient,

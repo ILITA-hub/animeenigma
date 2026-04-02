@@ -47,7 +47,8 @@ type HiAnimeConfig struct {
 }
 
 type ConsumetConfig struct {
-	APIURL string
+	APIURL   string
+	Provider string
 }
 
 type JimakuConfig struct {
@@ -105,7 +106,8 @@ func Load() (*Config, error) {
 			AniwatchAPIURL: getEnv("ANIWATCH_API_URL", "http://aniwatch:4000"),
 		},
 		Consumet: ConsumetConfig{
-			APIURL: getEnv("CONSUMET_API_URL", "http://consumet:3000"),
+			APIURL:   getEnv("CONSUMET_API_URL", "http://consumet:3000"),
+			Provider: getEnv("CONSUMET_PROVIDER", ""),
 		},
 		Jimaku: JimakuConfig{
 			APIKey: getEnv("JIMAKU_API_KEY", ""),
