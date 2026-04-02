@@ -58,11 +58,13 @@ function onFullscreenChange() {
   if (el && el.tagName === 'VIDEO') {
     // Native <video> went fullscreen — subtitles can't render inside it.
     // Redirect fullscreen to the parent container so the overlay stays visible.
+    // Call requestFullscreen on parent directly (replaces current fullscreen element).
     const container = el.parentElement
     if (container) {
-      document.exitFullscreen().then(() => {
-        container.requestFullscreen().catch(() => {})
-      }).catch(() => {})
+      container.requestFullscreen().catch(() => {
+        // If redirect fails (no user activation), keep video fullscreen
+        // but subtitles won't be visible in native-player fullscreen mode.
+      })
     }
     return
   }
@@ -84,15 +86,29 @@ const activeCues = computed(() => {
     .sort((a, b) => (a.style?.layer || 0) - (b.style?.layer || 0))
 })
 
-// Count how many preceding active cues share the same alignment position
+// Count stacking offset for overlapping cues at the same alignment.
+// For bottom-aligned cues (1-3): count cues AFTER this one so the first cue
+// in the array appears highest and the last sits at the bottom margin —
+// this preserves top-to-bottom reading order.
+// For top/middle cues: count cues BEFORE so they stack downward/outward.
 function getCueStackIndex(cue: SubtitleCue, index: number): number {
   if (cue.style?.pos) return 0 // absolute positioned cues don't stack
   const alignment = cue.style?.alignment || 2
+  const isBottom = alignment <= 3
   let stackIndex = 0
-  for (let i = 0; i < index; i++) {
-    const other = activeCues.value[i]
-    if (!other.style?.pos && (other.style?.alignment || 2) === alignment) {
-      stackIndex++
+  if (isBottom) {
+    for (let i = index + 1; i < activeCues.value.length; i++) {
+      const other = activeCues.value[i]
+      if (!other.style?.pos && (other.style?.alignment || 2) === alignment) {
+        stackIndex++
+      }
+    }
+  } else {
+    for (let i = 0; i < index; i++) {
+      const other = activeCues.value[i]
+      if (!other.style?.pos && (other.style?.alignment || 2) === alignment) {
+        stackIndex++
+      }
     }
   }
   return stackIndex
