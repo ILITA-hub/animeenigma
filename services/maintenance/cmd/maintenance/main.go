@@ -93,8 +93,12 @@ func main() {
 		cfg.Claude.TimeoutSec,
 	)
 
-	// Start HTTP server (health + metrics)
-	router := transport.NewRouter()
+	// Start HTTP server (health + metrics + report intake)
+	// workChan is initialized here so the router can inject reports; stored on the service struct
+	workChan := make(chan workItem, 10)
+	router := transport.NewRouter(func(report domain.ReportRequest) {
+		workChan <- workItem{reports: []domain.ReportRequest{report}}
+	})
 	server := &http.Server{
 		Addr:    cfg.Server.Address(),
 		Handler: router,
@@ -132,6 +136,7 @@ func main() {
 		state:       stateMgr,
 		cfg:         cfg,
 		alertsBotID: cfg.Telegram.AlertsBotID,
+		workChan:    workChan,
 	}
 
 	go svc.run(ctx)
@@ -158,17 +163,19 @@ type service struct {
 	state       *state.Manager
 	cfg         *config.Config
 	alertsBotID int64 // The alerts bot's user ID (for classifying Grafana messages)
+	workChan    chan workItem
 	mu          sync.Mutex
 }
 
-// workItem carries either Telegram updates or Grafana alerts to the processor.
+// workItem carries either Telegram updates, Grafana alerts, or HTTP reports to the processor.
 type workItem struct {
 	telegramUpdates []telegram.Update
 	grafanaAlerts   []domain.ClassifiedMessage
+	reports         []domain.ReportRequest
 }
 
 func (s *service) run(ctx context.Context) {
-	workChan := make(chan workItem, 10)
+	workChan := s.workChan
 
 	// Goroutine 1: Telegram poller (user messages, button clicks)
 	go func() {
@@ -257,12 +264,14 @@ func (s *service) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case work := <-workChan:
-			// Separate Telegram updates from Grafana alerts while draining
+			// Separate sources while draining
 			var telegramQueue []telegram.Update
 			var grafanaAlerts []domain.ClassifiedMessage
+			var reports []domain.ReportRequest
 
 			telegramQueue = append(telegramQueue, work.telegramUpdates...)
 			grafanaAlerts = append(grafanaAlerts, work.grafanaAlerts...)
+			reports = append(reports, work.reports...)
 
 		drainLoop:
 			for {
@@ -270,6 +279,7 @@ func (s *service) run(ctx context.Context) {
 				case more := <-workChan:
 					telegramQueue = append(telegramQueue, more.telegramUpdates...)
 					grafanaAlerts = append(grafanaAlerts, more.grafanaAlerts...)
+					reports = append(reports, more.reports...)
 				default:
 					break drainLoop
 				}
@@ -278,6 +288,24 @@ func (s *service) run(ctx context.Context) {
 			// Process Grafana alerts first (lightweight, coalesced)
 			if len(grafanaAlerts) > 0 {
 				s.processWork(ctx, workItem{grafanaAlerts: grafanaAlerts})
+			}
+
+			// Process HTTP reports one at a time (each posts to Telegram + invokes Claude)
+			for i, report := range reports {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				s.processReport(ctx, report)
+
+				if i < len(reports)-1 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(3 * time.Second):
+					}
+				}
 			}
 
 			// Process Telegram updates one at a time
@@ -425,6 +453,80 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		})
 	}
 
+	s.state.Save()
+}
+
+// processReport handles an error report received via HTTP:
+// posts it to Telegram (so maintenance bot owns the message), reacts, analyzes, replies.
+func (s *service) processReport(ctx context.Context, report domain.ReportRequest) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Build the same 🚨 report message format the player service used
+	var b strings.Builder
+	b.WriteString("🚨 <b>Player Error Report</b>\n\n")
+	b.WriteString(fmt.Sprintf("👤 <b>User:</b> %s (ID: %s)\n", escTelegram(report.Username), escTelegram(report.UserID)))
+	b.WriteString(fmt.Sprintf("🎬 <b>Player:</b> %s\n", escTelegram(report.PlayerType)))
+	b.WriteString(fmt.Sprintf("📺 <b>Anime:</b> %s\n", escTelegram(report.AnimeName)))
+	if report.EpisodeNumber != nil {
+		b.WriteString(fmt.Sprintf("📋 <b>Episode:</b> %d\n", *report.EpisodeNumber))
+	}
+	if report.ServerName != "" {
+		b.WriteString(fmt.Sprintf("🖥 <b>Server:</b> %s\n", escTelegram(report.ServerName)))
+	}
+	if report.ErrorMessage != "" {
+		msg := report.ErrorMessage
+		if len(msg) > 200 {
+			msg = msg[:200] + "..."
+		}
+		b.WriteString(fmt.Sprintf("\n⚠️ <b>Error:</b> <code>%s</code>\n", escTelegram(msg)))
+	}
+	if report.Description != "" {
+		desc := report.Description
+		if len(desc) > 500 {
+			desc = desc[:500] + "..."
+		}
+		b.WriteString(fmt.Sprintf("\n💬 <b>Description:</b>\n%s\n", escTelegram(desc)))
+	}
+	if report.URL != "" {
+		b.WriteString(fmt.Sprintf("\n🔗 %s", escTelegram(report.URL)))
+	}
+	if report.ReportFile != "" {
+		b.WriteString(fmt.Sprintf("\n📁 <code>%s</code>", escTelegram(report.ReportFile)))
+	}
+
+	// Post to Telegram — maintenance bot owns this message
+	msgID, err := s.tg.SendMessage(b.String())
+	if err != nil {
+		fmt.Printf("[report] failed to post to Telegram: %v\n", err)
+		return
+	}
+
+	// React with 👀
+	s.tg.SetReaction(msgID, "👀")
+
+	// Build ClassifiedMessage for Claude analysis
+	msg := domain.ClassifiedMessage{
+		MessageID: msgID,
+		Type:      domain.MessageErrorReport,
+		Priority:  domain.P2,
+		Text:      b.String(),
+		From:      domain.User{Username: report.Username},
+		RawJSON:   fmt.Sprintf(`{"report": {"player":"%s","anime":"%s","error":"%s","description":"%s","server":"%s","url":"%s","file":"%s"}}`, report.PlayerType, report.AnimeName, report.ErrorMessage, report.Description, report.ServerName, report.URL, report.ReportFile),
+	}
+
+	// Invoke Claude
+	fmt.Printf("Analyzing report from %s (player: %s, anime: %s)...\n", report.Username, report.PlayerType, report.AnimeName)
+	result, err := s.disp.Analyze(ctx, msg)
+	if err != nil {
+		fmt.Printf("Claude analysis failed for report: %v\n", err)
+		s.tg.SetReaction(msgID, "❌")
+		s.tg.SendReply(msgID, fmt.Sprintf("<b>⚠️ Analysis failed</b>\n%s", truncateForTelegram(err.Error())))
+		return
+	}
+
+	s.tg.SetReaction(msgID, "✅")
+	s.handleResult(ctx, msg, result)
 	s.state.Save()
 }
 
@@ -645,6 +747,13 @@ func (s *service) isSuppressed(alertKey string) bool {
 		}
 	}
 	return false
+}
+
+func escTelegram(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 func truncateForTelegram(s string) string {

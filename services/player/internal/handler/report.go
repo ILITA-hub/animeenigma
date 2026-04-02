@@ -25,19 +25,23 @@ var allowedPlayerTypes = map[string]bool{
 }
 
 type ReportHandler struct {
-	log             *logger.Logger
-	telegramToken   string
-	telegramChatID  string
-	telegramEnabled bool
-	reportsDir      string
+	log              *logger.Logger
+	telegramToken    string
+	telegramChatID   string
+	telegramEnabled  bool
+	maintenanceURL   string
+	reportsDir       string
 }
 
-func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reportsDir string) *ReportHandler {
+func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reportsDir, maintenanceURL string) *ReportHandler {
 	enabled := telegramToken != "" && telegramChatID != ""
 	if !enabled {
 		log.Warnw("telegram notifications disabled for error reports", "reason", "missing TELEGRAM_BOT_TOKEN or TELEGRAM_ADMIN_CHAT_ID")
 	} else {
 		log.Infow("telegram notifications enabled for error reports", "chat_id", telegramChatID)
+	}
+	if maintenanceURL != "" {
+		log.Infow("maintenance integration enabled", "url", maintenanceURL)
 	}
 
 	// Ensure reports directory exists
@@ -50,11 +54,12 @@ func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reports
 	}
 
 	return &ReportHandler{
-		log:             log,
-		telegramToken:   telegramToken,
-		telegramChatID:  telegramChatID,
-		telegramEnabled: enabled,
-		reportsDir:      reportsDir,
+		log:              log,
+		telegramToken:    telegramToken,
+		telegramChatID:   telegramChatID,
+		telegramEnabled:  enabled,
+		maintenanceURL:   maintenanceURL,
+		reportsDir:       reportsDir,
 	}
 }
 
@@ -105,10 +110,19 @@ func (h *ReportHandler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 	// Save report to disk
 	reportFile := h.saveReportToDisk(claims, &report)
 
-	// Send Telegram notification to admin
-	if h.telegramEnabled {
-		go h.sendTelegramNotification(claims, &report, reportFile)
-	}
+	// Send to maintenance service (preferred) or fall back to Telegram
+	go func() {
+		if h.maintenanceURL != "" {
+			if err := h.sendToMaintenance(claims, &report, reportFile); err != nil {
+				h.log.Warnw("maintenance service unavailable, falling back to Telegram", "error", err)
+			} else {
+				return // maintenance will post to Telegram and analyze
+			}
+		}
+		if h.telegramEnabled {
+			h.sendTelegramNotification(claims, &report, reportFile)
+		}
+	}()
 
 	httputil.OK(w, map[string]string{"status": "received"})
 }
@@ -176,6 +190,43 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 
 	h.log.Infow("report saved to disk", "path", filePath, "size", len(data))
 	return filePath
+}
+
+func (h *ReportHandler) sendToMaintenance(claims *authz.Claims, report *domain.ErrorReport, reportFile string) error {
+	payload := map[string]interface{}{
+		"username":    claims.Username,
+		"user_id":     claims.UserID,
+		"player_type": report.PlayerType,
+		"anime_name":  report.AnimeName,
+		"server_name": report.ServerName,
+		"error_message": report.ErrorMessage,
+		"description": report.Description,
+		"url":         report.URL,
+		"report_file": reportFile,
+	}
+	if report.EpisodeNumber != nil {
+		payload["episode_number"] = *report.EpisodeNumber
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(h.maintenanceURL+"/api/reports", "application/json", strings.NewReader(string(data)))
+	if err != nil {
+		return fmt.Errorf("post: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	}
+
+	h.log.Infow("report sent to maintenance service", "username", claims.Username, "player", report.PlayerType)
+	return nil
 }
 
 func (h *ReportHandler) sendTelegramNotification(claims *authz.Claims, report *domain.ErrorReport, reportFile string) {

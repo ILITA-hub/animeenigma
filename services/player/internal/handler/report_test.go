@@ -16,7 +16,7 @@ import (
 func TestSaveReportToDisk_ValidPlayerType(t *testing.T) {
 	tmpDir := t.TempDir()
 	log := logger.Default()
-	h := NewReportHandler(log, "", "", tmpDir)
+	h := NewReportHandler(log, "", "", tmpDir, "")
 
 	claims := &authz.Claims{UserID: "user-1", Username: "testuser"}
 	report := &domain.ErrorReport{
@@ -41,7 +41,7 @@ func TestSaveReportToDisk_ValidPlayerType(t *testing.T) {
 func TestSaveReportToDisk_InvalidPlayerType(t *testing.T) {
 	tmpDir := t.TempDir()
 	log := logger.Default()
-	h := NewReportHandler(log, "", "", tmpDir)
+	h := NewReportHandler(log, "", "", tmpDir, "")
 
 	claims := &authz.Claims{UserID: "user-1", Username: "testuser"}
 
@@ -77,7 +77,7 @@ func TestSaveReportToDisk_InvalidPlayerType(t *testing.T) {
 func TestSaveReportToDisk_FilePermissions(t *testing.T) {
 	tmpDir := t.TempDir()
 	log := logger.Default()
-	h := NewReportHandler(log, "", "", tmpDir)
+	h := NewReportHandler(log, "", "", tmpDir, "")
 
 	claims := &authz.Claims{UserID: "user-1", Username: "testuser"}
 	report := &domain.ErrorReport{
@@ -98,7 +98,7 @@ func TestSaveReportToDisk_FilePermissions(t *testing.T) {
 func TestSaveReportToDisk_UsernameSanitization(t *testing.T) {
 	tmpDir := t.TempDir()
 	log := logger.Default()
-	h := NewReportHandler(log, "", "", tmpDir)
+	h := NewReportHandler(log, "", "", tmpDir, "")
 
 	tests := []struct {
 		name     string
@@ -141,7 +141,7 @@ func TestSaveReportToDisk_UsernameSanitization(t *testing.T) {
 
 func TestSaveReportToDisk_EmptyReportsDir(t *testing.T) {
 	log := logger.Default()
-	h := NewReportHandler(log, "", "", "")
+	h := NewReportHandler(log, "", "", "", "")
 
 	claims := &authz.Claims{UserID: "user-1", Username: "testuser"}
 	report := &domain.ErrorReport{

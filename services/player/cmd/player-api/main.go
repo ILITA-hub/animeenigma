@@ -92,7 +92,7 @@ func main() {
 	shikimoriImportHandler := handler.NewShikimoriImportHandler(listService, syncRepo, log)
 	exportHandler := handler.NewExportHandler(listService, log)
 	prefHandler := handler.NewPreferenceHandler(prefService, log)
-	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir)
+	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir, cfg.Maintenance.URL)
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
 

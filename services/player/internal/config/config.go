@@ -11,16 +11,21 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database database.Config
-	JWT      authz.JWTConfig
-	Telegram TelegramConfig
-	Reports  ReportsConfig
+	Server      ServerConfig
+	Database    database.Config
+	JWT         authz.JWTConfig
+	Telegram    TelegramConfig
+	Reports     ReportsConfig
+	Maintenance MaintenanceConfig
 }
 
 type TelegramConfig struct {
 	BotToken    string
 	AdminChatID string
+}
+
+type MaintenanceConfig struct {
+	URL string // e.g. http://172.18.0.1:8087
 }
 
 type ReportsConfig struct {
@@ -66,6 +71,9 @@ func Load() (*Config, error) {
 		},
 		Reports: ReportsConfig{
 			Dir: getEnv("REPORTS_DIR", "/data/reports"),
+		},
+		Maintenance: MaintenanceConfig{
+			URL: getEnv("MAINTENANCE_URL", ""),
 		},
 	}, nil
 }

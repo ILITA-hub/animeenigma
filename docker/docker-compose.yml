@@ -406,6 +406,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
       REPORTS_DIR: /data/reports
+      MAINTENANCE_URL: http://host-gateway:8087
+    extra_hosts:
+      - "host-gateway:host-gateway"
     volumes:
       - player_reports:/data/reports
     ports:

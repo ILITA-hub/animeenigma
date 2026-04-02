@@ -146,6 +146,20 @@ type IssueInfo struct {
 	Status   string `json:"status"`
 }
 
+// ReportRequest is a player error report received via HTTP from the player service.
+type ReportRequest struct {
+	Username      string `json:"username"`
+	UserID        string `json:"user_id"`
+	PlayerType    string `json:"player_type"`
+	AnimeName     string `json:"anime_name"`
+	EpisodeNumber *int   `json:"episode_number,omitempty"`
+	ServerName    string `json:"server_name"`
+	ErrorMessage  string `json:"error_message"`
+	Description   string `json:"description"`
+	URL           string `json:"url"`
+	ReportFile    string `json:"report_file"`
+}
+
 // Issue stored in issues.json.
 type Issue struct {
 	ID                string      `json:"id"`
