@@ -16,6 +16,7 @@ use (
 	./services/auth
 	./services/catalog
 	./services/gateway
+	./services/maintenance
 	./services/player
 	./services/rooms
 	./services/scheduler

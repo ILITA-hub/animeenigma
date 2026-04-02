@@ -1,0 +1,19 @@
+{
+  "last_update_id": 124398431,
+  "last_poll_at": "2026-03-28T00:57:37Z",
+  "session_started": "2026-04-01T23:47:46Z",
+  "reactions_supported": false,
+  "bot_user_id": 8609426278,
+  "active_alerts": {},
+  "cooldowns": {
+    "restart:scheduler": "2026-03-30T06:13:01+02:00"
+  },
+  "fix_attempt_counts": {},
+  "last_fix_per_service": {
+    "scheduler": {
+      "action": "auto_fix",
+      "at": "2026-03-30T04:03:01Z"
+    }
+  },
+  "pending_fixes": {}
+}

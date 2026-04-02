@@ -1,0 +1,134 @@
+{
+  "last_id": 9,
+  "issues": [
+    {
+      "id": "AUTO-001",
+      "created_at": "2026-03-25T23:32:49Z",
+      "source": "admin_request",
+      "category": "status",
+      "priority": "P3",
+      "status": "no_action",
+      "title": "Empty admin message — status check",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 12,
+      "actions": null
+    },
+    {
+      "id": "AUTO-002",
+      "created_at": "2026-03-26T05:18:04Z",
+      "resolved_at": "2026-03-26T05:22:52Z",
+      "source": "grafana_alert",
+      "category": "upstream_cdn",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "HLS proxy 500s from uwucdn.top CDN blocking",
+      "reporter": "grafana",
+      "telegram_message_id": 0,
+      "affected_service": "gateway",
+      "actions": null,
+      "resolution": "Alert resolved (no longer firing in Grafana)"
+    },
+    {
+      "id": "AUTO-003",
+      "created_at": "2026-03-27T13:46:45Z",
+      "resolved_at": "2026-03-27T13:47:52Z",
+      "source": "grafana_alert",
+      "category": "bug",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Player watchlist 500s: ambiguous SQL column on title sort",
+      "reporter": "grafana",
+      "telegram_message_id": 0,
+      "affected_service": "gateway",
+      "actions": null,
+      "resolution": "Alert resolved (no longer firing in Grafana)"
+    },
+    {
+      "id": "AUTO-004",
+      "created_at": "2026-03-27T13:48:10Z",
+      "resolved_at": "2026-03-27T13:48:52Z",
+      "source": "grafana_alert",
+      "category": "code_bug",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Watchlist title-sort causes ambiguous column SQL error",
+      "reporter": "grafana",
+      "telegram_message_id": 0,
+      "affected_service": "player",
+      "actions": null,
+      "resolution": "Alert resolved (no longer firing in Grafana)"
+    },
+    {
+      "id": "AUTO-005",
+      "created_at": "2026-03-28T00:46:19Z",
+      "source": "admin_request",
+      "category": "feature_request",
+      "priority": "P1",
+      "status": "acknowledged",
+      "title": "Feature request: related anime cross-links on title page",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2,
+      "actions": []
+    },
+    {
+      "id": "AUTO-006",
+      "created_at": "2026-03-28T00:54:38Z",
+      "source": "admin_request",
+      "category": "feature_request",
+      "priority": "P1",
+      "status": "needs_development",
+      "title": "Feature: AnimeEnigma community rating in catalog",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3,
+      "actions": null
+    },
+    {
+      "id": "AUTO-007",
+      "created_at": "2026-03-28T00:57:57Z",
+      "source": "admin_request",
+      "category": "feature_request",
+      "priority": "P1",
+      "status": "acknowledged",
+      "title": "Feature request: anime catalog context menu with status setter",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 4,
+      "actions": null
+    },
+    {
+      "id": "AUTO-008",
+      "created_at": "2026-03-30T04:03:01Z",
+      "resolved_at": "2026-03-30T04:03:52Z",
+      "source": "grafana_alert",
+      "category": "scheduler",
+      "priority": "P0",
+      "status": "resolved",
+      "title": "Cleanup job missed scheduled 03:00 UTC run",
+      "reporter": "grafana",
+      "telegram_message_id": 0,
+      "affected_service": "scheduler",
+      "actions": [
+        {
+          "action": "curl -X POST http://localhost:8085/api/v1/jobs/cleanup",
+          "result": "success",
+          "details": "Job triggered successfully; confirmed new last_run=2026-03-30T04:02:35Z via /api/v1/jobs/status"
+        }
+      ],
+      "resolution": "Alert resolved (no longer firing in Grafana)"
+    },
+    {
+      "id": "AUTO-009",
+      "created_at": "2026-03-31T05:04:42Z",
+      "resolved_at": "2026-04-01T08:26:52Z",
+      "source": "grafana_alert",
+      "category": "monitoring",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "False positive: Grafana alert uses wrong job label",
+      "reporter": "grafana",
+      "telegram_message_id": 0,
+      "affected_service": "scheduler",
+      "actions": null,
+      "resolution": "Alert resolved (no longer firing in Grafana)"
+    }
+  ]
+}

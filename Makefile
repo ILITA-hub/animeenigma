@@ -48,6 +48,10 @@ build-%: ## Build a specific service
 	@echo "Building $*..."
 	cd services/$* && go build $(GO_BUILD_FLAGS) -o ../../bin/$*-api ./cmd/$*-api
 
+build-maintenance: ## Build maintenance poller (host-native binary)
+	@echo "Building maintenance service..."
+	cd services/maintenance && go build $(GO_BUILD_FLAGS) -o ../../bin/maintenance ./cmd/maintenance
+
 build-tools: ## Build all tools
 	cd tools/migrator && go build $(GO_BUILD_FLAGS) -o ../../bin/migrator .
 	cd tools/sync-cli && go build $(GO_BUILD_FLAGS) -o ../../bin/sync-cli .

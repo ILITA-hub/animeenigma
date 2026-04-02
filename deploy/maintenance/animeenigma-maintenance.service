@@ -1,0 +1,21 @@
+[Unit]
+Description=AnimeEnigma Maintenance Poller
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/data/animeenigma
+ExecStart=/data/animeenigma/bin/maintenance
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=330
+MemoryMax=2G
+TasksMax=50
+EnvironmentFile=/data/animeenigma/docker/maintenance.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=animeenigma-maintenance
+
+[Install]
+WantedBy=multi-user.target
