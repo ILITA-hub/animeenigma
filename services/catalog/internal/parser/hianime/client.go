@@ -281,6 +281,14 @@ func (c *Client) getStreamWithRetry(episodeID string, serverID string, category 
 		if err != nil && strings.Contains(err.Error(), "status 403") {
 			return nil, err
 		}
+
+		// On 429 (rate limited), allow one retry then give up with friendly message
+		if err != nil && strings.Contains(err.Error(), "status 429") {
+			if attempt >= 1 {
+				return nil, fmt.Errorf("server %s is overloaded right now, please try another server", serverID)
+			}
+			continue
+		}
 	}
 
 	return nil, lastErr

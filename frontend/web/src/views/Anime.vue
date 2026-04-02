@@ -349,6 +349,7 @@
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
             :preferred-combo="resolvedCombo"
+            :initial-episode="lastEpisode"
             @available-translations="handleAvailableTranslations"
           />
           <!-- AnimeLib Player -->
@@ -358,6 +359,7 @@
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
             :preferred-combo="resolvedCombo"
+            :initial-episode="lastEpisode"
             @available-translations="handleAvailableTranslations"
           />
           <!-- HiAnime Player -->
@@ -367,6 +369,7 @@
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
             :preferred-combo="resolvedCombo"
+            :initial-episode="lastEpisode"
             @available-translations="handleAvailableTranslations"
           />
           <!-- Consumet Player -->
@@ -376,6 +379,7 @@
             :anime-name="anime.title"
             :total-episodes="anime.totalEpisodes"
             :preferred-combo="resolvedCombo"
+            :initial-episode="lastEpisode"
             :sub-or-dub="'sub'"
             @available-translations="handleAvailableTranslations"
           />
@@ -614,6 +618,25 @@ const videoLanguage = ref<'ru' | 'en'>(
 const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet'>(
   (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet') || 'kodik'
 )
+
+// Last-watched episode derived from localStorage watch progress
+const lastEpisode = ref<number | undefined>(undefined)
+function loadLastEpisode(animeId: string) {
+  const raw = localStorage.getItem(`watch_progress:${animeId}`)
+  if (!raw) return
+  try {
+    const data = JSON.parse(raw) as Record<string, { updatedAt?: number }>
+    let latest = 0
+    let latestEp: number | undefined
+    for (const [ep, info] of Object.entries(data)) {
+      if (info.updatedAt && info.updatedAt > latest) {
+        latest = info.updatedAt
+        latestEp = parseInt(ep)
+      }
+    }
+    if (latestEp && !isNaN(latestEp)) lastEpisode.value = latestEp
+  } catch { /* ignore corrupted data */ }
+}
 
 // Watch preference resolution
 const preferenceState = ref<{
@@ -961,6 +984,7 @@ const loadAnimeData = async (animeId: string) => {
 
   // Reset state so stale data doesn't flash
   anime.value = null
+  lastEpisode.value = undefined
   currentListStatus.value = null
   reviews.value = []
   myReview.value = null
@@ -1003,6 +1027,11 @@ const loadAnimeData = async (animeId: string) => {
 
   const fetched = await fetchAnime(animeId)
   if (gen !== loadGeneration) return
+
+  // Load last-watched episode from localStorage
+  if (fetched) {
+    loadLastEpisode(fetched.id)
+  }
 
   // Initialize watch preferences for this anime
   if (fetched && authStore.isAuthenticated) {

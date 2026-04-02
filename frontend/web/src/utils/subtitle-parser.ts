@@ -15,6 +15,9 @@ export interface SubtitleCue {
     bold?: boolean
     italic?: boolean
     alignment?: number // ASS \an1-9
+    pos?: [number, number]   // \pos(x,y) absolute positioning
+    marginV?: number         // MarginV from ASS dialogue event
+    layer?: number           // Layer from ASS dialogue event
   }
 }
 
@@ -29,8 +32,8 @@ function stripASSTags(text: string): string {
 }
 
 // Extract basic style info from ASS override tags
-function extractASSStyle(text: string): SubtitleCue['style'] {
-  const style: SubtitleCue['style'] = {}
+function extractASSStyle(text: string): NonNullable<SubtitleCue['style']> {
+  const style: NonNullable<SubtitleCue['style']> = {}
 
   // Bold: {\b1}
   if (/\{[^}]*\\b1[^}]*\}/.test(text)) style.bold = true
@@ -55,6 +58,10 @@ function extractASSStyle(text: string): SubtitleCue['style'] {
   // Font size: {\fs24}
   const fsMatch = text.match(/\{[^}]*\\fs(\d+)[^}]*\}/)
   if (fsMatch) style.fontSize = parseInt(fsMatch[1])
+
+  // Position: {\pos(x,y)}
+  const posMatch = text.match(/\{[^}]*\\pos\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)[^}]*\}/)
+  if (posMatch) style.pos = [parseFloat(posMatch[1]), parseFloat(posMatch[2])]
 
   return style
 }
@@ -92,6 +99,14 @@ export async function parseASS(content: string): Promise<SubtitleCue[]> {
     const style = extractASSStyle(rawText)
     const text = stripASSTags(rawText)
     if (!text) continue
+
+    // Extract dialogue-level fields from ass-compiler
+    if (event.Layer !== undefined && event.Layer !== 0) {
+      style.layer = event.Layer
+    }
+    if (event.MarginV !== undefined && event.MarginV !== 0) {
+      style.marginV = event.MarginV
+    }
 
     cues.push({
       start: event.Start,

@@ -9,7 +9,7 @@
         v-for="(cue, index) in activeCues"
         :key="index"
         class="absolute pointer-events-auto select-text cursor-text px-3 py-1"
-        :style="cuePositionStyle(cue)"
+        :style="cuePositionStyle(cue, getCueStackIndex(cue, index))"
       >
         <span
           class="inline-block px-2 py-0.5 rounded subtitle-text"
@@ -65,15 +65,45 @@ function onFullscreenChange() {
   setTimeout(updateBaseFontSize, 100)
 }
 
-// Find active cues for current time
+// Find active cues for current time, sorted by layer
 const activeCues = computed(() => {
   if (!cues.value.length) return []
   const t = currentTime.value
-  return cues.value.filter(c => t >= c.start && t <= c.end)
+  return cues.value
+    .filter(c => t >= c.start && t <= c.end)
+    .sort((a, b) => (a.style?.layer || 0) - (b.style?.layer || 0))
 })
 
-// Position style based on ASS alignment
-function cuePositionStyle(cue: SubtitleCue): Record<string, string> {
+// Count how many preceding active cues share the same alignment position
+function getCueStackIndex(cue: SubtitleCue, index: number): number {
+  if (cue.style?.pos) return 0 // absolute positioned cues don't stack
+  const alignment = cue.style?.alignment || 2
+  let stackIndex = 0
+  for (let i = 0; i < index; i++) {
+    const other = activeCues.value[i]
+    if (!other.style?.pos && (other.style?.alignment || 2) === alignment) {
+      stackIndex++
+    }
+  }
+  return stackIndex
+}
+
+// Position style based on ASS alignment, with vertical stacking for overlapping cues
+function cuePositionStyle(cue: SubtitleCue, stackIndex: number = 0): Record<string, string> {
+  // Handle \pos() — absolute positioning
+  if (cue.style?.pos) {
+    const [x, y] = cue.style.pos
+    // Convert ASS pixel coords to percentages (standard PlayRes is ~640x480)
+    const videoEl = props.videoElement
+    const w = videoEl?.videoWidth || 640
+    const h = videoEl?.videoHeight || 480
+    return {
+      left: `${(x / w) * 100}%`,
+      top: `${(y / h) * 100}%`,
+      maxWidth: '90%',
+    }
+  }
+
   const alignment = cue.style?.alignment || 2 // Default: bottom center
 
   // ASS numpad alignment:
@@ -82,14 +112,24 @@ function cuePositionStyle(cue: SubtitleCue): Record<string, string> {
   // 1=BL 2=BC 3=BR
   const style: Record<string, string> = {}
 
-  // Vertical position
+  // Stack offset for overlapping cues at same alignment
+  const lineHeight = baseFontSize.value * 1.8
+  const stackOffset = stackIndex * lineHeight
+
+  // Vertical position with stacking
   if (alignment >= 7) {
-    style.top = '5%'
+    // Top-aligned: stack downward
+    const baseTop = cue.style?.marginV || 5
+    style.top = stackOffset > 0 ? `calc(${baseTop}% + ${stackOffset}px)` : `${baseTop}%`
   } else if (alignment >= 4) {
     style.top = '50%'
-    style.transform = 'translateY(-50%)'
+    style.transform = stackOffset > 0
+      ? `translateY(calc(-50% + ${stackOffset}px))`
+      : 'translateY(-50%)'
   } else {
-    style.bottom = '8%'
+    // Bottom-aligned: stack upward
+    const baseBottom = cue.style?.marginV || 8
+    style.bottom = stackOffset > 0 ? `calc(${baseBottom}% + ${stackOffset}px)` : `${baseBottom}%`
   }
 
   // Horizontal position

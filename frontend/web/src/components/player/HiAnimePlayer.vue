@@ -671,7 +671,12 @@ const fetchStream = async () => {
     const message = e.response?.data?.error?.message
       || e.response?.data?.message
       || t('player.error.loadVideo')
-    error.value = message
+    // Show friendly message for rate-limited servers
+    if (message.includes('overloaded') || message.includes('429')) {
+      error.value = `😔 Server ${selectedServer.value?.name || ''} is overloaded right now. Try selecting a different server.`
+    } else {
+      error.value = message
+    }
     streamUrl.value = null
   } finally {
     loadingStream.value = false

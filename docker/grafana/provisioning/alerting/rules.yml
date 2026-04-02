@@ -67,18 +67,18 @@ groups:
         data:
           - refId: A
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
               expr: |
-                sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
-                / sum(rate(http_requests_total[5m])) by (service)
+                sum(rate(http_requests_total{status=~"5.."}[30m])) by (service)
+                / sum(rate(http_requests_total[30m])) by (service)
               instant: true
               refId: A
           - refId: B
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: __expr__
             model:
@@ -88,7 +88,7 @@ groups:
               reducer: last
           - refId: C
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: __expr__
             model:
@@ -101,12 +101,12 @@ groups:
               refId: C
               type: threshold
               expression: B
-        for: 5m
+        for: 30m
         labels:
           severity: warning
         annotations:
           summary: "High error rate on {{ $labels.service }}"
-          description: "Service {{ $labels.service }} has >5% 5xx error rate for 5 minutes."
+          description: "Service {{ $labels.service }} has >5% 5xx error rate for 30 minutes."
 
       - uid: parser-failure-rate
         title: Parser Failure Rate
@@ -115,18 +115,18 @@ groups:
         data:
           - refId: A
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
               expr: |
-                sum(rate(parser_requests_total{status="error"}[5m])) by (provider)
-                / sum(rate(parser_requests_total[5m])) by (provider)
+                sum(rate(parser_requests_total{status="error"}[30m])) by (provider)
+                / sum(rate(parser_requests_total[30m])) by (provider)
               instant: true
               refId: A
           - refId: B
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: __expr__
             model:
@@ -136,7 +136,7 @@ groups:
               reducer: last
           - refId: C
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: __expr__
             model:
@@ -149,12 +149,12 @@ groups:
               refId: C
               type: threshold
               expression: B
-        for: 5m
+        for: 30m
         labels:
           severity: warning
         annotations:
           summary: "High parser failure rate for {{ $labels.provider }}"
-          description: "Parser {{ $labels.provider }} has >50% error rate for 5 minutes."
+          description: "Parser {{ $labels.provider }} has >50% error rate for 30 minutes."
 
       - uid: high-p95-latency
         title: High P95 Latency
@@ -163,17 +163,17 @@ groups:
         data:
           - refId: A
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
               expr: |
-                histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{path!~"/admin/.*",service!="streaming"}[5m])) by (service, le))
+                histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{path!~"/admin/.*",service!="streaming"}[30m])) by (service, le))
               instant: true
               refId: A
           - refId: B
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: __expr__
             model:
@@ -183,7 +183,7 @@ groups:
               reducer: last
           - refId: C
             relativeTimeRange:
-              from: 600
+              from: 3600
               to: 0
             datasourceUid: __expr__
             model:
@@ -196,12 +196,12 @@ groups:
               refId: C
               type: threshold
               expression: B
-        for: 5m
+        for: 30m
         labels:
           severity: warning
         annotations:
           summary: "High P95 latency on {{ $labels.service }}"
-          description: "Service {{ $labels.service }} P95 latency >2s for 5 minutes."
+          description: "Service {{ $labels.service }} P95 latency >2s for 30 minutes."
 
       - uid: hls-proxy-saturation
         title: HLS Proxy Saturation
@@ -380,9 +380,9 @@ groups:
               refId: C
               type: threshold
               expression: B
-        for: 5m
+        for: 30m
         labels:
           severity: critical
         annotations:
           summary: "Player {{ $labels.player }} is DOWN"
-          description: "Player {{ $labels.player }} has been unavailable for 5+ minutes. Check external API status."
+          description: "Player {{ $labels.player }} has been unavailable for 30+ minutes. Check external API status."
