@@ -696,19 +696,44 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 		return
 	}
 
+	// Use the button's message for replies (always exists), fall back to alert message
+	replyToID := fix.TelegramMessageID
+	if replyToID == 0 {
+		replyToID = fix.AlertMessageID
+	}
+
 	switch action {
 	case "fix":
+		fmt.Printf("[button] @%s approved fix for %s (target=%s, type=%s)\n", msg.From.Username, issueID, fix.FixPlan.Target, fix.FixPlan.Type)
 		s.tg.AnswerCallbackQuery(msg.CallbackID, "Applying fix...")
+		s.tg.SetReaction(replyToID, "👀")
 
+		fmt.Printf("[claude] executing fix for %s...\n", issueID)
+		analyzeStart := time.Now()
 		result, err := s.disp.ExecuteFix(ctx, *fix)
+		elapsed := time.Since(analyzeStart).Round(time.Second)
+
 		if err != nil {
-			s.tg.SendReply(fix.AlertMessageID, fmt.Sprintf("<b>❌ Fix failed</b>\n%s", truncateForTelegram(err.Error())))
+			fmt.Printf("[claude] fix execution FAILED for %s after %s: %v\n", issueID, elapsed, err)
+			s.tg.SetReaction(replyToID, "💔")
+			s.tg.SendReply(replyToID, fmt.Sprintf("<b>❌ Fix failed</b>\n%s", truncateForTelegram(err.Error())))
 		} else {
+			fmt.Printf("[claude] fix executed for %s in %s — tier=%s\n", issueID, elapsed, result.Tier)
+			if len(result.ActionsTaken) > 0 {
+				for _, a := range result.ActionsTaken {
+					fmt.Printf("[claude]   action: %s → %s\n", a.Action, a.Result)
+				}
+			}
+			s.tg.SetReaction(replyToID, "👍")
 			replyHTML := result.ReplyHTML
 			if replyHTML == "" {
 				replyHTML = fmt.Sprintf("<b>🔧 Fix Applied</b> (approved by @%s)\n\n<b>Issue:</b> %s", msg.From.Username, issueID)
 			}
-			s.tg.SendReply(fix.AlertMessageID, replyHTML)
+			if _, err := s.tg.SendReply(replyToID, replyHTML); err != nil {
+				fmt.Printf("[telegram] FAILED to send fix result for %s: %v\n", issueID, err)
+			} else {
+				fmt.Printf("[telegram] fix result sent for %s\n", issueID)
+			}
 			s.state.UpdateIssue(issueID, func(issue *domain.Issue) {
 				issue.Status = domain.StatusResolved
 				issue.Resolution = fmt.Sprintf("Fix applied by @%s", msg.From.Username)
@@ -720,9 +745,13 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 			}
 		}
 		s.state.RemovePendingFix(issueID)
+		s.state.Save()
+		fmt.Printf("[button] fix processing complete for %s\n", issueID)
 
 	case "dismiss":
+		fmt.Printf("[button] @%s dismissed %s\n", msg.From.Username, issueID)
 		s.tg.AnswerCallbackQuery(msg.CallbackID, "Dismissed")
+		s.tg.SetReaction(replyToID, "💔")
 		s.state.RemovePendingFix(issueID)
 		s.state.UpdateIssue(issueID, func(issue *domain.Issue) {
 			issue.Status = domain.StatusWontFix
