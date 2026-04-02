@@ -1090,7 +1090,7 @@ async function fetchRelatedAnime() {
   if (!anime.value?.id) return
   try {
     const resp = await animeApi.getRelated(anime.value.id as string)
-    const data = resp.data as Array<{
+    const data = (resp.data?.data || resp.data) as Array<{
       shikimori_id: string
       local_id?: string
       name: string
