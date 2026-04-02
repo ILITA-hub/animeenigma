@@ -119,6 +119,8 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string) (*domain.
 		"--model", model,
 	}
 
+	fmt.Printf("[dispatcher] invoking claude (model=%s, prompt=%d bytes, timeout=%v)\n", model, len(prompt), timeout)
+
 	cmd := exec.Command(d.claudePath, args...)
 	cmd.Dir = d.projectRoot
 	// Create process group so we can kill the entire tree on timeout
@@ -137,6 +139,7 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string) (*domain.
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start claude: %w", err)
 	}
+	fmt.Printf("[dispatcher] claude started (pid=%d)\n", cmd.Process.Pid)
 
 	// Read output with 1MB cap
 	outputCh := make(chan []byte, 1)
@@ -157,6 +160,7 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string) (*domain.
 	select {
 	case <-ctx.Done():
 		// Timeout: kill the entire process group
+		fmt.Printf("[dispatcher] claude TIMEOUT (pid=%d) after %v — killing\n", cmd.Process.Pid, timeout)
 		if cmd.Process != nil {
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
@@ -165,8 +169,13 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string) (*domain.
 		output := <-outputCh
 		stderrOut := <-errCh
 		if err != nil {
+			fmt.Printf("[dispatcher] claude exited with error (output=%d bytes, stderr=%d bytes)\n", len(output), len(stderrOut))
+			if len(stderrOut) > 0 {
+				fmt.Printf("[dispatcher] stderr: %s\n", truncate(stderrOut, 1000))
+			}
 			return nil, fmt.Errorf("claude exited with error: %w, stderr: %s", err, truncate(stderrOut, 500))
 		}
+		fmt.Printf("[dispatcher] claude finished (output=%d bytes)\n", len(output))
 		return parseResponse(output)
 	}
 }

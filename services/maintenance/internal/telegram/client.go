@@ -185,6 +185,9 @@ func (c *Client) SetReaction(messageID int, emoji string) bool {
 		"reaction":   []map[string]string{{"type": "emoji", "emoji": emoji}},
 	}
 	_, err := c.post("setMessageReaction", body)
+	if err != nil {
+		fmt.Printf("[telegram] setReaction(%s) on message %d FAILED: %v\n", emoji, messageID, err)
+	}
 	return err == nil
 }
 
