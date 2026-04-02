@@ -460,7 +460,7 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 	}
 
 	// Housekeeping
-	expired := s.state.ExpirePendingFixes(1 * time.Hour)
+	expired := s.state.ExpirePendingFixes(24 * time.Hour)
 	for _, id := range expired {
 		s.state.UpdateIssue(id, func(issue *domain.Issue) {
 			issue.Status = domain.StatusEscalated
