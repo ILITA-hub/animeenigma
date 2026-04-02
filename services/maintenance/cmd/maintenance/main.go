@@ -432,13 +432,13 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 
 		if err != nil {
 			fmt.Printf("Claude analysis failed: %v\n", err)
-			s.tg.SetReaction(msg.MessageID, "❌")
+			s.tg.SetReaction(msg.MessageID, "💔")
 			s.tg.SendReply(msg.MessageID, fmt.Sprintf("<b>⚠️ Analysis failed</b>\n%s", truncateForTelegram(err.Error())))
 			continue
 		}
 
 		// React with success
-		s.tg.SetReaction(msg.MessageID, "✅")
+		s.tg.SetReaction(msg.MessageID, "👍")
 
 		// Handle result based on tier
 		s.handleResult(ctx, msg, result)
@@ -520,12 +520,12 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	result, err := s.disp.Analyze(ctx, msg)
 	if err != nil {
 		fmt.Printf("Claude analysis failed for report: %v\n", err)
-		s.tg.SetReaction(msgID, "❌")
+		s.tg.SetReaction(msgID, "💔")
 		s.tg.SendReply(msgID, fmt.Sprintf("<b>⚠️ Analysis failed</b>\n%s", truncateForTelegram(err.Error())))
 		return
 	}
 
-	s.tg.SetReaction(msgID, "✅")
+	s.tg.SetReaction(msgID, "👍")
 	s.handleResult(ctx, msg, result)
 	s.state.Save()
 }
