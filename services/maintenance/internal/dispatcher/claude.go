@@ -91,21 +91,52 @@ var analysisSchema = `{
 // Analyze invokes Claude to analyze a maintenance message and return a structured response.
 func (d *Dispatcher) Analyze(ctx context.Context, msg domain.ClassifiedMessage) (*domain.AnalysisResult, error) {
 	prompt := d.buildAnalysisPrompt(msg)
-	return d.invoke(ctx, prompt, d.model)
+	return d.invoke(ctx, prompt, d.model, nil)
+}
+
+// allowedFixTools are the tools Claude can use when executing admin-approved fixes.
+// Analysis uses --permission-mode auto (read-only). Fix execution needs writes + deploys.
+var allowedFixTools = []string{
+	"Edit",
+	"Write",
+	"Bash(make:*)",
+	"Bash(docker:*)",
+	"Bash(docker compose:*)",
+	"Bash(curl:*)",
+	"Bash(go build:*)",
+	"Bash(go test:*)",
+	"Bash(go mod tidy:*)",
+	"Bash(go work sync:*)",
+	"Bash(git add:*)",
+	"Bash(git commit:*)",
+	"Bash(git diff:*)",
+	"Bash(git status:*)",
+	"Bash(docker pull:*)",
+	"Bash(docker restart:*)",
+	"Bash(docker exec:*)",
+	"Bash(docker logs:*)",
+	"Bash(golangci-lint:*)",
+	"Bash(systemctl restart:*)",
+	"Bash(ls:*)",
+	"Bash(cat:*)",
+	"Bash(head:*)",
+	"Bash(echo:*)",
 }
 
 // ExecuteFix invokes Claude to execute an admin-approved fix plan.
+// Uses --allowedTools for specific write/deploy operations (admin already approved via button).
 func (d *Dispatcher) ExecuteFix(ctx context.Context, fix domain.PendingFix) (*domain.AnalysisResult, error) {
 	prompt := d.buildFixPrompt(fix)
 	model := d.model
 	if fix.FixPlan.Type == domain.FixCodeFix {
 		model = d.codeModel
 	}
-	return d.invoke(ctx, prompt, model)
+	return d.invoke(ctx, prompt, model, allowedFixTools)
 }
 
 // invoke runs claude -p with the given prompt and parses the structured output.
-func (d *Dispatcher) invoke(ctx context.Context, prompt, model string) (*domain.AnalysisResult, error) {
+// extraAllowedTools: if non-nil, adds --allowedTools for specific write/deploy operations.
+func (d *Dispatcher) invoke(ctx context.Context, prompt, model string, extraAllowedTools []string) (*domain.AnalysisResult, error) {
 	timeout := time.Duration(d.timeoutSec) * time.Second
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -117,6 +148,10 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string) (*domain.
 		"--permission-mode", "auto",
 		"--no-session-persistence",
 		"--model", model,
+	}
+	if len(extraAllowedTools) > 0 {
+		args = append(args, "--allowedTools")
+		args = append(args, strings.Join(extraAllowedTools, " "))
 	}
 
 	fmt.Printf("[dispatcher] invoking claude (model=%s, prompt=%d bytes, timeout=%v)\n", model, len(prompt), timeout)
