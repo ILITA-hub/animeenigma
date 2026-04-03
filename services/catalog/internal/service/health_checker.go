@@ -283,7 +283,7 @@ func (h *PlayerHealthChecker) checkConsumet() error {
 	animeID := searchResp.Results[0].ID
 
 	// Step 2: Get info with episodes
-	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/info/%s", h.consumetURL, url.PathEscape(animeID)))
+	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/info?id=%s", h.consumetURL, url.QueryEscape(animeID)))
 	if err != nil {
 		return fmt.Errorf("info failed: %w", err)
 	}
