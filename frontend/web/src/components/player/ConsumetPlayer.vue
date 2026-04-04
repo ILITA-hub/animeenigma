@@ -529,11 +529,9 @@ const fetchServers = async () => {
     }
   } catch (err: unknown) {
     console.error('Failed to fetch servers:', err)
-    // Use default servers if API fails
+    // Use default server if API fails
     servers.value = [
-      { name: 'vidcloud' },
-      { name: 'streamsb' },
-      { name: 'vidstreaming' }
+      { name: 'default' }
     ]
     selectedServer.value = servers.value[0]
   }

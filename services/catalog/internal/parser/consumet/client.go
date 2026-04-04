@@ -23,8 +23,9 @@ const (
 // Available in riimuru/consumet-api: animekai, animepahe, hianime, animesaturn, animeunity, kickassanime
 var FallbackProviders = []string{"animekai", "hianime", "animepahe"}
 
-// PreferredServers defines the order of servers to try
-var PreferredServers = []string{"vidcloud", "streamsb", "vidstreaming"}
+// PreferredServers defines the order of servers to try.
+// Empty string means "use provider default" which works across all providers.
+var PreferredServers = []string{""}
 
 // Client is the Consumet API client
 type Client struct {
@@ -190,35 +191,29 @@ func (c *Client) GetEpisodes(animeID string) ([]Episode, error) {
 	return info.Episodes, nil
 }
 
-// GetServers returns available servers for streaming
-// Consumet doesn't have a dedicated servers endpoint, so we return predefined servers
+// GetServers returns available servers for streaming.
+// Uses provider default (empty name) since server names vary by provider.
 func (c *Client) GetServers() []Server {
 	return []Server{
-		{Name: "vidcloud", URL: ""},
-		{Name: "streamsb", URL: ""},
-		{Name: "vidstreaming", URL: ""},
+		{Name: "default", URL: ""},
 	}
 }
 
-// GetStream gets the stream URL for an episode
+// GetStream gets the stream URL for an episode.
+// Treats "default" or empty server name as provider default (no server param).
 func (c *Client) GetStream(episodeID string, serverName string) (*StreamResponse, error) {
-	// Build list of servers to try
-	serversToTry := []string{serverName}
-	if serverName == "" {
-		serversToTry = PreferredServers
+	// Normalize: "default" or empty = use provider default (no server param)
+	if serverName == "default" || serverName == "" {
+		serverName = ""
 	}
 
-	var lastErr error
-	for _, server := range serversToTry {
-		stream, err := c.getStreamWithRetry(episodeID, server)
-		if err == nil && stream != nil && len(stream.Sources) > 0 {
-			return stream, nil
-		}
-		lastErr = err
+	stream, err := c.getStreamWithRetry(episodeID, serverName)
+	if err == nil && stream != nil && len(stream.Sources) > 0 {
+		return stream, nil
 	}
 
-	if lastErr != nil {
-		return nil, fmt.Errorf("failed to get stream after trying servers %v: %w", serversToTry, lastErr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stream: %w", err)
 	}
 	return nil, fmt.Errorf("no stream available from any server")
 }
@@ -253,18 +248,28 @@ func (c *Client) getStreamDirect(episodeID string, serverName string) (*StreamRe
 	return c.getStreamDirectOnProvider(episodeID, serverName, c.provider)
 }
 
-// getStreamDirectOnProvider fetches stream using a specific provider
+// getStreamDirectOnProvider fetches stream using a specific provider.
+// Some providers (animekai) use path-style (/watch/{id}), others use query-param style (/watch?episodeId={id}).
 func (c *Client) getStreamDirectOnProvider(episodeID string, serverName string, provider string) (*StreamResponse, error) {
-	watchURL := fmt.Sprintf("%s/anime/%s/watch?episodeId=%s",
-		c.baseURL, provider, url.QueryEscape(episodeID))
+	// Try path-based first (animekai), fall back to query-param style (others)
+	watchURL := fmt.Sprintf("%s/anime/%s/watch/%s", c.baseURL, provider, url.PathEscape(episodeID))
 
 	if serverName != "" {
-		watchURL += "&server=" + serverName
+		watchURL += "?server=" + serverName
 	}
 
 	body, err := c.doRequest(watchURL)
 	if err != nil {
-		return nil, fmt.Errorf("stream request failed: %w", err)
+		// Fallback: query-param style
+		watchURL = fmt.Sprintf("%s/anime/%s/watch?episodeId=%s",
+			c.baseURL, provider, url.QueryEscape(episodeID))
+		if serverName != "" {
+			watchURL += "&server=" + serverName
+		}
+		body, err = c.doRequest(watchURL)
+		if err != nil {
+			return nil, fmt.Errorf("stream request failed: %w", err)
+		}
 	}
 
 	var response StreamResponse

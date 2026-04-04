@@ -301,8 +301,8 @@ func (h *PlayerHealthChecker) checkConsumet() error {
 	}
 	episodeID := infoResp.Episodes[0].ID
 
-	// Step 3: Get stream
-	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/watch?episodeId=%s", h.consumetURL, url.QueryEscape(episodeID)))
+	// Step 3: Get stream (animekai uses path-based watch URL)
+	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/watch/%s", h.consumetURL, url.PathEscape(episodeID)))
 	if err != nil {
 		return fmt.Errorf("stream failed: %w", err)
 	}
