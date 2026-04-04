@@ -234,8 +234,8 @@ func (c *Client) getStreamWithRetry(episodeID string, serverName string) (*Strea
 		}
 		lastErr = err
 
-		// Don't retry on 404 errors
-		if err != nil && strings.Contains(err.Error(), "404") {
+		// Don't retry on 4xx/5xx errors — they indicate the source is unavailable, not transient
+		if err != nil && (strings.Contains(err.Error(), "status 4") || strings.Contains(err.Error(), "status 5")) {
 			return nil, err
 		}
 	}
@@ -249,9 +249,10 @@ func (c *Client) getStreamDirect(episodeID string, serverName string) (*StreamRe
 }
 
 // getStreamDirectOnProvider fetches stream using a specific provider.
-// Some providers (animekai) use path-style (/watch/{id}), others use query-param style (/watch?episodeId={id}).
+// Uses path-style (/watch/{id}) which works for animekai and other providers.
+// Does NOT fall back to query-param style (/watch?episodeId={id}) because that
+// returns search results instead of stream data on animekai, masking real errors.
 func (c *Client) getStreamDirectOnProvider(episodeID string, serverName string, provider string) (*StreamResponse, error) {
-	// Try path-based first (animekai), fall back to query-param style (others)
 	watchURL := fmt.Sprintf("%s/anime/%s/watch/%s", c.baseURL, provider, url.PathEscape(episodeID))
 
 	if serverName != "" {
@@ -260,16 +261,7 @@ func (c *Client) getStreamDirectOnProvider(episodeID string, serverName string, 
 
 	body, err := c.doRequest(watchURL)
 	if err != nil {
-		// Fallback: query-param style
-		watchURL = fmt.Sprintf("%s/anime/%s/watch?episodeId=%s",
-			c.baseURL, provider, url.QueryEscape(episodeID))
-		if serverName != "" {
-			watchURL += "&server=" + serverName
-		}
-		body, err = c.doRequest(watchURL)
-		if err != nil {
-			return nil, fmt.Errorf("stream request failed: %w", err)
-		}
+		return nil, fmt.Errorf("stream request failed: %w", err)
 	}
 
 	var response StreamResponse
