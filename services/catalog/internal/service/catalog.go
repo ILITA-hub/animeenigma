@@ -2110,10 +2110,67 @@ func (s *CatalogService) findConsumetIDOnProvider(ctx context.Context, anime *do
 				return r.ID, nil
 			}
 		}
-		// Fallback to first result
+		// Smart fallback: filter out spinoffs and prefer best episode count match
+		if best := bestConsumetMatch(results, anime); best != "" {
+			return best, nil
+		}
+		// Last resort: first result
 		return results[0].ID, nil
 	}
 	return "", fmt.Errorf("anime not found on provider %s", provider)
+}
+
+// spinoffSuffixes are title suffixes that indicate a spinoff/side-content, not the main series.
+var spinoffSuffixes = []string{"mini anime", "mini", "recap", "specials", "special", "shorts", "short"}
+
+// bestConsumetMatch picks the best search result by filtering out spinoffs and matching episode count.
+func bestConsumetMatch(results []consumet.SearchResult, anime *domain.Anime) string {
+	animeName := strings.ToLower(anime.Name)
+
+	// Filter: remove results whose title contains spinoff qualifiers
+	// that are NOT in the original anime name.
+	var candidates []consumet.SearchResult
+	for _, r := range results {
+		titleLower := strings.ToLower(r.Title)
+		isSpinoff := false
+		for _, suffix := range spinoffSuffixes {
+			if strings.Contains(titleLower, suffix) && !strings.Contains(animeName, suffix) {
+				isSpinoff = true
+				break
+			}
+		}
+		if !isSpinoff {
+			candidates = append(candidates, r)
+		}
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	// If we have episode count info, prefer the closest match
+	if anime.EpisodesAired > 0 {
+		bestID := candidates[0].ID
+		bestDiff := abs(candidates[0].Episodes - anime.EpisodesAired)
+		for _, c := range candidates[1:] {
+			if c.Episodes > 0 {
+				diff := abs(c.Episodes - anime.EpisodesAired)
+				if diff < bestDiff {
+					bestDiff = diff
+					bestID = c.ID
+				}
+			}
+		}
+		return bestID
+	}
+
+	return candidates[0].ID
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // findConsumetID finds the Consumet ID for an anime by searching name variants in parallel
@@ -2171,9 +2228,13 @@ func (s *CatalogService) findConsumetID(ctx context.Context, anime *domain.Anime
 					return
 				}
 			}
-			// Fallback: first result
+			// Smart fallback: filter out spinoffs and prefer best episode match
+			fallbackID := results[0].ID
+			if best := bestConsumetMatch(results, anime); best != "" {
+				fallbackID = best
+			}
 			select {
-			case fallbackCh <- searchResult{id: results[0].ID}:
+			case fallbackCh <- searchResult{id: fallbackID}:
 			default:
 			}
 		}(name)

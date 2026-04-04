@@ -73,6 +73,7 @@ type SearchResult struct {
 	Type     string `json:"type"`
 	URL      string `json:"url"`
 	SubOrDub string `json:"subOrDub"`
+	Episodes int    `json:"episodes"`
 }
 
 // Episode represents an episode from Consumet
