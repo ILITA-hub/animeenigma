@@ -46,11 +46,9 @@
           <video
             v-if="streamUrl && !error"
             ref="videoRef"
-            :src="streamUrl"
             class="absolute inset-0 w-full h-full"
             controls
             playsinline
-            autoplay
             @timeupdate="handleTimeUpdate"
             @pause="handlePause"
             @ended="handleEnded"
@@ -150,7 +148,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import Hls from 'hls.js'
 import { hanimeApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import ReportButton from './ReportButton.vue'
@@ -191,6 +190,7 @@ const loadingStream = ref(false)
 const error = ref<string | null>(null)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
+let hls: Hls | null = null
 
 // Progress tracking
 const currentTime = ref(0)
@@ -198,12 +198,67 @@ const maxTime = ref(0)
 const lastSaveTime = ref(0)
 const SAVE_INTERVAL = 15
 
-// Build proxy URL for MP4
+// Build proxy URL
 const buildProxyUrl = (url: string): string => {
   const params = new URLSearchParams()
   params.set('url', url)
   params.set('referer', 'https://hanime.tv/')
   return `/api/streaming/hls-proxy?${params.toString()}`
+}
+
+const destroyHls = () => {
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+}
+
+const initHlsPlayer = (url: string) => {
+  const video = videoRef.value
+  if (!video) return
+
+  destroyHls()
+
+  const proxyUrl = buildProxyUrl(url)
+
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      backBufferLength: 90,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      maxBufferSize: 60 * 1000 * 1000,
+      startLevel: -1,
+      defaultAudioCodec: 'mp4a.40.2',
+    })
+
+    hls.loadSource(proxyUrl)
+    hls.attachMedia(video)
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play().catch(() => {})
+    })
+
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) {
+        console.error('[Hanime HLS Error]', data.type, data.details)
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          hls?.startLoad()
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          hls?.recoverMediaError()
+        } else {
+          error.value = `HLS error: ${data.details}`
+        }
+      }
+    })
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari native HLS
+    video.src = proxyUrl
+    video.play().catch(() => {})
+  } else {
+    error.value = 'HLS playback is not supported in this browser'
+  }
 }
 
 const fetchEpisodes = async () => {
@@ -259,10 +314,11 @@ const fetchStream = async (ep: HanimeEpisode) => {
       return parseInt(b.height) - parseInt(a.height)
     })
 
-    // Select best quality
-    const best = availableSources.value[0]
-    selectedSource.value = best
-    streamUrl.value = buildProxyUrl(best.url)
+    // Select best quality (prefer 720p, then highest)
+    const preferred = availableSources.value.find(s => s.height === '720') || availableSources.value[0]
+    selectedSource.value = preferred
+    streamUrl.value = preferred.url
+    // HLS init happens after DOM update via watcher
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string; error?: { message?: string } } } }
     const message = e.response?.data?.error?.message
@@ -276,16 +332,17 @@ const fetchStream = async (ep: HanimeEpisode) => {
 
 const selectQuality = (source: HanimeSource) => {
   if (source.url === selectedSource.value?.url) return
+  const pos = videoRef.value?.currentTime || 0
   selectedSource.value = source
-  const newUrl = buildProxyUrl(source.url)
-  if (videoRef.value) {
-    const pos = videoRef.value.currentTime
-    streamUrl.value = newUrl
-    videoRef.value.src = newUrl
-    videoRef.value.currentTime = pos
-    videoRef.value.play().catch(() => {})
-  } else {
-    streamUrl.value = newUrl
+  streamUrl.value = source.url
+  initHlsPlayer(source.url)
+  // Restore position after HLS loads
+  if (hls && pos > 0) {
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (videoRef.value) {
+        videoRef.value.currentTime = pos
+      }
+    })
   }
 }
 
@@ -355,9 +412,24 @@ const markEpisodeWatched = async () => {
   }
 }
 
+// Init HLS when streamUrl is set and video element exists
+watch(streamUrl, (url) => {
+  if (url && videoRef.value) {
+    initHlsPlayer(url)
+  }
+}, { flush: 'post' })
+
+// Also watch videoRef in case it mounts after streamUrl is set
+watch(videoRef, (el) => {
+  if (el && streamUrl.value) {
+    initHlsPlayer(streamUrl.value)
+  }
+})
+
 // Reset when anime changes
 watch(() => props.animeId, () => {
   saveProgress()
+  destroyHls()
   streamUrl.value = null
   episodes.value = []
   selectedEpisode.value = null
@@ -372,6 +444,11 @@ watch(() => props.animeId, () => {
 
 onMounted(async () => {
   await fetchEpisodes()
+})
+
+onBeforeUnmount(() => {
+  saveProgress()
+  destroyHls()
 })
 </script>
 
