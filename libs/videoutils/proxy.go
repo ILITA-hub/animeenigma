@@ -234,6 +234,8 @@ var HLSProxyAllowedDomains = []string{
 	"jimaku.cc",      // Japanese subtitle files
 	"cdnlibs.org",    // AnimeLib video CDN
 	"hentaicdn.org",  // AnimeLib video CDN (mirror)
+	// Hanime video CDN
+	"highwinds-cdn.com",
 }
 
 // UpstreamError represents an error from the upstream CDN.

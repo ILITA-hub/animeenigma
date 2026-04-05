@@ -354,6 +354,15 @@ export const animeLibApi = {
   search: (query: string) => apiClient.get('/animelib/search', { params: { q: query } }),
 }
 
+export const hanimeApi = {
+  getEpisodes: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/hanime/episodes`),
+  getStream: (animeId: string, slug: string) =>
+    apiClient.get(`/anime/${animeId}/hanime/stream`, {
+      params: { slug }
+    }),
+}
+
 export const themesApi = {
   list: (params?: { year?: number; season?: string; type?: string; sort?: string }) =>
     apiClient.get('/themes', { params }),
