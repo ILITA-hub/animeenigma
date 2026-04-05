@@ -236,6 +236,16 @@ var HLSProxyAllowedDomains = []string{
 	"hentaicdn.org",  // AnimeLib video CDN (mirror)
 	// Hanime video CDN
 	"highwinds-cdn.com",
+	"zodiark-25x-00.top",
+	"zodiark-25x-01.top",
+	"zodiark-25x-02.top",
+	"zodiark-25x-03.top",
+	"zodiark-25x-04.top",
+	"zodiark-25x-05.top",
+	"zodiark-25x-06.top",
+	"zodiark-25x-07.top",
+	"zodiark-25x-08.top",
+	"zodiark-25x-09.top",
 }
 
 // UpstreamError represents an error from the upstream CDN.
