@@ -575,10 +575,15 @@ func isHLSDomainAllowed(host string) bool {
 		host = host[:colonIdx]
 	}
 
-	// Check exact domain matches
 	for _, allowed := range HLSProxyAllowedDomains {
 		allowed = strings.ToLower(allowed)
-		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+		if strings.HasSuffix(allowed, "*") {
+			// Prefix wildcard: "htv-*" matches "htv-belias.com" and "p34.htv-hydaelyn.com"
+			prefix := allowed[:len(allowed)-1]
+			if strings.HasPrefix(host, prefix) || strings.Contains(host, "."+prefix) {
+				return true
+			}
+		} else if host == allowed || strings.HasSuffix(host, "."+allowed) {
 			return true
 		}
 	}
