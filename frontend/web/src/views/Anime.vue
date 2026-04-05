@@ -296,6 +296,15 @@
               >
                 EN
               </button>
+              <button
+                @click="switchLanguage('18+')"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+                :class="videoLanguage === '18+'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/50 hover:text-white/70'"
+              >
+                18+
+              </button>
             </div>
 
             <!-- Provider sub-tabs -->
@@ -319,7 +328,7 @@
                 AniLib
               </button>
             </template>
-            <template v-else>
+            <template v-else-if="videoLanguage === 'en'">
               <button
                 @click="videoProvider = 'hianime'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -337,6 +346,17 @@
                   : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
               >
                 Consumet
+              </button>
+            </template>
+            <template v-else-if="videoLanguage === '18+'">
+              <button
+                @click="videoProvider = 'hanime'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'hanime'
+                  ? 'bg-pink-500/20 text-pink-400 border border-pink-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                Hanime
               </button>
             </template>
           </div>
@@ -382,6 +402,14 @@
             :initial-episode="lastEpisode"
             :sub-or-dub="'sub'"
             @available-translations="handleAvailableTranslations"
+          />
+          <!-- Hanime Player -->
+          <HanimePlayer
+            v-else-if="videoProvider === 'hanime'"
+            :anime-id="anime.id"
+            :anime-name="anime.title"
+            :total-episodes="anime.totalEpisodes"
+            :initial-episode="lastEpisode"
           />
         </div>
       </section>
@@ -576,6 +604,7 @@ const KodikPlayer = defineAsyncComponent(() => import('@/components/player/Kodik
 const HiAnimePlayer = defineAsyncComponent(() => import('@/components/player/HiAnimePlayer.vue'))
 const ConsumetPlayer = defineAsyncComponent(() => import('@/components/player/ConsumetPlayer.vue'))
 const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
+const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { parseDescription } from '@/utils/description-parser'
@@ -636,11 +665,11 @@ const isHidden = ref(false)
 const showShikimoriEdit = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
-const videoLanguage = ref<'ru' | 'en'>(
-  (localStorage.getItem('preferred_video_language') as 'ru' | 'en') || 'ru'
+const videoLanguage = ref<'ru' | 'en' | '18+'>(
+  (localStorage.getItem('preferred_video_language') as 'ru' | 'en' | '18+') || 'ru'
 )
-const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet'>(
-  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet') || 'kodik'
+const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime'>(
+  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime') || 'kodik'
 )
 
 // Last-watched episode derived from localStorage watch progress
@@ -975,15 +1004,17 @@ const retry = () => {
 }
 
 // Language / provider switching
-const switchLanguage = (lang: 'ru' | 'en') => {
+const switchLanguage = (lang: 'ru' | 'en' | '18+') => {
   videoLanguage.value = lang
   // Auto-select first provider in the group
   if (lang === 'ru') {
     const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'animelib' | null
     videoProvider.value = savedRu || 'kodik'
-  } else {
+  } else if (lang === 'en') {
     const savedEn = localStorage.getItem('preferred_en_provider') as 'hianime' | 'consumet' | null
     videoProvider.value = savedEn || 'hianime'
+  } else if (lang === '18+') {
+    videoProvider.value = 'hanime'
   }
 }
 

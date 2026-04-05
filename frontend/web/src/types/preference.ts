@@ -1,6 +1,6 @@
 export interface WatchCombo {
-  player: 'kodik' | 'animelib' | 'hianime' | 'consumet'
-  language: 'ru' | 'en'
+  player: 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime'
+  language: 'ru' | 'en' | '18+'
   watch_type: 'dub' | 'sub'
   translation_id: string
   translation_title: string
