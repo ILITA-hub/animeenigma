@@ -235,6 +235,7 @@ var HLSProxyAllowedDomains = []string{
 	"cdnlibs.org",    // AnimeLib video CDN
 	"hentaicdn.org",  // AnimeLib video CDN (mirror)
 	// Hanime video CDN
+	"hanime.tv",
 	"highwinds-cdn.com",
 	"zodiark-25x-00.top",
 	"zodiark-25x-01.top",
