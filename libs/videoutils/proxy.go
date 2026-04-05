@@ -250,6 +250,7 @@ var HLSProxyAllowedDomains = []string{
 	"hanime.tv",
 	"highwinds-cdn.com",
 	"htv-*",        // htv-belias.com, htv-hydaelyn.com, etc.
+	"hydaelyn-*",   // hydaelyn-25x-00.top through hydaelyn-25x-19.top
 	"zodiark-*",    // zodiark-25x-00.top through zodiark-25x-09.top
 }
 
