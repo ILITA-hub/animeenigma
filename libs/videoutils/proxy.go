@@ -237,6 +237,7 @@ var HLSProxyAllowedDomains = []string{
 	// Hanime video CDN
 	"hanime.tv",
 	"highwinds-cdn.com",
+	"htv-belias.com",
 	"zodiark-25x-00.top",
 	"zodiark-25x-01.top",
 	"zodiark-25x-02.top",
