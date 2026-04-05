@@ -189,7 +189,19 @@ func (p *VideoProxy) isDomainAllowed(host string) bool {
 	host = strings.ToLower(host)
 	for _, allowed := range p.config.AllowedDomains {
 		allowed = strings.ToLower(allowed)
-		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+		// Wildcard prefix: "*.example.com" matches "cdn.example.com"
+		// Also "htv-*" matches "htv-belias.com", "htv-hydaelyn.com", etc.
+		if strings.HasPrefix(allowed, "*.") {
+			suffix := allowed[1:] // ".example.com"
+			if strings.HasSuffix(host, suffix) {
+				return true
+			}
+		} else if strings.HasSuffix(allowed, "*") {
+			prefix := allowed[:len(allowed)-1] // "htv-"
+			if strings.HasPrefix(host, prefix) || strings.Contains(host, "."+prefix) {
+				return true
+			}
+		} else if host == allowed || strings.HasSuffix(host, "."+allowed) {
 			return true
 		}
 	}
@@ -237,17 +249,8 @@ var HLSProxyAllowedDomains = []string{
 	// Hanime video CDN
 	"hanime.tv",
 	"highwinds-cdn.com",
-	"htv-belias.com",
-	"zodiark-25x-00.top",
-	"zodiark-25x-01.top",
-	"zodiark-25x-02.top",
-	"zodiark-25x-03.top",
-	"zodiark-25x-04.top",
-	"zodiark-25x-05.top",
-	"zodiark-25x-06.top",
-	"zodiark-25x-07.top",
-	"zodiark-25x-08.top",
-	"zodiark-25x-09.top",
+	"htv-*",        // htv-belias.com, htv-hydaelyn.com, etc.
+	"zodiark-*",    // zodiark-25x-00.top through zodiark-25x-09.top
 }
 
 // UpstreamError represents an error from the upstream CDN.
