@@ -923,6 +923,50 @@ func (h *CatalogHandler) SearchAnimeLib(w http.ResponseWriter, r *http.Request) 
 	httputil.OK(w, results)
 }
 
+// ============================================================================
+// Hanime Handlers
+// ============================================================================
+
+// GetHanimeEpisodes gets episodes from Hanime for an anime.
+func (h *CatalogHandler) GetHanimeEpisodes(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodes, err := h.catalogService.GetHanimeEpisodes(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, episodes)
+}
+
+// GetHanimeStream gets stream URLs for a Hanime episode.
+func (h *CatalogHandler) GetHanimeStream(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	slug := r.URL.Query().Get("slug")
+	if slug == "" {
+		httputil.BadRequest(w, "slug is required")
+		return
+	}
+
+	stream, err := h.catalogService.GetHanimeStream(r.Context(), animeID, slug)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, stream)
+}
+
 // GetJimakuSubtitles fetches Japanese subtitles from Jimaku for an anime episode
 func (h *CatalogHandler) GetJimakuSubtitles(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")

@@ -87,6 +87,9 @@ func NewRouter(
 			r.Get("/{animeId}/animelib/episodes", catalogHandler.GetAnimeLibEpisodes)
 			r.Get("/{animeId}/animelib/translations", catalogHandler.GetAnimeLibTranslations)
 			r.Get("/{animeId}/animelib/stream", catalogHandler.GetAnimeLibStream)
+			// Hanime video sources
+			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
+			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)
 			// Jimaku Japanese subtitles
 			r.Get("/{animeId}/jimaku/subtitles", catalogHandler.GetJimakuSubtitles)
 		})

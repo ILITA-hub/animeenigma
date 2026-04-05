@@ -18,6 +18,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animelib"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/consumet"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hianime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jikan"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
@@ -45,6 +46,7 @@ type CatalogService struct {
 	jikanClient     *jikan.Client
 	jimakuClient    *jimaku.Client
 	animelibClient  *animelib.Client
+	hanimeClient    *hanime.Client
 	idMappingClient *idmapping.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
@@ -59,6 +61,8 @@ type CatalogServiceOptions struct {
 	ConsumetProvider string
 	JimakuAPIKey     string
 	AnimeLibToken    string
+	HanimeEmail      string
+	HanimePassword   string
 }
 
 func NewCatalogService(
@@ -79,13 +83,15 @@ func NewCatalogService(
 	}
 
 	// Get API URLs from options
-	var aniwatchAPIURL, consumetAPIURL, consumetProvider, jimakuAPIKey, animelibToken string
+	var aniwatchAPIURL, consumetAPIURL, consumetProvider, jimakuAPIKey, animelibToken, hanimeEmail, hanimePassword string
 	if len(opts) > 0 {
 		aniwatchAPIURL = opts[0].AniwatchAPIURL
 		consumetAPIURL = opts[0].ConsumetAPIURL
 		consumetProvider = opts[0].ConsumetProvider
 		jimakuAPIKey = opts[0].JimakuAPIKey
 		animelibToken = opts[0].AnimeLibToken
+		hanimeEmail = opts[0].HanimeEmail
+		hanimePassword = opts[0].HanimePassword
 	}
 
 	jimakuClient := jimaku.NewClient(jimakuAPIKey)
@@ -102,6 +108,13 @@ func NewCatalogService(
 		log.Infow("animelib client initialized without token")
 	}
 
+	hanimeClient := hanime.NewClient(hanimeEmail, hanimePassword)
+	if hanimeClient.IsConfigured() {
+		log.Infow("hanime client initialized")
+	} else {
+		log.Infow("hanime client not configured, hanime features will be unavailable")
+	}
+
 	return &CatalogService{
 		animeRepo:       animeRepo,
 		genreRepo:       genreRepo,
@@ -114,6 +127,7 @@ func NewCatalogService(
 		jikanClient:     jikan.NewClient(),
 		jimakuClient:    jimakuClient,
 		animelibClient:  animelibClient,
+		hanimeClient:    hanimeClient,
 		idMappingClient: idmapping.NewClient(),
 		cache:           cache,
 		log:             log,
@@ -128,6 +142,11 @@ func (s *CatalogService) KodikClient() *kodik.Client {
 // AnimeLibClient returns the AnimeLib parser client.
 func (s *CatalogService) AnimeLibClient() *animelib.Client {
 	return s.animelibClient
+}
+
+// HanimeClient returns the Hanime parser client.
+func (s *CatalogService) HanimeClient() *hanime.Client {
+	return s.hanimeClient
 }
 
 // SearchAnime searches for anime, fetching from Shikimori if not found locally
@@ -1975,8 +1994,8 @@ func (s *CatalogService) GetConsumetEpisodes(ctx context.Context, animeID string
 		}
 	}
 
-	// Cache for 1 hour
-	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
+	// Cache for 5 minutes — consumet episode IDs contain tokens that expire quickly
+	_ = s.cache.Set(ctx, cacheKey, result, 5*time.Minute)
 
 	return result, nil
 }
@@ -2722,5 +2741,116 @@ func (s *CatalogService) GetJimakuSubtitles(ctx context.Context, animeID string,
 	// Cache for 1 hour
 	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
 
+	return result, nil
+}
+
+// GetHanimeEpisodes searches Hanime for an anime and returns its franchise episodes.
+func (s *CatalogService) GetHanimeEpisodes(ctx context.Context, animeID string) (_ []domain.HanimeEpisode, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("hanime", "get_episodes", start, &retErr)
+
+	if !s.hanimeClient.IsConfigured() {
+		return nil, errors.NotFound("hanime provider is not configured")
+	}
+
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheKey := fmt.Sprintf("hanime:episodes:%s", animeID)
+	var cached []domain.HanimeEpisode
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	searchNames := []string{anime.Name}
+	if anime.NameJP != "" {
+		searchNames = append(searchNames, anime.NameJP)
+	}
+
+	var hits []hanime.SearchHit
+	for _, name := range searchNames {
+		hits, err = s.hanimeClient.Search(name)
+		if err == nil && len(hits) > 0 {
+			break
+		}
+	}
+
+	if len(hits) == 0 {
+		_ = s.cache.Set(ctx, cacheKey, []domain.HanimeEpisode{}, 30*time.Minute)
+		return []domain.HanimeEpisode{}, nil
+	}
+
+	video, err := s.hanimeClient.GetVideo(hits[0].Slug)
+	if err != nil {
+		s.log.Warnw("failed to get hanime video", "slug", hits[0].Slug, "error", err)
+		return []domain.HanimeEpisode{}, nil
+	}
+
+	episodes := make([]domain.HanimeEpisode, len(video.FranchiseVideos))
+	for i, ep := range video.FranchiseVideos {
+		episodes[i] = domain.HanimeEpisode{
+			Name: ep.Name,
+			Slug: ep.Slug,
+		}
+	}
+
+	if len(episodes) == 0 {
+		episodes = []domain.HanimeEpisode{{
+			Name: video.Video.Name,
+			Slug: video.Video.Slug,
+		}}
+	}
+
+	_ = s.cache.Set(ctx, cacheKey, episodes, time.Hour)
+	return episodes, nil
+}
+
+// GetHanimeStream fetches stream URLs for a specific Hanime episode slug.
+func (s *CatalogService) GetHanimeStream(ctx context.Context, animeID string, slug string) (_ *domain.HanimeStream, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("hanime", "get_stream", start, &retErr)
+	metrics.EpisodeStreamRequestsTotal.WithLabelValues("hanime").Inc()
+
+	if !s.hanimeClient.IsConfigured() {
+		return nil, errors.NotFound("hanime provider is not configured")
+	}
+
+	cacheKey := fmt.Sprintf("hanime:stream:%s:%s", animeID, slug)
+	var cached domain.HanimeStream
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return &cached, nil
+	}
+
+	video, err := s.hanimeClient.GetVideo(slug)
+	if err != nil {
+		return nil, errors.NotFound(fmt.Sprintf("Stream unavailable: %s", err.Error()))
+	}
+
+	var sources []domain.HanimeSource
+	for _, srv := range video.Servers {
+		for _, stream := range srv.Streams {
+			if stream.URL == "" {
+				continue
+			}
+			sources = append(sources, domain.HanimeSource{
+				URL:    stream.URL,
+				Height: stream.Height,
+				Width:  stream.Width,
+				SizeMB: stream.FilesizeMbs,
+			})
+		}
+	}
+
+	if len(sources) == 0 {
+		return nil, errors.NotFound("no stream sources available")
+	}
+
+	result := &domain.HanimeStream{
+		Sources: sources,
+	}
+
+	_ = s.cache.Set(ctx, cacheKey, result, 30*time.Minute)
 	return result, nil
 }

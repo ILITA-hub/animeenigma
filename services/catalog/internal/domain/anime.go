@@ -353,6 +353,25 @@ type MALResolveResult struct {
 	MALID    string `json:"mal_id,omitempty"`    // always set
 }
 
+// HanimeEpisode represents an episode from Hanime.
+type HanimeEpisode struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// HanimeSource represents a single video quality source from Hanime.
+type HanimeSource struct {
+	URL    string  `json:"url"`
+	Height string  `json:"height"`
+	Width  int     `json:"width"`
+	SizeMB float64 `json:"size_mb"`
+}
+
+// HanimeStream represents stream data from Hanime.
+type HanimeStream struct {
+	Sources []HanimeSource `json:"sources"`
+}
+
 // AnimeLib types
 
 // AnimeLibEpisode represents an episode from AnimeLib

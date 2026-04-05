@@ -82,6 +82,8 @@ func main() {
 			ConsumetProvider: cfg.Consumet.Provider,
 			JimakuAPIKey:     cfg.Jimaku.APIKey,
 			AnimeLibToken:  cfg.AnimeLib.Token,
+			HanimeEmail:    cfg.Hanime.Email,
+			HanimePassword: cfg.Hanime.Password,
 		},
 	)
 

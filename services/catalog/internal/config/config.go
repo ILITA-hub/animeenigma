@@ -21,6 +21,7 @@ type Config struct {
 	Consumet  ConsumetConfig
 	Jimaku    JimakuConfig
 	AnimeLib    AnimeLibConfig
+	Hanime      HanimeConfig
 	Telegram    TelegramConfig
 	HealthCheck HealthCheckConfig
 }
@@ -57,6 +58,11 @@ type JimakuConfig struct {
 
 type AnimeLibConfig struct {
 	Token string
+}
+
+type HanimeConfig struct {
+	Email    string
+	Password string
 }
 
 type HealthCheckConfig struct {
@@ -114,6 +120,10 @@ func Load() (*Config, error) {
 		},
 		AnimeLib: AnimeLibConfig{
 			Token: getEnv("ANIMELIB_TOKEN", ""),
+		},
+		Hanime: HanimeConfig{
+			Email:    getEnv("HANIME_EMAIL", ""),
+			Password: getEnv("HANIME_PASSWORD", ""),
 		},
 		Telegram: TelegramConfig{
 			NewsChannel: getEnv("TELEGRAM_NEWS_CHANNEL", "animeenigmanews"),
