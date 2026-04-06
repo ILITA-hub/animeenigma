@@ -297,6 +297,7 @@
                 EN
               </button>
               <button
+                v-if="isHentai"
                 @click="switchLanguage('18+')"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
                 :class="videoLanguage === '18+'
@@ -758,6 +759,10 @@ const parsedDescription = computed(() =>
   anime.value?.description ? parseDescription(anime.value.description) : ''
 )
 
+const isHentai = computed(() =>
+  anime.value?.rawGenres?.some(g => g.name === 'Hentai') ?? false
+)
+
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr)
   return date.toLocaleDateString('ru-RU', {
@@ -1082,6 +1087,14 @@ const loadAnimeData = async (animeId: string) => {
 
   const fetched = await fetchAnime(animeId)
   if (gen !== loadGeneration) return
+
+  // Reset 18+ tab if this anime doesn't have the Hentai genre
+  if (videoLanguage.value === '18+') {
+    const fetchedIsHentai = fetched?.rawGenres?.some(g => g.name === 'Hentai') ?? false
+    if (!fetchedIsHentai) {
+      videoLanguage.value = 'ru'
+    }
+  }
 
   // Load last-watched episode from localStorage
   if (fetched) {
