@@ -35,20 +35,17 @@ frontend/web/
 │   │   ├── anime/        # Anime-related components
 │   │   │   └── AnimeCard.vue
 │   │   └── player/       # Video player components
-│   │       └── VideoPlayer.vue
 │   ├── composables/      # Vue composables
 │   │   ├── useAuth.ts    # Authentication logic
 │   │   └── useAnime.ts   # Anime API logic
 │   ├── router/           # Vue Router configuration
 │   │   └── index.ts      # Route definitions
 │   ├── stores/           # Pinia stores
-│   │   ├── auth.ts       # Authentication state
-│   │   └── player.ts     # Video player state
+│   │   └── auth.ts       # Authentication state
 │   ├── views/            # Page components
 │   │   ├── Home.vue      # Home page
 │   │   ├── Browse.vue    # Browse/search anime
 │   │   ├── Anime.vue     # Anime details
-│   │   ├── Watch.vue     # Video player page
 │   │   ├── Game.vue      # Game rooms
 │   │   ├── Profile.vue   # User profile
 │   │   └── NotFound.vue  # 404 page
@@ -146,14 +143,6 @@ services:
 ```
 
 ## Key Components
-
-### VideoPlayer
-Video.js-based player with:
-- Multiple quality options
-- Playback speed controls
-- Progress saving
-- Keyboard shortcuts
-- Full-screen support
 
 ### AnimeCard
 Reusable card component for displaying anime with:

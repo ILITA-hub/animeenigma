@@ -85,131 +85,10 @@ test.describe('Video Player', () => {
       // May be visible for pinning translations
     })
   })
-
-  test.describe('Watch Page', () => {
-    test('should navigate to watch page from anime detail', async ({ page }) => {
-      await page.goto('/browse')
-      await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
-
-      await page.locator('a[href^="/anime/"]').first().click()
-      await expect(page).toHaveURL(/\/anime\//)
-
-      await page.waitForTimeout(3000)
-
-      // Look for watch/play button
-      const watchButton = page.getByRole('link', { name: /watch|play|смотреть|играть/i }).or(
-        page.locator('a[href^="/watch/"]')
-      )
-
-      if (await watchButton.first().isVisible()) {
-        await watchButton.first().click()
-        await expect(page).toHaveURL(/\/watch\//)
-      }
-    })
-
-    test('should display video player on watch page', async ({ page }) => {
-      // Navigate directly to a watch page (if we know an ID)
-      await page.goto('/browse')
-      await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
-
-      const animeLink = page.locator('a[href^="/anime/"]').first()
-      const href = await animeLink.getAttribute('href')
-
-      if (href) {
-        const animeId = href.split('/anime/')[1]
-        await page.goto(`/watch/${animeId}/1`)
-
-        await page.waitForTimeout(3000)
-
-        const _player = page.locator('video, iframe, [class*="player"]')
-        // May be visible on watch page
-      }
-    })
-
-    test('should display episode navigation', async ({ page }) => {
-      await page.goto('/browse')
-      await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
-
-      const animeLink = page.locator('a[href^="/anime/"]').first()
-      const href = await animeLink.getAttribute('href')
-
-      if (href) {
-        const animeId = href.split('/anime/')[1]
-        await page.goto(`/watch/${animeId}/1`)
-
-        await page.waitForTimeout(3000)
-
-        // Look for prev/next buttons
-        const _prevButton = page.getByRole('button', { name: /prev|previous|назад|предыдущ/i })
-        const _nextButton = page.getByRole('button', { name: /next|следующ|далее/i })
-
-        // May be visible on watch page
-      }
-    })
-
-    test('should display episode list', async ({ page }) => {
-      await page.goto('/browse')
-      await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
-
-      const animeLink = page.locator('a[href^="/anime/"]').first()
-      const href = await animeLink.getAttribute('href')
-
-      if (href) {
-        const animeId = href.split('/anime/')[1]
-        await page.goto(`/watch/${animeId}/1`)
-
-        await page.waitForTimeout(3000)
-
-        // Look for episode list
-        const _episodeList = page.locator('[class*="episode"]')
-        // May be visible on watch page
-      }
-    })
-
-    test('should have autoplay toggle', async ({ page }) => {
-      await page.goto('/browse')
-      await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
-
-      const animeLink = page.locator('a[href^="/anime/"]').first()
-      const href = await animeLink.getAttribute('href')
-
-      if (href) {
-        const animeId = href.split('/anime/')[1]
-        await page.goto(`/watch/${animeId}/1`)
-
-        await page.waitForTimeout(3000)
-
-        // Look for autoplay toggle
-        const _autoplayToggle = page.getByText(/autoplay|автовоспроизведение/i)
-        // May be visible on watch page
-      }
-    })
-
-    test('should have quality selector', async ({ page }) => {
-      await page.goto('/browse')
-      await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
-
-      const animeLink = page.locator('a[href^="/anime/"]').first()
-      const href = await animeLink.getAttribute('href')
-
-      if (href) {
-        const animeId = href.split('/anime/')[1]
-        await page.goto(`/watch/${animeId}/1`)
-
-        await page.waitForTimeout(3000)
-
-        // Look for quality selector
-        const _qualitySelector = page.locator('select').filter({
-          has: page.locator('option', { hasText: /1080|720|480|auto/i })
-        })
-        // May be visible on watch page
-      }
-    })
-  })
 })
 
 test.describe('Player Controls', () => {
-  test('should display anime info on watch page', async ({ page }) => {
+  test('should display anime info on anime detail page', async ({ page }) => {
     await page.goto('/browse')
     await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
 
@@ -220,28 +99,5 @@ test.describe('Player Controls', () => {
     // Check for anime title visible on page
     const title = page.locator('h1, h2').first()
     await expect(title).toBeVisible()
-  })
-
-  test('should link back to anime detail from watch page', async ({ page }) => {
-    await page.goto('/browse')
-    await page.waitForSelector('a[href^="/anime/"]', { timeout: 10000 })
-
-    const animeLink = page.locator('a[href^="/anime/"]').first()
-    const href = await animeLink.getAttribute('href')
-
-    if (href) {
-      const animeId = href.split('/anime/')[1]
-      await page.goto(`/watch/${animeId}/1`)
-
-      await page.waitForTimeout(3000)
-
-      // Look for back link to anime detail
-      const backLink = page.locator(`a[href="/anime/${animeId}"]`)
-
-      if (await backLink.first().isVisible()) {
-        await backLink.first().click()
-        await expect(page).toHaveURL(/\/anime\//)
-      }
-    }
   })
 })

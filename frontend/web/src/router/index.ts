@@ -32,12 +32,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Anime Details' }
   },
   {
-    path: '/watch/:animeId/:episodeId',
-    name: 'watch',
-    component: () => import('@/views/Watch.vue'),
-    meta: { title: 'Watch', requiresAuth: false }
-  },
-  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfileSetup.vue'),

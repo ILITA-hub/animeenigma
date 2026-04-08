@@ -39,7 +39,6 @@
     "synopsis": "Synopsis",
     "related": "Related",
     "episode": "Episode",
-    "of": "of",
     "reviews": "Reviews",
     "reviewsCount": "{count} reviews",
     "writeReview": "Write a review",
@@ -83,9 +82,6 @@
   "player": {
     "quality": "Quality",
     "subtitles": "Subtitles",
-    "autoplay": "Autoplay",
-    "next": "Next",
-    "previous": "Previous",
     "noTranslations": "No translations available",
     "reportNotWorking": "Report a Problem",
     "reportTitle": "Report a Problem",

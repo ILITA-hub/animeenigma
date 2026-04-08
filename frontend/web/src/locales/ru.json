@@ -39,7 +39,6 @@
     "synopsis": "Описание",
     "related": "Связанные",
     "episode": "Эпизод",
-    "of": "из",
     "reviews": "Отзывы",
     "reviewsCount": "{count} отзывов",
     "writeReview": "Написать отзыв",
@@ -83,9 +82,6 @@
   "player": {
     "quality": "Качество",
     "subtitles": "Субтитры",
-    "autoplay": "Автовоспр.",
-    "next": "Следующий",
-    "previous": "Предыдущий",
     "noTranslations": "Нет доступных озвучек",
     "reportNotWorking": "Сообщить о проблеме",
     "reportTitle": "Сообщить о проблеме",

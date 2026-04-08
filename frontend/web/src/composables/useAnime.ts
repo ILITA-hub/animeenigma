@@ -231,21 +231,6 @@ export function useAnime() {
     }
   }
 
-  const fetchEpisode = async (episodeId: string) => {
-    loading.value = true
-    error.value = null
-    try {
-      const response = await episodeApi.getById(episodeId)
-      return response.data
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      error.value = e.response?.data?.message || 'Failed to fetch episode'
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
   const addToWatchlist = async (animeId: string) => {
     try {
       await userApi.addToWatchlist(animeId, 'plan_to_watch')
@@ -283,7 +268,6 @@ export function useAnime() {
     fetchSchedule,
     fetchOngoing,
     fetchEpisodes,
-    fetchEpisode,
     addToWatchlist,
     removeFromWatchlist
   }

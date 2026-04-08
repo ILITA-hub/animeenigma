@@ -39,7 +39,6 @@
     "synopsis": "あらすじ",
     "related": "関連作品",
     "episode": "話",
-    "of": "/",
     "reviews": "レビュー",
     "reviewsCount": "{count}件のレビュー",
     "writeReview": "レビューを書く",
@@ -83,9 +82,6 @@
   "player": {
     "quality": "画質",
     "subtitles": "字幕",
-    "autoplay": "自動再生",
-    "next": "次へ",
-    "previous": "前へ",
     "noTranslations": "利用可能な翻訳がありません",
     "reportNotWorking": "問題を報告",
     "reportTitle": "問題を報告",
