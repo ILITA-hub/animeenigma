@@ -182,6 +182,13 @@ function cleanup() {
 }
 
 onMounted(() => {
+  // UA-027: if user is already authed, bounce them out rather than show a fresh QR.
+  if (authStore.isAuthenticated) {
+    const returnUrl = sessionStorage.getItem('returnUrl')
+    sessionStorage.removeItem('returnUrl')
+    router.replace(returnUrl || '/')
+    return
+  }
   startAuth()
 })
 
