@@ -203,7 +203,12 @@ const fetchThemes = async () => {
       type: typeFilter.value || undefined,
       sort: sortBy.value,
     })
-    if (componentActive) themes.value = resp.data?.data || resp.data || []
+    if (componentActive) {
+      // Strict Array.isArray check guards against API shape drift (e.g. backend
+      // returning {data: null, success: true} on empty seasons — UA-024).
+      const raw = resp.data?.data
+      themes.value = Array.isArray(raw) ? raw : []
+    }
   } catch (err: unknown) {
     if (componentActive) {
       error.value = t('themes.loadError')

@@ -99,5 +99,8 @@ func (h *RatingHandler) GetMyRatings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if ratings == nil {
+		ratings = []domain.ThemeRating{}
+	}
 	httputil.OK(w, ratings)
 }

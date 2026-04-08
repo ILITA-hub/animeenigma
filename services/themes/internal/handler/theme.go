@@ -50,6 +50,9 @@ func (h *ThemeHandler) ListThemes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if themes == nil {
+		themes = []domain.AnimeTheme{}
+	}
 	httputil.OK(w, themes)
 }
 
