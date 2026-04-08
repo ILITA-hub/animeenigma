@@ -36,3 +36,6 @@ coverage
 # Temporary files
 *.tmp
 .cache
+
+# UI audit tooling (downloaded on demand, not committed)
+test-utils/axe.min.js
