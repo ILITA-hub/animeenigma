@@ -179,7 +179,8 @@
       "status": "Status"
     },
     "empty": {
-      "watchlist": "Your list is empty"
+      "watchlist": "Your list is empty",
+      "filter": "Nothing in this filter"
     },
     "actions": {
       "browseCatalog": "Browse Catalog",

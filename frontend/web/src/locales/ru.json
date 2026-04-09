@@ -179,7 +179,8 @@
       "status": "Статус"
     },
     "empty": {
-      "watchlist": "Ваш список пуст"
+      "watchlist": "Ваш список пуст",
+      "filter": "В этом фильтре пусто"
     },
     "actions": {
       "browseCatalog": "Каталог",

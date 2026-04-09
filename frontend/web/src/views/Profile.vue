@@ -97,7 +97,7 @@
               </svg>
             </div>
 
-            <div v-else-if="watchlist.length > 0" class="space-y-4">
+            <div v-else-if="hasAnyEntries" class="space-y-4">
               <!-- Stats Bar -->
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div class="glass-card p-3 text-center">
@@ -190,6 +190,8 @@
                 </svg>
               </div>
 
+              <!-- Table or Grid (only when the current filter has items) -->
+              <template v-if="watchlist.length > 0">
               <!-- Table View -->
               <div v-if="viewMode === 'table'" class="overflow-x-auto">
                 <table class="w-full text-sm">
@@ -439,10 +441,29 @@
                 </div>
               </div>
 
+              </template><!-- /v-if="watchlist.length > 0" -->
+
+              <!-- Current filter has no items, but the user has entries in other statuses -->
+              <template v-else>
+                <div v-if="watchlistPageLoading" class="flex justify-center py-12">
+                  <svg class="w-8 h-8 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </div>
+                <div v-else class="text-center py-12">
+                  <svg class="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <p class="text-white/50">{{ $t('profile.empty.filter') }}</p>
+                </div>
+              </template>
+
               </div><!-- end relative wrapper -->
 
               <!-- Pagination -->
               <PaginationBar
+                v-if="watchlist.length > 0"
                 :current-page="watchlistPage"
                 :total-pages="watchlistTotalPages"
                 @update:current-page="(p: number) => { watchlistPage = p; fetchWatchlistPage() }"
@@ -999,7 +1020,11 @@ const pageCache = new Map<string, CachedPage>()
 const PAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 function pageCacheKey(status: string, page: number): string {
-  return `${status}:${page}:${sortKey.value}:${sortDirection.value}`
+  // Include the profile's user id so navigating between /user/alice and /user/bob
+  // — which reuses the same Profile.vue component instance and therefore the same
+  // in-memory pageCache Map — cannot serve one user's cached data to another user.
+  const uid = profileUser.value?.id || 'anon'
+  return `${uid}:${status}:${page}:${sortKey.value}:${sortDirection.value}`
 }
 function clearPageCache() {
   pageCache.clear()
@@ -1112,6 +1137,22 @@ const filteredWatchlist = computed(() => {
 
 // Public profile aggregate stats (fetched from backend)
 const publicWatchlistStats = ref<{ avg_score: number; total_episodes: number; total_entries: number; completed: number } | null>(null)
+
+// True when the user has ANY watchlist entries across all statuses.
+// Used to distinguish "current filter is empty" (keep filter UI visible) from
+// "user has no entries at all" (show onboarding CTA).
+const hasAnyEntries = computed(() => {
+  if (_isOwnProfile.value) {
+    // Own profile — lightweight statuses endpoint is fetched up-front, so this is authoritative
+    return watchlistStore.entries.length > 0
+  }
+  // Public profile — prefer server aggregate, then per-status counts, then fall back to current-page data
+  const stats = publicWatchlistStats.value
+  if (stats && typeof stats.total_entries === 'number') return stats.total_entries > 0
+  const sumCounts = Object.values(publicStatusCounts.value).reduce((s, c) => s + c, 0)
+  if (sumCounts > 0) return true
+  return watchlist.value.length > 0 || watchlistTotalCount.value > 0
+})
 
 // Stats
 const watchlistStats = computed(() => {

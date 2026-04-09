@@ -179,7 +179,8 @@
       "status": "状態"
     },
     "empty": {
-      "watchlist": "リストは空です"
+      "watchlist": "リストは空です",
+      "filter": "このフィルターには何もありません"
     },
     "actions": {
       "browseCatalog": "カタログを見る",
