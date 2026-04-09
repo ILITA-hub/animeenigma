@@ -384,7 +384,11 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 	activeAlertCount := s.state.CountActiveAlerts()
 	batchAlertCount := classifier.CountAffectedServices(batch)
 	if activeAlertCount+batchAlertCount >= 3 {
-		s.escalateBatch(batch)
+		// Throttle to at most one escalation message per 24h to avoid spam.
+		if !s.state.IsInCooldown("escalate-outage", "global") {
+			s.escalateBatch(batch)
+			s.state.SetCooldown("escalate-outage", "global", 24*time.Hour)
+		}
 		s.state.Save()
 		return
 	}
