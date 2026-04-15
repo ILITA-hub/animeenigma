@@ -292,8 +292,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Scheduler job {{ $labels.job }} failed"
-          description: "Scheduler job {{ $labels.job }} has had errors in the last 25 hours."
+          summary: "Scheduler job {{ $labels.exported_job }} failed"
+          description: "Scheduler job {{ $labels.exported_job }} has had errors in the last 25 hours."
 
       - uid: scheduler-sync-stale
         title: Scheduler Sync Stale
@@ -306,7 +306,7 @@ groups:
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              expr: time() - scheduler_job_last_success_timestamp{exported_job!="calendar_sync"}
+              expr: time() - scheduler_job_last_success_timestamp{exported_job!~"calendar_sync|cleanup"}
               instant: true
               refId: A
           - refId: B
@@ -338,8 +338,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Scheduler job {{ $labels.job }} hasn't run successfully"
-          description: "Scheduler job {{ $labels.job }} hasn't succeeded in over 25 hours."
+          summary: "Scheduler job {{ $labels.exported_job }} hasn't run successfully"
+          description: "Scheduler job {{ $labels.exported_job }} hasn't succeeded in over 25 hours."
 
 
       - uid: scheduler-calendar-sync-stale
@@ -387,6 +387,52 @@ groups:
         annotations:
           summary: "Calendar sync hasn't run successfully"
           description: "The calendar_sync job hasn't succeeded in over 8 days (expected weekly on Mondays)."
+
+      - uid: scheduler-cleanup-stale
+        title: Scheduler Cleanup Stale
+        noDataState: OK
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: time() - scheduler_job_last_success_timestamp{exported_job="cleanup"}
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [691200]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 0s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cleanup hasn't run successfully"
+          description: "The cleanup job hasn't succeeded in over 8 days (expected weekly on Sundays)."
 
       - uid: player-unavailable
         title: Player Unavailable
