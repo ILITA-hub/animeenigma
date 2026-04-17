@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import { watch } from 'vue'
 
 // Locale messages
 import ru from './locales/ru.json'
@@ -20,12 +21,25 @@ function getDefaultLocale(): string {
   return 'ru' // Default to Russian
 }
 
+const initialLocale = getDefaultLocale()
+
 // Create i18n instance
 const i18n = createI18n({
   legacy: false,
-  locale: getDefaultLocale(),
+  locale: initialLocale,
   fallbackLocale: 'en',
   messages: { ru, ja, en },
 })
+
+// Keep <html lang> in sync with the active locale (accessibility, SEO, browser translation)
+if (typeof document !== 'undefined') {
+  document.documentElement.lang = initialLocale
+  watch(
+    () => (i18n.global.locale as unknown as { value: string }).value,
+    (newLocale) => {
+      if (newLocale) document.documentElement.lang = newLocale
+    },
+  )
+}
 
 export default i18n

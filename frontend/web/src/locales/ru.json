@@ -33,6 +33,9 @@
   },
   "anime": {
     "watch": "Смотреть",
+    "watchNow": "Смотреть",
+    "continueEp": "Продолжить с эп. {n}",
+    "rateStar": "Оценить на {n} из 10",
     "addToList": "В список",
     "removeFromList": "Удалить из списка",
     "episodes": "Эпизоды",
@@ -148,14 +151,22 @@
   },
   "search": {
     "placeholder": "Поиск аниме...",
+    "submit": "Найти",
     "recent": "Недавние поиски",
     "clearAll": "Очистить всё",
     "noResults": "Ничего не найдено",
     "genre": "Жанр",
     "viewAll": "Все результаты"
   },
+  "pagination": {
+    "label": "Постраничная навигация",
+    "previous": "Предыдущая страница",
+    "next": "Следующая страница",
+    "page": "Страница {n}"
+  },
   "profile": {
     "memberSince": "Участник с",
+    "uploadAvatar": "Загрузить аватар",
     "tabs": {
       "watchlist": "Мои списки",
       "settings": "Настройки"
@@ -167,7 +178,8 @@
       "completed": "Просмотрено",
       "onHold": "Отложено",
       "dropped": "Брошено",
-      "searchPlaceholder": "Поиск аниме..."
+      "searchPlaceholder": "Поиск аниме...",
+      "statusFilter": "Фильтр по статусу"
     },
     "table": {
       "title": "Название",
@@ -418,6 +430,8 @@
     "sortRating": "По рейтингу",
     "sortName": "По названию",
     "sortNewest": "Новые",
+    "sortAriaLabel": "Сортировка",
+    "seasonAriaLabel": "Сезон",
     "noThemes": "Нет тем для этого сезона",
     "syncHint": "Нажмите \"Синхронизировать\" для загрузки тем",
     "loadError": "Не удалось загрузить темы"

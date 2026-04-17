@@ -45,9 +45,12 @@
               <button
                 v-if="isOwnProfile"
                 @click="showAvatarModal = true"
+                type="button"
+                :aria-label="$t('profile.uploadAvatar')"
+                :title="$t('profile.uploadAvatar')"
                 class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-cyan-500 flex items-center justify-center text-white shadow-lg hover:bg-cyan-400 transition-colors"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </button>
@@ -119,18 +122,20 @@
               </div>
 
               <!-- Filter Pills -->
-              <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide" role="group" :aria-label="$t('profile.watchlist.statusFilter')">
                 <button
                   v-for="filter in watchlistFilters"
                   :key="filter.value"
+                  type="button"
+                  :aria-pressed="watchlistFilter === filter.value"
                   class="flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors"
                   :class="watchlistFilter === filter.value
                     ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                    : 'bg-white/5 text-white/60 border border-transparent hover:text-white'"
+                    : 'bg-white/5 text-white/80 border border-transparent hover:text-white'"
                   @click="watchlistFilter = filter.value"
                 >
                   {{ filter.label }}
-                  <span class="ml-1 opacity-60">({{ filter.count }})</span>
+                  <span class="ml-1 opacity-80">({{ filter.count }})</span>
                 </button>
               </div>
 

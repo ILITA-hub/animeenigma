@@ -33,6 +33,9 @@
   },
   "anime": {
     "watch": "Watch",
+    "watchNow": "Watch",
+    "continueEp": "Continue ep. {n}",
+    "rateStar": "Rate {n} out of 10",
     "addToList": "Add to List",
     "removeFromList": "Remove from List",
     "episodes": "Episodes",
@@ -148,14 +151,22 @@
   },
   "search": {
     "placeholder": "Search anime...",
+    "submit": "Search",
     "recent": "Recent Searches",
     "clearAll": "Clear All",
     "noResults": "No results found",
     "genre": "Genre",
     "viewAll": "View all results"
   },
+  "pagination": {
+    "label": "Pagination",
+    "previous": "Previous page",
+    "next": "Next page",
+    "page": "Page {n}"
+  },
   "profile": {
     "memberSince": "Member since",
+    "uploadAvatar": "Upload avatar",
     "tabs": {
       "watchlist": "My Lists",
       "settings": "Settings"
@@ -167,7 +178,8 @@
       "completed": "Completed",
       "onHold": "On Hold",
       "dropped": "Dropped",
-      "searchPlaceholder": "Search anime..."
+      "searchPlaceholder": "Search anime...",
+      "statusFilter": "Filter by status"
     },
     "table": {
       "title": "Title",
@@ -418,6 +430,8 @@
     "sortRating": "By Rating",
     "sortName": "By Name",
     "sortNewest": "Newest",
+    "sortAriaLabel": "Sort order",
+    "seasonAriaLabel": "Season",
     "noThemes": "No themes found for this season",
     "syncHint": "Click \"Sync Season\" to fetch themes",
     "loadError": "Failed to load themes"

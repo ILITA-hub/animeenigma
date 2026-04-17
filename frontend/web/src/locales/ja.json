@@ -33,6 +33,9 @@
   },
   "anime": {
     "watch": "視聴する",
+    "watchNow": "視聴する",
+    "continueEp": "第{n}話から続ける",
+    "rateStar": "{n}/10で評価",
     "addToList": "リストに追加",
     "removeFromList": "リストから削除",
     "episodes": "エピソード",
@@ -148,14 +151,22 @@
   },
   "search": {
     "placeholder": "アニメを検索...",
+    "submit": "検索",
     "recent": "最近の検索",
     "clearAll": "すべて削除",
     "noResults": "結果が見つかりません",
     "genre": "ジャンル",
     "viewAll": "すべての結果を見る"
   },
+  "pagination": {
+    "label": "ページネーション",
+    "previous": "前のページ",
+    "next": "次のページ",
+    "page": "{n}ページ目"
+  },
   "profile": {
     "memberSince": "登録日",
+    "uploadAvatar": "アバターをアップロード",
     "tabs": {
       "watchlist": "マイリスト",
       "settings": "設定"
@@ -167,7 +178,8 @@
       "completed": "視聴済み",
       "onHold": "保留中",
       "dropped": "中断",
-      "searchPlaceholder": "アニメを検索..."
+      "searchPlaceholder": "アニメを検索...",
+      "statusFilter": "ステータスで絞り込み"
     },
     "table": {
       "title": "タイトル",
@@ -418,6 +430,8 @@
     "sortRating": "評価順",
     "sortName": "名前順",
     "sortNewest": "新しい順",
+    "sortAriaLabel": "並び順",
+    "seasonAriaLabel": "シーズン",
     "noThemes": "このシーズンのテーマが見つかりません",
     "syncHint": "「シーズン同期」をクリックしてテーマを取得",
     "loadError": "テーマの読み込みに失敗しました"

@@ -51,7 +51,8 @@
         <!-- Sort -->
         <select
           v-model="sortBy"
-          class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/70 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+          :aria-label="$t('themes.sortAriaLabel')"
+          class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
         >
           <option value="rating">{{ $t('themes.sortRating') }}</option>
           <option value="name">{{ $t('themes.sortName') }}</option>
@@ -61,7 +62,8 @@
         <!-- Season selector -->
         <select
           v-model="selectedSeason"
-          class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/70 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+          :aria-label="$t('themes.seasonAriaLabel')"
+          class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
         >
           <option v-for="s in seasonOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
         </select>

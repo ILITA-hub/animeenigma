@@ -1,23 +1,28 @@
 <template>
-  <nav v-if="totalPages > 1" class="flex items-center justify-center gap-1 mt-8" aria-label="Pagination">
+  <nav v-if="totalPages > 1" class="flex items-center justify-center gap-1 mt-8" :aria-label="$t('pagination.label')">
     <!-- Previous -->
     <button
       :disabled="currentPage <= 1"
-      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors"
-      :class="{ 'opacity-30 cursor-not-allowed': currentPage <= 1 }"
+      type="button"
+      :aria-label="$t('pagination.previous')"
+      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/80 transition-colors"
+      :class="{ 'opacity-40 cursor-not-allowed': currentPage <= 1 }"
       @click="$emit('update:currentPage', currentPage - 1)"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
     </button>
 
     <!-- Page buttons -->
     <template v-for="page in visiblePages" :key="page">
-      <span v-if="page === '...'" class="px-2 text-white/30">...</span>
+      <span v-if="page === '...'" class="px-2 text-white/50">...</span>
       <button
         v-else
-        class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors"
+        type="button"
+        :aria-label="$t('pagination.page', { n: page })"
+        :aria-current="page === currentPage ? 'page' : undefined"
+        class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/80 transition-colors"
         :class="page === currentPage ? 'bg-pink-500/80 text-white' : 'hover:bg-white/10'"
         @click="$emit('update:currentPage', page as number)"
       >
@@ -28,11 +33,13 @@
     <!-- Next -->
     <button
       :disabled="currentPage >= totalPages"
-      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/70 transition-colors"
-      :class="{ 'opacity-30 cursor-not-allowed': currentPage >= totalPages }"
+      type="button"
+      :aria-label="$t('pagination.next')"
+      class="w-9 h-9 flex items-center justify-center rounded-lg text-sm text-white/80 transition-colors"
+      :class="{ 'opacity-40 cursor-not-allowed': currentPage >= totalPages }"
       @click="$emit('update:currentPage', currentPage + 1)"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
       </svg>
     </button>

@@ -35,7 +35,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
             </router-link>
-            <h3 v-else class="text-white/70 font-medium text-sm leading-tight truncate">{{ theme.anime_name }}</h3>
+            <h3 v-else class="text-white/90 font-medium text-sm leading-tight truncate">{{ theme.anime_name }}</h3>
             <div class="flex items-center gap-2 mt-1">
               <span
                 class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold"
@@ -48,7 +48,7 @@
             </div>
             <p v-if="theme.song_title" class="text-white/50 text-xs mt-1 truncate">
               {{ theme.song_title }}
-              <span v-if="theme.artist_name" class="text-white/30"> - {{ theme.artist_name }}</span>
+              <span v-if="theme.artist_name" class="text-white/60"> - {{ theme.artist_name }}</span>
             </p>
           </div>
 
@@ -62,7 +62,7 @@
                 {{ theme.avg_score > 0 ? theme.avg_score.toFixed(1) : '-' }}
               </span>
             </div>
-            <span class="text-white/30 text-xs">{{ theme.vote_count }} votes</span>
+            <span class="text-white/60 text-xs">{{ theme.vote_count }} votes</span>
           </div>
         </div>
       </div>
@@ -70,7 +70,7 @@
       <!-- Expand arrow -->
       <div class="flex items-center">
         <svg
-          class="w-5 h-5 text-white/30 transition-transform duration-200"
+          class="w-5 h-5 text-white/60 transition-transform duration-200"
           :class="{ 'rotate-180': expanded }"
           fill="none"
           stroke="currentColor"
@@ -96,7 +96,7 @@
             <source :src="`/api/themes/video/${theme.video_basename}`" type="video/webm" />
           </video>
         </div>
-        <p v-else class="text-white/30 text-sm text-center py-4">No video available</p>
+        <p v-else class="text-white/60 text-sm text-center py-4">No video available</p>
 
         <!-- User Rating -->
         <div v-if="isAuthenticated" class="pt-1">

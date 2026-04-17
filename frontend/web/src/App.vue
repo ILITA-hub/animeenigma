@@ -32,10 +32,10 @@
     <!-- Footer -->
     <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10">
       <div class="max-w-7xl mx-auto flex items-center justify-center gap-4">
-        <p class="text-white/40 text-sm">
+        <p class="text-white/60 text-sm">
           &copy; {{ new Date().getFullYear() }} AnimeEnigma. {{ $t('footer.rights') }}
         </p>
-        <router-link to="/status" class="text-white/40 hover:text-white/60 text-sm transition-colors">
+        <router-link to="/status" class="text-white/60 hover:text-white/80 text-sm transition-colors">
           {{ $t('status.title') }}
         </router-link>
       </div>

@@ -1,6 +1,7 @@
 <template>
   <div class="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black">
     <!-- Search Bar -->
+    <h1 class="sr-only">AnimeEnigma</h1>
     <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
       <div class="flex items-center gap-3">
         <div class="relative flex-1">
@@ -8,14 +9,18 @@
             v-model="searchQuery"
             type="text"
             :placeholder="$t('search.placeholder')"
+            :aria-label="$t('search.placeholder')"
             class="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all"
             @keyup.enter="goToSearch"
           />
           <button
             @click="goToSearch"
+            type="button"
+            :aria-label="$t('search.submit')"
+            :title="$t('search.submit')"
             class="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition-colors"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </button>

@@ -100,6 +100,20 @@
             </div>
           </div>
 
+          <!-- Primary Watch CTA (visible above the fold, for everyone) -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <button
+              @click="activatePlayer"
+              type="button"
+              class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/20 transition-all"
+            >
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
+            </button>
+          </div>
+
           <!-- Actions -->
           <div v-if="authStore.isAuthenticated" class="flex flex-wrap items-center gap-3 mb-6">
             <!-- Refresh Data Button -->
@@ -125,17 +139,21 @@
             <div class="relative" ref="dropdownRef">
               <button
                 @click="showStatusDropdown = !showStatusDropdown"
+                type="button"
+                aria-haspopup="menu"
+                :aria-expanded="showStatusDropdown"
+                aria-controls="watchlist-status-menu"
                 class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all"
                 :class="currentListStatus
                   ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30'
                   : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'"
               >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path v-if="currentListStatus" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
                 <span>{{ currentListStatus ? statusLabels[currentListStatus] : $t('anime.addToList') }}</span>
-                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showStatusDropdown }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showStatusDropdown }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -151,11 +169,15 @@
               >
                 <div
                   v-if="showStatusDropdown"
+                  id="watchlist-status-menu"
+                  role="menu"
                   class="absolute top-full left-0 mt-2 w-48 rounded-xl bg-surface border border-white/10 shadow-xl overflow-hidden z-50"
                 >
                   <button
                     v-for="(label, status) in statusLabels"
                     :key="status"
+                    role="menuitemradio"
+                    :aria-checked="currentListStatus === status"
                     @click="setListStatus(status)"
                     class="w-full px-4 py-3 text-left text-sm transition-colors flex items-center justify-between"
                     :class="currentListStatus === status
@@ -163,7 +185,7 @@
                       : 'text-white/80 hover:bg-white/5 hover:text-white'"
                   >
                     {{ label }}
-                    <svg v-if="currentListStatus === status" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <svg v-if="currentListStatus === status" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                       <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                     </svg>
                   </button>
@@ -172,9 +194,10 @@
                   <div v-if="currentListStatus" class="border-t border-white/10">
                     <button
                       @click="removeFromList"
+                      role="menuitem"
                       class="w-full px-4 py-3 text-left text-sm text-pink-400 hover:bg-pink-500/10 transition-colors flex items-center gap-2"
                     >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                       {{ $t('anime.removeFromList') }}
@@ -265,11 +288,11 @@
       </section>
 
       <!-- Video Player Section -->
-      <section class="mt-8">
+      <section class="mt-8" ref="playerSectionRef">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
-              <svg class="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 24 24">
+              <svg class="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M8 5v14l11-7z" />
               </svg>
               {{ $t('anime.watch') || 'Смотреть онлайн' }}
@@ -363,55 +386,83 @@
           </div>
         </div>
         <div class="glass-card p-4 md:p-6">
-          <!-- Kodik Player -->
-          <KodikPlayer
-            v-if="videoProvider === 'kodik'"
-            :anime-id="anime.id"
-            :anime-name="anime.title"
-            :total-episodes="anime.totalEpisodes"
-            :preferred-combo="resolvedCombo"
-            :initial-episode="lastEpisode"
-            @available-translations="handleAvailableTranslations"
-          />
-          <!-- AnimeLib Player -->
-          <AnimeLibPlayer
-            v-else-if="videoProvider === 'animelib'"
-            :anime-id="anime.id"
-            :anime-name="anime.title"
-            :total-episodes="anime.totalEpisodes"
-            :preferred-combo="resolvedCombo"
-            :initial-episode="lastEpisode"
-            @available-translations="handleAvailableTranslations"
-          />
-          <!-- HiAnime Player -->
-          <HiAnimePlayer
-            v-else-if="videoProvider === 'hianime'"
-            :anime-id="anime.id"
-            :anime-name="anime.title"
-            :total-episodes="anime.totalEpisodes"
-            :preferred-combo="resolvedCombo"
-            :initial-episode="lastEpisode"
-            @available-translations="handleAvailableTranslations"
-          />
-          <!-- Consumet Player -->
-          <ConsumetPlayer
-            v-else-if="videoProvider === 'consumet'"
-            :anime-id="anime.id"
-            :anime-name="anime.title"
-            :total-episodes="anime.totalEpisodes"
-            :preferred-combo="resolvedCombo"
-            :initial-episode="lastEpisode"
-            :sub-or-dub="'sub'"
-            @available-translations="handleAvailableTranslations"
-          />
-          <!-- Hanime Player -->
-          <HanimePlayer
-            v-else-if="videoProvider === 'hanime'"
-            :anime-id="anime.id"
-            :anime-name="anime.title"
-            :total-episodes="anime.totalEpisodes"
-            :initial-episode="lastEpisode"
-          />
+          <!-- Click-to-load placeholder (saves bandwidth / no auto-buffer) -->
+          <button
+            v-if="!playerActivated"
+            type="button"
+            @click="activatePlayer"
+            class="relative w-full aspect-video rounded-lg overflow-hidden group focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            :aria-label="lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow')"
+          >
+            <img
+              :src="anime.coverImage"
+              :alt="anime.title"
+              class="absolute inset-0 w-full h-full object-cover blur-sm scale-110"
+              @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime?.coverImage ?? '') } }"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/40" aria-hidden="true" />
+            <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+              <span class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-cyan-500/90 group-hover:bg-cyan-400 text-black flex items-center justify-center shadow-lg transition-colors">
+                <svg class="w-8 h-8 sm:w-10 sm:h-10 ml-1" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </span>
+              <span class="text-base sm:text-lg font-semibold">
+                {{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}
+              </span>
+            </div>
+          </button>
+          <template v-else>
+            <!-- Kodik Player -->
+            <KodikPlayer
+              v-if="videoProvider === 'kodik'"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :preferred-combo="resolvedCombo"
+              :initial-episode="lastEpisode"
+              @available-translations="handleAvailableTranslations"
+            />
+            <!-- AnimeLib Player -->
+            <AnimeLibPlayer
+              v-else-if="videoProvider === 'animelib'"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :preferred-combo="resolvedCombo"
+              :initial-episode="lastEpisode"
+              @available-translations="handleAvailableTranslations"
+            />
+            <!-- HiAnime Player -->
+            <HiAnimePlayer
+              v-else-if="videoProvider === 'hianime'"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :preferred-combo="resolvedCombo"
+              :initial-episode="lastEpisode"
+              @available-translations="handleAvailableTranslations"
+            />
+            <!-- Consumet Player -->
+            <ConsumetPlayer
+              v-else-if="videoProvider === 'consumet'"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :preferred-combo="resolvedCombo"
+              :initial-episode="lastEpisode"
+              :sub-or-dub="'sub'"
+              @available-translations="handleAvailableTranslations"
+            />
+            <!-- Hanime Player -->
+            <HanimePlayer
+              v-else-if="videoProvider === 'hanime'"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :initial-episode="lastEpisode"
+            />
+          </template>
         </div>
       </section>
 
@@ -438,18 +489,23 @@
           <!-- Star Rating -->
           <div class="mb-4">
             <label class="block text-white/60 text-sm mb-2">{{ $t('anime.yourRating') }}</label>
-            <div class="flex flex-wrap gap-1">
+            <div class="flex flex-wrap gap-1" role="radiogroup" :aria-label="$t('anime.yourRating')">
               <button
                 v-for="star in 10"
                 :key="star"
+                type="button"
+                role="radio"
+                :aria-checked="reviewForm.score === star"
+                :aria-label="$t('anime.rateStar', { n: star })"
                 @click="reviewForm.score = star"
                 class="p-0.5 sm:p-1 transition-transform hover:scale-110"
               >
                 <svg
                   class="w-6 h-6 sm:w-8 sm:h-8 transition-colors"
-                  :class="star <= reviewForm.score ? 'text-amber-400' : 'text-white/20'"
+                  :class="star <= reviewForm.score ? 'text-amber-400' : 'text-white/30'"
                   fill="currentColor"
                   viewBox="0 0 20 20"
+                  aria-hidden="true"
                 >
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
@@ -589,7 +645,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
@@ -660,6 +716,14 @@ const synopsisExpanded = ref(false)
 const currentListStatus = ref<string | null>(null)
 const showStatusDropdown = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
+const playerSectionRef = ref<HTMLElement | null>(null)
+const playerActivated = ref(false)
+
+async function activatePlayer() {
+  playerActivated.value = true
+  await nextTick()
+  playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 const relatedAnime = ref<RelatedAnime[]>([])
 const refreshing = ref(false)
 const isHidden = ref(false)
