@@ -120,8 +120,8 @@ groups:
             datasourceUid: PBFA97CFB590B2093
             model:
               expr: |
-                sum(rate(parser_requests_total{status="error"}[30m])) by (provider)
-                / sum(rate(parser_requests_total[30m])) by (provider)
+                sum(rate(parser_requests_total{status="error", provider!~"hianime|consumet"}[30m])) by (provider)
+                / sum(rate(parser_requests_total{provider!~"hianime|consumet"}[30m])) by (provider)
               instant: true
               refId: A
           - refId: B
@@ -155,6 +155,54 @@ groups:
         annotations:
           summary: "High parser failure rate for {{ $labels.provider }}"
           description: "Parser {{ $labels.provider }} has >50% error rate for 30 minutes."
+
+      - uid: parser-failure-rate-flaky
+        title: Parser Failure Rate (Flaky Providers)
+        noDataState: OK
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: |
+                sum(rate(parser_requests_total{status="error", provider=~"hianime|consumet"}[24h])) by (provider)
+                / sum(rate(parser_requests_total{provider=~"hianime|consumet"}[24h])) by (provider)
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.8]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Persistent parser failure rate for {{ $labels.provider }}"
+          description: "Parser {{ $labels.provider }} has >80% error rate over 24h (flaky-provider threshold — hianime/consumet only)."
 
       - uid: high-p95-latency
         title: High P95 Latency
@@ -445,7 +493,7 @@ groups:
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              expr: player_health_up
+              expr: player_health_up{player!~"hianime|consumet"}
               instant: true
               refId: A
           - refId: B
@@ -479,3 +527,49 @@ groups:
         annotations:
           summary: "Player {{ $labels.player }} is DOWN"
           description: "Player {{ $labels.player }} has been unavailable for 30+ minutes. Check external API status."
+
+      - uid: player-unavailable-flaky
+        title: Player Unavailable (Flaky)
+        noDataState: OK
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: player_health_up{player=~"hianime|consumet"}
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Player {{ $labels.player }} has been DOWN for 24h+"
+          description: "Player {{ $labels.player }} (flaky provider) has been unavailable for 24+ hours — upstream likely changed."
