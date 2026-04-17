@@ -21,6 +21,8 @@ type Config struct {
 type GrafanaConfig struct {
 	URL          string
 	PollInterval int // seconds between Grafana alert checks
+	WebhookUser  string
+	WebhookPass  string
 }
 
 type ServerConfig struct {
@@ -33,9 +35,8 @@ func (s ServerConfig) Address() string {
 }
 
 type TelegramConfig struct {
-	BotToken      string
-	AlertsBotID   int64  // The alerts bot's user ID (for identifying Grafana messages)
-	ChatID        int64
+	BotToken string
+	ChatID   int64
 }
 
 type ClaudeConfig struct {
@@ -48,12 +49,7 @@ type ClaudeConfig struct {
 }
 
 func Load() (*Config, error) {
-	// Use dedicated maintenance bot (separate from alerts bot so it can see alert messages)
 	token := getEnv("TELEGRAM_BOT_TOKEN", "")
-	if token == "" {
-		// Fallback to alerts bot token for backward compat
-		token = getEnv("TELEGRAM_ALERTS_BOT_TOKEN", "")
-	}
 	if token == "" {
 		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
 	}
@@ -79,13 +75,14 @@ func Load() (*Config, error) {
 			Port: getEnvInt("SERVER_PORT", 8087),
 		},
 		Telegram: TelegramConfig{
-			BotToken:    token,
-			AlertsBotID: int64(getEnvInt("ALERTS_BOT_ID", 8706597661)),
-			ChatID:      chatID,
+			BotToken: token,
+			ChatID:   chatID,
 		},
 		Grafana: GrafanaConfig{
 			URL:          getEnv("GRAFANA_URL", "http://localhost:3004"),
-			PollInterval: getEnvInt("GRAFANA_POLL_INTERVAL", 60),
+			PollInterval: getEnvInt("GRAFANA_POLL_INTERVAL", 600),
+			WebhookUser:  getEnv("GRAFANA_WEBHOOK_USER", "grafana"),
+			WebhookPass:  getEnv("GRAFANA_WEBHOOK_PASS", ""),
 		},
 		Claude: ClaudeConfig{
 			Path:        getEnv("CLAUDE_PATH", "/root/.local/bin/claude"),

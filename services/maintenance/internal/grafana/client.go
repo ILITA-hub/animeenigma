@@ -38,8 +38,8 @@ type AlertStatus struct {
 	State string `json:"state"` // "active", "suppressed", "resolved"
 }
 
-// criticalAlerts are alert names that map to P0.
-var criticalAlerts = map[string]bool{
+// CriticalAlerts are alert names that map to P0.
+var CriticalAlerts = map[string]bool{
 	"Service Unreachable":  true,
 	"Scheduler Sync Stale": true,
 	"Player Unavailable":   true,
@@ -74,7 +74,7 @@ func (c *Client) GetFiringAlerts() ([]domain.ClassifiedMessage, error) {
 		service := extractService(a.Labels, a.Annotations)
 		severity := "warning"
 		priority := domain.P1
-		if criticalAlerts[alertName] {
+		if CriticalAlerts[alertName] {
 			severity = "critical"
 			priority = domain.P0
 		}
@@ -128,19 +128,5 @@ func (c *Client) GetAlertFingerprints() (map[string]Alert, error) {
 }
 
 func extractService(labels, annotations map[string]string) string {
-	// Check common label fields
-	for _, key := range []string{"service", "job", "provider", "player"} {
-		if v, ok := labels[key]; ok && v != "" {
-			return strings.ToLower(v)
-		}
-	}
-	// Check annotations summary for service names
-	summary := annotations["summary"]
-	serviceNames := []string{"gateway", "auth", "catalog", "streaming", "player", "rooms", "scheduler", "themes", "kodik", "animelib", "hianime", "consumet", "aniwatch"}
-	for _, name := range serviceNames {
-		if strings.Contains(strings.ToLower(summary), name) {
-			return name
-		}
-	}
-	return "unknown"
+	return ExtractService(labels, annotations)
 }

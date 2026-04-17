@@ -2,19 +2,12 @@ apiVersion: 1
 
 contactPoints:
   - orgId: 1
-    name: telegram-alerts
+    name: maintenance-webhook
     receivers:
-      - uid: telegram-alerts
-        type: telegram
+      - uid: maintenance-webhook
+        type: webhook
         settings:
-          bottoken: "BOTTOKEN_PLACEHOLDER"
-          chatid: "CHATID_PLACEHOLDER"
-          parse_mode: HTML
-          message: |
-            {{ if eq .Status "firing" }}🔴{{ else }}🟢{{ end }} <b>{{ .Status | title }}</b>
-            {{ range .Alerts }}
-            <b>{{ .Labels.alertname }}</b>
-            {{ .Annotations.summary }}
-            {{ .Annotations.description }}
-            {{ end }}
-        disableResolveMessage: false
+          url: "http://host-gateway:8087/api/grafana-webhook"
+          httpMethod: "POST"
+          username: "grafana"
+          password: "WEBHOOKPASS_PLACEHOLDER"

@@ -13,7 +13,7 @@ import (
 // ReportSubmitFunc is called when a report arrives via HTTP.
 type ReportSubmitFunc func(report domain.ReportRequest)
 
-func NewRouter(submitReport ReportSubmitFunc) *chi.Mux {
+func NewRouter(submitReport ReportSubmitFunc, submitAlert AlertEventFunc, webhookUser, webhookPass string) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
@@ -27,6 +27,10 @@ func NewRouter(submitReport ReportSubmitFunc) *chi.Mux {
 	})
 
 	r.Handle("/metrics", metrics.Handler())
+
+	if submitAlert != nil && webhookPass != "" {
+		r.Post("/api/grafana-webhook", webhookHandler(submitAlert, webhookUser, webhookPass))
+	}
 
 	r.Post("/api/reports", func(w http.ResponseWriter, r *http.Request) {
 		var report domain.ReportRequest

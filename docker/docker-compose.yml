@@ -210,7 +210,7 @@ services:
       - |
         rm -rf /etc/grafana/provisioning
         cp -a /etc/grafana/provisioning-tpl /etc/grafana/provisioning
-        sed -i "s|CHATID_PLACEHOLDER|$$TELEGRAM_ADMIN_CHAT_ID|g;s|BOTTOKEN_PLACEHOLDER|$$TELEGRAM_ALERTS_BOT_TOKEN|g" /etc/grafana/provisioning/alerting/contactpoints.yml
+        sed -i "s|WEBHOOKPASS_PLACEHOLDER|$$GRAFANA_WEBHOOK_PASS|g" /etc/grafana/provisioning/alerting/contactpoints.yml
         exec /run.sh
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -224,8 +224,9 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
       GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
       GF_UNIFIED_ALERTING_ENABLED: "true"
-      TELEGRAM_ALERTS_BOT_TOKEN: ${TELEGRAM_ALERTS_BOT_TOKEN:-}
-      TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
+      GRAFANA_WEBHOOK_PASS: ${GRAFANA_WEBHOOK_PASS:-}
+    extra_hosts:
+      - "host-gateway:host-gateway"
     ports:
       - "127.0.0.1:3004:3000"
     volumes:

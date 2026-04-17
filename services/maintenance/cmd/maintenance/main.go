@@ -93,12 +93,19 @@ func main() {
 		cfg.Claude.TimeoutSec,
 	)
 
-	// Start HTTP server (health + metrics + report intake)
+	// Start HTTP server (health + metrics + report intake + Grafana webhook)
 	// workChan is initialized here so the router can inject reports; stored on the service struct
 	workChan := make(chan workItem, 10)
-	router := transport.NewRouter(func(report domain.ReportRequest) {
-		workChan <- workItem{reports: []domain.ReportRequest{report}}
-	})
+	router := transport.NewRouter(
+		func(report domain.ReportRequest) {
+			workChan <- workItem{reports: []domain.ReportRequest{report}}
+		},
+		func(payload domain.GrafanaWebhookPayload) {
+			workChan <- workItem{webhookEvents: []domain.GrafanaWebhookPayload{payload}}
+		},
+		cfg.Grafana.WebhookUser,
+		cfg.Grafana.WebhookPass,
+	)
 	server := &http.Server{
 		Addr:    cfg.Server.Address(),
 		Handler: router,
@@ -135,7 +142,6 @@ func main() {
 		disp:        disp,
 		state:       stateMgr,
 		cfg:         cfg,
-		alertsBotID: cfg.Telegram.AlertsBotID,
 		workChan:    workChan,
 	}
 
@@ -162,16 +168,16 @@ type service struct {
 	disp        *dispatcher.Dispatcher
 	state       *state.Manager
 	cfg         *config.Config
-	alertsBotID int64 // The alerts bot's user ID (for classifying Grafana messages)
 	workChan    chan workItem
 	mu          sync.Mutex
 }
 
-// workItem carries either Telegram updates, Grafana alerts, or HTTP reports to the processor.
+// workItem carries either Telegram updates, Grafana alerts, HTTP reports, or webhook events to the processor.
 type workItem struct {
 	telegramUpdates []telegram.Update
 	grafanaAlerts   []domain.ClassifiedMessage
 	reports         []domain.ReportRequest
+	webhookEvents   []domain.GrafanaWebhookPayload
 }
 
 func (s *service) run(ctx context.Context) {
@@ -213,11 +219,15 @@ func (s *service) run(ctx context.Context) {
 		}
 	}()
 
-	// Goroutine 2: Grafana alert poller (checks firing alerts periodically)
+	// Goroutine 2: Grafana reconciliation poller.
+	// Primary alert delivery is now via webhook (POST /api/grafana-webhook).
+	// This poller is a safety net that catches missed webhook deliveries
+	// (e.g. network blip, maintenance restart during burst, Grafana entrypoint failure).
+	// Do NOT remove — without it, a missed webhook silently drops an alert.
 	go func() {
 		interval := time.Duration(s.cfg.Grafana.PollInterval) * time.Second
-		if interval < 30*time.Second {
-			interval = 30 * time.Second
+		if interval < 300*time.Second {
+			interval = 300 * time.Second
 		}
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -229,19 +239,16 @@ func (s *service) run(ctx context.Context) {
 			case <-ticker.C:
 				alerts, err := s.gf.GetFiringAlerts()
 				if err != nil {
-					fmt.Printf("[grafana] poll error: %v\n", err)
+					fmt.Printf("[grafana-reconcile] poll error: %v\n", err)
 					continue
 				}
 
-				// Also check for resolved alerts: compare current with active_alerts
 				s.checkResolvedAlerts(alerts)
 
-				// Only send new (not already tracked, not suppressed) alerts
 				var newAlerts []domain.ClassifiedMessage
 				for _, a := range alerts {
 					if len(a.Alerts) > 0 {
 						key := a.Alerts[0].Name + ":" + a.Alerts[0].Service
-						// Skip suppressed alerts
 						if s.isSuppressed(key) {
 							continue
 						}
@@ -251,7 +258,7 @@ func (s *service) run(ctx context.Context) {
 					}
 				}
 				if len(newAlerts) > 0 {
-					fmt.Printf("[grafana] %d new alerts detected\n", len(newAlerts))
+					fmt.Printf("[grafana-reconcile] %d missed alerts detected\n", len(newAlerts))
 					workChan <- workItem{grafanaAlerts: newAlerts}
 				}
 			}
@@ -268,10 +275,12 @@ func (s *service) run(ctx context.Context) {
 			var telegramQueue []telegram.Update
 			var grafanaAlerts []domain.ClassifiedMessage
 			var reports []domain.ReportRequest
+			var webhookEvents []domain.GrafanaWebhookPayload
 
 			telegramQueue = append(telegramQueue, work.telegramUpdates...)
 			grafanaAlerts = append(grafanaAlerts, work.grafanaAlerts...)
 			reports = append(reports, work.reports...)
+			webhookEvents = append(webhookEvents, work.webhookEvents...)
 
 		drainLoop:
 			for {
@@ -280,12 +289,47 @@ func (s *service) run(ctx context.Context) {
 					telegramQueue = append(telegramQueue, more.telegramUpdates...)
 					grafanaAlerts = append(grafanaAlerts, more.grafanaAlerts...)
 					reports = append(reports, more.reports...)
+					webhookEvents = append(webhookEvents, more.webhookEvents...)
 				default:
 					break drainLoop
 				}
 			}
 
-			// Process Grafana alerts first (lightweight, coalesced)
+			// Process webhook events: convert firing to ClassifiedMessages; resolve directly
+			for _, payload := range webhookEvents {
+				for _, wa := range payload.Alerts {
+					alertName := wa.Labels["alertname"]
+					service := grafana.ExtractService(wa.Labels, wa.Annotations)
+					key := alertName + ":" + service
+
+					if wa.Status == "resolved" || payload.Status == "resolved" {
+						s.resolveAlertFromWebhook(key, wa)
+						continue
+					}
+					// firing: build ClassifiedMessage for processWork pipeline
+					severity := "warning"
+					priority := domain.P1
+					if grafana.CriticalAlerts[alertName] {
+						severity = "critical"
+						priority = domain.P0
+					}
+					grafanaAlerts = append(grafanaAlerts, domain.ClassifiedMessage{
+						Type:     domain.MessageAlertFiring,
+						Priority: priority,
+						Text:     fmt.Sprintf("%s: %s", alertName, wa.Annotations["summary"]),
+						From:     domain.User{Username: "grafana-webhook", IsBot: true},
+						Alerts: []domain.AlertInfo{{
+							Name:        alertName,
+							Summary:     wa.Annotations["summary"],
+							Description: wa.Annotations["description"],
+							Service:     service,
+							Severity:    severity,
+						}},
+					})
+				}
+			}
+
+			// Process Grafana alerts (poller + webhook-converted) — coalesced through processWork
 			if len(grafanaAlerts) > 0 {
 				s.processWork(ctx, workItem{grafanaAlerts: grafanaAlerts})
 			}
@@ -367,6 +411,38 @@ func (s *service) checkResolvedAlerts(currentAlerts []domain.ClassifiedMessage) 
 	s.state.Save()
 }
 
+// resolveAlertFromWebhook handles a resolve event pushed by the Grafana webhook.
+// Invariant: state.RemoveActiveAlert MUST happen before tg.SendMessage so the
+// reconciliation poller cannot re-emit the same resolve.
+func (s *service) resolveAlertFromWebhook(key string, wa domain.GrafanaWebhookAlert) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	active := s.state.GetActiveAlert(key)
+	if active == nil {
+		fmt.Printf("[webhook] resolve for unknown alert %s — skipping\n", key)
+		return
+	}
+
+	fmt.Printf("[webhook] Alert resolved: %s\n", key)
+	s.state.UpdateIssue(active.IssueID, func(issue *domain.Issue) {
+		issue.Status = domain.StatusResolved
+		issue.ResolvedAt = time.Now().UTC().Format(time.RFC3339)
+		issue.Resolution = "Alert resolved (webhook notification from Grafana)"
+	})
+	s.state.RemoveActiveAlert(key)
+
+	duration := "unknown"
+	if firstSeen, err := time.Parse(time.RFC3339, active.FirstSeen); err == nil {
+		duration = time.Since(firstSeen).Truncate(time.Second).String()
+	}
+	s.tg.SendMessage(fmt.Sprintf(
+		"<b>✅ Alert Resolved</b>\n<b>Alert:</b> %s (%s)\n<b>Duration:</b> %s\n<b>Issue:</b> %s",
+		active.AlertUID, active.Service, duration, active.IssueID,
+	))
+	s.state.Save()
+}
+
 func (s *service) processWork(ctx context.Context, work workItem) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -374,7 +450,7 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 	// Classify Telegram updates (user messages, button clicks)
 	var batch domain.ClassifiedBatch
 	if len(work.telegramUpdates) > 0 {
-		batch = classifier.ClassifyBatch(work.telegramUpdates, s.alertsBotID, s.cfg.Admins)
+		batch = classifier.ClassifyBatch(work.telegramUpdates, s.cfg.Admins)
 	}
 
 	// Add Grafana alerts to the relevant queue
@@ -424,6 +500,18 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 			svc := msg.Alerts[0].Service
 			if s.state.WasRecentlyFixed(svc, 10*time.Minute) {
 				continue
+			}
+		}
+
+		// For webhook-sourced alerts (MessageID == 0), post 🔴 Firing notification
+		if msg.Type == domain.MessageAlertFiring && msg.MessageID == 0 && len(msg.Alerts) > 0 {
+			alert := msg.Alerts[0]
+			fireHTML := fmt.Sprintf("<b>🔴 Firing</b>\n<b>%s</b>\n%s\n%s",
+				escTelegram(alert.Name), escTelegram(alert.Summary), escTelegram(alert.Description))
+			if sentID, err := s.tg.SendMessage(fireHTML); err == nil {
+				msg.MessageID = sentID
+			} else {
+				fmt.Printf("[webhook] failed to send 🔴 Firing message: %v\n", err)
 			}
 		}
 
