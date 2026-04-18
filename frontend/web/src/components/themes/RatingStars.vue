@@ -7,7 +7,7 @@
       :class="[
         n <= displayScore
           ? 'bg-cyan-500/30 text-cyan-400 border border-cyan-500/50'
-          : 'bg-white/5 text-white/30 border border-white/10 hover:bg-white/10 hover:text-white/50',
+          : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 hover:text-white/80',
         disabled ? 'cursor-default' : 'cursor-pointer'
       ]"
       :disabled="disabled"
@@ -19,7 +19,7 @@
     </button>
     <button
       v-if="modelValue && !disabled"
-      class="ml-1 p-1 text-white/30 hover:text-red-400 transition-colors"
+      class="ml-1 p-1 text-white/60 hover:text-red-400 transition-colors"
       title="Remove rating"
       @click="$emit('remove')"
     >

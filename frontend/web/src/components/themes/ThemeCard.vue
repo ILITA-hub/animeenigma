@@ -46,9 +46,9 @@
                 {{ theme.slug || theme.theme_type }}
               </span>
             </div>
-            <p v-if="theme.song_title" class="text-white/50 text-xs mt-1 truncate">
+            <p v-if="theme.song_title" class="text-white/80 text-xs mt-1 truncate">
               {{ theme.song_title }}
-              <span v-if="theme.artist_name" class="text-white/60"> - {{ theme.artist_name }}</span>
+              <span v-if="theme.artist_name" class="text-white/70"> - {{ theme.artist_name }}</span>
             </p>
           </div>
 
@@ -62,7 +62,7 @@
                 {{ theme.avg_score > 0 ? theme.avg_score.toFixed(1) : '-' }}
               </span>
             </div>
-            <span class="text-white/60 text-xs">{{ theme.vote_count }} votes</span>
+            <span class="text-white/80 text-xs">{{ theme.vote_count }} votes</span>
           </div>
         </div>
       </div>
@@ -100,7 +100,7 @@
 
         <!-- User Rating -->
         <div v-if="isAuthenticated" class="pt-1">
-          <p class="text-white/50 text-xs mb-2">Your rating:</p>
+          <p class="text-white/70 text-xs mb-2">Your rating:</p>
           <RatingStars
             :model-value="theme.user_score"
             @update:model-value="$emit('rate', $event)"
