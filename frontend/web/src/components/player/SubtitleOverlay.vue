@@ -26,12 +26,18 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import type { SubtitleCue } from '@/utils/subtitle-parser'
 import { parseASS, parseSRT, parseVTT } from '@/utils/subtitle-parser'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   videoElement: HTMLVideoElement | null
   subtitleUrl: string | null
   format: 'ass' | 'srt' | 'vtt' | null
   visible: boolean
-}>()
+  fullscreenContainer?: HTMLElement | null
+  /** Timing offset in seconds. Positive = show subtitles later, negative = earlier. */
+  offset?: number
+}>(), {
+  fullscreenContainer: null,
+  offset: 0,
+})
 
 const emit = defineEmits<{
   (e: 'loading', loading: boolean): void
@@ -62,9 +68,16 @@ function onFullscreenChange() {
     const container = el.parentElement
     if (container) {
       container.requestFullscreen().catch(() => {
-        // If redirect fails (no user activation), keep video fullscreen
-        // but subtitles won't be visible in native-player fullscreen mode.
+        // Redirect failed (no user activation) — use the prop fallback
+        // so the Teleport can still attach subtitles over the fullscreen video.
+        if (props.fullscreenContainer) {
+          fullscreenEl.value = props.fullscreenContainer
+          setTimeout(updateBaseFontSize, 100)
+        }
       })
+    } else if (props.fullscreenContainer) {
+      fullscreenEl.value = props.fullscreenContainer
+      setTimeout(updateBaseFontSize, 100)
     }
     return
   }
@@ -77,10 +90,12 @@ function onFullscreenChange() {
   setTimeout(updateBaseFontSize, 100)
 }
 
-// Find active cues for current time, sorted by layer
+// Find active cues for current time, sorted by layer.
+// Apply timing offset: positive offset = show subtitles later (shift the
+// visibility window forward in time), so we subtract it from currentTime.
 const activeCues = computed(() => {
   if (!cues.value.length) return []
-  const t = currentTime.value
+  const t = currentTime.value - props.offset
   return cues.value
     .filter(c => t >= c.start && t <= c.end)
     .sort((a, b) => (a.style?.layer || 0) - (b.style?.layer || 0))

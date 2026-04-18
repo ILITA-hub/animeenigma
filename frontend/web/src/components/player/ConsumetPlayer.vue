@@ -79,6 +79,8 @@
             :subtitle-url="activeSubtitleUrl"
             :format="activeSubtitleFormat"
             :visible="showSubtitleOverlay"
+            :fullscreen-container="playerContainer"
+            :offset="jpSubtitleOffset"
             @loading="(v: boolean) => loadingSubOverlay = v"
             @error="(msg: string) => jimakuError = msg"
           />
@@ -298,6 +300,54 @@
           >
             {{ showSubtitleOverlay ? 'Hide Subs' : 'Show Subs' }}
           </button>
+
+          <!-- Subtitle timing offset (only for JP subs) -->
+          <div
+            v-if="activeJimakuSub"
+            class="mt-3 pt-3 border-t border-white/10"
+          >
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-white/60 text-xs">Timing offset</span>
+              <span class="text-[10px] text-white/30" title="Hotkeys: Z / X">Z / X</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button
+                @click="adjustJpSubtitleOffset(-0.5)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="-0.5s"
+              >−0.5</button>
+              <button
+                @click="adjustJpSubtitleOffset(-0.1)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="-0.1s"
+              >−0.1</button>
+              <input
+                type="number"
+                step="0.1"
+                :value="jpSubtitleOffset.toFixed(1)"
+                @change="onJpSubtitleOffsetInput(($event.target as HTMLInputElement).value)"
+                class="flex-1 min-w-0 px-1 py-1 rounded bg-white/5 text-white text-xs text-center border border-transparent focus:border-white/20 focus:outline-none"
+                aria-label="JP subtitle offset in seconds"
+              />
+              <span class="text-[10px] text-white/40">s</span>
+              <button
+                @click="adjustJpSubtitleOffset(0.1)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="+0.1s"
+              >+0.1</button>
+              <button
+                @click="adjustJpSubtitleOffset(0.5)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="+0.5s"
+              >+0.5</button>
+              <button
+                @click="resetJpSubtitleOffset"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="Reset to 0"
+                aria-label="Reset offset"
+              >⟲</button>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -438,6 +488,73 @@ const activeSubtitleFormat = ref<'ass' | 'srt' | 'vtt' | null>(null)
 const showSubtitleOverlay = ref(true)
 const loadingSubOverlay = ref(false)
 
+// JP subtitle timing offset (seconds). Stored per (animeId, subtitle team)
+// in localStorage so corrections stick across episodes and sessions for the
+// same release group, but reset when the user switches to a different group.
+const jpSubtitleOffset = ref(0)
+const activeJimakuSub = ref<JimakuSubtitle | null>(null)
+
+/** Extract a stable "team signature" from a Jimaku filename.
+ *  Prefers a leading "[Team Name]" tag (e.g. "[Erai-raws] Frieren - 01.ass"),
+ *  falls back to the first alphanumeric token, then to "default". */
+function extractSubtitleTeam(fileName: string): string {
+  const tag = fileName.match(/^\s*\[([^\]]+)\]/)
+  if (tag) return tag[1].trim().toLowerCase()
+  const token = fileName.match(/^\s*([A-Za-z0-9_-]+)/)
+  if (token) return token[1].toLowerCase()
+  return 'default'
+}
+
+function jpOffsetStorageKey(sub: JimakuSubtitle): string {
+  return `jp_sub_offset:${props.animeId}:${extractSubtitleTeam(sub.file_name)}`
+}
+
+function loadJpSubtitleOffset(sub: JimakuSubtitle): number {
+  try {
+    const raw = localStorage.getItem(jpOffsetStorageKey(sub))
+    if (raw === null) return 0
+    const n = parseFloat(raw)
+    return Number.isFinite(n) ? n : 0
+  } catch {
+    return 0
+  }
+}
+
+function saveJpSubtitleOffset() {
+  if (!activeJimakuSub.value) return
+  try {
+    if (jpSubtitleOffset.value === 0) {
+      localStorage.removeItem(jpOffsetStorageKey(activeJimakuSub.value))
+    } else {
+      localStorage.setItem(
+        jpOffsetStorageKey(activeJimakuSub.value),
+        jpSubtitleOffset.value.toFixed(2),
+      )
+    }
+  } catch {
+    // localStorage unavailable — silently keep in-memory only
+  }
+}
+
+function adjustJpSubtitleOffset(delta: number) {
+  // Clamp to a sane range (±30s) and round to 2 decimals to avoid FP drift.
+  const next = Math.max(-30, Math.min(30, jpSubtitleOffset.value + delta))
+  jpSubtitleOffset.value = Math.round(next * 100) / 100
+  saveJpSubtitleOffset()
+}
+
+function resetJpSubtitleOffset() {
+  jpSubtitleOffset.value = 0
+  saveJpSubtitleOffset()
+}
+
+function onJpSubtitleOffsetInput(value: string) {
+  const n = parseFloat(value)
+  if (!Number.isFinite(n)) return
+  jpSubtitleOffset.value = Math.max(-30, Math.min(30, Math.round(n * 100) / 100))
+  saveJpSubtitleOffset()
+}
+
 // Computed: get the active video element for subtitle sync
 const activeVideoElement = computed<HTMLVideoElement | null>(() => {
   if (playerType.value === 'videojs' && vjsPlayerReady.value && vjsPlayer) {
@@ -549,6 +666,8 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
   jimakuError.value = null
   activeSubtitleUrl.value = null
   activeSubtitleFormat.value = null
+  activeJimakuSub.value = null
+  jpSubtitleOffset.value = 0
   await fetchStream()
 }
 
@@ -700,18 +819,25 @@ const activateStreamSubtitle = (sub: { url: string; lang: string }) => {
   activeSubtitleUrl.value = sub.url
   activeSubtitleFormat.value = 'vtt' // Consumet stream subs are VTT
   showSubtitleOverlay.value = true
+  // Stream subs don't use the JP offset — clear it to avoid a stale shift.
+  activeJimakuSub.value = null
+  jpSubtitleOffset.value = 0
 }
 
 const deactivateSubtitle = () => {
   activeSubtitleUrl.value = ''
   activeSubtitleFormat.value = null
   showSubtitleOverlay.value = false
+  activeJimakuSub.value = null
+  jpSubtitleOffset.value = 0
 }
 
 const activateJimakuSubtitle = (sub: JimakuSubtitle) => {
   activeSubtitleUrl.value = sub.url
   activeSubtitleFormat.value = (sub.format as 'ass' | 'srt' | 'vtt') || 'ass'
   showSubtitleOverlay.value = true
+  activeJimakuSub.value = sub
+  jpSubtitleOffset.value = loadJpSubtitleOffset(sub)
 }
 
 const initPlayer = (url: string, referer: string) => {
@@ -983,6 +1109,20 @@ const handleKeyDown = (e: KeyboardEvent) => {
         vjsPlayer.currentTime((vjsPlayer.currentTime() || 0) + 5)
       } else if (nativeVideoRef.value) {
         nativeVideoRef.value.currentTime += 5
+      }
+      break
+    case 'KeyZ':
+      // JP subtitle offset −0.1s (only when JP subs active)
+      if (activeJimakuSub.value) {
+        e.preventDefault()
+        adjustJpSubtitleOffset(-0.1)
+      }
+      break
+    case 'KeyX':
+      // JP subtitle offset +0.1s (only when JP subs active)
+      if (activeJimakuSub.value) {
+        e.preventDefault()
+        adjustJpSubtitleOffset(0.1)
       }
       break
   }
