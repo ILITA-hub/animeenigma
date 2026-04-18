@@ -161,7 +161,7 @@ export const animeApi = {
   getPopular: () => apiClient.get('/anime/popular'),
   getRecent: () => apiClient.get('/anime/recent'),
   getSchedule: () => apiClient.get('/anime/schedule'),
-  getOngoing: (params?: { sort?: string; order?: 'asc' | 'desc' }) =>
+  getOngoing: (params?: { sort?: string; order?: 'asc' | 'desc'; recent?: boolean }) =>
     apiClient.get('/anime/ongoing', { params }),
   getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'announced', page_size: limit } }),
   getTop: (limit = 20) => apiClient.get('/anime/trending', { params: { page_size: limit } }),

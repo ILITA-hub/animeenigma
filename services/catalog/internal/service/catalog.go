@@ -938,8 +938,8 @@ func (s *CatalogService) SyncCalendar(ctx context.Context) (imported, updated, f
 }
 
 // GetOngoingAnime gets all ongoing anime
-func (s *CatalogService) GetOngoingAnime(ctx context.Context, page, pageSize int, sort, order string) ([]*domain.Anime, int64, error) {
-	animes, total, err := s.animeRepo.GetOngoingAnime(ctx, page, pageSize, sort, order)
+func (s *CatalogService) GetOngoingAnime(ctx context.Context, page, pageSize int, sort, order string, recentOnly bool) ([]*domain.Anime, int64, error) {
+	animes, total, err := s.animeRepo.GetOngoingAnime(ctx, page, pageSize, sort, order, recentOnly)
 	if err != nil {
 		return nil, 0, err
 	}

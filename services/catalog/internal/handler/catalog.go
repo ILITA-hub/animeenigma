@@ -335,8 +335,9 @@ func (h *CatalogHandler) GetOngoingAnime(w http.ResponseWriter, r *http.Request)
 	pageSize := pagination.ParseIntParam(r.URL.Query().Get("page_size"), 50)
 	sort := r.URL.Query().Get("sort")
 	order := r.URL.Query().Get("order")
+	recentOnly := r.URL.Query().Get("recent") == "true"
 
-	animes, total, err := h.catalogService.GetOngoingAnime(r.Context(), page, pageSize, sort, order)
+	animes, total, err := h.catalogService.GetOngoingAnime(r.Context(), page, pageSize, sort, order, recentOnly)
 	if err != nil {
 		httputil.Error(w, err)
 		return

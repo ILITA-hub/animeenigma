@@ -211,10 +211,15 @@ func (r *AnimeRepository) GetSchedule(ctx context.Context) ([]*domain.Anime, err
 	return animes, nil
 }
 
-func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize int, sort, order string) ([]*domain.Anime, int64, error) {
+func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize int, sort, order string, recentOnly bool) ([]*domain.Anime, int64, error) {
 	var total int64
 	query := r.db.WithContext(ctx).Model(&domain.Anime{}).
 		Where("status = ? AND (hidden = ? OR hidden IS NULL)", "ongoing", false)
+
+	if recentOnly {
+		cutoff := time.Now().AddDate(-1, 0, 0)
+		query = query.Where("aired_on IS NULL OR aired_on >= ?", cutoff)
+	}
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count ongoing anime: %w", err)
