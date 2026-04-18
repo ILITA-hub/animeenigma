@@ -8,68 +8,12 @@
         </h1>
 
         <!-- Search Input -->
-        <div class="relative mb-4" ref="searchContainerRef">
-          <Input
+        <div class="mb-4 relative z-[60]">
+          <SearchAutocomplete
             v-model="searchQuery"
-            type="search"
-            :placeholder="$t('search.placeholder')"
-            size="lg"
-            clearable
-            role="combobox"
-            aria-autocomplete="list"
-            aria-controls="browse-search-listbox"
-            :aria-expanded="showLiveResults && liveResults.length > 0"
-            :aria-activedescendant="highlightedIndex >= 0 ? `browse-search-opt-${highlightedIndex}` : undefined"
-            @input="handleSearchInput"
-            @keydown.enter.prevent="onEnter"
-            @keydown.down.prevent="highlightNext"
-            @keydown.up.prevent="highlightPrev"
-            @keydown.escape="closeLiveResults"
-          >
-            <template #prefix>
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </template>
-          </Input>
-
-          <!-- Live Search Results Dropdown -->
-          <Transition name="dropdown">
-            <div
-              v-if="showLiveResults && liveResults.length > 0"
-              id="browse-search-listbox"
-              role="listbox"
-              class="absolute top-full left-0 right-0 mt-2 glass-elevated rounded-xl max-h-96 overflow-y-auto z-20"
-            >
-              <router-link
-                v-for="(result, index) in liveResults"
-                :id="`browse-search-opt-${index}`"
-                :key="result.id"
-                :to="`/anime/${result.id}`"
-                role="option"
-                :aria-selected="highlightedIndex === index"
-                class="flex items-center gap-3 p-3 hover:bg-white/10 transition-colors"
-                :class="{ 'bg-white/10': highlightedIndex === index }"
-                @click="closeLiveResults"
-                @mouseenter="highlightedIndex = index"
-              >
-                <img
-                  :src="result.coverImage"
-                  :alt="result.title"
-                  class="w-12 h-16 rounded-lg object-cover"
-                />
-                <div class="flex-1 min-w-0">
-                  <p class="text-white font-medium truncate">{{ result.title }}</p>
-                  <p class="text-white/60 text-sm">
-                    {{ result.releaseYear }}{{ result.releaseYear && result.episodes ? ' • ' : '' }}{{ result.episodes ? result.episodes + ' ' + $t('anime.episodesShort') : '' }}
-                  </p>
-                </div>
-                <Badge v-if="result.rating" variant="rating" size="sm">
-                  {{ result.rating.toFixed(1) }}
-                </Badge>
-              </router-link>
-            </div>
-          </Transition>
+            listbox-id="browse-search"
+            @submit="handleSearch"
+          />
         </div>
 
         <!-- Filters -->
@@ -239,16 +183,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { onClickOutside, useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Input, Badge, Button, Select, GenreFilterPopup, PaginationBar } from '@/components/ui'
+import { Button, Select, GenreFilterPopup, PaginationBar, SearchAutocomplete } from '@/components/ui'
 import { AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { animeApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useI18n } from 'vue-i18n'
-import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
-import { getImageUrl } from '@/composables/useImageProxy'
+import { getLocalizedGenre } from '@/utils/title'
 import { useSiteRatings } from '@/composables/useSiteRatings'
 import { useContextMenu } from '@/composables/useContextMenu'
 
@@ -290,10 +232,6 @@ const selectedYear = ref('')
 const selectedStatus = ref('')
 const sortBy = ref('popularity')
 const currentPage = ref(1)
-const showLiveResults = ref(false)
-const liveResults = ref<Array<{ id: string; title: string; name?: string; nameRu?: string; nameJp?: string; coverImage: string; releaseYear?: number; episodes?: number; rating?: number }>>([])
-const highlightedIndex = ref(-1)
-const searchContainerRef = ref<HTMLElement | null>(null)
 const recentSearches = ref<string[]>([])
 const loadingShikimori = ref(false)
 
@@ -343,82 +281,7 @@ const clearRecentSearches = () => {
   localStorage.removeItem('recentSearches')
 }
 
-// Debounced live search with AbortController to cancel stale requests
-let searchAbortController: AbortController | null = null
-
-const debouncedLiveSearch = useDebounceFn(async (query: string) => {
-  if (query.length < 2) {
-    liveResults.value = []
-    showLiveResults.value = false
-    highlightedIndex.value = -1
-    return
-  }
-
-  // Cancel previous in-flight search request
-  if (searchAbortController) {
-    searchAbortController.abort()
-  }
-  searchAbortController = new AbortController()
-
-  try {
-    const response = await animeApi.search(query, undefined, 5, searchAbortController.signal)
-    const data = response.data?.data || response.data
-    const list = Array.isArray(data) ? data : []
-    liveResults.value = list.map((a: Record<string, unknown>) => ({
-      id: a.id as string,
-      title: getLocalizedTitle(a.name as string, a.name_ru as string, a.name_jp as string),
-      name: a.name as string | undefined,
-      nameRu: a.name_ru as string | undefined,
-      nameJp: a.name_jp as string | undefined,
-      coverImage: getImageUrl(a.poster_url as string | undefined),
-      releaseYear: a.year as number | undefined,
-      episodes: a.episodes_count as number | undefined,
-      rating: a.score as number | undefined,
-    }))
-    showLiveResults.value = true
-    highlightedIndex.value = -1
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') return
-    console.error('Live search error:', err)
-  }
-}, 300)
-
-const closeLiveResults = () => {
-  showLiveResults.value = false
-  highlightedIndex.value = -1
-}
-
-const highlightNext = () => {
-  if (liveResults.value.length === 0) return
-  highlightedIndex.value = (highlightedIndex.value + 1) % liveResults.value.length
-}
-
-const highlightPrev = () => {
-  if (liveResults.value.length === 0) return
-  highlightedIndex.value = highlightedIndex.value <= 0
-    ? liveResults.value.length - 1
-    : highlightedIndex.value - 1
-}
-
-const onEnter = () => {
-  if (highlightedIndex.value >= 0 && liveResults.value[highlightedIndex.value]) {
-    router.push(`/anime/${liveResults.value[highlightedIndex.value].id}`)
-    closeLiveResults()
-    return
-  }
-  handleSearch()
-}
-
-onClickOutside(searchContainerRef, closeLiveResults)
-
-const handleSearchInput = () => {
-  highlightedIndex.value = -1
-  debouncedLiveSearch(searchQuery.value)
-}
-
 const handleSearch = async () => {
-  showLiveResults.value = false
-  highlightedIndex.value = -1
   currentPage.value = 1
 
   if (searchQuery.value.trim()) {
