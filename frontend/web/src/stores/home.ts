@@ -53,7 +53,7 @@ export const useHomeStore = defineStore('home', () => {
           loadingAnnounced.value = false
         }),
 
-        animeApi.getOngoing().then(response => {
+        animeApi.getOngoing({ sort: 'score', order: 'desc' }).then(response => {
           const animes = (response.data?.data || []).slice(0, 20)
           ongoingAnime.value = animes
           if (animes.length > 0) {

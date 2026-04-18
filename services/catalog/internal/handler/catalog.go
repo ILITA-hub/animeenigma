@@ -333,8 +333,10 @@ func (h *CatalogHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) GetOngoingAnime(w http.ResponseWriter, r *http.Request) {
 	page := pagination.ParseIntParam(r.URL.Query().Get("page"), 1)
 	pageSize := pagination.ParseIntParam(r.URL.Query().Get("page_size"), 50)
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
 
-	animes, total, err := h.catalogService.GetOngoingAnime(r.Context(), page, pageSize)
+	animes, total, err := h.catalogService.GetOngoingAnime(r.Context(), page, pageSize, sort, order)
 	if err != nil {
 		httputil.Error(w, err)
 		return

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
@@ -210,7 +211,7 @@ func (r *AnimeRepository) GetSchedule(ctx context.Context) ([]*domain.Anime, err
 	return animes, nil
 }
 
-func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize int) ([]*domain.Anime, int64, error) {
+func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize int, sort, order string) ([]*domain.Anime, int64, error) {
 	var total int64
 	query := r.db.WithContext(ctx).Model(&domain.Anime{}).
 		Where("status = ? AND (hidden = ? OR hidden IS NULL)", "ongoing", false)
@@ -224,8 +225,17 @@ func (r *AnimeRepository) GetOngoingAnime(ctx context.Context, page, pageSize in
 		offset = 0
 	}
 
+	orderClause := "COALESCE(next_episode_at, '9999-12-31') ASC, score DESC"
+	if sort != "" && sort != "next_episode_at" {
+		dir := "DESC"
+		if strings.ToLower(order) == "asc" {
+			dir = "ASC"
+		}
+		orderClause = fmt.Sprintf("%s %s NULLS LAST", mapSortColumn(sort), dir)
+	}
+
 	var animes []*domain.Anime
-	err := query.Order("COALESCE(next_episode_at, '9999-12-31') ASC, score DESC").
+	err := query.Order(orderClause).
 		Limit(pageSize).Offset(offset).Find(&animes).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("get ongoing anime: %w", err)
