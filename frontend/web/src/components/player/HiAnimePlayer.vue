@@ -1321,9 +1321,10 @@ onBeforeUnmount(() => {
 
 .accent-bg { background-color: var(--player-accent); }
 .accent-bg-hover:hover { background-color: color-mix(in srgb, var(--player-accent), black 15%); }
-.accent-text { color: var(--player-accent); }
+/* UA-036: lightened text mix keeps contrast ≥4.5:1 over accent-bg-muted */
+.accent-text { color: color-mix(in srgb, var(--player-accent), white 40%); }
 .accent-border { border-color: var(--player-accent); }
-.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.2); }
+.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.28); }
 .accent-ring { --tw-ring-color: rgba(var(--player-accent-rgb), 0.5); }
 
 .custom-scrollbar::-webkit-scrollbar {

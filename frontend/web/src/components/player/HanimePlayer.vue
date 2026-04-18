@@ -459,9 +459,10 @@ onBeforeUnmount(() => {
 }
 
 .accent-bg { background-color: var(--player-accent); }
-.accent-text { color: var(--player-accent); }
+/* UA-036: lightened text mix keeps contrast ≥4.5:1 over accent-bg-muted */
+.accent-text { color: color-mix(in srgb, var(--player-accent), white 40%); }
 .accent-border { border-color: var(--player-accent); }
-.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.2); }
+.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.28); }
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
