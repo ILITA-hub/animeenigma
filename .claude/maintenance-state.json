@@ -4,16 +4,7 @@
   "session_started": "2026-04-17T00:27:42Z",
   "reactions_supported": true,
   "bot_user_id": 8609426278,
-  "active_alerts": {
-    "Parser Failure Rate:hianime": {
-      "alert_uid": "Parser Failure Rate",
-      "service": "hianime",
-      "first_seen": "2026-04-16T23:57:37Z",
-      "last_seen": "2026-04-16T23:57:37Z",
-      "issue_id": "AUTO-078",
-      "status": "resolved"
-    }
-  },
+  "active_alerts": {},
   "cooldowns": {
     "alert_refire:Parser Failure Rate:consumet": "2026-04-07T09:13:01+02:00",
     "alert_refire:Parser Failure Rate:hianime": "2026-04-08T10:24:52+02:00",

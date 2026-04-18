@@ -294,13 +294,11 @@
       "source": "admin_request",
       "category": "degraded_upstream",
       "priority": "P2",
-      "status": "resolved",
+      "status": "monitoring",
       "title": "HiAnime MegaCloud extractor intermittent 500s; Consumet OK",
       "reporter": "@tNeymik",
       "telegram_message_id": 67,
-      "actions": null,
-      "resolved_at": "2026-04-17T01:17:49Z",
-      "resolution": "Stale. Superseded by relaxed HiAnime alert thresholds (parser-failure-rate-flaky, player-unavailable-flaky at 80%/24h)."
+      "actions": null
     },
     {
       "id": "AUTO-021",
@@ -500,7 +498,7 @@
         {
           "action": "docker network connect --alias catalog --alias animeenigma-catalog animeenigma-network animeenigma-catalog",
           "result": "success",
-          "details": "Re-registered both DNS aliases, exit 0, < 1s network blip"
+          "details": "Re-registered both DNS aliases, exit 0, \u003c 1s network blip"
         },
         {
           "action": "curl http://localhost:8000/status/health",
@@ -516,13 +514,11 @@
       "source": "admin_request",
       "category": "feature_request",
       "priority": "P1",
-      "status": "wont_fix",
+      "status": "escalated",
       "title": "Feature request: dedicated player for adult content",
       "reporter": "@NANDIorg_9",
       "telegram_message_id": 123,
-      "actions": [],
-      "resolved_at": "2026-04-17T01:17:49Z",
-      "resolution": "Feature request, not actionable as an alert. Track in product backlog if revived."
+      "actions": []
     },
     {
       "id": "AUTO-031",
@@ -581,13 +577,12 @@
       "source": "error_report",
       "category": "player_error",
       "priority": "P2",
-      "status": "wont_fix",
+      "status": "escalated",
       "title": "Hanime player: MEDIA_ERR_SRC_NOT_SUPPORTED on HLS streams",
       "reporter": "player_service",
       "telegram_message_id": 133,
       "actions": null,
-      "resolution": "Stale. Hanime adult-content player is feature work, not an alerting concern.",
-      "resolved_at": "2026-04-17T01:17:49Z"
+      "resolution": "Pending fix expired after 1 hour"
     },
     {
       "id": "AUTO-034",
@@ -668,13 +663,11 @@
       "source": "admin_request",
       "category": "misconfiguration",
       "priority": "P1",
-      "status": "resolved",
+      "status": "diagnosed",
       "title": "Frontend bundle has hardcoded localhost:8000 API URL",
       "reporter": "@tNeymik",
       "telegram_message_id": 146,
-      "actions": null,
-      "resolved_at": "2026-04-17T01:17:49Z",
-      "resolution": "Verified fixed: grep -l \"localhost:8000\" frontend/web/dist returns no matches."
+      "actions": null
     },
     {
       "id": "AUTO-038",
@@ -682,13 +675,11 @@
       "source": "admin_request",
       "category": "outage",
       "priority": "P1",
-      "status": "resolved",
+      "status": "pending_fix",
       "title": "Frontend API calls targeting localhost:8000 (hardcoded in bundle)",
       "reporter": "@tNeymik",
       "telegram_message_id": 147,
-      "actions": [],
-      "resolved_at": "2026-04-17T01:17:49Z",
-      "resolution": "Verified fixed with AUTO-037 — bundle no longer contains the hardcoded URL."
+      "actions": []
     },
     {
       "id": "AUTO-039",
@@ -707,7 +698,7 @@
           "details": "Image built successfully as animeenigma-web-img:latest with correct /api base URL baked into Vite bundle"
         },
         {
-          "action": "docker stop animeenigma-web && docker rm animeenigma-web",
+          "action": "docker stop animeenigma-web \u0026\u0026 docker rm animeenigma-web",
           "result": "success",
           "details": "Old broken container removed"
         },
@@ -722,7 +713,7 @@
           "details": "All 33 JS asset files return 0 matches — no localhost:8000 hardcoded URLs"
         },
         {
-          "action": "curl http://localhost:3003/ && curl http://localhost:3003/health",
+          "action": "curl http://localhost:3003/ \u0026\u0026 curl http://localhost:3003/health",
           "result": "success",
           "details": "Both return HTTP 200 — nginx serving correctly"
         }
@@ -792,13 +783,12 @@
       "source": "admin_request",
       "category": "bug",
       "priority": "P2",
-      "status": "resolved",
+      "status": "escalated",
       "title": "Maintenance bot spams repeated alert fire/resolve cycles",
       "reporter": "@tNeymik",
       "telegram_message_id": 664,
       "actions": null,
-      "resolution": "Fixed by webhook unification shipped 2026-04-17 (commit 6ec9892).",
-      "resolved_at": "2026-04-17T01:17:49Z"
+      "resolution": "Pending fix expired after 1 hour"
     },
     {
       "id": "AUTO-045",
@@ -1052,13 +1042,12 @@
       "source": "admin_request",
       "category": "configuration",
       "priority": "P1",
-      "status": "resolved",
+      "status": "wont_fix",
       "title": "Suppress Parser Failure Rate:hianime alerts (AUTO-058/059)",
       "reporter": "@tNeymik",
       "telegram_message_id": 1869,
       "actions": null,
-      "resolution": "Superseded by parser-failure-rate-flaky rule (80% error rate, 24h window) for hianime+consumet.",
-      "resolved_at": "2026-04-17T01:17:49Z"
+      "resolution": "Dismissed by @tNeymik"
     },
     {
       "id": "AUTO-061",
@@ -1066,13 +1055,12 @@
       "source": "admin_request",
       "category": "config",
       "priority": "P2",
-      "status": "resolved",
+      "status": "wont_fix",
       "title": "info_only alerts pollute Telegram chat",
       "reporter": "@tNeymik",
       "telegram_message_id": 1871,
       "actions": [],
-      "resolution": "Superseded by maintenance-webhook unification + relaxed HiAnime/Consumet thresholds — noise volume reduced.",
-      "resolved_at": "2026-04-17T01:17:49Z"
+      "resolution": "Dismissed by @tNeymik"
     },
     {
       "id": "AUTO-062",
@@ -1314,6 +1302,7 @@
     {
       "id": "AUTO-078",
       "created_at": "2026-04-16T23:57:37Z",
+      "resolved_at": "2026-04-17T01:22:42Z",
       "source": "grafana_alert",
       "category": "transient",
       "priority": "P1",
@@ -1322,7 +1311,8 @@
       "reporter": "grafana",
       "telegram_message_id": 0,
       "affected_service": "hianime",
-      "actions": null
+      "actions": null,
+      "resolution": "Alert resolved (no longer firing in Grafana)"
     },
     {
       "id": "AUTO-079",
