@@ -32,6 +32,7 @@
     "episodeCount": "{count}話"
   },
   "anime": {
+    "detailsTitle": "アニメ詳細",
     "watch": "視聴する",
     "watchNow": "視聴する",
     "continueEp": "第{n}話から続ける",

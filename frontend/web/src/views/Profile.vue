@@ -409,9 +409,9 @@
                         </span>
                       </div>
                     </div>
-                    <h3 class="mt-2 text-sm font-medium text-white line-clamp-2 group-hover:text-cyan-400 transition-colors">
+                    <h2 class="mt-2 text-sm font-medium text-white line-clamp-2 group-hover:text-cyan-400 transition-colors">
                       {{ animeTitle(anime) }}
-                    </h3>
+                    </h2>
                   </router-link>
                   <div class="flex items-center gap-1 mt-1">
                     <p class="text-xs text-white/50">
@@ -491,7 +491,7 @@
             <div class="space-y-6">
               <!-- Import -->
               <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.import.title') }}</h3>
+                <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.import.title') }}</h2>
                 <div class="space-y-4">
                   <div>
                     <label class="block text-white/60 text-sm mb-2">MyAnimeList</label>
@@ -598,7 +598,7 @@
 
               <!-- Export -->
               <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.export.title') }}</h3>
+                <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.export.title') }}</h2>
                 <p class="text-white/60 text-sm mb-4">{{ $t('profile.export.description') }}</p>
                 <Button
                   variant="primary"
@@ -621,7 +621,7 @@
 
               <!-- Public Profile -->
               <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.publicProfile') }}</h3>
+                <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.publicProfile') }}</h2>
                 <div class="space-y-4">
                   <!-- Public ID -->
                   <div>
@@ -717,7 +717,7 @@
 
               <!-- API Key -->
               <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.apiKey') }}</h3>
+                <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.apiKey') }}</h2>
                 <p class="text-white/60 text-sm mb-4">{{ $t('profile.settings.apiKeyDescription') }}</p>
 
                 <!-- Loading state -->
@@ -783,7 +783,7 @@
 
               <!-- Account -->
               <div class="glass-card p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.account') }}</h3>
+                <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.account') }}</h2>
                 <div class="space-y-4">
                   <Button variant="ghost" full-width class="justify-start">
                     {{ $t('profile.settings.changePassword') }}

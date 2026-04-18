@@ -32,6 +32,7 @@
     "episodeCount": "{count} ep."
   },
   "anime": {
+    "detailsTitle": "Anime Details",
     "watch": "Watch",
     "watchNow": "Watch",
     "continueEp": "Continue ep. {n}",

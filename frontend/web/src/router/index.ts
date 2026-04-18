@@ -7,7 +7,7 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: 'home',
     component: () => import('@/views/Home.vue'),
-    meta: { title: 'Home' }
+    meta: { titleKey: 'nav.home' }
   },
   {
     path: '/auth',
@@ -19,7 +19,7 @@ const routes: RouteRecordRaw[] = [
     path: '/browse',
     name: 'browse',
     component: () => import('@/views/Browse.vue'),
-    meta: { title: 'Browse Anime' }
+    meta: { titleKey: 'nav.catalog' }
   },
   {
     path: '/search',
@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
     path: '/anime/:id',
     name: 'anime',
     component: () => import('@/views/Anime.vue'),
-    meta: { title: 'Anime Details' }
+    meta: { titleKey: 'anime.detailsTitle' }
   },
   {
     path: '/profile',
@@ -55,19 +55,19 @@ const routes: RouteRecordRaw[] = [
     path: '/themes',
     name: 'themes',
     component: () => import('@/views/Themes.vue'),
-    meta: { title: 'Openings & Endings' }
+    meta: { titleKey: 'themes.title' }
   },
   {
     path: '/game',
     name: 'game',
     component: () => import('@/views/Game.vue'),
-    meta: { title: 'Game Rooms' }
+    meta: { titleKey: 'rooms.title' }
   },
   {
     path: '/game/:roomId',
     name: 'game-room',
     component: () => import('@/views/Game.vue'),
-    meta: { title: 'Game Room' }
+    meta: { titleKey: 'rooms.title' }
   },
   {
     path: '/user/:publicId',
@@ -85,7 +85,7 @@ const routes: RouteRecordRaw[] = [
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),
-    meta: { title: 'Not Found' }
+    meta: { titleKey: 'notFound.title' }
   }
 ]
 
