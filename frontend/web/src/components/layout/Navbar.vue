@@ -66,7 +66,7 @@
                 <Transition name="dropdown">
                   <div
                     v-if="searchResults.length > 0"
-                    class="absolute top-full left-0 mt-2 glass-elevated rounded-xl overflow-hidden z-50"
+                    class="absolute top-full left-0 mt-2 rounded-xl overflow-hidden z-50 bg-gray-950/95 backdrop-blur-xl border border-white/10 shadow-2xl"
                     style="min-width: 320px"
                   >
                     <router-link
@@ -127,7 +127,7 @@
             <Transition name="dropdown">
               <div
                 v-if="langDropdownOpen"
-                class="absolute right-0 mt-2 py-2 w-32 glass-elevated rounded-xl"
+                class="absolute right-0 mt-2 py-2 w-32 rounded-xl bg-gray-950/95 backdrop-blur-xl border border-white/10 shadow-2xl"
               >
                 <button
                   v-for="lang in languages"

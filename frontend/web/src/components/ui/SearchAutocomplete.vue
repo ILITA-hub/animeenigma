@@ -29,7 +29,7 @@
         v-if="results.length > 0"
         :id="listboxId"
         role="listbox"
-        class="absolute top-full left-0 right-0 mt-2 glass-elevated rounded-xl overflow-hidden z-50 max-h-96 overflow-y-auto"
+        class="absolute top-full left-0 right-0 mt-2 rounded-xl overflow-hidden z-50 max-h-96 overflow-y-auto bg-gray-950/95 backdrop-blur-xl border border-white/10 shadow-2xl"
       >
         <router-link
           v-for="(result, index) in results"
