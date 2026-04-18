@@ -36,6 +36,7 @@
     "watchNow": "Watch",
     "continueEp": "Continue ep. {n}",
     "rateStar": "Rate {n} out of 10",
+    "episodesShort": "eps",
     "addToList": "Add to List",
     "removeFromList": "Remove from List",
     "episodes": "Episodes",

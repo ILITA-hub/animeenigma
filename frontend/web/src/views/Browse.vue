@@ -8,15 +8,23 @@
         </h1>
 
         <!-- Search Input -->
-        <div class="relative mb-4">
+        <div class="relative mb-4" ref="searchContainerRef">
           <Input
             v-model="searchQuery"
             type="search"
             :placeholder="$t('search.placeholder')"
             size="lg"
             clearable
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="browse-search-listbox"
+            :aria-expanded="showLiveResults && liveResults.length > 0"
+            :aria-activedescendant="highlightedIndex >= 0 ? `browse-search-opt-${highlightedIndex}` : undefined"
             @input="handleSearchInput"
-            @keyup.enter="handleSearch"
+            @keydown.enter.prevent="onEnter"
+            @keydown.down.prevent="highlightNext"
+            @keydown.up.prevent="highlightPrev"
+            @keydown.escape="closeLiveResults"
           >
             <template #prefix>
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -29,14 +37,21 @@
           <Transition name="dropdown">
             <div
               v-if="showLiveResults && liveResults.length > 0"
+              id="browse-search-listbox"
+              role="listbox"
               class="absolute top-full left-0 right-0 mt-2 glass-elevated rounded-xl max-h-96 overflow-y-auto z-20"
             >
               <router-link
-                v-for="result in liveResults"
+                v-for="(result, index) in liveResults"
+                :id="`browse-search-opt-${index}`"
                 :key="result.id"
                 :to="`/anime/${result.id}`"
+                role="option"
+                :aria-selected="highlightedIndex === index"
                 class="flex items-center gap-3 p-3 hover:bg-white/10 transition-colors"
-                @click="showLiveResults = false"
+                :class="{ 'bg-white/10': highlightedIndex === index }"
+                @click="closeLiveResults"
+                @mouseenter="highlightedIndex = index"
               >
                 <img
                   :src="result.coverImage"
@@ -45,8 +60,8 @@
                 />
                 <div class="flex-1 min-w-0">
                   <p class="text-white font-medium truncate">{{ result.title }}</p>
-                  <p class="text-white/50 text-sm">
-                    {{ result.releaseYear }} • {{ result.episodes }} eps
+                  <p class="text-white/60 text-sm">
+                    {{ result.releaseYear }}{{ result.releaseYear && result.episodes ? ' • ' : '' }}{{ result.episodes ? result.episodes + ' ' + $t('anime.episodesShort') : '' }}
                   </p>
                 </div>
                 <Badge v-if="result.rating" variant="rating" size="sm">
@@ -224,7 +239,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useDebounceFn } from '@vueuse/core'
+import { onClickOutside, useDebounceFn } from '@vueuse/core'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Input, Badge, Button, Select, GenreFilterPopup, PaginationBar } from '@/components/ui'
@@ -277,6 +292,8 @@ const sortBy = ref('popularity')
 const currentPage = ref(1)
 const showLiveResults = ref(false)
 const liveResults = ref<Array<{ id: string; title: string; name?: string; nameRu?: string; nameJp?: string; coverImage: string; releaseYear?: number; episodes?: number; rating?: number }>>([])
+const highlightedIndex = ref(-1)
+const searchContainerRef = ref<HTMLElement | null>(null)
 const recentSearches = ref<string[]>([])
 const loadingShikimori = ref(false)
 
@@ -333,6 +350,7 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
   if (query.length < 2) {
     liveResults.value = []
     showLiveResults.value = false
+    highlightedIndex.value = -1
     return
   }
 
@@ -358,18 +376,49 @@ const debouncedLiveSearch = useDebounceFn(async (query: string) => {
       rating: a.score as number | undefined,
     }))
     showLiveResults.value = true
+    highlightedIndex.value = -1
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return
     console.error('Live search error:', err)
   }
 }, 300)
 
+const closeLiveResults = () => {
+  showLiveResults.value = false
+  highlightedIndex.value = -1
+}
+
+const highlightNext = () => {
+  if (liveResults.value.length === 0) return
+  highlightedIndex.value = (highlightedIndex.value + 1) % liveResults.value.length
+}
+
+const highlightPrev = () => {
+  if (liveResults.value.length === 0) return
+  highlightedIndex.value = highlightedIndex.value <= 0
+    ? liveResults.value.length - 1
+    : highlightedIndex.value - 1
+}
+
+const onEnter = () => {
+  if (highlightedIndex.value >= 0 && liveResults.value[highlightedIndex.value]) {
+    router.push(`/anime/${liveResults.value[highlightedIndex.value].id}`)
+    closeLiveResults()
+    return
+  }
+  handleSearch()
+}
+
+onClickOutside(searchContainerRef, closeLiveResults)
+
 const handleSearchInput = () => {
+  highlightedIndex.value = -1
   debouncedLiveSearch(searchQuery.value)
 }
 
 const handleSearch = async () => {
   showLiveResults.value = false
+  highlightedIndex.value = -1
   currentPage.value = 1
 
   if (searchQuery.value.trim()) {

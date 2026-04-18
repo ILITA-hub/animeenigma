@@ -36,6 +36,7 @@
     "watchNow": "視聴する",
     "continueEp": "第{n}話から続ける",
     "rateStar": "{n}/10で評価",
+    "episodesShort": "話",
     "addToList": "リストに追加",
     "removeFromList": "リストから削除",
     "episodes": "エピソード",

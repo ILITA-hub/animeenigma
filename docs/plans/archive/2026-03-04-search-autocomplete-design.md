@@ -1,5 +1,7 @@
 # Search Autocomplete Implementation Plan
 
+> **Status:** SHIPPED 2026-03-04 (Navbar). Home + Browse parity + keyboard-nav ARIA completed 2026-04-18. Archived.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Add a global autocomplete search bar to the navbar (desktop + mobile) and merge the `/search` route into `/browse`.

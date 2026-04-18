@@ -4,14 +4,24 @@
     <h1 class="sr-only">AnimeEnigma</h1>
     <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
       <div class="flex items-center gap-3">
-        <div class="relative flex-1">
+        <div class="relative flex-1" ref="searchContainerRef">
           <input
+            ref="searchInputRef"
             v-model="searchQuery"
             type="text"
             :placeholder="$t('search.placeholder')"
             :aria-label="$t('search.placeholder')"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="home-search-listbox"
+            :aria-expanded="searchResults.length > 0"
+            :aria-activedescendant="highlightedIndex >= 0 ? `home-search-opt-${highlightedIndex}` : undefined"
             class="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-5 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all"
-            @keyup.enter="goToSearch"
+            @input="onSearchInput"
+            @keydown.enter.prevent="goToSearch"
+            @keydown.down.prevent="highlightNext"
+            @keydown.up.prevent="highlightPrev"
+            @keydown.escape="closeDropdown"
           />
           <button
             @click="goToSearch"
@@ -24,6 +34,50 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </button>
+          <!-- Autocomplete Dropdown -->
+          <Transition name="dropdown">
+            <div
+              v-if="searchResults.length > 0"
+              id="home-search-listbox"
+              role="listbox"
+              class="absolute top-full left-0 right-0 mt-2 glass-elevated rounded-xl overflow-hidden z-50"
+            >
+              <router-link
+                v-for="(result, index) in searchResults"
+                :id="`home-search-opt-${index}`"
+                :key="result.id"
+                :to="`/anime/${result.id}`"
+                role="option"
+                :aria-selected="highlightedIndex === index"
+                class="flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 transition-colors"
+                :class="{ 'bg-white/10': highlightedIndex === index }"
+                @click="closeDropdown"
+                @mouseenter="highlightedIndex = index"
+              >
+                <img
+                  :src="result.coverImage"
+                  :alt="result.title"
+                  class="w-10 h-14 rounded-md object-cover flex-shrink-0"
+                />
+                <div class="flex-1 min-w-0">
+                  <p class="text-white text-sm font-medium truncate">{{ result.title }}</p>
+                  <p class="text-white/60 text-xs">
+                    {{ result.releaseYear || '' }}{{ result.releaseYear && result.totalEpisodes ? ' \u00b7 ' : '' }}{{ result.totalEpisodes ? result.totalEpisodes + ' ' + $t('anime.episodesShort') : '' }}
+                  </p>
+                </div>
+                <span v-if="result.rating" class="text-cyan-400 text-xs font-medium flex-shrink-0">
+                  {{ result.rating.toFixed(1) }}
+                </span>
+              </router-link>
+              <router-link
+                :to="{ path: '/browse', query: { q: searchQuery } }"
+                class="block px-3 py-2.5 text-center text-sm text-cyan-400 hover:bg-white/10 transition-colors border-t border-white/10"
+                @click="closeDropdown"
+              >
+                {{ $t('search.viewAll') }}
+              </router-link>
+            </div>
+          </Transition>
         </div>
         <router-link
           to="/schedule"
@@ -278,8 +332,11 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
+import { onClickOutside, useDebounceFn } from '@vueuse/core'
 import { getLocalizedTitle } from '@/utils/title'
+import { getImageUrl } from '@/composables/useImageProxy'
 import { useHomeStore } from '@/stores/home'
+import { animeApi } from '@/api/client'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
 
@@ -288,6 +345,18 @@ const { t } = useI18n()
 const homeStore = useHomeStore()
 
 const searchQuery = ref('')
+const searchResults = ref<Array<{
+  id: string
+  title: string
+  coverImage: string
+  releaseYear?: number
+  totalEpisodes?: number
+  rating?: number
+}>>([])
+const highlightedIndex = ref(-1)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+const searchContainerRef = ref<HTMLElement | null>(null)
+
 const {
   announcedAnime,
   ongoingAnime,
@@ -299,11 +368,66 @@ const {
   loadingTop,
 } = storeToRefs(homeStore)
 
+const debouncedSearch = useDebounceFn(async (query: string) => {
+  if (query.length < 2) {
+    searchResults.value = []
+    highlightedIndex.value = -1
+    return
+  }
+  try {
+    const response = await animeApi.search(query, undefined, 5)
+    const data = response.data?.data || response.data
+    const list = Array.isArray(data) ? data : []
+    searchResults.value = list.map((a: Record<string, unknown>) => ({
+      id: a.id as string,
+      title: getLocalizedTitle(a.name as string, a.name_ru as string, a.name_jp as string),
+      coverImage: getImageUrl(a.poster_url as string | undefined),
+      releaseYear: a.year as number | undefined,
+      totalEpisodes: a.episodes_count as number | undefined,
+      rating: a.score as number | undefined,
+    }))
+    highlightedIndex.value = -1
+  } catch {
+    searchResults.value = []
+    highlightedIndex.value = -1
+  }
+}, 300)
+
+const onSearchInput = () => {
+  highlightedIndex.value = -1
+  debouncedSearch(searchQuery.value)
+}
+
+const closeDropdown = () => {
+  searchResults.value = []
+  highlightedIndex.value = -1
+}
+
+const highlightNext = () => {
+  if (searchResults.value.length === 0) return
+  highlightedIndex.value = (highlightedIndex.value + 1) % searchResults.value.length
+}
+
+const highlightPrev = () => {
+  if (searchResults.value.length === 0) return
+  highlightedIndex.value = highlightedIndex.value <= 0
+    ? searchResults.value.length - 1
+    : highlightedIndex.value - 1
+}
+
 const goToSearch = () => {
+  if (highlightedIndex.value >= 0 && searchResults.value[highlightedIndex.value]) {
+    router.push(`/anime/${searchResults.value[highlightedIndex.value].id}`)
+    closeDropdown()
+    return
+  }
   if (searchQuery.value.trim()) {
     router.push({ path: '/browse', query: { q: searchQuery.value.trim() } })
+    closeDropdown()
   }
 }
+
+onClickOutside(searchContainerRef, closeDropdown)
 
 const getRankClass = (index: number) => {
   if (index === 0) return 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-black'
