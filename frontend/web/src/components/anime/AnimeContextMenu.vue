@@ -76,7 +76,7 @@
         </p>
       </div>
 
-      <!-- Go to page -->
+      <!-- Go to page / Open in new tab -->
       <div class="border-t border-white/10 pt-2 mt-1">
         <button
           class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
@@ -86,6 +86,15 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
           </svg>
           {{ $t('contextMenu.goToPage') }}
+        </button>
+        <button
+          class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+          @click="openInNewTab"
+        >
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7v7m0-7L10 14m-4-4H4a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-2" />
+          </svg>
+          {{ $t('contextMenu.openInNewTab') }}
         </button>
       </div>
     </div>
@@ -189,6 +198,12 @@ async function removeFromList() {
 function goToPage() {
   if (!props.anime) return
   router.push(`/anime/${props.anime.id}`)
+  emit('update:visible', false)
+}
+
+function openInNewTab() {
+  if (!props.anime) return
+  window.open(`/anime/${props.anime.id}`, '_blank', 'noopener,noreferrer')
   emit('update:visible', false)
 }
 </script>

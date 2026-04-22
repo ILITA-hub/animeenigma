@@ -358,7 +358,8 @@
                   v-for="anime in filteredWatchlist"
                   :key="anime.anime_id"
                   class="relative group"
-                  @contextmenu="openProfileContextMenu($event, anime)"
+                  @mouseenter="(e) => startProfileHover(e, anime)"
+                  @mouseleave="clearProfileHover"
                 >
                   <router-link :to="`/anime/${anime.anime_id}`" class="block">
                     <div class="aspect-[2/3] rounded-xl overflow-hidden bg-surface relative">
@@ -408,6 +409,21 @@
                           {{ statusLabels[anime.status] }}
                         </span>
                       </div>
+
+                      <!-- Kebab affordance: hover/focus only, opens custom context menu -->
+                      <button
+                        type="button"
+                        class="absolute bottom-2 right-2 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-black/80"
+                        :aria-label="$t('contextMenu.openMenu')"
+                        aria-haspopup="menu"
+                        @click.prevent.stop="openProfileMenuFromKebab($event, anime)"
+                      >
+                        <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                          <circle cx="10" cy="4" r="1.5" />
+                          <circle cx="10" cy="10" r="1.5" />
+                          <circle cx="10" cy="16" r="1.5" />
+                        </svg>
+                      </button>
                     </div>
                     <h2 class="mt-2 text-sm font-medium text-white line-clamp-2 group-hover:text-cyan-400 transition-colors">
                       {{ animeTitle(anime) }}
@@ -932,11 +948,15 @@ const watchlistStore = useWatchlistStore()
 
 const siteOrigin = window.location.origin
 
-// Context menu for grid view
-const { contextMenu: profileContextMenu, open: openProfileCtx } = useContextMenu()
+// Context menu for grid view (hover dwell + kebab affordance)
+const { contextMenu: profileContextMenu, openAtElement: openProfileCtxAt } = useContextMenu()
 
-function openProfileContextMenu(event: MouseEvent, entry: WatchlistEntry) {
-  openProfileCtx(event, {
+let profileHoverTimer: number | null = null
+let profileHoverEl: HTMLElement | null = null
+let profileHoverEntry: WatchlistEntry | null = null
+
+function openProfileMenuAt(el: HTMLElement, entry: WatchlistEntry) {
+  openProfileCtxAt(el, {
     id: entry.anime_id,
     title: animeTitle(entry),
     name: entry.anime?.name,
@@ -946,6 +966,35 @@ function openProfileContextMenu(event: MouseEvent, entry: WatchlistEntry) {
     episodes: entry.anime?.episodes_count,
   }, { listStatus: entry.status })
 }
+
+function startProfileHover(event: MouseEvent, entry: WatchlistEntry) {
+  clearProfileHover()
+  profileHoverEl = event.currentTarget as HTMLElement
+  profileHoverEntry = entry
+  profileHoverTimer = window.setTimeout(() => {
+    if (profileHoverEl && profileHoverEntry) {
+      openProfileMenuAt(profileHoverEl, profileHoverEntry)
+    }
+  }, 400)
+}
+
+function clearProfileHover() {
+  if (profileHoverTimer !== null) {
+    clearTimeout(profileHoverTimer)
+    profileHoverTimer = null
+  }
+  profileHoverEl = null
+  profileHoverEntry = null
+}
+
+function openProfileMenuFromKebab(event: MouseEvent, entry: WatchlistEntry) {
+  clearProfileHover()
+  // Anchor to the card wrapper, not the kebab button, for consistent positioning.
+  const card = (event.currentTarget as HTMLElement).closest('.relative.group') as HTMLElement | null
+  if (card) openProfileMenuAt(card, entry)
+}
+
+onUnmounted(clearProfileHover)
 
 // Helpers for nested anime data from Preload
 const animeTitle = (entry: WatchlistEntry): string =>

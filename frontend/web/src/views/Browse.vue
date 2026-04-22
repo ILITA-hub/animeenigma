@@ -151,7 +151,7 @@
           :anime="anime"
           :list-status="getListStatus(anime.id)"
           :site-rating="siteRatings[String(anime.id)]"
-          @contextmenu="openContextMenu($event, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
+          @open-menu="(el: HTMLElement) => openContextMenuAt(el, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
           @touchstart="onTouchstart($event, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
           @touchmove="onTouchmove"
           @touchend="onTouchend"
@@ -224,7 +224,7 @@ const getListStatus = (animeId: string | number): string | null => {
 const { ratings: siteRatings, fetchRatings: fetchSiteRatings } = useSiteRatings()
 
 // Context menu
-const { contextMenu, open: openContextMenu, onTouchstart, onTouchmove, onTouchend } = useContextMenu()
+const { contextMenu, openAtElement: openContextMenuAt, onTouchstart, onTouchmove, onTouchend } = useContextMenu()
 
 const searchQuery = ref('')
 const selectedGenre = ref('')

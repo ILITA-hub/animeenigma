@@ -604,7 +604,7 @@
             <div>
               <AnimeCardNew
                 :anime="(item as RelatedAnime)"
-                @contextmenu="openContextMenu($event, (item as RelatedAnime))"
+                @open-menu="(el: HTMLElement) => openContextMenuAt(el, (item as RelatedAnime))"
               />
               <p v-if="(item as RelatedAnime).relationLabel" class="text-xs text-white/40 mt-1 text-center">
                 {{ (item as RelatedAnime).relationLabel }}
@@ -709,7 +709,7 @@ const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const { anime, loading, error, fetchAnime } = useAnime()
-const { contextMenu, open: openContextMenu } = useContextMenu()
+const { contextMenu, openAtElement: openContextMenuAt } = useContextMenu()
 
 let loadGeneration = 0
 const synopsisExpanded = ref(false)

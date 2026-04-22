@@ -480,6 +480,8 @@
     }
   },
   "contextMenu": {
-    "goToPage": "Go to anime page"
+    "goToPage": "Go to anime page",
+    "openInNewTab": "Open in new tab",
+    "openMenu": "Open menu"
   }
 }

@@ -50,6 +50,22 @@ export function useContextMenu() {
 
   function close() {
     contextMenu.visible = false
+    window.removeEventListener('scroll', close, { capture: true } as EventListenerOptions)
+  }
+
+  function openAtElement(
+    el: HTMLElement,
+    anime: ContextMenuAnime,
+    opts?: { listStatus?: string | null; siteRating?: { average_score: number; total_reviews: number } | null }
+  ) {
+    const r = el.getBoundingClientRect()
+    contextMenu.x = r.right
+    contextMenu.y = r.top
+    contextMenu.anime = anime
+    contextMenu.listStatus = opts?.listStatus ?? null
+    contextMenu.siteRating = opts?.siteRating ?? null
+    contextMenu.visible = true
+    window.addEventListener('scroll', close, { passive: true, once: true, capture: true })
   }
 
   // Long-press helpers for mobile
@@ -85,5 +101,5 @@ export function useContextMenu() {
     }
   }
 
-  return { contextMenu, open, close, onTouchstart, onTouchmove, onTouchend }
+  return { contextMenu, open, openAtElement, close, onTouchstart, onTouchmove, onTouchend }
 }

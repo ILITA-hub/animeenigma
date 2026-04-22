@@ -1,10 +1,18 @@
 <template>
-  <router-link
-    :to="`/anime/${anime.id}`"
-    class="group block"
-    @contextmenu="emit('contextmenu', $event)"
+  <div
+    ref="cardEl"
+    class="group block relative"
+    @mouseenter="startHoverTimer"
+    @mouseleave="clearHoverTimer"
   >
-    <div class="card-hover rounded-xl overflow-hidden bg-white/5 border border-white/10">
+    <!-- SPA navigation overlay (full-card click target, sits behind kebab) -->
+    <router-link
+      :to="`/anime/${anime.id}`"
+      class="absolute inset-0 z-0 rounded-xl"
+      :aria-label="localizedTitle"
+    />
+
+    <div class="card-hover rounded-xl overflow-hidden bg-white/5 border border-white/10 pointer-events-none">
       <!-- Poster Container -->
       <div class="relative aspect-[2/3] overflow-hidden bg-surface">
         <!-- Placeholder (visible until image loads) -->
@@ -22,6 +30,21 @@
 
         <!-- Overlay Gradient -->
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+        <!-- Kebab affordance: hover/focus only, opens custom context menu -->
+        <button
+          type="button"
+          class="absolute bottom-2 right-2 z-10 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-black/80 pointer-events-auto"
+          :aria-label="$t('contextMenu.openMenu')"
+          aria-haspopup="menu"
+          @click.prevent.stop="openMenuNow"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+            <circle cx="10" cy="4" r="1.5" />
+            <circle cx="10" cy="10" r="1.5" />
+            <circle cx="10" cy="16" r="1.5" />
+          </svg>
+        </button>
 
         <!-- Top Badges -->
         <div class="absolute top-2 left-2 right-2 flex justify-between items-start">
@@ -95,11 +118,11 @@
         </div>
       </div>
     </div>
-  </router-link>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '@/components/ui/Badge.vue'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
@@ -130,10 +153,32 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  contextmenu: [event: MouseEvent]
+  openMenu: [el: HTMLElement]
 }>()
 
 const imageLoaded = ref(false)
+const cardEl = ref<HTMLElement | null>(null)
+let hoverTimer: number | null = null
+
+function startHoverTimer() {
+  clearHoverTimer()
+  hoverTimer = window.setTimeout(emitOpen, 400)
+}
+function clearHoverTimer() {
+  if (hoverTimer !== null) {
+    clearTimeout(hoverTimer)
+    hoverTimer = null
+  }
+}
+function openMenuNow() {
+  clearHoverTimer()
+  emitOpen()
+}
+function emitOpen() {
+  if (cardEl.value) emit('openMenu', cardEl.value)
+}
+
+onUnmounted(clearHoverTimer)
 
 const localizedTitle = computed(() => {
   if (props.anime.name || props.anime.nameRu || props.anime.nameJp) {
