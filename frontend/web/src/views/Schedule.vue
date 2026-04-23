@@ -22,8 +22,15 @@
               v-for="anime in day.animes"
               :key="anime.id"
               :to="`/anime/${anime.id}`"
-              class="flex gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+              class="relative flex gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors group"
+              @touchstart="(e) => onScheduleTouchstart(e, anime)"
+              @touchmove="onScheduleTouchmove"
+              @touchend="onScheduleTouchend"
             >
+              <AnimeKebab
+                :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
+                @open="(el) => openScheduleMenuAt(el, anime)"
+              />
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
                 :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
@@ -49,6 +56,16 @@
         <p class="text-white/40 text-sm mt-2">{{ $t('schedule.hint') }}</p>
       </div>
     </div>
+
+    <AnimeContextMenu
+      :visible="contextMenu.visible"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :anime="contextMenu.anime"
+      :list-status="contextMenu.listStatus"
+      :site-rating="contextMenu.siteRating"
+      @update:visible="contextMenu.visible = $event"
+    />
   </div>
 </template>
 
@@ -57,6 +74,8 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { getLocalizedTitle } from '@/utils/title'
+import { useContextMenu } from '@/composables/useContextMenu'
+import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 
 interface ScheduleAnime {
   id: string
@@ -71,6 +90,35 @@ interface ScheduleAnime {
 const { t, locale } = useI18n()
 const { fetchSchedule, loading } = useAnime()
 const schedule = ref<ScheduleAnime[]>([])
+
+const {
+  contextMenu,
+  openAtElement: openScheduleCtx,
+  onTouchstart: onScheduleCtxTouchstart,
+  onTouchmove: onScheduleTouchmove,
+  onTouchend: onScheduleTouchend,
+} = useContextMenu()
+
+function ctxAnimeFromSchedule(anime: ScheduleAnime) {
+  return {
+    id: anime.id,
+    title: getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) || 'Anime',
+    name: anime.name,
+    nameRu: anime.name_ru,
+    nameJp: anime.name_jp,
+    coverImage: anime.poster_url || '',
+  }
+}
+
+function openScheduleMenuAt(el: HTMLElement, anime: ScheduleAnime) {
+  // Schedule has no watchlist or rating data wired — pass null for both.
+  // The menu still lets the user set a status; pre-selection is just unavailable.
+  openScheduleCtx(el, ctxAnimeFromSchedule(anime), { listStatus: null, siteRating: null })
+}
+
+function onScheduleTouchstart(event: TouchEvent, anime: ScheduleAnime) {
+  onScheduleCtxTouchstart(event, ctxAnimeFromSchedule(anime), { listStatus: null, siteRating: null })
+}
 
 const dayNames = computed(() => [t('schedule.days.sunday'), t('schedule.days.monday'), t('schedule.days.tuesday'), t('schedule.days.wednesday'), t('schedule.days.thursday'), t('schedule.days.friday'), t('schedule.days.saturday')])
 

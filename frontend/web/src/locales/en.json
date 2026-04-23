@@ -482,6 +482,7 @@
   "contextMenu": {
     "goToPage": "Go to anime page",
     "openInNewTab": "Open in new tab",
-    "openMenu": "Open menu"
+    "openMenu": "Open menu",
+    "markNextWatched": "Mark episode {n} watched"
   }
 }

@@ -482,6 +482,7 @@
   "contextMenu": {
     "goToPage": "アニメページへ",
     "openInNewTab": "新しいタブで開く",
-    "openMenu": "メニューを開く"
+    "openMenu": "メニューを開く",
+    "markNextWatched": "第{n}話を視聴済みにする"
   }
 }

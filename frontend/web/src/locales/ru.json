@@ -482,6 +482,7 @@
   "contextMenu": {
     "goToPage": "Перейти на страницу",
     "openInNewTab": "Открыть в новой вкладке",
-    "openMenu": "Открыть меню"
+    "openMenu": "Открыть меню",
+    "markNextWatched": "Отметить серию {n} просмотренной"
   }
 }

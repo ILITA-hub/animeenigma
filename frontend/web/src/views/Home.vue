@@ -67,8 +67,15 @@
               v-for="anime in ongoingAnime"
               :key="anime.id"
               :to="`/anime/${anime.id}`"
-              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+              class="relative flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+              @touchstart="(e) => onHomeTouchstart(e, anime)"
+              @touchmove="onHomeTouchmove"
+              @touchend="onHomeTouchend"
             >
+              <AnimeKebab
+                :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
+                @open="(el) => openHomeMenuAt(el, anime)"
+              />
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
                 :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
@@ -143,8 +150,15 @@
               v-for="(anime, index) in topAnime"
               :key="anime.id"
               :to="`/anime/${anime.id}`"
-              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+              class="relative flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+              @touchstart="(e) => onHomeTouchstart(e, anime)"
+              @touchmove="onHomeTouchmove"
+              @touchend="onHomeTouchend"
             >
+              <AnimeKebab
+                :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
+                @open="(el) => openHomeMenuAt(el, anime)"
+              />
               <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
                    :class="getRankClass(index)">
                 {{ index + 1 }}
@@ -221,8 +235,15 @@
               v-for="anime in announcedAnime"
               :key="anime.id"
               :to="`/anime/${anime.id}`"
-              class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+              class="relative flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+              @touchstart="(e) => onHomeTouchstart(e, anime)"
+              @touchmove="onHomeTouchmove"
+              @touchend="onHomeTouchend"
             >
+              <AnimeKebab
+                :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
+                @open="(el) => openHomeMenuAt(el, anime)"
+              />
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
                 :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
@@ -257,6 +278,19 @@
       </div>
     </div>
   </div>
+
+  <!-- Context menu for the three home columns -->
+  <AnimeContextMenu
+    :visible="contextMenu.visible"
+    :x="contextMenu.x"
+    :y="contextMenu.y"
+    :anime="contextMenu.anime"
+    :list-status="contextMenu.listStatus"
+    :site-rating="contextMenu.siteRating"
+    @update:visible="contextMenu.visible = $event"
+    @status-change="watchlistStore.fetchStatuses(true)"
+    @remove-from-list="watchlistStore.fetchStatuses(true)"
+  />
 </template>
 
 <script setup lang="ts">
@@ -266,13 +300,29 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { getLocalizedTitle } from '@/utils/title'
 import { useHomeStore } from '@/stores/home'
+import { useWatchlistStore } from '@/stores/watchlist'
+import { useContextMenu } from '@/composables/useContextMenu'
 import { SearchAutocomplete } from '@/components/ui'
+import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
+
+interface HomeAnime {
+  id: string
+  name?: string
+  name_ru?: string
+  name_jp?: string
+  poster_url?: string
+  score?: number
+  episodes_count?: number
+  year?: number
+  status?: string
+}
 
 const router = useRouter()
 const { t } = useI18n()
 const homeStore = useHomeStore()
+const watchlistStore = useWatchlistStore()
 
 const searchQuery = ref('')
 
@@ -286,6 +336,44 @@ const {
   loadingOngoing,
   loadingTop,
 } = storeToRefs(homeStore)
+
+const {
+  contextMenu,
+  openAtElement: openHomeCtx,
+  onTouchstart: onHomeCtxTouchstart,
+  onTouchmove: onHomeTouchmove,
+  onTouchend: onHomeTouchend,
+} = useContextMenu()
+
+function ctxAnimeFromHome(anime: HomeAnime) {
+  return {
+    id: anime.id,
+    title: getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) || 'Anime',
+    name: anime.name,
+    nameRu: anime.name_ru,
+    nameJp: anime.name_jp,
+    coverImage: anime.poster_url || '',
+    rating: anime.score,
+    releaseYear: anime.year,
+    episodes: anime.episodes_count,
+    status: anime.status,
+  }
+}
+
+function homeOpts(anime: HomeAnime) {
+  return {
+    listStatus: watchlistStore.getStatus(anime.id),
+    siteRating: siteRatings.value[anime.id] ?? null,
+  }
+}
+
+function openHomeMenuAt(el: HTMLElement, anime: HomeAnime) {
+  openHomeCtx(el, ctxAnimeFromHome(anime), homeOpts(anime))
+}
+
+function onHomeTouchstart(event: TouchEvent, anime: HomeAnime) {
+  onHomeCtxTouchstart(event, ctxAnimeFromHome(anime), homeOpts(anime))
+}
 
 const goToSearch = () => {
   if (searchQuery.value.trim()) {
@@ -355,6 +443,9 @@ const formatUpdatedAt = (dateStr: string) => {
 
 onMounted(() => {
   homeStore.fetchAll()
+  // Best-effort load of watchlist statuses so the kebab menu can pre-select
+  // the user's status. Anonymous users are no-op'd by the store.
+  watchlistStore.fetchStatuses()
 })
 </script>
 

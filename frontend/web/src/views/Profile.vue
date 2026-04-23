@@ -358,8 +358,9 @@
                   v-for="anime in filteredWatchlist"
                   :key="anime.anime_id"
                   class="relative group"
-                  @mouseenter="(e) => startProfileHover(e, anime)"
-                  @mouseleave="clearProfileHover"
+                  @touchstart="(e) => onProfileTouchstart(e, anime)"
+                  @touchmove="onProfileTouchmove"
+                  @touchend="onProfileTouchend"
                 >
                   <router-link :to="`/anime/${anime.anime_id}`" class="block">
                     <div class="aspect-[2/3] rounded-xl overflow-hidden bg-surface relative">
@@ -376,19 +377,20 @@
                         </svg>
                       </div>
 
-                      <!-- Score Badge -->
+                      <!-- Score Badge — fades on hover so the kebab owns top-right.
+                           Click-to-edit on own profile still works after mouse-leave. -->
                       <div
                         v-if="anime.score && anime.score > 0"
-                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-yellow-400 text-sm font-bold"
+                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-yellow-400 text-sm font-bold transition-opacity duration-200 group-hover:opacity-0"
                         :class="{ 'cursor-pointer hover:bg-black/80': isOwnProfile }"
                         @click.prevent="isOwnProfile && (editingScoreGrid = anime.anime_id)"
                       >
                         {{ anime.score }}
                       </div>
-                      <!-- Score edit popover for grid -->
+                      <!-- Score edit popover for grid (z-40 keeps it above the kebab) -->
                       <div
                         v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
-                        class="absolute top-2 right-2 z-20"
+                        class="absolute top-2 right-2 z-40"
                         @click.prevent.stop
                       >
                         <input
@@ -411,19 +413,10 @@
                       </div>
 
                       <!-- Kebab affordance: hover/focus only, opens custom context menu -->
-                      <button
-                        type="button"
-                        class="absolute bottom-2 right-2 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-black/80"
-                        :aria-label="$t('contextMenu.openMenu')"
-                        aria-haspopup="menu"
-                        @click.prevent.stop="openProfileMenuFromKebab($event, anime)"
-                      >
-                        <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                          <circle cx="10" cy="4" r="1.5" />
-                          <circle cx="10" cy="10" r="1.5" />
-                          <circle cx="10" cy="16" r="1.5" />
-                        </svg>
-                      </button>
+                      <AnimeKebab
+                        :menu-open="profileContextMenu.visible && String(profileContextMenu.anime?.id) === String(anime.anime_id)"
+                        @open="(el) => openProfileMenuAt(el, anime)"
+                      />
                     </div>
                     <h2 class="mt-2 text-sm font-medium text-white line-clamp-2 group-hover:text-cyan-400 transition-colors">
                       {{ animeTitle(anime) }}
@@ -433,12 +426,6 @@
                     <p class="text-xs text-white/50">
                       {{ anime.episodes || 0 }} / {{ animeTotalEpisodes(anime) || '?' }} {{ $t('profile.ep') }}
                     </p>
-                    <button
-                      v-if="isOwnProfile"
-                      @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) + 1)"
-                      class="w-5 h-5 rounded flex items-center justify-center bg-white/10 text-white/40 hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors opacity-0 group-hover:opacity-100 text-xs"
-                      :disabled="animeTotalEpisodes(anime) ? (anime.episodes || 0) >= animeTotalEpisodes(anime) : false"
-                    >+</button>
                   </div>
                   <p v-if="anime.started_at || anime.completed_at" class="text-xs text-white/40 mt-0.5">
                     <span v-if="anime.started_at">{{ formatDateDisplay(anime.started_at) }}</span>
@@ -873,9 +860,12 @@
     :anime="profileContextMenu.anime"
     :list-status="profileContextMenu.listStatus"
     :site-rating="profileContextMenu.siteRating"
+    :episodes-watched="profileContextMenu.episodesWatched"
+    :episodes-total="profileContextMenu.episodesTotal"
     @update:visible="profileContextMenu.visible = $event"
     @status-change="fetchWatchlistPage()"
     @remove-from-list="fetchWatchlistPage()"
+    @episodes-change="fetchWatchlistPage()"
   />
 </template>
 
@@ -886,7 +876,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
-import { AnimeContextMenu } from '@/components/anime'
+import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
@@ -948,15 +938,17 @@ const watchlistStore = useWatchlistStore()
 
 const siteOrigin = window.location.origin
 
-// Context menu for grid view (hover dwell + kebab affordance)
-const { contextMenu: profileContextMenu, openAtElement: openProfileCtxAt } = useContextMenu()
+// Context menu for grid view (kebab affordance + mobile long-press)
+const {
+  contextMenu: profileContextMenu,
+  openAtElement: openProfileCtxAt,
+  onTouchstart: onProfileCtxTouchstart,
+  onTouchmove: onProfileTouchmove,
+  onTouchend: onProfileTouchend,
+} = useContextMenu()
 
-let profileHoverTimer: number | null = null
-let profileHoverEl: HTMLElement | null = null
-let profileHoverEntry: WatchlistEntry | null = null
-
-function openProfileMenuAt(el: HTMLElement, entry: WatchlistEntry) {
-  openProfileCtxAt(el, {
+function ctxAnimeFromEntry(entry: WatchlistEntry) {
+  return {
     id: entry.anime_id,
     title: animeTitle(entry),
     name: entry.anime?.name,
@@ -964,37 +956,24 @@ function openProfileMenuAt(el: HTMLElement, entry: WatchlistEntry) {
     nameJp: entry.anime?.name_jp,
     coverImage: animeCover(entry),
     episodes: entry.anime?.episodes_count,
-  }, { listStatus: entry.status })
-}
-
-function startProfileHover(event: MouseEvent, entry: WatchlistEntry) {
-  clearProfileHover()
-  profileHoverEl = event.currentTarget as HTMLElement
-  profileHoverEntry = entry
-  profileHoverTimer = window.setTimeout(() => {
-    if (profileHoverEl && profileHoverEntry) {
-      openProfileMenuAt(profileHoverEl, profileHoverEntry)
-    }
-  }, 400)
-}
-
-function clearProfileHover() {
-  if (profileHoverTimer !== null) {
-    clearTimeout(profileHoverTimer)
-    profileHoverTimer = null
   }
-  profileHoverEl = null
-  profileHoverEntry = null
 }
 
-function openProfileMenuFromKebab(event: MouseEvent, entry: WatchlistEntry) {
-  clearProfileHover()
-  // Anchor to the card wrapper, not the kebab button, for consistent positioning.
-  const card = (event.currentTarget as HTMLElement).closest('.relative.group') as HTMLElement | null
-  if (card) openProfileMenuAt(card, entry)
+function ctxOptsFromEntry(entry: WatchlistEntry) {
+  return {
+    listStatus: entry.status,
+    episodesWatched: entry.episodes ?? 0,
+    episodesTotal: animeTotalEpisodes(entry),
+  }
 }
 
-onUnmounted(clearProfileHover)
+function openProfileMenuAt(el: HTMLElement, entry: WatchlistEntry) {
+  openProfileCtxAt(el, ctxAnimeFromEntry(entry), ctxOptsFromEntry(entry))
+}
+
+function onProfileTouchstart(event: TouchEvent, entry: WatchlistEntry) {
+  onProfileCtxTouchstart(event, ctxAnimeFromEntry(entry), ctxOptsFromEntry(entry))
+}
 
 // Helpers for nested anime data from Preload
 const animeTitle = (entry: WatchlistEntry): string =>

@@ -151,6 +151,7 @@
           :anime="anime"
           :list-status="getListStatus(anime.id)"
           :site-rating="siteRatings[String(anime.id)]"
+          :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
           @open-menu="(el: HTMLElement) => openContextMenuAt(el, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
           @touchstart="onTouchstart($event, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
           @touchmove="onTouchmove"

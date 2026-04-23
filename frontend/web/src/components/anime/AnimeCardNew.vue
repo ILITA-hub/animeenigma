@@ -1,10 +1,5 @@
 <template>
-  <div
-    ref="cardEl"
-    class="group block relative"
-    @mouseenter="startHoverTimer"
-    @mouseleave="clearHoverTimer"
-  >
+  <div class="group block relative">
     <!-- SPA navigation overlay (full-card click target, sits behind kebab) -->
     <router-link
       :to="`/anime/${anime.id}`"
@@ -32,19 +27,7 @@
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
         <!-- Kebab affordance: hover/focus only, opens custom context menu -->
-        <button
-          type="button"
-          class="absolute bottom-2 right-2 z-10 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-black/80 pointer-events-auto"
-          :aria-label="$t('contextMenu.openMenu')"
-          aria-haspopup="menu"
-          @click.prevent.stop="openMenuNow"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-            <circle cx="10" cy="4" r="1.5" />
-            <circle cx="10" cy="10" r="1.5" />
-            <circle cx="10" cy="16" r="1.5" />
-          </svg>
-        </button>
+        <AnimeKebab :menu-open="menuOpen" @open="(el) => emit('openMenu', el)" />
 
         <!-- Top Badges -->
         <div class="absolute top-2 left-2 right-2 flex justify-between items-start">
@@ -54,8 +37,8 @@
           </Badge>
           <span v-else />
 
-          <!-- Rating Badges (stacked vertically) -->
-          <div class="flex flex-col gap-1 items-end">
+          <!-- Rating Badges (stacked vertically). Faded on hover so the kebab owns the corner. -->
+          <div class="flex flex-col gap-1 items-end transition-opacity duration-200 group-hover:opacity-0">
             <!-- Shikimori Rating Badge -->
             <Badge
               v-if="anime.rating"
@@ -122,9 +105,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '@/components/ui/Badge.vue'
+import AnimeKebab from './AnimeKebab.vue'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
 import { getImageFallbackUrl } from '@/composables/useImageProxy'
 
@@ -150,6 +134,7 @@ const props = defineProps<{
   anime: Anime
   listStatus?: string | null
   siteRating?: { average_score: number; total_reviews: number } | null
+  menuOpen?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -157,28 +142,6 @@ const emit = defineEmits<{
 }>()
 
 const imageLoaded = ref(false)
-const cardEl = ref<HTMLElement | null>(null)
-let hoverTimer: number | null = null
-
-function startHoverTimer() {
-  clearHoverTimer()
-  hoverTimer = window.setTimeout(emitOpen, 400)
-}
-function clearHoverTimer() {
-  if (hoverTimer !== null) {
-    clearTimeout(hoverTimer)
-    hoverTimer = null
-  }
-}
-function openMenuNow() {
-  clearHoverTimer()
-  emitOpen()
-}
-function emitOpen() {
-  if (cardEl.value) emit('openMenu', cardEl.value)
-}
-
-onUnmounted(clearHoverTimer)
 
 const localizedTitle = computed(() => {
   if (props.anime.name || props.anime.nameRu || props.anime.nameJp) {

@@ -604,6 +604,7 @@
             <div>
               <AnimeCardNew
                 :anime="(item as RelatedAnime)"
+                :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String((item as RelatedAnime).id)"
                 @open-menu="(el: HTMLElement) => openContextMenuAt(el, (item as RelatedAnime))"
               />
               <p v-if="(item as RelatedAnime).relationLabel" class="text-xs text-white/40 mt-1 text-center">
