@@ -9,6 +9,9 @@ findings:
   warning: 15
   info: 10
   total: 26
+resolved_inline:
+  - BL-01  # commit d098f0a: useWatchPreferences unwraps {data: {resolved}} envelope
+  - WR-14  # commit d098f0a: Anime.vue dropped authStore.isAuthenticated gate around initPreferences
 ---
 
 # Phase 01 — Code Review Report (instrumentation-baseline)
