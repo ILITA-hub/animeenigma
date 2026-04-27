@@ -29,10 +29,13 @@ export function useWatchPreferences(animeId: string) {
     isLoading.value = true
     try {
       const { data } = await userApi.resolvePreference(animeId, available)
-      resolvedCombo.value = data.resolved
-      // Cache the result
+      // Backend wraps responses via httputil.OK as { success, data: { resolved } } —
+      // unwrap the `data` envelope. Be lenient on any callsite that already returns
+      // the inner shape.
+      const envelope = (data as { data?: { resolved: ResolvedCombo | null } }).data ?? data
+      resolvedCombo.value = envelope.resolved ?? null
       localStorage.setItem(cacheKey, JSON.stringify({
-        data: data.resolved,
+        data: envelope.resolved ?? null,
         timestamp: Date.now()
       }))
     } catch (err) {

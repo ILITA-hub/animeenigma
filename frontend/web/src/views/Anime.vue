@@ -1208,8 +1208,11 @@ const loadAnimeData = async (animeId: string) => {
     loadLastEpisode(fetched.id)
   }
 
-  // Initialize watch preferences for this anime
-  if (fetched && authStore.isAuthenticated) {
+  // Initialize watch preferences for this anime — anon users included so the
+  // combo_resolve_total denominator increments alongside combo_override_total
+  // (CONTEXT D-12: per-anon-user override rate). The composable + axios
+  // interceptor handle the X-Anon-ID header for unauthenticated callers.
+  if (fetched) {
     initPreferences(fetched.id)
   }
 
