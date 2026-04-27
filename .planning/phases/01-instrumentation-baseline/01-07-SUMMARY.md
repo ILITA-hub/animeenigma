@@ -64,7 +64,7 @@ Provisioning reloaded — new dashboard JSON picked up. Plan acceptance `>= 1 pr
 
 ## Task 2 — Grafana panel renders (human-verify) ⏳ PENDING
 
-User must visually confirm at `https://admin.animeenigma.ru/grafana/d/preference-resolution-v1`:
+User must visually confirm at `https://animeenigma.ru/admin/grafana/d/preference-resolution-v1/preference-resolution`:
 
 1. New collapsible row "Auto-Pick Override Rate (Phase 1 Baseline)" visible
 2. All 5 sub-panels render (Override Rate stat, by Tier, by Player, by Language/Auth, by Dimension barchart)

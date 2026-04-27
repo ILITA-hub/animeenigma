@@ -1,5 +1,5 @@
 {
-  "last_id": 80,
+  "last_id": 81,
   "issues": [
     {
       "id": "AUTO-001",
@@ -1340,6 +1340,20 @@
       "reporter": "@tNeymik",
       "telegram_message_id": 1988,
       "actions": null
+    },
+    {
+      "id": "AUTO-081",
+      "created_at": "2026-04-22T04:49:06Z",
+      "source": "grafana_alert",
+      "category": "outage",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "HiAnime player down — aniwatch 521 fetchError (ISS-007)",
+      "reporter": "grafana",
+      "telegram_message_id": 1991,
+      "affected_service": "catalog",
+      "actions": null,
+      "resolution": "Fix applied by @tNeymik"
     }
   ]
 }
