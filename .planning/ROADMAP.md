@@ -30,7 +30,14 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   2. A Grafana dashboard tile shows override rate segmented by tier, language, anonymous-vs-auth, and player, refreshing within one minute of new events
   3. A baseline override-rate snapshot (≥ 24 hours of real traffic) is captured and recorded in PROJECT.md before Phase 6 starts
   4. The instrumentation is deployed via `make redeploy-player` (or whichever service emits) and verified live on production
-**Plans**: TBD
+**Plans**: 7 plans
+- [ ] 01-01-PLAN.md — Wave 0: write RED test scaffolds (Go handler/middleware/service tests + Playwright spec stub)
+- [ ] 01-02-PLAN.md — Wave 1: add ComboOverrideTotal/ComboResolveTotal CounterVecs + create OverrideHandler
+- [ ] 01-03-PLAN.md — Wave 2: OptionalAuthMiddleware + wire override route + anon-friendly resolve + gateway proxy
+- [ ] 01-04-PLAN.md — Wave 3: anonId util + axios X-Anon-ID interceptor + useOverrideTracker composable
+- [ ] 01-05-PLAN.md — Wave 4: wire useOverrideTracker into 4 players + Anime.vue + unbreak Playwright E2E specs
+- [ ] 01-06-PLAN.md — Wave 5: add Auto-Pick Override Rate row + 5 panels to preference-resolution.json
+- [ ] 01-07-PLAN.md — Wave 6: deploy via make redeploy + smoke tests + Grafana visual + animeenigma-after-update
 **UI hint**: yes
 
 ### Phase 2: Analytics Audit
@@ -126,7 +133,7 @@ Phases 1 and 2 are independent and may execute in parallel if `parallelization=t
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Instrumentation Baseline | 0/TBD | Not started | - |
+| 1. Instrumentation Baseline | 0/7 | Not started | - |
 | 2. Analytics Audit | 0/TBD | Not started | - |
 | 3. Single Source of Truth for "Watched" | 0/TBD | Not started | - |
 | 4. Resume State Machine in All Four Players | 0/TBD | Not started | - |
