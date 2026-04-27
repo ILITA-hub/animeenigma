@@ -174,7 +174,7 @@
         <!-- Category tabs (Sub/Dub) -->
         <div class="flex gap-2 mb-3">
           <button
-            @click="selectedCategory = 'sub'"
+            @click="setSelectedCategory('sub')"
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
             :class="selectedCategory === 'sub'
               ? 'accent-bg-muted accent-text border accent-border'
@@ -187,7 +187,7 @@
             <span class="text-xs opacity-70">({{ subServers.length }})</span>
           </button>
           <button
-            @click="selectedCategory = 'dub'"
+            @click="setSelectedCategory('dub')"
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
             :class="selectedCategory === 'dub'
               ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
@@ -394,13 +394,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, toRef, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
 import Hls from 'hls.js'
 import { hiAnimeApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -615,6 +616,24 @@ const currentCombo = computed((): WatchCombo | null => {
   }
 })
 
+// currentEpisodeNumber: numeric ref for the override tracker. HiAnime stores the
+// episode as the full HiAnimeEpisode object — extract the number lazily.
+const currentEpisodeNumber = computed(() => selectedEpisode.value?.number ?? 0)
+
+// Override tracker. User-click handlers (selectEpisode, selectServer, the
+// sub/dub category toggle) wrap their existing logic with recordPickerEvent
+// BEFORE the work; programmatic call sites — fetchEpisodes initial auto-pick,
+// fetchServers initial auto-pick, tryNextServer, the selectedCategory watcher,
+// and the videojs/hls error-recovery handlers — bypass via _advanceServer /
+// _advanceEpisode siblings to avoid false-positive overrides on auto-advance.
+// See .planning/phases/01-instrumentation-baseline/01-RESEARCH.md §Pitfall 1.
+const tracker = useOverrideTracker({
+  animeId: props.animeId,
+  player: 'hianime',
+  resolvedCombo: toRef(props, 'preferredCombo'),
+  currentEpisode: currentEpisodeNumber,
+})
+
 // Methods
 const fetchEpisodes = async (retries = 2) => {
   loadingEpisodes.value = true
@@ -629,12 +648,12 @@ const fetchEpisodes = async (retries = 2) => {
     // This allows the video player container to render so videoRef is available
     loadingEpisodes.value = false
 
-    // Auto-select first episode
+    // Auto-select first episode — programmatic, no override emission.
     if (episodes.value.length > 0) {
       const initialEp = props.initialEpisode
         ? episodes.value.find(e => e.number === props.initialEpisode) || episodes.value[0]
         : episodes.value[0]
-      await selectEpisode(initialEp)
+      await _advanceEpisode(initialEp)
     }
   } catch (err: unknown) {
     if (retries > 0) {
@@ -667,7 +686,9 @@ const fetchServers = async (episodeId: string) => {
     }))
     emit('availableTranslations', combos)
 
-    // Auto-select from preferredCombo if it matches this player
+    // Auto-select from preferredCombo if it matches this player. All branches
+    // here are programmatic auto-picks — bypass the user-click wrapper so no
+    // false override fires.
     let autoSelected = false
     if (props.preferredCombo?.player === 'hianime') {
       const match = servers.value.find(
@@ -677,7 +698,7 @@ const fetchServers = async (episodeId: string) => {
       if (match) {
         selectedCategory.value = match.type as 'sub' | 'dub'
         autoSelected = true
-        await selectServer(match)
+        await _advanceServer(match)
       }
     }
 
@@ -685,11 +706,11 @@ const fetchServers = async (episodeId: string) => {
       // Auto-select first server of preferred category
       const preferredServers = selectedCategory.value === 'sub' ? subServers.value : dubServers.value
       if (preferredServers.length > 0) {
-        await selectServer(preferredServers[0])
+        await _advanceServer(preferredServers[0])
       } else if (servers.value.length > 0) {
         // Fall back to any available server
         selectedCategory.value = servers.value[0].type as 'sub' | 'dub'
-        await selectServer(servers.value[0])
+        await _advanceServer(servers.value[0])
       }
     }
   } catch (err: unknown) {
@@ -1033,7 +1054,10 @@ const switchPlayerType = async (type: PlayerType) => {
   }
 }
 
-const selectEpisode = async (episode: HiAnimeEpisode) => {
+// Programmatic (no-tracking) episode selector. Used by fetchEpisodes initial
+// auto-pick and any other non-user code path. Keep behavior identical to
+// selectEpisode minus the recordPickerEvent.
+const _advanceEpisode = async (episode: HiAnimeEpisode) => {
   if (selectedEpisode.value?.id === episode.id) return
 
   // Save progress before switching
@@ -1061,6 +1085,13 @@ const selectEpisode = async (episode: HiAnimeEpisode) => {
   await fetchServers(episode.id)
 }
 
+// User-click episode selector — fires combo_override ('episode') BEFORE the work.
+const selectEpisode = async (episode: HiAnimeEpisode) => {
+  if (selectedEpisode.value?.id === episode.id) return
+  tracker.recordPickerEvent('episode', { episode: episode.number })
+  await _advanceEpisode(episode)
+}
+
 const tryNextServer = async () => {
   const currentServers = filteredServers.value
   const currentIdx = currentServers.findIndex(s => s.id === selectedServer.value?.id)
@@ -1068,19 +1099,70 @@ const tryNextServer = async () => {
   if (nextServer) {
     console.warn(`[HiAnime] Decode error, switching to server: ${nextServer.name}`)
     error.value = t('player.error.decoding', { server: nextServer.name })
-    await selectServer(nextServer)
+    // Programmatic auto-advance — bypass the tracker (Pitfall 1).
+    await _advanceServer(nextServer)
   } else {
     error.value = t('player.error.decodingFallback')
   }
 }
 
-const selectServer = async (server: HiAnimeServer) => {
+// Programmatic (no-tracking) server selector. Called from tryNextServer (auto-
+// recovery on decode/media error), fetchServers initial auto-pick, and the
+// selectedCategory watcher's auto-advance to a server matching the new
+// category. Keep behavior identical to selectServer minus the recordPickerEvent.
+const _advanceServer = async (server: HiAnimeServer) => {
   if (selectedServer.value?.id === server.id) return
 
   selectedServer.value = server
   decodeErrorCount = 0
   codecRetryCount = 0
   await fetchStream()
+}
+
+// User-click server selector — fires combo_override ('team') BEFORE the work.
+const selectServer = async (server: HiAnimeServer) => {
+  if (selectedServer.value?.id === server.id) return
+  tracker.recordPickerEvent('team', {
+    translation_title: server.name,
+    player: 'hianime',
+  })
+  await _advanceServer(server)
+}
+
+// User-click category toggle — fires combo_override ('language') BEFORE the
+// state mutation. The watcher on selectedCategory below picks the matching
+// server via _advanceServer, so the watch fires no false-positive 'team'
+// override.
+const setSelectedCategory = (category: 'sub' | 'dub') => {
+  if (selectedCategory.value === category) return
+  tracker.recordPickerEvent('language', {
+    watch_type: category,
+  })
+  selectedCategory.value = category
+}
+
+// DEV-only test hook (WARNING #7): drives the auto-advance code path
+// deterministically from the E2E spec to verify Pitfall 1 invariant —
+// programmatic advances do NOT funnel through the user-click handler and
+// therefore do NOT increment combo_override_total. Gated by import.meta.env.DEV
+// so this whole block is dead-code-eliminated from `bunx vite build` output.
+// NEVER use this in production code paths.
+if (import.meta.env.DEV) {
+  const w = window as unknown as { __aenigForceAdvanceHiAnime?: () => void }
+  w.__aenigForceAdvanceHiAnime = () => {
+    // Pick the first server in the currently-filtered category that is NOT
+    // already selected; if none exists, fall back to the next episode. Either
+    // way, the call goes through _advanceServer / _advanceEpisode (the
+    // unwrapped siblings) — never through selectServer / selectEpisode.
+    const candidates = filteredServers.value.filter(s => s.id !== selectedServer.value?.id)
+    if (candidates.length > 0) {
+      void _advanceServer(candidates[0])
+      return
+    }
+    const epIdx = episodes.value.findIndex(e => e.id === selectedEpisode.value?.id)
+    const nextEp = episodes.value[epIdx + 1]
+    if (nextEp) void _advanceEpisode(nextEp)
+  }
 }
 
 // Progress tracking
@@ -1258,10 +1340,14 @@ const handleKeyDown = (e: KeyboardEvent) => {
 
 // Watchers
 watch(selectedCategory, () => {
-  // When category changes, select first server of new category
+  // When category changes, select first server of new category. Use the
+  // programmatic _advanceServer sibling — the user already accepted the
+  // language change via setSelectedCategory (which emitted the 'language'
+  // override); the side-effect of picking a matching server is NOT a separate
+  // 'team' override (Pitfall 1).
   const newServers = selectedCategory.value === 'sub' ? subServers.value : dubServers.value
   if (newServers.length > 0 && selectedServer.value?.type !== selectedCategory.value) {
-    selectServer(newServers[0])
+    _advanceServer(newServers[0])
   }
 })
 
