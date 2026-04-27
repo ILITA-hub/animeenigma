@@ -334,7 +334,7 @@
             <!-- Provider sub-tabs -->
             <template v-if="videoLanguage === 'ru'">
               <button
-                @click="videoProvider = 'kodik'"
+                @click="onUserPickedProvider('kodik')"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 :class="videoProvider === 'kodik'
                   ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
@@ -343,7 +343,7 @@
                 Kodik
               </button>
               <button
-                @click="videoProvider = 'animelib'"
+                @click="onUserPickedProvider('animelib')"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 :class="videoProvider === 'animelib'
                   ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
@@ -354,7 +354,7 @@
             </template>
             <template v-else-if="videoLanguage === 'en'">
               <button
-                @click="videoProvider = 'hianime'"
+                @click="onUserPickedProvider('hianime')"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 :class="videoProvider === 'hianime'
                   ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
@@ -363,7 +363,7 @@
                 HiAnime
               </button>
               <button
-                @click="videoProvider = 'consumet'"
+                @click="onUserPickedProvider('consumet')"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 :class="videoProvider === 'consumet'
                   ? 'bg-green-500/20 text-green-400 border border-green-500/50'
@@ -655,6 +655,7 @@ import { Badge, Button } from '@/components/ui'
 import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
+import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useContextMenu } from '@/composables/useContextMenu'
 import type { WatchCombo } from '@/types/preference'
 
@@ -764,6 +765,47 @@ const preferenceState = ref<{
 } | null>(null)
 
 const resolvedCombo = computed(() => preferenceState.value?.resolvedCombo ?? null)
+
+// Numeric episode ref for the tracker. lastEpisode is Ref<number | undefined>
+// (resume-progress is unknown until localStorage is read); the tracker only
+// reads this for the optional payload, so default to 0 when unset.
+const currentEpisodeForTracker = computed(() => lastEpisode.value ?? 0)
+
+// Player-dimension override tracker. Instantiated ONCE at the Anime.vue level
+// because the player choice happens here, not inside any single player
+// component — a per-player composable instance can't observe a switch from
+// inside the unmounting player. This is the ONLY dimension this composable
+// handles outside the four player components (the per-player tracker handles
+// episode/team/language). Only fires from user-driven button clicks routed
+// through onUserPickedProvider — programmatic mutations to videoProvider.value
+// (initial preference resolution in initPreferences, switchLanguage tab
+// auto-pick, fallback when a parser fails) are intentionally direct
+// assignments and do NOT route through the tracker, per CONTEXT D-08.
+// See .planning/phases/01-instrumentation-baseline/01-RESEARCH.md §Pattern 2.
+const playerSwitchTracker = useOverrideTracker({
+  animeId: route.params.id as string,
+  // The composable's `player` is a static label — it identifies which player
+  // bucket this tracker belongs to in Loki. For Anime.vue the bucket is the
+  // CURRENT player at construction time; subsequent switches are recorded as
+  // dimension='player', new_combo.player=<destination>. The label is only used
+  // to filter Grafana panels, not to gate emissions. The 18+ 'hanime' provider
+  // is not part of the tracked PlayerName set; map it to 'kodik' for the
+  // bucket label so the type compiles. (No override fires for hanime anyway —
+  // onUserPickedProvider is typed to exclude it.)
+  player: videoProvider.value === 'hanime' ? 'kodik' : videoProvider.value,
+  resolvedCombo,
+  currentEpisode: currentEpisodeForTracker,
+})
+
+function onUserPickedProvider(newProvider: 'kodik' | 'animelib' | 'hianime' | 'consumet') {
+  // Only fire override if the user is genuinely SWITCHING. The composable's
+  // first-per-(load_session_id, dimension) lock would also catch repeats, but
+  // an explicit guard keeps E2E timing predictable.
+  if (newProvider !== videoProvider.value) {
+    playerSwitchTracker.recordPickerEvent('player', { player: newProvider })
+  }
+  videoProvider.value = newProvider
+}
 
 const initPreferences = (animeId: string) => {
   const pref = useWatchPreferences(animeId)

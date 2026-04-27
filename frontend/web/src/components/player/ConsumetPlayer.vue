@@ -368,13 +368,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, toRef, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
 import Hls from 'hls.js'
 import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -579,6 +580,27 @@ const currentCombo = computed((): WatchCombo | null => {
   }
 })
 
+// currentEpisodeNumber: numeric ref for the override tracker. Consumet stores
+// the episode as the full ConsumetEpisode object — extract the number lazily.
+const currentEpisodeNumber = computed(() => selectedEpisode.value?.number ?? 0)
+
+// Override tracker. User-click handlers (selectEpisode, selectServer) wrap
+// their existing logic with recordPickerEvent BEFORE the work; programmatic
+// call sites — fetchEpisodes initial auto-pick, fetchServers initial auto-pick
+// — bypass via _advanceServer / _advanceEpisode siblings to avoid false-positive
+// overrides. Consumet has no in-component language toggle (subOrDub is a parent
+// prop), so this tracker only emits 'episode' and 'team' dimensions; the
+// 'language' dimension is owned by Anime.vue. Consumet has no end-of-episode
+// auto-rotation today (serverRotationCount was deliberately removed; see
+// `serverRotationCount removed — auto-rotation disabled to expose errors`).
+// See .planning/phases/01-instrumentation-baseline/01-RESEARCH.md §Pitfall 1.
+const tracker = useOverrideTracker({
+  animeId: props.animeId,
+  player: 'consumet',
+  resolvedCombo: toRef(props, 'preferredCombo'),
+  currentEpisode: currentEpisodeNumber,
+})
+
 // Methods
 const fetchEpisodes = async () => {
   loadingEpisodes.value = true
@@ -594,12 +616,15 @@ const fetchEpisodes = async () => {
     // Fetch servers
     await fetchServers()
 
-    // Auto-select first episode
+    // Auto-select first episode — programmatic, no override emission.
     if (episodes.value.length > 0) {
       const initialEp = props.initialEpisode
-        ? episodes.value.find(e => e.number === props.initialEpisode) || episodes.value[0]
+        ? props.initialEpisode
+        : null
+      const targetEp = initialEp
+        ? episodes.value.find(e => e.number === initialEp) || episodes.value[0]
         : episodes.value[0]
-      await selectEpisode(initialEp)
+      await _advanceEpisode(targetEp)
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
@@ -654,7 +679,10 @@ const fetchServers = async () => {
   }
 }
 
-const selectEpisode = async (ep: ConsumetEpisode) => {
+// Programmatic (no-tracking) episode selector. Used by fetchEpisodes initial
+// auto-pick and any other non-user code path. Keep behavior identical to
+// selectEpisode minus the recordPickerEvent.
+const _advanceEpisode = async (ep: ConsumetEpisode) => {
   selectedEpisode.value = ep
   episodeMarkedWatched.value = false
   networkRetryCount = 0
@@ -671,13 +699,55 @@ const selectEpisode = async (ep: ConsumetEpisode) => {
   await fetchStream()
 }
 
-const selectServer = async (server: ConsumetServer) => {
+// User-click episode selector — fires combo_override ('episode') BEFORE the work.
+const selectEpisode = async (ep: ConsumetEpisode) => {
+  tracker.recordPickerEvent('episode', { episode: ep.number })
+  await _advanceEpisode(ep)
+}
+
+// Programmatic (no-tracking) server selector. Called from fetchServers initial
+// auto-pick and any future auto-recovery code path. Keep behavior identical to
+// selectServer minus the recordPickerEvent.
+const _advanceServer = async (server: ConsumetServer) => {
   selectedServer.value = server
   decodeErrorCount = 0
   networkRetryCount = 0
   codecRetryCount = 0
   if (selectedEpisode.value) {
     await fetchStream()
+  }
+}
+
+// User-click server selector — fires combo_override ('team') BEFORE the work.
+const selectServer = async (server: ConsumetServer) => {
+  tracker.recordPickerEvent('team', {
+    translation_title: server.name,
+    player: 'consumet',
+  })
+  await _advanceServer(server)
+}
+
+// DEV-only test hook (WARNING #7): drives the auto-advance code path
+// deterministically from the E2E spec to verify Pitfall 1 invariant —
+// programmatic advances do NOT funnel through the user-click handler and
+// therefore do NOT increment combo_override_total. Gated by import.meta.env.DEV
+// so this whole block is dead-code-eliminated from `bunx vite build` output.
+// NEVER use this in production code paths.
+if (import.meta.env.DEV) {
+  const w = window as unknown as { __aenigForceAdvanceConsumet?: () => void }
+  w.__aenigForceAdvanceConsumet = () => {
+    // Pick the first server that is NOT already selected; if none exists, fall
+    // back to the next episode. Either way, the call goes through
+    // _advanceServer / _advanceEpisode (the unwrapped siblings) — never
+    // through selectServer / selectEpisode.
+    const candidates = servers.value.filter(s => s.name !== selectedServer.value?.name)
+    if (candidates.length > 0) {
+      void _advanceServer(candidates[0])
+      return
+    }
+    const epIdx = episodes.value.findIndex(e => e.id === selectedEpisode.value?.id)
+    const nextEp = episodes.value[epIdx + 1]
+    if (nextEp) void _advanceEpisode(nextEp)
   }
 }
 
