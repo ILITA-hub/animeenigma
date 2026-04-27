@@ -1,6 +1,5 @@
 import { ref } from 'vue'
 import { userApi } from '@/api/client'
-import { useAuthStore } from '@/stores/auth'
 import type { WatchCombo, ResolvedCombo } from '@/types/preference'
 
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
@@ -8,7 +7,6 @@ const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
 export function useWatchPreferences(animeId: string) {
   const resolvedCombo = ref<ResolvedCombo | null>(null)
   const isLoading = ref(false)
-  const authStore = useAuthStore()
 
   // Try cached result first
   const cacheKey = `pref:${animeId}`
@@ -23,7 +21,10 @@ export function useWatchPreferences(animeId: string) {
   }
 
   async function resolve(available: WatchCombo[]) {
-    if (!authStore.isAuthenticated || available.length === 0) return
+    // Anon users now hit /api/preferences/resolve — the axios interceptor attaches
+    // X-Anon-ID and the backend OptionalAuthMiddleware allows the call through.
+    // Per CONTEXT Critical Finding 3: required for D-12 (per-anon-user override rate).
+    if (available.length === 0) return
 
     isLoading.value = true
     try {
