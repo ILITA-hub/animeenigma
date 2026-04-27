@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
 import { hookAxiosDiagnostics } from '@/utils/diagnostics'
-import type { WatchCombo, ResolveResponse } from '@/types/preference'
+import { getOrCreateAnonId } from '@/utils/anonId'
+import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/preference'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -84,9 +85,17 @@ apiClient.interceptors.request.use(
       const newToken = await doTokenRefresh()
       token = newToken
     }
-    if (token && config.headers) {
+    config.headers = config.headers || {}
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // Always-set X-Anon-ID per PATTERNS.md. The backend OptionalAuthMiddleware reads
+    // JWT first regardless of X-Anon-ID presence, so always-set is harmless on JWT
+    // routes (handlers ignore unknown headers) and removes a class of subtle bugs
+    // where X-Anon-ID would be missing if the user had a JWT but the JWT was rejected
+    // downstream. See .planning/phases/01-instrumentation-baseline/01-PATTERNS.md
+    // and 01-RESEARCH.md §Pattern 7.
+    config.headers['X-Anon-ID'] = getOrCreateAnonId()
     return config
   },
   (error) => {
@@ -227,7 +236,18 @@ export const userApi = {
   hasApiKey: () => apiClient.get('/auth/api-key'),
   // Watch preferences
   resolvePreference: (animeId: string, available: WatchCombo[]) =>
-    apiClient.post<ResolveResponse>('/users/preferences/resolve', { anime_id: animeId, available }),
+    apiClient.post<ResolveResponse>('/preferences/resolve', { anime_id: animeId, available }),
+  recordOverride: (data: {
+    anime_id: string
+    load_session_id: string
+    dimension: 'language' | 'player' | 'team' | 'episode'
+    original_combo: ResolvedCombo | null
+    new_combo: Partial<WatchCombo> & { episode?: number }
+    ms_since_load: number
+    tier: string | null
+    tier_number: number | null
+    player: 'kodik' | 'animelib' | 'hianime' | 'consumet'
+  }) => apiClient.post('/preferences/override', data),
   getAnimePreference: (animeId: string) =>
     apiClient.get<WatchCombo & { updated_at: string }>(`/users/preferences/${animeId}`),
   getGlobalPreferences: () =>
