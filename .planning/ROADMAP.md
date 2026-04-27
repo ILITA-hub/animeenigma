@@ -33,7 +33,7 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 **Plans**: 7 plans
 - [x] 01-01-PLAN.md — Wave 0: write RED test scaffolds (Go handler/middleware/service tests + Playwright spec stub)
 - [x] 01-02-PLAN.md — Wave 1: add ComboOverrideTotal/ComboResolveTotal CounterVecs + create OverrideHandler
-- [ ] 01-03-PLAN.md — Wave 2: OptionalAuthMiddleware + wire override route + anon-friendly resolve + gateway proxy
+- [x] 01-03-PLAN.md — Wave 2: OptionalAuthMiddleware + wire override route + anon-friendly resolve + gateway proxy
 - [ ] 01-04-PLAN.md — Wave 3: anonId util + axios X-Anon-ID interceptor + useOverrideTracker composable
 - [ ] 01-05-PLAN.md — Wave 4: wire useOverrideTracker into 4 players + Anime.vue + unbreak Playwright E2E specs
 - [ ] 01-06-PLAN.md — Wave 5: add Auto-Pick Override Rate row + 5 panels to preference-resolution.json
