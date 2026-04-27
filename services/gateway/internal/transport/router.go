@@ -144,6 +144,14 @@ func NewRouter(
 		// Public activity feed
 		r.Get("/activity/feed", proxyHandler.ProxyToPlayer)
 
+		// Player service routes - preferences (public, OptionalAuth on player side)
+		// Per CONTEXT Critical Finding 1: must NOT be inside the JWT-protected /users/* group,
+		// because anonymous users (no Authorization header) need to POST overrides + resolve.
+		// T-01-01: anon-friendly endpoint is a DDoS amplification target — the player handler
+		// rejects requests with neither claims nor X-Anon-ID, but the gateway also adds rate
+		// limiting at the path level (existing rate limiter applies to all /api/* paths).
+		r.HandleFunc("/preferences/*", proxyHandler.ProxyToPlayer)
+
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
