@@ -60,12 +60,42 @@ func (s *PreferenceService) Resolve(ctx context.Context, userID string, req *dom
 
 	// Increment metrics
 	tier := "null"
+	language := ""
+	player := ""
 	if result != nil {
 		tier = result.Tier
+		language = result.Language
+		player = result.Player
 	}
 	metrics.PreferenceResolutionTotal.WithLabelValues(tier).Inc()
 
+	// ComboResolveTotal — the rate denominator for combo_override_total. Same label
+	// derivation as the override handler so PromQL division by label group lines up.
+	// anon="true" if userID is empty (caller had no JWT claims and possibly an X-Anon-ID
+	// captured at the handler boundary; the service treats both as "anonymous").
+	anonLabel := "true"
+	if userID != "" {
+		anonLabel = "false"
+	}
+	metrics.ComboResolveTotal.WithLabelValues(
+		labelOrUnknownService(tier),
+		labelOrUnknownService(language),
+		anonLabel,
+		labelOrUnknownService(player),
+	).Inc()
+
 	return &domain.ResolveResponse{Resolved: result}, nil
+}
+
+// labelOrUnknownService coerces empty strings to "unknown" for Prometheus label values.
+// Mirror of services/player/internal/handler/override.go labelOrUnknown — kept package-local
+// because the handler version is private to the handler package. T-01-02 cardinality
+// bound also applies here at the service boundary.
+func labelOrUnknownService(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
 }
 
 // GetAnimePreference returns the user's saved preference for a specific anime
