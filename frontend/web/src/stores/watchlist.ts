@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { userApi } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 
 export const useWatchlistStore = defineStore('watchlist', () => {
   const statusEntries = ref<Array<{ anime_id: string; status: string; score?: number; episodes?: number }>>([])
@@ -21,6 +22,14 @@ export const useWatchlistStore = defineStore('watchlist', () => {
   const isStatusFresh = () => Date.now() - statusLastFetched.value < STATUS_CACHE_TTL
 
   const fetchStatuses = async (force = false) => {
+    // Anonymous users must no-op here. Without this gate, Home.vue fires
+    // GET /users/watchlist/statuses → 401 → response interceptor calls
+    // /auth/refresh → 401 → window.location='/' redirect — and on reload
+    // the same call fires again, locking the home page in a redirect loop
+    // (most visible on mobile where ITP invalidates the refresh cookie).
+    const authStore = useAuthStore()
+    if (!authStore.isAuthenticated) return
+
     if (!force && isStatusFresh() && statusEntries.value.length > 0) return
     if (statusLoading.value) return
 
