@@ -10,7 +10,7 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 - Integer phases (1-8): Planned milestone work
 - Decimal phases (e.g., 2.1): Reserved for urgent insertions if scoping reveals one
 
-- [ ] **Phase 1: Instrumentation Baseline** - Emit `combo_override` events and stand up the Grafana tile so every later phase can be measured against a real baseline
+- [x] **Phase 1: Instrumentation Baseline** - Emit `combo_override` events and stand up the Grafana tile so every later phase can be measured against a real baseline ✓ 2026-04-27
 - [ ] **Phase 2: Analytics Audit** - Read-only inventory of `watch_history` / `watch_progress` / `anime_list` columns and a written gap analysis for smart episode selection
 - [ ] **Phase 3: Single Source of Truth for "Watched"** - Both auto-mark (20 min) and manual-mark paths set `watch_progress.completed = true`, and `anime_list.episodes` + episode-list checkmarks derive from it
 - [ ] **Phase 4: Resume State Machine in All Four Players** - Pre-player episode selection follows the watching / finished / not-yet-aired state machine across Kodik, AnimeLib, HiAnime, Consumet
