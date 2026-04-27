@@ -25,6 +25,7 @@ func NewRouter(
 	activityHandler *handler.ActivityHandler,
 	exportHandler *handler.ExportHandler,
 	preferenceHandler *handler.PreferenceHandler,
+	overrideHandler *handler.OverrideHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -101,9 +102,17 @@ func NewRouter(
 			r.Post("/report", reportHandler.SubmitReport)
 
 			// Preference routes
-			r.Post("/preferences/resolve", preferenceHandler.ResolvePreference)
 			r.Get("/preferences/global", preferenceHandler.GetGlobalPreferences)
 			r.Get("/preferences/{animeId}", preferenceHandler.GetAnimePreference)
+		})
+
+		// Public preference routes — anon-friendly via OptionalAuthMiddleware.
+		// Per CONTEXT Critical Finding 1: this group lives OUTSIDE /users so the gateway's
+		// JWT validation does not reject anon callers before they reach the player service.
+		r.Route("/preferences", func(r chi.Router) {
+			r.Use(OptionalAuthMiddleware(jwtConfig))
+			r.Post("/resolve", preferenceHandler.ResolvePreference)
+			r.Post("/override", overrideHandler.RecordOverride)
 		})
 
 		// Public user watchlist

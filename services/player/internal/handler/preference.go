@@ -38,13 +38,16 @@ func (h *PreferenceHandler) ResolvePreference(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	claims, ok := authz.ClaimsFromContext(r.Context())
-	if !ok || claims == nil {
-		httputil.Unauthorized(w)
-		return
+	// OptionalAuth: accept claims if present, otherwise pass empty userID to the service.
+	// Empty userID skips Tier 1 (per-anime saved preference) and Tier 2 (user-global
+	// history aggregation) — the resolver naturally falls through to Tier 3+ (community).
+	// X-Anon-ID is captured into the metric label by the service layer, NOT by this handler.
+	var userID string
+	if claims, ok := authz.ClaimsFromContext(r.Context()); ok && claims != nil {
+		userID = claims.UserID
 	}
 
-	resp, err := h.prefService.Resolve(r.Context(), claims.UserID, &req)
+	resp, err := h.prefService.Resolve(r.Context(), userID, &req)
 	if err != nil {
 		httputil.Error(w, err)
 		return
