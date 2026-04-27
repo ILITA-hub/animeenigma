@@ -67,25 +67,25 @@ Deferred — not in this roadmap.
 
 ## Traceability
 
-Phase mapping is filled by the roadmapper.
+Phase mapping assigned 2026-04-27 by roadmapper. 18/18 v1 requirements mapped, no orphans.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| A-01 | TBD | Pending |
-| A-02 | TBD | Pending |
-| A-03 | TBD | Pending |
-| A-04 | TBD | Pending |
-| B-01 | TBD | Pending |
-| B-02 | TBD | Pending |
-| B-03 | TBD | Pending |
-| B-04 | TBD | Pending |
-| B-05 | TBD | Pending |
-| C-01 | TBD | Pending |
-| C-02 | TBD | Pending |
-| C-03 | TBD | Pending |
-| C-04 | TBD | Pending |
-| D-01 | TBD | Pending |
-| D-02 | TBD | Pending |
-| D-03 | TBD | Pending |
-| M-01 | TBD | Pending |
-| M-02 | TBD | Pending |
+| A-01 | Phase 3 | Pending |
+| A-02 | Phase 3 | Pending |
+| A-03 | Phase 4 | Pending |
+| A-04 | Phase 4 | Pending |
+| B-01 | Phase 6 | Pending |
+| B-02 | Phase 6 | Pending |
+| B-03 | Phase 6 | Pending |
+| B-04 | Phase 6 | Pending |
+| B-05 | Phase 7 | Pending |
+| C-01 | Phase 2 | Pending |
+| C-02 | Phase 2 | Pending |
+| C-03 | Phase 5 | Pending |
+| C-04 | Phase 8 | Pending |
+| D-01 | Phase 7 | Pending |
+| D-02 | Phase 3 | Pending |
+| D-03 | Phase 7 | Pending |
+| M-01 | Phase 1 | Pending |
+| M-02 | Phase 1 | Pending |
