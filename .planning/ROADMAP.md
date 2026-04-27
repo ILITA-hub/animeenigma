@@ -37,7 +37,7 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 - [x] 01-04-PLAN.md — Wave 3: anonId util + axios X-Anon-ID interceptor + useOverrideTracker composable
 - [x] 01-05-PLAN.md — Wave 4: wire useOverrideTracker into 4 players + Anime.vue + unbreak Playwright E2E specs
 - [x] 01-06-PLAN.md — Wave 5: add Auto-Pick Override Rate row + 5 panels to preference-resolution.json
-- [ ] 01-07-PLAN.md — Wave 6: deploy via make redeploy + smoke tests + Grafana visual + animeenigma-after-update
+- [x] 01-07-PLAN.md — Wave 6: deploy via make redeploy + smoke tests + Grafana visual + animeenigma-after-update
 **UI hint**: yes
 
 ### Phase 2: Analytics Audit
