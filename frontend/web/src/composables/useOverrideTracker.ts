@@ -25,10 +25,19 @@ export type OverrideDimension = 'language' | 'player' | 'team' | 'episode'
 
 export type PlayerName = 'kodik' | 'animelib' | 'hianime' | 'consumet'
 
+// We accept WatchCombo (the prop shape players hold) rather than the stricter
+// ResolvedCombo. The tier/tier_number fields are optional — the composable
+// reads them via a safe `(combo as Partial<ResolvedCombo>).tier` cast at emit
+// time. This unblocks all four players + Anime.vue, which only retain
+// WatchCombo on their props/state, not the full ResolvedCombo.
+//
+// `null | undefined` allows direct passing of `toRef(props, 'preferredCombo')`
+// where the prop is declared as `preferredCombo?: WatchCombo | null` (optional
+// → ref includes undefined).
 export interface OverrideTrackerOptions {
   animeId: string
   player: PlayerName
-  resolvedCombo: Ref<ResolvedCombo | null>
+  resolvedCombo: Ref<WatchCombo | null | undefined>
   currentEpisode: Ref<number>
 }
 
@@ -90,15 +99,20 @@ export function useOverrideTracker(opts: OverrideTrackerOptions) {
     msSinceLoad: number,
   ): Promise<void> {
     try {
+      // tier/tier_number are present on ResolvedCombo (a superset of WatchCombo).
+      // The prop is typed as WatchCombo, so we read those fields via a partial
+      // cast — they're echoed to the backend for label hygiene and may be null.
+      const original = opts.resolvedCombo.value ?? null
+      const resolved = original as Partial<ResolvedCombo> | null
       await userApi.recordOverride({
         anime_id: opts.animeId,
         load_session_id: loadSessionId,
         dimension,
-        original_combo: opts.resolvedCombo.value,
+        original_combo: original as ResolvedCombo | null,
         new_combo: newCombo,
         ms_since_load: Math.round(msSinceLoad),
-        tier: opts.resolvedCombo.value?.tier ?? null,
-        tier_number: opts.resolvedCombo.value?.tier_number ?? null,
+        tier: resolved?.tier ?? null,
+        tier_number: resolved?.tier_number ?? null,
         player: opts.player,
       })
     } catch {

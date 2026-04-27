@@ -113,7 +113,7 @@
         <!-- Tab buttons -->
         <div class="flex gap-2 mb-3">
           <button
-            @click="translationType = 'voice'"
+            @click="setTranslationType('voice')"
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
             :class="translationType === 'voice'
               ? 'bg-green-500/20 text-green-400 border border-green-500/50'
@@ -126,7 +126,7 @@
             <span class="text-xs opacity-70">({{ voiceTranslations.length }})</span>
           </button>
           <button
-            @click="translationType = 'subtitles'"
+            @click="setTranslationType('subtitles')"
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
             :class="translationType === 'subtitles'
               ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
@@ -229,10 +229,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, toRef, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
 
@@ -528,8 +529,35 @@ const loadVideo = async () => {
   }
 }
 
+// Override tracker: emits POST /api/preferences/override on first user-initiated
+// pick within 30s of resolvedCombo apply. Per (load_session_id, dimension).
+// Auto-advance and programmatic picks must NOT route through these wrapped
+// handlers — Kodik has none today (selectTranslation/selectEpisode are only
+// called from template @click), but a `setTranslationType` helper is added
+// below to wrap the language toggle template clicks.
+const tracker = useOverrideTracker({
+  animeId: props.animeId,
+  player: 'kodik',
+  resolvedCombo: toRef(props, 'preferredCombo'),
+  currentEpisode: selectedEpisode,
+})
+
+const setTranslationType = (type: 'voice' | 'subtitles') => {
+  if (translationType.value === type) return
+  // 'language' dimension is the sub-vs-dub axis here (D-07 enumerates the set).
+  tracker.recordPickerEvent('language', { watch_type: type === 'voice' ? 'dub' : 'sub' })
+  translationType.value = type
+}
+
 const selectTranslation = (translationId: number) => {
   if (selectedTranslation.value === translationId) return
+
+  // Look up the translation title for the override new_combo before mutating state.
+  const tr = translations.value.find(t => t.id === translationId)
+  tracker.recordPickerEvent('team', {
+    translation_title: tr?.title ?? String(translationId),
+    player: 'kodik',
+  })
 
   selectedTranslation.value = translationId
 
@@ -544,6 +572,7 @@ const selectTranslation = (translationId: number) => {
 
 const selectEpisode = (episode: number) => {
   if (selectedEpisode.value === episode) return
+  tracker.recordPickerEvent('episode', { episode })
 
   // Save progress of current episode before switching
   if (currentTime.value > 0) {
