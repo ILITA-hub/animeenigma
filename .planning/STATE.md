@@ -84,3 +84,7 @@ None yet.
 Last session: 2026-04-27T06:08:18.053Z
 Stopped at: Phase 1 context gathered
 Resume file: .planning/phases/01-instrumentation-baseline/01-CONTEXT.md
+
+## Phase 1 Follow-ups
+
+- **Phase 1 follow-up:** Capture ≥ 24h baseline override-rate snapshot to .planning/PROJECT.md before Phase 6 starts. Computed via PromQL: rate(combo_override_total[24h]) / rate(combo_resolve_total[24h]), segmented by tier/language/anon/player/dimension. This is ROADMAP success criterion 3 — a phase-gate, not a Phase 1 task. Do not open Phase 6 work until this snapshot is recorded under PROJECT.md § "Baseline override rate".
