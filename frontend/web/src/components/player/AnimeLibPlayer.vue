@@ -160,7 +160,7 @@
         <div v-if="translations.length > 0" class="mb-3">
           <div class="flex gap-1 bg-white/5 rounded-lg p-1 mb-3">
             <button
-              @click="translationFilter = 'all'"
+              @click="setTranslationFilter('all')"
               class="flex-1 px-2 py-1 rounded-md text-xs font-medium transition-all"
               :class="translationFilter === 'all'
                 ? 'bg-white/15 text-white'
@@ -169,7 +169,7 @@
               {{ $t('player.allCount', { count: translations.length }) }}
             </button>
             <button
-              @click="translationFilter = 'voice'"
+              @click="setTranslationFilter('voice')"
               class="flex-1 px-2 py-1 rounded-md text-xs font-medium transition-all"
               :class="translationFilter === 'voice'
                 ? 'bg-white/15 text-white'
@@ -178,7 +178,7 @@
               {{ $t('player.voiceActingCount', { count: voiceTranslations.length }) }}
             </button>
             <button
-              @click="translationFilter = 'subtitles'"
+              @click="setTranslationFilter('subtitles')"
               class="flex-1 px-2 py-1 rounded-md text-xs font-medium transition-all"
               :class="translationFilter === 'subtitles'
                 ? 'bg-white/15 text-white'
@@ -308,10 +308,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, toRef, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -421,6 +422,34 @@ const markingWatched = ref(false)
 const episodeMarkedWatched = ref(false)
 const watchedEpisodes = ref(0)
 
+// currentEpisodeNumber: numeric ref for the override tracker. AnimeLib stores
+// the episode as the full AnimeLibEpisode object — extract the number lazily.
+const currentEpisodeNumber = computed(() =>
+  selectedEpisode.value ? parseInt(selectedEpisode.value.number) || 0 : 0,
+)
+
+// Override tracker. User-click handlers wrap the existing logic with
+// recordPickerEvent BEFORE the work; programmatic call sites (initial
+// auto-select inside fetchEpisodes/fetchTranslations and the post-episode-pick
+// re-fetch) bypass via _selectEpisode/_selectTranslation siblings to avoid
+// false-positive 'team' overrides when an episode change re-runs translation
+// auto-selection.
+const tracker = useOverrideTracker({
+  animeId: props.animeId,
+  player: 'animelib',
+  resolvedCombo: toRef(props, 'preferredCombo'),
+  currentEpisode: currentEpisodeNumber,
+})
+
+const setTranslationFilter = (filter: 'all' | 'voice' | 'subtitles') => {
+  if (translationFilter.value === filter) return
+  // 'all' is just a UI filter — only emit when toggling between voice/subtitles.
+  if (filter === 'voice' || filter === 'subtitles') {
+    tracker.recordPickerEvent('language', { watch_type: filter === 'voice' ? 'dub' : 'sub' })
+  }
+  translationFilter.value = filter
+}
+
 // Methods
 const fetchEpisodes = async () => {
   loadingEpisodes.value = true
@@ -436,7 +465,8 @@ const fetchEpisodes = async () => {
       const initialEp = props.initialEpisode
         ? episodes.value.find(e => parseInt(e.number) === props.initialEpisode) || episodes.value[0]
         : episodes.value[0]
-      await selectEpisode(initialEp)
+      // Initial auto-pick — bypass the user-click wrapper so no false override fires.
+      await _selectEpisode(initialEp)
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
@@ -467,7 +497,8 @@ const fetchTranslations = async () => {
       }))
       emit('availableTranslations', combos)
 
-      // Auto-select from preferredCombo if it matches this player
+      // Auto-select from preferredCombo if it matches this player.
+      // Bypass user-click wrapper — programmatic (no override emission).
       let autoSelected = false
       if (props.preferredCombo?.player === 'animelib') {
         const match = translations.value.find(
@@ -476,12 +507,12 @@ const fetchTranslations = async () => {
         )
         if (match) {
           autoSelected = true
-          await selectTranslation(match)
+          await _selectTranslation(match)
         }
       }
 
       if (!autoSelected) {
-        await selectTranslation(translations.value[0])
+        await _selectTranslation(translations.value[0])
       }
     }
   } catch (err: unknown) {
@@ -492,7 +523,10 @@ const fetchTranslations = async () => {
   }
 }
 
-const selectEpisode = async (ep: AnimeLibEpisode) => {
+// Programmatic (no-tracking) episode selector. Used by fetchEpisodes initial
+// auto-pick and any other non-user code path. Keep behavior identical to
+// selectEpisode minus the recordPickerEvent.
+const _selectEpisode = async (ep: AnimeLibEpisode) => {
   selectedEpisode.value = ep
   episodeMarkedWatched.value = false
   selectedTranslation.value = null
@@ -508,9 +542,24 @@ const selectEpisode = async (ep: AnimeLibEpisode) => {
   await fetchTranslations()
 }
 
-const selectTranslation = async (tr: AnimeLibTranslation) => {
+// User-click episode selector — fires combo_override ('episode') BEFORE the work.
+const selectEpisode = async (ep: AnimeLibEpisode) => {
+  tracker.recordPickerEvent('episode', { episode: parseInt(ep.number) || 0 })
+  await _selectEpisode(ep)
+}
+
+// Programmatic (no-tracking) translation selector. Called from fetchTranslations
+// (initial auto-pick OR post-episode-change re-pick — both of which would
+// otherwise emit a false-positive 'team' override).
+const _selectTranslation = async (tr: AnimeLibTranslation) => {
   selectedTranslation.value = tr
   await fetchStream()
+}
+
+// User-click translation selector — fires combo_override ('team') BEFORE the work.
+const selectTranslation = async (tr: AnimeLibTranslation) => {
+  tracker.recordPickerEvent('team', { translation_title: tr.team_name, player: 'animelib' })
+  await _selectTranslation(tr)
 }
 
 const selectSubtitle = (sub: AnimeLibSubtitle) => {
