@@ -15,6 +15,8 @@ test_approach: playwright-only
 >
 > **Test approach (planner-decided):** Playwright-only. Vitest is NOT installed in repo and adding it for ~6 unit tests is yak-shaving for a phase whose explicit goal is "wiring existing infrastructure together." Backend Go tests use existing `go test`; frontend tests use Playwright with `clock.install()` for deterministic timing — covers debounce / 30s window / dimension lock / auto-advance suppression as integration assertions.
 
+> **Wave-number convention:** the `Wave` column below uses the same wave numbers as the plan frontmatter `wave:` field (01-01 → wave 0, 01-02 → wave 1, 01-03 → wave 2, 01-04 → wave 3, 01-05 → wave 4, 01-06 → wave 5, 01-07 → wave 6). This was previously a 0..3 grouping; the alignment to plan-frontmatter waves was applied in revision per WARNING #8 from plan-checker so operators don't see drift between this doc and the YAML frontmatter the executor reads.
+
 ---
 
 ## Test Infrastructure
@@ -64,30 +66,32 @@ test_approach: playwright-only
 | 8 | 01-02 | 1 | M-01 | Backend handler rejects requests with neither JWT nor X-Anon-ID | unit | `cd services/player && go test ./internal/handler -run TestOverride_RejectsBothMissing` exits 0 | ✅ |
 | 9 | 01-02 | 1 | M-01 | Backend handler validates `dimension` whitelist (cardinality protection) | unit | `cd services/player && go test ./internal/handler -run TestOverride_RejectsInvalidDimension` exits 0 | ✅ |
 | 10 | 01-02 | 1 | M-01 | Backend handler emits `combo_override` log line with structured fields | unit | `cd services/player && go test ./internal/handler -run TestOverride_LogsStructured` exits 0 | ✅ |
-| 11 | 01-03 | 1 | M-01 | OptionalAuthMiddleware decodes JWT when present, no-op when absent | unit | `cd services/player && go test ./internal/transport -run TestOptionalAuth` exits 0 | ✅ |
-| 12 | 01-03 | 1 | M-01 | Resolver also emits `ComboResolveTotal` with same label set | unit | `cd services/player && go test ./internal/service -run TestResolve_IncrementsComboCounter` exits 0 | ✅ |
-| 13 | 01-03 | 1 | M-01 | `ResolvePreference` handler accepts anon requests via OptionalAuth | unit | `cd services/player && go test ./internal/handler -run TestResolve_AcceptsAnon` exits 0 | ✅ |
-| 14 | 01-03 | 1 | M-01 | Player router registers `/api/preferences/override` outside JWT group | unit | `grep -A 5 'r.Route("/preferences"' services/player/internal/transport/router.go \| grep -c "OptionalAuthMiddleware"` returns >=1 | ✅ |
-| 15 | 01-03 | 1 | M-01 | Gateway router proxies `/api/preferences/*` outside JWT group | unit | `grep -B 2 'preferences/\*"' services/gateway/internal/transport/router.go \| grep -v "JWTValidation"` non-empty | ✅ |
-| 16 | 01-04 | 2 | M-01 | `useOverrideTracker.ts` exports composable factory | unit | `grep -c "export function useOverrideTracker" frontend/web/src/composables/useOverrideTracker.ts` returns 1 | ✅ |
-| 17 | 01-04 | 2 | M-01 | `anonId.ts` provides idempotent `getOrCreateAnonId` | unit | `grep -c "export function getOrCreateAnonId" frontend/web/src/utils/anonId.ts` returns 1 | ✅ |
-| 18 | 01-04 | 2 | M-01 | `apiClient` interceptor sets `X-Anon-ID` when no JWT | unit | `grep -c "X-Anon-ID" frontend/web/src/api/client.ts` returns >=1 | ✅ |
-| 19 | 01-04 | 2 | M-01 | `useWatchPreferences.ts` no longer short-circuits on anon | unit | `grep -c "!authStore.isAuthenticated" frontend/web/src/composables/useWatchPreferences.ts` returns 0 | ✅ |
-| 20 | 01-05 | 2 | M-01 | All four player components import `useOverrideTracker` | unit | `grep -l "useOverrideTracker" frontend/web/src/components/player/{Kodik,AnimeLib,HiAnime,Consumet}Player.vue \| wc -l` returns 4 | ✅ |
-| 21 | 01-05 | 2 | M-01 | `Anime.vue` invokes tracker for `player` dimension on user-driven `videoProvider` change | unit | `grep -c "useOverrideTracker\\\|recordPickerEvent" frontend/web/src/views/Anime.vue` returns >=2 | ✅ |
-| 22 | 01-05 | 2 | M-01 | E2E auth-user override flow end-to-end | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "auth user"` exits 0 | ✅ |
-| 23 | 01-05 | 2 | M-01 | E2E anon-user override flow end-to-end (X-Anon-ID header set) | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "anon user"` exits 0 | ✅ |
-| 24 | 01-05 | 2 | M-01 | E2E debounce — 250ms double-click coalesces to 1 POST | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "debounce"` exits 0 | ✅ |
-| 25 | 01-05 | 2 | M-01 | E2E 30s window expires — click after 31s emits no POST | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "30s window"` exits 0 | ✅ |
-| 26 | 01-05 | 2 | M-01 | E2E first-per-dimension lock — 2nd team click ignored | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "first per dimension"` exits 0 | ✅ |
-| 27 | 01-05 | 2 | M-01 | E2E auto-advance suppression — programmatic episode change emits no POST | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "ignores auto-advance"` exits 0 | ✅ |
-| 28 | 01-06 | 3 | M-02 | Grafana dashboard panel JSON parses (no syntax errors) | unit | `jq . docker/grafana/dashboards/preference-resolution.json > /dev/null` exits 0 | ✅ |
-| 29 | 01-06 | 3 | M-02 | Dashboard contains "Auto-Pick Override Rate" panel/row | unit | `jq '.panels \| map(select(.title \| test("Override Rate"))) \| length' docker/grafana/dashboards/preference-resolution.json` returns >=1 | ✅ |
-| 30 | 01-07 | 3 | M-02 | Player + gateway redeployed via `make redeploy-*` | manual-semi | `make health` all-green AND `curl -s http://localhost:8083/metrics \| grep -c combo_override_total` returns >=1 | ✅ |
-| 31 | 01-07 | 3 | M-02 | PromQL probe — counters present after smoke override | manual-semi | `curl -s 'http://localhost:9090/api/v1/query?query=combo_override_total' \| jq '.data.result \| length > 0'` returns true | manual |
-| 32 | 01-07 | 3 | M-02 | Grafana panel renders with "Auto-Pick Override Rate" title | manual | Open `https://admin.animeenigma.ru/grafana/d/preference-resolution-v1` and confirm panel visible | manual |
-| 33 | 01-07 | 3 | M-02 | `animeenigma-after-update` skill ran — changelog updated, commit + push completed | manual-semi | `jq '.entries[0].title' frontend/web/public/changelog.json \| grep -i "override\\\|baseline\\\|instrumentation"` non-empty AND `git log -1 --pretty=%s` matches phase-1 instrumentation message | ✅ |
-| 34 | post-phase | — | M-02 | Baseline snapshot ≥ 24h captured and recorded in PROJECT.md (PHASE GATE before Phase 6) | manual | `grep -A 10 "Baseline override rate" .planning/PROJECT.md` non-empty | manual (Phase gate) |
+| 11 | 01-03 | 2 | M-01 | OptionalAuthMiddleware decodes JWT when present, no-op when absent | unit | `cd services/player && go test ./internal/transport -run TestOptionalAuth` exits 0 | ✅ |
+| 12 | 01-03 | 2 | M-01 | Resolver also emits `ComboResolveTotal` with same label set | unit | `cd services/player && go test ./internal/service -run TestResolve_IncrementsComboCounter` exits 0 | ✅ |
+| 13 | 01-03 | 2 | M-01 | `ResolvePreference` handler accepts anon requests via OptionalAuth | unit | `cd services/player && go test ./internal/handler -run TestResolve_AcceptsAnon` exits 0 | ✅ |
+| 14 | 01-03 | 2 | M-01 | Player router registers `/api/preferences/override` outside JWT group | unit | `grep -A 5 'r.Route("/preferences"' services/player/internal/transport/router.go \| grep -c "OptionalAuthMiddleware"` returns >=1 | ✅ |
+| 15 | 01-03 | 2 | M-01 | Gateway router proxies `/api/preferences/*` outside JWT group | unit | `grep -B 2 'preferences/\*"' services/gateway/internal/transport/router.go \| grep -v "JWTValidation"` non-empty | ✅ |
+| 16 | 01-04 | 3 | M-01 | `useOverrideTracker.ts` exports composable factory | unit | `grep -c "export function useOverrideTracker" frontend/web/src/composables/useOverrideTracker.ts` returns 1 | ✅ |
+| 17 | 01-04 | 3 | M-01 | `anonId.ts` provides idempotent `getOrCreateAnonId` | unit | `grep -c "export function getOrCreateAnonId" frontend/web/src/utils/anonId.ts` returns 1 | ✅ |
+| 18 | 01-04 | 3 | M-01 | `apiClient` interceptor always sets `X-Anon-ID` (always-set per PATTERNS.md) | unit | `grep -c "X-Anon-ID" frontend/web/src/api/client.ts` returns >=1 AND `grep -B 2 "X-Anon-ID" frontend/web/src/api/client.ts \| grep -c "else if"` returns 0 | ✅ |
+| 19 | 01-04 | 3 | M-01 | `useWatchPreferences.ts` no longer short-circuits on anon | unit | `grep -c "!authStore.isAuthenticated" frontend/web/src/composables/useWatchPreferences.ts` returns 0 | ✅ |
+| 20 | 01-05 | 4 | M-01 | All four player components import `useOverrideTracker` | unit | `grep -l "useOverrideTracker" frontend/web/src/components/player/{Kodik,AnimeLib,HiAnime,Consumet}Player.vue \| wc -l` returns 4 | ✅ |
+| 21 | 01-05 | 4 | M-01 | `Anime.vue` invokes tracker for `player` dimension on user-driven `videoProvider` change | unit | `grep -c "useOverrideTracker\\\|recordPickerEvent" frontend/web/src/views/Anime.vue` returns >=2 | ✅ |
+| 22 | 01-05 | 4 | M-01 | E2E auth-user override flow end-to-end | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "auth user"` exits 0 | ✅ |
+| 23 | 01-05 | 4 | M-01 | E2E anon-user override flow end-to-end (X-Anon-ID header set) | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "anon user"` exits 0 | ✅ |
+| 24 | 01-05 | 4 | M-01 | E2E debounce — 250ms double-click coalesces to 1 POST | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "debounce"` exits 0 | ✅ |
+| 25 | 01-05 | 4 | M-01 | E2E 30s window expires — click after 31s emits no POST | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "30s window"` exits 0 | ✅ |
+| 26 | 01-05 | 4 | M-01 | E2E first-per-dimension lock — 2nd team click ignored | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "first per dimension"` exits 0 | ✅ |
+| 27 | 01-05 | 4 | M-01 | E2E auto-advance suppression — programmatic episode change emits no POST (uses DEV-only force-advance hook gated by import.meta.env.DEV) | integration | `cd frontend/web && bunx playwright test combo-override.spec.ts -g "ignores auto-advance"` exits 0 | ✅ |
+| 28 | 01-06 | 5 | M-02 | Grafana dashboard panel JSON parses (no syntax errors) | unit | `jq . docker/grafana/dashboards/preference-resolution.json > /dev/null` exits 0 | ✅ |
+| 29 | 01-06 | 5 | M-02 | Dashboard contains "Auto-Pick Override Rate" panel/row | unit | `jq '.panels \| map(select(.title \| test("Override Rate"))) \| length' docker/grafana/dashboards/preference-resolution.json` returns >=1 | ✅ |
+| 30 | 01-07 | 6 | M-02 | Player + gateway redeployed via `make redeploy-*` | manual-semi | `make health` all-green AND `curl -s http://localhost:8083/metrics \| grep -c combo_override_total` returns >=1 | ✅ |
+| 31 | 01-07 | 6 | M-02 | PromQL probe — counters present after smoke override | manual-semi | `curl -s 'http://localhost:9090/api/v1/query?query=combo_override_total' \| jq '.data.result \| length > 0'` returns true | manual |
+| 32 | 01-07 | 6 | M-02 | Grafana panel renders with "Auto-Pick Override Rate" title | manual | Open `https://admin.animeenigma.ru/grafana/d/preference-resolution-v1` and confirm panel visible | manual |
+| 33 | 01-07 | 6 | M-02 | `animeenigma-after-update` skill ran — changelog updated, commit + push completed | manual-semi | `jq -r '.[0].entries[].message' frontend/web/public/changelog.json \| grep -iE "override\|baseline\|instrumentation"` non-empty AND `git log -1 --pretty=%s` matches phase-1 instrumentation message | ✅ |
+| 34 | 01-07 | 6 | M-02 | PROJECT.md documents Loki 7d retention constraint (BLOCKER #2) | unit | `grep -ic "loki retention" .planning/PROJECT.md` returns >=1 AND `grep -cE "168h\|7 days\|7d" .planning/PROJECT.md` returns >=1 | ✅ |
+| 35 | 01-07 | 6 | M-02 | STATE.md carries Phase 1 follow-up marker (WARNING #9) | unit | `grep -c "Phase 1 follow-up" .planning/STATE.md` returns >=1 | ✅ |
+| 36 | post-phase | — | M-02 | Baseline snapshot ≥ 24h captured and recorded in PROJECT.md (PHASE GATE before Phase 6) | manual | `grep -A 10 "Baseline override rate" .planning/PROJECT.md` non-empty | manual (Phase gate) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -101,7 +105,7 @@ These must be created in Wave 0 before any implementation work begins (RED state
 - [ ] `services/player/internal/transport/optional_auth_test.go` — middleware test (JWT decode + no-op when absent). RED until middleware exists.
 - [ ] `services/player/internal/service/preference_resolve_combo_test.go` — assert `ComboResolveTotal` increments. RED until service edit lands.
 - [ ] `services/player/internal/handler/preference_anon_test.go` — assert ResolvePreference accepts anon (no JWT). RED until handler edit lands.
-- [ ] `frontend/web/e2e/combo-override.spec.ts` — Playwright spec stubs covering 7 E2E scenarios; `test.skip()` body until backend + frontend land. Becomes active in Wave 2.
+- [ ] `frontend/web/e2e/combo-override.spec.ts` — Playwright spec stubs covering 7 E2E scenarios; `test.skip()` body until backend + frontend land. Becomes active in Wave 4.
 
 Note: Wave 0 commits compile-failing tests. Wave 1 brings them green by introducing the production code. The Nyquist contract is satisfied because every `<verify>` references a Wave 0 file path.
 
@@ -113,7 +117,7 @@ Note: Wave 0 commits compile-failing tests. Wave 1 brings them green by introduc
 |----------|-------------|------------|-------------------|
 | Production PromQL probe non-zero after live traffic | M-02 | Requires real production traffic | After deploy, trigger 1+ override on prod, then `curl -s 'https://admin.animeenigma.ru/prometheus/api/v1/query?query=combo_override_total' \| jq '.data.result \| length'` returns ≥ 1 |
 | Grafana panel renders correctly with all 5 segmentations | M-02 | Requires browser visual confirmation | Open `https://admin.animeenigma.ru/grafana/d/preference-resolution-v1`, confirm "Auto-Pick Override Rate" panel renders with tier / language / anon-vs-auth / player / dimension segmentations |
-| 24h baseline captured and written to PROJECT.md | M-02, success criterion 3 | Requires 24+ hours of real traffic | After 24h soak: extract `rate(combo_override_total[5m]) / rate(combo_resolve_total[5m])` per segment, write to `.planning/PROJECT.md` § "Baseline override rate" |
+| 24h baseline captured and written to PROJECT.md | M-02, success criterion 3 | Requires 24+ hours of real traffic | After 24h soak: extract `rate(combo_override_total[5m]) / rate(combo_resolve_total[5m])` per segment, write to `.planning/PROJECT.md` § "Baseline override rate". This is also tracked in STATE.md as a "Phase 1 follow-up" marker (added by Plan 01-07 Task 3) so it survives context resets between Phase 1 close and Phase 6 open. |
 | Live deployment via `make redeploy-player` healthy | success criterion 4 | Requires production environment | `make redeploy-player && make redeploy-gateway && make health` returns all-green; both counters appear in `/metrics` exposition |
 
 ---
@@ -126,5 +130,6 @@ Note: Wave 0 commits compile-failing tests. Wave 1 brings them green by introduc
 - [x] No watch-mode flags (`go test`, `playwright test`, no `--ui`)
 - [x] Feedback latency < 30s per task
 - [x] `nyquist_compliant: true` set in frontmatter
+- [x] Wave-number column aligned to plan-frontmatter `wave:` values (WARNING #8 closed)
 
-**Approval:** approved — Approach B (Playwright-only) chosen by planner.
+**Approval:** approved — Approach B (Playwright-only) chosen by planner. Revised 2026-04-27 to address plan-checker BLOCKER #3 (jq path on row 33 corrected to `.[0].entries[].message` schema), WARNING #8 (wave numbers aligned to plan frontmatter), and to add coverage rows 34/35 for the new Plan 01-07 tasks (PROJECT.md Loki documentation + STATE.md follow-up marker).

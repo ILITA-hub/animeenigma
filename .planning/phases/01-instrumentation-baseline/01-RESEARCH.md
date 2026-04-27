@@ -1177,22 +1177,16 @@ Add to `docker/grafana/dashboards/preference-resolution.json` `panels` array. In
 
 **Note:** Most assumptions are LOW risk. A5 and A7 are the planner's primary verification targets in Wave 1.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `dimension="player"` be tracked from `Anime.vue` or skipped in v1?**
-   - What we know: Player switch happens at `Anime.vue:videoProvider` (line 781), outside any single player component. The composable lives inside players.
-   - What's unclear: Implementation cost vs. value — is `player` dimension a frequent override?
-   - Recommendation: Track it via a thin wrapper in `Anime.vue` invoking a one-shot version of the same backend POST. Cost is ~10 lines. Value: distinguishes "language/team picker is broken" from "the auto-picked player is wrong." Worth the cost. Document as the ONE place outside the 4 players where the composable's logic is duplicated.
+   - **RESOLVED — Track it.** A thin wrapper in `Anime.vue` invokes the same backend POST when `videoProvider` changes via the user-facing player picker (not via auto-selection / fallback). Cost ~10 lines. Value: distinguishes "language/team picker is broken" from "the auto-picked player is wrong." Plan 01-05 Task 2 implements this.
 
 2. **Should we ship Loki retention bump (7d → 30d) inside Phase 1 or defer?**
-   - What we know: D-06 says 31d but actual is 7d (Critical Finding 2). PROJECT.md success doesn't strictly require >7d retention.
-   - What's unclear: Will Phase 6 baselining need >7d Loki history?
-   - Recommendation: Defer. Document the 7d ceiling in PROJECT.md Key Decisions and the baseline snapshot. If Phase 5/6 needs more, that's the time to re-evaluate Loki sizing or add the per-event DB table from the deferred list.
+   - **RESOLVED — Defer.** Loki stays at 7d. Document the actual 7d ceiling in `.planning/PROJECT.md` § "Loki retention constraint" alongside the Phase 1 instrumentation deliverable. Prometheus 15d retention covers the rate-over-time use case (Phase 7 success criterion 5). If Phase 5/6 needs >7d per-event Loki history, re-evaluate then or add the per-event DB table from the deferred list.
 
 3. **Should the override handler de-duplicate at the server level too?**
-   - What we know: Composable already de-duplicates per `(load_session_id, dimension)` per session. Defense in depth would have the server reject duplicates.
-   - What's unclear: Cost of an in-memory LRU server-side vs trust the client.
-   - Recommendation: Trust the client for v1. Add a `metric_relabel_configs` in `prometheus.yml` to drop pathological cardinality if abuse is detected later. The metric is monitoring data, not financial — eventual consistency is fine.
+   - **RESOLVED — Trust the client for v1.** Composable already de-duplicates per `(load_session_id, dimension)` per session. The metric is monitoring data, not financial — eventual consistency is acceptable. If abuse is detected later, add a `metric_relabel_configs` in `prometheus.yml` to drop pathological cardinality. Server-side LRU is out of scope for Phase 1.
 
 ## Environment Availability
 

@@ -114,6 +114,18 @@ When a logged-in user opens an anime, the player loads on the correct episode in
 | `watch_progress.completed` becomes the single source of truth for "ep watched" | Avoids the `anime_list.episodes` vs `watch_progress.completed` disagreement. `anime_list.episodes` derives from it. | — Pending |
 | Recommendations engine out of scope | Building recs without the analytics work below is guessing twice. Phase C makes the *next* project (recs) cheaper. | — Pending |
 
+### Loki retention constraint
+
+**Loki retention is 168h / 7 days**, NOT the 31d figure mentioned in early Phase 1 CONTEXT D-06. Verified at `docker/loki/loki-config.yml` line 27-28 (`limits_config.retention_period: 168h  # 7 days`). The 31d figure was a documentation error; the actual provisioned retention is 7 days.
+
+What this means for the project:
+
+- **Prometheus retention (15d)** covers the `combo_override_total` / `combo_resolve_total` rate metric, which is the Phase 7 baseline-comparison signal. The Phase 1 success criterion 3 (24h baseline) and the Phase 7 before/after override-rate comparison both rely on Prometheus rate counters, NOT on Loki log lines, so the 7d Loki window is sufficient for those use cases.
+- **Loki (7d)** is for retroactive per-event inspection within a 7-day window. Useful for debugging individual override events ("why did this user override this anime"), per-event PII audit (T-01-03 verification), and short-window investigations.
+- **If Phase 6 needs > 7d per-event analysis** (e.g., to validate Tier 2 time-decay using individual override events spanning weeks), that becomes a Phase 5 schema-add (per-event DB table), which is already on the Deferred list in Phase 1 CONTEXT.md and PROJECT.md "Out of Scope" framing. Do NOT modify Loki retention to work around this — the per-event DB table is the correct lever.
+
+This subsection is intentionally placed in Key Decisions so that any future phase opening a per-event analytics question must read past it before assuming Loki has 31d of history.
+
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
