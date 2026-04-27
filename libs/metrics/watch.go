@@ -53,4 +53,28 @@ var (
 		},
 		[]string{"tier", "language", "watch_type"},
 	)
+
+	// ComboOverrideTotal tracks user-initiated combo changes within 30s of player load.
+	// One increment per (load_session_id, dimension) at most — frontend composable enforces.
+	// Cardinality budget: 6 (tier) × 4 (dimension) × 2 (language) × 2 (anon) × 4 (player) = 384 series.
+	// See .planning/phases/01-instrumentation-baseline/01-RESEARCH.md §Pattern 3 + §Pitfall 3.
+	ComboOverrideTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "combo_override_total",
+			Help: "User overrides of auto-picked combo within 30s of player load",
+		},
+		[]string{"tier", "dimension", "language", "anon", "player"},
+	)
+
+	// ComboResolveTotal is the rate denominator for ComboOverrideTotal.
+	// Incremented from the resolver service (services/player/internal/service/preference.go) on
+	// every successful resolve outcome — labels match ComboOverrideTotal except no `dimension`.
+	// PromQL: rate(combo_override_total[5m]) / rate(combo_resolve_total[5m]).
+	ComboResolveTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "combo_resolve_total",
+			Help: "Successful preference resolution outcomes",
+		},
+		[]string{"tier", "language", "anon", "player"},
+	)
 )
