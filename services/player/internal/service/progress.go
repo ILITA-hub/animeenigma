@@ -23,7 +23,9 @@ func NewProgressService(progressRepo *repo.ProgressRepository, prefService *Pref
 	}
 }
 
-// UpdateProgress updates or creates watch progress (time tracking only)
+// UpdateProgress updates or creates watch progress (heartbeat saves).
+// Does not mark the episode as completed — that is a discrete event written
+// via ProgressRepository.MarkCompleted from ListService.MarkEpisodeWatched.
 func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req *domain.UpdateProgressRequest) (*domain.WatchProgress, error) {
 	progress := &domain.WatchProgress{
 		UserID:        userID,
@@ -31,11 +33,10 @@ func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req
 		EpisodeNumber: req.EpisodeNumber,
 		Progress:      req.Progress,
 		Duration:      req.Duration,
-		Completed:     false, // User marks manually
 		LastWatchedAt: time.Now(),
 	}
 
-	if err := s.progressRepo.Upsert(ctx, progress); err != nil {
+	if err := s.progressRepo.UpsertProgress(ctx, progress); err != nil {
 		return nil, err
 	}
 

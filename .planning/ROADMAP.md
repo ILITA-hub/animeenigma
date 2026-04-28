@@ -12,7 +12,7 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 
 - [x] **Phase 1: Instrumentation Baseline** - Emit `combo_override` events and stand up the Grafana tile so every later phase can be measured against a real baseline ✓ 2026-04-27
 - [x] **Phase 2: Analytics Audit** - Read-only inventory of `watch_history` / `watch_progress` / `anime_list` columns and a written gap analysis for smart episode selection ✓ 2026-04-28
-- [ ] **Phase 3: Single Source of Truth for "Watched"** - Both auto-mark (20 min) and manual-mark paths set `watch_progress.completed = true`, and `anime_list.episodes` + episode-list checkmarks derive from it
+- [x] **Phase 3: Single Source of Truth for "Watched"** - Both auto-mark (20 min) and manual-mark paths set `watch_progress.completed = true`, and `anime_list.episodes` + episode-list checkmarks derive from it ✓ 2026-04-28
 - [ ] **Phase 4: Resume State Machine in All Four Players** - Pre-player episode selection follows the watching / finished / not-yet-aired state machine across Kodik, AnimeLib, HiAnime, Consumet
 - [ ] **Phase 5: Analytics Gap-Fill** - Add the highest-value low-risk columns/events identified in Phase 2; at minimum distinguish session-start vs session-resume
 - [ ] **Phase 6: Tier 2 Inference Rewrite** - Weighted by `duration_watched`, exponentially decayed (30-day half-life), two-signal coarse/fine, with a min-confidence fallback to Tier 3
@@ -63,7 +63,14 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   3. `anime_list.episodes` is derived from `watch_progress.completed` rows (read or recomputed) instead of being independently incremented; episode-list checkmarks in the UI read from the same source
   4. A user who has watched 5 episodes sees the same count of completed episodes on the watchlist counter, the episode-list checkmarks, and the resume CTA — verified for `ui_audit_bot`'s seeded data on production
   5. Backfill / migration handles existing rows where `anime_list.episodes > 0` but no `watch_progress.completed = true` exists (or this gap is consciously accepted and documented)
-**Plans**: TBD
+**Plans**: 5 tasks (single plan)
+- [x] 03-01 Backend repo split + service dual-write ✓ 2026-04-28
+- [x] 03-02 Idempotent backfill on startup with early-exit guard ✓ 2026-04-28
+- [x] 03-03 Frontend checkmark consistency (AnimeLib + Consumet) ✓ 2026-04-28
+- [x] 03-04 Tests (5 repo + 3 service) ✓ 2026-04-28
+- [x] 03-05 Update REQUIREMENTS/ROADMAP/STATE, summary, commit ✓ 2026-04-28
+**Deploy**: Pending — Wave 1 batch deploy at end of wave (after Phase 3 commit)
+**Production verification**: Pending — using `ui_audit_bot` seeded data per CONTEXT.md D-13
 
 ### Phase 4: Resume State Machine in All Four Players
 **Goal**: When a logged-in user opens an anime, the player loads on the correct episode and shows the right contextual CTA — for in-progress series, finished series, and ongoing series whose next episode hasn't aired — consistently across all four player components.

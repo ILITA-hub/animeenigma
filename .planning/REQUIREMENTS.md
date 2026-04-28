@@ -7,8 +7,8 @@
 
 ### A. Resume CTA Correctness
 
-- [ ] **A-01**: At the existing 20-min auto-mark threshold, set `watch_progress.completed = true` (in addition to bumping `anime_list.episodes`) so resume logic and watchlist counter agree.
-- [ ] **A-02**: Manual "mark watched" action also sets `watch_progress.completed = true` — both paths converge on a single source of truth.
+- [x] **A-01**: At the existing 20-min auto-mark threshold, set `watch_progress.completed = true` (in addition to bumping `anime_list.episodes`) so resume logic and watchlist counter agree. **Closed 2026-04-28** — `MarkEpisodeWatched` calls `progressRepo.MarkCompleted` (`services/player/internal/service/list.go`).
+- [x] **A-02**: Manual "mark watched" action also sets `watch_progress.completed = true` — both paths converge on a single source of truth. **Closed 2026-04-28** — same code path as A-01 (manual + auto-mark both invoke `MarkEpisodeWatched`).
 - [ ] **A-03**: Pre-player episode selection follows a state machine:
   - **Watching** (last < total): start ep N+1, breadcrumb "You finished ep N"
   - **Finished series** (last == total): "You finished this" surface with Rewatch / Mark complete in list / Find similar
@@ -33,7 +33,7 @@
 ### D. Cross-Cutting
 
 - [ ] **D-01**: Anonymous (logged-out) users get a localStorage-backed preference (language + watch_type + last-used team), with the same state-machine resume CTA from `localStorage` watch progress.
-- [ ] **D-02**: Single source of truth for "episode is watched" — `watch_progress.completed` is canonical; `anime_list.episodes` derives from it; episode-list checkmarks read from the same source.
+- [x] **D-02**: Single source of truth for "episode is watched" — `watch_progress.completed` is canonical; `anime_list.episodes` derives from it; episode-list checkmarks read from the same source. **Closed 2026-04-28** — `ProgressRepository.MarkCompleted` flips canonical truth; `anime_list.episodes` is the maintained denorm; AnimeLib + Consumet checkmark fields fixed to match Kodik/HiAnime (read `entry?.episodes`).
 - [ ] **D-03**: Cross-device freshness — invalidate the 24h composable cache on auth-state change and on a server-side combo-changed signal (e.g., bump a `prefs_version` cookie/header on save); shorten TTL if needed.
 
 ### M. Instrumentation (Success Metric)
@@ -71,8 +71,8 @@ Phase mapping assigned 2026-04-27 by roadmapper. 18/18 v1 requirements mapped, n
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| A-01 | Phase 3 | Pending |
-| A-02 | Phase 3 | Pending |
+| A-01 | Phase 3 | Complete (2026-04-28) |
+| A-02 | Phase 3 | Complete (2026-04-28) |
 | A-03 | Phase 4 | Pending |
 | A-04 | Phase 4 | Pending |
 | B-01 | Phase 6 | Pending |
@@ -85,7 +85,7 @@ Phase mapping assigned 2026-04-27 by roadmapper. 18/18 v1 requirements mapped, n
 | C-03 | Phase 5 | Pending |
 | C-04 | Phase 8 | Pending |
 | D-01 | Phase 7 | Pending |
-| D-02 | Phase 3 | Pending |
+| D-02 | Phase 3 | Complete (2026-04-28) |
 | D-03 | Phase 7 | Pending |
 | M-01 | Phase 1 | Pending |
 | M-02 | Phase 1 | Pending |

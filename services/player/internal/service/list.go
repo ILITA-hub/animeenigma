@@ -171,7 +171,12 @@ func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID strin
 	return s.listRepo.Delete(ctx, userID, animeID)
 }
 
-// MarkEpisodeWatched marks an episode as watched and updates the episodes count
+// MarkEpisodeWatched marks an episode as watched and updates the episodes count.
+// Called by both the 20-min auto-mark and the manual mark-watched button across
+// all four players. After bumping anime_list.episodes, also flips
+// watch_progress.completed=true for the episode (single source of truth — Phase 3).
+// The MarkCompleted call is best-effort: a failure is logged but does not fail
+// the request, mirroring the existing watch_history pattern below.
 func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID string, req *domain.MarkEpisodeWatchedRequest) (*domain.AnimeListEntry, error) {
 	updated, err := s.listRepo.IncrementEpisodes(ctx, userID, animeID, req.Episode)
 	if err != nil {
@@ -203,6 +208,15 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			if err := s.listRepo.Upsert(ctx, entry); err != nil {
 				return nil, err
 			}
+			// Single source of truth: also mark watch_progress.completed=true
+			if err := s.progressRepo.MarkCompleted(ctx, userID, animeID, req.Episode); err != nil {
+				s.log.Errorw("failed to mark watch_progress completed (auto-create path)",
+					"user_id", userID,
+					"anime_id", animeID,
+					"episode", req.Episode,
+					"error", err,
+				)
+			}
 			return entry, nil
 		}
 
@@ -210,6 +224,18 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			"user_id", userID,
 			"anime_id", animeID,
 			"episode", req.Episode,
+		)
+	}
+
+	// Single source of truth: flip watch_progress.completed=true for this episode.
+	// Idempotent — safe whether IncrementEpisodes updated, was a no-op, or hit
+	// the auto-create branch above (which has its own MarkCompleted call).
+	if err := s.progressRepo.MarkCompleted(ctx, userID, animeID, req.Episode); err != nil {
+		s.log.Errorw("failed to mark watch_progress completed",
+			"user_id", userID,
+			"anime_id", animeID,
+			"episode", req.Episode,
+			"error", err,
 		)
 	}
 

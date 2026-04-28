@@ -760,8 +760,8 @@ onMounted(async () => {
     try {
       const response = await userApi.getWatchlistEntry(props.animeId)
       const entry = response.data?.data || response.data
-      if (entry?.episodes_watched) {
-        watchedEpisodes.value = entry.episodes_watched
+      if (entry?.episodes) {
+        watchedEpisodes.value = entry.episodes
       }
     } catch {
       // Ignore

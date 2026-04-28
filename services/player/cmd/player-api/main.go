@@ -56,6 +56,33 @@ func main() {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
+	// Phase 3 backfill: synthesize watch_progress.completed=true rows for legacy
+	// data (any (user, anime, ep <= anime_list.episodes) without a completed=true
+	// row). Idempotent — guarded by an early-exit check so it short-circuits on
+	// every restart after the first deploy. Non-fatal if it fails.
+	{
+		var anyCompleted int
+		_ = db.DB.Raw("SELECT 1 FROM watch_progress WHERE completed = true LIMIT 1").Scan(&anyCompleted).Error
+		if anyCompleted == 0 {
+			log.Infow("phase 3 backfill: synthesizing watch_progress.completed=true rows from anime_list.episodes")
+			if err := db.DB.Exec(`
+				INSERT INTO watch_progress (id, user_id, anime_id, episode_number, progress, duration, completed, last_watched_at, created_at, updated_at)
+				SELECT gen_random_uuid(), al.user_id, al.anime_id, ep, 0, 0, true,
+				       COALESCE(al.completed_at, al.updated_at), NOW(), NOW()
+				FROM anime_list al
+				CROSS JOIN LATERAL generate_series(1, al.episodes) ep
+				WHERE al.episodes > 0
+				ON CONFLICT (user_id, anime_id, episode_number) DO UPDATE
+				SET completed = true, updated_at = NOW()
+				WHERE watch_progress.completed = false
+			`).Error; err != nil {
+				log.Errorw("phase 3 backfill failed (non-fatal)", "error", err)
+			} else {
+				log.Infow("phase 3 backfill complete")
+			}
+		}
+	}
+
 	// Initialize repositories
 	progressRepo := repo.NewProgressRepository(db.DB)
 	listRepo := repo.NewListRepository(db.DB)
