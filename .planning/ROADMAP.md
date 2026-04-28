@@ -11,7 +11,7 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 - Decimal phases (e.g., 2.1): Reserved for urgent insertions if scoping reveals one
 
 - [x] **Phase 1: Instrumentation Baseline** - Emit `combo_override` events and stand up the Grafana tile so every later phase can be measured against a real baseline ✓ 2026-04-27
-- [ ] **Phase 2: Analytics Audit** - Read-only inventory of `watch_history` / `watch_progress` / `anime_list` columns and a written gap analysis for smart episode selection
+- [x] **Phase 2: Analytics Audit** - Read-only inventory of `watch_history` / `watch_progress` / `anime_list` columns and a written gap analysis for smart episode selection ✓ 2026-04-28
 - [ ] **Phase 3: Single Source of Truth for "Watched"** - Both auto-mark (20 min) and manual-mark paths set `watch_progress.completed = true`, and `anime_list.episodes` + episode-list checkmarks derive from it
 - [ ] **Phase 4: Resume State Machine in All Four Players** - Pre-player episode selection follows the watching / finished / not-yet-aired state machine across Kodik, AnimeLib, HiAnime, Consumet
 - [ ] **Phase 5: Analytics Gap-Fill** - Add the highest-value low-risk columns/events identified in Phase 2; at minimum distinguish session-start vs session-resume
@@ -49,7 +49,9 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   2. The same document lists the gap items for smart episode selection (drop-off / abandon point, rewatch detection, completion-percentage trajectory, session length, intro/outro skip patterns) each scored on (value-for-this-project × risk-to-add)
   3. The gap list is ranked and the top 1-3 items explicitly flagged as Phase 5 candidates
   4. No production code or schema changes ship in this phase (read-only investigation)
-**Plans**: TBD
+**Plans**: 1 plan
+- [x] 02-01-PLAN.md — Promote draft to `docs/analytics-audit-2026-04-28.md`, lock Phase 5 candidates, close C-01/C-02 ✓ 2026-04-28
+**Deliverable**: `docs/analytics-audit-2026-04-28.md`
 
 ### Phase 3: Single Source of Truth for "Watched"
 **Goal**: Eliminate the disagreement between `watch_progress.completed` and `anime_list.episodes` so resume CTAs, watchlist counters, and episode-list checkmarks all agree.

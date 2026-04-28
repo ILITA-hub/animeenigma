@@ -25,8 +25,8 @@
 
 ### C. Analytics Audit + Gap-Fill
 
-- [ ] **C-01**: Audit every column captured in `watch_history`, `watch_progress`, `anime_list` and document what each is used for vs. unused.
-- [ ] **C-02**: Identify gaps for smart episode selection: drop-off / abandon point, rewatch detection, completion-percentage trajectory, session length, intro/outro skip patterns.
+- [x] **C-01**: Audit every column captured in `watch_history`, `watch_progress`, `anime_list` and document what each is used for vs. unused. **Closed 2026-04-28** — `docs/analytics-audit-2026-04-28.md` § "Column Inventory".
+- [x] **C-02**: Identify gaps for smart episode selection: drop-off / abandon point, rewatch detection, completion-percentage trajectory, session length, intro/outro skip patterns. **Closed 2026-04-28** — `docs/analytics-audit-2026-04-28.md` § "Gap Analysis" + § "Phase 5 Candidate Lock".
 - [ ] **C-03**: Add the gap-fill columns / events that score highest on (value-for-this-project × low-risk-to-add). Minimum required: distinguish "session start" from "session resume" so Tier 2 weighting can ignore brief checks.
 - [ ] **C-04**: Document downstream readiness — what additional capture would unlock a future recommendations engine; do not build that engine here.
 
@@ -80,8 +80,8 @@ Phase mapping assigned 2026-04-27 by roadmapper. 18/18 v1 requirements mapped, n
 | B-03 | Phase 6 | Pending |
 | B-04 | Phase 6 | Pending |
 | B-05 | Phase 7 | Pending |
-| C-01 | Phase 2 | Pending |
-| C-02 | Phase 2 | Pending |
+| C-01 | Phase 2 | Complete (2026-04-28) |
+| C-02 | Phase 2 | Complete (2026-04-28) |
 | C-03 | Phase 5 | Pending |
 | C-04 | Phase 8 | Pending |
 | D-01 | Phase 7 | Pending |
