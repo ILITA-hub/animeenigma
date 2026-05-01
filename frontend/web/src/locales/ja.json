@@ -226,7 +226,6 @@
     },
     "settings": {
       "account": "アカウント",
-      "changePassword": "パスワード変更",
       "signOut": "ログアウト",
       "apiKey": "APIキー",
       "apiKeyDescription": "パスワードなしでCLI/スクリプトからアクセスするためのAPIキーです。秘密にしてください。",

@@ -788,9 +788,6 @@
               <div class="glass-card p-6">
                 <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.account') }}</h2>
                 <div class="space-y-4">
-                  <Button variant="ghost" full-width class="justify-start">
-                    {{ $t('profile.settings.changePassword') }}
-                  </Button>
                   <Button variant="secondary" full-width @click="logout">
                     {{ $t('profile.settings.signOut') }}
                   </Button>

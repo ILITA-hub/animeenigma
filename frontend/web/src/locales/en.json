@@ -226,7 +226,6 @@
     },
     "settings": {
       "account": "Account",
-      "changePassword": "Change Password",
       "signOut": "Sign Out",
       "apiKey": "API Key",
       "apiKeyDescription": "Use an API key for CLI/script access without a password. Keep it secret.",

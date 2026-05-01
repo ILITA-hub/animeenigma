@@ -226,7 +226,6 @@
     },
     "settings": {
       "account": "Аккаунт",
-      "changePassword": "Сменить пароль",
       "signOut": "Выйти",
       "apiKey": "API-ключ",
       "apiKeyDescription": "API-ключ для доступа через CLI/скрипты без пароля. Храните его в секрете.",
