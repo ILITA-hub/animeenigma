@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-stopped_at: Wave 4 (Phase 7 + Phase 8) implemented 2026-05-03; batch deploy pending
-last_updated: "2026-05-03T11:00:00.000Z"
-last_activity: 2026-05-03 -- Phase 7 + Phase 8 implemented; Advanced Settings + anon Tier 2 + prefs_version + recs readiness doc
+status: phases_complete
+stopped_at: All 8 phases shipped 2026-05-03; milestone ready for /gsd-complete-milestone closeout
+last_updated: "2026-05-03T12:15:00.000Z"
+last_activity: 2026-05-03 -- Wave 4 deployed; player + web redeployed; user_prefs_version table created; Tier2DebugView endpoint live; X-Prefs-Version header verified in production
 progress:
   total_phases: 8
   completed_phases: 8
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-27)
 
 ## Current Position
 
-Phase: Milestone v1.0 ready for batch deploy (Wave 4)
+Phase: Milestone v1.0 — all phases shipped, ready for /gsd-complete-milestone
 Plan: All plans complete (12/12)
-Status: Phase 7 + Phase 8 implemented 2026-05-03; deploy pending
-Last activity: 2026-05-03 — Wave 4 implemented; Advanced Profile tab, anon localStorage Tier 2, prefs_version cross-device freshness, recs readiness doc
+Status: All 8 phases shipped 2026-05-03; production verified (table created, Tier2DebugView endpoint live, X-Prefs-Version header working)
+Last activity: 2026-05-03 — Wave 4 deployed
 
 Progress: [██████████] 100% (Phases 1, 2, 3, 4, 5, 6, 7, 8 complete; Wave 4 deploy pending)
 
@@ -39,7 +39,7 @@ Progress: [██████████] 100% (Phases 1, 2, 3, 4, 5, 6, 7, 8 c
 | 1 | 2 (audit, doc-only), 3 (write-path semantics) | 2 ✓; 3 ✓ — shipped 2026-05-03 | Done |
 | 2 | 4 (state machine in 4 players), 5 (gap-fill columns) | 4 ✓; 5 ✓ — shipped 2026-05-03 | Done |
 | 3 | 6 (Tier 2 rewrite) | 6 ✓ — shipped 2026-05-03 | Done |
-| 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | 7 ✓; 8 ✓ — implemented 2026-05-03; deploy pending | Batch ship after both |
+| 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | 7 ✓; 8 ✓ — shipped 2026-05-03 | Done |
 
 ## Performance Metrics
 
