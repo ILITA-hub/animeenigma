@@ -36,6 +36,16 @@
     "watch": "視聴する",
     "watchNow": "視聴する",
     "continueEp": "第{n}話から続ける",
+    "resume": {
+      "justFinished": "第{n}話を視聴しました。",
+      "youFinishedThis": "このアニメを最後まで視聴しました。",
+      "rewatch": "第1話から見直す",
+      "markCompleteInList": "リストで「視聴済み」にする",
+      "findSimilar": "似た作品を探す",
+      "notYetAvailable": "第{n}話はまだ配信されていません。",
+      "notYetAvailableEta": "第{n}話は{when}に配信予定です。",
+      "currentlyAiring": "第{n}話が現在放送中です。通常は数時間以内に視聴可能になります。"
+    },
     "rateStar": "{n}/10で評価",
     "episodesShort": "話",
     "addToList": "リストに追加",
