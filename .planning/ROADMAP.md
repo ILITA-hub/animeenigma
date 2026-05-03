@@ -13,8 +13,8 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 - [x] **Phase 1: Instrumentation Baseline** - Emit `combo_override` events and stand up the Grafana tile so every later phase can be measured against a real baseline ✓ 2026-04-27
 - [x] **Phase 2: Analytics Audit** - Read-only inventory of `watch_history` / `watch_progress` / `anime_list` columns and a written gap analysis for smart episode selection ✓ 2026-04-28
 - [x] **Phase 3: Single Source of Truth for "Watched"** - Both auto-mark (20 min) and manual-mark paths set `watch_progress.completed = true`, and `anime_list.episodes` + episode-list checkmarks derive from it ✓ 2026-04-28
-- [ ] **Phase 4: Resume State Machine in All Four Players** - Pre-player episode selection follows the watching / finished / not-yet-aired state machine across Kodik, AnimeLib, HiAnime, Consumet
-- [ ] **Phase 5: Analytics Gap-Fill** - Add the highest-value low-risk columns/events identified in Phase 2; at minimum distinguish session-start vs session-resume
+- [x] **Phase 4: Resume State Machine in All Four Players** - Pre-player episode selection follows the watching / finished / not-yet-aired state machine across Kodik, AnimeLib, HiAnime, Consumet ✓ 2026-05-03
+- [x] **Phase 5: Analytics Gap-Fill** - Add the highest-value low-risk columns/events identified in Phase 2; at minimum distinguish session-start vs session-resume ✓ 2026-05-03
 - [ ] **Phase 6: Tier 2 Inference Rewrite** - Weighted by `duration_watched`, exponentially decayed (30-day half-life), two-signal coarse/fine, with a min-confidence fallback to Tier 3
 - [ ] **Phase 7: Advanced Settings, Anonymous UX, Cross-Device Freshness** - Profile > Advanced Settings panel, localStorage-backed anonymous preference, and cache-invalidation on auth-change + `prefs_version` signal
 - [ ] **Phase 8: Recommendations Readiness Documentation** - Document what additional capture would unlock a future recommendations engine; no engine built here
@@ -82,7 +82,9 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   3. Last watched < total but next ep not yet aired → "Episode N+1 — not yet available" with ETA from the existing Schedule data; if ETA has passed, the copy switches to "currently airing — usually available within hours"
   4. The same selection logic and CTA copy apply identically across `KodikPlayer.vue`, `AnimeLibPlayer.vue`, `HiAnimePlayer.vue`, `ConsumetPlayer.vue` (no per-player divergence)
   5. All new copy ships in both EN and RU locales
-**Plans**: TBD
+**Plans**: 1 plan
+- [x] 04-01 — `useResumeStateMachine` composable + 4-state banner in Anime.vue + EN/RU i18n ✓ 2026-05-03
+**Deploy**: Pending — Wave 2 batch deploy at end of wave
 **UI hint**: yes
 
 ### Phase 5: Analytics Gap-Fill
@@ -94,7 +96,9 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   2. The system distinguishes "session start" (fresh open) from "session resume" (reopening an in-progress episode) on every progress save, and Tier 2 aggregation can filter on this distinction
   3. Each added column / event has a one-line description of intended consumer (Tier 2 query, future recs, debugging) recorded in the audit doc from Phase 2
   4. No existing column is dropped or renamed (additive-only schema change, per project compatibility constraint)
-**Plans**: TBD
+**Plans**: 1 plan
+- [x] 05-01 — `watch_count` (G-02) + `session_id` (G-04-lite) + `dropped_off_at` + dropoff beacon (G-01) + 4-player session wiring ✓ 2026-05-03
+**Deploy**: Pending — Wave 2 batch deploy at end of wave
 
 ### Phase 6: Tier 2 Inference Rewrite
 **Goal**: Replace the naive `COUNT(*) GROUP BY` Tier 2 query with weighted, time-decayed, two-signal inference that respects a min-confidence floor — so a single mega-binge no longer locks the wrong combo for everyone after it, and thin signals fall through to community popularity instead of locking from noise.

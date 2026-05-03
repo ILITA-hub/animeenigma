@@ -386,6 +386,100 @@
           </div>
         </div>
         <div class="glass-card p-4 md:p-6">
+          <!-- Resume State Banner (Phase 4 — A-03 / A-04) -->
+          <!-- Shown only for authenticated users once watch_progress is loaded.
+               Anonymous users see no banner (Phase 7 / D-01 will add one).
+               The four kinds correspond to the resume state machine:
+                 watching         — "you finished ep N" breadcrumb
+                 finished         — "you finished this anime" + actions
+                 not-yet-aired    — "ep N+1 — not yet available [{{when}}]"
+                 currently-airing — "ep N+1 is airing now"
+                 first-time       — no banner -->
+          <div
+            v-if="authStore.isAuthenticated && resume.loaded.value && resume.kind.value !== 'first-time'"
+            class="mb-4"
+          >
+            <!-- watching -->
+            <div
+              v-if="resume.kind.value === 'watching' && resume.finishedEpisode.value > 0"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-sm"
+              role="status"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>{{ $t('anime.resume.justFinished', { n: resume.finishedEpisode.value }) }}</span>
+            </div>
+
+            <!-- finished -->
+            <div
+              v-else-if="resume.kind.value === 'finished'"
+              class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+              role="status"
+            >
+              <div class="flex items-center gap-2 text-emerald-300 font-medium flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>{{ $t('anime.resume.youFinishedThis') }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
+                <button
+                  type="button"
+                  @click="resumeRewatch"
+                  class="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
+                >
+                  {{ $t('anime.resume.rewatch') }}
+                </button>
+                <button
+                  v-if="currentListStatus !== 'completed'"
+                  type="button"
+                  @click="setListStatus('completed')"
+                  class="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
+                >
+                  {{ $t('anime.resume.markCompleteInList') }}
+                </button>
+                <router-link
+                  v-if="anime?.genres?.length"
+                  :to="{ path: '/browse', query: { genres: anime.genres[0] } }"
+                  class="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
+                >
+                  {{ $t('anime.resume.findSimilar') }}
+                </router-link>
+              </div>
+            </div>
+
+            <!-- not-yet-aired -->
+            <div
+              v-else-if="resume.kind.value === 'not-yet-aired'"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm"
+              role="status"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span v-if="resumeNextEpisodeNumber && resume.lastWatched.value < resumeTotal && resumeNextAt.value">
+                {{ $t('anime.resume.notYetAvailableEta', { n: resumeNextEpisodeNumber, when: formatNextEpisode(resumeNextAt.value) }) }}
+              </span>
+              <span v-else-if="resumeNextEpisodeNumber">
+                {{ $t('anime.resume.notYetAvailable', { n: resumeNextEpisodeNumber }) }}
+              </span>
+            </div>
+
+            <!-- currently-airing -->
+            <div
+              v-else-if="resume.kind.value === 'currently-airing' && resumeNextEpisodeNumber"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-pink-500/10 border border-pink-500/30 text-pink-300 text-sm"
+              role="status"
+            >
+              <span class="relative flex h-2 w-2" aria-hidden="true">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-pink-500"></span>
+              </span>
+              <span>{{ $t('anime.resume.currentlyAiring', { n: resumeNextEpisodeNumber }) }}</span>
+            </div>
+          </div>
+
           <!-- Click-to-load placeholder (saves bandwidth / no auto-buffer) -->
           <button
             v-if="!playerActivated"
@@ -420,7 +514,7 @@
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
               :preferred-combo="resolvedCombo"
-              :initial-episode="lastEpisode"
+              :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
             />
             <!-- AnimeLib Player -->
@@ -430,7 +524,7 @@
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
               :preferred-combo="resolvedCombo"
-              :initial-episode="lastEpisode"
+              :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
             />
             <!-- HiAnime Player -->
@@ -440,7 +534,7 @@
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
               :preferred-combo="resolvedCombo"
-              :initial-episode="lastEpisode"
+              :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
             />
             <!-- Consumet Player -->
@@ -450,7 +544,7 @@
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
               :preferred-combo="resolvedCombo"
-              :initial-episode="lastEpisode"
+              :initial-episode="resumeStartEpisode"
               :sub-or-dub="'sub'"
               @available-translations="handleAvailableTranslations"
             />
@@ -460,7 +554,7 @@
               :anime-id="anime.id"
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
-              :initial-episode="lastEpisode"
+              :initial-episode="resumeStartEpisode"
             />
           </template>
         </div>
@@ -656,6 +750,7 @@ import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
+import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
 import { useContextMenu } from '@/composables/useContextMenu'
 import type { WatchCombo } from '@/types/preference'
 
@@ -739,8 +834,30 @@ const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanim
   (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime') || 'kodik'
 )
 
-// Last-watched episode derived from localStorage watch progress
+// Last-watched episode. For authenticated users this comes from server-side
+// watch_progress (Phase 4 — A-03 / D-02 single source of truth). For
+// anonymous users we still read localStorage; D-01 in Phase 7 will close the
+// gap with a localStorage-driven anonymous state machine.
 const lastEpisode = ref<number | undefined>(undefined)
+
+// Phase 4 resume state machine. Inputs are reactive refs that the composable
+// re-evaluates as anime data + watch_progress arrives. The composable owns
+// the kind / startEpisode / banner-relevant state; Anime.vue only renders.
+const resumeAnimeId = computed(() => anime.value?.id ?? '')
+const resumeTotal = computed(() => anime.value?.totalEpisodes ?? 0)
+const resumeAired = computed(() => anime.value?.episodesAired ?? 0)
+const resumeStatus = computed(() => anime.value?.status ?? '')
+const resumeNextAt = computed(() => anime.value?.nextEpisodeAt ?? undefined)
+const resumeAuth = computed(() => authStore.isAuthenticated)
+const resume = useResumeStateMachine({
+  animeId: resumeAnimeId,
+  totalEpisodes: resumeTotal,
+  episodesAired: resumeAired,
+  nextEpisodeAt: resumeNextAt,
+  status: resumeStatus,
+  isAuthenticated: resumeAuth,
+})
+
 function loadLastEpisode(animeId: string) {
   const raw = localStorage.getItem(`watch_progress:${animeId}`)
   if (!raw) return
@@ -756,6 +873,49 @@ function loadLastEpisode(animeId: string) {
     }
     if (latestEp && !isNaN(latestEp)) lastEpisode.value = latestEp
   } catch { /* ignore corrupted data */ }
+}
+
+// Once the resume state machine loads from server, it overrides the
+// localStorage last-episode for authenticated users.
+watch(() => resume.lastWatched.value, (n) => {
+  if (resumeAuth.value && n > 0) lastEpisode.value = n
+})
+
+// User-driven override of the state machine's start episode. Set when the
+// user clicks "Rewatch from ep. 1" on the finished banner; otherwise null.
+const resumeOverrideEpisode = ref<number | null>(null)
+
+// What episode the player should mount on. Authenticated + state machine
+// loaded → use the state machine's startEpisode. Otherwise fall back to the
+// existing lastEpisode (localStorage path) so anonymous users keep the
+// pre-Phase-4 behavior. Manual override (rewatch click) wins over both.
+const resumeStartEpisode = computed<number | undefined>(() => {
+  if (resumeOverrideEpisode.value && resumeOverrideEpisode.value > 0) {
+    return resumeOverrideEpisode.value
+  }
+  if (resumeAuth.value && resume.loaded.value) {
+    const s = resume.startEpisode.value
+    return s > 0 ? s : (lastEpisode.value ?? 1)
+  }
+  return lastEpisode.value
+})
+
+// Episode number the "not yet available" / "currently airing" banners refer
+// to. Always lastWatched + 1 in those states (the state machine has already
+// guaranteed last < total).
+const resumeNextEpisodeNumber = computed<number | undefined>(() => {
+  if (resume.kind.value === 'not-yet-aired' || resume.kind.value === 'currently-airing') {
+    return Math.max(1, resume.lastWatched.value + 1)
+  }
+  return undefined
+})
+
+// Restart from episode 1 — used by the "Rewatch" action on the finished
+// banner. Sets the override (which wins over the state machine's startEpisode
+// for 'finished') and activates the player.
+function resumeRewatch() {
+  resumeOverrideEpisode.value = 1
+  activatePlayer()
 }
 
 // Watch preference resolution
@@ -1152,6 +1312,8 @@ const loadAnimeData = async (animeId: string) => {
   // Reset state so stale data doesn't flash
   anime.value = null
   lastEpisode.value = undefined
+  resume.reset()
+  resumeOverrideEpisode.value = null
   currentListStatus.value = null
   reviews.value = []
   myReview.value = null
@@ -1203,9 +1365,11 @@ const loadAnimeData = async (animeId: string) => {
     }
   }
 
-  // Load last-watched episode from localStorage
+  // Load last-watched episode from localStorage (anon path) and from server
+  // watch_progress in parallel (auth path).
   if (fetched) {
     loadLastEpisode(fetched.id)
+    void resume.init()
   }
 
   // Initialize watch preferences for this anime — anon users included so the

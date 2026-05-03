@@ -36,6 +36,16 @@
     "watch": "Смотреть",
     "watchNow": "Смотреть",
     "continueEp": "Продолжить с эп. {n}",
+    "resume": {
+      "justFinished": "Вы закончили {n}-й эпизод.",
+      "youFinishedThis": "Вы закончили это аниме.",
+      "rewatch": "Пересмотреть с 1-й серии",
+      "markCompleteInList": "Отметить «Просмотрено» в списке",
+      "findSimilar": "Найти похожее",
+      "notYetAvailable": "Эпизод {n} ещё не вышел.",
+      "notYetAvailableEta": "Эпизод {n} выйдет {when}.",
+      "currentlyAiring": "Эпизод {n} выходит прямо сейчас — обычно появляется в течение часа."
+    },
     "rateStar": "Оценить на {n} из 10",
     "episodesShort": "эп.",
     "addToList": "В список",

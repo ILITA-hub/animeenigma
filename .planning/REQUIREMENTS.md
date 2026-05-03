@@ -9,11 +9,12 @@
 
 - [x] **A-01**: At the existing 20-min auto-mark threshold, set `watch_progress.completed = true` (in addition to bumping `anime_list.episodes`) so resume logic and watchlist counter agree. **Closed 2026-04-28** — `MarkEpisodeWatched` calls `progressRepo.MarkCompleted` (`services/player/internal/service/list.go`).
 - [x] **A-02**: Manual "mark watched" action also sets `watch_progress.completed = true` — both paths converge on a single source of truth. **Closed 2026-04-28** — same code path as A-01 (manual + auto-mark both invoke `MarkEpisodeWatched`).
-- [ ] **A-03**: Pre-player episode selection follows a state machine:
+- [x] **A-03**: Pre-player episode selection follows a state machine:
   - **Watching** (last < total): start ep N+1, breadcrumb "You finished ep N"
   - **Finished series** (last == total): "You finished this" surface with Rewatch / Mark complete in list / Find similar
   - **Ongoing, next not yet aired**: "Episode N+1 — not yet available" with ETA from Schedule data; if ETA passed, show "currently airing — usually available within hours"
-- [ ] **A-04**: All four players (Kodik, AnimeLib, HiAnime, Consumet) honor the same episode pre-selection logic on mount.
+  **Closed 2026-05-03** — `frontend/web/src/composables/useResumeStateMachine.ts` returns 5-state (`first-time`/`watching`/`finished`/`not-yet-aired`/`currently-airing`); `Anime.vue` banner renders the 4 non-trivial states.
+- [x] **A-04**: All four players (Kodik, AnimeLib, HiAnime, Consumet) honor the same episode pre-selection logic on mount. **Closed 2026-05-03** — state machine lives in `Anime.vue`; all 4 players consume `:initial-episode="resumeStartEpisode"` (no per-player divergence).
 
 ### B. Smarter Tier 2 Inference
 
@@ -27,7 +28,7 @@
 
 - [x] **C-01**: Audit every column captured in `watch_history`, `watch_progress`, `anime_list` and document what each is used for vs. unused. **Closed 2026-04-28** — `docs/analytics-audit-2026-04-28.md` § "Column Inventory".
 - [x] **C-02**: Identify gaps for smart episode selection: drop-off / abandon point, rewatch detection, completion-percentage trajectory, session length, intro/outro skip patterns. **Closed 2026-04-28** — `docs/analytics-audit-2026-04-28.md` § "Gap Analysis" + § "Phase 5 Candidate Lock".
-- [ ] **C-03**: Add the gap-fill columns / events that score highest on (value-for-this-project × low-risk-to-add). Minimum required: distinguish "session start" from "session resume" so Tier 2 weighting can ignore brief checks.
+- [x] **C-03**: Add the gap-fill columns / events that score highest on (value-for-this-project × low-risk-to-add). Minimum required: distinguish "session start" from "session resume" so Tier 2 weighting can ignore brief checks. **Closed 2026-05-03** — `watch_progress.watch_count` (G-02 rewatch), `watch_history.session_id` (G-04-lite), `watch_progress.dropped_off_at` + dropoff beacon endpoint (G-01). Per-row session_id satisfies the session start vs resume distinction.
 - [ ] **C-04**: Document downstream readiness — what additional capture would unlock a future recommendations engine; do not build that engine here.
 
 ### D. Cross-Cutting
@@ -73,8 +74,8 @@ Phase mapping assigned 2026-04-27 by roadmapper. 18/18 v1 requirements mapped, n
 |-------------|-------|--------|
 | A-01 | Phase 3 | Complete (2026-04-28) |
 | A-02 | Phase 3 | Complete (2026-04-28) |
-| A-03 | Phase 4 | Pending |
-| A-04 | Phase 4 | Pending |
+| A-03 | Phase 4 | Complete (2026-05-03) |
+| A-04 | Phase 4 | Complete (2026-05-03) |
 | B-01 | Phase 6 | Pending |
 | B-02 | Phase 6 | Pending |
 | B-03 | Phase 6 | Pending |
@@ -82,7 +83,7 @@ Phase mapping assigned 2026-04-27 by roadmapper. 18/18 v1 requirements mapped, n
 | B-05 | Phase 7 | Pending |
 | C-01 | Phase 2 | Complete (2026-04-28) |
 | C-02 | Phase 2 | Complete (2026-04-28) |
-| C-03 | Phase 5 | Pending |
+| C-03 | Phase 5 | Complete (2026-05-03) |
 | C-04 | Phase 8 | Pending |
 | D-01 | Phase 7 | Pending |
 | D-02 | Phase 3 | Complete (2026-04-28) |
