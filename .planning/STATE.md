@@ -11,7 +11,7 @@ progress:
   completed_phases: 5
   total_plans: 9
   completed_plans: 9
-  percent: 38
+  percent: 62
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-27)
 
 ## Current Position
 
-Phase: 4 (next)
-Plan: Wave 1 deploy pending; Wave 2 (Phase 4 + Phase 5) starts after deploy verification
-Status: Wave 1 deploy pending
-Last activity: 2026-04-28
+Phase: 6 (next — Wave 3, Tier 2 inference rewrite)
+Plan: To be created (06-01)
+Status: Phase 6 phase-gate satisfied 2026-05-03 (baseline override-rate snapshot captured to PROJECT.md § Baseline override rate)
+Last activity: 2026-05-03 — Wave 2 shipped; Phase 6 baseline captured
 
-Progress: [███░░░░░░░] 38% (Phases 1, 2, 3 complete)
+Progress: [██████░░░░] 62% (Phases 1, 2, 3, 4, 5 complete)
 
 ## Wave Plan (locked 2026-04-28)
 
@@ -101,4 +101,4 @@ Resume file: .planning/phases/03-single-source-of-truth-for-watched/03-01-SUMMAR
 
 ## Phase 1 Follow-ups
 
-- **Phase 1 follow-up:** Capture ≥ 24h baseline override-rate snapshot to .planning/PROJECT.md before Phase 6 starts. Computed via PromQL: rate(combo_override_total[24h]) / rate(combo_resolve_total[24h]), segmented by tier/language/anon/player/dimension. This is ROADMAP success criterion 3 — a phase-gate, not a Phase 1 task. Do not open Phase 6 work until this snapshot is recorded under PROJECT.md § "Baseline override rate".
+- **Phase 1 follow-up:** ✓ Resolved 2026-05-03. Baseline override-rate snapshot captured to PROJECT.md § Baseline override rate (24h: n=1, low-volume; 7d operative: 60% overall override rate over 10 resolves / 6 overrides). Phase-gate cleared for Phase 6 to open. Snapshot includes binding small-n caveat for Phase 7 before/after comparison: minimum n=100 resolves window required for meaningful comparison.

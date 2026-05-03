@@ -126,6 +126,52 @@ What this means for the project:
 
 This subsection is intentionally placed in Key Decisions so that any future phase opening a per-event analytics question must read past it before assuming Loki has 31d of history.
 
+### Baseline override rate (captured 2026-05-03 — Phase 6 phase-gate)
+
+Snapshot taken before Phase 6 (Tier 2 inference rewrite) opens. ROADMAP success criterion 3, STATE.md § Phase 1 Follow-ups. PromQL formula: `sum(increase(combo_override_total[W])) / sum(increase(combo_resolve_total[W]))`.
+
+**24h window (literal phase-gate compliance):**
+
+| Segment | Override rate | n (resolves) | n (overrides) |
+|---|---|---|---|
+| Overall | 0.00% | 1 | 0 |
+
+n is too small for the 24h window to be meaningful — the player container was redeployed ~3h before snapshot capture (Wave 2 ship). The 7d window below is the operative baseline for Phase 7 before/after comparison.
+
+**7d window (operative baseline — survives counter resets):**
+
+| Segment | Override rate | n (resolves) | n (overrides) |
+|---|---|---|---|
+| Overall | 60.00% | 10 | 6 |
+| anon=false | 85.71% | 7 | 6 |
+| anon=true | 0.00% | 3 | 0 |
+| tier=per_anime | 200% (small-n artifact) | 1 | 2 |
+| tier=default | 0.00% | 5 | 0 |
+| language=unknown | 120% (small-n artifact) | 5 | 6 |
+| player=kodik | 120% (small-n artifact) | 5 | 6 |
+
+**Override count by dimension (7d):**
+
+| Dimension | Count |
+|---|---|
+| episode | 3 |
+| team | 2 |
+| language | 1 |
+
+**Sample-size caveat (binding for Phase 7 before/after):**
+
+- Total volume is very low (10 resolves / 6 overrides over 7d). Per-segment percentages above 100% are artifacts of `increase()` interpolating across counter resets when n < 5; treat them as "directional only," not as statistical truth.
+- The `language=unknown` and `tier=per_anime` percentages > 100% indicate the override label-set sometimes resolves with `language=unknown` while the resolve event resolves with `language=ru`, which is a known label-misalignment between the override handler and the resolve callsite — flagging here for Phase 6 to fix as part of the rewrite.
+- Phase 7 before/after comparison MUST use a window with ≥ 100 resolves to be meaningful. If volume remains this low, Phase 7 should drive synthetic load (or wait for natural growth) before declaring the rewrite a success.
+
+**What "good" looks like after Phase 6:**
+- Overall override rate < 10% (from project ROADMAP target)
+- per_anime tier override rate < default tier override rate (per_anime should be the most accurate)
+- anon=true should remain low (anonymous users have less personalization to override)
+- Label alignment fixed: `language=unknown` should disappear for resolves of known anime
+
+**Re-snapshot policy:** Recompute this baseline once Phase 6 is shipped (Phase 7 task) using the same PromQL with a 7d window, taking the snapshot ≥ 7d after Phase 6 deploy so the comparison window contains only post-rewrite data.
+
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
@@ -144,4 +190,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-27 after initialization*
+*Last updated: 2026-05-03 after Wave 2 ship (Phase 4 + Phase 5) and baseline override-rate snapshot capture for Phase 6 phase-gate.*
