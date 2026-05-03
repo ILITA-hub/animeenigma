@@ -69,6 +69,7 @@ func NewRouter(
 			// Progress routes
 			r.Post("/progress", progressHandler.UpdateProgress)
 			r.Get("/progress/{animeId}", progressHandler.GetProgress)
+			r.Post("/progress/{animeId}/dropoff", progressHandler.MarkDropOff)
 
 			// History routes
 			r.Get("/history", historyHandler.GetWatchHistory)

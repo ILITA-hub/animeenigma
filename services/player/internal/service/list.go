@@ -256,6 +256,7 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			TranslationID:    req.TranslationID,
 			TranslationTitle: req.TranslationTitle,
 			DurationWatched:  durationWatched,
+			SessionID:        req.SessionID,
 			WatchedAt:        time.Now(),
 		}
 		if err := s.prefRepo.CreateWatchHistory(ctx, history); err != nil {

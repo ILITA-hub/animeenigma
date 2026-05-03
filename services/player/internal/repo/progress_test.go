@@ -64,6 +64,8 @@ func setupProgressTestDB(t *testing.T) (*ProgressRepository, *gorm.DB) {
 		progress INTEGER DEFAULT 0,
 		duration INTEGER DEFAULT 0,
 		completed INTEGER DEFAULT 0,
+		watch_count INTEGER DEFAULT 1,
+		dropped_off_at INTEGER,
 		last_watched_at DATETIME,
 		created_at DATETIME,
 		updated_at DATETIME,
@@ -75,14 +77,21 @@ func setupProgressTestDB(t *testing.T) (*ProgressRepository, *gorm.DB) {
 }
 
 // seedProgressRow inserts a watch_progress row directly via raw SQL, bypassing
-// UpsertProgress's GREATEST(...) expression which is Postgres-only.
+// UpsertProgress's GREATEST(...) expression which is Postgres-only. watch_count
+// defaults to 1 to match the table default; tests that need a non-default value
+// should use seedProgressRowWithCount.
 func seedProgressRow(t *testing.T, db *gorm.DB, userID, animeID string, episode, progress, duration int, completed bool) {
+	t.Helper()
+	seedProgressRowWithCount(t, db, userID, animeID, episode, progress, duration, completed, 1)
+}
+
+func seedProgressRowWithCount(t *testing.T, db *gorm.DB, userID, animeID string, episode, progress, duration int, completed bool, watchCount int) {
 	t.Helper()
 	now := time.Now()
 	err := db.Exec(`INSERT INTO watch_progress
-		(id, user_id, anime_id, episode_number, progress, duration, completed, last_watched_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"seed-"+userID+"-"+animeID+"-"+itoa(episode), userID, animeID, episode, progress, duration, completed, now, now, now).Error
+		(id, user_id, anime_id, episode_number, progress, duration, completed, watch_count, last_watched_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"seed-"+userID+"-"+animeID+"-"+itoa(episode), userID, animeID, episode, progress, duration, completed, watchCount, now, now, now).Error
 	require.NoError(t, err)
 }
 
@@ -218,4 +227,87 @@ func TestProgressRepository_MarkCompleted_PreservesLastWatchedAtMonotonic(t *tes
 	require.NoError(t, err)
 	assert.True(t, !second.LastWatchedAt.Before(firstTS),
 		"second MarkCompleted must update last_watched_at to a value >= the first")
+}
+
+// Phase 5 (G-02) — rewatch detection: watch_count must remain at 1 on first
+// completion, increment by 1 on each subsequent completion of the same row.
+func TestProgressRepository_MarkCompleted_FirstCompletion_WatchCountIs1(t *testing.T) {
+	repo, _ := setupProgressTestDB(t)
+	ctx := context.Background()
+
+	require.NoError(t, repo.MarkCompleted(ctx, "user-1", "anime-1", 1))
+
+	p, err := repo.GetByUserAnimeEpisode(ctx, "user-1", "anime-1", 1)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.Equal(t, 1, p.WatchCount, "first completion must set watch_count=1")
+}
+
+func TestProgressRepository_MarkCompleted_FlippingHeartbeatRow_WatchCountIs1(t *testing.T) {
+	repo, db := setupProgressTestDB(t)
+	ctx := context.Background()
+
+	// Heartbeat row exists (completed=false). Flipping it to completed must
+	// set watch_count=1 — not 2 — because the user only finished it once.
+	seedProgressRow(t, db, "user-1", "anime-1", 2, 600, 1440, false)
+
+	require.NoError(t, repo.MarkCompleted(ctx, "user-1", "anime-1", 2))
+
+	p, err := repo.GetByUserAnimeEpisode(ctx, "user-1", "anime-1", 2)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.True(t, p.Completed)
+	assert.Equal(t, 1, p.WatchCount, "first completion of a heartbeat row must set watch_count=1")
+}
+
+func TestProgressRepository_MarkCompleted_RewatchIncrementsWatchCount(t *testing.T) {
+	repo, _ := setupProgressTestDB(t)
+	ctx := context.Background()
+
+	require.NoError(t, repo.MarkCompleted(ctx, "user-1", "anime-1", 5))
+	require.NoError(t, repo.MarkCompleted(ctx, "user-1", "anime-1", 5))
+	require.NoError(t, repo.MarkCompleted(ctx, "user-1", "anime-1", 5))
+
+	p, err := repo.GetByUserAnimeEpisode(ctx, "user-1", "anime-1", 5)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.True(t, p.Completed)
+	assert.Equal(t, 3, p.WatchCount, "three completions = first + two rewatches")
+}
+
+// Phase 5 (G-01) — drop-off beacon: MarkDropOff records the abandon position
+// without touching the completed flag, regardless of starting state.
+func TestProgressRepository_MarkDropOff_CreatesRowIfMissing(t *testing.T) {
+	repo, _ := setupProgressTestDB(t)
+	ctx := context.Background()
+
+	require.NoError(t, repo.MarkDropOff(ctx, "user-1", "anime-1", 1, 360))
+
+	p, err := repo.GetByUserAnimeEpisode(ctx, "user-1", "anime-1", 1)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	require.NotNil(t, p.DroppedOffAt, "dropped_off_at must be set")
+	assert.Equal(t, 360, *p.DroppedOffAt)
+	assert.Equal(t, 360, p.Progress, "progress reflects abandon position on synthesized row")
+	assert.False(t, p.Completed, "drop-off must not flip completed=true")
+}
+
+func TestProgressRepository_MarkDropOff_PreservesCompletedTrue(t *testing.T) {
+	repo, db := setupProgressTestDB(t)
+	ctx := context.Background()
+
+	// User finished episode, then later opened the page mid-rewatch and closed
+	// the tab partway. Drop-off must NOT clobber the completed=true flag.
+	seedProgressRow(t, db, "user-1", "anime-1", 7, 1440, 1440, true)
+
+	require.NoError(t, repo.MarkDropOff(ctx, "user-1", "anime-1", 7, 200))
+
+	p, err := repo.GetByUserAnimeEpisode(ctx, "user-1", "anime-1", 7)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.True(t, p.Completed, "drop-off must not reset completed=true")
+	require.NotNil(t, p.DroppedOffAt)
+	assert.Equal(t, 200, *p.DroppedOffAt)
+	// progress preserves max via GREATEST — original 1440 wins over 200.
+	assert.Equal(t, 1440, p.Progress, "progress must not regress on drop-off")
 }

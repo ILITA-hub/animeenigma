@@ -96,6 +96,8 @@ func setupListServiceTestDB(t *testing.T) (*ListService, *gorm.DB) {
 			progress INTEGER DEFAULT 0,
 			duration INTEGER DEFAULT 0,
 			completed INTEGER DEFAULT 0,
+			watch_count INTEGER DEFAULT 1,
+			dropped_off_at INTEGER,
 			last_watched_at DATETIME,
 			created_at DATETIME,
 			updated_at DATETIME,
@@ -112,6 +114,7 @@ func setupListServiceTestDB(t *testing.T) (*ListService, *gorm.DB) {
 			translation_id TEXT,
 			translation_title TEXT,
 			duration_watched INTEGER DEFAULT 0,
+			session_id TEXT,
 			watched_at DATETIME
 		)`,
 		`CREATE TABLE activity_events (
@@ -231,6 +234,39 @@ func TestListService_MarkEpisodeWatched_FlipsWatchProgressCompleted(t *testing.T
 		exists, completed := readWatchProgressCompleted(t, db, "user-1", "anime-1", 5)
 		require.True(t, exists)
 		assert.True(t, completed, "watch_progress.completed must be true after IncrementEpisodes branch")
+	})
+
+	t.Run("session_id is persisted to watch_history (Phase 5 G-04-lite)", func(t *testing.T) {
+		svc, db := setupListServiceTestDB(t)
+		ctx := context.Background()
+
+		// Seed both anime + an existing watching list entry so MarkEpisodeWatched
+		// hits the increment-and-record branch (the auto-create branch returns
+		// early without writing to watch_history — a separate, pre-existing
+		// concern).
+		now := time.Now()
+		require.NoError(t, db.Exec(`INSERT INTO animes (id, name, episodes_count, deleted_at) VALUES (?, ?, ?, NULL)`,
+			"anime-1", "Test Anime", 24).Error)
+		require.NoError(t, db.Exec(`INSERT INTO anime_list (id, user_id, anime_id, status, episodes, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			"al-1", "user-1", "anime-1", "watching", 2, now, now).Error)
+
+		req := &domain.MarkEpisodeWatchedRequest{
+			Episode:   3,
+			Player:    "hianime",
+			Language:  "en",
+			WatchType: "sub",
+			SessionID: "11111111-2222-3333-4444-555555555555",
+		}
+		_, err := svc.MarkEpisodeWatched(ctx, "user-1", "anime-1", req)
+		require.NoError(t, err)
+
+		var sessionID string
+		err = db.Raw(`SELECT session_id FROM watch_history WHERE user_id=? AND anime_id=? AND episode_number=?`,
+			"user-1", "anime-1", 3).Scan(&sessionID).Error
+		require.NoError(t, err)
+		assert.Equal(t, "11111111-2222-3333-4444-555555555555", sessionID,
+			"session_id from request must round-trip into watch_history.session_id")
 	})
 
 	t.Run("idempotent: re-marking an already-completed episode keeps completed=true", func(t *testing.T) {

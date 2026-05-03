@@ -52,3 +52,9 @@ func (s *ProgressService) UpdateProgress(ctx context.Context, userID string, req
 func (s *ProgressService) GetProgress(ctx context.Context, userID, animeID string) ([]*domain.WatchProgress, error) {
 	return s.progressRepo.GetByUserAndAnime(ctx, userID, animeID)
 }
+
+// MarkDropOff records that the user closed the page mid-episode at the given
+// playback position (seconds). Phase 5 (G-01).
+func (s *ProgressService) MarkDropOff(ctx context.Context, userID, animeID string, req *domain.DropOffRequest) error {
+	return s.progressRepo.MarkDropOff(ctx, userID, animeID, req.EpisodeNumber, req.Progress)
+}

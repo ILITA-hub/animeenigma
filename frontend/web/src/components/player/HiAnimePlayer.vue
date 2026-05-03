@@ -402,6 +402,7 @@ import Hls from 'hls.js'
 import { hiAnimeApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
+import { useWatchSession } from '@/composables/useWatchSession'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -632,6 +633,19 @@ const tracker = useOverrideTracker({
   player: 'hianime',
   resolvedCombo: toRef(props, 'preferredCombo'),
   currentEpisode: currentEpisodeNumber,
+})
+
+// Phase 5 (G-04-lite + G-01): playback session correlation + drop-off beacon.
+const { sessionId, newSession, registerBeaconHooks } = useWatchSession()
+watch(currentEpisodeNumber, (n, old) => { if (n && n !== old) newSession() })
+registerBeaconHooks(() => {
+  const ep = selectedEpisode.value?.number
+  if (!ep || ep <= 0) return null
+  return {
+    animeId: props.animeId,
+    episodeNumber: ep,
+    progressSeconds: Math.floor(currentTime.value),
+  }
 })
 
 // Methods
@@ -1231,7 +1245,8 @@ const saveProgress = () => {
       episode_number: selectedEpisode.value.number,
       progress: Math.floor(currentTime.value),
       duration: Math.floor(maxTime.value) || null,
-      ...currentCombo.value
+      session_id: sessionId.value,
+      ...currentCombo.value,
     }).catch((err) => console.warn('[HiAnime] Failed to save progress:', err))
   }
 }
@@ -1261,7 +1276,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number
@@ -1279,7 +1294,7 @@ const autoMarkEpisodeWatched = async () => {
   if (!authStore.isAuthenticated || !selectedEpisode.value || episodeMarkedWatched.value) return
 
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
     if (selectedEpisode.value.number > watchedEpisodes.value) {
       watchedEpisodes.value = selectedEpisode.value.number

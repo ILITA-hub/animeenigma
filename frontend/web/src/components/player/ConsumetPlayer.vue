@@ -368,7 +368,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRef, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, toRef, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
@@ -376,6 +376,7 @@ import Hls from 'hls.js'
 import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
+import { useWatchSession } from '@/composables/useWatchSession'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -599,6 +600,19 @@ const tracker = useOverrideTracker({
   player: 'consumet',
   resolvedCombo: toRef(props, 'preferredCombo'),
   currentEpisode: currentEpisodeNumber,
+})
+
+// Phase 5 (G-04-lite + G-01): playback session correlation + drop-off beacon.
+const { sessionId, newSession, registerBeaconHooks } = useWatchSession()
+watch(currentEpisodeNumber, (n, old) => { if (n && n !== old) newSession() })
+registerBeaconHooks(() => {
+  const ep = selectedEpisode.value?.number
+  if (!ep || ep <= 0) return null
+  return {
+    animeId: props.animeId,
+    episodeNumber: ep,
+    progressSeconds: Math.floor(currentTime.value),
+  }
 })
 
 // Methods
@@ -1091,7 +1105,8 @@ const saveProgress = () => {
       episode_number: selectedEpisode.value.number,
       progress: Math.floor(currentTime.value),
       duration: Math.floor(maxTime.value) || null,
-      ...currentCombo.value
+      session_id: sessionId.value,
+      ...currentCombo.value,
     }).catch(() => {})
   }
 }
@@ -1135,7 +1150,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, selectedEpisode.value.number)
     emit('episodeWatched', { episode: selectedEpisode.value.number })

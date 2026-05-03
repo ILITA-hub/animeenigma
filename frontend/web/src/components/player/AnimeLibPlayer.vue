@@ -313,6 +313,7 @@ import { useI18n } from 'vue-i18n'
 import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
+import { useWatchSession } from '@/composables/useWatchSession'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -439,6 +440,21 @@ const tracker = useOverrideTracker({
   player: 'animelib',
   resolvedCombo: toRef(props, 'preferredCombo'),
   currentEpisode: currentEpisodeNumber,
+})
+
+// Phase 5 (G-04-lite + G-01): playback session correlation + drop-off beacon.
+// Session ID rotates whenever the selected episode changes — Tier 2 cares
+// about per-episode sessions, not per-mount sessions.
+const { sessionId, newSession, registerBeaconHooks } = useWatchSession()
+watch(currentEpisodeNumber, (n, old) => { if (n && n !== old) newSession() })
+registerBeaconHooks(() => {
+  const ep = currentEpisodeNumber.value
+  if (!ep || ep <= 0) return null
+  return {
+    animeId: props.animeId,
+    episodeNumber: ep,
+    progressSeconds: Math.floor(currentTime.value),
+  }
 })
 
 const setTranslationFilter = (filter: 'all' | 'voice' | 'subtitles') => {
@@ -668,7 +684,8 @@ const saveProgress = () => {
       episode_number: parseInt(selectedEpisode.value.number),
       progress: Math.floor(currentTime.value),
       duration: Math.floor(maxTime.value) || null,
-      ...currentCombo.value
+      session_id: sessionId.value,
+      ...currentCombo.value,
     }).catch(() => {})
   }
 }
@@ -720,7 +737,7 @@ const markCurrentEpisodeWatched = async () => {
   markingWatched.value = true
   try {
     const epNum = parseInt(selectedEpisode.value.number)
-    await userApi.markEpisodeWatched(props.animeId, epNum, currentCombo.value ?? undefined)
+    await userApi.markEpisodeWatched(props.animeId, epNum, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, epNum)
     emit('episodeWatched', { episode: epNum })

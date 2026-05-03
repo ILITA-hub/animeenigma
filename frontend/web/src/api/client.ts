@@ -208,10 +208,15 @@ export const userApi = {
     notes?: string
   }) => apiClient.put('/users/watchlist', data),
   removeFromWatchlist: (animeId: string) => apiClient.delete(`/users/watchlist/${animeId}`),
-  markEpisodeWatched: (animeId: string, episode: number, combo?: Partial<WatchCombo>) =>
-    apiClient.post(`/users/watchlist/${animeId}/episode`, { episode, ...combo }),
+  markEpisodeWatched: (animeId: string, episode: number, combo?: Partial<WatchCombo>, sessionId?: string) =>
+    apiClient.post(`/users/watchlist/${animeId}/episode`, {
+      episode,
+      ...combo,
+      ...(sessionId ? { session_id: sessionId } : {}),
+    }),
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: Record<string, unknown>) => apiClient.post('/users/progress', data),
+  getProgress: (animeId: string) => apiClient.get(`/users/progress/${animeId}`),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
   importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),

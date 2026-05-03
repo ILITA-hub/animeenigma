@@ -234,6 +234,7 @@ import { useI18n } from 'vue-i18n'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
+import { useWatchSession } from '@/composables/useWatchSession'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
 
@@ -277,7 +278,8 @@ const saveProgressServer = async (animeId: string, episode: number, time: number
       episode_number: episode,
       progress: Math.floor(time),
       duration: Math.floor(maxTime.value) || null,
-      ...currentCombo.value
+      session_id: sessionId.value,
+      ...currentCombo.value,
     })
   } catch (err) {
     console.warn('Failed to save progress to server:', err)
@@ -542,6 +544,13 @@ const tracker = useOverrideTracker({
   currentEpisode: selectedEpisode,
 })
 
+// Phase 5 (G-04-lite): playback session correlation. Kodik is an iframe — we
+// can't read currentTime, so the drop-off beacon is unwired here (no useful
+// position to report). session_id still flows so backend can group heartbeats
+// from the same Kodik playback even though we don't get accurate seconds.
+const { sessionId, newSession } = useWatchSession()
+watch(selectedEpisode, () => newSession())
+
 const setTranslationType = (type: 'voice' | 'subtitles') => {
   if (translationType.value === type) return
   // 'language' dimension is the sub-vs-dub axis here (D-07 enumerates the set).
@@ -620,7 +629,7 @@ const markCurrentEpisodeWatched = async () => {
 
   markingWatched.value = true
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
     // Update watched episodes count
     if (selectedEpisode.value > watchedEpisodes.value) {
@@ -640,7 +649,7 @@ const autoMarkEpisodeWatched = async () => {
   if (!authStore.isAuthenticated || episodeMarkedWatched.value) return
 
   try {
-    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined)
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
     // Update watched episodes count
     if (selectedEpisode.value > watchedEpisodes.value) {
