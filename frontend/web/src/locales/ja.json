@@ -181,7 +181,46 @@
     "uploadAvatar": "アバターをアップロード",
     "tabs": {
       "watchlist": "マイリスト",
-      "settings": "設定"
+      "settings": "設定",
+      "advanced": "詳細設定"
+    },
+    "advanced": {
+      "title": "自動選択の重み",
+      "description": "自動選択があなたの視聴傾向をどう捉えているか。新しい視聴ほど重く、視聴時間の合計が話数より重視されます。",
+      "loading": "読み込み中…",
+      "unavailable": "重みを読み込めませんでした。",
+      "lockActive": "ロック中：{lang} {wt}",
+      "lockInactive": "ロック未設定 — コミュニティの人気度を使用中",
+      "lockTeam": "ロック内の上位チーム：{team}",
+      "noTeam": "（チーム情報なし）",
+      "lockInactiveDescription": "重み合計 {current} が下限 {floor} を下回っています。もう少し視聴を続けると自動選択が学習を始めます。",
+      "totalWeight": "履歴の重み合計",
+      "minConfidence": "最小信頼度しきい値",
+      "halfLifeDays": "減衰半減期",
+      "coarseTitle": "言語＋タイプ",
+      "coarseDescription": "ロック判定（言語と吹替／字幕）を決定します。",
+      "fineTitle": "上位チーム",
+      "fineDescription": "ロック内のチーム選択。重み順に上位8件を表示。",
+      "empty": "履歴がまだありません。",
+      "col": {
+        "lang": "言語",
+        "wt": "タイプ",
+        "weight": "重み",
+        "team": "チーム",
+        "player": "プレーヤー"
+      },
+      "wt": {
+        "dub": "吹替",
+        "sub": "字幕"
+      },
+      "resetTitle": "学習済み設定をリセット",
+      "resetDescription": "アニメごとのロックを削除します。視聴履歴は残るため、自動選択は再び学習を始めます。",
+      "resetButton": "リセット",
+      "resetting": "リセット中…",
+      "resetConfirm": "すべてのアニメ別設定をリセットしますか？視聴履歴は保持されますが、自動選択は最初からやり直します。",
+      "resetSuccess": "設定をリセットしました。重みが再構築されるまで、次に開くアニメではコミュニティの人気度が使われます。",
+      "resetError": "リセットに失敗しました。もう一度お試しください。",
+      "refresh": "更新"
     },
     "watchlist": {
       "all": "すべて",

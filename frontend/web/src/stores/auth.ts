@@ -70,6 +70,10 @@ export const useAuthStore = defineStore('auth', () => {
       const data = response.data?.data || response.data
       setToken(data.access_token)
       setUser(data.user)
+      // Phase 7 D-03 — auth state just changed; the previous user's resolved
+      // combos must NOT survive into this user's session even if the prefs
+      // version happens to match.
+      clearPreferenceCache()
       return true
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
@@ -77,6 +81,18 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     } finally {
       loading.value = false
+    }
+  }
+
+  // Phase 7 D-03 — wipe localStorage of cached preference resolutions and
+  // the prefs_version stamp. Called on login/logout so a different user's
+  // (or anonymous) cached combos don't leak across auth boundaries.
+  function clearPreferenceCache() {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i)
+      if (key && (key.startsWith('pref:') || key === 'prefs_version')) {
+        localStorage.removeItem(key)
+      }
     }
   }
 
@@ -158,6 +174,8 @@ export const useAuthStore = defineStore('auth', () => {
     setUser(null)
     token.value = null
     localStorage.removeItem('token')
+    // Phase 7 D-03 — wipe pref:* + prefs_version on logout
+    clearPreferenceCache()
   }
 
   const fetchUser = async () => {

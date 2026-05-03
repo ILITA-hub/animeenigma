@@ -49,6 +49,7 @@ func main() {
 		&domain.AnimeListEntry{},
 		&domain.WatchHistory{},
 		&domain.UserAnimePreference{},
+		&domain.UserPrefsVersion{},
 		&domain.Review{},
 		&domain.SyncJob{},
 		&domain.ActivityEvent{},

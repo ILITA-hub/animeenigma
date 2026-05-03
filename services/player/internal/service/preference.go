@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
@@ -166,4 +167,63 @@ func (s *PreferenceService) GetAnimePreference(ctx context.Context, userID, anim
 // GetGlobalPreferences returns the user's top combos ranked by watch count
 func (s *PreferenceService) GetGlobalPreferences(ctx context.Context, userID string) ([]domain.ComboCount, error) {
 	return s.prefRepo.GetUserTopCombos(ctx, userID, 10)
+}
+
+// GetTier2DebugView produces the user's current Tier 2 weighted signals plus
+// the active min-confidence floor and half-life, so the Advanced Settings UI
+// can show "raw weights" and the resolved lock side-by-side. Phase 7 B-05.
+func (s *PreferenceService) GetTier2DebugView(ctx context.Context, userID string) (*domain.Tier2DebugView, error) {
+	history, err := s.prefRepo.GetUserHistoryForTier2(ctx, userID, s.tier2.MaxHistoryRows)
+	if err != nil {
+		return nil, err
+	}
+	coarse, fine, total := AggregateTier2(history, s.tier2.HalfLifeDays, time.Now(), s.tier2.DurationFloor)
+	lock := ChooseTier2Lock(coarse, fine, total, s.tier2.MinConfidence)
+	if coarse == nil {
+		coarse = []domain.WeightedCoarse{}
+	}
+	if fine == nil {
+		fine = []domain.WeightedFine{}
+	}
+	return &domain.Tier2DebugView{
+		Coarse:        coarse,
+		Fine:          fine,
+		TotalWeight:   total,
+		MinConfidence: s.tier2.MinConfidence,
+		HalfLifeDays:  s.tier2.HalfLifeDays,
+		Lock:          lock,
+	}, nil
+}
+
+// ForceCombo writes a per-anime preference with explicit user intent.
+// Underlying write is the same UpsertAnimePreference used by heartbeat saves,
+// so prefs_version bumps for cache invalidation. Phase 7 B-05.
+func (s *PreferenceService) ForceCombo(ctx context.Context, userID, animeID string, req *domain.ForceComboRequest) error {
+	if !domain.ValidateCombo(req.Player, req.Language, req.WatchType) {
+		return errors.InvalidInput("invalid combo: player/language/watch_type must be from the allowed set")
+	}
+	pref := &domain.UserAnimePreference{
+		UserID:           userID,
+		AnimeID:          animeID,
+		Player:           req.Player,
+		Language:         req.Language,
+		WatchType:        req.WatchType,
+		TranslationID:    req.TranslationID,
+		TranslationTitle: req.TranslationTitle,
+		UpdatedAt:        time.Now(),
+	}
+	return s.prefRepo.UpsertAnimePreference(ctx, pref)
+}
+
+// ResetLearnedPreferences deletes all per-anime preference rows for the user.
+// Watch history is preserved — Tier 2 weights regrow naturally. Phase 7 B-05.
+// Returns the new prefs_version (always > 0 because the reset itself bumps).
+func (s *PreferenceService) ResetLearnedPreferences(ctx context.Context, userID string) (int64, error) {
+	return s.prefRepo.ResetLearnedPreferences(ctx, userID)
+}
+
+// GetPrefsVersion returns the user's prefs_version generation counter.
+// 0 = no preferences ever saved. Phase 7 D-03.
+func (s *PreferenceService) GetPrefsVersion(ctx context.Context, userID string) (int64, error) {
+	return s.prefRepo.GetPrefsVersion(ctx, userID)
 }

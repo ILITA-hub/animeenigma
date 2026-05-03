@@ -106,6 +106,44 @@ type Tier2Lock struct {
 	Confidence          float64 `json:"confidence"` // sum of all coarse weights
 }
 
+// UserPrefsVersion is a per-user generation counter bumped every time the
+// player service mutates the user's preferences (UpsertAnimePreference,
+// ResetLearnedPreferences). The frontend reads it from the `X-Prefs-Version`
+// response header on preference endpoints; when the cached value differs from
+// the new one, the 24h composable cache is busted so cross-device users see
+// the new combo without waiting for TTL. Phase 7 D-03.
+type UserPrefsVersion struct {
+	UserID    string    `gorm:"type:uuid;primaryKey" json:"user_id"`
+	Version   int64     `gorm:"not null;default:0" json:"version"`
+	UpdatedAt time.Time `gorm:"not null;autoUpdateTime" json:"updated_at"`
+}
+
+func (UserPrefsVersion) TableName() string { return "user_prefs_version" }
+
+// Tier2DebugView is the response body for GET /api/users/preferences/tier2.
+// Used by the Advanced Settings panel to show "raw Tier 2 weights" so a
+// power user can understand why the resolver picked what it picked. Phase 7 B-05.
+type Tier2DebugView struct {
+	Coarse        []WeightedCoarse `json:"coarse"`
+	Fine          []WeightedFine   `json:"fine"`
+	TotalWeight   float64          `json:"total_weight"`
+	MinConfidence float64          `json:"min_confidence"` // active server-side floor
+	HalfLifeDays  float64          `json:"half_life_days"` // active server-side decay
+	Lock          *Tier2Lock       `json:"lock"`           // nil when below floor
+}
+
+// ForceComboRequest is the body for POST /api/users/preferences/{animeId}/force.
+// Saves the combo as the per-anime Tier 1 preference — same write path as the
+// implicit save during heartbeat, but explicit and labelled "force" in audit
+// logs. Phase 7 B-05.
+type ForceComboRequest struct {
+	Player           string `json:"player"`
+	Language         string `json:"language"`
+	WatchType        string `json:"watch_type"`
+	TranslationID    string `json:"translation_id"`
+	TranslationTitle string `json:"translation_title"`
+}
+
 // CommunityCombo is a community popularity entry for an anime (used by Tier 3)
 type CommunityCombo struct {
 	Player           string `json:"player"`

@@ -18,7 +18,9 @@
  */
 
 import { ref, watch, onUnmounted, type Ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/client'
+import { setAnonLastCombo } from '@/composables/useWatchPreferences'
 import type { WatchCombo, ResolvedCombo } from '@/types/preference'
 
 export type OverrideDimension = 'language' | 'player' | 'team' | 'episode'
@@ -45,6 +47,7 @@ const WINDOW_MS = 30_000
 const DEBOUNCE_MS = 250
 
 export function useOverrideTracker(opts: OverrideTrackerOptions) {
+  const auth = useAuthStore()
   const loadSessionId = crypto.randomUUID()
   const mountedAt = ref<number | null>(null)
   const emittedDimensions = new Set<OverrideDimension>()
@@ -89,6 +92,18 @@ export function useOverrideTracker(opts: OverrideTrackerOptions) {
         // click that lands during the network round-trip is also dropped.
         emittedDimensions.add(dimension)
         void emit(dimension, newCombo, msSinceLoad)
+        // Phase 7 SC2 — anon users persist their explicit override as
+        // localStorage last-used combo so the next visit can pick client-side.
+        if (!auth.isAuthenticated) {
+          const merged: WatchCombo = {
+            player: (newCombo.player ?? opts.resolvedCombo.value?.player ?? 'kodik') as WatchCombo['player'],
+            language: (newCombo.language ?? opts.resolvedCombo.value?.language ?? '') as WatchCombo['language'],
+            watch_type: (newCombo.watch_type ?? opts.resolvedCombo.value?.watch_type ?? '') as WatchCombo['watch_type'],
+            translation_id: newCombo.translation_id ?? opts.resolvedCombo.value?.translation_id ?? '',
+            translation_title: newCombo.translation_title ?? opts.resolvedCombo.value?.translation_title ?? '',
+          }
+          if (merged.language && merged.watch_type) setAnonLastCombo(merged)
+        }
       }, DEBOUNCE_MS),
     )
   }

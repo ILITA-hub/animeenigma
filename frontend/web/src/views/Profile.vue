@@ -795,6 +795,136 @@
               </div>
             </div>
           </template>
+
+          <!-- Advanced Tab (own profile only) — Phase 7 B-05 -->
+          <template v-if="isOwnProfile" #advanced>
+            <div class="space-y-6">
+              <div class="glass-card p-6">
+                <h2 class="text-lg font-semibold text-white mb-2">{{ $t('profile.advanced.title') }}</h2>
+                <p class="text-white/60 text-sm mb-4">{{ $t('profile.advanced.description') }}</p>
+
+                <div v-if="loadingTier2View" class="text-white/60 text-sm py-4">
+                  {{ $t('profile.advanced.loading') }}
+                </div>
+                <div v-else-if="!tier2View" class="text-white/60 text-sm py-4">
+                  {{ $t('profile.advanced.unavailable') }}
+                </div>
+                <div v-else class="space-y-5">
+                  <!-- Lock summary -->
+                  <div class="rounded-lg p-4" :class="tier2View.lock ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-amber-500/10 border border-amber-500/30'">
+                    <div class="flex items-start gap-3">
+                      <span class="text-2xl">{{ tier2View.lock ? '🎯' : '🛟' }}</span>
+                      <div class="flex-1">
+                        <div class="text-white font-semibold">
+                          {{ tier2View.lock
+                            ? $t('profile.advanced.lockActive', { lang: tier2View.lock.language.toUpperCase(), wt: $t(`profile.advanced.wt.${tier2View.lock.watch_type}`) })
+                            : $t('profile.advanced.lockInactive') }}
+                        </div>
+                        <div class="text-white/60 text-sm mt-1">
+                          {{ tier2View.lock
+                            ? $t('profile.advanced.lockTeam', { team: tier2View.lock.top_translation_title || $t('profile.advanced.noTeam') })
+                            : $t('profile.advanced.lockInactiveDescription', { current: tier2View.total_weight.toFixed(0), floor: tier2View.min_confidence.toFixed(0) }) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Tunables -->
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                    <div class="glass-card p-3">
+                      <div class="text-white/40 text-xs">{{ $t('profile.advanced.totalWeight') }}</div>
+                      <div class="text-white font-mono mt-1">{{ tier2View.total_weight.toFixed(1) }}</div>
+                    </div>
+                    <div class="glass-card p-3">
+                      <div class="text-white/40 text-xs">{{ $t('profile.advanced.minConfidence') }}</div>
+                      <div class="text-white font-mono mt-1">{{ tier2View.min_confidence.toFixed(0) }}</div>
+                    </div>
+                    <div class="glass-card p-3">
+                      <div class="text-white/40 text-xs">{{ $t('profile.advanced.halfLifeDays') }}</div>
+                      <div class="text-white font-mono mt-1">{{ tier2View.half_life_days }}d</div>
+                    </div>
+                  </div>
+
+                  <!-- Coarse signal table -->
+                  <div>
+                    <h3 class="text-white font-medium mb-2">{{ $t('profile.advanced.coarseTitle') }}</h3>
+                    <p class="text-white/60 text-xs mb-3">{{ $t('profile.advanced.coarseDescription') }}</p>
+                    <div v-if="tier2View.coarse.length === 0" class="text-white/40 text-sm py-2">
+                      {{ $t('profile.advanced.empty') }}
+                    </div>
+                    <div v-else class="overflow-x-auto">
+                      <table class="w-full text-sm">
+                        <thead class="text-white/40 text-xs">
+                          <tr>
+                            <th class="pb-2 text-left">{{ $t('profile.advanced.col.lang') }}</th>
+                            <th class="pb-2 text-left">{{ $t('profile.advanced.col.wt') }}</th>
+                            <th class="pb-2 text-right">{{ $t('profile.advanced.col.weight') }}</th>
+                          </tr>
+                        </thead>
+                        <tbody class="text-white/80">
+                          <tr v-for="(c, i) in tier2View.coarse" :key="`coarse-${i}`" class="border-t border-white/5">
+                            <td class="py-2">{{ c.language.toUpperCase() }}</td>
+                            <td class="py-2">{{ $t(`profile.advanced.wt.${c.watch_type}`) }}</td>
+                            <td class="py-2 text-right font-mono">{{ c.weight.toFixed(1) }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Fine signal table (top 8) -->
+                  <div>
+                    <h3 class="text-white font-medium mb-2">{{ $t('profile.advanced.fineTitle') }}</h3>
+                    <p class="text-white/60 text-xs mb-3">{{ $t('profile.advanced.fineDescription') }}</p>
+                    <div v-if="tier2View.fine.length === 0" class="text-white/40 text-sm py-2">
+                      {{ $t('profile.advanced.empty') }}
+                    </div>
+                    <div v-else class="overflow-x-auto">
+                      <table class="w-full text-sm">
+                        <thead class="text-white/40 text-xs">
+                          <tr>
+                            <th class="pb-2 text-left">{{ $t('profile.advanced.col.team') }}</th>
+                            <th class="pb-2 text-left">{{ $t('profile.advanced.col.lang') }}</th>
+                            <th class="pb-2 text-left">{{ $t('profile.advanced.col.wt') }}</th>
+                            <th class="pb-2 text-left">{{ $t('profile.advanced.col.player') }}</th>
+                            <th class="pb-2 text-right">{{ $t('profile.advanced.col.weight') }}</th>
+                          </tr>
+                        </thead>
+                        <tbody class="text-white/80">
+                          <tr v-for="(f, i) in tier2View.fine.slice(0, 8)" :key="`fine-${i}`" class="border-t border-white/5">
+                            <td class="py-2">{{ f.translation_title || '—' }}</td>
+                            <td class="py-2">{{ f.language.toUpperCase() }}</td>
+                            <td class="py-2">{{ $t(`profile.advanced.wt.${f.watch_type}`) }}</td>
+                            <td class="py-2">{{ f.player }}</td>
+                            <td class="py-2 text-right font-mono">{{ f.weight.toFixed(1) }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reset learned preferences -->
+              <div class="glass-card p-6">
+                <h2 class="text-lg font-semibold text-white mb-2">{{ $t('profile.advanced.resetTitle') }}</h2>
+                <p class="text-white/60 text-sm mb-4">{{ $t('profile.advanced.resetDescription') }}</p>
+                <div class="flex flex-col sm:flex-row gap-3">
+                  <Button variant="secondary" :disabled="resettingPrefs" @click="onResetLearnedPreferences">
+                    <svg v-if="resettingPrefs" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    {{ resettingPrefs ? $t('profile.advanced.resetting') : $t('profile.advanced.resetButton') }}
+                  </Button>
+                  <Button variant="ghost" @click="loadTier2View" :disabled="loadingTier2View">
+                    {{ $t('profile.advanced.refresh') }}
+                  </Button>
+                </div>
+                <p v-if="resetMessage" class="text-emerald-400 text-sm mt-3">{{ resetMessage }}</p>
+              </div>
+            </div>
+          </template>
         </Tabs>
       </div>
     </template>
@@ -1018,10 +1148,65 @@ const tabs = computed(() => {
   ]
   if (isOwnProfile.value) {
     baseTabs.push(
-      { value: 'settings', label: t('profile.tabs.settings') }
+      { value: 'settings', label: t('profile.tabs.settings') },
+      { value: 'advanced', label: t('profile.tabs.advanced') },
     )
   }
   return baseTabs
+})
+
+// Phase 7 — Advanced Settings tab state. Lazy-loaded the first time the user
+// opens the tab so we don't spend a request on every Profile mount.
+interface Tier2DebugView {
+  coarse: Array<{ language: string; watch_type: string; weight: number }>
+  fine: Array<{ language: string; watch_type: string; player: string; translation_id: string; translation_title: string; weight: number }>
+  total_weight: number
+  min_confidence: number
+  half_life_days: number
+  lock: { language: string; watch_type: string; top_translation_title: string; confidence: number } | null
+}
+const tier2View = ref<Tier2DebugView | null>(null)
+const loadingTier2View = ref(false)
+const resettingPrefs = ref(false)
+const resetMessage = ref('')
+
+async function loadTier2View() {
+  if (!isOwnProfile.value) return
+  loadingTier2View.value = true
+  try {
+    const { data } = await userApi.getTier2DebugView()
+    const envelope = (data as { data?: Tier2DebugView }).data ?? (data as Tier2DebugView)
+    tier2View.value = envelope
+  } catch (err) {
+    console.error('Failed to load Tier 2 debug view:', err)
+    tier2View.value = null
+  } finally {
+    loadingTier2View.value = false
+  }
+}
+
+async function onResetLearnedPreferences() {
+  if (!confirm(t('profile.advanced.resetConfirm'))) return
+  resettingPrefs.value = true
+  resetMessage.value = ''
+  try {
+    await userApi.resetLearnedPreferences()
+    resetMessage.value = t('profile.advanced.resetSuccess')
+    // Reload the debug view — coarse/fine signals come from watch_history
+    // (preserved) so they'll still be there, but the per-anime locks are wiped.
+    await loadTier2View()
+  } catch (err) {
+    console.error('Failed to reset learned preferences:', err)
+    resetMessage.value = t('profile.advanced.resetError')
+  } finally {
+    resettingPrefs.value = false
+  }
+}
+
+watch(activeTab, (newTab) => {
+  if (newTab === 'advanced' && !tier2View.value && !loadingTier2View.value) {
+    void loadTier2View()
+  }
 })
 
 // Watchlist

@@ -16,8 +16,8 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 - [x] **Phase 4: Resume State Machine in All Four Players** - Pre-player episode selection follows the watching / finished / not-yet-aired state machine across Kodik, AnimeLib, HiAnime, Consumet ✓ 2026-05-03
 - [x] **Phase 5: Analytics Gap-Fill** - Add the highest-value low-risk columns/events identified in Phase 2; at minimum distinguish session-start vs session-resume ✓ 2026-05-03
 - [x] **Phase 6: Tier 2 Inference Rewrite** ✓ 2026-05-03 - Weighted by `duration_watched`, exponentially decayed (30-day half-life), two-signal coarse/fine, with a min-confidence fallback to Tier 3
-- [ ] **Phase 7: Advanced Settings, Anonymous UX, Cross-Device Freshness** - Profile > Advanced Settings panel, localStorage-backed anonymous preference, and cache-invalidation on auth-change + `prefs_version` signal
-- [ ] **Phase 8: Recommendations Readiness Documentation** - Document what additional capture would unlock a future recommendations engine; no engine built here
+- [x] **Phase 7: Advanced Settings, Anonymous UX, Cross-Device Freshness** ✓ 2026-05-03 - Profile > Advanced Settings panel, localStorage-backed anonymous preference, and cache-invalidation on auth-change + `prefs_version` signal
+- [x] **Phase 8: Recommendations Readiness Documentation** ✓ 2026-05-03 - Document what additional capture would unlock a future recommendations engine; no engine built here
 
 ## Phase Details
 
@@ -125,7 +125,9 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   3. Logging in or logging out invalidates the 24h composable cache immediately, and a server-side `prefs_version` cookie/header bumps on every preference save so cross-device users see the new combo without waiting 24h
   4. All new Advanced Settings copy ships in both EN and RU locales
   5. The override-rate Grafana tile (Phase 1) shows a measurable drop after this phase deploys versus the Phase 1 baseline; target is < 10% but the success criterion is "drops in the right direction"
-**Plans**: TBD
+**Plans**:
+- [x] 07-01 — Tier 2 debug view + reset learned + force-combo endpoints + prefs_version cross-device freshness + Advanced Profile tab + anon localStorage Tier 2 + i18n parity ✓ 2026-05-03
+**Deploy**: Pending — Wave 4 batch deploy with Phase 8
 **UI hint**: yes
 
 ### Phase 8: Recommendations Readiness Documentation
@@ -137,7 +139,9 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   2. The document explicitly states that no recommendations engine is built in this phase
   3. Each proposed addition is annotated with rough cost (schema risk, query cost, frontend wiring) so the next milestone can prioritize
   4. The document is committed and the override-rate baseline + post-overhaul number from Phase 7 are recorded for posterity
-**Plans**: TBD
+**Plans**:
+- [x] 08-01 — `docs/recommendations-readiness-2026-05-03.md` shopping list for REC-01 / REC-02 ✓ 2026-05-03
+**Deploy**: Pending — Wave 4 batch deploy with Phase 7
 
 ## Progress
 
@@ -154,5 +158,5 @@ Phases 1 and 2 are independent and may execute in parallel if `parallelization=t
 | 4. Resume State Machine in All Four Players | 0/TBD | Not started | - |
 | 5. Analytics Gap-Fill | 0/TBD | Not started | - |
 | 6. Tier 2 Inference Rewrite | 1/1 | ✓ 2026-05-03 | - |
-| 7. Advanced Settings, Anonymous UX, Cross-Device Freshness | 0/TBD | Not started | - |
-| 8. Recommendations Readiness Documentation | 0/TBD | Not started | - |
+| 7. Advanced Settings, Anonymous UX, Cross-Device Freshness | 1/1 | ✓ 2026-05-03 | yes |
+| 8. Recommendations Readiness Documentation | 1/1 | ✓ 2026-05-03 | - |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Wave 3 (Phase 6 Tier 2 rewrite) shipped 2026-05-03; ready for Wave 4 (Phase 7 + Phase 8)
-last_updated: "2026-05-03T08:30:00.000Z"
-last_activity: 2026-05-03 -- Phase 6 deployed; player redeployed with weighted/decayed/two-signal inference + min-confidence floor; web redeployed with changelog
+stopped_at: Wave 4 (Phase 7 + Phase 8) implemented 2026-05-03; batch deploy pending
+last_updated: "2026-05-03T11:00:00.000Z"
+last_activity: 2026-05-03 -- Phase 7 + Phase 8 implemented; Advanced Settings + anon Tier 2 + prefs_version + recs readiness doc
 progress:
   total_phases: 8
-  completed_phases: 6
-  total_plans: 10
-  completed_plans: 10
-  percent: 75
+  completed_phases: 8
+  total_plans: 12
+  completed_plans: 12
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-27)
 
 ## Current Position
 
-Phase: 7 (next — Wave 4, Advanced Settings + Anonymous UX + Freshness)
-Plan: To be created (07-01)
-Status: Wave 3 (Phase 6 Tier 2 rewrite) shipped 2026-05-03; player + web redeployed; tier2_thin_signal_skip_total counter live
-Last activity: 2026-05-03 — Phase 6 deployed; weighted decayed two-signal inference + min-confidence floor + thin-signal-skip metric in production
+Phase: Milestone v1.0 ready for batch deploy (Wave 4)
+Plan: All plans complete (12/12)
+Status: Phase 7 + Phase 8 implemented 2026-05-03; deploy pending
+Last activity: 2026-05-03 — Wave 4 implemented; Advanced Profile tab, anon localStorage Tier 2, prefs_version cross-device freshness, recs readiness doc
 
-Progress: [████████░░] 75% (Phases 1, 2, 3, 4, 5, 6 complete)
+Progress: [██████████] 100% (Phases 1, 2, 3, 4, 5, 6, 7, 8 complete; Wave 4 deploy pending)
 
 ## Wave Plan (locked 2026-04-28)
 
@@ -39,7 +39,7 @@ Progress: [████████░░] 75% (Phases 1, 2, 3, 4, 5, 6 complete
 | 1 | 2 (audit, doc-only), 3 (write-path semantics) | 2 ✓; 3 ✓ — shipped 2026-05-03 | Done |
 | 2 | 4 (state machine in 4 players), 5 (gap-fill columns) | 4 ✓; 5 ✓ — shipped 2026-05-03 | Done |
 | 3 | 6 (Tier 2 rewrite) | 6 ✓ — shipped 2026-05-03 | Done |
-| 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | Ready to plan | Batch ship after both |
+| 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | 7 ✓; 8 ✓ — implemented 2026-05-03; deploy pending | Batch ship after both |
 
 ## Performance Metrics
 

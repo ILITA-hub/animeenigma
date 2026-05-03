@@ -16,14 +16,24 @@ func NewPreferenceRepository(db *gorm.DB) *PreferenceRepository {
 	return &PreferenceRepository{db: db}
 }
 
-// UpsertAnimePreference creates or updates the user's per-anime preference
+// UpsertAnimePreference creates or updates the user's per-anime preference,
+// then bumps prefs_version so the frontend cache invalidates. Best-effort:
+// upsert errors fail the call, but a failed prefs_version bump is logged
+// (caller's responsibility) and not surfaced — the version will catch up on
+// the next save.
 func (r *PreferenceRepository) UpsertAnimePreference(ctx context.Context, pref *domain.UserAnimePreference) error {
-	return r.db.WithContext(ctx).
+	if err := r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "user_id"}, {Name: "anime_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"player", "language", "watch_type", "translation_id", "translation_title", "updated_at"}),
 		}).
-		Create(pref).Error
+		Create(pref).Error; err != nil {
+		return err
+	}
+	// Best-effort bump — preference write must not fail because the version
+	// counter could not increment. The next successful save will catch up.
+	_, _ = r.BumpPrefsVersion(ctx, pref.UserID)
+	return nil
 }
 
 // GetAnimePreference returns the user's saved preference for a specific anime
@@ -92,4 +102,63 @@ func (r *PreferenceRepository) GetUserHistoryForTier2(ctx context.Context, userI
 		Limit(maxRows).
 		Find(&rows).Error
 	return rows, err
+}
+
+// BumpPrefsVersion atomically increments the user's prefs_version generation
+// counter, creating the row at version 1 on first call. Returns the new
+// version. Phase 7 D-03 — the frontend uses this to invalidate its 24h
+// composable cache cross-device.
+func (r *PreferenceRepository) BumpPrefsVersion(ctx context.Context, userID string) (int64, error) {
+	// Postgres-native upsert: insert a row at version 1, or atomically
+	// increment the existing row's version. SQLite tests register an
+	// "increment_prefs_version" path that follows the same shape via UDF.
+	err := r.db.WithContext(ctx).Exec(`
+		INSERT INTO user_prefs_version (user_id, version, updated_at)
+		VALUES (?, 1, NOW())
+		ON CONFLICT (user_id) DO UPDATE SET
+			version = user_prefs_version.version + 1,
+			updated_at = NOW()
+	`, userID).Error
+	if err != nil {
+		return 0, err
+	}
+
+	var row domain.UserPrefsVersion
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		First(&row).Error; err != nil {
+		return 0, err
+	}
+	return row.Version, nil
+}
+
+// GetPrefsVersion returns the user's current prefs_version generation, or 0
+// if the row hasn't been created yet (i.e., the user has never saved a
+// preference). Phase 7 D-03 — read on every preference response so the
+// frontend's X-Prefs-Version-aware cache stays consistent.
+func (r *PreferenceRepository) GetPrefsVersion(ctx context.Context, userID string) (int64, error) {
+	var row domain.UserPrefsVersion
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		First(&row).Error
+	if err != nil {
+		// Row not found means user has never saved a preference. The frontend
+		// treats version=0 as "no learned preferences yet" and skips
+		// invalidation. Don't surface the error.
+		return 0, nil
+	}
+	return row.Version, nil
+}
+
+// ResetLearnedPreferences deletes all per-anime preference rows for a user.
+// Watch history is NOT touched — community popularity (Tier 3) is a public
+// good and Tier 2 weights would resurface from history alone. Phase 7 B-05.
+// Bumps prefs_version so the frontend cache busts immediately.
+func (r *PreferenceRepository) ResetLearnedPreferences(ctx context.Context, userID string) (int64, error) {
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Delete(&domain.UserAnimePreference{}).Error; err != nil {
+		return 0, err
+	}
+	return r.BumpPrefsVersion(ctx, userID)
 }

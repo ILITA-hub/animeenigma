@@ -103,9 +103,34 @@ apiClient.interceptors.request.use(
   }
 )
 
+// Phase 7 D-03 — bust the 24h pref:* localStorage cache when the backend
+// signals a new prefs_version on any preference-touching response. This makes
+// cross-device prefs changes visible immediately on the next API call instead
+// of after the 24h composable TTL.
+const PREFS_VERSION_KEY = 'prefs_version'
+function maybeBustPrefsCache(headerVal: string | undefined) {
+  if (!headerVal) return
+  const incoming = headerVal.trim()
+  if (!incoming) return
+  const cached = localStorage.getItem(PREFS_VERSION_KEY)
+  if (cached === incoming) return
+  // Version drifted — wipe every cached resolved-combo entry. The next
+  // resolve call repopulates from server.
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith('pref:')) {
+      localStorage.removeItem(key)
+    }
+  }
+  localStorage.setItem(PREFS_VERSION_KEY, incoming)
+}
+
 // Response interceptor — handles 401 errors and X-Token-Expired fallback
 apiClient.interceptors.response.use(
   async (response: AxiosResponse) => {
+    // Cross-device prefs freshness signal (Phase 7 D-03)
+    maybeBustPrefsCache(response.headers['x-prefs-version'] as string | undefined)
+
     // Fallback: backend signals token was present but expired on optional-auth endpoints
     if (response.headers['x-token-expired'] === 'true') {
       const newToken = await doTokenRefresh()
@@ -257,6 +282,32 @@ export const userApi = {
     apiClient.get<WatchCombo & { updated_at: string }>(`/users/preferences/${animeId}`),
   getGlobalPreferences: () =>
     apiClient.get<{ top_combos: (WatchCombo & { count: number })[] }>('/users/preferences/global'),
+  // Phase 7 — Advanced Settings + cross-device freshness
+  getTier2DebugView: () =>
+    apiClient.get<{
+      coarse: Array<{ language: string; watch_type: string; weight: number }>
+      fine: Array<{
+        language: string
+        watch_type: string
+        player: string
+        translation_id: string
+        translation_title: string
+        weight: number
+      }>
+      total_weight: number
+      min_confidence: number
+      half_life_days: number
+      lock: {
+        language: string
+        watch_type: string
+        top_translation_title: string
+        confidence: number
+      } | null
+    }>('/users/preferences/tier2'),
+  forceCombo: (animeId: string, combo: WatchCombo) =>
+    apiClient.post(`/users/preferences/${animeId}/force`, combo),
+  resetLearnedPreferences: () =>
+    apiClient.delete<{ prefs_version: number }>('/users/preferences/learned'),
 }
 
 export const publicApi = {

@@ -104,7 +104,10 @@ func NewRouter(
 
 			// Preference routes
 			r.Get("/preferences/global", preferenceHandler.GetGlobalPreferences)
+			r.Get("/preferences/tier2", preferenceHandler.GetTier2DebugView)
+			r.Delete("/preferences/learned", preferenceHandler.ResetLearnedPreferences)
 			r.Get("/preferences/{animeId}", preferenceHandler.GetAnimePreference)
+			r.Post("/preferences/{animeId}/force", preferenceHandler.ForceCombo)
 		})
 
 		// Public preference routes — anon-friendly via OptionalAuthMiddleware.

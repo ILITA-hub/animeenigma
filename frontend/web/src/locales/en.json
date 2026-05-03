@@ -181,7 +181,46 @@
     "uploadAvatar": "Upload avatar",
     "tabs": {
       "watchlist": "My Lists",
-      "settings": "Settings"
+      "settings": "Settings",
+      "advanced": "Advanced"
+    },
+    "advanced": {
+      "title": "Auto-pick weights",
+      "description": "How the auto-pick understands your watch habits. Recent rows count more than old ones; total minutes watched matters more than total episodes.",
+      "loading": "Loading…",
+      "unavailable": "Could not load weights right now.",
+      "lockActive": "Locked to {lang} {wt}",
+      "lockInactive": "No lock — using community popularity",
+      "lockTeam": "Top team in lock: {team}",
+      "noTeam": "(no team)",
+      "lockInactiveDescription": "Total weighted history {current} is below the floor {floor}. Watch a bit more and the auto-pick will start learning.",
+      "totalWeight": "Total weighted history",
+      "minConfidence": "Min confidence floor",
+      "halfLifeDays": "Decay half-life",
+      "coarseTitle": "Language + type",
+      "coarseDescription": "Drives the lock decision (which language and dub-vs-sub).",
+      "fineTitle": "Top teams",
+      "fineDescription": "Picks the team within the lock. Showing top 8 by weight.",
+      "empty": "No history yet.",
+      "col": {
+        "lang": "Lang",
+        "wt": "Type",
+        "weight": "Weight",
+        "team": "Team",
+        "player": "Player"
+      },
+      "wt": {
+        "dub": "Dub",
+        "sub": "Sub"
+      },
+      "resetTitle": "Reset learned preferences",
+      "resetDescription": "Wipes per-anime locks. Your watch history is kept, so the auto-pick will relearn from scratch.",
+      "resetButton": "Reset",
+      "resetting": "Resetting…",
+      "resetConfirm": "Reset all per-anime preferences? Your watch history will be kept, but the auto-pick will start fresh.",
+      "resetSuccess": "Preferences reset. The next anime you open will use community popularity until weights rebuild.",
+      "resetError": "Failed to reset. Please try again.",
+      "refresh": "Refresh"
     },
     "watchlist": {
       "all": "All",
