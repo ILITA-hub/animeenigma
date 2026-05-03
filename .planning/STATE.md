@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Wave 2 shipped (Phase 4 + Phase 5); ready for Wave 3 (Phase 6 Tier 2 rewrite)
-last_updated: "2026-05-03T05:30:00.000Z"
-last_activity: 2026-05-03 -- Wave 2 deployed; player + web redeployed; schema migration applied (watch_count, session_id, dropped_off_at)
+stopped_at: Wave 3 (Phase 6 Tier 2 rewrite) implemented; deploy pending
+last_updated: "2026-05-03T08:00:00.000Z"
+last_activity: 2026-05-03 -- Phase 6 implemented; weighted decayed two-signal inference + min-confidence floor + thin-signal-skip metric; resolver + tier2 tests green
 progress:
   total_phases: 8
-  completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
-  percent: 62
+  completed_phases: 6
+  total_plans: 10
+  completed_plans: 10
+  percent: 75
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-27)
 
 ## Current Position
 
-Phase: 6 (next — Wave 3, Tier 2 inference rewrite)
-Plan: To be created (06-01)
-Status: Phase 6 phase-gate satisfied 2026-05-03 (baseline override-rate snapshot captured to PROJECT.md § Baseline override rate)
-Last activity: 2026-05-03 — Wave 2 shipped; Phase 6 baseline captured
+Phase: 7 (next — Wave 4, Advanced Settings + Anonymous UX + Freshness)
+Plan: To be created (07-01)
+Status: Wave 3 (Phase 6 Tier 2 rewrite) implemented 2026-05-03; deploy pending
+Last activity: 2026-05-03 — Phase 6 implemented; resolver tests + new tier2 tests green
 
-Progress: [██████░░░░] 62% (Phases 1, 2, 3, 4, 5 complete)
+Progress: [████████░░] 75% (Phases 1, 2, 3, 4, 5, 6 complete)
 
 ## Wave Plan (locked 2026-04-28)
 
@@ -38,8 +38,8 @@ Progress: [██████░░░░] 62% (Phases 1, 2, 3, 4, 5 complete)
 |---|---|---|---|
 | 1 | 2 (audit, doc-only), 3 (write-path semantics) | 2 ✓; 3 ✓ — shipped 2026-05-03 | Done |
 | 2 | 4 (state machine in 4 players), 5 (gap-fill columns) | 4 ✓; 5 ✓ — shipped 2026-05-03 | Done |
-| 3 | 6 (Tier 2 rewrite) | Ready to plan | Ship per phase |
-| 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | Blocked on Phase 6 | Batch ship after both |
+| 3 | 6 (Tier 2 rewrite) | 6 ✓ — implemented 2026-05-03; deploy pending | Ship per phase |
+| 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | Ready to plan | Batch ship after both |
 
 ## Performance Metrics
 

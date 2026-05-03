@@ -44,7 +44,7 @@ func TestResolve(t *testing.T) {
 	tests := []struct {
 		name      string
 		userPref  *domain.UserAnimePreference
-		globalFav *domain.ComboCount
+		tier2Lock *domain.Tier2Lock
 		community []domain.CommunityCombo
 		pinned    []domain.PinnedTranslation
 		available []domain.WatchCombo
@@ -97,20 +97,20 @@ func TestResolve(t *testing.T) {
 		// Group 2: Tier 2 — user global favorite #1 only
 		// ──────────────────────────────────────────────
 		{
-			name: "T2: global fav team found in available",
-			globalFav: &domain.ComboCount{
-				Player: "kodik", Language: "ru", WatchType: "dub",
-				TranslationTitle: "AniLibria", Count: 15,
+			name: "T2: weighted top in lock → matches available",
+			tier2Lock: &domain.Tier2Lock{
+				Language: "ru", WatchType: "dub",
+				TopTranslationTitle: "AniLibria", Confidence: 5000,
 			},
 			available: []domain.WatchCombo{kodikAniLibria, kodikAniDUB, hianimeHD1},
 			wantTier:  "user_global", wantTierN: 2,
 			wantCombo: kodikAniLibria,
 		},
 		{
-			name: "T2: global fav team not available → skip to Tier 3",
-			globalFav: &domain.ComboCount{
-				Player: "kodik", Language: "ru", WatchType: "dub",
-				TranslationTitle: "SHIZA", Count: 10,
+			name: "T2: weighted top team not available → skip to Tier 3 (still in lock)",
+			tier2Lock: &domain.Tier2Lock{
+				Language: "ru", WatchType: "dub",
+				TopTranslationTitle: "SHIZA", Confidence: 5000,
 			},
 			// SHIZA not in available; community has AniDUB as ru+dub
 			community: []domain.CommunityCombo{
@@ -120,6 +120,18 @@ func TestResolve(t *testing.T) {
 			available: []domain.WatchCombo{kodikAniDUB, hianimeHD1},
 			wantTier:  "community", wantTierN: 3,
 			wantCombo: kodikAniDUB,
+		},
+		{
+			name: "T2: nil lock (thin signal) → falls straight to Tier 3",
+			// tier2Lock nil simulates "history below min-confidence floor".
+			// Without a lock, Tier 3 picks the most-popular community combo.
+			community: []domain.CommunityCombo{
+				{Player: "kodik", Language: "ru", WatchType: "dub",
+					TranslationID: "610", TranslationTitle: "AniLibria", Viewers: 50},
+			},
+			available: []domain.WatchCombo{kodikAniLibria, hianimeHD1},
+			wantTier:  "community", wantTierN: 3,
+			wantCombo: kodikAniLibria,
 		},
 
 		// ──────────────────────────────────────────────
@@ -158,9 +170,9 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name: "T3: no community data → fall to Tier 4",
-			globalFav: &domain.ComboCount{
-				Player: "kodik", Language: "ru", WatchType: "dub",
-				TranslationTitle: "SHIZA", Count: 5,
+			tier2Lock: &domain.Tier2Lock{
+				Language: "ru", WatchType: "dub",
+				TopTranslationTitle: "SHIZA", Confidence: 3000,
 			},
 			// SHIZA not available, no community data, pinned AniLibria matches lock
 			pinned: []domain.PinnedTranslation{
@@ -188,9 +200,9 @@ func TestResolve(t *testing.T) {
 		// ──────────────────────────────────────────────
 		{
 			name: "T4: pinned matches lock (ru+dub)",
-			globalFav: &domain.ComboCount{
-				Player: "kodik", Language: "ru", WatchType: "dub",
-				TranslationTitle: "SHIZA", Count: 8,
+			tier2Lock: &domain.Tier2Lock{
+				Language: "ru", WatchType: "dub",
+				TopTranslationTitle: "SHIZA", Confidence: 4000,
 			},
 			// SHIZA not available, no community
 			pinned: []domain.PinnedTranslation{
@@ -202,9 +214,9 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name: "T4: pinned wrong type (voice pinned, lock is sub) → Tier 5",
-			globalFav: &domain.ComboCount{
-				Player: "kodik", Language: "ru", WatchType: "sub",
-				TranslationTitle: "SomeSubTeam", Count: 12,
+			tier2Lock: &domain.Tier2Lock{
+				Language: "ru", WatchType: "sub",
+				TopTranslationTitle: "SomeSubTeam", Confidence: 6000,
 			},
 			// SomeSubTeam not available, no community
 			// Pinned is voice=dub but lock is ru+sub
@@ -217,9 +229,9 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name: "T4: no pinned → Tier 5",
-			globalFav: &domain.ComboCount{
-				Player: "kodik", Language: "ru", WatchType: "sub",
-				TranslationTitle: "SomeTeam", Count: 3,
+			tier2Lock: &domain.Tier2Lock{
+				Language: "ru", WatchType: "sub",
+				TopTranslationTitle: "SomeTeam", Confidence: 2000,
 			},
 			available: []domain.WatchCombo{kodikCrunchyroll, kodikAniLibria},
 			wantTier:  "default", wantTierN: 5,
@@ -280,9 +292,9 @@ func TestResolve(t *testing.T) {
 		},
 		{
 			name: "B: lock carries through tiers (Tier 2 lock → Tier 3 → Tier 4 → Tier 5)",
-			globalFav: &domain.ComboCount{
-				Player: "hianime", Language: "en", WatchType: "dub",
-				TranslationTitle: "HD-1", Count: 20,
+			tier2Lock: &domain.Tier2Lock{
+				Language: "en", WatchType: "dub",
+				TopTranslationTitle: "HD-1", Confidence: 8000,
 			},
 			// HD-1 not available; community has ru options only; pinned is ru voice
 			community: []domain.CommunityCombo{
@@ -320,7 +332,7 @@ func TestResolve(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := Resolve(
 				tt.userPref,
-				tt.globalFav,
+				tt.tier2Lock,
 				tt.community,
 				tt.pinned,
 				tt.available,

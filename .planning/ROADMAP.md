@@ -15,7 +15,7 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
 - [x] **Phase 3: Single Source of Truth for "Watched"** - Both auto-mark (20 min) and manual-mark paths set `watch_progress.completed = true`, and `anime_list.episodes` + episode-list checkmarks derive from it ✓ 2026-04-28
 - [x] **Phase 4: Resume State Machine in All Four Players** - Pre-player episode selection follows the watching / finished / not-yet-aired state machine across Kodik, AnimeLib, HiAnime, Consumet ✓ 2026-05-03
 - [x] **Phase 5: Analytics Gap-Fill** - Add the highest-value low-risk columns/events identified in Phase 2; at minimum distinguish session-start vs session-resume ✓ 2026-05-03
-- [ ] **Phase 6: Tier 2 Inference Rewrite** - Weighted by `duration_watched`, exponentially decayed (30-day half-life), two-signal coarse/fine, with a min-confidence fallback to Tier 3
+- [x] **Phase 6: Tier 2 Inference Rewrite** ✓ 2026-05-03 - Weighted by `duration_watched`, exponentially decayed (30-day half-life), two-signal coarse/fine, with a min-confidence fallback to Tier 3
 - [ ] **Phase 7: Advanced Settings, Anonymous UX, Cross-Device Freshness** - Profile > Advanced Settings panel, localStorage-backed anonymous preference, and cache-invalidation on auth-change + `prefs_version` signal
 - [ ] **Phase 8: Recommendations Readiness Documentation** - Document what additional capture would unlock a future recommendations engine; no engine built here
 
@@ -111,7 +111,9 @@ The journey: ship instrumentation FIRST so we can baseline the override-rate met
   4. When total weighted history is below the configured floor, Tier 2 declines to lock and the resolver falls through to Tier 3 (community); the `combo_override` event downstream confirms this thin-signal case is no longer overriding at the previous rate
   5. The strict no-cross-language and no-cross-dub/sub boundary (VAL-02) is preserved — verified by tests that try to cross the boundary and assert the lock holds
   6. Resolver p95 latency stays under 50 ms (per PROJECT.md performance constraint), achieved with a materialized view or cached aggregate if the naive query exceeds budget
-**Plans**: TBD
+**Plans**:
+- [x] 06-01 — Weighted aggregation (`AggregateTier2`) + lock chooser (`ChooseTier2Lock`) + resolver Tier 2 rewrite + env-tunable config + thin-signal-skip metric ✓ 2026-05-03
+**Deploy**: Pending — Wave 3 single-phase deploy
 
 ### Phase 7: Advanced Settings, Anonymous UX, and Cross-Device Freshness
 **Goal**: Surface the new resolver behavior to power users (Advanced Settings panel), give anonymous users a comparable picker experience via localStorage, and stop stale 24h client cache from masking the resolver improvements across devices.
@@ -151,6 +153,6 @@ Phases 1 and 2 are independent and may execute in parallel if `parallelization=t
 | 3. Single Source of Truth for "Watched" | 0/TBD | Not started | - |
 | 4. Resume State Machine in All Four Players | 0/TBD | Not started | - |
 | 5. Analytics Gap-Fill | 0/TBD | Not started | - |
-| 6. Tier 2 Inference Rewrite | 0/TBD | Not started | - |
+| 6. Tier 2 Inference Rewrite | 1/1 | ✓ 2026-05-03 | - |
 | 7. Advanced Settings, Anonymous UX, Cross-Device Freshness | 0/TBD | Not started | - |
 | 8. Recommendations Readiness Documentation | 0/TBD | Not started | - |

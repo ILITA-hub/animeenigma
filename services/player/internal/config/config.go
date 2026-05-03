@@ -17,6 +17,16 @@ type Config struct {
 	Telegram    TelegramConfig
 	Reports     ReportsConfig
 	Maintenance MaintenanceConfig
+	Tier2       Tier2Config
+}
+
+// Tier2Config controls the Phase 6 weighted, time-decayed Tier 2 inference.
+// Tunable at runtime so we can adjust thresholds in production without a code change.
+type Tier2Config struct {
+	HalfLifeDays   float64 // exponential decay half-life (days). Default 30.
+	MinConfidence  float64 // min total weighted history to lock. Below = fall through to Tier 3. Default 1800 (≈30min effective).
+	MaxHistoryRows int     // safety cap on history rows pulled per resolve. Default 5000.
+	DurationFloor  int     // min duration_watched for a row's weight contribution (handles legacy duration_watched=0 rows). Default 60.
 }
 
 type TelegramConfig struct {
@@ -75,7 +85,22 @@ func Load() (*Config, error) {
 		Maintenance: MaintenanceConfig{
 			URL: getEnv("MAINTENANCE_URL", ""),
 		},
+		Tier2: Tier2Config{
+			HalfLifeDays:   getEnvFloat("TIER2_HALF_LIFE_DAYS", 30.0),
+			MinConfidence:  getEnvFloat("TIER2_MIN_CONFIDENCE", 1800.0),
+			MaxHistoryRows: getEnvInt("TIER2_MAX_HISTORY_ROWS", 5000),
+			DurationFloor:  getEnvInt("TIER2_DURATION_FLOOR", 60),
+		},
 	}, nil
+}
+
+func getEnvFloat(key string, defaultVal float64) float64 {
+	if val := os.Getenv(key); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
+		}
+	}
+	return defaultVal
 }
 
 func getEnv(key, defaultVal string) string {

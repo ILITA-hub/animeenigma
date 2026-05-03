@@ -61,13 +61,49 @@ type ResolvedCombo struct {
 	TierNumber int    `json:"tier_number"` // 1-5
 }
 
-// ComboCount is a user's watch count for a specific combo (used by Tier 2)
+// ComboCount is a user's watch count for a specific combo. Returned by the
+// /api/users/preferences/global endpoint via GetUserTopCombos. Phase 6's
+// resolver consumes Tier2Lock instead.
 type ComboCount struct {
 	Player           string `json:"player"`
 	Language         string `json:"language"`
 	WatchType        string `json:"watch_type"`
 	TranslationTitle string `json:"translation_title"`
 	Count            int    `json:"count"`
+}
+
+// WeightedCoarse is one (language, watch_type) tuple's exponentially-decayed
+// duration-weighted score across a user's watch_history. The "coarse" signal
+// drives the Tier 2 lock decision: which language and dub-vs-sub the user
+// actually consumes most. Phase 6.
+type WeightedCoarse struct {
+	Language  string  `json:"language"`
+	WatchType string  `json:"watch_type"`
+	Weight    float64 `json:"weight"`
+}
+
+// WeightedFine is one (language, watch_type, player, translation_id, title)
+// tuple's exponentially-decayed duration-weighted score. The "fine" signal
+// picks the team within the lock established by the coarse signal. Phase 6.
+type WeightedFine struct {
+	Language         string  `json:"language"`
+	WatchType        string  `json:"watch_type"`
+	Player           string  `json:"player"`
+	TranslationID    string  `json:"translation_id"`
+	TranslationTitle string  `json:"translation_title"`
+	Weight           float64 `json:"weight"`
+}
+
+// Tier2Lock is the resolver's view of the Tier 2 decision: a locked
+// (language, watch_type) pair plus the top translation_title within that lock.
+// Constructed by the service layer from coarse + fine signals after applying
+// the min-confidence floor. Nil when total weighted history is below floor —
+// the resolver then falls through to Tier 3 community popularity. Phase 6.
+type Tier2Lock struct {
+	Language            string  `json:"language"`
+	WatchType           string  `json:"watch_type"`
+	TopTranslationTitle string  `json:"top_translation_title"`
+	Confidence          float64 `json:"confidence"` // sum of all coarse weights
 }
 
 // CommunityCombo is a community popularity entry for an anime (used by Tier 3)

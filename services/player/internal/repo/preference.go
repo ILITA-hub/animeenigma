@@ -38,23 +38,6 @@ func (r *PreferenceRepository) GetAnimePreference(ctx context.Context, userID, a
 	return &pref, nil
 }
 
-// GetUserGlobalFavorite returns the user's #1 most-watched combo from watch_history
-func (r *PreferenceRepository) GetUserGlobalFavorite(ctx context.Context, userID string) (*domain.ComboCount, error) {
-	var result domain.ComboCount
-	err := r.db.WithContext(ctx).
-		Model(&domain.WatchHistory{}).
-		Select("player, language, watch_type, translation_title, COUNT(*) as count").
-		Where("user_id = ?", userID).
-		Group("player, language, watch_type, translation_title").
-		Order("count DESC").
-		Limit(1).
-		Scan(&result).Error
-	if err != nil || result.Count == 0 {
-		return nil, err
-	}
-	return &result, nil
-}
-
 // GetUserTopCombos returns the user's top combos ranked by watch count
 func (r *PreferenceRepository) GetUserTopCombos(ctx context.Context, userID string, limit int) ([]domain.ComboCount, error) {
 	var results []domain.ComboCount
@@ -94,4 +77,19 @@ func (r *PreferenceRepository) GetPinnedTranslations(ctx context.Context, animeI
 // CreateWatchHistory inserts a watch_history row with full combo context
 func (r *PreferenceRepository) CreateWatchHistory(ctx context.Context, history *domain.WatchHistory) error {
 	return r.db.WithContext(ctx).Create(history).Error
+}
+
+// GetUserHistoryForTier2 returns the user's recent watch_history rows ordered
+// by watched_at DESC so the service-layer aggregation (preference.AggregateTier2)
+// can compute the duration-weighted, exponentially-decayed coarse + fine signals.
+// maxRows is a safety cap to bound resolver latency for users with very long
+// history. Phase 6 (Tier 2 inference rewrite).
+func (r *PreferenceRepository) GetUserHistoryForTier2(ctx context.Context, userID string, maxRows int) ([]domain.WatchHistory, error) {
+	var rows []domain.WatchHistory
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("watched_at DESC").
+		Limit(maxRows).
+		Find(&rows).Error
+	return rows, err
 }

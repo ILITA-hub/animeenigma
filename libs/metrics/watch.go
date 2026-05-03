@@ -77,4 +77,17 @@ var (
 		},
 		[]string{"tier", "language", "anon", "player"},
 	)
+
+	// Tier2ThinSignalSkipTotal counts every time the Tier 2 weighted-inference
+	// rewrite (Phase 6) declined to lock because total weighted history was
+	// below the configured min-confidence floor. These resolves fall through
+	// to Tier 3 community popularity. Used to validate VAL-04 / Phase 6
+	// success criterion 4 from PROJECT.md.
+	Tier2ThinSignalSkipTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "tier2_thin_signal_skip_total",
+			Help: "Tier 2 declined to lock due to confidence below floor; resolver falls through to Tier 3",
+		},
+		[]string{"anon"},
+	)
 )

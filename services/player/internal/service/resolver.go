@@ -17,12 +17,14 @@ var tierNames = map[int]string{
 
 // Resolve is a pure function that implements the 5-tier preference resolution
 // algorithm. It selects the best WatchCombo from the available list based on
-// user preferences, global favorites, community popularity, and pinned translations.
+// user preferences, the Phase 6 weighted Tier 2 lock, community popularity,
+// and pinned translations.
 //
-// It never crosses language or dub/sub boundaries once a lock is established.
+// It never crosses language or dub/sub boundaries once a lock is established
+// (VAL-02).
 func Resolve(
 	userPref *domain.UserAnimePreference,
-	globalFav *domain.ComboCount,
+	tier2Lock *domain.Tier2Lock,
 	community []domain.CommunityCombo,
 	pinned []domain.PinnedTranslation,
 	available []domain.WatchCombo,
@@ -57,23 +59,31 @@ func Resolve(
 		// Combo gone — lock is set, continue to Tier 2
 	}
 
-	// ── Tier 2: User's global favorite #1 ─────────────────────
-	if globalFav != nil {
-		// If no lock yet, lock from global favorite
+	// ── Tier 2: Weighted, time-decayed inference (Phase 6) ────
+	// tier2Lock is nil when total weighted history is below the
+	// min-confidence floor — caller has already counted the skip in
+	// metrics.Tier2ThinSignalSkipTotal. We fall straight through to Tier 3.
+	if tier2Lock != nil {
+		// If no lock yet, lock from the coarse signal
 		if lockLang == "" {
-			lockLang = globalFav.Language
-			lockType = globalFav.WatchType
+			lockLang = tier2Lock.Language
+			lockType = tier2Lock.WatchType
 		}
 
-		// Only check exact translation_title match, filtered by lock
-		for _, a := range available {
-			if a.Language == lockLang && a.WatchType == lockType &&
-				a.TranslationTitle == globalFav.TranslationTitle {
-				return resolved(a, 2)
+		// Match the fine-signal top translation_title within the lock.
+		// VAL-02: only inside the locked language+watch_type — never crosses.
+		if tier2Lock.TopTranslationTitle != "" {
+			for _, a := range available {
+				if a.Language == lockLang && a.WatchType == lockType &&
+					a.TranslationTitle == tier2Lock.TopTranslationTitle {
+					return resolved(a, 2)
+				}
 			}
 		}
 
-		// Not found — do NOT try #2, #3 favorites. Fall to Tier 3.
+		// Top translation not currently available — fall to Tier 3 (community)
+		// rather than picking a random in-lock combo. The community signal at
+		// Tier 3 will itself respect the lock.
 	}
 
 	// ── Tier 3: Community popularity ──────────────────────────

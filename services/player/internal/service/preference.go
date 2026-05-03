@@ -13,10 +13,46 @@ import (
 type PreferenceService struct {
 	prefRepo *repo.PreferenceRepository
 	log      *logger.Logger
+	tier2    Tier2Params
+}
+
+// Tier2Params carries the runtime-tunable Phase 6 inputs into the service.
+// Mirrors config.Tier2Config but lives in the service package so the resolver
+// has no compile-time dependency on the player config layer.
+type Tier2Params struct {
+	HalfLifeDays   float64
+	MinConfidence  float64
+	MaxHistoryRows int
+	DurationFloor  int
+}
+
+// DefaultTier2Params returns sensible defaults — used by tests and as a
+// fallback when callers construct a service without explicit tuning.
+func DefaultTier2Params() Tier2Params {
+	return Tier2Params{
+		HalfLifeDays:   30.0,
+		MinConfidence:  1800.0,
+		MaxHistoryRows: 5000,
+		DurationFloor:  60,
+	}
 }
 
 func NewPreferenceService(prefRepo *repo.PreferenceRepository, log *logger.Logger) *PreferenceService {
-	return &PreferenceService{prefRepo: prefRepo, log: log}
+	return &PreferenceService{
+		prefRepo: prefRepo,
+		log:      log,
+		tier2:    DefaultTier2Params(),
+	}
+}
+
+// NewPreferenceServiceWithTier2 wires Phase 6 tunables in. main.go uses this
+// to thread cfg.Tier2 into the resolver.
+func NewPreferenceServiceWithTier2(prefRepo *repo.PreferenceRepository, log *logger.Logger, tier2 Tier2Params) *PreferenceService {
+	return &PreferenceService{
+		prefRepo: prefRepo,
+		log:      log,
+		tier2:    tier2,
+	}
 }
 
 // UpsertAnimePreference builds a UserAnimePreference from the request combo fields and upserts via repo
@@ -41,13 +77,41 @@ func (s *PreferenceService) UpsertAnimePreference(ctx context.Context, userID st
 	}
 }
 
-// Resolve loads all 4 data sources from DB, calls the pure Resolve function, and increments metrics
+// Resolve loads all data sources from DB, computes the Phase 6 weighted Tier 2
+// signals, and calls the pure Resolve function. Increments resolve metrics
+// (and tier2_thin_signal_skip_total when the min-confidence floor declines).
 func (s *PreferenceService) Resolve(ctx context.Context, userID string, req *domain.ResolveRequest) (*domain.ResolveResponse, error) {
+	anonLabel := "true"
+	if userID != "" {
+		anonLabel = "false"
+	}
+
 	// Load Tier 1: per-anime preference
 	userPref, _ := s.prefRepo.GetAnimePreference(ctx, userID, req.AnimeID)
 
-	// Load Tier 2: user's global favorite
-	globalFav, _ := s.prefRepo.GetUserGlobalFavorite(ctx, userID)
+	// Load Tier 2: weighted history aggregation (Phase 6 rewrite).
+	// Skipped entirely for anonymous callers — they have no userID, so no
+	// history to weight. Anonymous Tier 2 lives client-side via localStorage
+	// in Phase 7.
+	var tier2Lock *domain.Tier2Lock
+	if userID != "" {
+		history, err := s.prefRepo.GetUserHistoryForTier2(ctx, userID, s.tier2.MaxHistoryRows)
+		if err != nil {
+			s.log.Warnw("tier 2 history fetch failed; falling through to community",
+				"user_id", userID,
+				"error", err,
+			)
+		} else {
+			coarse, fine, total := AggregateTier2(history, s.tier2.HalfLifeDays, time.Now(), s.tier2.DurationFloor)
+			tier2Lock = ChooseTier2Lock(coarse, fine, total, s.tier2.MinConfidence)
+			if tier2Lock == nil && total > 0 {
+				// total>0 distinguishes "thin signal skip" (had some history,
+				// but below floor) from "no history at all" (truly first-time
+				// user). We only count the former.
+				metrics.Tier2ThinSignalSkipTotal.WithLabelValues(anonLabel).Inc()
+			}
+		}
+	}
 
 	// Load Tier 3: community popularity for this anime
 	community, _ := s.prefRepo.GetCommunityPopularity(ctx, req.AnimeID)
@@ -56,7 +120,7 @@ func (s *PreferenceService) Resolve(ctx context.Context, userID string, req *dom
 	pinned, _ := s.prefRepo.GetPinnedTranslations(ctx, req.AnimeID)
 
 	// Call the pure resolver function
-	result := Resolve(userPref, globalFav, community, pinned, req.Available)
+	result := Resolve(userPref, tier2Lock, community, pinned, req.Available)
 
 	// Increment metrics
 	tier := "null"
@@ -71,12 +135,8 @@ func (s *PreferenceService) Resolve(ctx context.Context, userID string, req *dom
 
 	// ComboResolveTotal — the rate denominator for combo_override_total. Same label
 	// derivation as the override handler so PromQL division by label group lines up.
-	// anon="true" if userID is empty (caller had no JWT claims and possibly an X-Anon-ID
-	// captured at the handler boundary; the service treats both as "anonymous").
-	anonLabel := "true"
-	if userID != "" {
-		anonLabel = "false"
-	}
+	// anonLabel is set above (top of Resolve) so Tier 2 thin-signal skip metric
+	// can also use it without recomputation.
 	metrics.ComboResolveTotal.WithLabelValues(
 		labelOrUnknownService(tier),
 		labelOrUnknownService(language),

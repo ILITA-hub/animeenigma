@@ -100,7 +100,12 @@ func main() {
 	prefRepo := repo.NewPreferenceRepository(db.DB)
 
 	// Initialize services
-	prefService := service.NewPreferenceService(prefRepo, log)
+	prefService := service.NewPreferenceServiceWithTier2(prefRepo, log, service.Tier2Params{
+		HalfLifeDays:   cfg.Tier2.HalfLifeDays,
+		MinConfidence:  cfg.Tier2.MinConfidence,
+		MaxHistoryRows: cfg.Tier2.MaxHistoryRows,
+		DurationFloor:  cfg.Tier2.DurationFloor,
+	})
 	progressService := service.NewProgressService(progressRepo, prefService, log)
 	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, log)
 	historyService := service.NewHistoryService(historyRepo, log)
