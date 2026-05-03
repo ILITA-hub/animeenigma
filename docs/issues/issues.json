@@ -1,5 +1,5 @@
 {
-  "last_id": 81,
+  "last_id": 82,
   "issues": [
     {
       "id": "AUTO-001",
@@ -1354,6 +1354,21 @@
       "affected_service": "catalog",
       "actions": null,
       "resolution": "Fix applied by @tNeymik"
+    },
+    {
+      "id": "AUTO-082",
+      "created_at": "2026-05-02T23:13:59Z",
+      "resolved_at": "2026-05-02T23:17:42Z",
+      "source": "grafana_alert",
+      "category": "player_unavailable",
+      "priority": "P0",
+      "status": "resolved",
+      "title": "AnimeLib — transient upstream API timeout on hapi.hentaicdn.org",
+      "reporter": "grafana",
+      "telegram_message_id": 1996,
+      "affected_service": "catalog",
+      "actions": null,
+      "resolution": "Alert resolved (no longer firing in Grafana)"
     }
   ]
 }
