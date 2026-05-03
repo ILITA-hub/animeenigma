@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Wave 3 (Phase 6 Tier 2 rewrite) implemented; deploy pending
-last_updated: "2026-05-03T08:00:00.000Z"
-last_activity: 2026-05-03 -- Phase 6 implemented; weighted decayed two-signal inference + min-confidence floor + thin-signal-skip metric; resolver + tier2 tests green
+stopped_at: Wave 3 (Phase 6 Tier 2 rewrite) shipped 2026-05-03; ready for Wave 4 (Phase 7 + Phase 8)
+last_updated: "2026-05-03T08:30:00.000Z"
+last_activity: 2026-05-03 -- Phase 6 deployed; player redeployed with weighted/decayed/two-signal inference + min-confidence floor; web redeployed with changelog
 progress:
   total_phases: 8
   completed_phases: 6
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-27)
 
 Phase: 7 (next — Wave 4, Advanced Settings + Anonymous UX + Freshness)
 Plan: To be created (07-01)
-Status: Wave 3 (Phase 6 Tier 2 rewrite) implemented 2026-05-03; deploy pending
-Last activity: 2026-05-03 — Phase 6 implemented; resolver tests + new tier2 tests green
+Status: Wave 3 (Phase 6 Tier 2 rewrite) shipped 2026-05-03; player + web redeployed; tier2_thin_signal_skip_total counter live
+Last activity: 2026-05-03 — Phase 6 deployed; weighted decayed two-signal inference + min-confidence floor + thin-signal-skip metric in production
 
 Progress: [████████░░] 75% (Phases 1, 2, 3, 4, 5, 6 complete)
 
@@ -38,7 +38,7 @@ Progress: [████████░░] 75% (Phases 1, 2, 3, 4, 5, 6 complete
 |---|---|---|---|
 | 1 | 2 (audit, doc-only), 3 (write-path semantics) | 2 ✓; 3 ✓ — shipped 2026-05-03 | Done |
 | 2 | 4 (state machine in 4 players), 5 (gap-fill columns) | 4 ✓; 5 ✓ — shipped 2026-05-03 | Done |
-| 3 | 6 (Tier 2 rewrite) | 6 ✓ — implemented 2026-05-03; deploy pending | Ship per phase |
+| 3 | 6 (Tier 2 rewrite) | 6 ✓ — shipped 2026-05-03 | Done |
 | 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | Ready to plan | Batch ship after both |
 
 ## Performance Metrics
