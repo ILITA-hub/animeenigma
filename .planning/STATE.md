@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Wave 2 implementations complete (Phase 4 + Phase 5); batch deploy pending
-last_updated: "2026-05-03T05:00:00.000Z"
-last_activity: 2026-05-03 -- Phase 4 + Phase 5 implementation complete; Wave 2 batch deploy pending
+stopped_at: Wave 2 shipped (Phase 4 + Phase 5); ready for Wave 3 (Phase 6 Tier 2 rewrite)
+last_updated: "2026-05-03T05:30:00.000Z"
+last_activity: 2026-05-03 -- Wave 2 deployed; player + web redeployed; schema migration applied (watch_count, session_id, dropped_off_at)
 progress:
   total_phases: 8
   completed_phases: 5
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-27)
 
 **Core value:** When a logged-in user opens an anime, the player loads on the correct episode in the combo (language + dub/sub + team + player) they actually want — without the user touching anything — and we can prove it with a single metric (auto-pick override rate).
-**Current focus:** Wave 2 implementations complete 2026-05-03 — Phase 4 (resume state machine + 4-state banner) and Phase 5 (watch_count, session_id, drop-off beacon) committed; Wave 2 batch deploy pending via `/animeenigma-after-update`.
+**Current focus:** Wave 2 shipped 2026-05-03 — Phase 4 (resume state machine + 4-state banner) and Phase 5 (watch_count, session_id, drop-off beacon) deployed live. Schema migration verified in Postgres (watch_count, dropped_off_at on watch_progress; session_id on watch_history). Wave 3 (Phase 6 Tier 2 rewrite) ready to plan.
 
 ## Current Position
 
@@ -37,8 +37,8 @@ Progress: [███░░░░░░░] 38% (Phases 1, 2, 3 complete)
 | Wave | Phases | Status | Deploy gate |
 |---|---|---|---|
 | 1 | 2 (audit, doc-only), 3 (write-path semantics) | 2 ✓; 3 ✓ — shipped 2026-05-03 | Done |
-| 2 | 4 (state machine in 4 players), 5 (gap-fill columns) | 4 ✓; 5 ✓ — deploy pending | Batch ship pending |
-| 3 | 6 (Tier 2 rewrite) | Blocked on Phase 5 | Ship per phase |
+| 2 | 4 (state machine in 4 players), 5 (gap-fill columns) | 4 ✓; 5 ✓ — shipped 2026-05-03 | Done |
+| 3 | 6 (Tier 2 rewrite) | Ready to plan | Ship per phase |
 | 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | Blocked on Phase 6 | Batch ship after both |
 
 ## Performance Metrics
