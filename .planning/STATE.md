@@ -1,64 +1,41 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: phases_complete
-stopped_at: All 8 phases shipped 2026-05-03; milestone ready for /gsd-complete-milestone closeout
-last_updated: "2026-05-03T12:15:00.000Z"
-last_activity: 2026-05-03 -- Wave 4 deployed; player + web redeployed; user_prefs_version table created; Tier2DebugView endpoint live; X-Prefs-Version header verified in production
+milestone: v2.0
+milestone_name: Recommendations Engine
+status: planning
+last_updated: "2026-05-04T15:15:08.138Z"
+last_activity: 2026-05-04
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-27)
+See: .planning/PROJECT.md (updated 2026-05-04 for v2.0)
 
-**Core value:** When a logged-in user opens an anime, the player loads on the correct episode in the combo (language + dub/sub + team + player) they actually want — without the user touching anything — and we can prove it with a single metric (auto-pick override rate).
-**Current focus:** Wave 2 shipped 2026-05-03 — Phase 4 (resume state machine + 4-state banner) and Phase 5 (watch_count, session_id, drop-off beacon) deployed live. Schema migration verified in Postgres (watch_count, dropped_off_at on watch_progress; session_id on watch_history). Wave 3 (Phase 6 Tier 2 rewrite) ready to plan.
+**Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
+**Current focus:** v2.0 milestone started 2026-05-04. Defining requirements; roadmap pending.
 
 ## Current Position
 
-Phase: Milestone v1.0 — all phases shipped, ready for /gsd-complete-milestone
-Plan: All plans complete (12/12)
-Status: All 8 phases shipped 2026-05-03; production verified (table created, Tier2DebugView endpoint live, X-Prefs-Version header working)
-Last activity: 2026-05-03 — Wave 4 deployed
-
-Progress: [██████████] 100% (Phases 1, 2, 3, 4, 5, 6, 7, 8 complete; Wave 4 deploy pending)
-
-## Wave Plan (locked 2026-04-28)
-
-| Wave | Phases | Status | Deploy gate |
-|---|---|---|---|
-| 1 | 2 (audit, doc-only), 3 (write-path semantics) | 2 ✓; 3 ✓ — shipped 2026-05-03 | Done |
-| 2 | 4 (state machine in 4 players), 5 (gap-fill columns) | 4 ✓; 5 ✓ — shipped 2026-05-03 | Done |
-| 3 | 6 (Tier 2 rewrite) | 6 ✓ — shipped 2026-05-03 | Done |
-| 4 | 7 (advanced settings, anon UX, freshness), 8 (recs readiness docs) | 7 ✓; 8 ✓ — shipped 2026-05-03 | Done |
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-04 — Milestone v2.0 started
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 7
+- Total plans completed: 0 (v2.0)
 - Average duration: —
 - Total execution time: —
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01 | 7 | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: —
-- Trend: —
 
 *Updated after each plan completion*
 
@@ -66,18 +43,18 @@ Progress: [██████████] 100% (Phases 1, 2, 3, 4, 5, 6, 7, 8 c
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
 
-- Roadmap order: instrumentation FIRST so override-rate has a baseline before behavior changes ship
-- Analytics audit (Phase 2) is read-only and may run in parallel with Phase 1
-- `watch_progress.completed` is the single source of truth for "episode watched"; `anime_list.episodes` derives from it
-- Strict no-cross-language and no-cross-dub/sub boundary (VAL-02) is preserved across all Tier 2 changes — must appear as a verified success criterion in Phase 6
-- 2026-04-28: Wave-based execution plan locked. Wave 1 = Phase 2 + Phase 3, batch deploy after both.
-- 2026-04-28: Phase 5 candidate lock — top-3 gaps from `docs/analytics-audit-2026-04-28.md`: G-02 rewatch, G-04-lite session_id, G-01 drop-off. G-03/G-05 deferred.
-- 2026-04-28: Hygiene items from analytics audit are out-of-scope for Phases 5-8; recommended for milestone backlog. No janitorial phase added to roadmap.
-- 2026-04-28: Phase 3 split `ProgressRepository.Upsert` → `UpsertProgress` (heartbeat, doesn't touch `completed`) + `MarkCompleted` (idempotent set-to-true). Heartbeat bug fixed: `completed=true` is now sticky against subsequent progress saves.
-- 2026-04-28: Phase 3 backfill SQL synthesizes `watch_progress.completed=true` rows from `anime_list.episodes` on first deploy; idempotent + early-exit guarded; runs on every player-api startup but short-circuits after the first.
+- 2026-05-04: v2.0 ensemble pattern locked over tiered fallback or two-stage retrieval+ranker — graceful cold-start, free admin breakdown, can grow into two-stage at scale without rewrite.
+- 2026-05-04: Per-pool min-max normalization is the architectural fix that lets weights be coherent across signals at different raw scales.
+- 2026-05-04: S6 score threshold ≥ 7 with fallback to ≥ 5 if pool too thin (more conservative than initial recommendation; cleaner signal).
+- 2026-05-04: S6 Variant B (pinned tile) over Variant A (weight-shift) for v2.0 — more transparent, easier to debug; weight-shift deferred to v2.1 once pin CTR measured.
+- 2026-05-04: Hybrid storage — Postgres precomputed signals + Redis 6h top-N cache. S6 seed update is synchronous on `MarkEpisodeWatched` so the pin appears immediately.
+- 2026-05-04: Anonymous personalization deferred to v2.1; v2.0 anon users see population-only "Trending now" row.
+- 2026-05-04: Pluggable `SignalModule` interface from day one — single seam for future signals (S7-S10).
+- 2026-05-04: S5 TF-IDF time-weighting falls back to integer episode count for Kodik rows (84% of watch_history; duration_watched unreliable).
+
+(Decisions carried from v1.0 are preserved in PROJECT.md Key Decisions table; this section tracks v2.0-fresh decisions only.)
 
 ### Pending Todos
 
@@ -91,14 +68,18 @@ None yet.
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| Signal | S9-implicit OP/ED affinity (skip-behavior) | Backlog (`.planning/backlog/REC-S9-implicit-op-ed-affinity.md`) | 2026-04-28 (during v2.0 design brainstorm) |
+| Architecture | S6 Variant A weight-shift | Deferred to v2.1 | 2026-05-04 |
+| Signal | S7 content-vector similarity, S8 franchise, S10 staff | Deferred to v3.0 | 2026-05-04 |
+| Surface | "Similar to this" sidebar on anime detail | Deferred to v3.0 | 2026-05-04 |
+| Personalization | Anonymous user personalization (beyond trending) | Deferred to v2.1 | 2026-05-04 |
+
+## v1.0 Carryover
+
+- **Phase 7 follow-up (override-rate re-snapshot)** runs ≥ 7 d after Phase 6 deploy (≥ 2026-05-10) in parallel with v2.0 phases. Does NOT block v2.0.
 
 ## Session Continuity
 
-Last session: 2026-04-28T00:00:00.000Z
-Stopped at: Phase 2 + Phase 3 committed; Wave 1 batch deploy pending
-Resume file: .planning/phases/03-single-source-of-truth-for-watched/03-01-SUMMARY.md
-
-## Phase 1 Follow-ups
-
-- **Phase 1 follow-up:** ✓ Resolved 2026-05-03. Baseline override-rate snapshot captured to PROJECT.md § Baseline override rate (24h: n=1, low-volume; 7d operative: 60% overall override rate over 10 resolves / 6 overrides). Phase-gate cleared for Phase 6 to open. Snapshot includes binding small-n caveat for Phase 7 before/after comparison: minimum n=100 resolves window required for meaningful comparison.
+Last session: 2026-05-04T15:15:00.000Z
+Stopped at: v2.0 milestone started; PROJECT.md updated; STATE.md reset; defining requirements next.
+Resume file: —
