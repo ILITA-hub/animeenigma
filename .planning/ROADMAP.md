@@ -96,7 +96,8 @@
   2. A throwaway test signal that returns `{anime_id: 1.0}` for two candidates can be registered with weight 1.0; the ensemble returns those two anime sorted by final score with no NaN, no Inf, and per-pool-normalized values in `[0, 1]`
   3. The normalizer's property tests (empty pool / single element / all-equal / normal pool) pass under `go test ./services/player/internal/service/recs/...`
   4. Adding a second test signal does not require diff in `ensemble.go`, `normalize.go`, or any API handler beyond a one-line registry entry — verified by inspecting the diff during code review
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 09-01-PLAN.md — Land SignalModule interface, weighted-ensemble aggregator, per-pool min-max normalizer, three Postgres tables, and precompute orchestrator stub (silent infrastructure for v2.0 signals)
 
 #### Phase 10: Population Signals, Filter, Trending Row
 **Goal**: Land the three stateless / population-wide signals (S3 trending, S4 recency, S11 filter), the 60-minute precompute cron, the Redis 6h top-N cache, and the anonymous "Trending now" home row. After this phase ships, anonymous users on `/` see a working trending row backed by real population data.
@@ -185,7 +186,7 @@ v1.0 phases (1-8) executed in numeric order and shipped 2026-05-03. v2.0 phases 
 | 6. Tier 2 Inference Rewrite | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 7. Advanced Settings, Anonymous UX, Cross-Device Freshness | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 8. Recommendations Readiness Documentation | v1.0 | 1/1 | Complete | 2026-05-03 |
-| 9. Recs Foundation | v2.0 | 0/TBD | Not started | - |
+| 9. Recs Foundation | v2.0 | 0/1 | Planned | - |
 | 10. Population Signals, Filter, Trending Row | v2.0 | 0/TBD | Not started | - |
 | 11. User Signals & "Up Next for you" Row | v2.0 | 0/TBD | Not started | - |
 | 12. TF-IDF Attribute Affinity (S5) | v2.0 | 0/TBD | Not started | - |
