@@ -64,6 +64,21 @@ type RelatedAnime struct {
 	PosterURL   string  `json:"poster_url"`
 }
 
+// SimilarAnime represents a similar anime entry fetched from Shikimori
+// (not stored in DB). Phase 13 (REC-SIG-06) — sibling of RelatedAnime, but the
+// Shikimori /similar endpoint returns a flat array of anime objects (no
+// relation wrapper), so this type omits Relation* fields.
+type SimilarAnime struct {
+	ShikimoriID string  `json:"shikimori_id"`
+	LocalID     string  `json:"local_id,omitempty"`
+	Name        string  `json:"name"`
+	NameRU      string  `json:"name_ru"`
+	Score       float64 `json:"score"`
+	Episodes    int     `json:"episodes"`
+	Status      string  `json:"status"`
+	PosterURL   string  `json:"poster_url"`
+}
+
 // AnimeStatus represents the airing status
 type AnimeStatus string
 

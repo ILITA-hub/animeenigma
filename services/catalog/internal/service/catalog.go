@@ -323,6 +323,43 @@ func (s *CatalogService) GetRelatedAnime(ctx context.Context, animeID string) ([
 	return related, nil
 }
 
+// GetSimilarAnime fetches similar anime from Shikimori for the given local anime.
+// Phase 13 (REC-SIG-06) — used by the player service's S6 pin cascade as a
+// Shikimori fallback when the local co-occurrence pool yields fewer than 5
+// post-S11-filter candidates. Mirrors GetRelatedAnime: cache check → Shikimori
+// fallback → enrichment with LocalID via GetByShikimoriID → cache write.
+func (s *CatalogService) GetSimilarAnime(ctx context.Context, animeID string) ([]domain.SimilarAnime, error) {
+	anime, err := s.GetAnime(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+	if anime.ShikimoriID == "" {
+		return nil, nil
+	}
+
+	cacheKey := cache.KeySimilarAnime(anime.ShikimoriID)
+	var cached []domain.SimilarAnime
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return cached, nil
+	}
+
+	similar, err := s.shikimoriClient.GetSimilarAnime(ctx, anime.ShikimoriID)
+	if err != nil {
+		s.log.Warnw("failed to fetch similar anime", "anime_id", animeID, "error", err)
+		return nil, nil
+	}
+
+	for i := range similar {
+		local, err := s.animeRepo.GetByShikimoriID(ctx, similar[i].ShikimoriID)
+		if err == nil && local != nil {
+			similar[i].LocalID = local.ID
+		}
+	}
+
+	_ = s.cache.Set(ctx, cacheKey, similar, cache.TTLAnimeDetails)
+	return similar, nil
+}
+
 // ResolveMALAnime resolves a MAL ID to a local anime record.
 // First tries direct Shikimori lookup (since Shikimori IDs = MAL IDs),
 // then falls back to Jikan title matching. Returns "resolved" with anime

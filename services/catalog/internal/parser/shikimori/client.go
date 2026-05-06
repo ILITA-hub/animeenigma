@@ -695,6 +695,79 @@ func (c *Client) GetRelatedAnime(ctx context.Context, shikimoriID string) ([]dom
 	return result, nil
 }
 
+// similarEntry represents a single similar anime entry from the Shikimori REST
+// API. Unlike /related (which wraps each anime in a {relation, anime} object),
+// /similar returns a flat array of anime objects.
+type similarEntry struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Russian  string `json:"russian"`
+	Score    string `json:"score"`
+	Episodes int    `json:"episodes"`
+	Status   string `json:"status"`
+	Image    *struct {
+		Original string `json:"original"`
+	} `json:"image"`
+}
+
+// GetSimilarAnime fetches similar anime from the Shikimori REST API.
+// Phase 13 (REC-SIG-06) — feeds the S6 cascade's Shikimori fallback path
+// when the local rec_completion_co_occurrence pool yields fewer than 5
+// post-S11-filter candidates.
+//
+// Mirrors GetRelatedAnime in shape (rate-limited, structured logging,
+// /api/animes/:id/similar REST endpoint). Returns an empty slice when
+// Shikimori has no similar list for this anime.
+func (c *Client) GetSimilarAnime(ctx context.Context, shikimoriID string) ([]domain.SimilarAnime, error) {
+	c.rateLimiter.acquire()
+
+	url := fmt.Sprintf("%s/api/animes/%s/similar", c.config.BaseURL, shikimoriID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	req.Header.Set("User-Agent", c.config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.ExternalAPI("shikimori", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// 404 means "no similar entries" — treat as empty list, not an error.
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.ExternalAPI("shikimori", fmt.Errorf("similar returned status %d", resp.StatusCode))
+	}
+
+	var entries []similarEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, errors.ExternalAPI("shikimori", fmt.Errorf("decode similar: %w", err))
+	}
+
+	var result []domain.SimilarAnime
+	for _, e := range entries {
+		sa := domain.SimilarAnime{
+			ShikimoriID: strconv.Itoa(e.ID),
+			Name:        e.Name,
+			NameRU:      e.Russian,
+			Episodes:    e.Episodes,
+			Status:      e.Status,
+		}
+		if score, err := strconv.ParseFloat(e.Score, 64); err == nil {
+			sa.Score = score
+		}
+		if e.Image != nil && e.Image.Original != "" {
+			sa.PosterURL = "https://shikimori.io" + e.Image.Original
+		}
+		result = append(result, sa)
+	}
+
+	return result, nil
+}
+
 // ExtractShikimoriID extracts ID from various Shikimori URL formats
 func ExtractShikimoriID(input string) string {
 	// Handle direct ID

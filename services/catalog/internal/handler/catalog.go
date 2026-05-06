@@ -206,6 +206,29 @@ func (h *CatalogHandler) GetRelatedAnime(w http.ResponseWriter, r *http.Request)
 	httputil.OK(w, related)
 }
 
+// GetSimilarAnime handles fetching similar anime (Shikimori /similar endpoint).
+// Phase 13 (REC-SIG-06) — public read; consumed by the player service's S6
+// pin cascade. Mirrors GetRelatedAnime contract (nil → empty array).
+func (h *CatalogHandler) GetSimilarAnime(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	similar, err := h.catalogService.GetSimilarAnime(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if similar == nil {
+		similar = []domain.SimilarAnime{}
+	}
+
+	httputil.OK(w, similar)
+}
+
 // ResolveMALAnime handles MAL ID resolution via Jikan + Shikimori name matching
 func (h *CatalogHandler) ResolveMALAnime(w http.ResponseWriter, r *http.Request) {
 	malID := chi.URLParam(r, "malId")

@@ -105,3 +105,9 @@ func KeyTopAnime() string {
 func KeyRelatedAnime(shikimoriID string) string {
 	return PrefixAnime + "related:" + shikimoriID
 }
+
+// KeySimilarAnime is the cache key for Shikimori /similar lookups.
+// Phase 13 (REC-SIG-06) — sibling of KeyRelatedAnime. TTL = TTLAnimeDetails (6h).
+func KeySimilarAnime(shikimoriID string) string {
+	return PrefixAnime + "similar:" + shikimoriID
+}

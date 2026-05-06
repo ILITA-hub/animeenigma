@@ -65,6 +65,9 @@ func NewRouter(
 			r.Post("/{animeId}/refresh", catalogHandler.RefreshAnime)
 			r.Get("/{animeId}/episodes", catalogHandler.GetAnimeEpisodes)
 			r.Get("/{animeId}/related", catalogHandler.GetRelatedAnime)
+			// Phase 13 (REC-SIG-06): Shikimori /similar endpoint feed for the
+			// player service's S6 pin cascade. Public read, no auth required.
+			r.Get("/{animeId}/similar", catalogHandler.GetSimilarAnime)
 			// Pinned translations (public)
 			r.Get("/{animeId}/pinned-translations", catalogHandler.GetPinnedTranslations)
 			r.Post("/{animeId}/pin-translation", catalogHandler.PinTranslation)
