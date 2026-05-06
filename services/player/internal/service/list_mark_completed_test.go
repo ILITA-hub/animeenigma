@@ -164,9 +164,10 @@ func setupListServiceTestDB(t *testing.T) (*ListService, *gorm.DB) {
 	log, err := logger.New(logger.Config{Level: "error", Development: false})
 	require.NoError(t, err)
 
-	// userOrchestrator nil — these tests don't exercise the Phase 11 debounced
-	// trigger path; the MarkEpisodeWatched hot path nil-guards the trigger.
-	svc := NewListService(listRepo, activityRepo, prefRepo, progressRepo, nil, log)
+	// userOrchestrator / recsRepo / cache nil — these tests don't exercise
+	// the Phase 11 debounced trigger path or the Phase 13 synchronous S6
+	// seed-update path; MarkEpisodeWatched nil-guards each before invoking.
+	svc := NewListService(listRepo, activityRepo, prefRepo, progressRepo, nil, nil, nil, log)
 	return svc, db
 }
 

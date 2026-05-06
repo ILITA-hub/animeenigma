@@ -218,7 +218,10 @@ func main() {
 		DurationFloor:  cfg.Tier2.DurationFloor,
 	})
 	progressService := service.NewProgressService(progressRepo, prefService, log)
-	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, log)
+	// Phase 13 (REC-INFRA-03): recsRepo + cache args wired in Task 7;
+	// passed as nil here so the existing build stays green between
+	// the Task 5 list.go signature change and the Task 7 wiring commit.
+	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, nil, nil, log)
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(reviewRepo, listRepo, activityRepo, log)
 
