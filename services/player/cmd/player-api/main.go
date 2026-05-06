@@ -245,7 +245,7 @@ func main() {
 
 	// Phase 10: recs handler (anonymous trending row).
 	recsRepo := repo.NewRecsRepository(db.DB)
-	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, log)
+	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, nil, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")

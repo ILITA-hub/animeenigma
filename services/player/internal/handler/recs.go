@@ -73,11 +73,21 @@ type RecAnimePayload struct {
 }
 
 // RecItem is one row in the response array.
+//
+// Phase 13 (REC-UX-03) extension: when Pinned=true (only the recs[0] item
+// when S6 fires), PinReason / PinSeedAnimeID / PinSource carry the
+// "Because you finished {name}" copy + admin-debug context. Final is 0 for
+// the pinned row (the JSON-zero approximation of "null" since RecItem.Final
+// is float64; the frontend gates display on Pinned, NOT Final, so this is
+// the spec §B7 deviation).
 type RecItem struct {
-	Anime  RecAnimePayload `json:"anime"`
-	Final  float64         `json:"final"`
-	Pinned bool            `json:"pinned"`
-	Rank   int             `json:"rank"`
+	Anime          RecAnimePayload `json:"anime"`
+	Final          float64         `json:"final"`
+	Pinned         bool            `json:"pinned"`
+	PinReason      string          `json:"pin_reason,omitempty"`        // Phase 13 (REC-UX-03)
+	PinSeedAnimeID string          `json:"pin_seed_anime_id,omitempty"` // Phase 13 (REC-UX-03)
+	PinSource      string          `json:"pin_source,omitempty"`        // Phase 13 (REC-UX-03)
+	Rank           int             `json:"rank"`
 }
 
 // RecsEnvelope is the data field of the API response (wrapped by httputil.OK).
@@ -104,11 +114,16 @@ type RecsHandler struct {
 	s1  *signals.S1ScoreCluster
 	s2  *signals.S2Metadata
 	s5  *signals.S5Attribute // Phase 12 (REC-SIG-05) — TF-IDF attribute affinity
+	s6  *signals.S6ComboPin  // Phase 13 (REC-SIG-06) — combo-watched-after pin resolver; may be nil
 }
 
 // NewRecsHandler wires the handler with its dependencies. The signal modules
 // are constructed once here (cheap; just struct literals + the DB handle).
-func NewRecsHandler(db *gorm.DB, recsRepo *repo.RecsRepository, cache recsCache, log *logger.Logger) *RecsHandler {
+//
+// The s6 argument may be nil when the caller doesn't want the S6 pin
+// surface (e.g. an ensemble-only test fixture); computeFreshForUser
+// nil-guards before invoking.
+func NewRecsHandler(db *gorm.DB, recsRepo *repo.RecsRepository, cache recsCache, s6 *signals.S6ComboPin, log *logger.Logger) *RecsHandler {
 	return &RecsHandler{
 		db:    db,
 		repo:  recsRepo,
@@ -120,6 +135,7 @@ func NewRecsHandler(db *gorm.DB, recsRepo *repo.RecsRepository, cache recsCache,
 		s1:    signals.NewS1ScoreCluster(db, recsRepo),
 		s2:    signals.NewS2Metadata(db),
 		s5:    signals.NewS5Attribute(db, recsRepo), // Phase 12 (REC-SIG-05)
+		s6:    s6,                                   // Phase 13 (REC-SIG-06)
 	}
 }
 
@@ -391,6 +407,56 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 			Pinned: false,
 			Rank:   i + 1,
 		})
+	}
+
+	// Phase 13 (REC-SIG-06 / REC-UX-03): try to resolve a pin candidate.
+	// The S6 cascade reads the user's s6_seed_*, runs the local + Shikimori
+	// fallbacks, and returns a single PinCandidate or nil. On non-nil:
+	//
+	//   1. Hydrate the pin's anime row so the frontend can render the card.
+	//   2. Remove the pin's anime from items[] if the ensemble already
+	//      ranked it (avoids the same poster appearing twice).
+	//   3. Re-rank the remaining ensemble tail (rank 2..N).
+	//   4. Prepend a Pinned RecItem at index 0 with rank 1.
+	if h.s6 != nil {
+		topIDs := make([]string, 0, len(top))
+		for _, r := range top {
+			topIDs = append(topIDs, string(r.AnimeID))
+		}
+		pin, err := h.s6.Resolve(ctx, userID, topIDs)
+		if err != nil {
+			h.log.Warnw("s6 resolve failed (non-fatal)", "user_id", userID, "error", err)
+		} else if pin != nil {
+			pinHydrated, hydrateErr := h.hydrateAnime(ctx, []string{pin.AnimeID})
+			if hydrateErr == nil {
+				if anime, ok := pinHydrated[pin.AnimeID]; ok {
+					// Drop pin from items[] if it was already in ensemble result.
+					deduped := make([]RecItem, 0, len(items))
+					for _, it := range items {
+						if it.Anime.ID != pin.AnimeID {
+							deduped = append(deduped, it)
+						}
+					}
+					// Re-rank the deduped tail (pin takes rank 1).
+					for i := range deduped {
+						deduped[i].Rank = i + 2
+					}
+					pinItem := RecItem{
+						Anime:          anime,
+						Final:          0, // spec §B7: float64 zero approximates "null"; frontend gates on Pinned
+						Pinned:         true,
+						PinReason:      "Because you finished " + pin.SeedName,
+						PinSeedAnimeID: pin.SeedAnimeID,
+						PinSource:      pin.Source,
+						Rank:           1,
+					}
+					items = append([]RecItem{pinItem}, deduped...)
+				}
+			} else {
+				h.log.Warnw("s6 pin hydrate failed (non-fatal); serving row without pin",
+					"user_id", userID, "pin_anime_id", pin.AnimeID, "error", hydrateErr)
+			}
+		}
 	}
 
 	return RecsEnvelope{

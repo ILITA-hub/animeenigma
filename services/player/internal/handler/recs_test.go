@@ -243,7 +243,7 @@ func TestRecsHandler_CacheMissComputesFromEnsemble(t *testing.T) {
 	// ongoing-1 has no S3 row -> S3 norm = 0; but S4=1.0
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
@@ -294,7 +294,7 @@ func TestRecsHandler_CacheHitReturnsCachedPayload(t *testing.T) {
 	cache.preBake(t, "recs:public:trending:topN", prebaked)
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
@@ -318,7 +318,7 @@ func TestRecsHandler_EmptyPoolReturnsEmptyArray(t *testing.T) {
 	db := setupRecsTestDB(t)
 	cache := newFakeRecsCache()
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
@@ -347,7 +347,7 @@ func TestRecsHandler_HiddenExcluded(t *testing.T) {
 	seedPopulationSignal(t, db, "hidden-1", 200.0) // would dominate if not filtered
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
@@ -381,7 +381,7 @@ func TestRecsHandler_ThinS3PoolBackfillsViaS4(t *testing.T) {
 	seedAnimeFull(t, db, "s4-released-3", "released", false, 4.0)
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
@@ -458,7 +458,7 @@ func TestRecsHandler_PersonalizedBranch_CacheMissComputesAndCaches(t *testing.T)
 	seedPopulationSignal(t, db, "anime-2", 10.0)
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
 
@@ -502,7 +502,7 @@ func TestRecsHandler_PersonalizedBranch_CacheHitReturnsCachedPayload(t *testing.
 	cache.preBake(t, "recs:user:user-1:topN", prebaked)
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
 
@@ -535,7 +535,7 @@ func TestRecsHandler_PersonalizedBranch_ExcludesCompletedAndDropped(t *testing.T
 	seedAnimeListRow(t, db, "al3", "user-1", "anime-dropped", "dropped", 4)
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
 
@@ -569,7 +569,7 @@ func TestRecsHandler_PersonalizedBranch_ColdStartUserDegradesToS3S4(t *testing.T
 	seedAnimeListRow(t, db, "al1", "user-1", "anime-A", "watching", 4) // < 5 fallback
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
 
@@ -599,7 +599,7 @@ func TestRecsHandler_PersonalizedBranch_EmptyPoolReturnsEmptyEnvelope(t *testing
 	seedAnimeListRow(t, db, "al2", "user-1", "anime-2", "completed", 7)
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
 
@@ -632,7 +632,7 @@ func TestRecsHandler_PersonalizedBranch_PerUserCacheIsolation(t *testing.T) {
 	})
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
 
@@ -667,7 +667,7 @@ func TestRecsHandler_PersonalizedBranch_ServerSliceTo50_AnonymousStillTo20(t *te
 	}
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	r := chi.NewRouter()
 	r.Get("/api/users/recs", h.GetRecs)
 
@@ -725,7 +725,7 @@ func TestRecsHandler_PersonalizedBranchS5_RegistryHasFiveSignals(t *testing.T) {
 	seedPhase12History(t, db, "wh-1", "user-1", "watched-1", "hianime", 1500)
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	require.NotNil(t, h.s5, "RecsHandler must wire h.s5 in NewRecsHandler (Phase-12 Wave-3)")
 
 	// Run S5.Precompute synchronously so the affinity vector exists.
@@ -786,7 +786,7 @@ func TestRecsHandler_PersonalizedBranchS5_ContributesAfterPrecompute(t *testing.
 	}
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, newFakeRecsCache(), logger.Default())
+	h := NewRecsHandler(db, recsRepo, newFakeRecsCache(), nil, logger.Default())
 	require.NoError(t, h.s5.Precompute(context.Background(), "user-1"))
 
 	// Direct call to S5.Score to inspect the raw output (pre-normalization)
@@ -832,7 +832,7 @@ func TestRecsHandler_PersonalizedBranchS5_NoNaN(t *testing.T) {
 	}
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	require.NoError(t, h.s5.Precompute(context.Background(), "u00"))
 
 	r := chi.NewRouter()
@@ -869,7 +869,7 @@ func TestRecsHandler_PersonalizedBranchS5_ColdStartUser(t *testing.T) {
 	// User-cold has no watch_history, no anime_list.
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
 	require.NoError(t, h.s5.Precompute(context.Background(), "user-cold"),
 		"S5.Precompute on a cold-start user must succeed")
 
@@ -932,7 +932,7 @@ func TestRecsHandler_PersonalizedBranchS5_TopOrderingDiffersFromPhase11Baseline(
 	}
 
 	recsRepo := repo.NewRecsRepository(db)
-	h := NewRecsHandler(db, recsRepo, newFakeRecsCache(), logger.Default())
+	h := NewRecsHandler(db, recsRepo, newFakeRecsCache(), nil, logger.Default())
 	require.NoError(t, h.s5.Precompute(context.Background(), "user-1"))
 	require.NoError(t, h.s1.Precompute(context.Background(), "user-1"))
 
