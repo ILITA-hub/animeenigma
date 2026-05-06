@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Recommendations Engine
 status: planning
-last_updated: "2026-05-04T15:15:08.138Z"
-last_activity: 2026-05-04
+last_updated: "2026-05-06T00:00:00.000Z"
+last_activity: 2026-05-06
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-04 for v2.0)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
-**Current focus:** v2.0 milestone started 2026-05-04. Defining requirements; roadmap pending.
+**Current focus:** v2.0 milestone roadmap approved 2026-05-06; next step is `/gsd-plan-phase 9` (Recs Foundation).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 9 — Recs Foundation (pending plan-phase)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-04 — Milestone v2.0 started
+Status: Roadmap approved; ready for plan-phase 9
+Last activity: 2026-05-06 — Roadmap created (Phases 9-14)
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Last activity: 2026-05-04 — Milestone v2.0 started
 
 Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
 
+- 2026-05-06: v2.0 roadmap structured as 6 phases (9-14): Foundation → Population Signals + Trending → User Signals + Up Next Row → S5 TF-IDF → S6 Pin → Admin Debug + Eval. Each phase independently shippable. Phase numbering continues from v1.0 (last shipped phase = 8).
 - 2026-05-04: v2.0 ensemble pattern locked over tiered fallback or two-stage retrieval+ranker — graceful cold-start, free admin breakdown, can grow into two-stage at scale without rewrite.
 - 2026-05-04: Per-pool min-max normalization is the architectural fix that lets weights be coherent across signals at different raw scales.
 - 2026-05-04: S6 score threshold ≥ 7 with fallback to ≥ 5 if pool too thin (more conservative than initial recommendation; cleaner signal).
@@ -58,7 +59,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 
 ### Pending Todos
 
-None yet.
+- Plan-phase 9 (Recs Foundation): inventory `animes` table schema during plan-phase to confirm which of `tags`, `source`, `demographic`, `type`, `studios`, `producers` exist vs. need backfill (open question §14.1 of design spec) — informs Phase 12 scope.
+- Plan-phase 10: confirm Redis key namespacing for anonymous trending vs. logged-in top-N to avoid cache collisions.
+- Plan-phase 13: code review must verify the synchronous S6 seed update inside `MarkEpisodeWatched` adds < 5 ms p95 overhead — this is a hot path from v1.0.
 
 ### Blockers/Concerns
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-04T15:15:00.000Z
-Stopped at: v2.0 milestone started; PROJECT.md updated; STATE.md reset; defining requirements next.
+Last session: 2026-05-06T00:00:00.000Z
+Stopped at: v2.0 roadmap created and approved (Phases 9-14); ready for `/gsd-plan-phase 9`.
 Resume file: —

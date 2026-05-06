@@ -79,13 +79,32 @@
 
 ## Traceability
 
-Phase mapping assigned by roadmapper. Filled in after roadmap approval.
+Phase mapping assigned by roadmapper 2026-05-06. Phase numbering continues from v1.0 (last shipped phase = 8); v2.0 spans Phases 9-14.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REC-FOUND-01..04 | TBD | Pending |
-| REC-UX-01..04 | TBD | Pending |
-| REC-SIG-01..07 | TBD | Pending |
-| REC-INFRA-01..04 | TBD | Pending |
-| REC-ADMIN-01..02 | TBD | Pending |
-| REC-EVAL-01..02 | TBD | Pending |
+| REC-FOUND-01 | Phase 9 | Pending |
+| REC-FOUND-02 | Phase 9 | Pending |
+| REC-FOUND-03 | Phase 9 | Pending |
+| REC-FOUND-04 | Phase 9 | Pending |
+| REC-SIG-01 (S3 trending) | Phase 10 | Pending |
+| REC-SIG-02 (S4 recency) | Phase 10 | Pending |
+| REC-SIG-07 (S11 filter) | Phase 10 | Pending |
+| REC-INFRA-01 (60-min population cron) | Phase 10 | Pending |
+| REC-INFRA-04 (Redis 6h cache) | Phase 10 | Pending |
+| REC-UX-02 (Trending now row) | Phase 10 | Pending |
+| REC-SIG-03 (S1 score-cluster) | Phase 11 | Pending |
+| REC-SIG-04 (S2 item-item metadata) | Phase 11 | Pending |
+| REC-INFRA-02 (6h user cron + on-write) | Phase 11 | Pending |
+| REC-UX-01 (Up Next for you row) | Phase 11 | Pending |
+| REC-UX-04 (exclude completed/dropped/hidden) | Phase 11 | Pending |
+| REC-SIG-05 (S5 TF-IDF affinity) | Phase 12 | Pending |
+| REC-SIG-06 (S6 combo-watched-after) | Phase 13 | Pending |
+| REC-INFRA-03 (synchronous S6 seed update) | Phase 13 | Pending |
+| REC-UX-03 (Because you finished X pin) | Phase 13 | Pending |
+| REC-ADMIN-01 (admin debug page) | Phase 14 | Pending |
+| REC-ADMIN-02 (force-recompute endpoint) | Phase 14 | Pending |
+| REC-EVAL-01 (rec_click / rec_watched events) | Phase 14 | Pending |
+| REC-EVAL-02 (Prometheus rec_signal_ctr) | Phase 14 | Pending |
+
+**Coverage:** 23/23 v2.0 requirements mapped. No orphans.
