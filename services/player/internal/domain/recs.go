@@ -19,8 +19,8 @@ import "time"
 //   - s6_seed_anime_id → animes(id) ON DELETE SET NULL
 type RecUserSignals struct {
 	UserID            string     `gorm:"type:uuid;primaryKey" json:"user_id"`
-	S1Vector          string     `gorm:"type:jsonb;not null;default:'{}'::jsonb" json:"s1_vector"`
-	S5Affinity        string     `gorm:"type:jsonb;not null;default:'{}'::jsonb" json:"s5_affinity"`
+	S1Vector          string     `gorm:"type:jsonb;not null;default:'{}'" json:"s1_vector"`
+	S5Affinity        string     `gorm:"type:jsonb;not null;default:'{}'" json:"s5_affinity"`
 	S6SeedAnimeID     *string    `gorm:"type:uuid" json:"s6_seed_anime_id,omitempty"`
 	S6SeedCompletedAt *time.Time `json:"s6_seed_completed_at,omitempty"`
 	S6SeedScore       *int       `json:"s6_seed_score,omitempty"`

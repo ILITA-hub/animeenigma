@@ -53,8 +53,68 @@ func main() {
 		&domain.Review{},
 		&domain.SyncJob{},
 		&domain.ActivityEvent{},
+		&domain.RecUserSignals{},
+		&domain.RecPopulationSignals{},
+		&domain.RecCompletionCoOccurrence{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
+	}
+
+	// Phase 9: rec engine FK constraints + last_computed indexes — created via
+	// raw SQL because GORM AutoMigrate does not infer FKs from struct tags
+	// alone. Postgres 16 does NOT support `ALTER TABLE ... ADD CONSTRAINT IF
+	// NOT EXISTS ...` for FKs, so each constraint is wrapped in a DO block
+	// that checks pg_constraint first. Indexes use the native `CREATE INDEX
+	// IF NOT EXISTS` form. Idempotent — re-running on already-migrated DBs is
+	// a no-op. See spec docs/superpowers/specs/2026-05-03-rec-engine-design.md
+	// §4.1.
+	{
+		stmts := []string{
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_user_signals_user_id_fkey') THEN
+					ALTER TABLE rec_user_signals
+						ADD CONSTRAINT rec_user_signals_user_id_fkey
+						FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+				END IF;
+			END $$;`,
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_user_signals_s6_seed_anime_id_fkey') THEN
+					ALTER TABLE rec_user_signals
+						ADD CONSTRAINT rec_user_signals_s6_seed_anime_id_fkey
+						FOREIGN KEY (s6_seed_anime_id) REFERENCES animes(id) ON DELETE SET NULL;
+				END IF;
+			END $$;`,
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_population_signals_anime_id_fkey') THEN
+					ALTER TABLE rec_population_signals
+						ADD CONSTRAINT rec_population_signals_anime_id_fkey
+						FOREIGN KEY (anime_id) REFERENCES animes(id) ON DELETE CASCADE;
+				END IF;
+			END $$;`,
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_co_occurrence_seed_fkey') THEN
+					ALTER TABLE rec_completion_co_occurrence
+						ADD CONSTRAINT rec_co_occurrence_seed_fkey
+						FOREIGN KEY (seed_anime_id) REFERENCES animes(id) ON DELETE CASCADE;
+				END IF;
+			END $$;`,
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_co_occurrence_candidate_fkey') THEN
+					ALTER TABLE rec_completion_co_occurrence
+						ADD CONSTRAINT rec_co_occurrence_candidate_fkey
+						FOREIGN KEY (candidate_anime_id) REFERENCES animes(id) ON DELETE CASCADE;
+				END IF;
+			END $$;`,
+			`CREATE INDEX IF NOT EXISTS idx_rec_user_signals_last_computed
+				ON rec_user_signals (last_computed)`,
+			`CREATE INDEX IF NOT EXISTS idx_rec_co_occurrence_seed
+				ON rec_completion_co_occurrence (seed_anime_id, co_count DESC)`,
+		}
+		for _, sql := range stmts {
+			if err := db.DB.Exec(sql).Error; err != nil {
+				log.Fatalw("failed to enforce rec engine FK/index", "sql", sql, "error", err)
+			}
+		}
 	}
 
 	// Phase 3 backfill: synthesize watch_progress.completed=true rows for legacy
