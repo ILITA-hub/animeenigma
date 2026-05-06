@@ -59,6 +59,16 @@ func main() {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
+	// Phase 12 — the libs/database wrapper's AutoMigrate ADDs missing
+	// columns on existing tables but never creates m2m join tables for
+	// relations added to a pre-existing struct (anime_studios was missed
+	// on the first Phase-12 redeploy because Anime already existed). Fall
+	// through to GORM's native AutoMigrate on Anime to register the new
+	// Studios m2m. Idempotent — does nothing on subsequent boots.
+	if err := db.DB.AutoMigrate(&domain.Anime{}); err != nil {
+		log.Fatalw("failed to migrate Anime m2m relations", "error", err)
+	}
+
 	// Phase 12 — register the explicit AnimeTag join model so GORM
 	// associations preserve Rank. Required AFTER AutoMigrate so the
 	// underlying table already exists.
