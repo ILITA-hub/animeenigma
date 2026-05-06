@@ -112,11 +112,18 @@ type shikimoriAnime struct {
 	Status        graphql.String     `graphql:"status"`
 	// Phase 12 (Decision §A1) — S5 attribute dimensions.
 	// Kind (TV/Movie/OVA/...), Rating (G/PG/PG-13/R/R+/Rx — used as the
-	// S5 demographic proxy per Decision §A3), Source (manga/light_novel/
-	// original/...) populate animes.kind, animes.rating, animes.material_source.
+	// S5 demographic proxy per Decision §A3), and the adaptation source
+	// (manga/light_novel/original/...) populate animes.kind, animes.rating,
+	// animes.material_source.
+	//
+	// Shikimori's GraphQL schema names the adaptation-source field "origin"
+	// (verified via introspection 2026-05-06). The CONTEXT.md spec called
+	// it "source" — the live API rejects that field with "Field 'source'
+	// doesn't exist on type 'Anime'", so we query "origin" and surface it
+	// as Source on the parser-local struct.
 	Kind          graphql.String     `graphql:"kind"`
 	Rating        graphql.String     `graphql:"rating"`
-	Source        graphql.String     `graphql:"source"`
+	Source        graphql.String     `graphql:"origin"`
 	Episodes      graphql.Int        `graphql:"episodes"`
 	EpisodesAired graphql.Int        `graphql:"episodesAired"`
 	Duration      graphql.Int        `graphql:"duration"`
@@ -170,7 +177,7 @@ func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int)
 	// Don't filter by kind to include TV, ONA, OVA, movies, etc.
 	gqlQuery := fmt.Sprintf(`{
 		animes(search: "%s", limit: %d, page: %d) {
-			id name russian japanese description score status kind rating source episodes episodesAired duration
+			id name russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
@@ -228,10 +235,13 @@ type rawAnime struct {
 	Description    string  `json:"description"`
 	Score          float64 `json:"score"`
 	Status         string  `json:"status"`
-	// Phase 12 (Decision §A1) — S5 attribute dimensions.
+	// Phase 12 (Decision §A1) — S5 attribute dimensions. The adaptation
+	// source field is "origin" in Shikimori's GraphQL schema; we keep the
+	// Go field name `Source` for clarity at the boundary with domain.Anime
+	// (column: material_source).
 	Kind           string  `json:"kind"`
 	Rating         string  `json:"rating"`
-	Source         string  `json:"source"`
+	Source         string  `json:"origin"`
 	Episodes       int     `json:"episodes"`
 	EpisodesAired  int     `json:"episodesAired"`
 	Duration       int     `json:"duration"`
@@ -347,7 +357,7 @@ func (c *Client) GetAnimeByIDs(ctx context.Context, shikimoriIDs []string) ([]*d
 	ids := strings.Join(shikimoriIDs, ",")
 	gqlQuery := fmt.Sprintf(`{
 		animes(ids: "%s", limit: %d) {
-			id name russian japanese description score status kind rating source episodes episodesAired duration
+			id name russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
@@ -366,7 +376,7 @@ func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*doma
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, order: ranked) {
-			id name russian japanese description score status kind rating source episodes episodesAired duration
+			id name russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
@@ -385,7 +395,7 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, order: popularity) {
-			id name russian japanese description score status kind rating source episodes episodesAired duration
+			id name russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
