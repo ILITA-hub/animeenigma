@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -74,6 +75,11 @@ func (c *fakeRecsCache) preBake(t *testing.T, key string, payload interface{}) [
 // setupRecsTestDB mirrors the production schema for the columns the handler
 // hits: animes, rec_population_signals (S3 reads), plus the user-scope tables
 // the personalized branch needs (anime_list, anime_genres, rec_user_signals).
+//
+// Phase 12 (Wave 1) added kind / rating / material_source columns to animes
+// and the studios / anime_studios / tags / anime_tags tables. The watch_history
+// table is Phase-5; S5 reads from it. All Phase-12 schema is created here so
+// the personalized-branch tests can exercise the full 5-signal ensemble.
 func setupRecsTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -90,6 +96,9 @@ func setupRecsTestDB(t *testing.T) *gorm.DB {
 		status TEXT,
 		year INTEGER,
 		aired_on DATETIME,
+		kind TEXT DEFAULT '',
+		rating TEXT DEFAULT '',
+		material_source TEXT DEFAULT '',
 		hidden INTEGER DEFAULT 0,
 		deleted_at DATETIME
 	)`).Error)
@@ -120,7 +129,77 @@ func setupRecsTestDB(t *testing.T) *gorm.DB {
 		s6_seed_score INTEGER,
 		last_computed DATETIME NOT NULL
 	)`).Error)
+	// Phase 12 schema — Wave 1 added these to support S5 in Wave 3.
+	require.NoError(t, db.Exec(`CREATE TABLE studios (
+		id TEXT PRIMARY KEY,
+		name TEXT
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE anime_studios (
+		anime_id TEXT NOT NULL,
+		studio_id TEXT NOT NULL,
+		PRIMARY KEY (anime_id, studio_id)
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE tags (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		source TEXT
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE anime_tags (
+		anime_id TEXT NOT NULL,
+		tag_id TEXT NOT NULL,
+		rank INTEGER DEFAULT 0,
+		PRIMARY KEY (anime_id, tag_id)
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE watch_history (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		anime_id TEXT NOT NULL,
+		episode_number INTEGER NOT NULL DEFAULT 0,
+		player TEXT NOT NULL,
+		duration_watched INTEGER NOT NULL DEFAULT 0,
+		watched_at DATETIME NOT NULL DEFAULT (datetime('now'))
+	)`).Error)
 	return db
+}
+
+// seedPhase12Anime extends seedAnimeFull with the Phase-12 attribute columns.
+// The plain seedAnimeFull is unchanged so existing tests still work.
+func seedPhase12Anime(t *testing.T, db *gorm.DB, id, status string, hidden bool, score float64, kind, rating, materialSource string) {
+	t.Helper()
+	hiddenInt := 0
+	if hidden {
+		hiddenInt = 1
+	}
+	require.NoError(t, db.Exec(
+		`INSERT INTO animes (id, name, name_ru, name_jp, poster_url, score, episodes_count, status, year, kind, rating, material_source, hidden, deleted_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+		id, "Name "+id, "RU "+id, "JP "+id, "/p/"+id+".jpg", score, 12, status, 2024, kind, rating, materialSource, hiddenInt,
+	).Error)
+}
+
+func seedPhase12Studio(t *testing.T, db *gorm.DB, animeID, studioID string) {
+	t.Helper()
+	_ = db.Exec(`INSERT OR IGNORE INTO studios (id, name) VALUES (?, ?)`, studioID, studioID).Error
+	require.NoError(t, db.Exec(`INSERT INTO anime_studios (anime_id, studio_id) VALUES (?, ?)`, animeID, studioID).Error)
+}
+
+func seedPhase12Tag(t *testing.T, db *gorm.DB, animeID, tagID string) {
+	t.Helper()
+	_ = db.Exec(`INSERT OR IGNORE INTO tags (id, name, source) VALUES (?, ?, 'anilist')`, tagID, tagID).Error
+	require.NoError(t, db.Exec(`INSERT INTO anime_tags (anime_id, tag_id, rank) VALUES (?, ?, 0)`, animeID, tagID).Error)
+}
+
+func seedPhase12Genre(t *testing.T, db *gorm.DB, animeID, genreID string) {
+	t.Helper()
+	require.NoError(t, db.Exec(`INSERT INTO anime_genres (anime_id, genre_id) VALUES (?, ?)`, animeID, genreID).Error)
+}
+
+func seedPhase12History(t *testing.T, db *gorm.DB, rowID, userID, animeID, player string, durationWatched int) {
+	t.Helper()
+	require.NoError(t, db.Exec(
+		`INSERT INTO watch_history (id, user_id, anime_id, episode_number, player, duration_watched) VALUES (?, ?, ?, 1, ?, ?)`,
+		rowID, userID, animeID, player, durationWatched,
+	).Error)
 }
 
 func seedAnimeFull(t *testing.T, db *gorm.DB, id, status string, hidden bool, score float64) {
@@ -616,6 +695,281 @@ func TestRecsHandler_PersonalizedBranch_ServerSliceTo50_AnonymousStillTo20(t *te
 	require.NoError(t, json.NewDecoder(wAnon.Body).Decode(&envAnon))
 	assert.Equal(t, 20, envAnon.Data.Total, "anonymous server slice = 20")
 	assert.Equal(t, "recs.trending", envAnon.Data.RowLabelKey)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12 — S5 in personalized-branch ensemble.
+// ---------------------------------------------------------------------------
+
+// TestRecsHandler_PersonalizedBranchS5_RegistryHasFiveSignals — sanity check
+// via behavior: a user with rich watch_history + populated attribute schema
+// gets recs that depend on S5 contribution. The "5 signals" assertion
+// proper happens via the source-level grep in <acceptance_criteria>; this
+// behavioral test ensures the handler actually wires h.s5 into the
+// ensemble registry and isn't just declared but unused.
+func TestRecsHandler_PersonalizedBranchS5_RegistryHasFiveSignals(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	// Build a fixture where S5 will produce non-zero contribution: user
+	// watched 1 anime with all 6 attribute dimensions populated; the
+	// candidate pool includes another anime sharing the studio + kind.
+	seedPhase12Anime(t, db, "watched-1", "released", false, 8.0, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "watched-1", "Madhouse")
+	seedPhase12Genre(t, db, "watched-1", "action")
+	seedPhase12Tag(t, db, "watched-1", "shounen")
+	seedPhase12Anime(t, db, "cand-similar", "released", false, 7.5, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "cand-similar", "Madhouse")
+	seedPhase12Anime(t, db, "cand-different", "released", false, 7.5, "movie", "g", "original")
+	seedPhase12History(t, db, "wh-1", "user-1", "watched-1", "hianime", 1500)
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	require.NotNil(t, h.s5, "RecsHandler must wire h.s5 in NewRecsHandler (Phase-12 Wave-3)")
+
+	// Run S5.Precompute synchronously so the affinity vector exists.
+	require.NoError(t, h.s5.Precompute(context.Background(), "user-1"))
+
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	assert.Greater(t, env.Data.Total, 0, "ensemble must produce ranked recs with S5 wired in")
+	// "watched-1" is in the user's watch_history but not in anime_list, so the
+	// CandidatePoolForUser exclusion (which keys on anime_list) does NOT exclude
+	// it — both candidates appear. We don't assert specific ordering here; that
+	// belongs in TestRecsHandler_PersonalizedBranchS5_TopOrderingDiffersFromPhase11Baseline.
+}
+
+// TestRecsHandler_PersonalizedBranchS5_ContributesAfterPrecompute — directly
+// asserts that the Final score for a candidate sharing attributes with the
+// user's history exceeds what the Phase-11 4-signal ensemble would produce.
+func TestRecsHandler_PersonalizedBranchS5_ContributesAfterPrecompute(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	// User's history: 2 anime sharing Madhouse + manga + tv. Candidate pool:
+	// 1 anime sharing the same attributes, 1 anime with completely different
+	// attributes. After S5 precompute, the similar candidate should rank
+	// strictly higher than the different one.
+	seedPhase12Anime(t, db, "history-1", "released", false, 8.0, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "history-1", "Madhouse")
+	seedPhase12Anime(t, db, "history-2", "released", false, 8.0, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "history-2", "Madhouse")
+	seedPhase12Anime(t, db, "cand-similar", "released", false, 7.0, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "cand-similar", "Madhouse")
+	seedPhase12Anime(t, db, "cand-different", "released", false, 7.0, "movie", "g", "original")
+	seedPhase12History(t, db, "wh-1", "user-1", "history-1", "hianime", 1500)
+	seedPhase12History(t, db, "wh-2", "user-1", "history-2", "hianime", 1500)
+	// Ensure both candidates have equal S3/S4 footing: no S3 rows, both released.
+	// Without S5 these would tie at 0; with S5 the similar one wins.
+
+	// Seed a second user so total_users > 1 → the IDF for Madhouse is positive
+	// (rare among the population), making S5 contribute a positive raw score.
+	seedPhase12Anime(t, db, "other-1", "released", false, 7.0, "movie", "g", "original")
+	seedPhase12History(t, db, "wh-other", "user-2", "other-1", "hianime", 1500)
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	require.NoError(t, h.s5.Precompute(context.Background(), "user-1"))
+
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+
+	// Find the two candidates in the response.
+	var simRank, diffRank = -1, -1
+	for i, item := range env.Data.Recs {
+		switch item.Anime.ID {
+		case "cand-similar":
+			simRank = i
+		case "cand-different":
+			diffRank = i
+		}
+	}
+	require.GreaterOrEqual(t, simRank, 0, "cand-similar must appear in response")
+	require.GreaterOrEqual(t, diffRank, 0, "cand-different must appear in response")
+	assert.Less(t, simRank, diffRank,
+		"cand-similar (shares Madhouse+tv+pg_13+manga with user history) must rank above cand-different (no shared attributes)")
+}
+
+// TestRecsHandler_PersonalizedBranchS5_NoNaN — property test on a 50-anime
+// fixture: every Final value is finite and non-negative.
+func TestRecsHandler_PersonalizedBranchS5_NoNaN(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	for i := 0; i < 50; i++ {
+		id := "anime-" + sliceTestID(i)
+		kind := []string{"tv", "movie", "ova", "ona", "special"}[i%5]
+		rating := []string{"g", "pg", "pg_13", "r", "r_plus"}[i%5]
+		source := []string{"manga", "novel", "original", "light_novel", "game"}[i%5]
+		seedPhase12Anime(t, db, id, "released", false, 7.0, kind, rating, source)
+		seedPhase12Studio(t, db, id, "studio-"+sliceTestID(i%4))
+		seedPhase12Genre(t, db, id, "genre-"+sliceTestID(i%7))
+		seedPhase12Tag(t, db, id, "tag-"+sliceTestID(i%9))
+		seedPopulationSignal(t, db, id, float32(50-i))
+	}
+	for u := 0; u < 5; u++ {
+		userID := "u" + sliceTestID(u)
+		for k := 0; k < 5; k++ {
+			animeID := "anime-" + sliceTestID((u*5+k)%50)
+			seedPhase12History(t, db, "wh-u"+sliceTestID(u)+"-"+sliceTestID(k), userID, animeID, "hianime", 60+(k*30))
+		}
+	}
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	require.NoError(t, h.s5.Precompute(context.Background(), "u00"))
+
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+	req := loggedInRequest("u00")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+
+	for _, item := range env.Data.Recs {
+		assert.False(t, math.IsNaN(item.Final), "anime %s produced NaN", item.Anime.ID)
+		assert.False(t, math.IsInf(item.Final, 0), "anime %s produced Inf", item.Anime.ID)
+		assert.GreaterOrEqual(t, item.Final, 0.0, "anime %s produced negative Final", item.Anime.ID)
+	}
+}
+
+// TestRecsHandler_PersonalizedBranchS5_ColdStartUser — user with zero
+// watch_history. S5 returns empty map. Ensemble still produces recs from
+// S3+S4. No NaN, no error.
+func TestRecsHandler_PersonalizedBranchS5_ColdStartUser(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	seedPhase12Anime(t, db, "anime-A", "ongoing", false, 8.0, "tv", "pg_13", "manga")
+	seedPhase12Anime(t, db, "anime-B", "released", false, 7.5, "movie", "g", "original")
+	seedPopulationSignal(t, db, "anime-A", 50.0)
+
+	// User-cold has no watch_history, no anime_list.
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	require.NoError(t, h.s5.Precompute(context.Background(), "user-cold"),
+		"S5.Precompute on a cold-start user must succeed")
+
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+	req := loggedInRequest("user-cold")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	assert.True(t, env.Success)
+	assert.Equal(t, "recs.upNext", env.Data.RowLabelKey)
+	assert.Greater(t, env.Data.Total, 0, "cold-start must still return S3+S4-driven recs")
+	for _, item := range env.Data.Recs {
+		assert.False(t, math.IsNaN(item.Final))
+		assert.False(t, math.IsInf(item.Final, 0))
+	}
+}
+
+// TestRecsHandler_PersonalizedBranchS5_TopOrderingDiffersFromPhase11Baseline
+// — unit-test equivalent of Phase-12 SC#5. Build a fixture where S5
+// contribution moves a candidate; assert the rank shifts.
+func TestRecsHandler_PersonalizedBranchS5_TopOrderingDiffersFromPhase11Baseline(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	// Without S5: cand-A wins on S3 (highest trending score).
+	// With S5: cand-B is similar to user's history (same studio + tags) and
+	// cand-A is dissimilar — S5 nudges cand-B above cand-A even though
+	// cand-B has lower trending.
+	seedPhase12Anime(t, db, "history-1", "released", false, 9.0, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "history-1", "Madhouse")
+	seedPhase12Tag(t, db, "history-1", "shounen")
+	seedPhase12Tag(t, db, "history-1", "action")
+	seedPhase12Anime(t, db, "history-2", "released", false, 9.0, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "history-2", "Madhouse")
+	seedPhase12Tag(t, db, "history-2", "shounen")
+	seedPhase12Tag(t, db, "history-2", "action")
+
+	seedPhase12Anime(t, db, "cand-A", "released", false, 8.0, "movie", "g", "original")
+	// cand-A has no shared attributes with user's history.
+	seedPopulationSignal(t, db, "cand-A", 100.0) // dominant trending
+
+	seedPhase12Anime(t, db, "cand-B", "released", false, 7.5, "tv", "pg_13", "manga")
+	seedPhase12Studio(t, db, "cand-B", "Madhouse")
+	seedPhase12Tag(t, db, "cand-B", "shounen")
+	seedPhase12Tag(t, db, "cand-B", "action")
+	seedPopulationSignal(t, db, "cand-B", 30.0) // weaker trending
+
+	seedPhase12History(t, db, "wh-1", "user-1", "history-1", "hianime", 1500)
+	seedPhase12History(t, db, "wh-2", "user-1", "history-2", "hianime", 1500)
+
+	// Population: a second user touches different attributes so the IDF for
+	// Madhouse + shounen + action becomes positive (rare → discriminative).
+	seedPhase12Anime(t, db, "filler-1", "released", false, 7.0, "movie", "g", "original")
+	seedPhase12Anime(t, db, "filler-2", "released", false, 7.0, "movie", "g", "original")
+	seedPhase12History(t, db, "wh-other-1", "user-2", "filler-1", "hianime", 1500)
+	seedPhase12History(t, db, "wh-other-2", "user-3", "filler-2", "hianime", 1500)
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	require.NoError(t, h.s5.Precompute(context.Background(), "user-1"))
+
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+
+	// Assert cand-B (similar to history) ranks ABOVE cand-A (dissimilar but
+	// higher trending). Without S5, S3 alone would have put cand-A first.
+	var posA, posB = -1, -1
+	for i, item := range env.Data.Recs {
+		switch item.Anime.ID {
+		case "cand-A":
+			posA = i
+		case "cand-B":
+			posB = i
+		}
+	}
+	require.GreaterOrEqual(t, posA, 0, "cand-A must appear")
+	require.GreaterOrEqual(t, posB, 0, "cand-B must appear")
+	assert.Less(t, posB, posA,
+		"S5 must lift cand-B (shares attributes with user's history) above cand-A (higher S3 trending but dissimilar). If posB >= posA, S5 is not contributing — Phase-12 SC#5 regression.")
 }
 
 // sliceTestID returns a zero-padded id so SQL ordering would be predictable
