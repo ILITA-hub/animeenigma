@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Recommendations Engine
-status: planning
-last_updated: "2026-05-06T00:00:00.000Z"
-last_activity: 2026-05-06
+status: in_progress
+last_updated: "2026-05-06T15:00:00.000Z"
+last_activity: 2026-05-06 — Phase 10 (Population Signals + Trending Row) shipped
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-04 for v2.0)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
-**Current focus:** v2.0 milestone roadmap approved 2026-05-06; next step is `/gsd-plan-phase 9` (Recs Foundation).
+**Current focus:** Phase 10 (Population Signals + Trending Row) shipped 2026-05-06 — anonymous users see a working "Trending now" home row backed by S3 + S4 ensemble, served from Redis 6h cache, refreshed by 60-min cron. Phase 11 (User Signals + Up Next Row) opens next.
 
 ## Current Position
 
-Phase: Phase 9 — Recs Foundation (pending plan-phase)
+Phase: Phase 11 — User Signals & "Up Next for you" Row (pending discuss/plan)
 Plan: —
-Status: Roadmap approved; ready for plan-phase 9
-Last activity: 2026-05-06 — Roadmap created (Phases 9-14)
+Status: Phase 9 ✓; Phase 10 ✓; Phase 11 opening
+Last activity: 2026-05-06 — Phase 10 shipped (16 atomic commits, S3+S4 ensemble live, Redis cache live)
 
 ## Performance Metrics
 
