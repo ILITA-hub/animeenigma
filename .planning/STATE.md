@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Recommendations Engine
 status: executing
-stopped_at: Phase 12 Wave 1 (catalog schema + Shikimori parser + AniList client) shipped — 8 commits including 2 Rule-1 deviation fixes, full production verification passed. Frieren refresh proves the Shikimori parser end-to-end (kind=tv, rating=pg_13, material_source=manga, studios=[Madhouse]). Wave 2 (services/maintenance/cmd/backfill-attributes — 3857 rows) is the next plan.
-last_updated: "2026-05-06T11:55:13.863Z"
+stopped_at: Phase 12 Wave 3 (S5 TF-IDF SignalModule + ensemble registration) shipped — 5 commits (RED+GREEN for Tasks 1+2, single for Task 3, changelog). Player redeployed cleanly with 5-signal ensemble live. ui_audit_bot top-3 shifted post-redeploy (rank 3: Re:Zero S4 → Chainsaw Man Recap; rank-1 Final score 0.323 → 0.523), confirming Phase-12 SC#5. Phase 12 COMPLETE; Phase 13 (S6 combo-watched-after pin) opens next.
+last_updated: "2026-05-06T14:40:00.000Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 14
-  completed_phases: 3
+  completed_phases: 12
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -25,9 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-04 for v2.0)
 
 ## Current Position
 
-Phase: 12 (TF-IDF Attribute Affinity (S5)) — EXECUTING
-Plan: 3 of 3 (Wave 2 — backfill)
-Status: Ready to execute
+Phase: 12 (TF-IDF Attribute Affinity (S5)) — COMPLETE
+Plan: 3 of 3 (Wave 3 — S5 SignalModule + ensemble registration) ✅ shipped 2026-05-06
+Next phase: Phase 13 (Combo-Watched-After Pin (S6))
+Status: Phase 12 complete; ready to plan Phase 13
 Last activity: 2026-05-06
 
 ## Performance Metrics
@@ -46,6 +47,8 @@ Last activity: 2026-05-06
 
 Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
 
+- 2026-05-06: Phase-12 SC#5 verified live — ui_audit_bot top-3 shifted post-redeploy (rank 3: Re:Zero S4 → Chainsaw Man Recap; rank-1 Steel Ball Run Final score 0.323 → 0.523, demonstrating S5 contribution at weight 0.20).
+- 2026-05-06: S5 affinity vector for ui_audit_bot populated 5/6 dimensions (genre / kind / rating / studio / source); tag dimension empty because the AniList tags backfill is still streaming for ui_audit_bot's specific watched anime — handled gracefully by the cold-start contract spec §3.3 (missing-attribute-equals-zero).
 - 2026-05-06: Shikimori adaptation-source field is named `origin`, NOT `source` (CONTEXT.md §S5 was wrong). Live introspection confirmed; parser fixed in Phase 12 Wave 1.
 - 2026-05-06: libs/database wrapper's AutoMigrate doesn't create m2m join tables for relations added to pre-existing structs — fall through to gorm's native AutoMigrate after the wrapper for new m2m. Caught at Phase 12 Wave 1 redeploy verification.
 - 2026-05-06: v2.0 roadmap structured as 6 phases (9-14): Foundation → Population Signals + Trending → User Signals + Up Next Row → S5 TF-IDF → S6 Pin → Admin Debug + Eval. Each phase independently shippable. Phase numbering continues from v1.0 (last shipped phase = 8).
@@ -86,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-06T10:15:00.000Z
-Stopped at: Phase 12 Wave 1 (catalog schema + Shikimori parser + AniList client) shipped — 8 commits including 2 Rule-1 deviation fixes, full production verification passed. Frieren refresh proves the Shikimori parser end-to-end (kind=tv, rating=pg_13, material_source=manga, studios=[Madhouse]). Wave 2 (services/maintenance/cmd/backfill-attributes — 3857 rows) is the next plan.
-Resume file: .planning/phases/12-tf-idf-attribute-affinity-s5/12-01-SUMMARY.md
+Last session: 2026-05-06T14:40:00.000Z
+Stopped at: Phase 12 Wave 3 shipped — S5 TF-IDF SignalModule live in production, full v2.0 ensemble (0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5) ranks every logged-in user's "Up Next for you" row. Phase 12 complete. Phase 13 (Combo-Watched-After Pin S6) opens next.
+Resume file: .planning/phases/12-tf-idf-attribute-affinity-s5/12-03-SUMMARY.md
