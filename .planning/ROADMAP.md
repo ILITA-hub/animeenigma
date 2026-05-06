@@ -123,7 +123,8 @@
   3. A user with fewer than 3 scored anime gets S1 = 0 and S2 = 0 cleanly (no NaN, no errors); the ensemble degrades to trending-leaning and the row still renders 20 cards
   4. The 6-hour user-signal cron writes fresh `rec_user_signals.s1_vector` and updates `last_computed` for every user with at least one `watch_history` row; the on-write trigger after a `watch_history` insert re-runs the per-user precompute within 5 minutes (with a 5-minute-per-user debounce) and busts the Redis cache for that user
   5. The strict no-cross-language / no-cross-dub-sub boundary from VAL-02 is not violated by any rec — verified by a test that seeds a JP-sub-only user and asserts no RU-dub anime appears in the row (informational only; recs do not write preference state)
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 11-01-PLAN.md — Land S1 (score-cluster k-NN), S2 (item-item genres metadata, request-time), S11.CandidatePoolForUser, libs/cache.SetNX, UserOrchestrator with 6h cron + debounced TriggerForUser, personalized GET /api/users/recs branch, and auth-aware refresh in useRecs (genres-only S2 per plan-phase schema inventory; tags/studios deferred to Phase 12)
 **UI hint**: yes
 
 #### Phase 12: TF-IDF Attribute Affinity (S5)
@@ -189,7 +190,7 @@ v1.0 phases (1-8) executed in numeric order and shipped 2026-05-03. v2.0 phases 
 | 8. Recommendations Readiness Documentation | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 9. Recs Foundation | v2.0 | 0/1 | Planned | - |
 | 10. Population Signals, Filter, Trending Row | v2.0 | 0/1 | Planned | - |
-| 11. User Signals & "Up Next for you" Row | v2.0 | 0/TBD | Not started | - |
+| 11. User Signals & "Up Next for you" Row | v2.0 | 0/1 | Planned | - |
 | 12. TF-IDF Attribute Affinity (S5) | v2.0 | 0/TBD | Not started | - |
 | 13. Combo-Watched-After Pin (S6) | v2.0 | 0/TBD | Not started | - |
 | 14. Admin Debug Page & Eval Pipeline | v2.0 | 0/TBD | Not started | - |
