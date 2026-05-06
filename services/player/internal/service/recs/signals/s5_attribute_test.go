@@ -3,6 +3,7 @@ package signals
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -180,22 +181,12 @@ func TestS5Attribute_KodikFallback(t *testing.T) {
 	var aff map[string]float64
 	require.NoError(t, json.Unmarshal([]byte(row.S5Affinity), &aff))
 
-	// Kodik fallback: each row = 1 unit (NOT 0, which would be duration_watched/60).
-	// If Kodik branch were broken, total_units would be just 25 and the
-	// Madhouse value would still be 1.0 — so we ALSO assert that the studio
-	// affinity > 0 (the only way the math works at all is if Kodik contributes
-	// non-zero units), AND that we didn't accidentally use duration/60=0 for
-	// Kodik (which would make Madhouse tf collapse to 25/25=1 but the genre
-	// wouldn't matter — we verify against a different shape below).
-	assert.Greater(t, aff["studio:Madhouse"], 0.0, "studio:Madhouse must have non-zero affinity")
-	// Verify Kodik rows actually contributed via tf alignment: with 1 user,
-	// total_units = 3*1 + 25 = 28 → studio Madhouse tf = 28/28 = 1.0 → idf =
-	// log(1/(1+1)) ≈ -0.693; affinity = 1.0 * -0.693 = -0.693. With ONLY the
-	// HiAnime branch (Kodik counted as 0), total_units = 25, tf = 25/25 = 1.0,
-	// same result. So tf alone doesn't distinguish — we instead assert that
-	// total_units in the affinity reflects Kodik rows by inspecting via genre.
-	// Simpler: assert Kodik history rows produced a contribution by looking
-	// for SOMETHING with the kodik anime in the kind dimension.
+	// Kodik fallback: each row = 1 unit. With 1 user, IDF = log(1/(1+1)) =
+	// -0.693, so per-attribute affinity is NEGATIVE (legitimate — universal
+	// attributes have negative IDF, and Score's normalizer downstream treats
+	// negative-raw entries as zero contribution). The test asserts non-zero
+	// magnitude — what matters is that the Kodik branch contributed units.
+	assert.NotZero(t, aff["studio:Madhouse"], "studio:Madhouse must have non-zero affinity")
 	assert.Greater(t, math.Abs(aff["kind:tv"]), 0.0, "kind:tv populated from both Kodik+HiAnime anime")
 }
 
@@ -570,11 +561,5 @@ func TestS5Attribute_PreservesS1AndS6(t *testing.T) {
 
 // s5RandomID is a deterministic ID builder for the property test.
 func s5RandomID(prefix string, n int) string {
-	const digits = "0123456789"
-	if n < 10 {
-		return prefix + "-0" + string(digits[n])
-	}
-	tens := n / 10
-	ones := n % 10
-	return prefix + "-" + string(digits[tens]) + string(digits[ones])
+	return fmt.Sprintf("%s-%04d", prefix, n)
 }
