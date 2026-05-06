@@ -59,12 +59,20 @@ build-backfill-attributes: ## Build the Phase-12 attribute backfill tool (host-n
 
 # Phase-12 Wave-2 (REC-SIG-05) attribute backfill. Idempotent — re-running
 # only re-fetches rows still missing kind/rating/material_source/studios
-# (Shikimori half) or anime_tags rows (AniList half). Reads DB env from
-# docker/.env. Pass extra flags via BACKFILL_ARGS, e.g.:
+# (Shikimori half) or anime_tags rows (AniList half).
+#
+# DB env: only DB_* + SHIKIMORI_* vars are sourced via grep + export.
+# We don't `. docker/.env` because some values contain unquoted spaces
+# (e.g. ANIMELIB_TOKEN=Bearer ...) which sh interprets as a command.
+# Defaults match the production docker-compose layout (localhost:5432
+# postgres/postgres/animeenigma).
+#
+# Pass extra flags via BACKFILL_ARGS, e.g.:
 #   make backfill-attributes BACKFILL_ARGS="--dry-run --limit=10"
 backfill-attributes: build-backfill-attributes ## Run the Phase-12 attribute backfill (REC-SIG-05). Reads DB env from docker/.env. Idempotent.
 	@echo "Running Phase-12 attribute backfill..."
-	@set -a; . ./docker/.env; set +a; ./bin/backfill-attributes $(BACKFILL_ARGS)
+	@set -a; eval "$$(grep -E '^(DB_|SHIKIMORI_)[A-Z_]+=' docker/.env 2>/dev/null || true)"; set +a; \
+		./bin/backfill-attributes $(BACKFILL_ARGS)
 
 build-tools: ## Build all tools
 	cd tools/migrator && go build $(GO_BUILD_FLAGS) -o ../../bin/migrator .
