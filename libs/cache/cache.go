@@ -17,6 +17,11 @@ type Cache interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	GetOrSet(ctx context.Context, key string, dest interface{}, ttl time.Duration, fn func() (interface{}, error)) error
 	Invalidate(ctx context.Context, pattern string) error
+	// SetNX atomically sets key to value with the given TTL only when the
+	// key does not exist. Returns acquired=true if the key was set, false
+	// if it already existed. Used as a distributed lock primitive (e.g.
+	// the recs:debounce:{user_id} debounce lock from REC-INFRA-02).
+	SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error)
 }
 
 type Config struct {
@@ -90,6 +95,36 @@ func (c *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl
 	metrics.CacheOperationDuration.WithLabelValues("set").Observe(time.Since(start).Seconds())
 	metrics.CacheOperationsTotal.WithLabelValues("set", "success").Inc()
 	return nil
+}
+
+// SetNX implements the Cache interface — atomic SET-if-not-exists with TTL.
+// Returns acquired=true when the key was set (it didn't exist before),
+// false when the key already existed (the existing value/TTL is unchanged).
+// Used by UserOrchestrator.TriggerForUser as a 5-min per-user debounce lock
+// (REC-INFRA-02).
+func (c *RedisCache) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
+	start := time.Now()
+	data, err := json.Marshal(value)
+	if err != nil {
+		metrics.CacheOperationDuration.WithLabelValues("setnx").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("setnx", "error").Inc()
+		return false, fmt.Errorf("cache marshal: %w", err)
+	}
+
+	ok, err := c.client.SetNX(ctx, key, data, ttl).Result()
+	if err != nil {
+		metrics.CacheOperationDuration.WithLabelValues("setnx").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("setnx", "error").Inc()
+		return false, fmt.Errorf("cache setnx: %w", err)
+	}
+
+	outcome := "miss"
+	if ok {
+		outcome = "acquired"
+	}
+	metrics.CacheOperationDuration.WithLabelValues("setnx").Observe(time.Since(start).Seconds())
+	metrics.CacheOperationsTotal.WithLabelValues("setnx", outcome).Inc()
+	return ok, nil
 }
 
 func (c *RedisCache) Delete(ctx context.Context, keys ...string) error {
