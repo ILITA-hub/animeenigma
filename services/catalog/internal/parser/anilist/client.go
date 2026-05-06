@@ -106,12 +106,23 @@ func NewClient(log *logger.Logger) *Client {
 // NewClientWithBaseURL allows tests to point the client at an httptest
 // stub server while keeping the production User-Agent and rate limiter.
 func NewClientWithBaseURL(endpoint string, log *logger.Logger) *Client {
+	return NewClientWithBaseURLAndRateLimit(endpoint, defaultRateLimitRPS, log)
+}
+
+// NewClientWithBaseURLAndRateLimit lets the caller override the rate
+// limit (req/sec). Used by the Phase-12 backfill so the operator can
+// dial AniList rps down to 1 (default) or up if a future plan needs it.
+// rps <= 0 falls back to defaultRateLimitRPS.
+func NewClientWithBaseURLAndRateLimit(endpoint string, rps int, log *logger.Logger) *Client {
+	if rps <= 0 {
+		rps = defaultRateLimitRPS
+	}
 	return &Client{
 		httpClient:  &http.Client{Timeout: defaultTimeout},
 		endpoint:    endpoint,
 		userAgent:   defaultUserAgent,
 		log:         log,
-		rateLimiter: newRateLimiter(defaultRateLimitRPS),
+		rateLimiter: newRateLimiter(rps),
 	}
 }
 

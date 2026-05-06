@@ -544,6 +544,184 @@ func TestBackfillRunner_LimitFlag(t *testing.T) {
 	assert.Equal(t, 2, sh.callCount())
 }
 
+// --- 429 retry+backoff tests (Plan 12-02 deviation: Option A) -----------
+
+// rate429Shikimori is a Shikimori mock that returns a 429-shaped error on
+// the first N calls per shikimoriID, then succeeds. Used to assert the
+// retry+backoff helper wraps the fetcher correctly.
+type rate429Shikimori struct {
+	mu          sync.Mutex
+	callsByID   map[string]int
+	failNCalls  int
+	errMessage  string
+	successResp *catalogdomain.Anime
+}
+
+func (m *rate429Shikimori) GetAnimeByID(_ context.Context, shikimoriID string) (*catalogdomain.Anime, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.callsByID == nil {
+		m.callsByID = map[string]int{}
+	}
+	m.callsByID[shikimoriID]++
+	if m.callsByID[shikimoriID] <= m.failNCalls {
+		return nil, errors.New(m.errMessage)
+	}
+	cp := *m.successResp
+	return &cp, nil
+}
+
+func (m *rate429Shikimori) callCount(id string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callsByID[id]
+}
+
+func TestBackfillRunner_RetriesOn429(t *testing.T) {
+	db := newTestDB(t)
+	insertAnime(t, db, catalogdomain.Anime{ID: "r1", ShikimoriID: "30001"})
+
+	sh := &rate429Shikimori{
+		failNCalls: 1,
+		errMessage: "external API error: shikimori (cause: graphql: Too Many Requests)",
+		successResp: &catalogdomain.Anime{
+			Kind: "tv", Rating: "pg_13", MaterialSource: "manga",
+			Studios: []catalogdomain.Studio{{ID: "1", Name: "Madhouse"}},
+		},
+	}
+	r := NewBackfillRunner(db, sh, &mockAnilist{}, &mockARM{}, newTestLogger(t),
+		// Compress backoff for tests (1ms -> 3ms -> 5ms) so the suite stays fast.
+		// The default production schedule (5s/15s/60s) is exercised in
+		// TestRetryWaitDuration_Defaults via the helper directly.
+		Config{LogEvery: 100, RetryWaits: []time.Duration{1 * time.Millisecond, 3 * time.Millisecond, 5 * time.Millisecond}})
+	res, err := r.ShikimoriHalf(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Succeeded, "row succeeds after the retry")
+	assert.Equal(t, 0, res.Failed)
+	assert.Equal(t, 2, sh.callCount("30001"), "exactly 1 retry: call#1 = 429, call#2 = success")
+
+	// And the row is populated, not left empty.
+	var got catalogdomain.Anime
+	require.NoError(t, db.First(&got, "id = ?", "r1").Error)
+	assert.Equal(t, "tv", got.Kind)
+	assert.Equal(t, "pg_13", got.Rating)
+	assert.Equal(t, "manga", got.MaterialSource)
+}
+
+func TestBackfillRunner_RetriesOn429_GivesUpAfter3(t *testing.T) {
+	db := newTestDB(t)
+	insertAnime(t, db, catalogdomain.Anime{ID: "r2", ShikimoriID: "30002"})
+
+	sh := &rate429Shikimori{
+		failNCalls: 99, // always fails
+		errMessage: "429 Too Many Requests",
+		successResp: &catalogdomain.Anime{Kind: "tv"},
+	}
+	r := NewBackfillRunner(db, sh, &mockAnilist{}, &mockARM{}, newTestLogger(t),
+		Config{LogEvery: 100, RetryWaits: []time.Duration{1 * time.Millisecond, 1 * time.Millisecond, 1 * time.Millisecond}})
+	res, err := r.ShikimoriHalf(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.Succeeded)
+	assert.Equal(t, 1, res.Failed, "row counted as failed after retry exhaustion")
+	// Initial attempt + 3 retries = 4 calls total
+	assert.Equal(t, 4, sh.callCount("30002"))
+}
+
+func TestBackfillRunner_NoRetryOnNon429(t *testing.T) {
+	db := newTestDB(t)
+	insertAnime(t, db, catalogdomain.Anime{ID: "r3", ShikimoriID: "30003"})
+
+	sh := &rate429Shikimori{
+		failNCalls: 99,
+		errMessage: "external API error: shikimori (cause: connection refused)",
+		successResp: &catalogdomain.Anime{Kind: "tv"},
+	}
+	r := NewBackfillRunner(db, sh, &mockAnilist{}, &mockARM{}, newTestLogger(t),
+		Config{LogEvery: 100, RetryWaits: []time.Duration{1 * time.Millisecond, 1 * time.Millisecond, 1 * time.Millisecond}})
+	res, err := r.ShikimoriHalf(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.Succeeded)
+	assert.Equal(t, 1, res.Failed)
+	// Non-429 error: NO retries, exactly one attempt
+	assert.Equal(t, 1, sh.callCount("30003"))
+}
+
+// rate429Anilist is the AniList equivalent of rate429Shikimori — used to
+// assert the retry+backoff wraps both fetchers, not just Shikimori.
+type rate429Anilist struct {
+	mu         sync.Mutex
+	callsByID  map[int]int
+	failNCalls int
+	errMessage string
+	tags       []anilist.Tag
+}
+
+func (m *rate429Anilist) FetchTags(_ context.Context, anilistID int) ([]anilist.Tag, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.callsByID == nil {
+		m.callsByID = map[int]int{}
+	}
+	m.callsByID[anilistID]++
+	if m.callsByID[anilistID] <= m.failNCalls {
+		return nil, errors.New(m.errMessage)
+	}
+	return m.tags, nil
+}
+
+func (m *rate429Anilist) callCount(id int) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callsByID[id]
+}
+
+func TestBackfillRunner_AnilistRetriesOn429(t *testing.T) {
+	db := newTestDB(t)
+	insertAnime(t, db, catalogdomain.Anime{ID: "ar1", ShikimoriID: "31001"})
+
+	arm := &mockARM{resultBy: map[string]*idmapping.MappingResult{
+		"31001": {AniList: intp(7777)},
+	}}
+	al := &rate429Anilist{
+		failNCalls: 1,
+		errMessage: "external API error: anilist (cause: graphql: Too Many Requests)",
+		tags:       []anilist.Tag{{Name: "Action", Rank: 80}},
+	}
+	r := NewBackfillRunner(db, &mockShikimori{}, al, arm, newTestLogger(t),
+		Config{LogEvery: 100, RetryWaits: []time.Duration{1 * time.Millisecond, 3 * time.Millisecond, 5 * time.Millisecond}})
+	res, err := r.AnilistHalf(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Succeeded)
+	assert.Equal(t, 0, res.Failed)
+	assert.Equal(t, 2, al.callCount(7777))
+
+	var tagCount int64
+	require.NoError(t, db.Model(&catalogdomain.Tag{}).Count(&tagCount).Error)
+	assert.Equal(t, int64(1), tagCount)
+}
+
+func Test_is429Error(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"plain 429", errors.New("429 Too Many Requests"), true},
+		{"wrapped 429", errors.New("external API error: shikimori (cause: graphql: 429 Too Many Requests)"), true},
+		{"too many requests phrase", errors.New("upstream returned: Too Many Requests"), true},
+		{"retry later phrase", errors.New("Retry later"), true},
+		{"503 not 429", errors.New("503 Service Unavailable"), false},
+		{"connection refused not 429", errors.New("dial tcp: connection refused"), false},
+		{"empty", errors.New(""), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, is429Error(tc.err))
+		})
+	}
+}
+
 func TestBackfillRunner_DryRun(t *testing.T) {
 	db := newTestDB(t)
 	insertAnime(t, db, catalogdomain.Anime{ID: "dr1", ShikimoriID: "20001"})
