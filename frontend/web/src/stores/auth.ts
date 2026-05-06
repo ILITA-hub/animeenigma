@@ -130,8 +130,13 @@ export const useAuthStore = defineStore('auth', () => {
         setUser(data.user)
       }
       return true
-    } catch {
-      logout()
+    } catch (err) {
+      // Only logout when the server rejects the refresh token; transient
+      // network/5xx errors (e.g. VPN reconnect) shouldn't drop the session.
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 401 || status === 403) {
+        logout()
+      }
       return false
     } finally {
       isRefreshing.value = false
@@ -186,8 +191,13 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiClient.get('/auth/me')
       const userData = response.data?.data || response.data
       setUser(userData)
-    } catch {
-      logout()
+    } catch (err) {
+      // Only logout when the server says the token is invalid; transient
+      // network/5xx errors (e.g. VPN reconnect) shouldn't drop the session.
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 401 || status === 403) {
+        logout()
+      }
     } finally {
       loading.value = false
     }

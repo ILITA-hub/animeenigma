@@ -60,8 +60,13 @@ async function doTokenRefresh(): Promise<string | null> {
       return newAccessToken as string
     } catch (refreshError) {
       processQueue(refreshError as AxiosError, null)
-      localStorage.removeItem('token')
-      window.location.href = '/'
+      // Only force-logout when the server explicitly rejects the refresh token.
+      // Network/5xx errors are often transient (e.g. VPN reconnect) — keep the session.
+      const status = (refreshError as AxiosError)?.response?.status
+      if (status === 401 || status === 403) {
+        localStorage.removeItem('token')
+        window.location.href = '/'
+      }
       return null
     } finally {
       isRefreshing = false
