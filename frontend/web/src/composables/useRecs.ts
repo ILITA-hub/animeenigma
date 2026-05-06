@@ -1,15 +1,19 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { apiClient } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 
 // Phase 10: anonymous trending row composable.
+// Phase 11: also handles auth-state transitions so the row payload swaps
+// between "Trending now" (anonymous) and "Up Next for you" (logged-in)
+// without requiring a hard reload.
 //
 // Backend contract (services/player/internal/handler/recs.go):
 //   GET /api/users/recs -> { success, data: { recs, generated_at, cache_hit, total, row_label_key } }
 //
-// row_label_key is the i18n key the row title uses ("recs.trending" in
-// Phase 10; Phase 11 will branch to "recs.upNext" for logged-in users).
-// We expose it via the composable so Home.vue can render `$t(rowLabelKey)`
-// without hard-coding the key.
+// row_label_key is the i18n key the row title uses — Phase 10 returns
+// "recs.trending" for anonymous, Phase 11 returns "recs.upNext" for
+// logged-in callers. We expose it via the composable so Home.vue can render
+// `$t(rowLabelKey)` without hard-coding the key.
 
 export interface RecAnime {
   id: string
@@ -70,6 +74,24 @@ export function useRecs() {
   }
 
   onMounted(fetchRecs)
+
+  // Phase 11 (REC-UX-01): re-fetch when auth state transitions so the row
+  // payload swaps between "Trending now" (anonymous) and "Up Next for you"
+  // (logged-in) without a hard reload. Watching `token` (the source of
+  // truth for "is the next request authenticated?") rather than the `user`
+  // ref because `user` can lag during refresh-cookie warmups.
+  const auth = useAuthStore()
+  watch(
+    () => auth.token,
+    (newToken, oldToken) => {
+      // Only refetch on a real transition; the watcher fires once on mount
+      // with `oldToken === undefined` which would double-trigger after the
+      // onMounted initial fetch.
+      if (newToken !== oldToken && oldToken !== undefined) {
+        fetchRecs()
+      }
+    },
+  )
 
   return { recs, isLoading, error, generatedAt, rowLabelKey, cacheHit, refresh: fetchRecs }
 }
