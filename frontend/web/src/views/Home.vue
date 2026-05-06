@@ -23,6 +23,55 @@
       </div>
     </div>
 
+    <!-- Trending Now Row (Phase 10 — anonymous trending; Phase 11 will switch
+         label to "Up Next for you" for logged-in users via the row_label_key
+         the backend returns in /api/users/recs). Hidden when no recs returned
+         so an empty pool doesn't add a "no data" placeholder. -->
+    <div v-if="trendingRecs.length > 0" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl md:text-2xl font-bold text-white">{{ t(rowLabelKey) }}</h2>
+      </div>
+      <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-1 px-1">
+        <router-link
+          v-for="item in trendingRecs"
+          :key="item.anime.id"
+          :to="`/anime/${item.anime.id}`"
+          class="flex-shrink-0 w-32 md:w-40 lg:w-48 group"
+        >
+          <div class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] mb-2">
+            <img
+              :src="item.anime.poster_url || '/placeholder.svg'"
+              :alt="getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp)"
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              loading="lazy"
+            />
+            <div
+              v-if="item.anime.score"
+              class="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/70 backdrop-blur-sm text-xs font-semibold text-yellow-400 flex items-center gap-1"
+            >
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+              </svg>
+              {{ item.anime.score?.toFixed(1) }}
+            </div>
+          </div>
+          <p class="text-sm text-white truncate group-hover:text-cyan-400 transition-colors">
+            {{ getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp) }}
+          </p>
+        </router-link>
+      </div>
+    </div>
+    <div v-else-if="trendingLoading" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+      <div class="h-8 w-48 bg-white/10 rounded animate-pulse mb-4" />
+      <div class="flex gap-3 overflow-hidden">
+        <div
+          v-for="i in 8"
+          :key="i"
+          class="flex-shrink-0 w-32 md:w-40 lg:w-48 aspect-[2/3] bg-white/10 rounded-xl animate-pulse"
+        />
+      </div>
+    </div>
+
     <!-- Three Columns Layout -->
     <div class="px-4 lg:px-8 max-w-7xl mx-auto pb-12">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -294,7 +343,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
@@ -302,6 +351,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { useHomeStore } from '@/stores/home'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useContextMenu } from '@/composables/useContextMenu'
+import { useRecs } from '@/composables/useRecs'
 import { SearchAutocomplete } from '@/components/ui'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
@@ -325,6 +375,12 @@ const homeStore = useHomeStore()
 const watchlistStore = useWatchlistStore()
 
 const searchQuery = ref('')
+
+// Phase 10 — anonymous trending row. The composable fetches /api/users/recs
+// onMounted and exposes the row label key (recs.trending in this phase;
+// recs.upNext when Phase 11 lands and the backend branches on auth state).
+const { recs: rawRecs, isLoading: trendingLoading, rowLabelKey } = useRecs()
+const trendingRecs = computed(() => rawRecs.value.slice(0, 20))
 
 const {
   announcedAnime,
