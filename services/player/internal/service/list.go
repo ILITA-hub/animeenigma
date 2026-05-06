@@ -8,23 +8,29 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
 )
 
 type ListService struct {
-	listRepo     *repo.ListRepository
-	activityRepo *repo.ActivityRepository
-	prefRepo     *repo.PreferenceRepository
-	progressRepo *repo.ProgressRepository
-	log          *logger.Logger
+	listRepo         *repo.ListRepository
+	activityRepo     *repo.ActivityRepository
+	prefRepo         *repo.PreferenceRepository
+	progressRepo     *repo.ProgressRepository
+	userOrchestrator *recs.UserOrchestrator // Phase 11 (REC-INFRA-02) — debounced trigger; may be nil in tests
+	log              *logger.Logger
 }
 
-func NewListService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, prefRepo *repo.PreferenceRepository, progressRepo *repo.ProgressRepository, log *logger.Logger) *ListService {
+// NewListService wires the list service. The userOrchestrator argument may
+// be nil in test environments that don't exercise the recs trigger; the
+// MarkEpisodeWatched hot path nil-guards before invoking it.
+func NewListService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, prefRepo *repo.PreferenceRepository, progressRepo *repo.ProgressRepository, userOrchestrator *recs.UserOrchestrator, log *logger.Logger) *ListService {
 	return &ListService{
-		listRepo:     listRepo,
-		activityRepo: activityRepo,
-		prefRepo:     prefRepo,
-		progressRepo: progressRepo,
-		log:          log,
+		listRepo:         listRepo,
+		activityRepo:     activityRepo,
+		prefRepo:         prefRepo,
+		progressRepo:     progressRepo,
+		userOrchestrator: userOrchestrator,
+		log:              log,
 	}
 }
 
@@ -268,6 +274,18 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			)
 		}
 		metrics.WatchEpisodesTotal.WithLabelValues(req.Player, req.Language, req.WatchType).Inc()
+
+		// Phase 11 (REC-INFRA-02): fire-and-forget debounced trigger so the
+		// user's recs row reflects the new watch within ~5 minutes. The
+		// orchestrator handles the SetNX debounce + spawning internally —
+		// this call is non-blocking and never returns an error to us. We use
+		// context.Background() so a cancelled request context (the HTTP
+		// handler returning) doesn't kill the goroutine before SetNX runs.
+		if s.userOrchestrator != nil {
+			go func() {
+				_ = s.userOrchestrator.TriggerForUser(context.Background(), userID)
+			}()
+		}
 	}
 
 	// Return updated entry

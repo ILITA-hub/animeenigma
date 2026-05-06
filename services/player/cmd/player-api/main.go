@@ -148,6 +148,24 @@ func main() {
 		popOrch.Start(cronCtx, 60*time.Minute)
 	}
 
+	// Phase 11: rec engine USER signal cron (6-hour ticker) + debounced
+	// on-write trigger. The orchestrator delegates to the existing
+	// recs.Orchestrator (precompute.go) for per-user RunForUser semantics.
+	// Cache invalidation on success busts recs:user:{user_id}:topN so the
+	// next request picks up fresh signals.
+	var userOrch *recs.UserOrchestrator
+	{
+		recsRepo := repo.NewRecsRepository(db.DB)
+		s1 := signals.NewS1ScoreCluster(db.DB, recsRepo)
+		s2 := signals.NewS2Metadata(db.DB)
+		userPrecompute := recs.NewOrchestrator([]recs.SignalModule{s1, s2})
+		userOrch = recs.NewUserOrchestrator(userPrecompute, db.DB, redisCache, log)
+		// 6-hour cadence per CONTEXT.md decisions §User-Signal Cron.
+		// Boot tick runs immediately so logged-in users get fresh signals
+		// within seconds of redeploy.
+		userOrch.Start(cronCtx, 6*time.Hour)
+	}
+
 	// Phase 3 backfill: synthesize watch_progress.completed=true rows for legacy
 	// data (any (user, anime, ep <= anime_list.episodes) without a completed=true
 	// row). Idempotent — guarded by an early-exit check so it short-circuits on
@@ -199,7 +217,7 @@ func main() {
 		DurationFloor:  cfg.Tier2.DurationFloor,
 	})
 	progressService := service.NewProgressService(progressRepo, prefService, log)
-	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, log)
+	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, log)
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(reviewRepo, listRepo, activityRepo, log)
 
