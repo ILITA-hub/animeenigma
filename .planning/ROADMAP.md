@@ -109,7 +109,8 @@
   3. The 60-minute population cron runs in the player service, writes fresh `s3_trending_score` and `s4_recency_score` rows for every anime in `animes` on each tick, and a Grafana log query confirms two consecutive successful runs in production
   4. A second identical request to `/api/users/recs` within 6 hours hits the Redis cache (verified via `recs:popsignal:lastcomputed` key existing and per-anon `recs:user:anon:{anon_id}:topN` returning `cache_hit: true` in the response envelope)
   5. Cron failure (e.g. forced DB error in test) is logged but does not crash the service; stale signals continue serving until the next successful run
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 10-01-PLAN.md — Land S3 (trending), S4 (recency), S11 (hidden filter), 60-min population cron, Redis 6h top-N cache, GET /api/users/recs handler, useRecs composable, and Trending now row on Home.vue (EN + RU + JA i18n)
 **UI hint**: yes
 
 #### Phase 11: User Signals & "Up Next for you" Row
@@ -187,7 +188,7 @@ v1.0 phases (1-8) executed in numeric order and shipped 2026-05-03. v2.0 phases 
 | 7. Advanced Settings, Anonymous UX, Cross-Device Freshness | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 8. Recommendations Readiness Documentation | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 9. Recs Foundation | v2.0 | 0/1 | Planned | - |
-| 10. Population Signals, Filter, Trending Row | v2.0 | 0/TBD | Not started | - |
+| 10. Population Signals, Filter, Trending Row | v2.0 | 0/1 | Planned | - |
 | 11. User Signals & "Up Next for you" Row | v2.0 | 0/TBD | Not started | - |
 | 12. TF-IDF Attribute Affinity (S5) | v2.0 | 0/TBD | Not started | - |
 | 13. Combo-Watched-After Pin (S6) | v2.0 | 0/TBD | Not started | - |
