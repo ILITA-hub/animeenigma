@@ -1,10 +1,11 @@
-// Package handler — recs.go: GET /api/users/recs anonymous trending row.
+// Package handler — recs.go: GET /api/users/recs.
 //
-// Phase 10 surfaces the population-wide recommendations engine for the first
-// time. Anonymous callers get a single shared trending top-N (no per-anon
-// personalization in v2.0). Logged-in callers in this phase get the SAME
-// payload — Phase 11 will branch on auth state to swap in the personalized
-// "Up Next for you" row.
+// Phase 10 surfaced the anonymous trending row. Phase 11 branches on auth
+// state: anonymous callers still get the single shared trending top-N
+// (row_label_key=recs.trending), while logged-in callers get a personalized
+// "Up Next for you" row (row_label_key=recs.upNext) computed from the full
+// 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 ensemble, with completed/dropped
+// anime excluded by S11.CandidatePoolForUser.
 package handler
 
 import (
@@ -41,6 +42,21 @@ const publicTrendingTTL = 6 * time.Hour
 
 // anonRowSliceSize — Phase 10 anonymous returns top-20.
 const anonRowSliceSize = 20
+
+// userTopNTTL — Phase 11 logged-in cache window. 6h matches the user-signal
+// cron cadence; the on-write debounce trigger busts the cache early when a
+// new watch_history row lands.
+const userTopNTTL = 6 * time.Hour
+
+// userRowSliceSize — Phase 11 server returns top-50 for logged-in (the
+// frontend slices to 20 per spec §13).
+const userRowSliceSize = 50
+
+// userTopNKey returns the per-user topN cache key in canonical shape so the
+// handler / cron / trigger paths all agree.
+func userTopNKey(userID string) string {
+	return "recs:user:" + userID + ":topN"
+}
 
 // RecAnimePayload is the anime fields the frontend AnimeCard needs to render.
 // Mirrors the home store payload shape so AnimeCard can render without changes.
@@ -80,11 +96,13 @@ type RecsHandler struct {
 	cache recsCache
 	log   *logger.Logger
 
-	// Composed signals — built lazily-once on first request to keep the
-	// constructor zero-arg-friendly. The DB handle is enough to wire them.
+	// Composed signals — built once at construction. The DB handle is enough
+	// to wire them.
 	s11 *signals.S11Filter
 	s3  *signals.S3Trending
 	s4  *signals.S4Recency
+	s1  *signals.S1ScoreCluster
+	s2  *signals.S2Metadata
 }
 
 // NewRecsHandler wires the handler with its dependencies. The signal modules
@@ -98,32 +116,34 @@ func NewRecsHandler(db *gorm.DB, recsRepo *repo.RecsRepository, cache recsCache,
 		s11:   signals.NewS11Filter(db),
 		s3:    signals.NewS3Trending(db, recsRepo),
 		s4:    signals.NewS4Recency(db),
+		s1:    signals.NewS1ScoreCluster(db, recsRepo),
+		s2:    signals.NewS2Metadata(db),
 	}
 }
 
-// GetRecs serves the trending row.
+// GetRecs serves the recs row. Branches on JWT presence:
 //
-// Cache flow:
+//   - Logged-in (claims.UserID != "") -> personalized "Up Next for you" row
+//     via serveLoggedIn (REC-UX-01 / REC-UX-04).
+//   - Anonymous -> shared "Trending now" row via serveAnonymous (Phase 10
+//     contract preserved).
+func (h *RecsHandler) GetRecs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if claims, ok := authz.ClaimsFromContext(ctx); ok && claims != nil && claims.UserID != "" {
+		h.serveLoggedIn(ctx, w, claims.UserID)
+		return
+	}
+	h.serveAnonymous(ctx, w)
+}
+
+// serveAnonymous serves the Phase 10 trending row. Cache flow:
 //  1. Try recsCache.Get(PublicTrendingKey).
 //  2. Hit  -> set CacheHit=true and return.
 //  3. Miss -> compute via S11.CandidatePool + Ensemble(S3=0.20, S4=0.10),
 //     sort with S4-tiebreak backfill, slice to top-20, hydrate anime info,
 //     write to cache with 6h TTL, return.
-//
-// Phase 10 contract: logged-in callers get the SAME anonymous payload (with
-// row_label_key="recs.trending"). Phase 11 will branch on claims to switch
-// to "recs.upNext" and a personalized ensemble.
-func (h *RecsHandler) GetRecs(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	// Phase-11 stub: log when a logged-in caller hits the anonymous path so
-	// we can audit migration when personalization lands.
-	if claims, ok := authz.ClaimsFromContext(ctx); ok && claims != nil {
-		// TODO(phase-11): branch on claims to serve personalized recs row
-		h.log.Debugw("phase-11 personalization deferred — serving anonymous trending",
-			"user_id", claims.UserID)
-	}
-
+func (h *RecsHandler) serveAnonymous(ctx context.Context, w http.ResponseWriter) {
 	// 1. Cache read-through
 	var cached RecsEnvelope
 	err := h.cache.Get(ctx, PublicTrendingKey, &cached)
@@ -132,7 +152,6 @@ func (h *RecsHandler) GetRecs(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, cached)
 		return
 	}
-	// On any non-trivial cache error, log but continue (fail open).
 	if err != nil && !isCacheMiss(err) {
 		h.log.Warnw("recs cache read failed; recomputing", "error", err)
 	}
@@ -141,8 +160,6 @@ func (h *RecsHandler) GetRecs(w http.ResponseWriter, r *http.Request) {
 	envelope, err := h.computeFresh(ctx)
 	if err != nil {
 		h.log.Errorw("recs compute failed", "error", err)
-		// Serve an empty row instead of an error — the trending row is a
-		// best-effort surface. Frontend hides on empty.
 		httputil.OK(w, RecsEnvelope{
 			Recs:        []RecItem{},
 			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
@@ -156,6 +173,44 @@ func (h *RecsHandler) GetRecs(w http.ResponseWriter, r *http.Request) {
 	// 3. Cache the result
 	if setErr := h.cache.Set(ctx, PublicTrendingKey, envelope, publicTrendingTTL); setErr != nil {
 		h.log.Warnw("recs cache write failed", "error", setErr)
+	}
+
+	httputil.OK(w, envelope)
+}
+
+// serveLoggedIn serves the personalized Up Next row. Per-user cache,
+// CandidatePoolForUser (excluding completed/dropped), full ensemble.
+func (h *RecsHandler) serveLoggedIn(ctx context.Context, w http.ResponseWriter, userID string) {
+	// 1. Cache read-through (per-user key).
+	var cached RecsEnvelope
+	if err := h.cache.Get(ctx, userTopNKey(userID), &cached); err == nil {
+		cached.CacheHit = true
+		httputil.OK(w, cached)
+		return
+	} else if !isCacheMiss(err) {
+		h.log.Warnw("personalized recs cache read failed; recomputing",
+			"user_id", userID, "error", err)
+	}
+
+	// 2. Compute fresh
+	envelope, err := h.computeFreshForUser(ctx, userID)
+	if err != nil {
+		h.log.Errorw("personalized recs compute failed",
+			"user_id", userID, "error", err)
+		httputil.OK(w, RecsEnvelope{
+			Recs:        []RecItem{},
+			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+			CacheHit:    false,
+			Total:       0,
+			RowLabelKey: "recs.upNext",
+		})
+		return
+	}
+
+	// 3. Cache (per-user, 6h TTL).
+	if setErr := h.cache.Set(ctx, userTopNKey(userID), envelope, userTopNTTL); setErr != nil {
+		h.log.Warnw("personalized recs cache write failed",
+			"user_id", userID, "error", setErr)
 	}
 
 	httputil.OK(w, envelope)
@@ -259,6 +314,88 @@ func (h *RecsHandler) computeFresh(ctx context.Context) (RecsEnvelope, error) {
 		CacheHit:    false,
 		Total:       len(items),
 		RowLabelKey: "recs.trending",
+	}, nil
+}
+
+// computeFreshForUser runs the personalized ensemble for a logged-in user:
+// S11.CandidatePoolForUser (excludes completed/dropped) -> full ensemble
+// 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 -> stable sort -> top-50 server slice
+// -> hydrate -> envelope with row_label_key=recs.upNext.
+func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (RecsEnvelope, error) {
+	pool, err := h.s11.CandidatePoolForUser(ctx, recs.UserID(userID))
+	if err != nil {
+		return RecsEnvelope{}, err
+	}
+	if len(pool) == 0 {
+		return RecsEnvelope{
+			Recs:        []RecItem{},
+			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+			CacheHit:    false,
+			Total:       0,
+			RowLabelKey: "recs.upNext",
+		}, nil
+	}
+
+	ensemble := recs.NewEnsemble([]recs.WeightedSignal{
+		{Module: h.s1, Weight: 0.30},
+		{Module: h.s2, Weight: 0.20},
+		{Module: h.s3, Weight: 0.20},
+		{Module: h.s4, Weight: 0.10},
+	})
+	ranked, err := ensemble.Rank(ctx, recs.UserID(userID), pool)
+	if err != nil {
+		return RecsEnvelope{}, err
+	}
+
+	// Stable secondary sort matching the Phase 10 thin-pool pattern: tiebreak
+	// by S4 then AnimeID so cold-start users get deterministic ordering.
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].Final != ranked[j].Final {
+			return ranked[i].Final > ranked[j].Final
+		}
+		s4i := float64(ranked[i].Breakdown[recs.SignalID("s4")])
+		s4j := float64(ranked[j].Breakdown[recs.SignalID("s4")])
+		if s4i != s4j {
+			return s4i > s4j
+		}
+		return ranked[i].AnimeID < ranked[j].AnimeID
+	})
+
+	end := userRowSliceSize
+	if len(ranked) < end {
+		end = len(ranked)
+	}
+	top := ranked[:end]
+
+	ids := make([]string, len(top))
+	for i, r := range top {
+		ids[i] = r.AnimeID
+	}
+	hydrated, err := h.hydrateAnime(ctx, ids)
+	if err != nil {
+		return RecsEnvelope{}, err
+	}
+
+	items := make([]RecItem, 0, len(top))
+	for i, r := range top {
+		anime, ok := hydrated[r.AnimeID]
+		if !ok {
+			continue
+		}
+		items = append(items, RecItem{
+			Anime:  anime,
+			Final:  r.Final,
+			Pinned: false,
+			Rank:   i + 1,
+		})
+	}
+
+	return RecsEnvelope{
+		Recs:        items,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		CacheHit:    false,
+		Total:       len(items),
+		RowLabelKey: "recs.upNext",
 	}, nil
 }
 
