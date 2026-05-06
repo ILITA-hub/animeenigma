@@ -152,6 +152,13 @@ func NewRouter(
 		// limiting at the path level (existing rate limiter applies to all /api/* paths).
 		r.HandleFunc("/preferences/*", proxyHandler.ProxyToPlayer)
 
+		// Phase 10 (recs): anonymous trending row.
+		// MUST be defined BEFORE the protected /users/* group so chi's longest-prefix
+		// match catches /users/recs first. Player applies OptionalAuthMiddleware
+		// internally — JWT decodes if present, anon passes through.
+		r.HandleFunc("/users/recs", proxyHandler.ProxyToPlayer)
+		r.HandleFunc("/users/recs/", proxyHandler.ProxyToPlayer)
+
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
