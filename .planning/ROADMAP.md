@@ -29,7 +29,7 @@
 - [x] **Phase 10: Population Signals, Filter, Trending Row** — Land S3 (trending), S4 (recency), S11 (filter), 60-minute population cron, Redis 6h top-N cache, and the anonymous "Trending now" home row. ✅ shipped 2026-05-06
 - [x] **Phase 11: User Signals & "Up Next for you" Row** — Land S1 (score-cluster) + S2 (item-item metadata), 6-hour user cron + debounced on-write trigger, and the logged-in "Up Next for you" home row. ✅ shipped 2026-05-06
 - [x] **Phase 12: TF-IDF Attribute Affinity (S5)** — Land S5 with six weighted attribute dimensions (Decision §A2 collapsed studios + producers) and the Kodik episode-count fallback. Personalization quality jumps; weights are tuned via admin breakdown view. ✅ shipped 2026-05-06
-- [ ] **Phase 13: Combo-Watched-After Pin (S6)** — Land S6 cascade (local co-occurrence → Shikimori `/similar`), synchronous seed update on `MarkEpisodeWatched`, and the "Because you finished X" pinned tile.
+- [x] **Phase 13: Combo-Watched-After Pin (S6)** — Land S6 cascade (local co-occurrence → Shikimori `/similar`), synchronous seed update on `MarkEpisodeWatched`, and the "Because you finished X" pinned tile. ✅ shipped 2026-05-06
 - [ ] **Phase 14: Admin Debug Page & Eval Pipeline** — Land the full `/admin/recs/:user_id` page (per-signal contribution, S5 term expand, S11 audit), force-recompute endpoint, frontend `rec_click` / `rec_watched` events, and Prometheus `rec_signal_ctr` metric.
 
 ## Phase Details
@@ -155,7 +155,7 @@
   5. The synchronous S6 seed update inside `MarkEpisodeWatched` writes `s6_seed_anime_id` / `s6_seed_completed_at` / `s6_seed_score` and invalidates `recs:user:{user_id}:topN` in Redis; the request returns within 5 ms additional overhead measured against the Phase-12 baseline
   6. The pinned tile is visually distinct from the rest of the row (border, label, or badge — designer's call) so users perceive it as a recommendation tied to a specific completion, not a generic rec
 **Plans:** 1 plan
-- [ ] 13-01-PLAN.md — Land Catalog /similar endpoint, RecsRepository.UpdateS6Seed + GetTopCoOccurrences, CoOccurrenceOrchestrator (24h cron), S6ComboPin resolver (local → Shikimori → score-5 cascade), synchronous seed update inside MarkEpisodeWatched, RecsHandler S6 pin integration, Home.vue pin treatment (border + badge + reason line), and EN/RU/JA i18n keys
+- [x] 13-01-PLAN.md — Land Catalog /similar endpoint, RecsRepository.UpdateS6Seed + GetTopCoOccurrences, CoOccurrenceOrchestrator (24h cron), S6ComboPin resolver (local → Shikimori → score-5 cascade), synchronous seed update inside MarkEpisodeWatched, RecsHandler S6 pin integration, Home.vue pin treatment (border + badge + reason line), and EN/RU/JA i18n keys ✅ shipped 2026-05-06
 **UI hint**: yes
 
 #### Phase 14: Admin Debug Page & Eval Pipeline
@@ -197,5 +197,5 @@ v1.0 phases (1-8) executed in numeric order and shipped 2026-05-03. v2.0 phases 
 | 10. Population Signals, Filter, Trending Row | v2.0 | 0/1 | Planned | - |
 | 11. User Signals & "Up Next for you" Row | v2.0 | 0/1 | Planned | - |
 | 12. TF-IDF Attribute Affinity (S5) | v2.0 | 0/TBD | Not started | - |
-| 13. Combo-Watched-After Pin (S6) | v2.0 | 0/1 | Planned | - |
+| 13. Combo-Watched-After Pin (S6) | v2.0 | 1/1 | Complete | 2026-05-06 |
 | 14. Admin Debug Page & Eval Pipeline | v2.0 | 0/TBD | Not started | - |
