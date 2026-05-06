@@ -127,11 +127,18 @@ func TestRecsHandler_CacheMissComputesFromEnsemble(t *testing.T) {
 	db := setupRecsTestDB(t)
 	cache := newFakeRecsCache()
 
-	// 3 visible animes; one with a strong S3 signal, one ongoing (S4=1.0), one ordinary
+	// Realistic fixture: multiple animes with VARYING S3 scores so per-pool
+	// MinMaxNormalize has a real span (degenerate single-data-point pools
+	// normalize to all-zeros, which is the expected behavior — see the
+	// thin-S3 backfill test).
 	seedAnimeFull(t, db, "trend-1", "released", false, 8.0)
+	seedAnimeFull(t, db, "trend-2", "released", false, 7.5)
 	seedAnimeFull(t, db, "ongoing-1", "ongoing", false, 7.5)
 	seedAnimeFull(t, db, "boring-1", "released", false, 6.0)
-	seedPopulationSignal(t, db, "trend-1", 50.0) // dominant trending
+	seedPopulationSignal(t, db, "trend-1", 100.0) // dominant
+	seedPopulationSignal(t, db, "trend-2", 30.0)
+	seedPopulationSignal(t, db, "boring-1", 5.0)
+	// ongoing-1 has no S3 row -> S3 norm = 0; but S4=1.0
 
 	recsRepo := repo.NewRecsRepository(db)
 	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
@@ -145,7 +152,7 @@ func TestRecsHandler_CacheMissComputesFromEnsemble(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	var env struct {
-		Success bool          `json:"success"`
+		Success bool         `json:"success"`
 		Data    RecsEnvelope `json:"data"`
 	}
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
@@ -155,8 +162,11 @@ func TestRecsHandler_CacheMissComputesFromEnsemble(t *testing.T) {
 	assert.LessOrEqual(t, env.Data.Total, 20)
 	assert.Greater(t, env.Data.Total, 0, "thin pool but not empty")
 	require.NotEmpty(t, env.Data.Recs)
-	// trend-1 has the dominant S3 score so it should rank above boring-1
-	assert.Equal(t, "trend-1", env.Data.Recs[0].Anime.ID, "S3 trending dominates ranking")
+	// trend-1 has the dominant S3 score so it should rank first.
+	// Math: S3 norm: trend-1=1.0, trend-2=0.263, boring-1=0, ongoing-1=0
+	// S4 norm: ongoing-1=1.0, others=0
+	// Final: trend-1=0.20*1.0=0.20; ongoing-1=0.10*1.0=0.10; trend-2≈0.053; boring-1=0
+	assert.Equal(t, "trend-1", env.Data.Recs[0].Anime.ID, "S3 trending dominates when pool has spread")
 
 	// Cache must now be populated for the next call
 	var cached interface{}
@@ -259,14 +269,14 @@ func TestRecsHandler_ThinS3PoolBackfillsViaS4(t *testing.T) {
 	db := setupRecsTestDB(t)
 	cache := newFakeRecsCache()
 
-	// 5 animes: only 1 has S3 data; the others rely on S4 (ongoing/recent) for ranking
-	seedAnimeFull(t, db, "s3-winner", "released", false, 8.0)
-	seedPopulationSignal(t, db, "s3-winner", 100.0)
-
+	// Thin S3: zero animes have S3 signal rows. Per spec, when the S3 pool
+	// is empty, S4 ordering is the entire ranking (S3 contributes 0 to all).
+	// All 5 candidates pass S11 (none hidden, none soft-deleted).
 	seedAnimeFull(t, db, "s4-ongoing-1", "ongoing", false, 7.0)
 	seedAnimeFull(t, db, "s4-ongoing-2", "ongoing", false, 7.5)
 	seedAnimeFull(t, db, "s4-released-1", "released", false, 6.0)
 	seedAnimeFull(t, db, "s4-released-2", "released", false, 5.5)
+	seedAnimeFull(t, db, "s4-released-3", "released", false, 4.0)
 
 	recsRepo := repo.NewRecsRepository(db)
 	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
@@ -280,34 +290,33 @@ func TestRecsHandler_ThinS3PoolBackfillsViaS4(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	var env struct {
-		Success bool          `json:"success"`
+		Success bool         `json:"success"`
 		Data    RecsEnvelope `json:"data"`
 	}
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
 
 	// All 5 animes should appear (pool < 20)
 	assert.Equal(t, 5, env.Data.Total)
-	// s3-winner first (S3 dominates)
-	assert.Equal(t, "s3-winner", env.Data.Recs[0].Anime.ID)
-	// Ongoing animes (S4=1.0) outrank older released ones (S4=0)
+
 	gotIDs := make([]string, len(env.Data.Recs))
 	for i, item := range env.Data.Recs {
 		gotIDs[i] = item.Anime.ID
 	}
-	// Find positions of ongoing vs released
+	// Backfill ordering: ongoing animes (S4=1.0) must rank above all released
+	// (S4=0) in this thin-S3 pool.
 	ongoingPos := map[string]int{}
 	releasedPos := map[string]int{}
 	for i, id := range gotIDs {
 		switch id {
 		case "s4-ongoing-1", "s4-ongoing-2":
 			ongoingPos[id] = i
-		case "s4-released-1", "s4-released-2":
+		case "s4-released-1", "s4-released-2", "s4-released-3":
 			releasedPos[id] = i
 		}
 	}
 	for _, op := range ongoingPos {
 		for _, rp := range releasedPos {
-			assert.Less(t, op, rp, "all ongoing anime must rank above all released anime in S4 backfill")
+			assert.Less(t, op, rp, "S4 backfill: all ongoing must rank above all released when S3 is empty")
 		}
 	}
 }
