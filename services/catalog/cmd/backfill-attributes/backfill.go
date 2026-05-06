@@ -30,6 +30,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -40,6 +41,44 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/anilist"
 )
+
+// defaultRetryWaits is the production exponential-backoff schedule for
+// HTTP 429 / "Too Many Requests" responses from Shikimori or AniList:
+// 5s -> 15s -> 60s. Up to 3 retries per fetch (4 attempts total). On the
+// 4th failure the row is counted as failed and the loop continues —
+// matches the plan's "continue on individual failures" contract.
+//
+// Decision driver (Plan 12-02 deviation, Option A): the first production
+// run populated ~1080 rows before Shikimori started returning 429 in
+// bursts. The operator chose backoff over reducing RPS because most
+// minutes the 3 RPS budget is fine; only short bursts trip the limiter.
+var defaultRetryWaits = []time.Duration{
+	5 * time.Second,
+	15 * time.Second,
+	60 * time.Second,
+}
+
+// is429Error reports whether err looks like a rate-limit response from
+// Shikimori or AniList. Both surface the limit through different layers:
+//   - Shikimori GraphQL — wraps an error with body "Too Many Requests"
+//     or "Retry later" — no HTTP status code in the message.
+//   - HTTP 429 — explicit numeric status surfaced when the GraphQL layer
+//     decodes the response body or fails before that.
+//
+// We accept a substring match so a wrapped errors.ExternalAPI cause is
+// caught regardless of how many layers wrap the original.
+func is429Error(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if msg == "" {
+		return false
+	}
+	return strings.Contains(msg, "429") ||
+		strings.Contains(msg, "too many requests") ||
+		strings.Contains(msg, "retry later")
+}
 
 // Consumer-side interfaces — kept small so tests can mock them.
 type shikimoriFetcher interface {
@@ -61,6 +100,10 @@ type Config struct {
 	SkipShikimori bool
 	SkipTags      bool
 	LogEvery      int // default 100
+	// RetryWaits overrides the default 429 backoff schedule. Empty/nil
+	// uses defaultRetryWaits (5s/15s/60s). Tests pass compressed values
+	// (e.g. 1ms/3ms/5ms) to keep the suite fast.
+	RetryWaits []time.Duration
 }
 
 // Result types — kept separate so the operator log can break out the two
@@ -87,7 +130,84 @@ func NewBackfillRunner(db *gorm.DB, sh shikimoriFetcher, al anilistFetcher, arm 
 	if cfg.LogEvery <= 0 {
 		cfg.LogEvery = 100
 	}
+	if len(cfg.RetryWaits) == 0 {
+		cfg.RetryWaits = defaultRetryWaits
+	}
 	return &BackfillRunner{db: db, shikimori: sh, anilist: al, arm: arm, log: log, cfg: cfg}
+}
+
+// fetchShikimoriWithBackoff calls r.shikimori.GetAnimeByID and retries
+// on 429 / "Too Many Requests" / "Retry later" responses with the
+// schedule in r.cfg.RetryWaits (default 5s/15s/60s, up to 3 retries).
+//
+// Non-429 errors short-circuit and are returned to the caller — they
+// reflect bugs (DNS, parse, schema mismatch) that retrying won't fix.
+//
+// Context cancellation aborts the wait between retries.
+func (r *BackfillRunner) fetchShikimoriWithBackoff(ctx context.Context, animeID, shikimoriID string) (*domain.Anime, error) {
+	var lastErr error
+	for attempt := 0; attempt <= len(r.cfg.RetryWaits); attempt++ {
+		anime, err := r.shikimori.GetAnimeByID(ctx, shikimoriID)
+		if err == nil {
+			return anime, nil
+		}
+		lastErr = err
+		if !is429Error(err) {
+			// Non-rate-limit error: do not retry.
+			return nil, err
+		}
+		if attempt == len(r.cfg.RetryWaits) {
+			// Out of retries; surface the last 429.
+			break
+		}
+		wait := r.cfg.RetryWaits[attempt]
+		r.log.Warnw("backfill 429 backoff",
+			"source", "shikimori",
+			"anime_id", animeID,
+			"shikimori_id", shikimoriID,
+			"attempt", attempt+1,
+			"wait_seconds", int(wait.Seconds()),
+			"error", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	return nil, lastErr
+}
+
+// fetchAnilistTagsWithBackoff mirrors fetchShikimoriWithBackoff for the
+// AniList tag fetch. Same 429-detection rules, same backoff schedule.
+func (r *BackfillRunner) fetchAnilistTagsWithBackoff(ctx context.Context, animeID string, anilistID int) ([]anilist.Tag, error) {
+	var lastErr error
+	for attempt := 0; attempt <= len(r.cfg.RetryWaits); attempt++ {
+		tags, err := r.anilist.FetchTags(ctx, anilistID)
+		if err == nil {
+			return tags, nil
+		}
+		lastErr = err
+		if !is429Error(err) {
+			return nil, err
+		}
+		if attempt == len(r.cfg.RetryWaits) {
+			break
+		}
+		wait := r.cfg.RetryWaits[attempt]
+		r.log.Warnw("backfill 429 backoff",
+			"source", "anilist",
+			"anime_id", animeID,
+			"anilist_id", anilistID,
+			"attempt", attempt+1,
+			"wait_seconds", int(wait.Seconds()),
+			"error", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	return nil, lastErr
 }
 
 // candidate is the minimal projection needed to drive a fetch.
@@ -155,7 +275,7 @@ func (r *BackfillRunner) ShikimoriHalf(ctx context.Context) (ShikimoriHalfResult
 			return res, nil
 		}
 
-		anime, err := r.shikimori.GetAnimeByID(ctx, cand.ShikimoriID)
+		anime, err := r.fetchShikimoriWithBackoff(ctx, cand.ID, cand.ShikimoriID)
 		if err != nil {
 			r.log.Warnw("shikimori-half: fetch failed, continuing",
 				"anime_id", cand.ID, "shikimori_id", cand.ShikimoriID, "error", err)
@@ -293,7 +413,7 @@ func (r *BackfillRunner) AnilistHalf(ctx context.Context) (AnilistHalfResult, er
 			continue
 		}
 
-		tags, err := r.anilist.FetchTags(ctx, *mapping.AniList)
+		tags, err := r.fetchAnilistTagsWithBackoff(ctx, cand.ID, *mapping.AniList)
 		if err != nil {
 			r.log.Warnw("anilist-half: fetch tags failed, continuing",
 				"anime_id", cand.ID, "anilist_id", *mapping.AniList, "error", err)

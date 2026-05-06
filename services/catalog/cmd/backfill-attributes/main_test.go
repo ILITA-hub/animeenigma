@@ -31,6 +31,9 @@ func TestParseFlags_Defaults(t *testing.T) {
 	if c.ShikimoriRPS != 3 {
 		t.Errorf("ShikimoriRPS default: got %d, want 3", c.ShikimoriRPS)
 	}
+	if c.AnilistRPS != 1 {
+		t.Errorf("AnilistRPS default: got %d, want 1", c.AnilistRPS)
+	}
 }
 
 // TestParseFlags_Overrides confirms flag-line overrides reach the
@@ -44,6 +47,7 @@ func TestParseFlags_Overrides(t *testing.T) {
 		"--skip-tags",
 		"--log-every=10",
 		"--shikimori-rps=5",
+		"--anilist-rps=2",
 	}
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	c := parseFlags()
@@ -64,5 +68,8 @@ func TestParseFlags_Overrides(t *testing.T) {
 	}
 	if c.ShikimoriRPS != 5 {
 		t.Errorf("ShikimoriRPS: got %d, want 5", c.ShikimoriRPS)
+	}
+	if c.AnilistRPS != 2 {
+		t.Errorf("AnilistRPS: got %d, want 2", c.AnilistRPS)
 	}
 }

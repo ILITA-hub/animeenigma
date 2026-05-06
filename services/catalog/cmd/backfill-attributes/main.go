@@ -13,6 +13,7 @@
 //	--skip-tags       run only the Shikimori half
 //	--log-every N     progress log frequency (default 100)
 //	--shikimori-rps N Shikimori rate limit override (default 3)
+//	--anilist-rps N   AniList rate limit override (default 1)
 //
 // Exit codes:
 //
@@ -44,6 +45,7 @@ type cliConfig struct {
 	SkipTags      bool
 	LogEvery      int
 	ShikimoriRPS  int
+	AnilistRPS    int
 }
 
 func parseFlags() cliConfig {
@@ -54,6 +56,7 @@ func parseFlags() cliConfig {
 	flag.BoolVar(&c.SkipTags, "skip-tags", false, "skip the AniList tag-fetch half")
 	flag.IntVar(&c.LogEvery, "log-every", 100, "log progress every N rows")
 	flag.IntVar(&c.ShikimoriRPS, "shikimori-rps", 3, "Shikimori rate limit in req/sec")
+	flag.IntVar(&c.AnilistRPS, "anilist-rps", 1, "AniList rate limit in req/sec (default 1, max ~1.5 — AniList caps at 90/min)")
 	flag.Parse()
 	return c
 }
@@ -95,7 +98,11 @@ func main() {
 		RateLimit:  cli.ShikimoriRPS,
 	}
 	shikimoriClient := shikimori.NewClient(shikimoriCfg, log)
-	anilistClient := anilist.NewClient(log)
+	anilistClient := anilist.NewClientWithBaseURLAndRateLimit(
+		getenv("ANILIST_GRAPHQL_URL", "https://graphql.anilist.co"),
+		cli.AnilistRPS,
+		log,
+	)
 	armClient := idmapping.NewClient()
 
 	runner := NewBackfillRunner(db.DB, shikimoriClient, anilistClient, armClient, log, Config{
