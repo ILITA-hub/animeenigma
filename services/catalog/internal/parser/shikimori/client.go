@@ -103,22 +103,33 @@ type animeByIDQuery struct {
 }
 
 type shikimoriAnime struct {
-	ID            graphql.String   `graphql:"id"`
-	Name          graphql.String   `graphql:"name"`
-	Russian       graphql.String   `graphql:"russian"`
-	Japanese      graphql.String   `graphql:"japanese"`
-	Description   graphql.String   `graphql:"description"`
-	Score         graphql.Float    `graphql:"score"`
-	Status        graphql.String   `graphql:"status"`
-	Episodes      graphql.Int      `graphql:"episodes"`
-	EpisodesAired graphql.Int      `graphql:"episodesAired"`
-	Duration      graphql.Int      `graphql:"duration"`
-	MalId         graphql.String   `graphql:"malId"`
-	AiredOn       *shikimoriDate   `graphql:"airedOn"`
-	NextEpisodeAt graphql.String   `graphql:"nextEpisodeAt"`
-	Poster        *shikimoriPoster `graphql:"poster"`
-	Genres        []shikimoriGenre `graphql:"genres"`
-	Videos        []shikimoriVideo `graphql:"videos"`
+	ID            graphql.String     `graphql:"id"`
+	Name          graphql.String     `graphql:"name"`
+	Russian       graphql.String     `graphql:"russian"`
+	Japanese      graphql.String     `graphql:"japanese"`
+	Description   graphql.String     `graphql:"description"`
+	Score         graphql.Float      `graphql:"score"`
+	Status        graphql.String     `graphql:"status"`
+	// Phase 12 (Decision §A1) — S5 attribute dimensions.
+	// Kind (TV/Movie/OVA/...), Rating (G/PG/PG-13/R/R+/Rx — used as the
+	// S5 demographic proxy per Decision §A3), Source (manga/light_novel/
+	// original/...) populate animes.kind, animes.rating, animes.material_source.
+	Kind          graphql.String     `graphql:"kind"`
+	Rating        graphql.String     `graphql:"rating"`
+	Source        graphql.String     `graphql:"source"`
+	Episodes      graphql.Int        `graphql:"episodes"`
+	EpisodesAired graphql.Int        `graphql:"episodesAired"`
+	Duration      graphql.Int        `graphql:"duration"`
+	MalId         graphql.String     `graphql:"malId"`
+	AiredOn       *shikimoriDate     `graphql:"airedOn"`
+	NextEpisodeAt graphql.String     `graphql:"nextEpisodeAt"`
+	Poster        *shikimoriPoster   `graphql:"poster"`
+	Genres        []shikimoriGenre   `graphql:"genres"`
+	// Phase 12 (Decision §A1/A2) — Shikimori does not separate producers,
+	// so this single Studios payload feeds both spec dimensions, collapsed
+	// in S5 to a 0.25 weight.
+	Studios       []shikimoriStudio  `graphql:"studios"`
+	Videos        []shikimoriVideo   `graphql:"videos"`
 }
 
 type shikimoriDate struct {
@@ -137,6 +148,13 @@ type shikimoriGenre struct {
 	Russian graphql.String `graphql:"russian"`
 }
 
+// shikimoriStudio mirrors shikimoriGenre minus the Russian field —
+// Shikimori's studios payload has no Russian translations (Phase 12 §A1).
+type shikimoriStudio struct {
+	ID   graphql.String `graphql:"id"`
+	Name graphql.String `graphql:"name"`
+}
+
 type shikimoriVideo struct {
 	ID       graphql.String `graphql:"id"`
 	URL      graphql.String `graphql:"url"`
@@ -152,12 +170,13 @@ func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int)
 	// Don't filter by kind to include TV, ONA, OVA, movies, etc.
 	gqlQuery := fmt.Sprintf(`{
 		animes(search: "%s", limit: %d, page: %d) {
-			id name russian japanese description score status episodes episodesAired duration
+			id name russian japanese description score status kind rating source episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
 			genres { id name russian }
+			studios { id name }
 		}
 	}`, query, limit, page)
 
@@ -209,6 +228,10 @@ type rawAnime struct {
 	Description    string  `json:"description"`
 	Score          float64 `json:"score"`
 	Status         string  `json:"status"`
+	// Phase 12 (Decision §A1) — S5 attribute dimensions.
+	Kind           string  `json:"kind"`
+	Rating         string  `json:"rating"`
+	Source         string  `json:"source"`
 	Episodes       int     `json:"episodes"`
 	EpisodesAired  int     `json:"episodesAired"`
 	Duration       int     `json:"duration"`
@@ -227,6 +250,13 @@ type rawAnime struct {
 		Name    string `json:"name"`
 		Russian string `json:"russian"`
 	} `json:"genres"`
+	// Phase 12 (Decision §A1/A2) — studios. Shikimori does not separate
+	// producers, so this single payload feeds the collapsed S5 studios
+	// dimension at weight 0.25.
+	Studios []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"studios"`
 }
 
 func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
@@ -245,6 +275,10 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 			EpisodeDuration: a.Duration,
 			MALID:           a.MalID,
 		}
+		// Phase 12 (Decision §A1) — S5 attribute dimensions.
+		anime.Kind = a.Kind
+		anime.Rating = a.Rating
+		anime.MaterialSource = a.Source
 		if a.AiredOn != nil {
 			anime.Year = a.AiredOn.Year
 			anime.Season = detectSeason(a.AiredOn.Month)
@@ -267,6 +301,13 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 				ID:     g.ID, // Shikimori genre ID
 				Name:   g.Name,
 				NameRU: g.Russian,
+			})
+		}
+		// Phase 12 (Decision §A1/A2) — studios m2m hydration.
+		for _, st := range a.Studios {
+			anime.Studios = append(anime.Studios, domain.Studio{
+				ID:   st.ID,
+				Name: st.Name,
 			})
 		}
 		result = append(result, anime)
@@ -306,12 +347,13 @@ func (c *Client) GetAnimeByIDs(ctx context.Context, shikimoriIDs []string) ([]*d
 	ids := strings.Join(shikimoriIDs, ",")
 	gqlQuery := fmt.Sprintf(`{
 		animes(ids: "%s", limit: %d) {
-			id name russian japanese description score status episodes episodesAired duration
+			id name russian japanese description score status kind rating source episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
 			genres { id name russian }
+			studios { id name }
 		}
 	}`, ids, len(shikimoriIDs))
 
@@ -324,12 +366,13 @@ func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*doma
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, order: ranked) {
-			id name russian japanese description score status episodes episodesAired duration
+			id name russian japanese description score status kind rating source episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
 			genres { id name russian }
+			studios { id name }
 		}
 	}`, limit, page)
 
@@ -342,12 +385,13 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, order: popularity) {
-			id name russian japanese description score status episodes episodesAired duration
+			id name russian japanese description score status kind rating source episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
 			poster { originalUrl }
 			genres { id name russian }
+			studios { id name }
 		}
 	}`, limit, page)
 
@@ -400,6 +444,11 @@ func (c *Client) mapAnime(sa shikimoriAnime) *domain.Anime {
 		MALID:           string(sa.MalId),
 	}
 
+	// Phase 12 (Decision §A1) — S5 attribute dimensions.
+	anime.Kind = string(sa.Kind)
+	anime.Rating = string(sa.Rating)
+	anime.MaterialSource = string(sa.Source)
+
 	if sa.AiredOn != nil {
 		anime.Year = int(sa.AiredOn.Year)
 		anime.Season = detectSeason(int(sa.AiredOn.Month))
@@ -429,6 +478,14 @@ func (c *Client) mapAnime(sa shikimoriAnime) *domain.Anime {
 			ID:     string(g.ID),
 			Name:   string(g.Name),
 			NameRU: string(g.Russian),
+		})
+	}
+
+	// Phase 12 (Decision §A1/A2) — studios m2m hydration.
+	for _, st := range sa.Studios {
+		anime.Studios = append(anime.Studios, domain.Studio{
+			ID:   string(st.ID),
+			Name: string(st.Name),
 		})
 	}
 
