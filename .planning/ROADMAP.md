@@ -25,9 +25,9 @@
 
 ### v2.0 Recommendations Engine (In Progress)
 
-- [ ] **Phase 9: Recs Foundation — Interface, Ensemble, Normalizer, Schema** — Land the pluggable `SignalModule` interface, weighted-ensemble aggregator, per-pool min-max normalizer, and three new tables. No signals, no user-facing surface — silent infrastructure other phases bolt onto.
-- [ ] **Phase 10: Population Signals, Filter, Trending Row** — Land S3 (trending), S4 (recency), S11 (filter), 60-minute population cron, Redis 6h top-N cache, and the anonymous "Trending now" home row.
-- [ ] **Phase 11: User Signals & "Up Next for you" Row** — Land S1 (score-cluster) + S2 (item-item metadata), 6-hour user cron + debounced on-write trigger, and the logged-in "Up Next for you" home row.
+- [x] **Phase 9: Recs Foundation — Interface, Ensemble, Normalizer, Schema** — Land the pluggable `SignalModule` interface, weighted-ensemble aggregator, per-pool min-max normalizer, and three new tables. No signals, no user-facing surface — silent infrastructure other phases bolt onto. ✅ shipped 2026-05-06
+- [x] **Phase 10: Population Signals, Filter, Trending Row** — Land S3 (trending), S4 (recency), S11 (filter), 60-minute population cron, Redis 6h top-N cache, and the anonymous "Trending now" home row. ✅ shipped 2026-05-06
+- [x] **Phase 11: User Signals & "Up Next for you" Row** — Land S1 (score-cluster) + S2 (item-item metadata), 6-hour user cron + debounced on-write trigger, and the logged-in "Up Next for you" home row. ✅ shipped 2026-05-06
 - [ ] **Phase 12: TF-IDF Attribute Affinity (S5)** — Land S5 with seven weighted attribute dimensions and the Kodik episode-count fallback. Personalization quality jumps; weights are tuned via admin breakdown view.
 - [ ] **Phase 13: Combo-Watched-After Pin (S6)** — Land S6 cascade (local co-occurrence → Shikimori `/similar`), synchronous seed update on `MarkEpisodeWatched`, and the "Because you finished X" pinned tile.
 - [ ] **Phase 14: Admin Debug Page & Eval Pipeline** — Land the full `/admin/recs/:user_id` page (per-signal contribution, S5 term expand, S11 audit), force-recompute endpoint, frontend `rec_click` / `rec_watched` events, and Prometheus `rec_signal_ctr` metric.
@@ -97,7 +97,7 @@
   3. The normalizer's property tests (empty pool / single element / all-equal / normal pool) pass under `go test ./services/player/internal/service/recs/...`
   4. Adding a second test signal does not require diff in `ensemble.go`, `normalize.go`, or any API handler beyond a one-line registry entry — verified by inspecting the diff during code review
 **Plans:** 1 plan
-- [ ] 09-01-PLAN.md — Land SignalModule interface, weighted-ensemble aggregator, per-pool min-max normalizer, three Postgres tables, and precompute orchestrator stub (silent infrastructure for v2.0 signals)
+- [x] 09-01-PLAN.md — Land SignalModule interface, weighted-ensemble aggregator, per-pool min-max normalizer, three Postgres tables, and precompute orchestrator stub (silent infrastructure for v2.0 signals) ✅ shipped 2026-05-06
 
 #### Phase 10: Population Signals, Filter, Trending Row
 **Goal**: Land the three stateless / population-wide signals (S3 trending, S4 recency, S11 filter), the 60-minute precompute cron, the Redis 6h top-N cache, and the anonymous "Trending now" home row. After this phase ships, anonymous users on `/` see a working trending row backed by real population data.
@@ -110,7 +110,7 @@
   4. A second identical request to `/api/users/recs` within 6 hours hits the Redis cache (verified via `recs:popsignal:lastcomputed` key existing and per-anon `recs:user:anon:{anon_id}:topN` returning `cache_hit: true` in the response envelope)
   5. Cron failure (e.g. forced DB error in test) is logged but does not crash the service; stale signals continue serving until the next successful run
 **Plans:** 1 plan
-- [ ] 10-01-PLAN.md — Land S3 (trending), S4 (recency), S11 (hidden filter), 60-min population cron, Redis 6h top-N cache, GET /api/users/recs handler, useRecs composable, and Trending now row on Home.vue (EN + RU + JA i18n)
+- [x] 10-01-PLAN.md — Land S3 (trending), S4 (recency), S11 (hidden filter), 60-min population cron, Redis 6h top-N cache, GET /api/users/recs handler, useRecs composable, and Trending now row on Home.vue (EN + RU + JA i18n) ✅ shipped 2026-05-06
 **UI hint**: yes
 
 #### Phase 11: User Signals & "Up Next for you" Row
@@ -124,7 +124,7 @@
   4. The 6-hour user-signal cron writes fresh `rec_user_signals.s1_vector` and updates `last_computed` for every user with at least one `watch_history` row; the on-write trigger after a `watch_history` insert re-runs the per-user precompute within 5 minutes (with a 5-minute-per-user debounce) and busts the Redis cache for that user
   5. The strict no-cross-language / no-cross-dub-sub boundary from VAL-02 is not violated by any rec — verified by a test that seeds a JP-sub-only user and asserts no RU-dub anime appears in the row (informational only; recs do not write preference state)
 **Plans:** 1 plan
-- [ ] 11-01-PLAN.md — Land S1 (score-cluster k-NN), S2 (item-item genres metadata, request-time), S11.CandidatePoolForUser, libs/cache.SetNX, UserOrchestrator with 6h cron + debounced TriggerForUser, personalized GET /api/users/recs branch, and auth-aware refresh in useRecs (genres-only S2 per plan-phase schema inventory; tags/studios deferred to Phase 12)
+- [x] 11-01-PLAN.md — Land S1 (score-cluster k-NN), S2 (item-item genres metadata, request-time), S11.CandidatePoolForUser, libs/cache.SetNX, UserOrchestrator with 6h cron + debounced TriggerForUser, personalized GET /api/users/recs branch, and auth-aware refresh in useRecs (genres-only S2 per plan-phase schema inventory; tags/studios deferred to Phase 12) ✅ shipped 2026-05-06
 **UI hint**: yes
 
 #### Phase 12: TF-IDF Attribute Affinity (S5)

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Recommendations Engine
 status: in_progress
-last_updated: "2026-05-06T15:00:00.000Z"
-last_activity: 2026-05-06 — Phase 10 (Population Signals + Trending Row) shipped
+last_updated: "2026-05-06T06:35:00.000Z"
+last_activity: 2026-05-06 — Phase 11 (User Signals + Up Next Row) shipped
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 33
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-04 for v2.0)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
-**Current focus:** Phase 10 (Population Signals + Trending Row) shipped 2026-05-06 — anonymous users see a working "Trending now" home row backed by S3 + S4 ensemble, served from Redis 6h cache, refreshed by 60-min cron. Phase 11 (User Signals + Up Next Row) opens next.
+**Current focus:** Phase 11 (User Signals + Up Next Row) shipped 2026-05-06 — logged-in users now see a personalized "Up Next for you" row backed by full S1+S2+S3+S4 ensemble (S5 omitted), per-user Redis 6h cache, 6h cron + 5min-debounced on-write trigger, completed/dropped exclusion. Anonymous trending row (Phase 10) unchanged. Phase 12 (S5 TF-IDF affinity + attribute schema backfill) opens next.
 
 ## Current Position
 
-Phase: Phase 11 — User Signals & "Up Next for you" Row (pending discuss/plan)
+Phase: Phase 12 — S5 TF-IDF Affinity + Attribute Backfill (pending discuss/plan)
 Plan: —
-Status: Phase 9 ✓; Phase 10 ✓; Phase 11 opening
-Last activity: 2026-05-06 — Phase 10 shipped (16 atomic commits, S3+S4 ensemble live, Redis cache live)
+Status: Phase 9 ✓; Phase 10 ✓; Phase 11 ✓; Phase 12 opening
+Last activity: 2026-05-06 — Phase 11 shipped (16 atomic commits, full ensemble live, OptionalJWT gateway middleware added)
 
 ## Performance Metrics
 
@@ -83,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-06T00:00:00.000Z
-Stopped at: v2.0 roadmap created and approved (Phases 9-14); ready for `/gsd-plan-phase 9`.
+Last session: 2026-05-06T06:35:00.000Z
+Stopped at: Phase 11 (User Signals + Up Next Row) shipped — 16 commits, all 5 success criteria verified live, deployed to production. Ready for `/gsd-discuss-phase 12`.
 Resume file: —
