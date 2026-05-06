@@ -154,7 +154,8 @@
   4. If the score-7 cascade pool is empty for both local and Shikimori, the threshold drops to score ≥ 5 (never to score > 0); if still empty, the pin is silently omitted and the row falls back to the Phase-12 ensemble — verified by unit test
   5. The synchronous S6 seed update inside `MarkEpisodeWatched` writes `s6_seed_anime_id` / `s6_seed_completed_at` / `s6_seed_score` and invalidates `recs:user:{user_id}:topN` in Redis; the request returns within 5 ms additional overhead measured against the Phase-12 baseline
   6. The pinned tile is visually distinct from the rest of the row (border, label, or badge — designer's call) so users perceive it as a recommendation tied to a specific completion, not a generic rec
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 13-01-PLAN.md — Land Catalog /similar endpoint, RecsRepository.UpdateS6Seed + GetTopCoOccurrences, CoOccurrenceOrchestrator (24h cron), S6ComboPin resolver (local → Shikimori → score-5 cascade), synchronous seed update inside MarkEpisodeWatched, RecsHandler S6 pin integration, Home.vue pin treatment (border + badge + reason line), and EN/RU/JA i18n keys
 **UI hint**: yes
 
 #### Phase 14: Admin Debug Page & Eval Pipeline
@@ -196,5 +197,5 @@ v1.0 phases (1-8) executed in numeric order and shipped 2026-05-03. v2.0 phases 
 | 10. Population Signals, Filter, Trending Row | v2.0 | 0/1 | Planned | - |
 | 11. User Signals & "Up Next for you" Row | v2.0 | 0/1 | Planned | - |
 | 12. TF-IDF Attribute Affinity (S5) | v2.0 | 0/TBD | Not started | - |
-| 13. Combo-Watched-After Pin (S6) | v2.0 | 0/TBD | Not started | - |
+| 13. Combo-Watched-After Pin (S6) | v2.0 | 0/1 | Planned | - |
 | 14. Admin Debug Page & Eval Pipeline | v2.0 | 0/TBD | Not started | - |
