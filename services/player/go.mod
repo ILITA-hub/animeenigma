@@ -13,7 +13,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/prometheus/client_golang v1.19.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	go.uber.org/zap v1.27.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.0

@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/minio/minio-go/v7 v7.0.67
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 )
 
 require (

@@ -10,7 +10,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.0
 )

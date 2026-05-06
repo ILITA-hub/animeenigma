@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Recommendations Engine
 status: executing
-stopped_at: Phase 12 Wave 1 (catalog schema + Shikimori parser + AniList client) shipped — 8 commits, schema verified live in postgres, Shikimori smoke test populated kind/rating/material_source/studios end-to-end. Wave 2 (backfill 3857 missing rows) next.
-last_updated: "2026-05-06T10:15:00.000Z"
-last_activity: 2026-05-06 -- Phase 12 plan 01 (Wave 1) complete
+stopped_at: Phase 12 Wave 1 (catalog schema + Shikimori parser + AniList client) shipped — 8 commits including 2 Rule-1 deviation fixes, full production verification passed. Frieren refresh proves the Shikimori parser end-to-end (kind=tv, rating=pg_13, material_source=manga, studios=[Madhouse]). Wave 2 (services/maintenance/cmd/backfill-attributes — 3857 rows) is the next plan.
+last_updated: "2026-05-06T11:55:13.863Z"
+last_activity: 2026-05-06
 progress:
   total_phases: 14
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 4
-  percent: 57
+  total_plans: 6
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-04 for v2.0)
 ## Current Position
 
 Phase: 12 (TF-IDF Attribute Affinity (S5)) — EXECUTING
-Plan: 2 of 3 (Wave 2 — backfill)
-Status: Executing Phase 12 — Wave 1 complete, Wave 2 next
-Last activity: 2026-05-06 -- Phase 12 plan 01 (Wave 1) complete; 3857 rows queued for Wave 2 backfill
+Plan: 3 of 3 (Wave 2 — backfill)
+Status: Ready to execute
+Last activity: 2026-05-06
 
 ## Performance Metrics
 
