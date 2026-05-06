@@ -31,6 +31,11 @@
     "announced": "Анонс",
     "episodeCount": "{count} эп."
   },
+  "recs": {
+    "trending": "Тренды сейчас",
+    "upNext": "Подобрано для вас",
+    "empty": "Пока нет рекомендаций"
+  },
   "anime": {
     "detailsTitle": "Детали аниме",
     "watch": "Смотреть",
