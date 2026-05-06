@@ -137,7 +137,11 @@
   3. All seven attribute dimensions (tags, studios, genres, demographic, source, type, producers) contribute to S5 with their locked weights; missing attribute columns on `animes` are either backfilled from Shikimori during this phase OR explicitly skipped with a logged warning (decision documented in the plan)
   4. The full ensemble `0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5` runs end-to-end with no NaN / Inf / negative values across the candidate pool (property test on production-like fixture)
   5. After redeploy, the existing logged-in row (Phase 11) still renders 20 cards but now with visibly different ordering for the seeded `ui_audit_bot` — the top-3 anime change relative to the Phase-11 baseline (regression sanity check that S5 is actually contributing)
-**Plans**: TBD
+**Plans:** 3 plans
+- [ ] 12-01-PLAN.md — Land Phase-12 schema additions on the catalog service: Kind / Rating / MaterialSource columns + Studios m2m + Tags m2m on Anime, extend Shikimori parser GraphQL queries on all 6 fetch paths, add new AniList GraphQL client with FetchTags + slugifyTagName, register new types with AutoMigrate. Producers absorbed into studios per Decision §A2. (Wave 1)
+- [ ] 12-02-PLAN.md — Land the one-shot backfill tool in the maintenance service: BackfillRunner with Shikimori half (kind/rating/material_source/studios) + AniList half (tags via ARM->AniList mapping), Makefile target make backfill-attributes, dry-run + canary + full-run gating. Idempotent re-runnable. (Wave 2 — depends on 12-01)
+- [ ] 12-03-PLAN.md — Implement S5 TF-IDF SignalModule with Kodik fallback, register in handler ensemble at weight 0.20 (full ensemble: 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5), add to UserOrchestrator module list, ship Phase-12 changelog entry. Top-3 ordering shift verified vs Phase-11 baseline. (Wave 3 — depends on 12-02)
+
 
 #### Phase 13: Combo-Watched-After Pin (S6)
 **Goal**: Land S6 with local co-occurrence + Shikimori `/similar` cascade, the synchronous seed-update path inside `MarkEpisodeWatched`, and the "Because you finished X" pinned tile in the frontend row. After this phase ships, finishing an anime with score ≥ 7 surfaces an instant pin on the home page.
