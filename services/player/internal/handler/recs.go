@@ -4,8 +4,8 @@
 // state: anonymous callers still get the single shared trending top-N
 // (row_label_key=recs.trending), while logged-in callers get a personalized
 // "Up Next for you" row (row_label_key=recs.upNext) computed from the full
-// 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 ensemble, with completed/dropped
-// anime excluded by S11.CandidatePoolForUser.
+// 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 Phase-12 ensemble, with
+// completed/dropped anime excluded by S11.CandidatePoolForUser.
 package handler
 
 import (
@@ -103,6 +103,7 @@ type RecsHandler struct {
 	s4  *signals.S4Recency
 	s1  *signals.S1ScoreCluster
 	s2  *signals.S2Metadata
+	s5  *signals.S5Attribute // Phase 12 (REC-SIG-05) — TF-IDF attribute affinity
 }
 
 // NewRecsHandler wires the handler with its dependencies. The signal modules
@@ -118,6 +119,7 @@ func NewRecsHandler(db *gorm.DB, recsRepo *repo.RecsRepository, cache recsCache,
 		s4:    signals.NewS4Recency(db),
 		s1:    signals.NewS1ScoreCluster(db, recsRepo),
 		s2:    signals.NewS2Metadata(db),
+		s5:    signals.NewS5Attribute(db, recsRepo), // Phase 12 (REC-SIG-05)
 	}
 }
 
@@ -318,9 +320,9 @@ func (h *RecsHandler) computeFresh(ctx context.Context) (RecsEnvelope, error) {
 }
 
 // computeFreshForUser runs the personalized ensemble for a logged-in user:
-// S11.CandidatePoolForUser (excludes completed/dropped) -> full ensemble
-// 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 -> stable sort -> top-50 server slice
-// -> hydrate -> envelope with row_label_key=recs.upNext.
+// S11.CandidatePoolForUser (excludes completed/dropped) -> full Phase-12
+// ensemble 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 -> stable sort
+// -> top-50 server slice -> hydrate -> envelope with row_label_key=recs.upNext.
 func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (RecsEnvelope, error) {
 	pool, err := h.s11.CandidatePoolForUser(ctx, recs.UserID(userID))
 	if err != nil {
@@ -341,6 +343,7 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 		{Module: h.s2, Weight: 0.20},
 		{Module: h.s3, Weight: 0.20},
 		{Module: h.s4, Weight: 0.10},
+		{Module: h.s5, Weight: 0.20}, // Phase 12 (REC-SIG-05)
 	})
 	ranked, err := ensemble.Rank(ctx, recs.UserID(userID), pool)
 	if err != nil {
