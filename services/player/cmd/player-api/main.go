@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -16,6 +17,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/player/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs/signals"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/transport"
 )
 
@@ -117,6 +120,34 @@ func main() {
 		}
 	}
 
+	// Phase 10: Redis cache (required for recs handler + population orchestrator).
+	// Player did not use Redis prior to Phase 10; this is the first required
+	// dependency. If Redis is unreachable on boot we treat it as fatal because
+	// the recs surface is now part of the public home page.
+	redisCache, err := cache.New(cfg.Redis)
+	if err != nil {
+		log.Fatalw("failed to connect to redis (player needs redis as of Phase 10 for recs caching)",
+			"host", cfg.Redis.Host, "port", cfg.Redis.Port, "error", err)
+	}
+
+	// Phase 10: rec engine population cron (60-minute ticker).
+	// Spawned with a derived context so graceful shutdown can cancel it
+	// before the HTTP server stops accepting traffic.
+	cronCtx, cronCancel := context.WithCancel(context.Background())
+	{
+		recsRepo := repo.NewRecsRepository(db.DB)
+		s3 := signals.NewS3Trending(db.DB, recsRepo)
+		s4 := signals.NewS4Recency(db.DB)
+		popOrch := recs.NewPopulationOrchestrator(
+			[]recs.SignalModule{s3, s4},
+			redisCache,
+			log,
+		)
+		// 60-minute cadence per CONTEXT.md decisions §Population cron.
+		// Boot tick runs immediately so cold start has data within seconds.
+		popOrch.Start(cronCtx, 60*time.Minute)
+	}
+
 	// Phase 3 backfill: synthesize watch_progress.completed=true rows for legacy
 	// data (any (user, anime, ep <= anime_list.episodes) without a completed=true
 	// row). Idempotent — guarded by an early-exit check so it short-circuits on
@@ -190,11 +221,15 @@ func main() {
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
 
+	// Phase 10: recs handler (anonymous trending row).
+	recsRepo := repo.NewRecsRepository(db.DB)
+	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -219,6 +254,10 @@ func main() {
 	<-quit
 
 	log.Info("shutting down server...")
+
+	// Stop the recs population cron before draining HTTP traffic so a tick
+	// in flight can finish on its own deadline rather than be aborted.
+	cronCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

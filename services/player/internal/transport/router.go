@@ -26,6 +26,7 @@ func NewRouter(
 	exportHandler *handler.ExportHandler,
 	preferenceHandler *handler.PreferenceHandler,
 	overrideHandler *handler.OverrideHandler,
+	recsHandler *handler.RecsHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -117,6 +118,17 @@ func NewRouter(
 			r.Use(OptionalAuthMiddleware(jwtConfig))
 			r.Post("/resolve", preferenceHandler.ResolvePreference)
 			r.Post("/override", overrideHandler.RecordOverride)
+		})
+
+		// Phase 10: anonymous trending recs row.
+		// MUST live OUTSIDE the protected r.Route("/users", ...) group above —
+		// that group uses AuthMiddleware which 401s anonymous callers. We mount
+		// /users/recs as a sibling and apply OptionalAuthMiddleware so JWTs
+		// decode if present but anonymous callers pass through with the same
+		// payload (Phase 11 will branch on claims for personalization).
+		r.Route("/users/recs", func(r chi.Router) {
+			r.Use(OptionalAuthMiddleware(jwtConfig))
+			r.Get("/", recsHandler.GetRecs)
 		})
 
 		// Public user watchlist
