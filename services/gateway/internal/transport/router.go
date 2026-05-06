@@ -152,12 +152,19 @@ func NewRouter(
 		// limiting at the path level (existing rate limiter applies to all /api/* paths).
 		r.HandleFunc("/preferences/*", proxyHandler.ProxyToPlayer)
 
-		// Phase 10 (recs): anonymous trending row.
+		// Phase 10/11 (recs): anonymous trending row + logged-in "Up Next for you" row.
 		// MUST be defined BEFORE the protected /users/* group so chi's longest-prefix
-		// match catches /users/recs first. Player applies OptionalAuthMiddleware
-		// internally — JWT decodes if present, anon passes through.
-		r.HandleFunc("/users/recs", proxyHandler.ProxyToPlayer)
-		r.HandleFunc("/users/recs/", proxyHandler.ProxyToPlayer)
+		// match catches /users/recs first. The OptionalJWTValidationMiddleware
+		// (a) lets anonymous traffic through untouched, (b) resolves "ak_…" API keys
+		// to a freshly-minted JWT that downstream OptionalAuthMiddleware can validate,
+		// (c) validates real JWTs in place. Without this carve-out, ak_-key callers
+		// would silently fall through to the anonymous trending row (Phase 11 bug
+		// caught during Task 9 verification).
+		r.Group(func(r chi.Router) {
+			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.HandleFunc("/users/recs", proxyHandler.ProxyToPlayer)
+			r.HandleFunc("/users/recs/", proxyHandler.ProxyToPlayer)
+		})
 
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
@@ -283,6 +290,64 @@ func JWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL string) f
 				}
 			}
 
+			ctx := authz.ContextWithClaims(r.Context(), claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// OptionalJWTValidationMiddleware validates JWT or resolves API keys (ak_ prefix) when
+// an Authorization header is present, but allows anonymous traffic (no header) to pass
+// through unchanged. Used for endpoints that have public + personalized branches based
+// on auth presence (e.g. /api/users/recs — anonymous gets the trending row, logged-in
+// gets the personalized "Up Next for you" row).
+//
+// Behaviour:
+//   - No Authorization header → pass through unchanged (downstream sees no claims)
+//   - "Bearer ak_…" → resolve via auth service, mint short-lived JWT, replace header
+//   - "Bearer <jwt>" → validate; on failure pass through unchanged so downstream's
+//     OptionalAuth middleware also sees no claims (defense in depth — never serve
+//     personalized data on a forged token)
+func OptionalJWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL string) func(http.Handler) http.Handler {
+	jwtManager := authz.NewJWTManager(jwtConfig)
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := httputil.BearerToken(r)
+			if token == "" {
+				// No token → anonymous flow, pass through unchanged.
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if strings.HasPrefix(token, "ak_") {
+				resolved, resolveErr := resolveApiKey(authServiceURL, token)
+				if resolveErr != nil {
+					// Bad/expired API key on an optional-auth route → degrade to
+					// anonymous rather than 401, matching the route's contract.
+					r.Header.Del("Authorization")
+					next.ServeHTTP(w, r)
+					return
+				}
+				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role)
+				if mintErr != nil {
+					r.Header.Del("Authorization")
+					next.ServeHTTP(w, r)
+					return
+				}
+				r.Header.Set("Authorization", "Bearer "+tokenPair.AccessToken)
+				ctx := authz.ContextWithClaims(r.Context(), resolved)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			// Standard JWT validation — on failure, strip header and degrade to anonymous.
+			claims, err := jwtManager.ValidateAccessToken(token)
+			if err != nil {
+				r.Header.Del("Authorization")
+				next.ServeHTTP(w, r)
+				return
+			}
 			ctx := authz.ContextWithClaims(r.Context(), claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
