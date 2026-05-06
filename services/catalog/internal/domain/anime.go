@@ -16,6 +16,12 @@ type Anime struct {
 	Year            int            `json:"year,omitempty"`
 	Season          string         `gorm:"size:20" json:"season,omitempty"`
 	Status          AnimeStatus    `gorm:"size:20;default:'released'" json:"status"`
+	// S5 attribute dimensions (Phase 12 Decision §A1) — Shikimori-sourced.
+	// Rating doubles as the S5 "demographic" proxy per Decision §A3.
+	// MaterialSource column name avoids collision with VideoSource.SourceType.
+	Kind            string         `gorm:"size:20;index" json:"kind,omitempty"`
+	Rating          string         `gorm:"size:20" json:"rating,omitempty"`
+	MaterialSource  string         `gorm:"size:50;column:material_source" json:"material_source,omitempty"`
 	EpisodesCount   int            `json:"episodes_count"`
 	EpisodesAired   int            `json:"episodes_aired,omitempty"`
 	EpisodeDuration int            `json:"episode_duration,omitempty"`
@@ -30,6 +36,14 @@ type Anime struct {
 	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`
 	AiredOn         *time.Time     `json:"aired_on,omitempty"`
 	Genres          []Genre        `gorm:"many2many:anime_genres;" json:"genres,omitempty"`
+	// Phase 12 Decision §A1/A2 — Studios absorbs the producers role; no
+	// separate Producers field exists in v2.0 (Decision §A2 collapses
+	// the spec-§3.1 producers 0.05 into studios 0.25).
+	Studios         []Studio       `gorm:"many2many:anime_studios;" json:"studios,omitempty"`
+	// Phase 12 Decision §A4 — AniList-sourced tags. Explicit AnimeTag
+	// join model preserves Rank (0-100) for v2.1 rank-weighted TF-IDF
+	// even though v1 S5 ignores rank.
+	Tags            []Tag          `gorm:"many2many:anime_tags;joinForeignKey:AnimeID;joinReferences:TagID" json:"tags,omitempty"`
 	Videos          []Video        `gorm:"foreignKey:AnimeID" json:"-"`
 	VideoSources    []VideoSource  `gorm:"-" json:"video_sources,omitempty"` // Computed, not stored
 	CreatedAt       time.Time      `json:"created_at"`
@@ -66,6 +80,45 @@ type Genre struct {
 	NameRU    string    `gorm:"size:100" json:"name_ru,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Studio is an anime production company. Sourced from Shikimori's
+// studios { id name } GraphQL payload (Phase 12 Decision §A1).
+//
+// Note: Shikimori does not separate "studios" and "producers" — Decision
+// §A2 collapses the spec-§3.1 producers 0.05 weight into the studios 0.25
+// weight, so this single Studio dimension represents both. Producers as a
+// separate dimension is deferred to v3.0.
+type Studio struct {
+	ID        string    `gorm:"size:50;primaryKey" json:"id"` // Shikimori studio ID
+	Name      string    `gorm:"size:200;uniqueIndex" json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Tag is an anime descriptor sourced from AniList (Phase 12 Decision §A4).
+// Tag.ID is the slugified name (deterministic, idempotent — see
+// services/catalog/internal/parser/anilist/client.go::SlugifyTagName).
+// Source defaults to 'anilist' but is left open for future MAL/Shikimori
+// keyword sources without schema change.
+type Tag struct {
+	ID        string    `gorm:"size:200;primaryKey" json:"id"`
+	Name      string    `gorm:"size:200;index" json:"name"`
+	Source    string    `gorm:"size:50;default:'anilist';index" json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// AnimeTag is the explicit join row for the anime <-> tag many-to-many.
+// Rank preserves AniList's per-anime tag rank (0-100). Decision §A4
+// ignores rank in v1 S5 but we persist it for v2.1 rank-weighted TF-IDF.
+//
+// Composite primary key (AnimeID, TagID) prevents duplicate joins.
+type AnimeTag struct {
+	AnimeID   string    `gorm:"type:uuid;primaryKey" json:"anime_id"`
+	TagID     string    `gorm:"size:200;primaryKey" json:"tag_id"`
+	Rank      int       `gorm:"default:0" json:"rank"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Episode represents an anime episode

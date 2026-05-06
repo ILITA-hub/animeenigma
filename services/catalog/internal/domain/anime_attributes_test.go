@@ -1,13 +1,39 @@
 package domain
 
 import (
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"sync"
 	"testing"
 
+	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+// registerSQLiteCatalogUDFsOnce installs a SQLite driver named
+// "sqlite3_catalog_attrs" with a gen_random_uuid() UDF that returns a random
+// 32-char hex string. Postgres-only `default:gen_random_uuid()` clauses on
+// the Anime.ID column otherwise fail SQLite syntax (CREATE TABLE chokes on
+// "near '(': syntax error" because gen_random_uuid is unknown).
+var registerSQLiteCatalogUDFsOnce sync.Once
+
+func registerSQLiteCatalogUDFs() {
+	registerSQLiteCatalogUDFsOnce.Do(func() {
+		sql.Register("sqlite3_catalog_attrs", &sqlite3.SQLiteDriver{
+			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+				return conn.RegisterFunc("gen_random_uuid", func() string {
+					b := make([]byte, 16)
+					_, _ = rand.Read(b)
+					return hex.EncodeToString(b)
+				}, true)
+			},
+		})
+	})
+}
 
 // setupAttributesTestDB creates an in-memory SQLite DB and runs AutoMigrate
 // for the full Phase-12 attribute schema (Anime + Genre + Studio + Tag + AnimeTag).
@@ -15,13 +41,85 @@ import (
 // SetupJoinTable is called AFTER AutoMigrate so the explicit AnimeTag join
 // model is registered for GORM associations (preserves AnimeTag.Rank — Decision §A4).
 //
-// Note: sqlite stores the Anime.ID PK as TEXT (the postgres-only
-// `default:gen_random_uuid()` clause is ignored), so each test inserts an
-// Anime with an explicit ID.
+// SQLite quirk: GORM emits `DEFAULT gen_random_uuid()` for the Anime.ID
+// column based on the postgres-only struct tag, but SQLite syntax requires
+// DEFAULT expressions to be wrapped in parentheses. We pre-create the
+// `animes` table via raw SQL with a schema that mirrors what AutoMigrate
+// would build on postgres minus the unsupported default — then AutoMigrate
+// is a no-op for `animes` (HasTable is true) and proceeds to create the
+// remaining tables. Each test still inserts an Anime with an explicit ID.
 func setupAttributesTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+
+	registerSQLiteCatalogUDFs()
+	rawDB, err := sql.Open("sqlite3_catalog_attrs", ":memory:")
 	require.NoError(t, err)
+
+	db, err := gorm.Open(sqlite.Dialector{
+		DriverName: "sqlite3_catalog_attrs",
+		Conn:       rawDB,
+	}, &gorm.Config{})
+	require.NoError(t, err)
+
+	// Pre-create tables whose DDL would otherwise reference the postgres-only
+	// `default:gen_random_uuid()` GORM tag (Anime.ID and any FK column that
+	// GORM resolves back to it on m2m joins). On postgres this is fine; on
+	// SQLite the DEFAULT clause must be parenthesised, which the sqlite
+	// dialector doesn't translate.
+	//
+	// AutoMigrate sees HasTable already true and only ADDs missing columns,
+	// so SetupJoinTable + the attribute m2m relations still get exercised.
+	rawSQL := []string{
+		`CREATE TABLE animes (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			name_ru TEXT,
+			name_jp TEXT,
+			description TEXT,
+			year INTEGER,
+			season TEXT,
+			status TEXT DEFAULT 'released',
+			kind TEXT,
+			rating TEXT,
+			material_source TEXT,
+			episodes_count INTEGER DEFAULT 0,
+			episodes_aired INTEGER DEFAULT 0,
+			episode_duration INTEGER DEFAULT 0,
+			score REAL DEFAULT 0,
+			poster_url TEXT,
+			shikimori_id TEXT,
+			mal_id TEXT,
+			ani_list_id TEXT,
+			has_video INTEGER DEFAULT 0,
+			hidden INTEGER DEFAULT 0,
+			sort_priority INTEGER DEFAULT 0,
+			next_episode_at DATETIME,
+			aired_on DATETIME,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME
+		)`,
+		`CREATE TABLE anime_genres (
+			anime_id TEXT NOT NULL,
+			genre_id TEXT NOT NULL,
+			PRIMARY KEY (anime_id, genre_id)
+		)`,
+		`CREATE TABLE anime_studios (
+			anime_id TEXT NOT NULL,
+			studio_id TEXT NOT NULL,
+			PRIMARY KEY (anime_id, studio_id)
+		)`,
+		`CREATE TABLE anime_tags (
+			anime_id TEXT NOT NULL,
+			tag_id TEXT NOT NULL,
+			rank INTEGER DEFAULT 0,
+			created_at DATETIME,
+			PRIMARY KEY (anime_id, tag_id)
+		)`,
+	}
+	for _, ddl := range rawSQL {
+		require.NoError(t, db.Exec(ddl).Error)
+	}
 
 	require.NoError(t, db.AutoMigrate(
 		&Anime{},
