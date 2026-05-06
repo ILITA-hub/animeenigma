@@ -158,7 +158,8 @@ func main() {
 		recsRepo := repo.NewRecsRepository(db.DB)
 		s1 := signals.NewS1ScoreCluster(db.DB, recsRepo)
 		s2 := signals.NewS2Metadata(db.DB)
-		userPrecompute := recs.NewOrchestrator([]recs.SignalModule{s1, s2})
+		s5 := signals.NewS5Attribute(db.DB, recsRepo) // Phase 12 (REC-SIG-05)
+		userPrecompute := recs.NewOrchestrator([]recs.SignalModule{s1, s2, s5})
 		userOrch = recs.NewUserOrchestrator(userPrecompute, db.DB, redisCache, log)
 		// 6-hour cadence per CONTEXT.md decisions §User-Signal Cron.
 		// Boot tick runs immediately so logged-in users get fresh signals
