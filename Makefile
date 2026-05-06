@@ -2,7 +2,8 @@
 	k8s-apply k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
 	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod \
 	migrate migrate-down migrate-force migrate-version migrate-auth migrate-catalog migrate-player migrate-rooms migrate-all migrate-create migrate-status db-shell \
-	redeploy-all redeploy-web type-check
+	redeploy-all redeploy-web type-check \
+	backfill-attributes build-backfill-attributes
 
 # Variables
 SERVICES := auth catalog streaming player rooms scheduler gateway themes
@@ -51,6 +52,19 @@ build-%: ## Build a specific service
 build-maintenance: ## Build maintenance poller (host-native binary)
 	@echo "Building maintenance service..."
 	cd services/maintenance && go build $(GO_BUILD_FLAGS) -o ../../bin/maintenance ./cmd/maintenance
+
+build-backfill-attributes: ## Build the Phase-12 attribute backfill tool (host-native, REC-SIG-05)
+	@echo "Building backfill-attributes tool..."
+	cd services/catalog && go build $(GO_BUILD_FLAGS) -o ../../bin/backfill-attributes ./cmd/backfill-attributes
+
+# Phase-12 Wave-2 (REC-SIG-05) attribute backfill. Idempotent — re-running
+# only re-fetches rows still missing kind/rating/material_source/studios
+# (Shikimori half) or anime_tags rows (AniList half). Reads DB env from
+# docker/.env. Pass extra flags via BACKFILL_ARGS, e.g.:
+#   make backfill-attributes BACKFILL_ARGS="--dry-run --limit=10"
+backfill-attributes: build-backfill-attributes ## Run the Phase-12 attribute backfill (REC-SIG-05). Reads DB env from docker/.env. Idempotent.
+	@echo "Running Phase-12 attribute backfill..."
+	@set -a; . ./docker/.env; set +a; ./bin/backfill-attributes $(BACKFILL_ARGS)
 
 build-tools: ## Build all tools
 	cd tools/migrator && go build $(GO_BUILD_FLAGS) -o ../../bin/migrator .
