@@ -167,6 +167,16 @@ func main() {
 		userOrch.Start(cronCtx, 6*time.Hour)
 	}
 
+	// Phase 13 (REC-SIG-06): rec engine CO-OCCURRENCE cron (24-hour ticker).
+	// Materializes rec_completion_co_occurrence at score>=7 nightly. The S6
+	// pin resolver reads from this table on every recs request; nightly
+	// materialization is enough at production scale (~1900 rows; millisecond
+	// runtime). Per CONTEXT.md decisions §B4.
+	{
+		coOccOrch := recs.NewCoOccurrenceOrchestrator(db.DB, log)
+		coOccOrch.Start(cronCtx, 24*time.Hour)
+	}
+
 	// Phase 3 backfill: synthesize watch_progress.completed=true rows for legacy
 	// data (any (user, anime, ep <= anime_list.episodes) without a completed=true
 	// row). Idempotent — guarded by an early-exit check so it short-circuits on
@@ -209,6 +219,10 @@ func main() {
 
 	// Initialize repositories (preference)
 	prefRepo := repo.NewPreferenceRepository(db.DB)
+	// Phase 13 (REC-INFRA-03): recsRepo is hoisted up here (vs. its
+	// previous location next to recsHandler) so ListService can take it
+	// for the synchronous S6 seed-update path inside MarkEpisodeWatched.
+	recsRepo := repo.NewRecsRepository(db.DB)
 
 	// Initialize services
 	prefService := service.NewPreferenceServiceWithTier2(prefRepo, log, service.Tier2Params{
@@ -218,10 +232,10 @@ func main() {
 		DurationFloor:  cfg.Tier2.DurationFloor,
 	})
 	progressService := service.NewProgressService(progressRepo, prefService, log)
-	// Phase 13 (REC-INFRA-03): recsRepo + cache args wired in Task 7;
-	// passed as nil here so the existing build stays green between
-	// the Task 5 list.go signature change and the Task 7 wiring commit.
-	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, nil, nil, log)
+	// Phase 13 (REC-INFRA-03): recsRepo + redisCache wired so MarkEpisodeWatched
+	// can synchronously update s6_seed_* and bust recs:user:{id}:topN when a
+	// completion qualifies (status='completed' AND score>=7).
+	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, recsRepo, redisCache, log)
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(reviewRepo, listRepo, activityRepo, log)
 
@@ -244,8 +258,13 @@ func main() {
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
 
 	// Phase 10: recs handler (anonymous trending row).
-	recsRepo := repo.NewRecsRepository(db.DB)
-	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, nil, log)
+	// Phase 13 (REC-SIG-06): also wires the S6 combo-watched-after pin
+	// resolver. The HTTP shikimori-similar client points at the catalog
+	// service's internal docker DNS — same convention as
+	// services/player/internal/handler/{mal,shikimori}_import.go.
+	shikimoriSimilarClient := signals.NewHTTPShikimoriSimilarClient("http://catalog:8081", log)
+	s6 := signals.NewS6ComboPin(db.DB, recsRepo, shikimoriSimilarClient, log)
+	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, s6, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")

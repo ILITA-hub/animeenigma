@@ -1,5 +1,5 @@
 {
-  "last_id": 82,
+  "last_id": 83,
   "issues": [
     {
       "id": "AUTO-001",
@@ -1368,6 +1368,21 @@
       "telegram_message_id": 1996,
       "affected_service": "catalog",
       "actions": null,
+      "resolution": "Alert resolved (no longer firing in Grafana)"
+    },
+    {
+      "id": "AUTO-083",
+      "created_at": "2026-05-06T03:43:47Z",
+      "resolved_at": "2026-05-06T03:47:42Z",
+      "source": "grafana_alert",
+      "category": "transient_outage",
+      "priority": "P0",
+      "status": "resolved",
+      "title": "Player service transient startup unreachability",
+      "reporter": "grafana",
+      "telegram_message_id": 1998,
+      "affected_service": "player",
+      "actions": [],
       "resolution": "Alert resolved (no longer firing in Grafana)"
     }
   ]
