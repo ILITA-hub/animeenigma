@@ -23,14 +23,24 @@
       </div>
     </div>
 
-    <!-- Trending Now Row (Phase 10 — anonymous trending; Phase 11 will switch
-         label to "Up Next for you" for logged-in users via the row_label_key
-         the backend returns in /api/users/recs). Hidden when no recs returned
-         so an empty pool doesn't add a "no data" placeholder. -->
+    <!-- Trending Now Row (Phase 10 — anonymous trending; Phase 11 — switches
+         label to "Up Next for you" for logged-in users via row_label_key;
+         Phase 13 — adds an S6 pin treatment when recs[0].pinned===true:
+         a row-header reason line above the row + a colored left-border + a
+         "PINNED" badge on the pinned card). Hidden when no recs returned. -->
     <div v-if="trendingRecs.length > 0" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl md:text-2xl font-bold text-white">{{ t(rowLabelKey) }}</h2>
       </div>
+      <!-- Phase 13 (REC-UX-03): pin reason rendered above the row when the
+           first item is pinned. Server has already substituted the seed
+           name into pin_reason; frontend renders the string as-is. -->
+      <p
+        v-if="trendingRecs[0]?.pinned && trendingRecs[0]?.pin_reason"
+        class="text-sm text-cyan-300 mb-3"
+      >
+        {{ trendingRecs[0].pin_reason }}
+      </p>
       <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-1 px-1">
         <router-link
           v-for="item in trendingRecs"
@@ -38,7 +48,16 @@
           :to="`/anime/${item.anime.id}`"
           class="flex-shrink-0 w-32 md:w-40 lg:w-48 group"
         >
-          <div class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] mb-2">
+          <div
+            class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] mb-2"
+            :class="item.pinned ? 'ring-2 ring-cyan-400 border-l-4 border-cyan-400' : ''"
+          >
+            <span
+              v-if="item.pinned"
+              class="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-cyan-500/90 text-[10px] font-bold text-white tracking-wider"
+            >
+              {{ $t('recs.pinBadge') }}
+            </span>
             <img
               :src="item.anime.poster_url || '/placeholder.svg'"
               :alt="getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp)"

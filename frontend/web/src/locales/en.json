@@ -34,7 +34,8 @@
   "recs": {
     "trending": "Trending now",
     "upNext": "Up Next for you",
-    "empty": "No recommendations yet"
+    "empty": "No recommendations yet",
+    "pinBadge": "PINNED"
   },
   "anime": {
     "detailsTitle": "Anime Details",

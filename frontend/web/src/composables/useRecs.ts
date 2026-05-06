@@ -32,6 +32,13 @@ export interface RecItem {
   final: number
   pinned: boolean
   rank: number
+  // Phase 13 (REC-UX-03) — present only when pinned===true. The server
+  // renders pin_reason with the seed name interpolated, so the frontend
+  // displays it as-is. pin_source distinguishes the cascade branch
+  // (admin debug in Phase 14 reads it).
+  pin_reason?: string
+  pin_seed_anime_id?: string
+  pin_source?: 'local' | 'shikimori_similar'
 }
 
 interface RecsEnvelope {
