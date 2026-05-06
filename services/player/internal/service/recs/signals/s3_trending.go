@@ -2,7 +2,6 @@ package signals
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
@@ -81,18 +80,20 @@ func (s *S3Trending) Precompute(ctx context.Context, _ recs.UserID) error {
 		// Task 4) is the canonical writer for s4 — but in case S3 runs first
 		// we read the existing row and preserve s4. Cheap: this is bounded by
 		// "anime that received a start in the last 30 days" which is small.
-		var existing domain.RecPopulationSignals
-		findErr := s.db.WithContext(ctx).
+		// Read existing s4_recency_score (if any) so we don't clobber it.
+		// Use a scalar Pluck to avoid gorm's default-logger noise on NotFound,
+		// which would log every cold-start anime as "record not found" warnings.
+		var existingS4 []float32
+		if findErr := s.db.WithContext(ctx).
+			Table("rec_population_signals").
 			Where("anime_id = ?", r.AnimeID).
-			First(&existing).Error
-		switch {
-		case findErr == nil:
-			row.S4RecencyScore = existing.S4RecencyScore
-		case errors.Is(findErr, gorm.ErrRecordNotFound):
-			// Brand-new row; s4 will be 0 until the next S4 orchestrator pass.
-		default:
+			Pluck("s4_recency_score", &existingS4).Error; findErr != nil {
 			return findErr
 		}
+		if len(existingS4) > 0 {
+			row.S4RecencyScore = existingS4[0]
+		}
+		// else: brand-new row; s4 stays 0 until the next S4 orchestrator pass.
 		if err := s.repo.UpsertPopulationSignal(ctx, row); err != nil {
 			return err
 		}
