@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -71,8 +72,8 @@ func (c *fakeRecsCache) preBake(t *testing.T, key string, payload interface{}) [
 }
 
 // setupRecsTestDB mirrors the production schema for the columns the handler
-// hits: animes (id, name, name_ru, name_jp, poster_url, score, episodes_count,
-// status, year, hidden, deleted_at) + rec_population_signals (for S3 reads).
+// hits: animes, rec_population_signals (S3 reads), plus the user-scope tables
+// the personalized branch needs (anime_list, anime_genres, rec_user_signals).
 func setupRecsTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -96,6 +97,27 @@ func setupRecsTestDB(t *testing.T) *gorm.DB {
 		anime_id TEXT PRIMARY KEY,
 		s3_trending_score REAL NOT NULL DEFAULT 0,
 		s4_recency_score REAL NOT NULL DEFAULT 0,
+		last_computed DATETIME NOT NULL
+	)`).Error)
+	// Phase 11 tables — needed by the personalized branch.
+	require.NoError(t, db.Exec(`CREATE TABLE anime_list (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		anime_id TEXT NOT NULL,
+		status TEXT,
+		score INTEGER DEFAULT 0
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE anime_genres (
+		anime_id TEXT NOT NULL,
+		genre_id TEXT NOT NULL
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE rec_user_signals (
+		user_id TEXT PRIMARY KEY,
+		s1_vector TEXT NOT NULL DEFAULT '{}',
+		s5_affinity TEXT NOT NULL DEFAULT '{}',
+		s6_seed_anime_id TEXT,
+		s6_seed_completed_at DATETIME,
+		s6_seed_score INTEGER,
 		last_computed DATETIME NOT NULL
 	)`).Error)
 	return db
@@ -319,4 +341,291 @@ func TestRecsHandler_ThinS3PoolBackfillsViaS4(t *testing.T) {
 			assert.Less(t, op, rp, "S4 backfill: all ongoing must rank above all released when S3 is empty")
 		}
 	}
+}
+
+// ----------------------------------------------------------------------------
+// Phase 11 — personalized branch tests.
+// ----------------------------------------------------------------------------
+
+// loggedInRequest builds a GET /api/users/recs request with claims pre-injected
+// in the context. Bypasses the OptionalAuthMiddleware (which we trust by
+// virtue of Phase 10 wiring) and lets us focus on the handler's branch logic.
+func loggedInRequest(userID string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/api/users/recs", nil)
+	ctx := authz.ContextWithClaims(req.Context(), &authz.Claims{UserID: userID})
+	return req.WithContext(ctx)
+}
+
+func seedAnimeListRow(t *testing.T, db *gorm.DB, rowID, userID, animeID, status string, score int) {
+	t.Helper()
+	require.NoError(t, db.Exec(
+		`INSERT INTO anime_list (id, user_id, anime_id, status, score) VALUES (?, ?, ?, ?, ?)`,
+		rowID, userID, animeID, status, score,
+	).Error)
+}
+
+func TestRecsHandler_PersonalizedBranch_CacheMissComputesAndCaches(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	// 4 animes, none hidden. user-1 has not marked any of them completed.
+	seedAnimeFull(t, db, "anime-1", "ongoing", false, 7.0)
+	seedAnimeFull(t, db, "anime-2", "released", false, 7.0)
+	seedAnimeFull(t, db, "anime-3", "released", false, 7.0)
+	seedAnimeFull(t, db, "anime-4", "released", false, 7.0)
+	// Some S3 spread.
+	seedPopulationSignal(t, db, "anime-1", 50.0)
+	seedPopulationSignal(t, db, "anime-2", 10.0)
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	assert.True(t, env.Success)
+	assert.Equal(t, "recs.upNext", env.Data.RowLabelKey, "logged-in row uses the upNext label")
+	assert.False(t, env.Data.CacheHit)
+	assert.Greater(t, env.Data.Total, 0, "personalized row populated for user-1")
+
+	// Cache must now contain the per-user key.
+	var cached interface{}
+	require.NoError(t, cache.Get(context.Background(), "recs:user:user-1:topN", &cached),
+		"per-user cache key must be populated after fresh compute")
+}
+
+func TestRecsHandler_PersonalizedBranch_CacheHitReturnsCachedPayload(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	prebaked := RecsEnvelope{
+		Recs: []RecItem{{
+			Anime:  RecAnimePayload{ID: "cached-up-next-1", Name: "Cached Personalized"},
+			Final:  0.91,
+			Pinned: false,
+			Rank:   1,
+		}},
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		CacheHit:    false,
+		Total:       1,
+		RowLabelKey: "recs.upNext",
+	}
+	cache.preBake(t, "recs:user:user-1:topN", prebaked)
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	assert.True(t, env.Data.CacheHit, "cache HIT path: cache_hit must be true")
+	assert.Equal(t, "recs.upNext", env.Data.RowLabelKey)
+	assert.Equal(t, 1, env.Data.Total)
+	assert.Equal(t, "cached-up-next-1", env.Data.Recs[0].Anime.ID)
+}
+
+func TestRecsHandler_PersonalizedBranch_ExcludesCompletedAndDropped(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	seedAnimeFull(t, db, "anime-watching", "ongoing", false, 8.0)
+	seedAnimeFull(t, db, "anime-completed", "released", false, 9.0)
+	seedAnimeFull(t, db, "anime-dropped", "released", false, 8.5)
+	seedAnimeFull(t, db, "anime-fresh", "ongoing", false, 7.0)
+	seedAnimeListRow(t, db, "al1", "user-1", "anime-watching", "watching", 0)
+	seedAnimeListRow(t, db, "al2", "user-1", "anime-completed", "completed", 9)
+	seedAnimeListRow(t, db, "al3", "user-1", "anime-dropped", "dropped", 4)
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+
+	for _, item := range env.Data.Recs {
+		assert.NotEqual(t, "anime-completed", item.Anime.ID, "completed anime must NOT appear in personalized row")
+		assert.NotEqual(t, "anime-dropped", item.Anime.ID, "dropped anime must NOT appear in personalized row")
+	}
+}
+
+func TestRecsHandler_PersonalizedBranch_ColdStartUserDegradesToS3S4(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	// User-1 has only 1 scored anime — below the S1 cold-start threshold of 3
+	// AND below the S2 fallback threshold of 5. S1 + S2 should both emit
+	// empty maps and the row should still render via S3 + S4.
+	seedAnimeFull(t, db, "anime-A", "ongoing", false, 8.0)
+	seedAnimeFull(t, db, "anime-B", "ongoing", false, 7.5)
+	seedAnimeFull(t, db, "anime-C", "released", false, 7.0)
+	seedAnimeListRow(t, db, "al1", "user-1", "anime-A", "watching", 4) // < 5 fallback
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	assert.True(t, env.Success, "cold-start request must succeed (no NaN, no error)")
+	// Pool is anime-A (watching, retained) + anime-B + anime-C = 3.
+	assert.Greater(t, env.Data.Total, 0, "ensemble must degrade gracefully and still produce ranked recs")
+}
+
+func TestRecsHandler_PersonalizedBranch_EmptyPoolReturnsEmptyEnvelope(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	seedAnimeFull(t, db, "anime-1", "released", false, 8.0)
+	seedAnimeFull(t, db, "anime-2", "released", false, 7.5)
+	// User-1 has marked everything completed -> candidate pool is empty.
+	seedAnimeListRow(t, db, "al1", "user-1", "anime-1", "completed", 8)
+	seedAnimeListRow(t, db, "al2", "user-1", "anime-2", "completed", 7)
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+
+	req := loggedInRequest("user-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	assert.Equal(t, 0, env.Data.Total)
+	assert.Empty(t, env.Data.Recs)
+	assert.Equal(t, "recs.upNext", env.Data.RowLabelKey)
+}
+
+func TestRecsHandler_PersonalizedBranch_PerUserCacheIsolation(t *testing.T) {
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+
+	// Pre-bake distinct payloads for two users — verifies the cache key is
+	// per-user.
+	cache.preBake(t, "recs:user:user-A:topN", RecsEnvelope{
+		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-A"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
+	})
+	cache.preBake(t, "recs:user:user-B:topN", RecsEnvelope{
+		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-B"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
+	})
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+
+	for _, tc := range []struct{ user, want string }{
+		{"user-A", "for-A"},
+		{"user-B", "for-B"},
+	} {
+		req := loggedInRequest(tc.user)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var env struct {
+			Success bool         `json:"success"`
+			Data    RecsEnvelope `json:"data"`
+		}
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+		require.Len(t, env.Data.Recs, 1)
+		assert.Equal(t, tc.want, env.Data.Recs[0].Anime.ID, "per-user cache must be keyed on JWT user_id")
+	}
+}
+
+func TestRecsHandler_PersonalizedBranch_ServerSliceTo50_AnonymousStillTo20(t *testing.T) {
+	// Seed 75 visible anime so the slice ceilings actually matter. User-A is
+	// logged in -> expects up to 50. Anonymous request -> expects up to 20.
+	db := setupRecsTestDB(t)
+	cache := newFakeRecsCache()
+	for i := 0; i < 75; i++ {
+		id := "anime-" + sliceTestID(i)
+		seedAnimeFull(t, db, id, "released", false, 7.0)
+		seedPopulationSignal(t, db, id, float32(75-i)) // unique S3 -> deterministic order
+	}
+
+	recsRepo := repo.NewRecsRepository(db)
+	h := NewRecsHandler(db, recsRepo, cache, logger.Default())
+	r := chi.NewRouter()
+	r.Get("/api/users/recs", h.GetRecs)
+
+	// Logged-in -> 50 cap.
+	reqLi := loggedInRequest("user-A")
+	wLi := httptest.NewRecorder()
+	r.ServeHTTP(wLi, reqLi)
+	require.Equal(t, http.StatusOK, wLi.Code)
+	var envLi struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(wLi.Body).Decode(&envLi))
+	assert.Equal(t, 50, envLi.Data.Total, "logged-in server slice = 50")
+	assert.Equal(t, "recs.upNext", envLi.Data.RowLabelKey)
+
+	// Anonymous -> 20 cap.
+	reqAnon := httptest.NewRequest(http.MethodGet, "/api/users/recs", nil)
+	wAnon := httptest.NewRecorder()
+	r.ServeHTTP(wAnon, reqAnon)
+	require.Equal(t, http.StatusOK, wAnon.Code)
+	var envAnon struct {
+		Success bool         `json:"success"`
+		Data    RecsEnvelope `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(wAnon.Body).Decode(&envAnon))
+	assert.Equal(t, 20, envAnon.Data.Total, "anonymous server slice = 20")
+	assert.Equal(t, "recs.trending", envAnon.Data.RowLabelKey)
+}
+
+// sliceTestID returns a zero-padded id so SQL ordering would be predictable
+// if we ever needed it; the test doesn't assert order, just count.
+func sliceTestID(i int) string {
+	const digits = "0123456789"
+	if i < 10 {
+		return "0" + string(digits[i])
+	}
+	tens := i / 10
+	ones := i % 10
+	return string(digits[tens]) + string(digits[ones])
 }
