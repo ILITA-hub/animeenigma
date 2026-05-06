@@ -49,8 +49,21 @@ func main() {
 		&domain.Genre{},
 		&domain.Video{},
 		&domain.PinnedTranslation{},
+		// Phase 12 (REC-SIG-05) — S5 attribute schema additions per Decision §A1.
+		// AnimeTag is the explicit join model for the anime <-> tag m2m so
+		// AnimeTag.Rank is preserved (Decision §A4 — v2.1 rank-weighted TF-IDF).
+		&domain.Studio{},
+		&domain.Tag{},
+		&domain.AnimeTag{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
+	}
+
+	// Phase 12 — register the explicit AnimeTag join model so GORM
+	// associations preserve Rank. Required AFTER AutoMigrate so the
+	// underlying table already exists.
+	if err := db.SetupJoinTable(&domain.Anime{}, "Tags", &domain.AnimeTag{}); err != nil {
+		log.Fatalw("failed to register AnimeTag join model", "error", err)
 	}
 
 	// Initialize cache
