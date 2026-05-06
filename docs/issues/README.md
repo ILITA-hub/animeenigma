@@ -172,6 +172,19 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Resolved Issues
 
+### ISS-010: Search returns empty / single result for any anime not in local DB (Shikimori .one → .io migration)
+- **Date:** 2026-05-06
+- **Severity:** High (catalog effectively read-only — no new anime can be discovered)
+- **Reported by:** User trying to find "Maboroshi" (Alice to Therese no Maboroshi Koujou). Logs showed several minutes of failed searches across many query variants.
+- **Symptom:** Searching any anime not already cached in local DB returned empty results. Searching a query that partially matched a stale local entry returned only that stale entry. Forced `?source=shikimori` returned `data: null`.
+- **Root cause:** Shikimori migrated their domain from `shikimori.one` to `shikimori.io` and now serves a 301 redirect with an HTML body on the old host. The catalog's `SHIKIMORI_GRAPHQL_URL` default still pointed to `https://shikimori.one/api/graphql`. Go's standard `http.Client` follows 301 on a POST as a GET (per RFC) and replays no body, so the request became `GET https://shikimori.io/api/graphql` with no GraphQL query — the response was an HTML page. The JSON decoder choked on `<` and the parser returned `EXTERNAL_API_ERROR: invalid character '<' looking for beginning of value`. The error was logged at WARN and the upstream service swallowed it (returned empty results, status 200), so the failure was silent end-to-end.
+- **Fix applied:**
+  - `services/catalog/internal/config/config.go` — default `SHIKIMORI_BASE_URL` and `SHIKIMORI_GRAPHQL_URL` updated to `shikimori.io`
+  - `services/catalog/internal/parser/shikimori/client.go:623` — poster URL prefix updated to `https://shikimori.io`
+  - Busted stale `search:*` Redis keys that had cached the empty/partial results during the broken window
+- **Verification:** `GET /api/anime/search?q=Maboroshi` now returns 13 results including the user's target (shikimori_id 49303 — Alice to Therese no Maboroshi Koujou).
+- **Status:** Fixed (2026-05-06)
+
 ### ISS-003: Error reports received with empty fields
 - **Date:** 2026-02-27
 - **Severity:** Medium (reports useless without context)

@@ -620,7 +620,7 @@ func (c *Client) GetRelatedAnime(ctx context.Context, shikimoriID string) ([]dom
 			ra.Score = score
 		}
 		if e.Anime.Image != nil && e.Anime.Image.Original != "" {
-			ra.PosterURL = "https://shikimori.one" + e.Anime.Image.Original
+			ra.PosterURL = "https://shikimori.io" + e.Anime.Image.Original
 		}
 		result = append(result, ra)
 	}

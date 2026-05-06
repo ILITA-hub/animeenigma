@@ -102,8 +102,8 @@ func Load() (*Config, error) {
 			Issuer: getEnv("JWT_ISSUER", "animeenigma"),
 		},
 		Shikimori: ShikimoriConfig{
-			BaseURL:    getEnv("SHIKIMORI_BASE_URL", "https://shikimori.one"),
-			GraphQLURL: getEnv("SHIKIMORI_GRAPHQL_URL", "https://shikimori.one/api/graphql"),
+			BaseURL:    getEnv("SHIKIMORI_BASE_URL", "https://shikimori.io"),
+			GraphQLURL: getEnv("SHIKIMORI_GRAPHQL_URL", "https://shikimori.io/api/graphql"),
 			UserAgent:  getEnv("SHIKIMORI_USER_AGENT", "AnimeEnigma/1.0"),
 			RateLimit:  getEnvInt("SHIKIMORI_RATE_LIMIT", 5), // requests per second
 			Timeout:    getEnvDuration("SHIKIMORI_TIMEOUT", 30*time.Second),
