@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Recommendations Engine
-status: in_progress
-last_updated: "2026-05-06T06:35:00.000Z"
-last_activity: 2026-05-06 — Phase 11 (User Signals + Up Next Row) shipped
+status: executing
+stopped_at: Phase 12 Wave 1 (catalog schema + Shikimori parser + AniList client) shipped — 8 commits, schema verified live in postgres, Shikimori smoke test populated kind/rating/material_source/studios end-to-end. Wave 2 (backfill 3857 missing rows) next.
+last_updated: "2026-05-06T10:15:00.000Z"
+last_activity: 2026-05-06 -- Phase 12 plan 01 (Wave 1) complete
 progress:
-  total_phases: 6
+  total_phases: 14
   completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
-  percent: 50
+  total_plans: 7
+  completed_plans: 4
+  percent: 57
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-04 for v2.0)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
-**Current focus:** Phase 11 (User Signals + Up Next Row) shipped 2026-05-06 — logged-in users now see a personalized "Up Next for you" row backed by full S1+S2+S3+S4 ensemble (S5 omitted), per-user Redis 6h cache, 6h cron + 5min-debounced on-write trigger, completed/dropped exclusion. Anonymous trending row (Phase 10) unchanged. Phase 12 (S5 TF-IDF affinity + attribute schema backfill) opens next.
+**Current focus:** Phase 12 — TF-IDF Attribute Affinity (S5)
 
 ## Current Position
 
-Phase: Phase 12 — S5 TF-IDF Affinity + Attribute Backfill (pending discuss/plan)
-Plan: —
-Status: Phase 9 ✓; Phase 10 ✓; Phase 11 ✓; Phase 12 opening
-Last activity: 2026-05-06 — Phase 11 shipped (16 atomic commits, full ensemble live, OptionalJWT gateway middleware added)
+Phase: 12 (TF-IDF Attribute Affinity (S5)) — EXECUTING
+Plan: 2 of 3 (Wave 2 — backfill)
+Status: Executing Phase 12 — Wave 1 complete, Wave 2 next
+Last activity: 2026-05-06 -- Phase 12 plan 01 (Wave 1) complete; 3857 rows queued for Wave 2 backfill
 
 ## Performance Metrics
 
@@ -45,6 +46,8 @@ Last activity: 2026-05-06 — Phase 11 shipped (16 atomic commits, full ensemble
 
 Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
 
+- 2026-05-06: Shikimori adaptation-source field is named `origin`, NOT `source` (CONTEXT.md §S5 was wrong). Live introspection confirmed; parser fixed in Phase 12 Wave 1.
+- 2026-05-06: libs/database wrapper's AutoMigrate doesn't create m2m join tables for relations added to pre-existing structs — fall through to gorm's native AutoMigrate after the wrapper for new m2m. Caught at Phase 12 Wave 1 redeploy verification.
 - 2026-05-06: v2.0 roadmap structured as 6 phases (9-14): Foundation → Population Signals + Trending → User Signals + Up Next Row → S5 TF-IDF → S6 Pin → Admin Debug + Eval. Each phase independently shippable. Phase numbering continues from v1.0 (last shipped phase = 8).
 - 2026-05-04: v2.0 ensemble pattern locked over tiered fallback or two-stage retrieval+ranker — graceful cold-start, free admin breakdown, can grow into two-stage at scale without rewrite.
 - 2026-05-04: Per-pool min-max normalization is the architectural fix that lets weights be coherent across signals at different raw scales.
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-06T06:35:00.000Z
-Stopped at: Phase 11 (User Signals + Up Next Row) shipped — 16 commits, all 5 success criteria verified live, deployed to production. Ready for `/gsd-discuss-phase 12`.
-Resume file: —
+Last session: 2026-05-06T10:15:00.000Z
+Stopped at: Phase 12 Wave 1 (catalog schema + Shikimori parser + AniList client) shipped — 8 commits including 2 Rule-1 deviation fixes, full production verification passed. Frieren refresh proves the Shikimori parser end-to-end (kind=tv, rating=pg_13, material_source=manga, studios=[Madhouse]). Wave 2 (services/maintenance/cmd/backfill-attributes — 3857 rows) is the next plan.
+Resume file: .planning/phases/12-tf-idf-attribute-affinity-s5/12-01-SUMMARY.md
