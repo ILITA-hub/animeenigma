@@ -114,6 +114,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.PrometheusService, nil
 	case "loki":
 		return s.serviceURLs.LokiService, nil
+	case "web":
+		return s.serviceURLs.WebService, nil
 	default:
 		return "", errors.NotFound("service")
 	}

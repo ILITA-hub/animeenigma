@@ -18,7 +18,9 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"regexp"
 	"sort"
 	"time"
 
@@ -30,6 +32,64 @@ import (
 	"github.com/go-chi/chi/v5"
 	"gorm.io/gorm"
 )
+
+// uuidRe matches the canonical UUID v4 form (8-4-4-4-12 hex with hyphens).
+// We use it to decide whether the {user_id} URL param is already a UUID, or
+// whether it needs to be resolved from username / public_id.
+var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// resolveUserID accepts a string from the URL param and returns the canonical
+// UUID. The param may be any of: (a) a UUID v4 — returned as-is, (b) a
+// username, (c) a public_id. The lookup is a single SELECT against the users
+// table the player service shares with auth.
+//
+// Behavior:
+//   - Returns the raw input + nil if it already matches the UUID v4 format.
+//   - Returns the resolved UUID + nil on a successful username/public_id lookup.
+//   - Returns "" + nil if the lookup completes cleanly but the user does
+//     not exist (caller treats as 404).
+//   - Returns the raw input + nil if the users table is unreachable
+//     (e.g. test fixtures that only seed recs tables) — graceful fall-through
+//     so downstream queries error naturally rather than masking the real
+//     issue with a confusing 404.
+//   - Returns "" + err on any other DB error (caller surfaces as 500).
+func (h *AdminRecsHandler) resolveUserID(ctx context.Context, raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	if uuidRe.MatchString(raw) {
+		return raw, nil
+	}
+	var id string
+	err := h.db.WithContext(ctx).
+		Table("users").
+		Select("id").
+		Where("username = ? OR public_id = ?", raw, raw).
+		Limit(1).
+		Scan(&id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", nil
+		}
+		// Test fixtures often only create the recs tables; "no such table"
+		// (sqlite) and "relation ... does not exist" (postgres) both indicate
+		// the users table is absent — fall through to the raw input rather
+		// than 500. Production has the users table guaranteed.
+		msg := err.Error()
+		if regexpUsersTableMissing.MatchString(msg) {
+			h.log.Debugw("admin recs: users table missing, falling through with raw param",
+				"raw", raw, "error", msg)
+			return raw, nil
+		}
+		return "", err
+	}
+	return id, nil
+}
+
+// regexpUsersTableMissing matches "no such table: users" (sqlite) and
+// "relation \"users\" does not exist" (postgres). Used by resolveUserID to
+// gracefully fall through when the users table is absent in tests.
+var regexpUsersTableMissing = regexp.MustCompile(`no such table:?\s*users|relation\s+"?users"?\s+does\s+not\s+exist`)
 
 // adminTopNSliceSize — the admin debug page shows the top 50 ranked candidates,
 // matching the user-facing serveLoggedIn slice ceiling so admins see exactly
@@ -160,9 +220,22 @@ var adminSignalVersions = map[string]string{
 // returns the filtered_out audit alongside.
 func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := chi.URLParam(r, "user_id")
-	if userID == "" {
+	rawID := chi.URLParam(r, "user_id")
+	if rawID == "" {
 		httputil.BadRequest(w, "user_id is required")
+		return
+	}
+
+	// Resolve username / public_id to UUID so admins can hit
+	// /admin/recs/{username} without memorizing UUIDs.
+	userID, resolveErr := h.resolveUserID(ctx, rawID)
+	if resolveErr != nil {
+		h.log.Errorw("admin recs: resolve user_id failed", "raw", rawID, "error", resolveErr)
+		httputil.Error(w, resolveErr)
+		return
+	}
+	if userID == "" {
+		httputil.NotFound(w, "user not found: "+rawID)
 		return
 	}
 
@@ -358,9 +431,20 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 // recommendations?").
 func (h *AdminRecsHandler) ForceRecompute(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := chi.URLParam(r, "user_id")
-	if userID == "" {
+	rawID := chi.URLParam(r, "user_id")
+	if rawID == "" {
 		httputil.BadRequest(w, "user_id is required")
+		return
+	}
+
+	userID, resolveErr := h.resolveUserID(ctx, rawID)
+	if resolveErr != nil {
+		h.log.Errorw("admin recs recompute: resolve user_id failed", "raw", rawID, "error", resolveErr)
+		httputil.Error(w, resolveErr)
+		return
+	}
+	if userID == "" {
+		httputil.NotFound(w, "user not found: "+rawID)
 		return
 	}
 

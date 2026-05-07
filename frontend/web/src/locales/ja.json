@@ -563,7 +563,12 @@
       "pinSourceShikimoriSimilar": "Shikimori /similar",
       "pinSourceScore5Fallback": "Score-5 fallback",
       "error403": "Admins only",
-      "errorGeneric": "Failed to load admin recs"
+      "errorGeneric": "Failed to load admin recs",
+      "pickerHelp": "Enter a username, public ID, or UUID to view that user's rec breakdown.",
+      "pickerLabel": "User identifier",
+      "pickerPlaceholder": "username, public_id, or UUID",
+      "pickerSubmit": "Open",
+      "pickerSelf": "Use my account"
     }
   }
 }

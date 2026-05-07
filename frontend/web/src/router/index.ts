@@ -90,6 +90,16 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'admin.recs.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // Picker view for the admin recs debug page. Reachable from the gateway
+    // /admin landing HTML when the admin clicks "Rec Engine Debug" without
+    // a known user_id in hand. Accepts username, public_id, or UUID and
+    // redirects to /admin/recs/{input}.
+    path: '/admin/recs',
+    name: 'admin-recs-picker',
+    component: () => import('@/views/admin/AdminRecsPicker.vue'),
+    meta: { titleKey: 'admin.recs.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),

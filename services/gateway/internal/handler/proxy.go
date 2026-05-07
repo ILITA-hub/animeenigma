@@ -66,6 +66,13 @@ func (h *ProxyHandler) ProxyToLoki(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "loki")
 }
 
+// ProxyToWeb proxies requests to the web service (Vue SPA via nginx).
+// Used by /admin/recs/* so the SPA's admin debug page is reachable through
+// the same /admin/ URL prefix as Grafana/Prometheus/Loki.
+func (h *ProxyHandler) ProxyToWeb(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "web")
+}
+
 func (h *ProxyHandler) proxy(w http.ResponseWriter, r *http.Request, service string) {
 	resp, err := h.proxyService.Forward(r, service)
 	if err != nil {

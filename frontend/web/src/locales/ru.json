@@ -563,7 +563,12 @@
       "pinSourceShikimoriSimilar": "Shikimori /similar",
       "pinSourceScore5Fallback": "Запасной вариант (≥5)",
       "error403": "Только для админов",
-      "errorGeneric": "Не удалось загрузить отладку рекомендаций"
+      "errorGeneric": "Не удалось загрузить отладку рекомендаций",
+      "pickerHelp": "Введите имя пользователя, публичный ID или UUID, чтобы открыть отладку рекомендаций.",
+      "pickerLabel": "Идентификатор пользователя",
+      "pickerPlaceholder": "username, public_id или UUID",
+      "pickerSubmit": "Открыть",
+      "pickerSelf": "Открыть мой аккаунт"
     }
   }
 }

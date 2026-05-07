@@ -99,6 +99,7 @@ func NewRouter(
     <a href="/admin/grafana/">Grafana - Metrics & Dashboards</a>
     <a href="/admin/prometheus/">Prometheus - Metrics Database</a>
     <a href="/admin/grafana/explore?orgId=1&left=%7B%22datasource%22:%22Loki%22%7D">Loki - Log Explorer (via Grafana)</a>
+    <a href="/admin/recs/">Rec Engine Debug — per-user signal breakdown, force-recompute, S11 audit</a>
 </body>
 </html>`))
 		})
@@ -106,6 +107,15 @@ func NewRouter(
 		r.HandleFunc("/grafana/*", proxyHandler.ProxyToGrafana)
 		r.HandleFunc("/prometheus/*", proxyHandler.ProxyToPrometheus)
 		r.HandleFunc("/loki/*", proxyHandler.ProxyToLoki)
+
+		// Phase 14: /admin/recs/* falls through to the web service so the Vue
+		// SPA's AdminRecs.vue route can render. Without this, chi would 404 any
+		// /admin path it doesn't explicitly know — including the new SPA
+		// admin debug page. Both /admin/recs (no trailing slash) and
+		// /admin/recs/{user_id} are covered. Auth is already enforced by the
+		// /admin route group's JWT + AdminRoleMiddleware above.
+		r.HandleFunc("/recs", proxyHandler.ProxyToWeb)
+		r.HandleFunc("/recs/*", proxyHandler.ProxyToWeb)
 	})
 
 	// API routes

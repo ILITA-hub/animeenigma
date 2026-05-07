@@ -37,6 +37,7 @@ type ServiceURLs struct {
 	RoomsService     string
 	StreamingService string
 	ThemesService    string
+	WebService       string
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
@@ -76,6 +77,7 @@ func Load() (*Config, error) {
 			RoomsService:     getEnv("ROOMS_SERVICE_URL", "http://rooms:8084"),
 			StreamingService: getEnv("STREAMING_SERVICE_URL", "http://streaming:8082"),
 			ThemesService:    getEnv("THEMES_SERVICE_URL", "http://themes:8086"),
+			WebService:       getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
 			PrometheusService: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090"),
