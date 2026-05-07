@@ -82,6 +82,14 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'status.title' }
   },
   {
+    // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug page for the recs
+    // engine. Route guard rejects non-admin users via meta.requiresAdmin.
+    path: '/admin/recs/:user_id',
+    name: 'admin-recs',
+    component: () => import('@/views/admin/AdminRecs.vue'),
+    meta: { titleKey: 'admin.recs.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),
@@ -120,9 +128,18 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     sessionStorage.setItem('returnUrl', to.fullPath)
     next({ name: 'auth' })
-  } else {
-    next()
+    return
   }
+
+  // Phase 14: requiresAdmin gate. Non-admin users are sent home.
+  // The route guard is purely UX — the actual security boundary is the
+  // gateway + player AdminRoleMiddleware (defense-in-depth).
+  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    next({ name: 'home' })
+    return
+  }
+
+  next()
 })
 
 // Auto-reload when lazy-loaded chunks fail after a deploy

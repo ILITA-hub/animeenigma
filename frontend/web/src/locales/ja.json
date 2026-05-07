@@ -538,5 +538,32 @@
     "openInNewTab": "新しいタブで開く",
     "openMenu": "メニューを開く",
     "markNextWatched": "第{n}話を視聴済みにする"
+  },
+  "admin": {
+    "recs": {
+      "title": "Recs Debug",
+      "breadcrumb": "User",
+      "forceRecompute": "Force recompute",
+      "recomputing": "Recomputing…",
+      "lastComputed": "Last computed",
+      "columnRank": "Rank",
+      "columnAnime": "Anime",
+      "columnFinal": "Final",
+      "columnTopContributor": "Top",
+      "expandRow": "Expand",
+      "collapseRow": "Collapse",
+      "filterAuditTitle": "Filter audit",
+      "filterAuditEmpty": "Nothing filtered",
+      "reasonCompleted": "Completed",
+      "reasonDropped": "Dropped",
+      "reasonHidden": "Hidden",
+      "contributorDetailS5Title": "TF-IDF terms",
+      "contributorDetailS6Title": "Pin source",
+      "pinSourceLocal": "Local co-occurrence",
+      "pinSourceShikimoriSimilar": "Shikimori /similar",
+      "pinSourceScore5Fallback": "Score-5 fallback",
+      "error403": "Admins only",
+      "errorGeneric": "Failed to load admin recs"
+    }
   }
 }

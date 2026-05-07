@@ -538,5 +538,32 @@
     "openInNewTab": "Открыть в новой вкладке",
     "openMenu": "Открыть меню",
     "markNextWatched": "Отметить серию {n} просмотренной"
+  },
+  "admin": {
+    "recs": {
+      "title": "Отладка рекомендаций",
+      "breadcrumb": "Пользователь",
+      "forceRecompute": "Пересчитать",
+      "recomputing": "Пересчёт…",
+      "lastComputed": "Обновлено",
+      "columnRank": "Ранг",
+      "columnAnime": "Аниме",
+      "columnFinal": "Итог",
+      "columnTopContributor": "Топ",
+      "expandRow": "Развернуть",
+      "collapseRow": "Свернуть",
+      "filterAuditTitle": "Аудит фильтра",
+      "filterAuditEmpty": "Ничего не отфильтровано",
+      "reasonCompleted": "Просмотрено",
+      "reasonDropped": "Брошено",
+      "reasonHidden": "Скрыто",
+      "contributorDetailS5Title": "TF-IDF термы",
+      "contributorDetailS6Title": "Источник пина",
+      "pinSourceLocal": "Локальная совместимость",
+      "pinSourceShikimoriSimilar": "Shikimori /similar",
+      "pinSourceScore5Fallback": "Запасной вариант (≥5)",
+      "error403": "Только для админов",
+      "errorGeneric": "Не удалось загрузить отладку рекомендаций"
+    }
   }
 }
