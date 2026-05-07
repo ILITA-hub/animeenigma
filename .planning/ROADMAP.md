@@ -168,7 +168,8 @@
   3. A logged-in user clicking a card in the "Up Next for you" row emits a `rec_click` event tagged with the top contributor signal ID at click time; opening the player and crossing the 20-minute auto-mark threshold emits a `rec_watched` event with the same tag — verified by tailing the events table on production for the `ui_audit_bot` user
   4. `curl http://localhost:8083/metrics | grep rec_signal_ctr` returns a per-signal-id labeled gauge or summary, computed as `rec_watched_total / rec_click_total` over the last hour, scraped by Prometheus and visible in Grafana via a new "Rec engine" dashboard row
   5. EN + RU locale parity for any new admin-page copy that surfaces to non-admin contexts (rec row labels are already covered in earlier phases; this phase adds nothing user-facing other than telemetry)
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 14-01-PLAN.md — AdminRoleMiddleware + Ensemble.RankWithBreakdown + S11.FilterAudit + AdminRecsHandler (GetAdminRecs + ForceRecompute) + rec_events table/handler/repo + libs/metrics rec_click_total/rec_watched_total counters + gateway routing (/admin/recs/* admin-gated, /events/rec optional-auth) + frontend recsAnalytics utility (localStorage FIFO 50, 1h TTL) + AdminRecs.vue + useAdminRecs composable + admin route guard + Home.vue rec_click hook + 4-player rec_watched hooks + Grafana rec-engine.json dashboard + EN/RU/JA i18n + after-update changelog. (Wave 1)
 **UI hint**: yes
 
 ## Progress
