@@ -27,6 +27,7 @@ func NewRouter(
 	preferenceHandler *handler.PreferenceHandler,
 	overrideHandler *handler.OverrideHandler,
 	recsHandler *handler.RecsHandler,
+	adminRecsHandler *handler.AdminRecsHandler, // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02)
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -129,6 +130,19 @@ func NewRouter(
 		r.Route("/users/recs", func(r chi.Router) {
 			r.Use(OptionalAuthMiddleware(jwtConfig))
 			r.Get("/", recsHandler.GetRecs)
+		})
+
+		// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute.
+		// AuthMiddleware first (401 on missing/invalid JWT), AdminRoleMiddleware
+		// second (403 on non-admin role). Defense-in-depth: the gateway also
+		// applies the same gates (services/gateway/internal/transport/router.go).
+		// The /events/rec public-telemetry route lives below; added in Task 6
+		// once RecEventsHandler exists.
+		r.Route("/admin/recs", func(r chi.Router) {
+			r.Use(AuthMiddleware(jwtConfig))
+			r.Use(AdminRoleMiddleware)
+			r.Get("/{user_id}", adminRecsHandler.GetAdminRecs)
+			r.Post("/{user_id}/recompute", adminRecsHandler.ForceRecompute)
 		})
 
 		// Public user watchlist

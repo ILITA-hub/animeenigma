@@ -6,6 +6,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -22,33 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeAdminCache extends fakeRecsCache with a Delete method so the
-// force-recompute path can be exercised. The recs handler uses the narrower
-// recsCache interface (Get + Set); the admin handler additionally needs
-// Delete to bust the per-user topN cache before recompute.
-type fakeAdminCache struct {
-	*fakeRecsCache
-	deletedKeys []string
-	deleteErr   error
-}
-
-func newFakeAdminCache() *fakeAdminCache {
-	return &fakeAdminCache{fakeRecsCache: newFakeRecsCache()}
-}
-
-func (c *fakeAdminCache) Delete(_ interface {
-	Done() <-chan struct{}
-	Err() error
-	Value(any) any
-	Deadline() (time.Time, bool)
-}, _ ...string) error {
-	return nil
-}
-
-// adminCacheStub satisfies the narrow Get+Set+Delete surface AdminRecsHandler
-// expects. We can't reuse fakeAdminCache directly because Delete in the
-// production cache.Cache interface uses ctx context.Context; redefine a tiny
-// type that just records calls.
+// adminCacheStub satisfies the Get+Set+Delete surface AdminRecsHandler
+// expects. Records Delete calls so the force-recompute test can assert the
+// per-user topN cache key was busted.
 type adminCacheStub struct {
 	store     map[string][]byte
 	notFound  error
@@ -63,7 +40,7 @@ func newAdminCacheStub() *adminCacheStub {
 	}
 }
 
-func (c *adminCacheStub) Get(_ ctxLike, key string, dest interface{}) error {
+func (c *adminCacheStub) Get(_ context.Context, key string, dest interface{}) error {
 	v, ok := c.store[key]
 	if !ok {
 		return c.notFound
@@ -71,7 +48,7 @@ func (c *adminCacheStub) Get(_ ctxLike, key string, dest interface{}) error {
 	return json.Unmarshal(v, dest)
 }
 
-func (c *adminCacheStub) Set(_ ctxLike, key string, value interface{}, _ time.Duration) error {
+func (c *adminCacheStub) Set(_ context.Context, key string, value interface{}, _ time.Duration) error {
 	b, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -80,19 +57,9 @@ func (c *adminCacheStub) Set(_ ctxLike, key string, value interface{}, _ time.Du
 	return nil
 }
 
-func (c *adminCacheStub) Delete(_ ctxLike, keys ...string) error {
+func (c *adminCacheStub) Delete(_ context.Context, keys ...string) error {
 	c.deletes = append(c.deletes, keys...)
 	return c.deleteErr
-}
-
-// ctxLike captures the context.Context surface as an interface so the stub
-// doesn't have to import context. We use the real context type at call sites
-// — Go's structural typing accepts the matching method set.
-type ctxLike = interface {
-	Deadline() (time.Time, bool)
-	Done() <-chan struct{}
-	Err() error
-	Value(any) any
 }
 
 // ----------------------------------------------------------------------------
