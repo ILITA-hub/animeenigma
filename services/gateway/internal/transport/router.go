@@ -166,6 +166,24 @@ func NewRouter(
 			r.HandleFunc("/users/recs/", proxyHandler.ProxyToPlayer)
 		})
 
+		// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute
+		// routes proxied to the player service. JWT validation + admin role
+		// gate at the gateway layer (defense-in-depth — player applies the same
+		// gates again in services/player/internal/transport/router.go).
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(AdminRoleMiddleware)
+			r.HandleFunc("/admin/recs/*", proxyHandler.ProxyToPlayer)
+		})
+
+		// Phase 14 (REC-EVAL-01): public telemetry endpoint. JWT-OPTIONAL so
+		// anonymous CTR data flows from the trending row. Player applies its
+		// own OptionalAuthMiddleware on the inner /events/rec route.
+		r.Group(func(r chi.Router) {
+			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.HandleFunc("/events/rec", proxyHandler.ProxyToPlayer)
+		})
+
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
