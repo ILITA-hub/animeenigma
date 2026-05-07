@@ -28,6 +28,7 @@ func NewRouter(
 	overrideHandler *handler.OverrideHandler,
 	recsHandler *handler.RecsHandler,
 	adminRecsHandler *handler.AdminRecsHandler, // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02)
+	recEventsHandler *handler.RecEventsHandler, // Phase 14 (REC-EVAL-01)
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -136,13 +137,19 @@ func NewRouter(
 		// AuthMiddleware first (401 on missing/invalid JWT), AdminRoleMiddleware
 		// second (403 on non-admin role). Defense-in-depth: the gateway also
 		// applies the same gates (services/gateway/internal/transport/router.go).
-		// The /events/rec public-telemetry route lives below; added in Task 6
-		// once RecEventsHandler exists.
 		r.Route("/admin/recs", func(r chi.Router) {
 			r.Use(AuthMiddleware(jwtConfig))
 			r.Use(AdminRoleMiddleware)
 			r.Get("/{user_id}", adminRecsHandler.GetAdminRecs)
 			r.Post("/{user_id}/recompute", adminRecsHandler.ForceRecompute)
+		})
+
+		// Phase 14 (REC-EVAL-01): public telemetry endpoint. JWT-OPTIONAL —
+		// anonymous trending CTR data is valid per CONTEXT.md §C4. The handler
+		// increments Prometheus counters AND persists a rec_events row.
+		r.Route("/events", func(r chi.Router) {
+			r.Use(OptionalAuthMiddleware(jwtConfig))
+			r.Post("/rec", recEventsHandler.PostRecEvent)
 		})
 
 		// Public user watchlist
