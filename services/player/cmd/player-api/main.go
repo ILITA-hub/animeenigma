@@ -59,6 +59,7 @@ func main() {
 		&domain.RecUserSignals{},
 		&domain.RecPopulationSignals{},
 		&domain.RecCompletionCoOccurrence{},
+		&domain.RecEvent{}, // Phase 14 (REC-EVAL-01)
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -153,13 +154,20 @@ func main() {
 	// recs.Orchestrator (precompute.go) for per-user RunForUser semantics.
 	// Cache invalidation on success busts recs:user:{user_id}:topN so the
 	// next request picks up fresh signals.
+	//
+	// Phase 14: userPrecompute is hoisted to outer scope (vs. its previous
+	// block-local declaration) so the AdminRecsHandler.ForceRecompute path
+	// can call the SAME synchronous precompute orchestrator the cron uses
+	// — avoids spinning up a parallel module list and keeps admin debug
+	// in lockstep with the production precompute schedule.
 	var userOrch *recs.UserOrchestrator
+	var userPrecompute *recs.Orchestrator
 	{
-		recsRepo := repo.NewRecsRepository(db.DB)
-		s1 := signals.NewS1ScoreCluster(db.DB, recsRepo)
+		recsRepoLocal := repo.NewRecsRepository(db.DB)
+		s1 := signals.NewS1ScoreCluster(db.DB, recsRepoLocal)
 		s2 := signals.NewS2Metadata(db.DB)
-		s5 := signals.NewS5Attribute(db.DB, recsRepo) // Phase 12 (REC-SIG-05)
-		userPrecompute := recs.NewOrchestrator([]recs.SignalModule{s1, s2, s5})
+		s5 := signals.NewS5Attribute(db.DB, recsRepoLocal) // Phase 12 (REC-SIG-05)
+		userPrecompute = recs.NewOrchestrator([]recs.SignalModule{s1, s2, s5})
 		userOrch = recs.NewUserOrchestrator(userPrecompute, db.DB, redisCache, log)
 		// 6-hour cadence per CONTEXT.md decisions §User-Signal Cron.
 		// Boot tick runs immediately so logged-in users get fresh signals
@@ -266,11 +274,26 @@ func main() {
 	s6 := signals.NewS6ComboPin(db.DB, recsRepo, shikimoriSimilarClient, log)
 	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, s6, log)
 
+	// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute.
+	// userPrecompute is the same Orchestrator the user-orchestrator cron
+	// uses for its 6h precompute pass — admin force-recompute calls the
+	// same synchronous RunForUser path so admin clicks always recompute
+	// (NOT the debounced TriggerForUser, which would NO-OP after the
+	// second click within 5 minutes).
+	adminRecsHandler := handler.NewAdminRecsHandler(db.DB, recsRepo, redisCache, s6, userPrecompute, log)
+
+	// Phase 14 (REC-EVAL-01): public events endpoint. JWT-OPTIONAL so
+	// anonymous trending CTR data flows. Persists to rec_events table for
+	// v2.1 weight-tuning queries; increments rec_click_total /
+	// rec_watched_total Prometheus counters via libs/metrics/recs.go.
+	recEventsRepo := repo.NewRecEventsRepository(db.DB)
+	recEventsHandler := handler.NewRecEventsHandler(recEventsRepo, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, recEventsHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
