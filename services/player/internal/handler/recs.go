@@ -80,6 +80,11 @@ type RecAnimePayload struct {
 // the pinned row (the JSON-zero approximation of "null" since RecItem.Final
 // is float64; the frontend gates display on Pinned, NOT Final, so this is
 // the spec §B7 deviation).
+//
+// Phase 14 (REC-EVAL-01) extension: TopContributor surfaces the click-time
+// signal_id so the frontend can tag rec_click events without a separate
+// fetch. For pinned rows this stays empty — the frontend uses the literal
+// "s6_pin" string per locked Phase 13 hand-off.
 type RecItem struct {
 	Anime          RecAnimePayload `json:"anime"`
 	Final          float64         `json:"final"`
@@ -88,6 +93,7 @@ type RecItem struct {
 	PinSeedAnimeID string          `json:"pin_seed_anime_id,omitempty"` // Phase 13 (REC-UX-03)
 	PinSource      string          `json:"pin_source,omitempty"`        // Phase 13 (REC-UX-03)
 	Rank           int             `json:"rank"`
+	TopContributor string          `json:"top_contributor,omitempty"` // Phase 14 (REC-EVAL-01)
 }
 
 // RecsEnvelope is the data field of the API response (wrapped by httputil.OK).
@@ -311,6 +317,13 @@ func (h *RecsHandler) computeFresh(ctx context.Context) (RecsEnvelope, error) {
 	}
 
 	items := make([]RecItem, 0, len(top))
+	// Phase 14 (REC-EVAL-01): trending row uses S3 + S4 only; derive
+	// top_contributor for the click telemetry pipeline. Default to "s3"
+	// when both signals are 0 so the click-time signal_id is never empty.
+	trendingWeights := []recs.WeightedSignal{
+		{Module: h.s3, Weight: 0.20},
+		{Module: h.s4, Weight: 0.10},
+	}
 	for i, r := range top {
 		anime, ok := hydrated[r.AnimeID]
 		if !ok {
@@ -318,11 +331,16 @@ func (h *RecsHandler) computeFresh(ctx context.Context) (RecsEnvelope, error) {
 			// possible under concurrent edits. Skip silently.
 			continue
 		}
+		topSig := deriveTopContributor(r.Breakdown, trendingWeights)
+		if topSig == "" {
+			topSig = "s3"
+		}
 		items = append(items, RecItem{
-			Anime:  anime,
-			Final:  r.Final,
-			Pinned: false,
-			Rank:   i + 1,
+			Anime:          anime,
+			Final:          r.Final,
+			Pinned:         false,
+			Rank:           i + 1,
+			TopContributor: topSig,
 		})
 	}
 
@@ -333,6 +351,28 @@ func (h *RecsHandler) computeFresh(ctx context.Context) (RecsEnvelope, error) {
 		Total:       len(items),
 		RowLabelKey: "recs.trending",
 	}, nil
+}
+
+// deriveTopContributor returns the SignalID with the largest weighted
+// contribution to a Recommendation's Final score. Mirrors the
+// RankWithBreakdown TopContributor logic but operates on the narrow
+// Breakdown map the public Rank API exposes. Phase 14 (REC-EVAL-01).
+//
+// Returns "" only when weights is empty.
+func deriveTopContributor(breakdown map[recs.SignalID]recs.NormalizedScore, weights []recs.WeightedSignal) string {
+	if len(weights) == 0 {
+		return ""
+	}
+	var topSig recs.SignalID
+	topVal := -1.0
+	for _, ws := range weights {
+		w := ws.Weight * float64(breakdown[ws.Module.ID()])
+		if w > topVal {
+			topVal = w
+			topSig = ws.Module.ID()
+		}
+	}
+	return string(topSig)
 }
 
 // computeFreshForUser runs the personalized ensemble for a logged-in user:
@@ -396,16 +436,26 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 	}
 
 	items := make([]RecItem, 0, len(top))
+	// Phase 14 (REC-EVAL-01): derive top_contributor per item so the
+	// frontend can tag rec_click events without a separate fetch.
+	upNextWeights := []recs.WeightedSignal{
+		{Module: h.s1, Weight: 0.30},
+		{Module: h.s2, Weight: 0.20},
+		{Module: h.s3, Weight: 0.20},
+		{Module: h.s4, Weight: 0.10},
+		{Module: h.s5, Weight: 0.20},
+	}
 	for i, r := range top {
 		anime, ok := hydrated[r.AnimeID]
 		if !ok {
 			continue
 		}
 		items = append(items, RecItem{
-			Anime:  anime,
-			Final:  r.Final,
-			Pinned: false,
-			Rank:   i + 1,
+			Anime:          anime,
+			Final:          r.Final,
+			Pinned:         false,
+			Rank:           i + 1,
+			TopContributor: deriveTopContributor(r.Breakdown, upNextWeights),
 		})
 	}
 

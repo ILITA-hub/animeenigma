@@ -235,6 +235,7 @@ import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
+import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
 
@@ -656,6 +657,21 @@ const autoMarkEpisodeWatched = async () => {
       watchedEpisodes.value = selectedEpisode.value
     }
     emit('episodeWatched', { episode: selectedEpisode.value })
+    // Phase 14 (REC-EVAL-01): emit rec_watched if a click for this anime
+    // landed in the last hour. Strict click→watched correlation.
+    const recent = findRecentClick(props.animeId)
+    if (recent) {
+      void emitRecWatched({
+        event_type: 'rec_watched',
+        anime_id: props.animeId,
+        signal_id: recent.signal_id,
+        pinned: recent.pinned,
+        pin_source: recent.pin_source,
+        pin_seed_anime_id: recent.pin_seed_anime_id,
+        source_route: 'player',
+        rank: recent.rank,
+      })
+    }
   } catch {
     // Silent fail for auto-mark
   }

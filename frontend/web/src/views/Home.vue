@@ -47,6 +47,7 @@
           :key="item.anime.id"
           :to="`/anime/${item.anime.id}`"
           class="flex-shrink-0 w-32 md:w-40 lg:w-48 group"
+          @click="onRecClick(item)"
         >
           <div
             class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] mb-2"
@@ -363,14 +364,15 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { getLocalizedTitle } from '@/utils/title'
 import { useHomeStore } from '@/stores/home'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useContextMenu } from '@/composables/useContextMenu'
-import { useRecs } from '@/composables/useRecs'
+import { useRecs, type RecItem } from '@/composables/useRecs'
+import { emitRecClick, type PinSource } from '@/utils/recsAnalytics'
 import { SearchAutocomplete } from '@/components/ui'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
@@ -389,9 +391,26 @@ interface HomeAnime {
 }
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const homeStore = useHomeStore()
 const watchlistStore = useWatchlistStore()
+
+// Phase 14 (REC-EVAL-01): rec_click telemetry on the trending row. The
+// router-link still navigates; emit fires non-blocking before navigation.
+function onRecClick(item: RecItem): void {
+  const signalId = item.pinned ? 's6_pin' : (item.top_contributor || 's3')
+  void emitRecClick({
+    event_type: 'rec_click',
+    anime_id: item.anime.id,
+    signal_id: signalId,
+    pinned: !!item.pinned,
+    pin_source: item.pin_source as PinSource | undefined,
+    pin_seed_anime_id: item.pin_seed_anime_id,
+    source_route: route.path,
+    rank: item.rank,
+  })
+}
 
 const searchQuery = ref('')
 

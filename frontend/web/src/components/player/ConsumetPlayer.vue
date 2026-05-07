@@ -377,6 +377,7 @@ import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
+import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -1154,6 +1155,22 @@ const markCurrentEpisodeWatched = async () => {
     episodeMarkedWatched.value = true
     watchedEpisodes.value = Math.max(watchedEpisodes.value, selectedEpisode.value.number)
     emit('episodeWatched', { episode: selectedEpisode.value.number })
+    // Phase 14 (REC-EVAL-01): emit rec_watched if a click for this anime
+    // landed in the last hour. Strict click→watched correlation; no match
+    // = no emit (not all marks originate from a recs row click).
+    const recent = findRecentClick(props.animeId)
+    if (recent) {
+      void emitRecWatched({
+        event_type: 'rec_watched',
+        anime_id: props.animeId,
+        signal_id: recent.signal_id,
+        pinned: recent.pinned,
+        pin_source: recent.pin_source,
+        pin_seed_anime_id: recent.pin_seed_anime_id,
+        source_route: 'player',
+        rank: recent.rank,
+      })
+    }
   } catch (err) {
     console.error('Failed to mark episode as watched:', err)
   } finally {

@@ -38,7 +38,11 @@ export interface RecItem {
   // (admin debug in Phase 14 reads it).
   pin_reason?: string
   pin_seed_anime_id?: string
-  pin_source?: 'local' | 'shikimori_similar'
+  pin_source?: 'local' | 'shikimori_similar' | 'score_5_fallback'
+  // Phase 14 (REC-EVAL-01) — click-time signal_id surfaced by the backend
+  // so the frontend can tag rec_click events without a separate fetch.
+  // Empty for pinned items (frontend uses the literal "s6_pin" instead).
+  top_contributor?: string
 }
 
 interface RecsEnvelope {
