@@ -23,14 +23,14 @@
 - [x] **Phase 7: Advanced Settings, Anonymous UX, Cross-Device Freshness** ✓ 2026-05-03
 - [x] **Phase 8: Recommendations Readiness Documentation** ✓ 2026-05-03
 
-### v2.0 Recommendations Engine (In Progress)
+### v2.0 Recommendations Engine (Functionally Complete — milestone-audit pending)
 
 - [x] **Phase 9: Recs Foundation — Interface, Ensemble, Normalizer, Schema** — Land the pluggable `SignalModule` interface, weighted-ensemble aggregator, per-pool min-max normalizer, and three new tables. No signals, no user-facing surface — silent infrastructure other phases bolt onto. ✅ shipped 2026-05-06
 - [x] **Phase 10: Population Signals, Filter, Trending Row** — Land S3 (trending), S4 (recency), S11 (filter), 60-minute population cron, Redis 6h top-N cache, and the anonymous "Trending now" home row. ✅ shipped 2026-05-06
 - [x] **Phase 11: User Signals & "Up Next for you" Row** — Land S1 (score-cluster) + S2 (item-item metadata), 6-hour user cron + debounced on-write trigger, and the logged-in "Up Next for you" home row. ✅ shipped 2026-05-06
 - [x] **Phase 12: TF-IDF Attribute Affinity (S5)** — Land S5 with six weighted attribute dimensions (Decision §A2 collapsed studios + producers) and the Kodik episode-count fallback. Personalization quality jumps; weights are tuned via admin breakdown view. ✅ shipped 2026-05-06
 - [x] **Phase 13: Combo-Watched-After Pin (S6)** — Land S6 cascade (local co-occurrence → Shikimori `/similar`), synchronous seed update on `MarkEpisodeWatched`, and the "Because you finished X" pinned tile. ✅ shipped 2026-05-06
-- [ ] **Phase 14: Admin Debug Page & Eval Pipeline** — Land the full `/admin/recs/:user_id` page (per-signal contribution, S5 term expand, S11 audit), force-recompute endpoint, frontend `rec_click` / `rec_watched` events, and Prometheus `rec_signal_ctr` metric.
+- [x] **Phase 14: Admin Debug Page & Eval Pipeline** — Land the full `/admin/recs/:user_id` page (per-signal contribution, S5 term expand, S11 audit), force-recompute endpoint, frontend `rec_click` / `rec_watched` events, and Prometheus `rec_click_total` / `rec_watched_total` counters + Grafana "Rec engine" dashboard. ✅ shipped 2026-05-07
 
 ## Phase Details
 

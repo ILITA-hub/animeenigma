@@ -39,10 +39,10 @@
 
 ### Admin & Eval
 
-- [ ] **REC-ADMIN-01**: Admin debug page at `/admin/recs/:user_id` displays per-signal contribution table (final, weight × normalized for each signal, top contributor per row), TF-IDF term breakdown for S5 on row expand, and S11 filter-audit list (which anime were excluded and why).
-- [ ] **REC-ADMIN-02**: Admin can force-recompute a user's recs via `POST /api/admin/recs/{user_id}/recompute`. Endpoint invalidates Redis cache, triggers immediate precompute, returns new top-N + computation latency.
-- [ ] **REC-EVAL-01**: Frontend emits `rec_click` (impression-to-click) and `rec_watched` (click-to-actually-started) events tagged with the top contributor signal ID at click time.
-- [ ] **REC-EVAL-02**: Prometheus exposes per-signal click-through-rate metric (`rec_signal_ctr` labeled by signal_id) for v2.1 weight tuning.
+- [x] **REC-ADMIN-01**: Admin debug page at `/admin/recs/:user_id` displays per-signal contribution table (final, weight × normalized for each signal, top contributor per row), TF-IDF term breakdown for S5 on row expand, and S11 filter-audit list (which anime were excluded and why). ✅ shipped Phase 14 (2026-05-07)
+- [x] **REC-ADMIN-02**: Admin can force-recompute a user's recs via `POST /api/admin/recs/{user_id}/recompute`. Endpoint invalidates Redis cache, triggers immediate precompute, returns new top-N + computation latency. ✅ shipped Phase 14 (2026-05-07; production p95 ~10ms)
+- [x] **REC-EVAL-01**: Frontend emits `rec_click` (impression-to-click) and `rec_watched` (click-to-actually-started) events tagged with the top contributor signal ID at click time. ✅ shipped Phase 14 (2026-05-07; localStorage FIFO 50, 1h TTL correlation)
+- [x] **REC-EVAL-02**: Prometheus exposes per-signal click-through-rate metric (`rec_click_total` + `rec_watched_total` labeled by signal_id, computed as a Prometheus-side rate ratio in the new "Rec engine" Grafana dashboard) for v2.1 weight tuning. ✅ shipped Phase 14 (2026-05-07)
 
 ## Future Requirements (deferred — not in this milestone)
 
@@ -102,9 +102,9 @@ Phase mapping assigned by roadmapper 2026-05-06. Phase numbering continues from 
 | REC-SIG-06 (S6 combo-watched-after) | Phase 13 | ✅ Complete (2026-05-06) |
 | REC-INFRA-03 (synchronous S6 seed update) | Phase 13 | ✅ Complete (2026-05-06) |
 | REC-UX-03 (Because you finished X pin) | Phase 13 | ✅ Complete (2026-05-06) |
-| REC-ADMIN-01 (admin debug page) | Phase 14 | Pending |
-| REC-ADMIN-02 (force-recompute endpoint) | Phase 14 | Pending |
-| REC-EVAL-01 (rec_click / rec_watched events) | Phase 14 | Pending |
-| REC-EVAL-02 (Prometheus rec_signal_ctr) | Phase 14 | Pending |
+| REC-ADMIN-01 (admin debug page) | Phase 14 | ✅ Complete (2026-05-07) |
+| REC-ADMIN-02 (force-recompute endpoint) | Phase 14 | ✅ Complete (2026-05-07) |
+| REC-EVAL-01 (rec_click / rec_watched events) | Phase 14 | ✅ Complete (2026-05-07) |
+| REC-EVAL-02 (Prometheus rec_signal_ctr) | Phase 14 | ✅ Complete (2026-05-07) |
 
 **Coverage:** 23/23 v2.0 requirements mapped. No orphans.
