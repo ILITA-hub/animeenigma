@@ -14,6 +14,9 @@ package signals
 //     plus exclusion of anime the user has marked completed or dropped
 //     (REC-UX-04). The anonymous path is intentionally untouched so the
 //     anonymous trending row keeps its existing semantics.
+//
+// Phase 14 added FilterAudit for the admin debug page — returns the items
+// the per-user filter would exclude with a reason string per category.
 
 import (
 	"context"
@@ -70,4 +73,54 @@ func (f *S11Filter) CandidatePoolForUser(ctx context.Context, userID recs.UserID
 		return nil, err
 	}
 	return ids, nil
+}
+
+// FilteredOutEntry is one row in the admin-debug filter audit panel.
+// Reason ∈ {"status=completed", "status=dropped", "hidden=true"}.
+// Phase 14 (REC-ADMIN-01).
+type FilteredOutEntry struct {
+	AnimeID string `json:"anime_id"`
+	Reason  string `json:"reason"`
+}
+
+// FilterAudit returns every anime the per-user S11 filter would exclude,
+// with a reason string per applicable category. An anime that triggers
+// multiple categories (e.g. hidden=true AND in the user's completed list)
+// emits multiple rows — admins see every reason that applied.
+//
+// Soft-deleted anime (deleted_at IS NOT NULL) are EXCLUDED from the audit
+// — they're never surfaced anywhere in the admin debug surface.
+//
+// Output is sorted by (reason ASC, anime_id ASC) for deterministic test
+// snapshots and stable rendering. Phase 14 (REC-ADMIN-01).
+func (f *S11Filter) FilterAudit(ctx context.Context, userID recs.UserID) ([]FilteredOutEntry, error) {
+	type row struct {
+		AnimeID string
+		Reason  string
+	}
+	var rows []row
+	const q = `
+		SELECT a.id AS anime_id, 'hidden=true' AS reason
+		FROM animes a
+		WHERE a.hidden = TRUE AND a.deleted_at IS NULL
+		UNION ALL
+		SELECT al.anime_id, 'status=completed' AS reason
+		FROM anime_list al
+		JOIN animes a ON a.id = al.anime_id
+		WHERE al.user_id = ? AND al.status = 'completed' AND a.deleted_at IS NULL
+		UNION ALL
+		SELECT al.anime_id, 'status=dropped' AS reason
+		FROM anime_list al
+		JOIN animes a ON a.id = al.anime_id
+		WHERE al.user_id = ? AND al.status = 'dropped' AND a.deleted_at IS NULL
+		ORDER BY reason ASC, anime_id ASC
+	`
+	if err := f.db.WithContext(ctx).Raw(q, string(userID), string(userID)).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]FilteredOutEntry, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, FilteredOutEntry{AnimeID: r.AnimeID, Reason: r.Reason})
+	}
+	return out, nil
 }
