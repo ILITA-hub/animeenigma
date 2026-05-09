@@ -1149,7 +1149,6 @@ const tabs = computed(() => {
   if (isOwnProfile.value) {
     baseTabs.push(
       { value: 'settings', label: t('profile.tabs.settings') },
-      { value: 'advanced', label: t('profile.tabs.advanced') },
     )
   }
   return baseTabs
