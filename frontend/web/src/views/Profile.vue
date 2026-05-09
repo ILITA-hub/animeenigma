@@ -1559,7 +1559,12 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
 
   if (!backgroundRefresh) {
     watchlistPageLoading.value = true
-    if (currentPage === 1 && !cached) {
+    // Only show the full-tab spinner when there is genuinely nothing to display.
+    // For refetches triggered by search / sort / status change there is already a
+    // list on screen — replacing it with a spinner unmounts the search input,
+    // costs focus, and feels like a page reload on every keystroke. Use the
+    // subtle overlay (`watchlistPageLoading`) for those cases instead.
+    if (currentPage === 1 && !cached && watchlist.value.length === 0) {
       loadingWatchlist.value = true
     }
   }
