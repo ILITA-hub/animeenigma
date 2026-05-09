@@ -146,9 +146,16 @@
           <template v-if="authStore.isAuthenticated">
             <router-link
               to="/profile"
-              class="w-10 h-10 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+              class="w-10 h-10 rounded-full overflow-hidden border border-cyan-500/30 flex items-center justify-center transition-colors"
+              :class="authStore.user?.avatar ? 'bg-surface hover:ring-2 hover:ring-cyan-400/50' : 'bg-cyan-500/20 hover:bg-cyan-500/30'"
             >
-              <span class="text-sm font-medium">{{ userInitials }}</span>
+              <img
+                v-if="authStore.user?.avatar"
+                :src="authStore.user.avatar"
+                :alt="authStore.user.username"
+                class="w-full h-full object-cover"
+              />
+              <span v-else class="text-sm font-medium text-cyan-400">{{ userInitials }}</span>
             </router-link>
           </template>
           <template v-else>
@@ -199,8 +206,17 @@
                 active-class="text-cyan-400 bg-cyan-500/10"
                 @click="mobileMenuOpen = false"
               >
-                <div class="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-sm font-medium flex-shrink-0">
-                  {{ userInitials }}
+                <div
+                  class="w-8 h-8 rounded-full overflow-hidden border border-cyan-500/30 flex items-center justify-center flex-shrink-0"
+                  :class="authStore.user?.avatar ? 'bg-surface' : 'bg-cyan-500/20'"
+                >
+                  <img
+                    v-if="authStore.user?.avatar"
+                    :src="authStore.user.avatar"
+                    :alt="authStore.user.username"
+                    class="w-full h-full object-cover"
+                  />
+                  <span v-else class="text-cyan-400 text-sm font-medium">{{ userInitials }}</span>
                 </div>
                 {{ $t('nav.profile') }}
               </router-link>
