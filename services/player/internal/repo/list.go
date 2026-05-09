@@ -145,7 +145,7 @@ func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string
 	return entries, err
 }
 
-func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 
 	var entries []*domain.AnimeListEntry
@@ -156,16 +156,25 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status 
 		base = base.Where("anime_list.status = ?", status)
 	}
 
+	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
+	if needsAnimesJoin {
+		base = base.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
+	}
+	if search != "" {
+		like := "%" + search + "%"
+		base = base.Where(
+			"animes.name ILIKE ? OR animes.name_ru ILIKE ? OR animes.name_jp ILIKE ?",
+			like, like, like,
+		)
+	}
+
 	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	q := base.Session(&gorm.Session{}).
-		Preload("Anime").Preload("Anime.Genres")
-	if isTitleSort(params.Sort) {
-		q = q.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
-	}
-	err := q.Order(sanitizedOrderClause(params.Sort, params.Order)).
+	err := base.Session(&gorm.Session{}).
+		Preload("Anime").Preload("Anime.Genres").
+		Order(sanitizedOrderClause(params.Sort, params.Order)).
 		Offset(params.Offset()).
 		Limit(params.PerPage).
 		Find(&entries).Error
@@ -201,7 +210,7 @@ func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID strin
 	return &stats, err
 }
 
-func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 
 	var entries []*domain.AnimeListEntry
@@ -209,16 +218,25 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 
 	base := r.db.WithContext(ctx).Where("anime_list.user_id = ? AND anime_list.status IN ?", userID, statuses)
 
+	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
+	if needsAnimesJoin {
+		base = base.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
+	}
+	if search != "" {
+		like := "%" + search + "%"
+		base = base.Where(
+			"animes.name ILIKE ? OR animes.name_ru ILIKE ? OR animes.name_jp ILIKE ?",
+			like, like, like,
+		)
+	}
+
 	if err := base.Session(&gorm.Session{}).Model(&domain.AnimeListEntry{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	q := base.Session(&gorm.Session{}).
-		Preload("Anime").Preload("Anime.Genres")
-	if isTitleSort(params.Sort) {
-		q = q.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
-	}
-	err := q.Order(sanitizedOrderClause(params.Sort, params.Order)).
+	err := base.Session(&gorm.Session{}).
+		Preload("Anime").Preload("Anime.Genres").
+		Order(sanitizedOrderClause(params.Sort, params.Order)).
 		Offset(params.Offset()).
 		Limit(params.PerPage).
 		Find(&entries).Error

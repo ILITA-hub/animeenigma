@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
@@ -35,9 +36,10 @@ func (h *ListHandler) GetUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := r.URL.Query().Get("status")
+	search := strings.TrimSpace(r.URL.Query().Get("q"))
 	params := parsePaginationParams(r)
 
-	entries, total, err := h.listService.GetUserListPaginated(r.Context(), claims.UserID, status, params)
+	entries, total, err := h.listService.GetUserListPaginated(r.Context(), claims.UserID, status, search, params)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -260,9 +262,10 @@ func (h *ListHandler) GetPublicWatchlist(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	search := strings.TrimSpace(r.URL.Query().Get("q"))
 	params := parsePaginationParams(r)
 
-	entries, total, err := h.listService.GetPublicWatchlistPaginated(r.Context(), userID, statuses, params)
+	entries, total, err := h.listService.GetPublicWatchlistPaginated(r.Context(), userID, statuses, search, params)
 	if err != nil {
 		httputil.Error(w, err)
 		return

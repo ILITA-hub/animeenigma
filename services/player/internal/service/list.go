@@ -72,10 +72,11 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 	return s.listRepo.GetByUser(ctx, userID)
 }
 
-// GetUserListPaginated returns user's anime list with pagination
-func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+// GetUserListPaginated returns user's anime list with pagination.
+// search filters entries by anime title (name / name_ru / name_jp, case-insensitive). Empty = no filter.
+func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate()
-	return s.listRepo.GetByUserPaginated(ctx, userID, status, params)
+	return s.listRepo.GetByUserPaginated(ctx, userID, status, search, params)
 }
 
 // GetUserStatuses returns lightweight anime_id+status pairs for the entire list
@@ -83,13 +84,14 @@ func (s *ListService) GetUserStatuses(ctx context.Context, userID string) ([]dom
 	return s.listRepo.GetByUserStatuses(ctx, userID)
 }
 
-// GetPublicWatchlistPaginated returns user's public watchlist with pagination
-func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID string, statuses []string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+// GetPublicWatchlistPaginated returns user's public watchlist with pagination.
+// search filters entries by anime title (name / name_ru / name_jp, case-insensitive). Empty = no filter.
+func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID string, statuses []string, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate()
 	if len(statuses) == 0 {
-		return s.listRepo.GetByUserPaginated(ctx, userID, "", params)
+		return s.listRepo.GetByUserPaginated(ctx, userID, "", search, params)
 	}
-	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, params)
+	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, search, params)
 }
 
 // GetUserAnimeEntry returns a single anime entry from user's list

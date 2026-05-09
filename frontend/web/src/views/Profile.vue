@@ -998,6 +998,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -1238,7 +1239,8 @@ function pageCacheKey(status: string, page: number): string {
   // — which reuses the same Profile.vue component instance and therefore the same
   // in-memory pageCache Map — cannot serve one user's cached data to another user.
   const uid = profileUser.value?.id || 'anon'
-  return `${uid}:${status}:${page}:${sortKey.value}:${sortDirection.value}`
+  const q = searchQuery.value.trim().toLowerCase()
+  return `${uid}:${status}:${page}:${sortKey.value}:${sortDirection.value}:${q}`
 }
 function clearPageCache() {
   pageCache.clear()
@@ -1332,21 +1334,10 @@ const watchlistFilters = computed(() => {
 })
 
 const filteredWatchlist = computed(() => {
-  // Sorting is handled server-side via fetchWatchlistPage.
-  // Here we only apply client-side search filtering on the current page.
-  let list = [...watchlist.value]
-
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    list = list.filter(a => {
-      const name = a.anime?.name?.toLowerCase() || ''
-      const nameRu = a.anime?.name_ru?.toLowerCase() || ''
-      const nameJp = a.anime?.name_jp?.toLowerCase() || ''
-      return name.includes(q) || nameRu.includes(q) || nameJp.includes(q)
-    })
-  }
-
-  return list
+  // Sorting AND searching are handled server-side via fetchWatchlistPage.
+  // The server returns the page that matches the current status/sort/q, so this
+  // is just a passthrough — we keep the computed for stable template references.
+  return watchlist.value
 })
 
 // Public profile aggregate stats (fetched from backend)
@@ -1579,6 +1570,8 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
     let data: any[] = []
     let meta: any
 
+    const trimmedQuery = searchQuery.value.trim()
+
     if (_isOwnProfile.value) {
       const response = await userApi.getWatchlist({
         page: currentPage,
@@ -1586,6 +1579,7 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
         ...(statusParam && { status: statusParam }),
         sort: backendSortKey.value,
         order: sortDirection.value,
+        ...(trimmedQuery && { q: trimmedQuery }),
       })
       data = response.data?.data || response.data || []
       meta = response.data?.meta
@@ -1600,6 +1594,7 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
         ...(visibleStatuses.length && !statusParam && { statuses: visibleStatuses.join(',') }),
         sort: backendSortKey.value,
         order: sortDirection.value,
+        ...(trimmedQuery && { q: trimmedQuery }),
       })
       data = response.data?.data || response.data || []
       meta = response.data?.meta
@@ -1617,8 +1612,12 @@ const fetchWatchlistPage = async (backgroundRefresh = false) => {
       fetchedAt: Date.now(),
     })
 
-    // Race condition guard: only update state if filter/page hasn't changed while we were fetching
-    if (watchlistFilter.value === currentFilter && watchlistPage.value === currentPage) {
+    // Race condition guard: only update state if filter/page/query hasn't changed while we were fetching
+    if (
+      watchlistFilter.value === currentFilter &&
+      watchlistPage.value === currentPage &&
+      searchQuery.value.trim() === trimmedQuery
+    ) {
       watchlist.value = newData
       watchlistTotalPages.value = newTotalPages
       watchlistTotalCount.value = newTotalCount
@@ -1660,26 +1659,31 @@ const fetchWatchlist = async (isOwn: boolean) => {
   await fetchWatchlistPage()
   _watchlistInitialized.value = true
 
-  // Prefetch page 1 of all other status tabs in background for instant switching
-  const allStatuses = isOwn
-    ? ['all', 'watching', 'plan_to_watch', 'completed', 'on_hold', 'dropped']
-    : ['all', ...(profileUser.value?.public_statuses || [])]
-  const currentStatus = watchlistFilter.value
-  for (const status of allStatuses) {
-    if (status === currentStatus) continue
-    // Fire and forget — populate the cache silently
-    const key = pageCacheKey(status, 1)
-    if (!pageCache.has(key)) {
-      const statusParam = status === 'all' ? undefined : status
-      if (isOwn) {
-        userApi.getWatchlist({ page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), sort: backendSortKey.value, order: sortDirection.value })
-          .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
-          .catch(() => {})
-      } else if (profileUser.value?.id) {
-        const ps = profileUser.value.public_statuses || []
-        publicApi.getPublicWatchlist(profileUser.value.id, { page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), ...(!statusParam && ps.length && { statuses: ps.join(',') }), sort: backendSortKey.value, order: sortDirection.value })
-          .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
-          .catch(() => {})
+  // Prefetch page 1 of all other status tabs in background for instant switching.
+  // Skip when a search query is active — searching is short-lived and we don't
+  // want to pollute the cache with status-specific pages that are already
+  // search-filtered (they'd be wrong as soon as the user clears the query).
+  if (!searchQuery.value.trim()) {
+    const allStatuses = isOwn
+      ? ['all', 'watching', 'plan_to_watch', 'completed', 'on_hold', 'dropped']
+      : ['all', ...(profileUser.value?.public_statuses || [])]
+    const currentStatus = watchlistFilter.value
+    for (const status of allStatuses) {
+      if (status === currentStatus) continue
+      // Fire and forget — populate the cache silently
+      const key = pageCacheKey(status, 1)
+      if (!pageCache.has(key)) {
+        const statusParam = status === 'all' ? undefined : status
+        if (isOwn) {
+          userApi.getWatchlist({ page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), sort: backendSortKey.value, order: sortDirection.value })
+            .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
+            .catch(() => {})
+        } else if (profileUser.value?.id) {
+          const ps = profileUser.value.public_statuses || []
+          publicApi.getPublicWatchlist(profileUser.value.id, { page: 1, per_page: watchlistPerPage, ...(statusParam && { status: statusParam }), ...(!statusParam && ps.length && { statuses: ps.join(',') }), sort: backendSortKey.value, order: sortDirection.value })
+            .then(r => { pageCache.set(key, { data: r.data?.data || [], totalPages: r.data?.meta?.total_pages || 0, totalCount: r.data?.meta?.total_count || 0, fetchedAt: Date.now() }) })
+            .catch(() => {})
+        }
       }
     }
   }
@@ -1697,6 +1701,17 @@ watch([sortKey, sortDirection], () => {
   if (!_watchlistInitialized.value) return
   watchlistPage.value = 1
   fetchWatchlistPage()
+})
+
+// Re-fetch when search query changes (server-side search across full watchlist).
+// Debounced so we don't hammer the API on every keystroke.
+const debouncedSearchRefetch = useDebounceFn(() => {
+  if (!_watchlistInitialized.value) return
+  watchlistPage.value = 1
+  fetchWatchlistPage()
+}, 300)
+watch(searchQuery, () => {
+  debouncedSearchRefetch()
 })
 
 const formatDateForInput = (dateStr: string | null | undefined): string => {

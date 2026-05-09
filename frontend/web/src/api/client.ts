@@ -220,7 +220,7 @@ export const episodeApi = {
 export const userApi = {
   getProfile: () => apiClient.get('/users/profile'),
   updateProfile: (data: Record<string, unknown>) => apiClient.patch('/users/profile', data),
-  getWatchlist: (params?: { status?: string; page?: number; per_page?: number; sort?: string; order?: string }) =>
+  getWatchlist: (params?: { status?: string; page?: number; per_page?: number; sort?: string; order?: string; q?: string }) =>
     apiClient.get('/users/watchlist', { params }),
   getWatchlistStatuses: () => apiClient.get('/users/watchlist/statuses'),
   getWatchlistEntry: (animeId: string) => apiClient.get(`/users/watchlist/${animeId}`),
@@ -319,7 +319,7 @@ export const publicApi = {
   // Get public user profile by public_id
   getUserProfile: (publicId: string) => apiClient.get(`/auth/users/${publicId}`),
   // Get public watchlist
-  getPublicWatchlist: (userId: string, params?: { status?: string; statuses?: string; page?: number; per_page?: number; sort?: string; order?: string }) =>
+  getPublicWatchlist: (userId: string, params?: { status?: string; statuses?: string; page?: number; per_page?: number; sort?: string; order?: string; q?: string }) =>
     apiClient.get(`/users/${userId}/watchlist/public`, { params }),
   // Get public watchlist stats (avg score, total episodes)
   getPublicWatchlistStats: (userId: string, statuses?: string[]) =>
