@@ -259,18 +259,34 @@
     "import": {
       "title": "Import List",
       "malPlaceholder": "Enter MAL username",
-      "malDescription": "Imports your anime list from MyAnimeList. Your profile must be public.",
+      "malDescription": "Imports your anime list from MyAnimeList. Your profile must be public. Enter your username, not a URL.",
       "importing": "Importing...",
       "import": "Import",
       "imported": "Imported",
       "skipped": "Skipped",
       "shikimoriPlaceholder": "Enter Shikimori nickname",
-      "shikimoriDescription": "Imports your anime list from Shikimori. Your profile must be public.",
+      "shikimoriDescription": "Imports your anime list from Shikimori. Your profile must be public. Enter your nickname, not a URL.",
       "lastSynced": "Synced {time}: imported {imported}, skipped {skipped}",
       "justNow": "just now",
       "minutesAgo": "{n} min ago",
       "hoursAgo": "{n}h ago",
-      "daysAgo": "{n}d ago"
+      "daysAgo": "{n}d ago",
+      "errors": {
+        "empty": "Enter a username.",
+        "contains_separator": "That looks like a URL or path. Enter only your username — no http://, no slashes, no spaces.",
+        "url_unparseable": "Couldn't parse that URL. Enter only your username — e.g. JohnDoe.",
+        "url_wrong_host": "That's a {host} URL, not the right site. Enter only your username.",
+        "url_no_username": "Couldn't find a username in that URL. Enter only your username — e.g. JohnDoe.",
+        "mal_user_not_found_or_private": "MAL user \"{username}\" wasn't found, or their list is private. Check the username on myanimelist.net and make the list public.",
+        "mal_list_private": "MAL list for \"{username}\" is private. Open it in MAL privacy settings, then try again.",
+        "mal_rate_limited": "MyAnimeList is rate-limiting us. Wait a minute and try again.",
+        "mal_upstream_error": "MyAnimeList is unavailable right now. Try again in a few minutes.",
+        "shikimori_user_not_found": "Shikimori user \"{username}\" wasn't found. Check the nickname at shikimori.one.",
+        "shikimori_profile_private": "Shikimori profile for \"{username}\" is private. Open it in Shikimori privacy settings, then try again.",
+        "shikimori_rate_limited": "Shikimori is rate-limiting us. Wait a minute and try again.",
+        "shikimori_upstream_error": "Shikimori is unavailable right now. Try again in a few minutes.",
+        "generic": "Failed to import list. Please try again later."
+      }
     },
     "export": {
       "title": "Export List",

@@ -1015,7 +1015,13 @@ interface ApiError {
     status?: number
     data?: {
       message?: string
-      error?: string
+      error?:
+        | string
+        | {
+            code?: string
+            message?: string
+            details?: Record<string, string>
+          }
     }
   }
 }
@@ -1060,7 +1066,7 @@ interface ProfileUser {
 
 const router = useRouter()
 const route = useRoute()
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 
@@ -1870,7 +1876,7 @@ const startPolling = (source: 'mal' | 'shikimori', jobId: string) => {
           }
           await fetchWatchlist(true)
         } else {
-          state.value.error = data.error_message || 'Import failed'
+          state.value.error = data.error_message || t('profile.import.errors.generic', { source })
         }
       }
     } catch {
@@ -1885,6 +1891,34 @@ const stopPolling = (source: 'mal' | 'shikimori') => {
     clearInterval(pollIntervals[source]!)
     pollIntervals[source] = null
   }
+}
+
+// Map a server error response into a friendly, localized message for the
+// import card. The backend tags each failure with `error.details.reason`
+// (see services/player/internal/handler/import_input.go and the
+// fetch{MAL,Shikimori}Page functions); we look up that reason in i18n and
+// fall back to the server's English message, then a generic translation.
+const importErrorMessage = (
+  err: ApiError,
+  source: 'mal' | 'shikimori',
+): string => {
+  const errBody = err.response?.data?.error
+  const structured = typeof errBody === 'object' ? errBody : undefined
+  const reason = structured?.details?.reason
+  const host = structured?.details?.host
+  const username = structured?.details?.username || structured?.details?.nickname
+
+  if (reason) {
+    const key = `profile.import.errors.${reason}`
+    if (te(key)) return t(key, { host: host ?? '', username: username ?? '', source })
+  }
+
+  // Fall back to the server-provided message, then a generic localized one.
+  const serverMsg = structured?.message
+    || (typeof errBody === 'string' ? errBody : undefined)
+    || err.response?.data?.message
+  if (serverMsg) return serverMsg
+  return t('profile.import.errors.generic', { source })
 }
 
 const startImport = async (source: 'mal' | 'shikimori') => {
@@ -1912,7 +1946,7 @@ const startImport = async (source: 'mal' | 'shikimori') => {
 
     startPolling(source, data.job_id)
   } catch (err: unknown) {
-    state.value.error = (err as ApiError).response?.data?.message || 'Failed to import list'
+    state.value.error = importErrorMessage(err as ApiError, source)
     state.value.importing = false
   }
 }
@@ -2017,7 +2051,11 @@ const savePublicId = async () => {
     setTimeout(() => { publicIdSuccess.value = false }, 3000)
   } catch (err: unknown) {
     const apiErr = err as ApiError
-    const message = apiErr.response?.data?.message || apiErr.response?.data?.error
+    const errBody = apiErr.response?.data?.error
+    const errBodyMsg = typeof errBody === 'string'
+      ? errBody
+      : errBody?.message
+    const message = apiErr.response?.data?.message || errBodyMsg
     if (message?.includes('already taken') || message?.includes('уже занят')) {
       publicIdError.value = t('profile.linkTaken')
     } else {

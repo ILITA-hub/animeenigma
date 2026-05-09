@@ -259,18 +259,34 @@
     "import": {
       "title": "Импорт списка",
       "malPlaceholder": "Введите имя пользователя MAL",
-      "malDescription": "Импортирует ваш список аниме с MyAnimeList. Ваш профиль должен быть публичным.",
+      "malDescription": "Импортирует ваш список аниме с MyAnimeList. Ваш профиль должен быть публичным. Введите ник, а не ссылку.",
       "importing": "Импорт...",
       "import": "Импорт",
       "imported": "Импортировано",
       "skipped": "Пропущено",
       "shikimoriPlaceholder": "Введите никнейм Shikimori",
-      "shikimoriDescription": "Импортирует ваш список аниме с Shikimori. Ваш профиль должен быть публичным.",
+      "shikimoriDescription": "Импортирует ваш список аниме с Shikimori. Ваш профиль должен быть публичным. Введите ник, а не ссылку.",
       "lastSynced": "Синхр. {time}: импортировано {imported}, пропущено {skipped}",
       "justNow": "только что",
       "minutesAgo": "{n} мин назад",
       "hoursAgo": "{n}ч назад",
-      "daysAgo": "{n}д назад"
+      "daysAgo": "{n}д назад",
+      "errors": {
+        "empty": "Введите имя пользователя.",
+        "contains_separator": "Похоже, вы вставили ссылку или путь. Введите только имя пользователя — без http://, без / и без пробелов.",
+        "url_unparseable": "Не получилось разобрать ссылку. Введите только имя пользователя — например, JohnDoe.",
+        "url_wrong_host": "Это ссылка с {host}, а не с того сайта. Введите только имя пользователя.",
+        "url_no_username": "В ссылке не нашлось имени пользователя. Введите только ник — например, JohnDoe.",
+        "mal_user_not_found_or_private": "Пользователь MAL «{username}» не найден или его список закрыт. Проверьте ник на myanimelist.net и сделайте список публичным.",
+        "mal_list_private": "Список MAL «{username}» закрыт. Откройте его в настройках приватности MAL и попробуйте снова.",
+        "mal_rate_limited": "MyAnimeList временно ограничивает запросы. Подождите минуту и попробуйте снова.",
+        "mal_upstream_error": "MyAnimeList сейчас недоступен. Попробуйте через несколько минут.",
+        "shikimori_user_not_found": "Пользователь Shikimori «{username}» не найден. Проверьте ник на shikimori.one.",
+        "shikimori_profile_private": "Профиль Shikimori «{username}» закрыт. Откройте его в настройках приватности Shikimori и попробуйте снова.",
+        "shikimori_rate_limited": "Shikimori временно ограничивает запросы. Подождите минуту и попробуйте снова.",
+        "shikimori_upstream_error": "Shikimori сейчас недоступен. Попробуйте через несколько минут.",
+        "generic": "Не удалось импортировать список. Попробуйте ещё раз позже."
+      }
     },
     "export": {
       "title": "Экспорт списка",

@@ -76,9 +76,9 @@ func (h *ShikimoriImportHandler) ImportShikimoriList(w http.ResponseWriter, r *h
 		return
 	}
 
-	nickname := strings.TrimSpace(req.Nickname)
-	if nickname == "" {
-		httputil.BadRequest(w, "Shikimori nickname is required")
+	nickname, err := ExtractShikimoriNickname(req.Nickname)
+	if err != nil {
+		httputil.Error(w, err)
 		return
 	}
 
@@ -323,13 +323,24 @@ func (h *ShikimoriImportHandler) fetchShikimoriPage(ctx context.Context, nicknam
 
 	switch resp.StatusCode {
 	case 404:
-		return nil, errors.New(errors.CodeNotFound, "Shikimori user not found")
+		return nil, errors.New(errors.CodeNotFound,
+			fmt.Sprintf("Shikimori user %q not found — check the nickname at shikimori.one", nickname)).
+			WithDetail("reason", "shikimori_user_not_found").
+			WithDetail("nickname", nickname)
 	case 403:
-		return nil, errors.New(errors.CodeForbidden, "Shikimori profile is private")
+		return nil, errors.New(errors.CodeForbidden,
+			fmt.Sprintf("Shikimori profile for %q is private — open it in Shikimori privacy settings, then try again", nickname)).
+			WithDetail("reason", "shikimori_profile_private").
+			WithDetail("nickname", nickname)
+	case 429:
+		return nil, errors.RateLimited().WithDetail("reason", "shikimori_rate_limited")
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, errors.Internal(fmt.Sprintf("Shikimori API error: %d", resp.StatusCode))
+		return nil, errors.New(errors.CodeExternalAPI,
+			fmt.Sprintf("Shikimori is unavailable right now (status %d) — try again in a few minutes", resp.StatusCode)).
+			WithDetail("reason", "shikimori_upstream_error").
+			WithDetail("status", fmt.Sprintf("%d", resp.StatusCode))
 	}
 
 	var entries []shikimoriAnimeRate

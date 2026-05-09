@@ -87,13 +87,11 @@ func (h *MALImportHandler) ImportMALList(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.Username == "" {
-		httputil.BadRequest(w, "MAL username is required")
+	username, err := ExtractMALUsername(req.Username)
+	if err != nil {
+		httputil.Error(w, err)
 		return
 	}
-
-	// Clean username
-	username := strings.TrimSpace(req.Username)
 
 	// Check for existing active job
 	activeJob, err := h.syncRepo.GetActiveByUserAndSource(r.Context(), claims.UserID, "mal")
@@ -374,12 +372,29 @@ func (h *MALImportHandler) fetchMALPage(ctx context.Context, username string, of
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 400 {
-		return nil, errors.New(errors.CodeNotFound, "MAL user not found or list is private")
+	if resp.StatusCode == 400 || resp.StatusCode == 404 {
+		return nil, errors.New(errors.CodeNotFound,
+			fmt.Sprintf("MAL user %q not found, or their list is private — check the username on myanimelist.net and make the list public", username)).
+			WithDetail("reason", "mal_user_not_found_or_private").
+			WithDetail("username", username)
+	}
+
+	if resp.StatusCode == 403 {
+		return nil, errors.New(errors.CodeForbidden,
+			fmt.Sprintf("MAL list for %q is private — make it public in MAL privacy settings, then try again", username)).
+			WithDetail("reason", "mal_list_private").
+			WithDetail("username", username)
+	}
+
+	if resp.StatusCode == 429 {
+		return nil, errors.RateLimited().WithDetail("reason", "mal_rate_limited")
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, errors.Internal(fmt.Sprintf("MAL error: %d", resp.StatusCode))
+		return nil, errors.New(errors.CodeExternalAPI,
+			fmt.Sprintf("MyAnimeList is unavailable right now (status %d) — try again in a few minutes", resp.StatusCode)).
+			WithDetail("reason", "mal_upstream_error").
+			WithDetail("status", fmt.Sprintf("%d", resp.StatusCode))
 	}
 
 	var entries []MALAnimeEntry

@@ -259,18 +259,34 @@
     "import": {
       "title": "リストをインポート",
       "malPlaceholder": "MALユーザー名を入力",
-      "malDescription": "MyAnimeListからアニメリストをインポートします。プロフィールは公開されている必要があります。",
+      "malDescription": "MyAnimeListからアニメリストをインポートします。プロフィールは公開されている必要があります。URLではなくユーザー名を入力してください。",
       "importing": "インポート中...",
       "import": "インポート",
       "imported": "インポート済み",
       "skipped": "スキップ",
       "shikimoriPlaceholder": "Shikimoriのニックネームを入力",
-      "shikimoriDescription": "Shikimoriからアニメリストをインポートします。プロフィールは公開されている必要があります。",
+      "shikimoriDescription": "Shikimoriからアニメリストをインポートします。プロフィールは公開されている必要があります。URLではなくニックネームを入力してください。",
       "lastSynced": "同期 {time}: インポート {imported}、スキップ {skipped}",
       "justNow": "たった今",
       "minutesAgo": "{n}分前",
       "hoursAgo": "{n}時間前",
-      "daysAgo": "{n}日前"
+      "daysAgo": "{n}日前",
+      "errors": {
+        "empty": "ユーザー名を入力してください。",
+        "contains_separator": "URLかパスのようです。ユーザー名のみを入力してください（http://、スラッシュ、スペースなし）。",
+        "url_unparseable": "URLを解析できませんでした。ユーザー名のみを入力してください（例: JohnDoe）。",
+        "url_wrong_host": "{host} のURLで、対象サイトのものではありません。ユーザー名のみを入力してください。",
+        "url_no_username": "URLからユーザー名が見つかりませんでした。ユーザー名のみを入力してください（例: JohnDoe）。",
+        "mal_user_not_found_or_private": "MALユーザー「{username}」が見つからないか、リストが非公開です。myanimelist.net でユーザー名を確認し、リストを公開してください。",
+        "mal_list_private": "「{username}」のMALリストは非公開です。MALのプライバシー設定で公開してから再試行してください。",
+        "mal_rate_limited": "MyAnimeListからレート制限を受けています。1分ほど待ってから再試行してください。",
+        "mal_upstream_error": "MyAnimeListが現在利用できません。数分後に再試行してください。",
+        "shikimori_user_not_found": "Shikimoriユーザー「{username}」が見つかりませんでした。shikimori.one でニックネームを確認してください。",
+        "shikimori_profile_private": "「{username}」のShikimoriプロフィールは非公開です。Shikimoriのプライバシー設定で公開してから再試行してください。",
+        "shikimori_rate_limited": "Shikimoriからレート制限を受けています。1分ほど待ってから再試行してください。",
+        "shikimori_upstream_error": "Shikimoriが現在利用できません。数分後に再試行してください。",
+        "generic": "リストのインポートに失敗しました。後でもう一度お試しください。"
+      }
     },
     "export": {
       "title": "リストをエクスポート",
