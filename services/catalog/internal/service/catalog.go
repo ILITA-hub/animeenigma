@@ -2421,15 +2421,19 @@ func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID st
 	teamMap := make(map[int]*teamEntry)
 
 	for _, p := range detail.Players {
+		// Skip Kodik-backed entries — AniLib must serve only its native MP4
+		// players. Kodik content is reachable via the dedicated Kodik tab.
+		if p.Player == "Kodik" {
+			continue
+		}
+
 		// Map translation type label to internal type
 		translationType := "voice"
 		if p.TranslationType.ID == 1 || strings.Contains(strings.ToLower(p.TranslationType.Label), "субтитр") {
 			translationType = "subtitles"
 		}
 
-		existing, exists := teamMap[p.Team.ID]
-		// Prefer "Animelib" player over "Kodik" for same team
-		if !exists || (p.Player == "Animelib" && existing.translation.Player != "Animelib") {
+		if _, exists := teamMap[p.Team.ID]; !exists {
 			teamMap[p.Team.ID] = &teamEntry{
 				translation: domain.AnimeLibTranslation{
 					ID:           p.ID, // use the player entry ID (not team ID) for stream lookup
@@ -2519,18 +2523,8 @@ func (s *CatalogService) GetAnimeLibStream(ctx context.Context, animeID string, 
 			}
 			result.Subtitles = subs
 		}
-	} else if matched.Src != "" {
-		// Kodik iframe fallback
-		metrics.ParserFallbackTotal.WithLabelValues("animelib", "kodik").Inc()
-		iframeURL := matched.Src
-		if strings.HasPrefix(iframeURL, "//") {
-			iframeURL = "https:" + iframeURL
-		}
-		result = &domain.AnimeLibStream{
-			IframeURL: iframeURL,
-		}
 	} else {
-		return nil, errors.NotFound("no video source available on animelib")
+		return nil, errors.NotFound("no native AniLib video available")
 	}
 
 	// Cache for 30 minutes (stream URLs may expire)

@@ -44,7 +44,7 @@
 
           <!-- Direct video player (Animelib native) -->
           <video
-            v-if="streamUrl && !iframeUrl && !error"
+            v-if="streamUrl && !error"
             ref="videoRef"
             :src="streamUrl"
             class="absolute inset-0 w-full h-full"
@@ -57,15 +57,6 @@
             @error="handleVideoError"
           >
           </video>
-
-          <!-- Kodik iframe fallback -->
-          <iframe
-            v-else-if="iframeUrl && !error"
-            :src="iframeUrl"
-            class="absolute inset-0 w-full h-full border-0"
-            allowfullscreen
-            allow="autoplay; fullscreen"
-          />
 
           <!-- Placeholder when no video loaded -->
           <div
@@ -347,7 +338,6 @@ interface AnimeLibSubtitle {
 
 interface AnimeLibStream {
   sources?: AnimeLibSource[]
-  iframe_url?: string
   subtitles?: AnimeLibSubtitle[]
 }
 
@@ -373,7 +363,6 @@ const translations = ref<AnimeLibTranslation[]>([])
 const selectedEpisode = ref<AnimeLibEpisode | null>(null)
 const selectedTranslation = ref<AnimeLibTranslation | null>(null)
 const streamUrl = ref<string | null>(null)
-const iframeUrl = ref<string | null>(null)
 const availableSources = ref<AnimeLibSource[]>([])
 const selectedQuality = ref<number | null>(null)
 
@@ -548,7 +537,6 @@ const _selectEpisode = async (ep: AnimeLibEpisode) => {
   episodeMarkedWatched.value = false
   selectedTranslation.value = null
   streamUrl.value = null
-  iframeUrl.value = null
   availableSources.value = []
   selectedQuality.value = null
   streamSubtitles.value = []
@@ -601,7 +589,6 @@ const fetchStream = async () => {
   if (!selectedEpisode.value || !selectedTranslation.value) return
 
   streamUrl.value = null
-  iframeUrl.value = null
   availableSources.value = []
   selectedQuality.value = null
   streamSubtitles.value = []
@@ -640,9 +627,6 @@ const fetchStream = async () => {
         // Auto-enable for subtitle-type translations
         showSubtitleOverlay.value = selectedTranslation.value?.type === 'subtitles'
       }
-    } else if (data.iframe_url) {
-      // Kodik iframe fallback — no direct video control, but playable
-      iframeUrl.value = data.iframe_url
     } else {
       error.value = t('player.error.getVideoUrl')
     }
@@ -772,7 +756,6 @@ const isEpisodeWatched = (episodeNumber: number): boolean => {
 watch(() => props.animeId, () => {
   saveProgress()
   streamUrl.value = null
-  iframeUrl.value = null
   episodes.value = []
   translations.value = []
   selectedEpisode.value = null

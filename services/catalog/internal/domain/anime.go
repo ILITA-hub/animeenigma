@@ -472,9 +472,8 @@ type AnimeLibSubtitle struct {
 
 // AnimeLibStream represents stream source data from AnimeLib
 type AnimeLibStream struct {
-	Sources   []AnimeLibSource   `json:"sources,omitempty"`    // direct MP4 video sources (Animelib player)
-	IframeURL string             `json:"iframe_url,omitempty"` // Kodik iframe fallback
-	Subtitles []AnimeLibSubtitle `json:"subtitles,omitempty"`  // external subtitle files (ASS, VTT)
+	Sources   []AnimeLibSource   `json:"sources,omitempty"`   // direct MP4 video sources (Animelib player)
+	Subtitles []AnimeLibSubtitle `json:"subtitles,omitempty"` // external subtitle files (ASS, VTT)
 }
 
 // AnimeLibSearchResult represents a search result from AnimeLib
