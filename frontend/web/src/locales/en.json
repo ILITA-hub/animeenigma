@@ -104,6 +104,7 @@
     "quality": "Quality",
     "subtitles": "Subtitles",
     "noTranslations": "No translations available",
+    "noEpisodes": "No episodes found on {source}",
     "reportNotWorking": "Report a Problem",
     "reportTitle": "Report a Problem",
     "reportSent": "Report Sent",

@@ -104,6 +104,7 @@
     "quality": "画質",
     "subtitles": "字幕",
     "noTranslations": "利用可能な翻訳がありません",
+    "noEpisodes": "{source}でエピソードが見つかりません",
     "reportNotWorking": "問題を報告",
     "reportTitle": "問題を報告",
     "reportSent": "レポート送信完了",

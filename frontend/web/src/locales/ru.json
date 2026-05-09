@@ -104,6 +104,7 @@
     "quality": "Качество",
     "subtitles": "Субтитры",
     "noTranslations": "Нет доступных озвучек",
+    "noEpisodes": "Серии не найдены на {source}",
     "reportNotWorking": "Сообщить о проблеме",
     "reportTitle": "Сообщить о проблеме",
     "reportSent": "Отчёт отправлен",
