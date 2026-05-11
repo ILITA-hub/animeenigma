@@ -13,9 +13,28 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 - ✅ **v1.0 Smart Watch Picker Overhaul** — shipped 2026-05-03 (Phases 1-8) — see `.planning/milestones/v1.0-ROADMAP.md`
 - ✅ **v2.0 Recommendations Engine** — shipped 2026-05-07 (Phases 9-14) — see `.planning/milestones/v2.0-ROADMAP.md`
 
-## Next Milestone
+## Current Milestone: v3.0 Universal Anime Scraper
 
-To be defined via `/gsd-new-milestone`. **Working title: universal anime scraper** — the abandoned HiAnime (`aniwatch` upstream / `hianime.to`) and broken Consumet (`enc-dec.app` contract change) provider paths must be replaced with a self-hosted scraping service over alive English sources (candidates: AnimeKai, AnimePahe, Anitaku/Gogoanime). Kodik (RU iframe) and AnimeLib (RU MP4) remain as separate parsers and are not in scope.
+**Goal:** Replace the dead HiAnime (`aniwatch` upstream, `hianime.to` shut down) and broken Consumet (`enc-dec.app` contract change) provider paths with a self-hosted Go scraping service that targets alive English anime sources, preserving the existing HLS m3u8 + tracks + subtitles contract that our HiAnime and Consumet players consume.
+
+**Target features:**
+- New Go service (working name `services/scraper/` or extension of `services/catalog/`) with a `Provider` interface so new sources plug in without rewriting the orchestrator
+- Initial provider implementations targeting alive sources: AnimeKai (`animekai.to`), AnimePahe (alive mirror), Anitaku / Gogoanime (`anitaku.io`) — pick the subset that ship in v3.0 during planning
+- Cross-provider search → episode list → server list → stream extraction pipeline returning a uniform DTO compatible with the existing HiAnime / Consumet frontend players (HLS m3u8 + VTT/ASS subtitle tracks)
+- Reuse our existing `megacloud-extractor` Node helper for any embed decryption that genuinely benefits from a JS runtime; everything else stays Go
+- Cutover: remove the dead `aniwatch` and `consumet-api` containers from `docker/docker-compose.yml`, remove `services/catalog/internal/parser/{hianime,consumet}/`, update the two frontend players (HiAnimePlayer.vue + ConsumetPlayer.vue) to point at the new endpoints (or merge them into a single English-source player component)
+- Health-check and per-provider Prometheus metrics so we can see when a provider site dies before users do
+- Kodik (RU iframe) and AnimeLib (RU MP4) parsers stay untouched — they remain separate parsers behind their dedicated player tabs
+
+**Drivers / why now:**
+- HiAnime ecosystem dead: `hianime.to` unreachable, `hianime.nz` shows shutdown notice, `aniwatch-api` GitHub repo deleted, `aniwatchtv.to` returns 404
+- Consumet broken: `riimuru/consumet-api:latest` (5 months stale) calls `enc-dec.app` with stale body shape (`Expected body: text, agent`) → 100% of Zoro stream resolution fails
+- AnimeLib's Kodik-fallback path was just disabled (commit `9347143`); users with EN-only anime currently have no working player tab other than Kodik (which has no JP subs, no quality switching, no time tracking)
+
+**Out of v3.0 scope:**
+- Russian providers (Kodik, AnimeLib) — separate parsers, untouched
+- Player UX redesign — preserve the existing player surface
+- New languages/frameworks — Go 1.22 backend + existing Vue/TS frontend only
 
 ## Requirements
 
@@ -42,7 +61,9 @@ To be defined via `/gsd-new-milestone`. **Working title: universal anime scraper
 
 ### Active
 
-_None — v2.0 shipped. Next milestone's requirements will be defined via `/gsd-new-milestone`._
+<!-- v3.0 milestone — items defined here are tracked in REQUIREMENTS.md and mapped to phases by ROADMAP.md. -->
+
+_v3.0 requirements are being defined; see `.planning/REQUIREMENTS.md` once written._
 
 <details>
 <summary>✅ v2.0 Recommendations Engine — 23/23 requirements shipped 2026-05-07 (see <code>.planning/milestones/v2.0-REQUIREMENTS.md</code>)</summary>
@@ -172,4 +193,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-09 — v2.0 Recommendations Engine milestone closed (shipped 2026-05-07, audit passed, requirements archived). Next milestone (universal anime scraper) pending definition via `/gsd-new-milestone`.*
+*Last updated: 2026-05-09 — v3.0 Universal Anime Scraper milestone started. v2.0 (Recommendations Engine) closed and archived 2026-05-09.*
