@@ -12,6 +12,7 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 
 - ✅ **v1.0 Smart Watch Picker Overhaul** — shipped 2026-05-03 (Phases 1-8) — see `.planning/milestones/v1.0-ROADMAP.md`
 - ✅ **v2.0 Recommendations Engine** — shipped 2026-05-07 (Phases 9-14) — see `.planning/milestones/v2.0-ROADMAP.md`
+- 🟢 **v3.0 Universal Anime Scraper** — Phase 15 (Foundation) complete 2026-05-11; scraper microservice live on `:8088` with `Provider`/`EmbedExtractor` interfaces + 503-stub HTTP contract; Phases 16-20 remaining (AnimePahe + EnglishPlayer, Observability, 9anime, AnimeKai gated, Cutover)
 
 ## Current Milestone: v3.0 Universal Anime Scraper
 
