@@ -1,0 +1,140 @@
+// Package scraper is a thin HTTP wrapper around the scraper microservice
+// at SCRAPER_API_URL (default http://scraper:8088). The wrapper is
+// deliberately dumb: it forwards request to the scraper, returns the
+// raw response status + body verbatim, and lets the catalog handler
+// passthrough 503/200 responses without re-interpreting them.
+//
+// Design notes (Phase 15 plan 04):
+//   - HTTP 503 from the scraper is the canonical "not-yet-implemented"
+//     contract for /scraper/{episodes,servers,stream} during Phase 15.
+//     We return it as (503, body, nil) — a legitimate response shape,
+//     not an error worth signaling.
+//   - HTTP 5xx other than 503 means the scraper itself is unhealthy.
+//     We return (status, body, wrapped ErrScraperUpstream) so the
+//     handler maps it to 502 instead of forwarding 500 verbatim.
+//   - 2xx/3xx/4xx are returned with err==nil. The catalog handler decides
+//     what to do based on the status.
+//   - All requests are context-cancellable via http.NewRequestWithContext.
+package scraper
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+)
+
+// ErrScraperUpstream is the sentinel for unexpected scraper failures (5xx
+// other than 503). The catalog handler can use errors.Is to map it to a
+// 502 Bad Gateway response.
+var ErrScraperUpstream = errors.New("scraper upstream error")
+
+// Client is the thin HTTP client targeting the scraper service.
+type Client struct {
+	baseURL    string
+	httpClient *http.Client
+}
+
+// NewClient builds a Client. timeout==0 falls back to a 15s default.
+//
+// Production wiring: NewClient(cfg.Scraper.APIURL, cfg.Scraper.Timeout)
+// where cfg.Scraper.APIURL defaults to http://scraper:8088 and the
+// timeout defaults to 15s.
+func NewClient(baseURL string, timeout time.Duration) *Client {
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	return &Client{
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: timeout,
+		},
+	}
+}
+
+// GetEpisodes forwards GET /scraper/episodes?mal_id=<id>&prefer=<prefer>.
+func (c *Client) GetEpisodes(ctx context.Context, malID int, prefer string) (int, []byte, error) {
+	q := url.Values{}
+	q.Set("mal_id", strconv.Itoa(malID))
+	if prefer != "" {
+		q.Set("prefer", prefer)
+	}
+	return c.doGET(ctx, "/scraper/episodes", q)
+}
+
+// GetServers forwards GET /scraper/servers?mal_id=<id>&episode=<ep>&prefer=<prefer>.
+func (c *Client) GetServers(ctx context.Context, malID int, episodeID, prefer string) (int, []byte, error) {
+	q := url.Values{}
+	q.Set("mal_id", strconv.Itoa(malID))
+	q.Set("episode", episodeID)
+	if prefer != "" {
+		q.Set("prefer", prefer)
+	}
+	return c.doGET(ctx, "/scraper/servers", q)
+}
+
+// GetStream forwards GET /scraper/stream?mal_id=...&episode=...&server=...&category=...&prefer=...
+func (c *Client) GetStream(ctx context.Context, malID int, episodeID, serverID, category, prefer string) (int, []byte, error) {
+	q := url.Values{}
+	q.Set("mal_id", strconv.Itoa(malID))
+	q.Set("episode", episodeID)
+	q.Set("server", serverID)
+	if category != "" {
+		q.Set("category", category)
+	}
+	if prefer != "" {
+		q.Set("prefer", prefer)
+	}
+	return c.doGET(ctx, "/scraper/stream", q)
+}
+
+// GetHealth forwards GET /scraper/health (no query params).
+func (c *Client) GetHealth(ctx context.Context) (int, []byte, error) {
+	return c.doGET(ctx, "/scraper/health", nil)
+}
+
+// doGET issues a single GET and returns (status, body, err).
+//
+// Error semantics:
+//   - 503: returned verbatim with err==nil (Phase 15 not-yet-implemented contract).
+//   - 5xx other than 503: returned with err wrapping ErrScraperUpstream so the
+//     caller can errors.Is-match it and map to 502 Bad Gateway.
+//   - 2xx/3xx/4xx: returned with err==nil.
+//   - Transport / context errors: returned with status=0, body=nil, err=cause.
+func (c *Client) doGET(ctx context.Context, path string, q url.Values) (int, []byte, error) {
+	full := c.baseURL + path
+	if q != nil && len(q) > 0 {
+		full += "?" + q.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, full, nil)
+	if err != nil {
+		return 0, nil, fmt.Errorf("build scraper request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("scraper http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return resp.StatusCode, nil, fmt.Errorf("scraper read body: %w", readErr)
+	}
+
+	// 503 is the canonical not-yet-implemented contract — forward verbatim.
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return resp.StatusCode, body, nil
+	}
+	// Other 5xx is a real upstream failure worth signaling.
+	if resp.StatusCode >= 500 {
+		return resp.StatusCode, body, fmt.Errorf("scraper upstream %d: %w", resp.StatusCode, ErrScraperUpstream)
+	}
+	return resp.StatusCode, body, nil
+}
