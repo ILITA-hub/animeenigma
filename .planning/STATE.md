@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
-status: planning
-stopped_at: "Roadmap defined (Phases 15-20). 49/49 SCRAPER-* requirements mapped. Ready to discuss/plan Phase 15 (Foundation)."
+status: ready_for_autonomous_execution
+stopped_at: "Decision register signed off (.planning/v3.0-DECISIONS.md). Ready to invoke /gsd-autonomous or /gsd-discuss-phase 15."
 last_updated: "2026-05-11T00:00:00.000Z"
 last_activity: 2026-05-11
 progress:
