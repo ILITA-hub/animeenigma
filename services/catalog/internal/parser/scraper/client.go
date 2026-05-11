@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -44,12 +45,16 @@ type Client struct {
 // Production wiring: NewClient(cfg.Scraper.APIURL, cfg.Scraper.Timeout)
 // where cfg.Scraper.APIURL defaults to http://scraper:8088 and the
 // timeout defaults to 15s.
+//
+// REVIEW.md WR-01: baseURL has trailing slashes trimmed so request URLs
+// like baseURL + "/scraper/episodes" never produce "//scraper/episodes"
+// (which chi normalizes, but proxies/IDS in the middle may not).
 func NewClient(baseURL string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
 	return &Client{
-		baseURL: baseURL,
+		baseURL: strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
