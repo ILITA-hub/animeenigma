@@ -25,7 +25,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ## Requirements (numbered SCRAPER-*)
 
-### Foundation (Phase A)
+### Foundation (Phase 15)
 
 - [ ] **SCRAPER-FOUND-01**: A `Provider` Go interface in `services/catalog/internal/parser/scraper/provider.go` exposes `Name`, `FindID`, `ListEpisodes`, `ListServers`, `GetStream`, `HealthCheck`. New providers plug in without modifying the orchestrator or HTTP handlers.
 - [ ] **SCRAPER-FOUND-02**: Three sentinel errors (`ErrNotFound`, `ErrProviderDown`, `ErrExtractFailed`) drive orchestrator failover semantics. Returning `[]Episode{}, nil` from a provider on selector drift is forbidden — providers must distinguish "real empty" from "scrape broke" and emit the appropriate sentinel.
@@ -36,13 +36,13 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 - [ ] **SCRAPER-FOUND-07**: A golden-file test harness (`testdata/<provider>/<page>.html` + `sebdah/goldie/v2`) snapshots upstream HTML so unit tests stay deterministic when upstreams are down or rate-limited. `make capture-goldens` recipe documented for refreshing fixtures.
 - [ ] **SCRAPER-FOUND-08**: A `MegacloudClient` Go HTTP wrapper calls the existing `docker/megacloud-extractor/` Node sidecar over HTTP. The sidecar is registered as the `megacloud` `EmbedExtractor` in the registry. No embed decryption is reimplemented in Go.
 - [ ] **SCRAPER-FOUND-09**: CI lint rejects `go.mod` additions of `chromedp`, `go-rod`, `chromedp-rod`, `utls`, `tls-client`, `cloudscraper_go`, and `flaresolverr` packages. Anti-bot scope creep is gated at the build.
-- [ ] **SCRAPER-FOUND-10**: New gateway-routed HTTP endpoints under `/api/anime/{animeId}/scraper/*` are registered (returning HTTP 503 `not-yet-implemented` until Phase B):
+- [ ] **SCRAPER-FOUND-10**: New gateway-routed HTTP endpoints under `/api/anime/{animeId}/scraper/*` are registered (returning HTTP 503 `not-yet-implemented` until Phase 16):
   - `GET /api/anime/{animeId}/scraper/episodes?prefer={provider}`
   - `GET /api/anime/{animeId}/scraper/servers?episode={epId}&prefer={provider}`
   - `GET /api/anime/{animeId}/scraper/stream?episode={epId}&server={srvId}&category={sub|dub}&prefer={provider}`
   - `GET /api/anime/{animeId}/scraper/health`
 
-### First Provider — AnimePahe (Phase B)
+### First Provider — AnimePahe (Phase 16)
 
 - [ ] **SCRAPER-PAHE-01**: Given a Shikimori/MAL ID, the AnimePahe client returns the matching AnimePahe session UUID via `malsync.moe` lookup (24 h cache) with a fuzzy-title fallback.
 - [ ] **SCRAPER-PAHE-02**: `ListEpisodes` returns the complete episode list with `episode_number`, `id`, `title`, and `is_filler` where the upstream exposes it. Cached for 6 hours.
@@ -50,14 +50,14 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 - [ ] **SCRAPER-PAHE-04**: DDoS-Guard cookies are handled via the per-provider `cookiejar` scoped by `golang.org/x/net/publicsuffix`. No headless browser.
 - [ ] **SCRAPER-PAHE-05**: AnimePahe CDN hostnames (`kwik.cx`, `owocdn.top`, `uwucdn.top`, and any others discovered during implementation) are appended to `libs/videoutils/proxy.go::HLSProxyAllowedDomains`.
 
-### New unified English player frontend (Phase B)
+### New unified English player frontend (Phase 16)
 
 - [ ] **SCRAPER-UI-01**: A new `frontend/web/src/components/player/EnglishPlayer.vue` component replaces both `HiAnimePlayer.vue` and `ConsumetPlayer.vue`. Same Video.js / HLS.js engine + the existing `SubtitleOverlay.vue` for Jimaku JP subs.
 - [ ] **SCRAPER-UI-02**: The anime detail page surfaces **one** "English" player tab (replacing the previous two tabs labelled "HiAnime" and "Consumet"). Provider selection lives **inside** the player UI — a small "Source: AnimePahe / 9anime / AnimeKai" dropdown so users can override the orchestrator's default. User selection persists per anime via the existing watch-preference store.
-- [ ] **SCRAPER-UI-03**: A new `frontend/web/src/api/client.ts::scraperApi` exposes `getEpisodes`, `getServers`, `getStream`, `getHealth` against the `/api/anime/{id}/scraper/*` endpoints. `hianimeApi` and `consumetApi` are **not** repointed — they will be deleted in Phase F.
-- [ ] **SCRAPER-UI-04**: The two old player components (`HiAnimePlayer.vue`, `ConsumetPlayer.vue`) are **kept temporarily** during the soak (Phase B-E) so users have a working fallback if the new player misbehaves. Both are removed in Phase F. New users see only the English tab; the old tabs stay reachable via a dev flag (`?legacy=1`) for debug.
+- [ ] **SCRAPER-UI-03**: A new `frontend/web/src/api/client.ts::scraperApi` exposes `getEpisodes`, `getServers`, `getStream`, `getHealth` against the `/api/anime/{id}/scraper/*` endpoints. `hianimeApi` and `consumetApi` are **not** repointed — they will be deleted in Phase 20.
+- [ ] **SCRAPER-UI-04**: The two old player components (`HiAnimePlayer.vue`, `ConsumetPlayer.vue`) are **kept temporarily** during the soak (Phases 16-19) so users have a working fallback if the new player misbehaves. Both are removed in Phase 20. New users see only the English tab; the old tabs stay reachable via a dev flag (`?legacy=1`) for debug.
 
-### Observability (Phase C)
+### Observability (Phase 17)
 
 - [ ] **SCRAPER-OBS-01**: A background liveness probe runs every 15 min ± 20 % jitter, exercising the full pipeline (search → episodes → servers → stream → first segment) against a rotating 5-10 anime golden pool **per provider**.
 - [ ] **SCRAPER-OBS-02**: A Prometheus gauge family `provider_health_up{provider, stage}` reports per-stage health for 5 stages: `search`, `episodes`, `servers`, `stream`, `stream_segment`. A stage flips to 0 after 3 consecutive failures within 15 min.
@@ -65,7 +65,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 - [ ] **SCRAPER-OBS-04**: A Grafana dashboard panel + alert fires when any `provider_health_up{stage="stream_segment"}` reads 0 for 15 min. Alerts target the existing Telegram admin chat (`TELEGRAM_ADMIN_CHAT_ID`).
 - [ ] **SCRAPER-OBS-05**: `GET /api/admin/scraper/health` exposes the current per-provider / per-stage health snapshot + last successful timestamps for admin debugging.
 
-### Second Provider — 9anime (Phase D)
+### Second Provider — 9anime (Phase 18)
 
 - [ ] **SCRAPER-9ANI-01**: Given a Shikimori/MAL ID, the 9anime client resolves the matching 9anime slug via `malsync.moe` lookup with the same caching + fuzzy fallback as AnimePahe.
 - [ ] **SCRAPER-9ANI-02**: `ListEpisodes` returns the full episode list scraped from 9anime's WordPress/Madara-themed markup (`bsx`, `bixbox`, `bs`, `bt` class family). Sub/dub split surfaced where present. Cached 6 hours.
@@ -74,17 +74,17 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 - [ ] **SCRAPER-9ANI-05**: 9anime CDN hostnames (whatever `mp4upload` / `streamsb` / `streamtape` resolve to today, plus 9anime's own static asset hosts) are appended to `libs/videoutils/proxy.go::HLSProxyAllowedDomains`.
 - [ ] **SCRAPER-9ANI-06**: The orchestrator's sequential failover ordering AnimePahe → 9anime is verified end-to-end: forcing AnimePahe's health gauge to 0 produces a playable stream from 9anime; `parser_fallback_total{from="animepahe",to="9anime"}` increments.
 
-### Third Provider — AnimeKai, gated (Phase E)
+### Third Provider — AnimeKai, gated (Phase 19)
 
 - [ ] **SCRAPER-KAI-01**: Given a Shikimori/MAL ID, the AnimeKai client resolves the matching AnimeKai slug via `malsync.moe`.
 - [ ] **SCRAPER-KAI-02**: `ListEpisodes` returns the full episode list scraped from AnimeKai's custom markup (`aitem-wrapper`, `alist-group`, `azlist` class family). Sub/dub split surfaced.
 - [ ] **SCRAPER-KAI-03**: `ListServers` enumerates AnimeKai's embed hosts. AnimeKai is known to use MegaUp/megacloud-variant embeds; these route to the existing `megacloud` `EmbedExtractor` (extended if necessary).
 - [ ] **SCRAPER-KAI-04**: The AnimeKai MegaUp-embed decryption + auth-token generation runs **inside our own `docker/megacloud-extractor/` sidecar** via a new endpoint (e.g. `/animekai-token`). **No call to `enc-dec.app` or any other external decryption service is performed at any point in the AnimeKai pipeline** — the contract change of `enc-dec.app` is what killed Consumet; v3.0 will not reintroduce that single point of failure.
-- [ ] **SCRAPER-KAI-05**: AnimeKai ships behind a feature flag (`SCRAPER_ANIMEKAI_ENABLED`, default off in production for ≥ 7 days after Phase E ships, then default on). The flag is read at orchestrator startup and toggleable without rebuild via `docker compose restart catalog`.
-- [ ] **SCRAPER-KAI-06**: If the in-house token-generator R&D doesn't converge during Phase E (extractor returns errors against the live `animekai.to` embed), AnimeKai ships with the flag default-off and `SCRAPER-KAI-01..04` stay open as v3.1 carryover. The rest of v3.0 ships regardless.
+- [ ] **SCRAPER-KAI-05**: AnimeKai ships behind a feature flag (`SCRAPER_ANIMEKAI_ENABLED`, default off in production for ≥ 7 days after Phase 19 ships, then default on). The flag is read at orchestrator startup and toggleable without rebuild via `docker compose restart catalog`.
+- [ ] **SCRAPER-KAI-06**: If the in-house token-generator R&D doesn't converge during Phase 19 (extractor returns errors against the live `animekai.to` embed), AnimeKai ships with the flag default-off and `SCRAPER-KAI-01..04` stay open as v3.1 carryover. The rest of v3.0 ships regardless.
 - [ ] **SCRAPER-KAI-07**: The orchestrator's sequential failover ordering AnimePahe → 9anime → AnimeKai is verified end-to-end with the flag on: forcing both AnimePahe and 9anime down still produces a playable stream from AnimeKai.
 
-### Cutover — delete dead code (Phase F)
+### Cutover — delete dead code (Phase 20)
 
 - [ ] **SCRAPER-CUT-01**: After ≥ 7 days of clean production traffic on the new EnglishPlayer (per-provider error rate ≤ 5 %, no Telegram alerts, no user-reported player breakage), the following Go code is deleted in a single PR: `services/catalog/internal/parser/hianime/`, `services/catalog/internal/parser/consumet/`, the seven HiAnime + Consumet handler funcs in `services/catalog/internal/handler/catalog.go`, the six old routes in `services/catalog/internal/transport/router.go` (`/api/anime/{id}/hianime/*`, `/api/anime/{id}/consumet/*`).
 - [ ] **SCRAPER-CUT-02**: `services/catalog/internal/config/` removes `AniwatchAPIURL` and `ConsumetAPIURL`. The catalog service no longer accepts or requires those env vars.
@@ -106,7 +106,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ## Future Requirements (deferred to v3.1+)
 
-- **AnimeKai full enablement** if Phase E's R&D doesn't converge — token-generator implementation work + flag flip.
+- **AnimeKai full enablement** if Phase 19's R&D doesn't converge — token-generator implementation work + flag flip.
 - **DIFF-04** fuzzy title fallback against AniList when malsync.moe returns no match (only if v3.0 ships and the empirical miss rate ≥ 5 %).
 - **DIFF-06** `/api/admin/scraper/diag/:shikimoriId` admin debug endpoint that walks the full pipeline for one ID and dumps every intermediate response.
 - **Anitaku/Gogoanime as fourth provider** — domain volatility (5+ rotations in 18 months) means maintenance cost is high; coverage overlap with the v3.0 trio is already high. Pull in only if a documented user-coverage gap appears.
@@ -136,12 +136,54 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 | REQ-ID | Phase | Status |
 |---|---|---|
-| SCRAPER-FOUND-01..10 | A — Foundation | Pending |
-| SCRAPER-PAHE-01..05, SCRAPER-UI-01..04 | B — AnimePahe + new EnglishPlayer | Pending |
-| SCRAPER-OBS-01..05 | C — Observability | Pending |
-| SCRAPER-9ANI-01..06 | D — 9anime | Pending |
-| SCRAPER-KAI-01..07 | E — AnimeKai (gated) | Pending |
-| SCRAPER-CUT-01..07 | F — Cutover | Pending |
-| SCRAPER-NF-01..05 | Cross-cutting (woven through A-F) | Pending |
+| SCRAPER-FOUND-01 | Phase 15 | Pending |
+| SCRAPER-FOUND-02 | Phase 15 | Pending |
+| SCRAPER-FOUND-03 | Phase 15 | Pending |
+| SCRAPER-FOUND-04 | Phase 15 | Pending |
+| SCRAPER-FOUND-05 | Phase 15 | Pending |
+| SCRAPER-FOUND-06 | Phase 15 | Pending |
+| SCRAPER-FOUND-07 | Phase 15 | Pending |
+| SCRAPER-FOUND-08 | Phase 15 | Pending |
+| SCRAPER-FOUND-09 | Phase 15 | Pending |
+| SCRAPER-FOUND-10 | Phase 15 | Pending |
+| SCRAPER-PAHE-01 | Phase 16 | Pending |
+| SCRAPER-PAHE-02 | Phase 16 | Pending |
+| SCRAPER-PAHE-03 | Phase 16 | Pending |
+| SCRAPER-PAHE-04 | Phase 16 | Pending |
+| SCRAPER-PAHE-05 | Phase 16 | Pending |
+| SCRAPER-UI-01 | Phase 16 | Pending |
+| SCRAPER-UI-02 | Phase 16 | Pending |
+| SCRAPER-UI-03 | Phase 16 | Pending |
+| SCRAPER-UI-04 | Phase 16 | Pending |
+| SCRAPER-OBS-01 | Phase 17 | Pending |
+| SCRAPER-OBS-02 | Phase 17 | Pending |
+| SCRAPER-OBS-03 | Phase 17 | Pending |
+| SCRAPER-OBS-04 | Phase 17 | Pending |
+| SCRAPER-OBS-05 | Phase 17 | Pending |
+| SCRAPER-9ANI-01 | Phase 18 | Pending |
+| SCRAPER-9ANI-02 | Phase 18 | Pending |
+| SCRAPER-9ANI-03 | Phase 18 | Pending |
+| SCRAPER-9ANI-04 | Phase 18 | Pending |
+| SCRAPER-9ANI-05 | Phase 18 | Pending |
+| SCRAPER-9ANI-06 | Phase 18 | Pending |
+| SCRAPER-KAI-01 | Phase 19 | Pending |
+| SCRAPER-KAI-02 | Phase 19 | Pending |
+| SCRAPER-KAI-03 | Phase 19 | Pending |
+| SCRAPER-KAI-04 | Phase 19 | Pending |
+| SCRAPER-KAI-05 | Phase 19 | Pending |
+| SCRAPER-KAI-06 | Phase 19 | Pending |
+| SCRAPER-KAI-07 | Phase 19 | Pending |
+| SCRAPER-CUT-01 | Phase 20 | Pending |
+| SCRAPER-CUT-02 | Phase 20 | Pending |
+| SCRAPER-CUT-03 | Phase 20 | Pending |
+| SCRAPER-CUT-04 | Phase 20 | Pending |
+| SCRAPER-CUT-05 | Phase 20 | Pending |
+| SCRAPER-CUT-06 | Phase 20 | Pending |
+| SCRAPER-CUT-07 | Phase 20 | Pending |
+| SCRAPER-NF-01 | Phase 15 (woven through 15-19) | Pending |
+| SCRAPER-NF-02 | Phase 16 (woven through 16-19) | Pending |
+| SCRAPER-NF-03 | Phase 15 (woven through 15-19) | Pending |
+| SCRAPER-NF-04 | Phase 17 (woven through 17-19) | Pending |
+| SCRAPER-NF-05 | Phase 16 (woven through 16-19) | Pending |
 
-Traceability is finalized when the roadmapper writes ROADMAP.md.
+**Coverage:** 49/49 SCRAPER-* requirements mapped. No orphans. Each NF requirement is anchored to the earliest phase where it must be observable; remaining phases inherit the constraint as an invariant.

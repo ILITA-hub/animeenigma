@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
 status: planning
-stopped_at: "v3.0 milestone started — defining requirements next. Goal: replace dead HiAnime (aniwatch / hianime.to) + broken Consumet (enc-dec.app contract) provider paths with a self-hosted Go scraping service targeting alive EN sources (AnimeKai, AnimePahe, Anitaku/Gogoanime). Kodik + AnimeLib untouched."
-last_updated: "2026-05-09T00:00:00.000Z"
-last_activity: 2026-05-09
+stopped_at: "Roadmap defined (Phases 15-20). 49/49 SCRAPER-* requirements mapped. Ready to discuss/plan Phase 15 (Foundation)."
+last_updated: "2026-05-11T00:00:00.000Z"
+last_activity: 2026-05-11
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
 
-**Current focus:** v3.0 Universal Anime Scraper — defining requirements.
+**Current focus:** v3.0 Universal Anime Scraper — replace dead HiAnime + broken Consumet provider paths with a self-hosted Go scraping subsystem (AnimePahe + 9anime + AnimeKai-gated) behind a new unified `EnglishPlayer.vue`.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 15 (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-09 — Milestone v3.0 started
+Status: Roadmap defined, ready to discuss/plan phase 15
+Last activity: 2026-05-11 — ROADMAP.md written, REQUIREMENTS.md traceability finalized, 49/49 SCRAPER-* requirements mapped across Phases 15-20.
 
 ## Shipped Milestones
 
@@ -37,6 +37,17 @@ Last activity: 2026-05-09 — Milestone v3.0 started
 |-----------|---------|--------|-------|
 | v1.0 Smart Watch Picker Overhaul | 2026-05-03 | 1-8 | — |
 | v2.0 Recommendations Engine | 2026-05-07 | 9-14 | 8/8 |
+
+## v3.0 Phase Map
+
+| Phase | Name | Requirements |
+|---|---|---|
+| 15 | Foundation | SCRAPER-FOUND-01..10, SCRAPER-NF-01, SCRAPER-NF-03 |
+| 16 | AnimePahe + new EnglishPlayer | SCRAPER-PAHE-01..05, SCRAPER-UI-01..04, SCRAPER-NF-02, SCRAPER-NF-05 |
+| 17 | Observability | SCRAPER-OBS-01..05, SCRAPER-NF-04 |
+| 18 | 9anime | SCRAPER-9ANI-01..06 |
+| 19 | AnimeKai (gated) | SCRAPER-KAI-01..07 |
+| 20 | Cutover | SCRAPER-CUT-01..07 (gated on ≥ 7 days clean prod traffic) |
 
 ## v3.0 Drivers (carried from triage 2026-05-09)
 
@@ -52,6 +63,6 @@ Last activity: 2026-05-09 — Milestone v3.0 started
 
 ## Session Continuity
 
-Last session: 2026-05-09
-Stopped at: v3.0 milestone started; PROJECT.md + STATE.md updated. Next: define REQUIREMENTS.md per `/gsd-new-milestone` workflow.
-Resume from: continue `/gsd-new-milestone` at the Research Decision step.
+Last session: 2026-05-11
+Stopped at: v3.0 ROADMAP.md written (Phases 15-20); REQUIREMENTS.md traceability finalized; STATE.md updated. Next: present roadmap for user approval, then run `/gsd-plan-phase 15`.
+Resume from: discuss/plan Phase 15 (Foundation) — Provider interface, orchestrator skeleton, EmbedExtractor registry, BaseHTTPClient, megacloud-extractor Go wrapper, golden-file harness, 503-stub HTTP endpoints.
