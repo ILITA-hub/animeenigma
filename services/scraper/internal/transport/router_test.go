@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -14,9 +15,26 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 )
 
+// metrics.NewCollector registers Prometheus collectors against the global
+// promauto registry, so calling it twice in the same process panics with
+// "duplicate metrics collector registration". We share a single Collector
+// across every router test so each test still gets an independent router
+// but the metric collectors are registered exactly once.
+var (
+	sharedMC     *metrics.Collector
+	sharedMCOnce sync.Once
+)
+
+func getSharedMC() *metrics.Collector {
+	sharedMCOnce.Do(func() {
+		sharedMC = metrics.NewCollector("scraper-router-test")
+	})
+	return sharedMC
+}
+
 // freshTestRouter builds a real router from real (zero-provider) wiring.
-// Using a fresh metrics.Collector("scraper-test-<random>") avoids the
-// promauto duplicate-registration panic across parallel test packages.
+// Returns a new chi.Router on every call (cheap), but reuses the shared
+// metrics.Collector to avoid the global-registry collision.
 func freshTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	log := logger.Default()
@@ -26,10 +44,9 @@ func freshTestRouter(t *testing.T) http.Handler {
 			URL: "http://localhost:0",
 		},
 	}
-	mc := metrics.NewCollector("scraper-test-" + t.Name())
 	orch := service.NewOrchestrator(log, domain.NewRegistry())
 	sh := handler.NewScraperHandler(orch, log)
-	return NewRouter(sh, cfg, log, mc)
+	return NewRouter(sh, cfg, log, getSharedMC())
 }
 
 // TestRouter_AllScraperRoutesRegistered fires GETs at every /scraper/* route
