@@ -58,7 +58,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 **Depends on**: Nothing (first v3.0 phase)
 **Requirements**: SCRAPER-FOUND-01, SCRAPER-FOUND-02, SCRAPER-FOUND-03, SCRAPER-FOUND-04, SCRAPER-FOUND-05, SCRAPER-FOUND-06, SCRAPER-FOUND-07, SCRAPER-FOUND-08, SCRAPER-FOUND-09, SCRAPER-FOUND-10, SCRAPER-NF-01, SCRAPER-NF-03
 **Success Criteria** (what must be TRUE):
-  1. `docker compose ps` shows a healthy `animeenigma-scraper` container on `:8087`; `make redeploy-scraper` and `make logs-scraper` both work; the service starts with no providers registered and serves `GET /scraper/health` returning a JSON snapshot.
+  1. `docker compose ps` shows a healthy `animeenigma-scraper` container on `:8088` (changed from planned `:8087` in Plan 15-01 — host port conflict with the `services/maintenance` binary that runs natively on 8087 outside docker-compose); `make redeploy-scraper` and `make logs-scraper` both work; the service starts with no providers registered and serves `GET /scraper/health` returning a JSON snapshot.
   2. `GET /api/anime/{animeId}/scraper/episodes|servers|stream|health` on the catalog API surface returns HTTP 503 `not-yet-implemented`. Catalog resolves the UUID → MAL ID and forwards to scraper via `services/catalog/internal/parser/scraper/client.go`; scraper returns 503 from `services/scraper/internal/handler/`. Both layers are wired.
   3. The Stream DTO compiled into `services/scraper/internal/domain/` has no `iframe_url` field at the Go type level — silent cross-tier fallback to Kodik is structurally impossible. Compile-time test asserts the field's absence.
   4. `make capture-goldens` recipe runs in `services/scraper/` and produces deterministic `testdata/<provider>/*.html` fixtures; parser unit tests run offline against goldens (no network).
@@ -134,7 +134,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 |-------|-----------|-------|--------|-----------|
 | 1-8 | v1.0 | 18/18 | ✅ Complete | 2026-04-27 → 2026-05-03 |
 | 9-14 | v2.0 | 8/8 | ✅ Complete | 2026-05-06 → 2026-05-07 |
-| 15 | v3.0 | 0/? | Not started | — |
+| 15 | v3.0 | 1/4 | In Progress|  |
 | 16 | v3.0 | 0/? | Not started | — |
 | 17 | v3.0 | 0/? | Not started | — |
 | 18 | v3.0 | 0/? | Not started | — |
