@@ -54,15 +54,16 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 ## Phase Details
 
 ### Phase 15: Foundation
-**Goal**: All structural seams in place so subsequent phases plug in providers without re-architecting. No user-visible behavior change.
+**Goal**: All structural seams in place so subsequent phases plug in providers without re-architecting. No user-visible behavior change. Adds a new `services/scraper/` microservice (orchestrator + interfaces + harness) plus a thin client inside catalog that talks to it.
 **Depends on**: Nothing (first v3.0 phase)
 **Requirements**: SCRAPER-FOUND-01, SCRAPER-FOUND-02, SCRAPER-FOUND-03, SCRAPER-FOUND-04, SCRAPER-FOUND-05, SCRAPER-FOUND-06, SCRAPER-FOUND-07, SCRAPER-FOUND-08, SCRAPER-FOUND-09, SCRAPER-FOUND-10, SCRAPER-NF-01, SCRAPER-NF-03
 **Success Criteria** (what must be TRUE):
-  1. `GET /api/anime/{animeId}/scraper/episodes|servers|stream|health` returns HTTP 503 `not-yet-implemented` (routes exist, orchestrator skeleton wired, zero providers registered).
-  2. The Stream DTO compiled into `services/catalog/internal/parser/scraper/provider.go` has no `iframe_url` field at the Go type level — silent cross-tier fallback to Kodik is structurally impossible.
-  3. `make capture-goldens` recipe runs and produces deterministic `testdata/<provider>/*.html` fixtures; parser unit tests run offline against goldens (no network).
-  4. CI fails any `go.mod` PR that adds `chromedp`, `go-rod`, `chromedp-rod`, `utls`, `tls-client`, `cloudscraper_go`, or `flaresolverr` — verified by a deliberate red PR.
-  5. Every upstream HTTP call routed through `BaseHTTPClient` has a hard 10-second timeout and uses `hashicorp/go-retryablehttp` exponential backoff (1s → 2s → 4s → 8s) — no hand-rolled retry loops permitted.
+  1. `docker compose ps` shows a healthy `animeenigma-scraper` container on `:8087`; `make redeploy-scraper` and `make logs-scraper` both work; the service starts with no providers registered and serves `GET /scraper/health` returning a JSON snapshot.
+  2. `GET /api/anime/{animeId}/scraper/episodes|servers|stream|health` on the catalog API surface returns HTTP 503 `not-yet-implemented`. Catalog resolves the UUID → MAL ID and forwards to scraper via `services/catalog/internal/parser/scraper/client.go`; scraper returns 503 from `services/scraper/internal/handler/`. Both layers are wired.
+  3. The Stream DTO compiled into `services/scraper/internal/domain/` has no `iframe_url` field at the Go type level — silent cross-tier fallback to Kodik is structurally impossible. Compile-time test asserts the field's absence.
+  4. `make capture-goldens` recipe runs in `services/scraper/` and produces deterministic `testdata/<provider>/*.html` fixtures; parser unit tests run offline against goldens (no network).
+  5. CI fails any `services/scraper/go.mod` PR that adds `chromedp`, `go-rod`, `chromedp-rod`, `utls`, `tls-client`, `cloudscraper_go`, or `flaresolverr` — verified by a deliberate red PR.
+  6. Every upstream HTTP call routed through `BaseHTTPClient` (in scraper) has a hard 10-second timeout and uses `hashicorp/go-retryablehttp` exponential backoff (1s → 2s → 4s → 8s) — no hand-rolled retry loops permitted.
 **Plans**: TBD
 
 ### Phase 16: AnimePahe + New EnglishPlayer

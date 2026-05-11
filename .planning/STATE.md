@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
 status: ready_for_autonomous_execution
-stopped_at: "Decision register signed off (.planning/v3.0-DECISIONS.md). Ready to invoke /gsd-autonomous or /gsd-discuss-phase 15."
+stopped_at: "Decision register signed off (.planning/v3.0-DECISIONS.md). Architecture revised 2026-05-11: scraper is a NEW services/scraper/ microservice (port 8087); catalog gets a thin services/catalog/internal/parser/scraper/client.go that calls it. Frontend hits gateway → catalog → scraper; no gateway change. Ready to invoke /gsd-autonomous or /gsd-discuss-phase 15."
 last_updated: "2026-05-11T00:00:00.000Z"
 last_activity: 2026-05-11
 progress:
@@ -22,7 +22,7 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
 
-**Current focus:** v3.0 Universal Anime Scraper — replace dead HiAnime + broken Consumet provider paths with a self-hosted Go scraping subsystem (AnimePahe + 9anime + AnimeKai-gated) behind a new unified `EnglishPlayer.vue`.
+**Current focus:** v3.0 Universal Anime Scraper — new `services/scraper/` Go microservice (port 8087) called from a thin `services/catalog/internal/parser/scraper/client.go` HTTP wrapper. AnimePahe + 9anime + AnimeKai-gated, behind a new unified `EnglishPlayer.vue`. Replaces the dead HiAnime + broken Consumet provider paths.
 
 ## Current Position
 
