@@ -221,11 +221,21 @@ func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, ser
 // cache for liveness-aware failover skipping.
 //
 // The returned map is always non-nil; empty for zero providers.
+//
+// Locking discipline (REVIEW.md CR-02): snapshot the provider slice under
+// the read lock, then RELEASE the lock before invoking p.HealthCheck(ctx).
+// Holding the orchestrator's RLock across provider HealthCheck calls would
+// block any concurrent Register() (write lock) for the duration of every
+// health check — and a future regression where a provider's HealthCheck
+// does network I/O would turn into a global service stall.
 func (o *Orchestrator) HealthSnapshot(ctx context.Context) map[string]domain.Health {
 	o.mu.RLock()
-	defer o.mu.RUnlock()
-	out := make(map[string]domain.Health, len(o.providers))
-	for _, p := range o.providers {
+	providers := make([]domain.Provider, len(o.providers))
+	copy(providers, o.providers)
+	o.mu.RUnlock()
+
+	out := make(map[string]domain.Health, len(providers))
+	for _, p := range providers {
 		out[p.Name()] = p.HealthCheck(ctx)
 	}
 	return out
