@@ -76,7 +76,13 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
   3. The "Source: AnimePahe" dropdown inside the player UI is visible (single-option until Phase 18); user override selection persists per anime via the existing watch-preference store.
   4. Cache TTLs observed in Redis match the freshness contract: 24h malsync, 6h episodes, 15min search, ≤ `min(parsed kwik expiry − 30s, 5min)` for stream URLs.
   5. ReportButton bug reports submitted from the English tab include `provider:animepahe` plus the orchestrator's `tried:` chain — verified via a test report inspected in the player_reports volume.
-**Plans**: TBD
+**Plans**: 6 plans across 4 waves (Wave 1: 16-01 + 16-02 + 16-04 parallel; Wave 2: 16-03; Wave 3: 16-05; Wave 4: 16-06)
+- [ ] 16-01-PLAN.md — Wave 1: AnimePahe connectivity probe + BaseHTTPClient.Jar() accessor + HLS allowlist regression lock + capture goldens
+- [ ] 16-02-PLAN.md — Wave 1: Kwik EmbedExtractor (dop251/goja in-process, fresh runtime per call, SSRF + timeout guards)
+- [ ] 16-03-PLAN.md — Wave 2: AnimePahe Provider (malsync 24h + fuzzy fallback, episodes 6h, ListServers HTML scrape via goquery, stream TTL ≤ min(expires−30s, 5min), DDoS-Guard cookie helper)
+- [ ] 16-04-PLAN.md — Wave 1: Frontend infra — scraperApi client + new locale keys (3 locales) + ReportButton + diagnostics scraperProvider/triedChain props + useWatchPreferences.preferredScraperProvider
+- [ ] 16-05-PLAN.md — Wave 3: Scraper boot wiring (Kwik + AnimePahe registered, Redis cache, ANIMEPAHE_BASE_URL env, meta.tried response field, 503-stubs → live orchestrator)
+- [ ] 16-06-PLAN.md — Wave 4: EnglishPlayer.vue (fork of HiAnimePlayer with scraperApi + cyan accent) + Anime.vue tab integration + legacy=1 gating + Playwright e2e
 **UI hint**: yes
 
 ### Phase 17: Observability
@@ -135,7 +141,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 | 1-8 | v1.0 | 18/18 | ✅ Complete | 2026-04-27 → 2026-05-03 |
 | 9-14 | v2.0 | 8/8 | ✅ Complete | 2026-05-06 → 2026-05-07 |
 | 15 | v3.0 | 4/4 | Complete    | 2026-05-11 |
-| 16 | v3.0 | 0/? | Not started | — |
+| 16 | v3.0 | 0/6 | Planned     | — |
 | 17 | v3.0 | 0/? | Not started | — |
 | 18 | v3.0 | 0/? | Not started | — |
 | 19 | v3.0 | 0/? | Not started | — |
