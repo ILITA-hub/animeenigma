@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
-status: ready_for_autonomous_execution
-stopped_at: "Decision register signed off (.planning/v3.0-DECISIONS.md). Architecture revised 2026-05-11: scraper is a NEW services/scraper/ microservice (port 8087); catalog gets a thin services/catalog/internal/parser/scraper/client.go that calls it. Frontend hits gateway → catalog → scraper; no gateway change. Ready to invoke /gsd-autonomous or /gsd-discuss-phase 15."
+status: phase_15_planned_ready_for_execution
+stopped_at: "Phase 15 (Foundation) planned across 4 waves (15-01..15-04 PLAN.md, ~1750 lines total). CONTEXT.md committed. Anthropic usage budget exhausted mid-/gsd-autonomous run (resets 7:30am Europe/Berlin). Resume /gsd-autonomous after reset to execute the 4 plans via gsd-executor — each plan is TDD-tagged, atomic-commit-structured, autonomous-flagged. Plan 15-01 Wave 1 (scaffolding) has no dependencies; 15-02 → 15-04 chain via depends_on edges."
 last_updated: "2026-05-11T00:00:00.000Z"
 last_activity: 2026-05-11
 progress:
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 ## Current Position
 
-Phase: 15 (not started)
-Plan: —
-Status: Roadmap defined, ready to discuss/plan phase 15
-Last activity: 2026-05-11 — ROADMAP.md written, REQUIREMENTS.md traceability finalized, 49/49 SCRAPER-* requirements mapped across Phases 15-20.
+Phase: 15 (Foundation)
+Plan: 4 plans written (15-01..15-04), 0 executed
+Status: Ready for execution — gsd-executor must run plans in order 15-01 → 15-02 → 15-03 → 15-04 (depends_on edges enforce this)
+Last activity: 2026-05-11 — Phase 15 plans written via gsd-planner; autonomous run paused on Anthropic usage exhaustion (resets 7:30am Europe/Berlin). Resume with /gsd-autonomous --from 15 after reset.
 
 ## Shipped Milestones
 
@@ -64,5 +64,5 @@ Last activity: 2026-05-11 — ROADMAP.md written, REQUIREMENTS.md traceability f
 ## Session Continuity
 
 Last session: 2026-05-11
-Stopped at: v3.0 ROADMAP.md written (Phases 15-20); REQUIREMENTS.md traceability finalized; STATE.md updated. Next: present roadmap for user approval, then run `/gsd-plan-phase 15`.
-Resume from: discuss/plan Phase 15 (Foundation) — Provider interface, orchestrator skeleton, EmbedExtractor registry, BaseHTTPClient, megacloud-extractor Go wrapper, golden-file harness, 503-stub HTTP endpoints.
+Stopped at: Phase 15 (Foundation) — discuss + plan done, 4 PLAN.md files committed, execution paused on Anthropic usage exhaustion (resets 7:30am Europe/Berlin).
+Resume from: `/gsd-autonomous --from 15` after usage reset. The autonomous workflow will detect existing CONTEXT.md + PLAN.md and skip straight to gsd-execute-phase. Each plan is autonomous-flagged so the executor can run them back-to-back without further user input.
