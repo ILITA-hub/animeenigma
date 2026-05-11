@@ -1,4 +1,4 @@
-go 1.22
+go 1.23.0
 
 use (
 	./libs/animeparser
@@ -20,6 +20,7 @@ use (
 	./services/player
 	./services/rooms
 	./services/scheduler
+	./services/scraper
 	./services/streaming
 	./services/themes
 )
