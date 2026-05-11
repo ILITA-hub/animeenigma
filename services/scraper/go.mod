@@ -7,8 +7,12 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/go-chi/chi/v5 v5.0.12
+	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/sebdah/goldie/v2 v2.5.5
 	github.com/stretchr/testify v1.9.0
+	golang.org/x/mod v0.20.0
+	golang.org/x/net v0.39.0
+	golang.org/x/time v0.5.0
 )
 
 require (
@@ -19,6 +23,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-chi/render v1.0.3 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.19.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
