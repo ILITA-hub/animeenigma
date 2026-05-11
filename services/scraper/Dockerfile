@@ -8,6 +8,12 @@ RUN apk add --no-cache git
 # Copy go.work and all module files. Every workspace member must be
 # reachable from inside the build context because `go work sync` resolves
 # the entire workspace graph; missing members fail the build.
+#
+# REVIEW.md WR-06: many of the lib go.mods below are not directly required
+# by services/scraper/go.mod (which only needs errors/httputil/logger/metrics
+# today), but go.work requires every workspace member's go.mod to exist at
+# build time. Removing them would diverge from the other services'
+# Dockerfiles — keep the full set and document the reason instead.
 COPY go.work go.work.sum ./
 COPY libs/logger/go.mod libs/logger/go.sum* ./libs/logger/
 COPY libs/tracing/go.mod libs/tracing/go.sum* ./libs/tracing/
