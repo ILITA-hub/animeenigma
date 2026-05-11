@@ -90,6 +90,14 @@ func NewRouter(
 			r.Get("/{animeId}/animelib/episodes", catalogHandler.GetAnimeLibEpisodes)
 			r.Get("/{animeId}/animelib/translations", catalogHandler.GetAnimeLibTranslations)
 			r.Get("/{animeId}/animelib/stream", catalogHandler.GetAnimeLibStream)
+			// Scraper (Phase 15+ — universal English provider orchestration via
+			// the scraper microservice on :8088. Phase 15: episodes/servers/stream
+			// return 503 not-yet-implemented; health returns the live snapshot.
+			// Phase 16+ plugs in real provider implementations.)
+			r.Get("/{animeId}/scraper/episodes", catalogHandler.GetScraperEpisodes)
+			r.Get("/{animeId}/scraper/servers", catalogHandler.GetScraperServers)
+			r.Get("/{animeId}/scraper/stream", catalogHandler.GetScraperStream)
+			r.Get("/{animeId}/scraper/health", catalogHandler.GetScraperHealth)
 			// Hanime video sources
 			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
 			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)

@@ -23,6 +23,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jikan"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kodik"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/scraper"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 )
@@ -48,6 +49,7 @@ type CatalogService struct {
 	animelibClient  *animelib.Client
 	hanimeClient    *hanime.Client
 	idMappingClient *idmapping.Client
+	scraperClient   *scraper.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
 
@@ -63,6 +65,11 @@ type CatalogServiceOptions struct {
 	AnimeLibToken    string
 	HanimeEmail      string
 	HanimePassword   string
+	// Phase 15 (plan 04) — scraper microservice thin-client wiring.
+	// ScraperAPIURL defaults to http://scraper:8088 when empty.
+	// ScraperTimeout defaults to 15s when zero.
+	ScraperAPIURL  string
+	ScraperTimeout time.Duration
 }
 
 func NewCatalogService(
@@ -84,6 +91,8 @@ func NewCatalogService(
 
 	// Get API URLs from options
 	var aniwatchAPIURL, consumetAPIURL, consumetProvider, jimakuAPIKey, animelibToken, hanimeEmail, hanimePassword string
+	var scraperAPIURL string
+	var scraperTimeout time.Duration
 	if len(opts) > 0 {
 		aniwatchAPIURL = opts[0].AniwatchAPIURL
 		consumetAPIURL = opts[0].ConsumetAPIURL
@@ -92,6 +101,13 @@ func NewCatalogService(
 		animelibToken = opts[0].AnimeLibToken
 		hanimeEmail = opts[0].HanimeEmail
 		hanimePassword = opts[0].HanimePassword
+		scraperAPIURL = opts[0].ScraperAPIURL
+		scraperTimeout = opts[0].ScraperTimeout
+	}
+	if scraperAPIURL == "" {
+		// Match the docker-compose / config.go default so unit-test
+		// callers that don't populate options still get a sensible client.
+		scraperAPIURL = "http://scraper:8088"
 	}
 
 	jimakuClient := jimaku.NewClient(jimakuAPIKey)
@@ -129,6 +145,7 @@ func NewCatalogService(
 		animelibClient:  animelibClient,
 		hanimeClient:    hanimeClient,
 		idMappingClient: idmapping.NewClient(),
+		scraperClient:   scraper.NewClient(scraperAPIURL, scraperTimeout),
 		cache:           cache,
 		log:             log,
 	}

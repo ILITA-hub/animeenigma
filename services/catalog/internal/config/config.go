@@ -24,6 +24,7 @@ type Config struct {
 	Hanime      HanimeConfig
 	Telegram    TelegramConfig
 	HealthCheck HealthCheckConfig
+	Scraper     ScraperConfig
 }
 
 type ServerConfig struct {
@@ -71,6 +72,14 @@ type HealthCheckConfig struct {
 
 type TelegramConfig struct {
 	NewsChannel string
+}
+
+// ScraperConfig configures the thin client targeting the scraper
+// microservice (Phase 15+). APIURL defaults to http://scraper:8088 to
+// match the docker-compose scraper service block. Timeout defaults to 15s.
+type ScraperConfig struct {
+	APIURL  string
+	Timeout time.Duration
 }
 
 func Load() (*Config, error) {
@@ -130,6 +139,10 @@ func Load() (*Config, error) {
 		},
 		HealthCheck: HealthCheckConfig{
 			Interval: getEnvDuration("PLAYER_HEALTH_CHECK_INTERVAL", 5*time.Minute),
+		},
+		Scraper: ScraperConfig{
+			APIURL:  getEnv("SCRAPER_API_URL", "http://scraper:8088"),
+			Timeout: getEnvDuration("SCRAPER_TIMEOUT", 15*time.Second),
 		},
 	}, nil
 }

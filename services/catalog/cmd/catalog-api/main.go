@@ -104,9 +104,11 @@ func main() {
 			ConsumetAPIURL:   cfg.Consumet.APIURL,
 			ConsumetProvider: cfg.Consumet.Provider,
 			JimakuAPIKey:     cfg.Jimaku.APIKey,
-			AnimeLibToken:  cfg.AnimeLib.Token,
-			HanimeEmail:    cfg.Hanime.Email,
-			HanimePassword: cfg.Hanime.Password,
+			AnimeLibToken:    cfg.AnimeLib.Token,
+			HanimeEmail:      cfg.Hanime.Email,
+			HanimePassword:   cfg.Hanime.Password,
+			ScraperAPIURL:    cfg.Scraper.APIURL,
+			ScraperTimeout:   cfg.Scraper.Timeout,
 		},
 	)
 
