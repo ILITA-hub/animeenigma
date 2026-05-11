@@ -18,12 +18,20 @@ import (
 type CatalogHandler struct {
 	catalogService *service.CatalogService
 	log            *logger.Logger
+
+	// Phase 15 plan 04 — scraper endpoints. Embedded so chi can route
+	// /api/anime/{animeId}/scraper/* via catalogHandler.GetScraper*
+	// alongside the existing hianime/consumet/animelib handlers.
+	*ScraperEndpointsHandler
 }
 
 func NewCatalogHandler(catalogService *service.CatalogService, log *logger.Logger) *CatalogHandler {
+	scraperEp := &ScraperEndpointsHandler{}
+	WireScraperEndpoints(scraperEp, catalogService, log)
 	return &CatalogHandler{
-		catalogService: catalogService,
-		log:            log,
+		catalogService:          catalogService,
+		log:                     log,
+		ScraperEndpointsHandler: scraperEp,
 	}
 }
 
