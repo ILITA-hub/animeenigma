@@ -14,6 +14,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/pagination v0.0.0
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/go-chi/chi/v5 v5.0.12
+	github.com/google/uuid v1.6.0
 	github.com/hasura/go-graphql-client v0.12.1
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/stretchr/testify v1.9.0
@@ -31,7 +32,6 @@ require (
 	github.com/go-chi/render v1.0.3 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.7.4 // indirect

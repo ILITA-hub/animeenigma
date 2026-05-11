@@ -88,7 +88,7 @@ func newScraperOps(repo animeFetcher, scr scraperForwarder) *scraperOps {
 
 // Test 1 — happy path: ShikimoriID parses to int, scraper forwards.
 func TestCatalogService_GetScraperEpisodes_HappyPath(t *testing.T) {
-	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "uuid-1", ShikimoriID: "12345"}}
+	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "11111111-1111-4111-8111-111111111111", ShikimoriID: "12345"}}
 	scr := &fakeScraperForwarder{
 		replyStatus: http.StatusServiceUnavailable,
 		replyBody:   []byte(`{"error":"not-yet-implemented","phase":15}`),
@@ -96,7 +96,7 @@ func TestCatalogService_GetScraperEpisodes_HappyPath(t *testing.T) {
 	}
 	ops := newScraperOps(repo, scr)
 
-	status, body, err := ops.GetScraperEpisodes(context.Background(), "uuid-1", "animepahe")
+	status, body, err := ops.GetScraperEpisodes(context.Background(), "11111111-1111-4111-8111-111111111111", "animepahe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,11 +134,11 @@ func TestCatalogService_GetScraperEpisodes_AnimeNotFound(t *testing.T) {
 
 // Test 3 — anime has neither ShikimoriID nor MALID → 422 marker (errMalIDUnavailable).
 func TestCatalogService_GetScraperEpisodes_NoMALOrShikimoriID(t *testing.T) {
-	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "uuid-2", ShikimoriID: "", MALID: ""}}
+	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "22222222-2222-4222-8222-222222222222", ShikimoriID: "", MALID: ""}}
 	scr := &fakeScraperForwarder{}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "uuid-2", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "22222222-2222-4222-8222-222222222222", "")
 	if err == nil {
 		t.Fatal("expected error for missing mal_id, got nil")
 	}
@@ -153,11 +153,11 @@ func TestCatalogService_GetScraperEpisodes_NoMALOrShikimoriID(t *testing.T) {
 // Test 4 — ShikimoriID field is what's used when valid (project memory:
 // Shikimori IDs == MAL IDs for anime).
 func TestCatalogService_GetScraperEpisodes_ShikimoriIDFromShikimoriField(t *testing.T) {
-	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "uuid-3", ShikimoriID: "42", MALID: ""}}
+	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "33333333-3333-4333-8333-333333333333", ShikimoriID: "42", MALID: ""}}
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "uuid-3", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "33333333-3333-4333-8333-333333333333", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -168,11 +168,11 @@ func TestCatalogService_GetScraperEpisodes_ShikimoriIDFromShikimoriField(t *test
 
 // Test 5 — ShikimoriID is garbage, MALID is valid → service uses MALID.
 func TestCatalogService_GetScraperEpisodes_ShikimoriIDInvalid_FallbackMALID(t *testing.T) {
-	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "uuid-4", ShikimoriID: "not-a-number", MALID: "777"}}
+	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "44444444-4444-4444-8444-444444444444", ShikimoriID: "not-a-number", MALID: "777"}}
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperEpisodes(context.Background(), "uuid-4", "")
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "44444444-4444-4444-8444-444444444444", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -183,11 +183,11 @@ func TestCatalogService_GetScraperEpisodes_ShikimoriIDInvalid_FallbackMALID(t *t
 
 // Test 6 — GetScraperServers passes episode + prefer through.
 func TestCatalogService_GetScraperServers_PassesEpisodeQuery(t *testing.T) {
-	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "uuid-5", ShikimoriID: "5"}}
+	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "55555555-5555-4555-8555-555555555555", ShikimoriID: "5"}}
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperServers(context.Background(), "uuid-5", "ep-1", "animepahe")
+	_, _, err := ops.GetScraperServers(context.Background(), "55555555-5555-4555-8555-555555555555", "ep-1", "animepahe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,11 +204,11 @@ func TestCatalogService_GetScraperServers_PassesEpisodeQuery(t *testing.T) {
 
 // Test 7 — GetScraperStream passes every query through.
 func TestCatalogService_GetScraperStream_PassesAllQuery(t *testing.T) {
-	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "uuid-6", ShikimoriID: "9"}}
+	repo := &fakeAnimeFetcher{anime: &domain.Anime{ID: "66666666-6666-4666-8666-666666666666", ShikimoriID: "9"}}
 	scr := &fakeScraperForwarder{replyStatus: 503, replyBody: []byte(`{}`)}
 	ops := newScraperOps(repo, scr)
 
-	_, _, err := ops.GetScraperStream(context.Background(), "uuid-6", "ep-2", "srv-1", "sub", "animepahe")
+	_, _, err := ops.GetScraperStream(context.Background(), "66666666-6666-4666-8666-666666666666", "ep-2", "srv-1", "sub", "animepahe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,6 +226,26 @@ func TestCatalogService_GetScraperStream_PassesAllQuery(t *testing.T) {
 	}
 	if scr.gotStreamPrefer != "animepahe" {
 		t.Errorf("scraper got prefer=%q, want animepahe", scr.gotStreamPrefer)
+	}
+}
+
+// Test 9 — Malformed UUID surfaces as 404 not 500 (no DB roundtrip).
+// Plan must_haves.truths: "If animeId is not a valid UUID format or is
+// not found in animes, catalog returns 404 (not 503)".
+func TestCatalogService_GetScraperEpisodes_MalformedUUID(t *testing.T) {
+	repo := &fakeAnimeFetcher{} // err==nil; if repo were called, anime would be nil → handled by NotFound
+	scr := &fakeScraperForwarder{}
+	ops := newScraperOps(repo, scr)
+
+	_, _, err := ops.GetScraperEpisodes(context.Background(), "not-a-uuid", "")
+	if err == nil {
+		t.Fatal("expected NotFound for malformed UUID, got nil")
+	}
+	if appErr, ok := liberrors.IsAppError(err); !ok || appErr.Code != liberrors.CodeNotFound {
+		t.Errorf("err = %v, want NotFound AppError for malformed UUID", err)
+	}
+	if atomic.LoadInt32(&repo.calls) != 0 {
+		t.Error("animeRepo should NOT be called when UUID is malformed (avoids DB syntax error)")
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/google/uuid"
 )
 
 // ErrMalIDUnavailable is returned when the catalog row for the requested
@@ -52,6 +53,13 @@ type scraperOps struct {
 //  3. If ShikimoriID is empty or unparseable, try MALID.
 //  4. Otherwise return ErrMalIDUnavailable so the handler can emit 422.
 func (o *scraperOps) resolveMALID(ctx context.Context, animeID string) (int, error) {
+	// Malformed UUID — skip the DB roundtrip entirely (Postgres would
+	// otherwise reject with SQLSTATE 22P02, surfaced as a 500). Behave
+	// as "anime not found" instead per plan 15-04 must_haves.truths.
+	if _, err := uuid.Parse(animeID); err != nil {
+		return 0, liberrors.NotFound("anime")
+	}
+
 	anime, err := o.animeRepo.GetByID(ctx, animeID)
 	if err != nil {
 		// liberrors.NotFound from the repo is already the right shape for
