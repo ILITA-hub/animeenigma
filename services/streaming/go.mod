@@ -1,6 +1,6 @@
 module github.com/ILITA-hub/animeenigma/services/streaming
 
-go 1.22
+go 1.23.0
 
 require (
 	github.com/ILITA-hub/animeenigma/libs/animeparser v0.0.0-20260201042258-b7df9066db2d
@@ -14,7 +14,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/minio/minio-go/v7 v7.0.67
 	github.com/prometheus/client_golang v1.19.0
-	golang.org/x/sync v0.10.0
+	golang.org/x/sync v0.13.0
 )
 
 require (
@@ -44,10 +44,10 @@ require (
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/net v0.27.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/crypto v0.37.0 // indirect
+	golang.org/x/net v0.39.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240228224816-df926f6c8641 // indirect
 	google.golang.org/grpc v1.62.0 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect

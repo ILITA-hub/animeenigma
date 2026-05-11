@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
-status: phase_15_planned_ready_for_execution
-stopped_at: "Phase 15 (Foundation) planned across 4 waves (15-01..15-04 PLAN.md, ~1750 lines total). CONTEXT.md committed. Anthropic usage budget exhausted mid-/gsd-autonomous run (resets 7:30am Europe/Berlin). Resume /gsd-autonomous after reset to execute the 4 plans via gsd-executor — each plan is TDD-tagged, atomic-commit-structured, autonomous-flagged. Plan 15-01 Wave 1 (scaffolding) has no dependencies; 15-02 → 15-04 chain via depends_on edges."
-last_updated: "2026-05-11T00:00:00.000Z"
-last_activity: 2026-05-11
+status: executing
+stopped_at: "Phase 15 (Foundation) — discuss + plan done, 4 PLAN.md files committed, execution paused on Anthropic usage exhaustion (resets 7:30am Europe/Berlin)."
+last_updated: "2026-05-11T05:56:26.241Z"
+last_activity: 2026-05-11 -- Phase 15 execution started
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 4
   completed_plans: 0
   percent: 0
 ---
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
 
-**Current focus:** v3.0 Universal Anime Scraper — new `services/scraper/` Go microservice (port 8087) called from a thin `services/catalog/internal/parser/scraper/client.go` HTTP wrapper. AnimePahe + 9anime + AnimeKai-gated, behind a new unified `EnglishPlayer.vue`. Replaces the dead HiAnime + broken Consumet provider paths.
+**Current focus:** Phase 15 — foundation
 
 ## Current Position
 
-Phase: 15 (Foundation)
-Plan: 4 plans written (15-01..15-04), 0 executed
-Status: Ready for execution — gsd-executor must run plans in order 15-01 → 15-02 → 15-03 → 15-04 (depends_on edges enforce this)
-Last activity: 2026-05-11 — Phase 15 plans written via gsd-planner; autonomous run paused on Anthropic usage exhaustion (resets 7:30am Europe/Berlin). Resume with /gsd-autonomous --from 15 after reset.
+Phase: 15 (foundation) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 15
+Last activity: 2026-05-11 -- Phase 15 execution started
 
 ## Shipped Milestones
 
