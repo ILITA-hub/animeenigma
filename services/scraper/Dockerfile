@@ -50,6 +50,6 @@ WORKDIR /app
 
 COPY --from=builder /scraper-api .
 
-EXPOSE 8087
+EXPOSE 8088
 
 CMD ["./scraper-api"]

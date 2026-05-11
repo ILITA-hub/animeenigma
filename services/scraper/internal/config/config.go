@@ -33,7 +33,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
-			Port: getEnvInt("SERVER_PORT", 8087),
+			Port: getEnvInt("SERVER_PORT", 8088),
 		},
 		MegacloudExtractorURL: getEnv("MEGACLOUD_EXTRACTOR_URL", "http://megacloud-extractor:3200"),
 	}

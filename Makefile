@@ -6,7 +6,7 @@
 	backfill-attributes build-backfill-attributes
 
 # Variables
-SERVICES := auth catalog streaming player rooms scheduler gateway themes
+SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper
 GO_BUILD_FLAGS := -ldflags="-s -w"
 DOCKER_REGISTRY ?= ghcr.io/ilita-hub/animeenigma
 
@@ -101,6 +101,10 @@ test-integration: ## Run integration tests
 
 test-e2e: ## Run end-to-end tests
 	cd frontend/web && pnpm test:e2e
+
+capture-goldens: ## Refresh golden-file test fixtures for services/scraper (Phase 15: no fixtures yet — runs as no-op)
+	@echo "Capturing scraper goldens..."
+	cd services/scraper && go test -update ./... -run "Golden" || true
 
 # ============================================================================
 # Code Quality
@@ -417,6 +421,7 @@ health: ## Check health of all services (docker-compose)
 	@curl -sf http://localhost:8083/health > /dev/null && echo "✓ player:8083" || echo "✗ player:8083"
 	@curl -sf http://localhost:8084/health > /dev/null && echo "✓ rooms:8084" || echo "✗ rooms:8084"
 	@curl -sf http://localhost:8085/health > /dev/null && echo "✓ scheduler:8085" || echo "✗ scheduler:8085"
+	@curl -sf http://localhost:8088/health > /dev/null && echo "✓ scraper:8088" || echo "✗ scraper:8088"
 
 metrics: ## Fetch metrics from all services
 	@echo "=== Gateway Metrics ==="
