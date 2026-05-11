@@ -117,7 +117,14 @@ func failoverDecision(err error) (retry bool, kind string) {
 // summarizeFailover collapses N per-provider errors into a single error the
 // caller can match via errors.Is. Priority: any non-NotFound error (ProviderDown,
 // ExtractFailed) wins over NotFound; if every provider returned NotFound we
-// return plain ErrNotFound. Empty errs (zero providers) → ErrNotFound.
+// return plain ErrNotFound.
+//
+// PRECONDITION (REVIEW.md WR-07): errs may be empty ONLY when there are zero
+// providers. runFailover's loop is guaranteed to either append to errs or
+// return early on a terminal error. Future maintainers adding a new terminal-
+// error category to failoverDecision must preserve this invariant; otherwise
+// a non-empty provider list with empty errs would silently return ErrNotFound
+// instead of the real failure cause.
 func summarizeFailover(errs []error) error {
 	if len(errs) == 0 {
 		return domain.ErrNotFound
