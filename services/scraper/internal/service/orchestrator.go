@@ -62,6 +62,11 @@ func (o *Orchestrator) EmbedRegistry() *domain.Registry {
 // If prefer matches a registered provider's Name(), that provider is moved
 // to position 0; the remainder stays in registration order. Unknown prefer
 // values are silently ignored (caller-supplied input is not trusted).
+//
+// The implementation tracks the preferred provider by INDEX so the second
+// loop can skip it unconditionally — a previous version compared against
+// `len(out) == 1` which produced a duplicate once the loop appended any
+// non-preferred provider (advancing len(out) to 2). See REVIEW.md CR-01.
 func (o *Orchestrator) orderedProviders(prefer string) []domain.Provider {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -69,16 +74,18 @@ func (o *Orchestrator) orderedProviders(prefer string) []domain.Provider {
 		return nil
 	}
 	out := make([]domain.Provider, 0, len(o.providers))
+	preferredIdx := -1
 	if prefer != "" {
-		for _, p := range o.providers {
+		for i, p := range o.providers {
 			if p.Name() == prefer {
+				preferredIdx = i
 				out = append(out, p)
 				break
 			}
 		}
 	}
-	for _, p := range o.providers {
-		if len(out) == 1 && p.Name() == prefer {
+	for i, p := range o.providers {
+		if i == preferredIdx {
 			continue // already inserted at position 0
 		}
 		out = append(out, p)

@@ -367,6 +367,66 @@ func TestOrchestrator_PreferPriority(t *testing.T) {
 	}
 }
 
+// TestOrchestrator_PreferPriority_NoDuplicates verifies that the preferred
+// provider is invoked at most once across a failover-exhaustion scenario.
+// REVIEW.md CR-01: a previous version of orderedProviders would append the
+// preferred provider twice (once at the front, once again on its natural
+// position in the second loop), causing the prefer'd upstream to be hit
+// twice on failover. This test locks the contract: each provider is called
+// exactly once per business call, regardless of `prefer`.
+func TestOrchestrator_PreferPriority_NoDuplicates(t *testing.T) {
+	t.Parallel()
+
+	var callsA, callsB, callsC int32
+
+	pa := &fakeProvider{
+		nameVal: "A_nd",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			atomic.AddInt32(&callsA, 1)
+			return nil, domain.WrapProviderDown(errors.New("A down"), "A")
+		},
+	}
+	pb := &fakeProvider{
+		nameVal: "B_nd",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			atomic.AddInt32(&callsB, 1)
+			return nil, domain.WrapProviderDown(errors.New("B down"), "B")
+		},
+	}
+	pc := &fakeProvider{
+		nameVal: "C_nd",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			atomic.AddInt32(&callsC, 1)
+			return nil, domain.WrapProviderDown(errors.New("C down"), "C")
+		},
+	}
+	// Register order: A, B, C. Prefer B → expected order [B, A, C].
+	o := newTestOrchestrator(t, pa, pb, pc)
+
+	_, err := o.ListEpisodes(context.Background(), "x", "B_nd")
+	if err == nil {
+		t.Fatal("ListEpisodes: want err on all-down, got nil")
+	}
+	if got := atomic.LoadInt32(&callsA); got != 1 {
+		t.Errorf("A_nd called %d times; want exactly 1", got)
+	}
+	if got := atomic.LoadInt32(&callsB); got != 1 {
+		t.Errorf("B_nd called %d times; want exactly 1 (preferred MUST NOT duplicate)", got)
+	}
+	if got := atomic.LoadInt32(&callsC); got != 1 {
+		t.Errorf("C_nd called %d times; want exactly 1", got)
+	}
+
+	// Also verify the slice returned by orderedProviders has the correct length.
+	ordered := o.orderedProviders("B_nd")
+	if len(ordered) != 3 {
+		t.Errorf("orderedProviders len = %d; want 3 (no duplicates)", len(ordered))
+	}
+	if ordered[0].Name() != "B_nd" {
+		t.Errorf("orderedProviders[0] = %q; want B_nd (preferred first)", ordered[0].Name())
+	}
+}
+
 // TestOrchestrator_PreferUnknownIgnored verifies that an unknown `prefer`
 // value falls back to default registration order (does not crash, does not
 // return ErrNotFound just because the preference was wrong).
