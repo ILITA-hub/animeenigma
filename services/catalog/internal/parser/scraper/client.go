@@ -34,6 +34,12 @@ import (
 // 502 Bad Gateway response.
 var ErrScraperUpstream = errors.New("scraper upstream error")
 
+// maxScraperBody caps the response body the scraper service may stream
+// back to the catalog client. Real scraper responses are <50 KiB; a
+// misbehaving scraper streaming gigabytes would OOM the catalog without
+// this guard. See REVIEW.md WR-04.
+const maxScraperBody = 4 << 20 // 4 MiB
+
 // Client is the thin HTTP client targeting the scraper service.
 type Client struct {
 	baseURL    string
@@ -126,9 +132,15 @@ func (c *Client) doGET(ctx context.Context, path string, q url.Values) (int, []b
 	if err != nil {
 		return 0, nil, fmt.Errorf("scraper http: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// REVIEW.md WR-04: drain any unread bytes so the keep-alive
+		// connection can be reused even on partial-body failures.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
-	body, readErr := io.ReadAll(resp.Body)
+	// Cap the body so a misbehaving scraper cannot OOM the catalog.
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxScraperBody))
 	if readErr != nil {
 		return resp.StatusCode, nil, fmt.Errorf("scraper read body: %w", readErr)
 	}
