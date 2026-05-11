@@ -42,6 +42,12 @@ var megacloudKnownHosts = []string{
 // matches the sidecar's own setTimeout(15000).
 const defaultMegacloudTimeout = 15 * time.Second
 
+// maxSidecarBody caps the response body the megacloud-extractor sidecar may
+// stream back. Real sidecar responses are <50 KiB in practice; a misbehaving
+// sidecar streaming gigabytes would OOM the scraper without this guard.
+// See REVIEW.md CR-03.
+const maxSidecarBody = 2 << 20 // 2 MiB
+
 // MegacloudClient is a domain.EmbedExtractor that delegates to the
 // megacloud-extractor sidecar over HTTP. The Go side does NO decryption; it
 // is purely an HTTP wrapper + DTO translator.
@@ -150,9 +156,23 @@ func (c *MegacloudClient) Extract(ctx context.Context, embedURL string, headers 
 	if err != nil {
 		return nil, domain.WrapExtractFailed(err, "megacloud: sidecar request failed")
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// Drain any unread bytes so the keep-alive connection can be reused.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	// REVIEW.md CR-03: do NOT discard the io.ReadAll error. A truncated body
+	// from a network blip / sidecar OOM-mid-response would otherwise surface
+	// as a misleading "decode" error instead of the actual transport failure.
+	// Also cap the body so a misbehaving sidecar can't OOM the scraper.
+	bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, maxSidecarBody))
+	if readErr != nil {
+		// Body read failure is a transport-level issue — the sidecar IS up,
+		// but the network between us was disrupted. Surface as ProviderDown so
+		// upstream incident dashboards observe it correctly.
+		return nil, domain.WrapProviderDown(readErr, "megacloud: read sidecar response body")
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Try to decode the JSON error body; fall back to raw status if it
