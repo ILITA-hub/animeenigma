@@ -386,100 +386,6 @@
           </div>
         </div>
         <div class="glass-card p-4 md:p-6">
-          <!-- Resume State Banner (Phase 4 — A-03 / A-04) -->
-          <!-- Shown only for authenticated users once watch_progress is loaded.
-               Anonymous users see no banner (Phase 7 / D-01 will add one).
-               The four kinds correspond to the resume state machine:
-                 watching         — "you finished ep N" breadcrumb
-                 finished         — "you finished this anime" + actions
-                 not-yet-aired    — "ep N+1 — not yet available [{{when}}]"
-                 currently-airing — "ep N+1 is airing now"
-                 first-time       — no banner -->
-          <div
-            v-if="authStore.isAuthenticated && resume.loaded.value && resume.kind.value !== 'first-time'"
-            class="mb-4"
-          >
-            <!-- watching -->
-            <div
-              v-if="resume.kind.value === 'watching' && resume.finishedEpisode.value > 0"
-              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-sm"
-              role="status"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
-              <span>{{ $t('anime.resume.justFinished', { n: resume.finishedEpisode.value }) }}</span>
-            </div>
-
-            <!-- finished -->
-            <div
-              v-else-if="resume.kind.value === 'finished'"
-              class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
-              role="status"
-            >
-              <div class="flex items-center gap-2 text-emerald-300 font-medium flex-shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <span>{{ $t('anime.resume.youFinishedThis') }}</span>
-              </div>
-              <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
-                <button
-                  type="button"
-                  @click="resumeRewatch"
-                  class="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
-                >
-                  {{ $t('anime.resume.rewatch') }}
-                </button>
-                <button
-                  v-if="currentListStatus !== 'completed'"
-                  type="button"
-                  @click="setListStatus('completed')"
-                  class="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
-                >
-                  {{ $t('anime.resume.markCompleteInList') }}
-                </button>
-                <router-link
-                  v-if="anime?.genres?.length"
-                  :to="{ path: '/browse', query: { genres: anime.genres[0] } }"
-                  class="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
-                >
-                  {{ $t('anime.resume.findSimilar') }}
-                </router-link>
-              </div>
-            </div>
-
-            <!-- not-yet-aired -->
-            <div
-              v-else-if="resume.kind.value === 'not-yet-aired'"
-              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm"
-              role="status"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span v-if="resumeNextEpisodeNumber && resumeNextAt">
-                {{ $t('anime.resume.notYetAvailableEta', { n: resumeNextEpisodeNumber, when: formatNextEpisode(resumeNextAt) }) }}
-              </span>
-              <span v-else-if="resumeNextEpisodeNumber">
-                {{ $t('anime.resume.notYetAvailable', { n: resumeNextEpisodeNumber }) }}
-              </span>
-            </div>
-
-            <!-- currently-airing -->
-            <div
-              v-else-if="resume.kind.value === 'currently-airing' && resumeNextEpisodeNumber"
-              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-pink-500/10 border border-pink-500/30 text-pink-300 text-sm"
-              role="status"
-            >
-              <span class="relative flex h-2 w-2" aria-hidden="true">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-pink-500"></span>
-              </span>
-              <span>{{ $t('anime.resume.currentlyAiring', { n: resumeNextEpisodeNumber }) }}</span>
-            </div>
-          </div>
-
           <!-- Click-to-load placeholder (saves bandwidth / no auto-buffer) -->
           <button
             v-if="!playerActivated"
@@ -557,6 +463,100 @@
               :initial-episode="resumeStartEpisode"
             />
           </template>
+
+          <!-- Resume State Banner (Phase 4 — A-03 / A-04) -->
+          <!-- Shown only for authenticated users once watch_progress is loaded.
+               Anonymous users see no banner (Phase 7 / D-01 will add one).
+               The four kinds correspond to the resume state machine:
+                 watching         — "you finished ep N" breadcrumb
+                 finished         — "you finished this anime" + actions
+                 not-yet-aired    — "ep N+1 — not yet available [{{when}}]"
+                 currently-airing — "ep N+1 is airing now"
+                 first-time       — no banner -->
+          <div
+            v-if="authStore.isAuthenticated && resume.loaded.value && resume.kind.value !== 'first-time'"
+            class="mt-4"
+          >
+            <!-- watching -->
+            <div
+              v-if="resume.kind.value === 'watching' && resume.finishedEpisode.value > 0"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs"
+              role="status"
+            >
+              <svg class="w-3.5 h-3.5 text-cyan-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>{{ $t('anime.resume.justFinished', { n: resume.finishedEpisode.value }) }}</span>
+            </div>
+
+            <!-- finished -->
+            <div
+              v-else-if="resume.kind.value === 'finished'"
+              class="rounded-lg bg-white/5 border border-white/10 p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+              role="status"
+            >
+              <div class="flex items-center gap-2 text-white/70 text-sm flex-shrink-0">
+                <svg class="w-4 h-4 text-emerald-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>{{ $t('anime.resume.youFinishedThis') }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
+                <button
+                  type="button"
+                  @click="resumeRewatch"
+                  class="px-3 py-1.5 text-xs rounded-md bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 transition-colors"
+                >
+                  {{ $t('anime.resume.rewatch') }}
+                </button>
+                <button
+                  v-if="currentListStatus !== 'completed'"
+                  type="button"
+                  @click="setListStatus('completed')"
+                  class="px-3 py-1.5 text-xs rounded-md bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 transition-colors"
+                >
+                  {{ $t('anime.resume.markCompleteInList') }}
+                </button>
+                <router-link
+                  v-if="anime?.genres?.length"
+                  :to="{ path: '/browse', query: { genres: anime.genres[0] } }"
+                  class="px-3 py-1.5 text-xs rounded-md bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 transition-colors"
+                >
+                  {{ $t('anime.resume.findSimilar') }}
+                </router-link>
+              </div>
+            </div>
+
+            <!-- not-yet-aired -->
+            <div
+              v-else-if="resume.kind.value === 'not-yet-aired'"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs"
+              role="status"
+            >
+              <svg class="w-3.5 h-3.5 text-amber-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span v-if="resumeNextEpisodeNumber && resumeNextAt">
+                {{ $t('anime.resume.notYetAvailableEta', { n: resumeNextEpisodeNumber, when: formatNextEpisode(resumeNextAt) }) }}
+              </span>
+              <span v-else-if="resumeNextEpisodeNumber">
+                {{ $t('anime.resume.notYetAvailable', { n: resumeNextEpisodeNumber }) }}
+              </span>
+            </div>
+
+            <!-- currently-airing -->
+            <div
+              v-else-if="resume.kind.value === 'currently-airing' && resumeNextEpisodeNumber"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs"
+              role="status"
+            >
+              <span class="relative flex h-2 w-2" aria-hidden="true">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400/60 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-pink-400/70"></span>
+              </span>
+              <span>{{ $t('anime.resume.currentlyAiring', { n: resumeNextEpisodeNumber }) }}</span>
+            </div>
+          </div>
         </div>
       </section>
 
