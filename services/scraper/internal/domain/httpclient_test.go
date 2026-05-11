@@ -37,12 +37,14 @@ func TestBaseHTTPClient_DefaultTimeoutIs10s(t *testing.T) {
 func TestBaseHTTPClient_HardTimeout(t *testing.T) {
 	t.Parallel()
 	hang := make(chan struct{})
-	t.Cleanup(func() { close(hang) })
-
+	// Close hang BEFORE srv.Close so the blocking handler can return and
+	// srv.Close doesn't hang waiting for in-flight requests. Cleanups run in
+	// LIFO order, so register hang-close LAST (it runs first).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-hang // block forever (cleanup closes it)
+		<-hang
 	}))
 	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(hang) })
 
 	c := NewBaseHTTPClient(testLogger(t),
 		WithTimeout(100*time.Millisecond),
@@ -255,7 +257,6 @@ func TestBaseHTTPClient_PerHostLimiterIsolation(t *testing.T) {
 	t.Cleanup(srvB.Close)
 
 	uA, _ := url.Parse(srvA.URL)
-	uB, _ := url.Parse(srvB.URL)
 
 	c := NewBaseHTTPClient(testLogger(t),
 		WithPerHostRPS(uA.Host, 0.5, 1), // host A: 0.5 RPS, very slow
