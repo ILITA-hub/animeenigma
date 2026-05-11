@@ -32,7 +32,11 @@ func NewRouter(
 	r.Use(metricsCollector.Middleware)
 	r.Use(httputil.RequestLogger(log))
 	r.Use(httputil.Recoverer(log))
-	r.Use(httputil.CORS([]string{"*"}))
+	// REVIEW.md WR-02: CORS middleware intentionally omitted. The scraper is
+	// a backend-to-backend service (bound to 127.0.0.1:8088, called only by
+	// catalog) — it is never hit directly from a browser, so an
+	// `Access-Control-Allow-Origin: *` header would be both unnecessary and
+	// silently permissive if the bind address changes in the future.
 	r.Use(middleware.RealIP)
 
 	// Service liveness (docker-compose healthcheck target). Distinct from
