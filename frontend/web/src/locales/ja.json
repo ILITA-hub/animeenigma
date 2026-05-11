@@ -463,7 +463,12 @@
     "expiresIn": "{seconds}秒後に期限切れ",
     "sessionExpired": "セッションが期限切れです",
     "tryAgain": "もう一度試す",
-    "troubleshootingHint": "問題がありますか？Telegramで @animeenigma_auth_bot をブロックしていないか確認してください。"
+    "troubleshootingHint": "問題がありますか？Telegramで @animeenigma_auth_bot をブロックしていないか確認してください。",
+    "openInBrowser": "アプリがない場合：ブラウザで開く",
+    "tgWebToggle": "Telegram Webを使用中ですか？",
+    "tgWebInstructions": "Telegramで @animeenigma_auth_bot を開き、次のメッセージを送信してください：",
+    "tgWebCopy": "コピー",
+    "tgWebCopied": "コピー済み"
   },
   "notFound": {
     "code": "404",

@@ -25,45 +25,8 @@
           {{ authStore.error }}
         </div>
 
-        <!-- Loading state -->
-        <div v-if="state === 'loading'" class="flex flex-col items-center gap-3">
-          <div class="animate-spin h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full" />
-          <span class="text-white/40 text-sm">{{ $t('auth.loading') }}</span>
-        </div>
-
-        <!-- QR + Deep link -->
-        <div v-else-if="state === 'ready'" class="flex flex-col items-center gap-5">
-          <!-- QR Code -->
-          <div class="bg-white rounded-xl p-3">
-            <canvas ref="qrCanvas" />
-          </div>
-
-          <!-- Open in Telegram button -->
-          <a
-            :href="deeplinkUrl"
-            target="_blank"
-            rel="noopener"
-            class="inline-flex items-center gap-2 px-6 py-3 bg-[#54a9eb] hover:bg-[#4a96d2] text-white font-medium rounded-lg transition-colors w-full justify-center"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-            </svg>
-            {{ $t('auth.openInTelegram') }}
-          </a>
-
-          <!-- Timer -->
-          <p class="text-white/30 text-xs">
-            {{ $t('auth.expiresIn', { seconds: remainingSeconds }) }}
-          </p>
-
-          <!-- Troubleshooting hint (shows after 30 seconds) -->
-          <p v-if="showTroubleshootingHint" class="text-white/30 text-xs text-center">
-            {{ $t('auth.troubleshootingHint') }}
-          </p>
-        </div>
-
         <!-- Expired state -->
-        <div v-else-if="state === 'expired'" class="flex flex-col items-center gap-4">
+        <div v-if="expired" class="flex flex-col items-center gap-4">
           <p class="text-white/50 text-sm">{{ $t('auth.sessionExpired') }}</p>
           <button
             class="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-medium rounded-lg transition-colors"
@@ -72,12 +35,90 @@
             {{ $t('auth.tryAgain') }}
           </button>
         </div>
+
+        <!-- Active state (QR card visible immediately; canvas paints when token arrives) -->
+        <div v-else class="flex flex-col items-center gap-5">
+          <!-- QR Code (renders empty placeholder + spinner until token arrives) -->
+          <div class="bg-white rounded-xl p-3 relative w-[216px] h-[216px] flex items-center justify-center">
+            <canvas ref="qrCanvas" :class="['transition-opacity duration-200', tokenReady ? 'opacity-100' : 'opacity-0']" />
+            <div
+              v-if="!tokenReady"
+              class="absolute inset-0 flex items-center justify-center"
+              aria-hidden="true"
+            >
+              <div class="animate-spin h-6 w-6 border-2 border-cyan-500 border-t-transparent rounded-full" />
+            </div>
+          </div>
+
+          <!-- Open in Telegram (tg:// for instant native app launch) -->
+          <a
+            :href="appUrl || '#'"
+            :class="[
+              'inline-flex items-center gap-2 px-6 py-3 bg-[#54a9eb] hover:bg-[#4a96d2] text-white font-medium rounded-lg transition-colors w-full justify-center',
+              { 'opacity-50 pointer-events-none': !tokenReady },
+            ]"
+            target="_blank"
+            rel="noopener"
+            @click="trackClicked"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+            </svg>
+            {{ $t('auth.openInTelegram') }}
+          </a>
+
+          <!-- Browser fallback for users without the native app -->
+          <a
+            v-if="tokenReady"
+            :href="webUrl"
+            target="_blank"
+            rel="noopener"
+            class="text-white/40 hover:text-white/70 text-xs underline-offset-2 hover:underline transition-colors"
+          >
+            {{ $t('auth.openInBrowser') }}
+          </a>
+
+          <!-- Timer -->
+          <p v-if="tokenReady" class="text-white/30 text-xs">
+            {{ $t('auth.expiresIn', { seconds: remainingSeconds }) }}
+          </p>
+
+          <!-- Troubleshooting hint (shows after 30 seconds) -->
+          <p v-if="showTroubleshootingHint" class="text-white/30 text-xs text-center">
+            {{ $t('auth.troubleshootingHint') }}
+          </p>
+
+          <!-- Telegram Web manual fallback. Always available because tg-web does
+               not always auto-execute /start payloads from t.me links (returning
+               users who have chatted with the bot before silently drop the start
+               param). Copy-paste works universally. -->
+          <details v-if="tokenReady" class="w-full text-xs">
+            <summary class="cursor-pointer text-white/40 hover:text-white/70 transition-colors select-none text-center">
+              {{ $t('auth.tgWebToggle') }}
+            </summary>
+            <div class="mt-3 p-3 bg-black/30 border border-white/10 rounded-lg space-y-2">
+              <p class="text-white/60 leading-relaxed">
+                {{ $t('auth.tgWebInstructions') }}
+              </p>
+              <div class="flex items-center gap-2">
+                <code class="flex-1 font-mono text-cyan-300 break-all select-all px-2 py-1.5 bg-black/40 rounded">{{ manualCommand }}</code>
+                <button
+                  type="button"
+                  class="px-2 py-1.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs transition-colors whitespace-nowrap"
+                  @click="copyManual"
+                >
+                  {{ copied ? $t('auth.tgWebCopied') : $t('auth.tgWebCopy') }}
+                </button>
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
 
       <!-- Back to home -->
       <p class="text-center mt-6 text-white/40 text-sm">
         <router-link to="/" class="hover:text-white transition-colors">
-          {{ '\u2190 ' + $t('auth.backHome') }}
+          {{ '← ' + $t('auth.backHome') }}
         </router-link>
       </p>
     </div>
@@ -85,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -97,11 +138,22 @@ const router = useRouter()
 const authStore = useAuthStore()
 const qrCanvas = ref<HTMLCanvasElement | null>(null)
 
-const state = ref<'loading' | 'ready' | 'expired'>('loading')
-const deeplinkUrl = ref('')
+// Two URLs derived from the backend's https://t.me/{bot}?start={token}:
+// - appUrl (tg://resolve?...) — instant native-app launch, bypasses t.me bouncer
+// - webUrl (https://t.me/...) — universal fallback for users without the app
+const webUrl = ref('')
+const appUrl = ref('')
 const authToken = ref('')
+
+const expired = ref(false)
+const tokenReady = computed(() => !!authToken.value && !expired.value)
 const remainingSeconds = ref(300)
 const showTroubleshootingHint = ref(false)
+const copied = ref(false)
+
+// Telegram Web fallback: users already logged into web.telegram.org cannot rely
+// on t.me auto-executing /start, so they paste this command into the bot chat.
+const manualCommand = computed(() => (authToken.value ? `/start ${authToken.value}` : ''))
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 let countdownInterval: ReturnType<typeof setInterval> | null = null
@@ -109,22 +161,43 @@ let troubleshootingTimeout: ReturnType<typeof setTimeout> | null = null
 let pollCount = 0
 const MAX_POLLS = 150
 
+function parseDeepLink(url: string): { botName: string; token: string } | null {
+  try {
+    const u = new URL(url)
+    const botName = u.pathname.replace(/^\//, '')
+    const token = u.searchParams.get('start') || ''
+    if (!botName || !token) return null
+    return { botName, token }
+  } catch {
+    return null
+  }
+}
+
 async function startAuth() {
-  state.value = 'loading'
+  expired.value = false
   showTroubleshootingHint.value = false
   pollCount = 0
+  authToken.value = ''
+  webUrl.value = ''
+  appUrl.value = ''
   cleanup()
 
   const result = await authStore.requestDeepLink()
   if (!result) {
-    state.value = 'expired'
+    expired.value = true
+    return
+  }
+
+  const parsed = parseDeepLink(result.deeplink_url)
+  if (!parsed) {
+    expired.value = true
     return
   }
 
   authToken.value = result.token
-  deeplinkUrl.value = result.deeplink_url
+  webUrl.value = result.deeplink_url
+  appUrl.value = `tg://resolve?domain=${parsed.botName}&start=${parsed.token}`
   remainingSeconds.value = result.expires_in
-  state.value = 'ready'
 
   // Render QR code after DOM update
   await nextTick()
@@ -143,7 +216,7 @@ async function startAuth() {
   countdownInterval = setInterval(() => {
     remainingSeconds.value--
     if (remainingSeconds.value <= 0) {
-      state.value = 'expired'
+      expired.value = true
       cleanup()
     }
   }, 1000)
@@ -156,7 +229,7 @@ async function startAuth() {
 
 async function pollForAuth() {
   if (!authToken.value || pollCount >= MAX_POLLS) {
-    state.value = 'expired'
+    expired.value = true
     cleanup()
     return
   }
@@ -170,9 +243,26 @@ async function pollForAuth() {
     sessionStorage.removeItem('returnUrl')
     router.push(returnUrl || '/')
   } else if (result?.status === 'expired') {
-    state.value = 'expired'
+    expired.value = true
     cleanup()
   }
+}
+
+async function copyManual() {
+  if (!manualCommand.value) return
+  try {
+    await navigator.clipboard.writeText(manualCommand.value)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch {
+    // Clipboard API unavailable (insecure context); user can still long-press to copy.
+  }
+}
+
+function trackClicked() {
+  // Placeholder for future analytics (tg:// click-through rate vs https://t.me/ fallback).
 }
 
 function cleanup() {
