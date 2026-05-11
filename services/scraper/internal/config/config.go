@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -38,6 +39,11 @@ type MegacloudExtractorConfig struct {
 
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
+//
+// REVIEW.md WR-05: MEGACLOUD_EXTRACTOR_URL is validated at boot so an
+// invalid value (e.g. missing scheme) is rejected immediately rather
+// than surfacing deep inside MegacloudClient.Extract on the first
+// request. An empty URL is allowed (main.go warns on it).
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -48,6 +54,15 @@ func Load() (*Config, error) {
 			URL:     getEnv("MEGACLOUD_EXTRACTOR_URL", "http://megacloud-extractor:3200"),
 			Timeout: getEnvDuration("MEGACLOUD_EXTRACTOR_TIMEOUT", 15*time.Second),
 		},
+	}
+	if u := cfg.MegacloudExtractor.URL; u != "" {
+		parsed, err := url.Parse(u)
+		if err != nil {
+			return nil, fmt.Errorf("invalid MEGACLOUD_EXTRACTOR_URL %q: %w", u, err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid MEGACLOUD_EXTRACTOR_URL %q: missing scheme or host", u)
+		}
 	}
 	return cfg, nil
 }
