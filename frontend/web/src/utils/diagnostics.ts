@@ -29,6 +29,8 @@ export interface PlayerContext {
   serverName?: string | null
   streamUrl?: string | null
   errorMessage?: string | null
+  scraperProvider?: string | null  // Phase 16 SCRAPER-NF-05 — active orchestrator source
+  triedChain?: string[]            // Phase 16 SCRAPER-NF-05 — orchestrator failover path
 }
 
 export interface DiagnosticReport {
@@ -46,6 +48,8 @@ export interface DiagnosticReport {
   server_name: string | null
   stream_url: string | null
   error_message: string | null
+  scraper_provider: string | null  // Phase 16 SCRAPER-NF-05 (snake_case for Go report.go)
+  tried_chain: string[]            // Phase 16 SCRAPER-NF-05 (snake_case for Go report.go)
   console_logs: string
   network_logs: string
   page_html: string
@@ -210,6 +214,8 @@ export function collectDiagnostics(
     server_name: context.serverName ?? null,
     stream_url: context.streamUrl ?? null,
     error_message: context.errorMessage ?? null,
+    scraper_provider: context.scraperProvider ?? null,
+    tried_chain: context.triedChain ?? [],
     console_logs: JSON.stringify(consoleLogs),
     network_logs: JSON.stringify(networkLogs),
     page_html: pageHtml,

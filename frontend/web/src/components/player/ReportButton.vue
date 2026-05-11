@@ -39,6 +39,14 @@
             <span class="text-white/40 w-20 flex-shrink-0">{{ $t('player.reportServer') || 'Сервер' }}:</span>
             <span>{{ serverName }}</span>
           </div>
+          <div v-if="scraperProvider" class="flex gap-2">
+            <span class="text-white/40 w-20 flex-shrink-0">{{ $t('player.reportProvider') }}:</span>
+            <span>{{ scraperProvider }}</span>
+          </div>
+          <div v-if="triedChain && triedChain.length > 0" class="flex gap-2">
+            <span class="text-white/40 w-20 flex-shrink-0">{{ $t('player.reportTried') }}:</span>
+            <span>{{ triedChain.join(', ') }}</span>
+          </div>
           <div v-if="errorMessage" class="flex gap-2">
             <span class="text-white/40 w-20 flex-shrink-0">{{ $t('player.reportError') || 'Ошибка' }}:</span>
             <span class="text-pink-400 truncate">{{ errorMessage }}</span>
@@ -112,10 +120,14 @@ interface Props {
   streamUrl?: string | null
   errorMessage?: string | null
   accentColor?: string
+  scraperProvider?: string | null   // Phase 16 — orchestrator-selected source
+  triedChain?: string[]             // Phase 16 — orchestrator failover path
 }
 
 const props = withDefaults(defineProps<Props>(), {
   accentColor: '#a855f7',
+  scraperProvider: null,
+  triedChain: () => [],
 })
 
 const authStore = useAuthStore()
@@ -158,6 +170,8 @@ async function submitReport() {
         serverName: props.serverName,
         streamUrl: props.streamUrl,
         errorMessage: props.errorMessage,
+        scraperProvider: props.scraperProvider,
+        triedChain: props.triedChain,
       },
       description.value,
       authStore.user?.id ?? null,
