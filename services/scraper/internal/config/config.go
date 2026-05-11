@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Config holds the scraper service configuration.
 //
-// Phase 15 plan 01: only the server bind address and the megacloud-extractor
-// sidecar URL are needed. Per-provider config (cookies, rate limits, base
-// URLs) will be added by later plans when each provider lands.
+// Phase 15 plan 03 nests megacloud-extractor settings into their own struct so
+// new providers' configs can land alongside without flattening the top level.
 type Config struct {
-	Server                ServerConfig
-	MegacloudExtractorURL string
+	Server             ServerConfig
+	MegacloudExtractor MegacloudExtractorConfig
 }
 
 // ServerConfig controls the HTTP listener.
@@ -27,6 +27,15 @@ func (s ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
+// MegacloudExtractorConfig configures the HTTP client that talks to the
+// docker/megacloud-extractor sidecar. URL defaults to the docker-compose
+// service name; Timeout defaults to 15s to match the sidecar's internal
+// req.setTimeout(15000) (see docker/megacloud-extractor/server.js).
+type MegacloudExtractorConfig struct {
+	URL     string
+	Timeout time.Duration
+}
+
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 func Load() (*Config, error) {
@@ -35,7 +44,10 @@ func Load() (*Config, error) {
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
 			Port: getEnvInt("SERVER_PORT", 8088),
 		},
-		MegacloudExtractorURL: getEnv("MEGACLOUD_EXTRACTOR_URL", "http://megacloud-extractor:3200"),
+		MegacloudExtractor: MegacloudExtractorConfig{
+			URL:     getEnv("MEGACLOUD_EXTRACTOR_URL", "http://megacloud-extractor:3200"),
+			Timeout: getEnvDuration("MEGACLOUD_EXTRACTOR_TIMEOUT", 15*time.Second),
+		},
 	}
 	return cfg, nil
 }
@@ -51,6 +63,15 @@ func getEnvInt(key string, defaultVal int) int {
 	if val := os.Getenv(key); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
 			return i
+		}
+	}
+	return defaultVal
+}
+
+func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
+	if val := os.Getenv(key); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			return d
 		}
 	}
 	return defaultVal

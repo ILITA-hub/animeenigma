@@ -23,7 +23,7 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
-	if cfg.MegacloudExtractorURL == "" {
+	if cfg.MegacloudExtractor.URL == "" {
 		log.Warnw("MEGACLOUD_EXTRACTOR_URL is empty; megacloud-backed extraction will fail when invoked")
 	}
 
@@ -45,7 +45,7 @@ func main() {
 	go func() {
 		log.Infow("starting scraper service",
 			"address", cfg.Server.Address(),
-			"megacloud_extractor_url", cfg.MegacloudExtractorURL,
+			"megacloud_extractor_url", cfg.MegacloudExtractor.URL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)
