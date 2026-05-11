@@ -27,16 +27,16 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ### Foundation (Phase 15)
 
-- [ ] **SCRAPER-FOUND-01**: A `Provider` Go interface in `services/scraper/internal/domain/provider.go` exposes `Name`, `FindID`, `ListEpisodes`, `ListServers`, `GetStream`, `HealthCheck`. New providers plug in without modifying the orchestrator or HTTP handlers.
-- [ ] **SCRAPER-FOUND-02**: Three sentinel errors (`ErrNotFound`, `ErrProviderDown`, `ErrExtractFailed`) drive orchestrator failover semantics. Returning `[]Episode{}, nil` from a provider on selector drift is forbidden — providers must distinguish "real empty" from "scrape broke" and emit the appropriate sentinel.
-- [ ] **SCRAPER-FOUND-03**: The Stream DTO returned by the scraper has **no `iframe_url` field at the type level**. EN providers serve HLS m3u8 + optional tracks or HTTP 404 with `{reason, tried[]}`. Silent cross-tier fallback to a Kodik iframe is structurally impossible.
-- [ ] **SCRAPER-FOUND-04**: A service-layer `Orchestrator` (`services/scraper/internal/service/orchestrator.go`) does sequential per-anime provider failover. Per-provider clients are unaware of each other (no in-client `FallbackProviders` like the dead Consumet parser).
-- [ ] **SCRAPER-FOUND-05**: An `EmbedExtractor` interface + registry. Each registered extractor declares which URL hosts it handles (e.g. `megacloud.*`, `kwik.cx`, `vidstreaming.*`, `streamsb.*`, `mp4upload.*`). The orchestrator (or provider client, post-`ListServers`) routes each embed URL to the matching extractor. Adding a new embed family is one registry entry, not changes to provider clients.
-- [ ] **SCRAPER-FOUND-06**: A `BaseHTTPClient` Go type encapsulates `hashicorp/go-retryablehttp` + per-host `golang.org/x/time/rate.Limiter` + scoped `net/http/cookiejar` + standard browser headers (UA, Accept-Language, Accept-Encoding). Every provider client uses this base — no ad-hoc `http.Client` per provider. Default budget: 1 RPS per provider, weight=2 per host, 10 s hard timeout per request.
-- [ ] **SCRAPER-FOUND-07**: A golden-file test harness (`testdata/<provider>/<page>.html` + `sebdah/goldie/v2`) snapshots upstream HTML so unit tests stay deterministic when upstreams are down or rate-limited. `make capture-goldens` recipe documented for refreshing fixtures.
-- [ ] **SCRAPER-FOUND-08**: A `MegacloudClient` Go HTTP wrapper calls the existing `docker/megacloud-extractor/` Node sidecar over HTTP. The sidecar is registered as the `megacloud` `EmbedExtractor` in the registry. No embed decryption is reimplemented in Go.
-- [ ] **SCRAPER-FOUND-09**: CI lint rejects `go.mod` additions of `chromedp`, `go-rod`, `chromedp-rod`, `utls`, `tls-client`, `cloudscraper_go`, and `flaresolverr` packages. Anti-bot scope creep is gated at the build.
-- [ ] **SCRAPER-FOUND-10**: New `services/scraper/` microservice runs in `docker/docker-compose.yml` on port 8088 (changed from planned 8087 in Plan 15-01 — host port conflict with the `services/maintenance` binary that runs natively on 8087 outside docker-compose) with its own Dockerfile, health endpoint, `make redeploy-scraper` target, and structured logging via `libs/logger`. The service exposes an internal HTTP API at `/scraper/{episodes,servers,stream,health}` consumed only by the new `services/catalog/internal/parser/scraper/client.go` thin client. The catalog registers the user-facing endpoints `/api/anime/{animeId}/scraper/*` (gateway already routes `/api/anime/*` to catalog — no gateway change), which resolve UUID → MAL ID via the existing `animes` table and then call the scraper microservice. All four endpoints return HTTP 503 `not-yet-implemented` until Phase 16:
+- [x] **SCRAPER-FOUND-01**: A `Provider` Go interface in `services/scraper/internal/domain/provider.go` exposes `Name`, `FindID`, `ListEpisodes`, `ListServers`, `GetStream`, `HealthCheck`. New providers plug in without modifying the orchestrator or HTTP handlers.
+- [x] **SCRAPER-FOUND-02**: Three sentinel errors (`ErrNotFound`, `ErrProviderDown`, `ErrExtractFailed`) drive orchestrator failover semantics. Returning `[]Episode{}, nil` from a provider on selector drift is forbidden — providers must distinguish "real empty" from "scrape broke" and emit the appropriate sentinel.
+- [x] **SCRAPER-FOUND-03**: The Stream DTO returned by the scraper has **no `iframe_url` field at the type level**. EN providers serve HLS m3u8 + optional tracks or HTTP 404 with `{reason, tried[]}`. Silent cross-tier fallback to a Kodik iframe is structurally impossible.
+- [x] **SCRAPER-FOUND-04**: A service-layer `Orchestrator` (`services/scraper/internal/service/orchestrator.go`) does sequential per-anime provider failover. Per-provider clients are unaware of each other (no in-client `FallbackProviders` like the dead Consumet parser).
+- [x] **SCRAPER-FOUND-05**: An `EmbedExtractor` interface + registry. Each registered extractor declares which URL hosts it handles (e.g. `megacloud.*`, `kwik.cx`, `vidstreaming.*`, `streamsb.*`, `mp4upload.*`). The orchestrator (or provider client, post-`ListServers`) routes each embed URL to the matching extractor. Adding a new embed family is one registry entry, not changes to provider clients.
+- [x] **SCRAPER-FOUND-06**: A `BaseHTTPClient` Go type encapsulates `hashicorp/go-retryablehttp` + per-host `golang.org/x/time/rate.Limiter` + scoped `net/http/cookiejar` + standard browser headers (UA, Accept-Language, Accept-Encoding). Every provider client uses this base — no ad-hoc `http.Client` per provider. Default budget: 1 RPS per provider, weight=2 per host, 10 s hard timeout per request.
+- [x] **SCRAPER-FOUND-07**: A golden-file test harness (`testdata/<provider>/<page>.html` + `sebdah/goldie/v2`) snapshots upstream HTML so unit tests stay deterministic when upstreams are down or rate-limited. `make capture-goldens` recipe documented for refreshing fixtures.
+- [x] **SCRAPER-FOUND-08**: A `MegacloudClient` Go HTTP wrapper calls the existing `docker/megacloud-extractor/` Node sidecar over HTTP. The sidecar is registered as the `megacloud` `EmbedExtractor` in the registry. No embed decryption is reimplemented in Go.
+- [x] **SCRAPER-FOUND-09**: CI lint rejects `go.mod` additions of `chromedp`, `go-rod`, `chromedp-rod`, `utls`, `tls-client`, `cloudscraper_go`, and `flaresolverr` packages. Anti-bot scope creep is gated at the build.
+- [x] **SCRAPER-FOUND-10**: New `services/scraper/` microservice runs in `docker/docker-compose.yml` on port 8088 (changed from planned 8087 in Plan 15-01 — host port conflict with the `services/maintenance` binary that runs natively on 8087 outside docker-compose) with its own Dockerfile, health endpoint, `make redeploy-scraper` target, and structured logging via `libs/logger`. The service exposes an internal HTTP API at `/scraper/{episodes,servers,stream,health}` consumed only by the new `services/catalog/internal/parser/scraper/client.go` thin client. The catalog registers the user-facing endpoints `/api/anime/{animeId}/scraper/*` (gateway already routes `/api/anime/*` to catalog — no gateway change), which resolve UUID → MAL ID via the existing `animes` table and then call the scraper microservice. All four endpoints return HTTP 503 `not-yet-implemented` until Phase 16:
   - `GET /api/anime/{animeId}/scraper/episodes?prefer={provider}`
   - `GET /api/anime/{animeId}/scraper/servers?episode={epId}&prefer={provider}`
   - `GET /api/anime/{animeId}/scraper/stream?episode={epId}&server={srvId}&category={sub|dub}&prefer={provider}`
@@ -96,9 +96,9 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ### Cross-cutting non-functional
 
-- [ ] **SCRAPER-NF-01**: Every upstream HTTP call has a hard 10 s timeout. No call hangs indefinitely.
+- [x] **SCRAPER-NF-01**: Every upstream HTTP call has a hard 10 s timeout. No call hangs indefinitely.
 - [ ] **SCRAPER-NF-02**: Cache TTLs match the data freshness contract: 24 h for malsync ID lookups, 6 h for episode lists, 15 min for search results, **≤ min(parsed expiry − 30 s, 5 min)** for stream URLs.
-- [ ] **SCRAPER-NF-03**: `hashicorp/go-retryablehttp` handles 429 / 5xx with exponential backoff (1 s → 2 s → 4 s → 8 s) and a 5-minute circuit-break per host after repeated failures. Hand-rolled retry loops from the old parsers are not ported.
+- [x] **SCRAPER-NF-03**: `hashicorp/go-retryablehttp` handles 429 / 5xx with exponential backoff (1 s → 2 s → 4 s → 8 s) and a 5-minute circuit-break per host after repeated failures. Hand-rolled retry loops from the old parsers are not ported.
 - [ ] **SCRAPER-NF-04**: `parser_requests_total`, `parser_request_duration_seconds`, `parser_fallback_total{from,to}`, and `parser_zero_match_total{provider,selector}` Prometheus metrics emit for the scraper using the existing `libs/metrics/parser.go` patterns. Per-provider breakdown labelled `{provider}`.
 - [ ] **SCRAPER-NF-05**: `ReportButton` from existing players emits a `provider:<name>` field plus the active orchestrator provider chain (`tried: [animepahe, 9anime]`) so user-reported bugs are sourceable to a specific provider in the report payload.
 
@@ -136,16 +136,16 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 | REQ-ID | Phase | Status |
 |---|---|---|
-| SCRAPER-FOUND-01 | Phase 15 | Pending |
-| SCRAPER-FOUND-02 | Phase 15 | Pending |
-| SCRAPER-FOUND-03 | Phase 15 | Pending |
-| SCRAPER-FOUND-04 | Phase 15 | Pending |
-| SCRAPER-FOUND-05 | Phase 15 | Pending |
-| SCRAPER-FOUND-06 | Phase 15 | Pending |
-| SCRAPER-FOUND-07 | Phase 15 | Pending |
-| SCRAPER-FOUND-08 | Phase 15 | Pending |
-| SCRAPER-FOUND-09 | Phase 15 | Pending |
-| SCRAPER-FOUND-10 | Phase 15 | Pending |
+| SCRAPER-FOUND-01 | Phase 15 | Complete |
+| SCRAPER-FOUND-02 | Phase 15 | Complete |
+| SCRAPER-FOUND-03 | Phase 15 | Complete |
+| SCRAPER-FOUND-04 | Phase 15 | Complete |
+| SCRAPER-FOUND-05 | Phase 15 | Complete |
+| SCRAPER-FOUND-06 | Phase 15 | Complete |
+| SCRAPER-FOUND-07 | Phase 15 | Complete |
+| SCRAPER-FOUND-08 | Phase 15 | Complete |
+| SCRAPER-FOUND-09 | Phase 15 | Complete |
+| SCRAPER-FOUND-10 | Phase 15 | Complete |
 | SCRAPER-PAHE-01 | Phase 16 | Pending |
 | SCRAPER-PAHE-02 | Phase 16 | Pending |
 | SCRAPER-PAHE-03 | Phase 16 | Pending |
@@ -180,9 +180,9 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 | SCRAPER-CUT-05 | Phase 20 | Pending |
 | SCRAPER-CUT-06 | Phase 20 | Pending |
 | SCRAPER-CUT-07 | Phase 20 | Pending |
-| SCRAPER-NF-01 | Phase 15 (woven through 15-19) | Pending |
+| SCRAPER-NF-01 | Phase 15 (woven through 15-19) | Complete |
 | SCRAPER-NF-02 | Phase 16 (woven through 16-19) | Pending |
-| SCRAPER-NF-03 | Phase 15 (woven through 15-19) | Pending |
+| SCRAPER-NF-03 | Phase 15 (woven through 15-19) | Complete |
 | SCRAPER-NF-04 | Phase 17 (woven through 17-19) | Pending |
 | SCRAPER-NF-05 | Phase 16 (woven through 16-19) | Pending |
 

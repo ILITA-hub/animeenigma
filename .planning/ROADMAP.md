@@ -134,7 +134,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 |-------|-----------|-------|--------|-----------|
 | 1-8 | v1.0 | 18/18 | ✅ Complete | 2026-04-27 → 2026-05-03 |
 | 9-14 | v2.0 | 8/8 | ✅ Complete | 2026-05-06 → 2026-05-07 |
-| 15 | v3.0 | 4/4 | Complete   | 2026-05-11 |
+| 15 | v3.0 | 4/4 | Complete    | 2026-05-11 |
 | 16 | v3.0 | 0/? | Not started | — |
 | 17 | v3.0 | 0/? | Not started | — |
 | 18 | v3.0 | 0/? | Not started | — |
