@@ -427,6 +427,67 @@ func TestOrchestrator_PreferPriority_NoDuplicates(t *testing.T) {
 	}
 }
 
+// TestOrchestrator_FailoverFallbackTotalIncrementCount verifies the
+// *total* number of parser_fallback_total increments across a failover
+// loop equals exactly len(providers)-1 (the maximum possible, one per
+// failover hop). This catches the failure mode where a buggy iteration
+// order causes a provider to be tried twice (CR-01) — the existing
+// fallback tests only check single-label deltas and would silently pass
+// if the same provider were called twice with the same `from`/`to` pair
+// in different orders.
+//
+// See REVIEW.md WR-08 for context on global-registry metric pollution.
+func TestOrchestrator_FailoverFallbackTotalIncrementCount(t *testing.T) {
+	t.Parallel()
+
+	pa := &fakeProvider{
+		nameVal: "A_count",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return nil, domain.WrapProviderDown(errors.New("A down"), "A")
+		},
+	}
+	pb := &fakeProvider{
+		nameVal: "B_count",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return nil, domain.WrapProviderDown(errors.New("B down"), "B")
+		},
+	}
+	pc := &fakeProvider{
+		nameVal: "C_count",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "ep"}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, pa, pb, pc)
+
+	// Capture all (from,to) deltas we expect: A→B and B→C.
+	beforeAB := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_count", "B_count"))
+	beforeBC := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("B_count", "C_count"))
+
+	if _, err := o.ListEpisodes(context.Background(), "x", ""); err != nil {
+		t.Fatalf("ListEpisodes err = %v; want nil after C recovers", err)
+	}
+
+	afterAB := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_count", "B_count"))
+	afterBC := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("B_count", "C_count"))
+
+	if d := afterAB - beforeAB; d != 1.0 {
+		t.Errorf("ParserFallbackTotal{from=A_count,to=B_count} delta = %v; want 1.0", d)
+	}
+	if d := afterBC - beforeBC; d != 1.0 {
+		t.Errorf("ParserFallbackTotal{from=B_count,to=C_count} delta = %v; want 1.0", d)
+	}
+
+	// Total increments = (afterAB-beforeAB) + (afterBC-beforeBC) must equal
+	// len(providers)-1 = 2. Any duplicate failover hop (e.g. from CR-01-style
+	// double-iteration) would push this over 2.
+	totalDelta := (afterAB - beforeAB) + (afterBC - beforeBC)
+	if totalDelta != float64(3-1) {
+		t.Errorf("total fallback increments = %v; want %d (len(providers)-1, no duplicates)",
+			totalDelta, 3-1)
+	}
+}
+
 // TestOrchestrator_PreferUnknownIgnored verifies that an unknown `prefer`
 // value falls back to default registration order (does not crash, does not
 // return ErrNotFound just because the preference was wrong).
