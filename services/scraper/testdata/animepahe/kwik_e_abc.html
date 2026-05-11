@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kwik</title>
+</head>
+<body>
+<div id="kwik-player"></div>
+<!--
+  Synthetic Kwik packed-JS fixture for plan 16-02 Task 2 (TestKwik_Extract_GoldenFixture).
+
+  Real Kwik upstream HTML uses Dean-Edwards packer to obfuscate a script
+  block whose unpacked form contains  const source='https://...m3u8...'  .
+  We mirror only the structure the extractor cares about:
+
+    1) outer eval(function(p,a,c,k,e,d){...}(...));
+       — this is what packedJSRegex matches and what goja then evaluates.
+    2) the IIFE body returns a string that contains  const source=\'...m3u8...\'
+       (Dean-Edwards emits backslash-escaped single quotes on unpack).
+
+  We DO NOT replicate the full p,a,c,k,e,d unpacking math because Pattern 2 in
+  16-RESEARCH.md only requires the wrapper `(IIFE)` to evaluate to "the unpacked
+  string". A synthetic IIFE that immediately returns the unpacked source line
+  is functionally identical from the extractor's point of view (it consumes
+  the return value, not the algorithm), and it keeps the fixture
+  deterministic and small.
+-->
+<script>eval(function(p,a,c,k,e,d){return p}('const source=\'https://eu-w2.streamhost.example.com/animepahe/kwik_e_abc/720p/master.m3u8?expires=1715000000&token=deadbeef\';const sources=[{file:\'https://eu-w2.streamhost.example.com/animepahe/kwik_e_abc/480p/master.m3u8\',label:\'480p\'},{file:\'https://eu-w2.streamhost.example.com/animepahe/kwik_e_abc/720p/master.m3u8\',label:\'720p\'},{file:\'https://eu-w2.streamhost.example.com/animepahe/kwik_e_abc/1080p/master.m3u8\',label:\'1080p\'}];',62,1,'placeholder'.split('|'),0,{}))</script>
+</body>
+</html>
