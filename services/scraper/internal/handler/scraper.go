@@ -39,29 +39,36 @@ func NewScraperHandler(svc *service.Orchestrator, log *logger.Logger) *ScraperHa
 // We intentionally bypass httputil.Response wrapping for this stub so the
 // shape is "as-spec'd in the plan" (top-level error + phase) rather than
 // nested under {success:false, error:{code,message,details}}.
-func notYetImplemented(w http.ResponseWriter) {
+//
+// REVIEW.md WR-03: uses the injected logger so request-correlation context
+// (request IDs from middleware.RequestID) carries through to error logs.
+func (h *ScraperHandler) notYetImplemented(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusServiceUnavailable)
 	body := map[string]any{"error": "not-yet-implemented", "phase": 15}
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		// Best-effort; the client has already received headers + status.
-		logger.Default().Errorw("failed to encode 503 stub body", "error", err)
+		log := h.log
+		if log == nil {
+			log = logger.Default()
+		}
+		log.Errorw("failed to encode 503 stub body", "error", err)
 	}
 }
 
 // GetEpisodes handles GET /scraper/episodes. Phase 15: 503 stub.
 func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
-	notYetImplemented(w)
+	h.notYetImplemented(w)
 }
 
 // GetServers handles GET /scraper/servers. Phase 15: 503 stub.
 func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
-	notYetImplemented(w)
+	h.notYetImplemented(w)
 }
 
 // GetStream handles GET /scraper/stream. Phase 15: 503 stub.
 func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
-	notYetImplemented(w)
+	h.notYetImplemented(w)
 }
 
 // GetHealth handles GET /scraper/health. Returns the orchestrator's live

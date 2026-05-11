@@ -62,7 +62,7 @@ func (h *ScraperEndpointsHandler) GetScraperEpisodes(w http.ResponseWriter, r *h
 
 	status, body, err := h.scraperSvc.GetScraperEpisodes(r.Context(), animeID, prefer)
 	if err != nil {
-		writeScraperError(w, err)
+		h.writeScraperError(w, err)
 		return
 	}
 	writePassthrough(w, status, body)
@@ -84,7 +84,7 @@ func (h *ScraperEndpointsHandler) GetScraperServers(w http.ResponseWriter, r *ht
 
 	status, body, err := h.scraperSvc.GetScraperServers(r.Context(), animeID, episodeID, prefer)
 	if err != nil {
-		writeScraperError(w, err)
+		h.writeScraperError(w, err)
 		return
 	}
 	writePassthrough(w, status, body)
@@ -116,7 +116,7 @@ func (h *ScraperEndpointsHandler) GetScraperStream(w http.ResponseWriter, r *htt
 
 	status, body, err := h.scraperSvc.GetScraperStream(r.Context(), animeID, episodeID, serverID, category, prefer)
 	if err != nil {
-		writeScraperError(w, err)
+		h.writeScraperError(w, err)
 		return
 	}
 	writePassthrough(w, status, body)
@@ -128,7 +128,7 @@ func (h *ScraperEndpointsHandler) GetScraperStream(w http.ResponseWriter, r *htt
 func (h *ScraperEndpointsHandler) GetScraperHealth(w http.ResponseWriter, r *http.Request) {
 	status, body, err := h.scraperSvc.GetScraperHealth(r.Context())
 	if err != nil {
-		writeScraperError(w, err)
+		h.writeScraperError(w, err)
 		return
 	}
 	writePassthrough(w, status, body)
@@ -149,7 +149,11 @@ func writePassthrough(w http.ResponseWriter, status int, body []byte) {
 //   - anything else                                    -> httputil.Error
 //     (which renders 500 unless the error already carries an AppError
 //     status code).
-func writeScraperError(w http.ResponseWriter, err error) {
+//
+// REVIEW.md WR-03: the per-handler `log` field is now used for breadcrumb
+// logging on unexpected error paths so operators have observability when
+// the catalog↔scraper hop starts emitting 500s in production.
+func (h *ScraperEndpointsHandler) writeScraperError(w http.ResponseWriter, err error) {
 	// Anime not found in the catalog → 404 NotFound.
 	if appErr, ok := liberrors.IsAppError(err); ok && appErr.Code == liberrors.CodeNotFound {
 		httputil.Error(w, err)
@@ -161,6 +165,10 @@ func writeScraperError(w http.ResponseWriter, err error) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "mal_id unavailable for this anime"})
 		return
+	}
+	// Unexpected error path — log a breadcrumb so the operator can correlate.
+	if h != nil && h.log != nil {
+		h.log.Errorw("scraper endpoint error", "error", err)
 	}
 	httputil.Error(w, err)
 }
