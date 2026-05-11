@@ -2,26 +2,20 @@
 
 ## What This Is
 
-A self-hosted anime streaming platform with Shikimori/MAL integration, four video players (Kodik, AnimeLib, HiAnime, Consumet), a smart auto-picker that selects what users watch, and now a personalized recommendations engine. v1.0 (Smart Watch Picker Overhaul) shipped 2026-05-03 — every logged-in user lands on the right episode in the right combo without thinking, and we measure success via override-rate. v2.0 (this milestone) adds a personalized "Up Next for you" home row plus the pluggable foundation for future signals.
+A self-hosted anime streaming platform with Shikimori/MAL integration, four video players (Kodik, AnimeLib, HiAnime, Consumet), a smart auto-picker that selects what users watch, and a personalized recommendations engine. v1.0 (Smart Watch Picker Overhaul) shipped 2026-05-03 — every logged-in user lands on the right episode in the right combo without thinking, and we measure success via override-rate. v2.0 (Recommendations Engine) shipped 2026-05-07 — added a personalized "Up Next for you" home row plus the pluggable foundation for future signals.
 
 ## Core Value
 
 A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals (their score history, attribute affinity, population trending, recency, item-item metadata, and "users who finished X also watched Y"). After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row immediately. Anonymous users still see a useful "Trending now" row. Admins can audit every ranking decision per user.
 
-## Current Milestone: v2.0 Recommendations Engine
+## Current State
 
-**Goal:** Ship a personalized "Up Next for you" home row plus an admin debug surface, built on a pluggable foundation that accepts future signals (vector similarity, OP/ED skip-behavior, franchise proximity) without rewrites.
+- ✅ **v1.0 Smart Watch Picker Overhaul** — shipped 2026-05-03 (Phases 1-8) — see `.planning/milestones/v1.0-ROADMAP.md`
+- ✅ **v2.0 Recommendations Engine** — shipped 2026-05-07 (Phases 9-14) — see `.planning/milestones/v2.0-ROADMAP.md`
 
-**Target features:**
-- Pluggable `SignalModule` interface, weighted-ensemble aggregator, per-pool min-max normalizer
-- Storage tables for per-user signals, population-wide signals, and completion co-occurrence
-- Seven concrete signals: S1 score-cluster k-NN, S2 item-item metadata, S3 trending, S4 recency, S5 TF-IDF attribute affinity (tags/studios/genres/demographic/source/type/producers), S6 combo-watched-after with Shikimori `/similar` cascade, S11 watched/dropped/hidden filter
-- Cron-based precompute (60-min population, 6-h user signals) plus synchronous S6 seed update on episode completion plus Redis 6-h top-N cache
-- Frontend "Up Next for you" home row (logged-in) and "Trending now" home row (anonymous)
-- Admin debug page at `/admin/recs/:user_id` with per-signal contribution breakdown and force-recompute button
-- Prometheus per-signal click-through-rate metric for v2.1 weight tuning
+## Next Milestone
 
-**Design spec:** `docs/superpowers/specs/2026-05-03-rec-engine-design.md` — locked decisions in §13.
+To be defined via `/gsd-new-milestone`. **Working title: universal anime scraper** — the abandoned HiAnime (`aniwatch` upstream / `hianime.to`) and broken Consumet (`enc-dec.app` contract change) provider paths must be replaced with a self-hosted scraping service over alive English sources (candidates: AnimeKai, AnimePahe, Anitaku/Gogoanime). Kodik (RU iframe) and AnimeLib (RU MP4) remain as separate parsers and are not in scope.
 
 ## Requirements
 
@@ -48,45 +42,50 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 
 ### Active
 
-<!-- v2.0 milestone — items defined here are tracked in REQUIREMENTS.md and mapped to phases by ROADMAP.md. -->
+_None — v2.0 shipped. Next milestone's requirements will be defined via `/gsd-new-milestone`._
+
+<details>
+<summary>✅ v2.0 Recommendations Engine — 23/23 requirements shipped 2026-05-07 (see <code>.planning/milestones/v2.0-REQUIREMENTS.md</code>)</summary>
 
 #### Foundation
 
-- [ ] **REC-FOUND-01**: Pluggable `SignalModule` interface allows new signals to be added without modifying the ensemble, normalizer, or API handler
-- [ ] **REC-FOUND-02**: Weighted-ensemble aggregator computes `final = Σ weight × per-pool-normalized(raw)` and returns sorted `Recommendation` list
-- [ ] **REC-FOUND-03**: Per-pool min-max normalizer maps raw signal output to `[0, 1]` over the candidate pool with degenerate-pool guard (no NaN, no Inf)
-- [ ] **REC-FOUND-04**: Persistence tables `rec_user_signals`, `rec_population_signals`, `rec_completion_co_occurrence` are auto-migrated on player-service startup
+- [x] **REC-FOUND-01**: Pluggable `SignalModule` interface allows new signals to be added without modifying the ensemble, normalizer, or API handler
+- [x] **REC-FOUND-02**: Weighted-ensemble aggregator computes `final = Σ weight × per-pool-normalized(raw)` and returns sorted `Recommendation` list
+- [x] **REC-FOUND-03**: Per-pool min-max normalizer maps raw signal output to `[0, 1]` over the candidate pool with degenerate-pool guard (no NaN, no Inf)
+- [x] **REC-FOUND-04**: Persistence tables `rec_user_signals`, `rec_population_signals`, `rec_completion_co_occurrence` are auto-migrated on player-service startup
 
 #### Personalized Surfaces
 
-- [ ] **REC-UX-01**: Logged-in users see an "Up Next for you" row on the home page with up to 20 personalized recommendations
-- [ ] **REC-UX-02**: Anonymous users see a "Trending now" row using population signals only (S3 + S4 ensemble)
-- [ ] **REC-UX-03**: After a user completes an anime with score ≥ 7, a "Because you finished X" pin appears at the top of their "Up Next for you" row within seconds
-- [ ] **REC-UX-04**: Recommendations exclude anime the user has already completed, dropped, or that are admin-hidden
+- [x] **REC-UX-01**: Logged-in users see an "Up Next for you" row on the home page with up to 20 personalized recommendations
+- [x] **REC-UX-02**: Anonymous users see a "Trending now" row using population signals only (S3 + S4 ensemble)
+- [x] **REC-UX-03**: After a user completes an anime with score ≥ 7, a "Because you finished X" pin appears at the top of their "Up Next for you" row within seconds
+- [x] **REC-UX-04**: Recommendations exclude anime the user has already completed, dropped, or that are admin-hidden
 
 #### Signal Library
 
-- [ ] **REC-SIG-01**: S3 (population trending) ranks anime by last-30-day watch_history start count
-- [ ] **REC-SIG-02**: S4 (recency) boosts anime that are currently airing or aired in the last 90 days
-- [ ] **REC-SIG-03**: S1 (score-cluster) predicts a user's score for unwatched anime via k-NN over their `anime_list.score` history
-- [ ] **REC-SIG-04**: S2 (item-item metadata) ranks candidates by similarity to the user's top-scored anime over tags, genres, and studios
-- [ ] **REC-SIG-05**: S5 (TF-IDF attribute affinity) ranks candidates by time-weighted attribute overlap (tags 0.30, studios 0.20, genres 0.15, demographic 0.10, source 0.10, type 0.10, producers 0.05) with episode-count fallback for Kodik rows
-- [ ] **REC-SIG-06**: S6 (combo-watched-after) cascades local co-occurrence (score ≥ 7 completions) → Shikimori `/api/animes/:id/similar` when local pool is too thin
-- [ ] **REC-SIG-07**: S11 (filter) excludes anime where the user's `anime_list.status ∈ {completed, dropped}` or the anime has `hidden = true`
+- [x] **REC-SIG-01**: S3 (population trending) ranks anime by last-30-day watch_history start count
+- [x] **REC-SIG-02**: S4 (recency) boosts anime that are currently airing or aired in the last 90 days
+- [x] **REC-SIG-03**: S1 (score-cluster) predicts a user's score for unwatched anime via k-NN over their `anime_list.score` history
+- [x] **REC-SIG-04**: S2 (item-item metadata) ranks candidates by similarity to the user's top-scored anime over tags, genres, and studios
+- [x] **REC-SIG-05**: S5 (TF-IDF attribute affinity) ranks candidates by time-weighted attribute overlap (tags 0.30, studios 0.20, genres 0.15, demographic 0.10, source 0.10, type 0.10, producers 0.05) with episode-count fallback for Kodik rows
+- [x] **REC-SIG-06**: S6 (combo-watched-after) cascades local co-occurrence (score ≥ 7 completions) → Shikimori `/api/animes/:id/similar` when local pool is too thin
+- [x] **REC-SIG-07**: S11 (filter) excludes anime where the user's `anime_list.status ∈ {completed, dropped}` or the anime has `hidden = true`
 
 #### Refresh & Storage
 
-- [ ] **REC-INFRA-01**: Population signals (S3, S4) are precomputed every 60 minutes via cron
-- [ ] **REC-INFRA-02**: User signals (S1, S5) are precomputed every 6 hours via cron, with optional debounced on-write trigger after `watch_history` insert
-- [ ] **REC-INFRA-03**: S6 seed (`s6_seed_anime_id`, `s6_seed_completed_at`, `s6_seed_score`) updates synchronously inside `MarkEpisodeWatched` when a row qualifies
-- [ ] **REC-INFRA-04**: Top-N recommendations are cached in Redis with 6-hour TTL, invalidated on user-signal recompute or S6 seed change
+- [x] **REC-INFRA-01**: Population signals (S3, S4) are precomputed every 60 minutes via cron
+- [x] **REC-INFRA-02**: User signals (S1, S5) are precomputed every 6 hours via cron, with optional debounced on-write trigger after `watch_history` insert
+- [x] **REC-INFRA-03**: S6 seed (`s6_seed_anime_id`, `s6_seed_completed_at`, `s6_seed_score`) updates synchronously inside `MarkEpisodeWatched` when a row qualifies
+- [x] **REC-INFRA-04**: Top-N recommendations are cached in Redis with 6-hour TTL, invalidated on user-signal recompute or S6 seed change
 
 #### Admin & Eval
 
-- [ ] **REC-ADMIN-01**: Admin debug page at `/admin/recs/:user_id` displays per-signal contribution table, top contributor per row, S5 TF-IDF term breakdown on expand, and S11 filter-audit list
-- [ ] **REC-ADMIN-02**: Admin can force-recompute a user's recs via `POST /api/admin/recs/{user_id}/recompute`
-- [ ] **REC-EVAL-01**: Frontend emits `rec_click` and `rec_watched` events tagged with the top contributor signal ID
-- [ ] **REC-EVAL-02**: Prometheus exposes per-signal click-through-rate metric (`rec_signal_ctr`) for v2.1 weight tuning
+- [x] **REC-ADMIN-01**: Admin debug page at `/admin/recs/:user_id` displays per-signal contribution table, top contributor per row, S5 TF-IDF term breakdown on expand, and S11 filter-audit list
+- [x] **REC-ADMIN-02**: Admin can force-recompute a user's recs via `POST /api/admin/recs/{user_id}/recompute`
+- [x] **REC-EVAL-01**: Frontend emits `rec_click` and `rec_watched` events tagged with the top contributor signal ID
+- [x] **REC-EVAL-02**: Prometheus exposes per-signal click-through-rate metric (`rec_signal_ctr`) for v2.1 weight tuning
+
+</details>
 
 ### Out of Scope
 
@@ -138,14 +137,14 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 | (v1.0) Inferred preferences (no explicit dub/sub onboarding) + Advanced Settings escape hatch | Zero-friction default for normals; full control for power users. | ✓ Validated 2026-05-03 — Advanced Settings panel deployed |
 | (v1.0) Override rate < 10% as success metric | Single observable behavior measuring the project's actual goal. | Pending re-snapshot post-Phase-6 (Phase 7 follow-up) |
 | (v1.0) `watch_progress.completed` becomes single source of truth for "ep watched" | Avoids `anime_list.episodes` vs `watch_progress.completed` disagreement. | ✓ Validated 2026-04-28 |
-| (v2.0) Weighted ensemble pattern over tiered fallback or two-stage retrieval+ranker | Dataset is uneven across users; ensemble degrades gracefully where tiered cliffs are jarring; admin debug page becomes per-signal contribution table for free; can grow into two-stage at ~100k users without rewrite. | — Pending |
-| (v2.0) Per-pool min-max normalization (architectural fix) | Without it, raw scales (S1 ~[0,10] vs S5 ~[0,0.05]) silently dominate or vanish regardless of weight. | — Pending |
-| (v2.0) S6 score threshold ≥ 7 (not ≥ 6) with fallback to ≥ 5 if pool too thin | More conservative than my recommendation; cleaner signal; avoids "more like the thing they hated". | — Pending |
-| (v2.0) S6 Variant B (pinned tile) over Variant A (weight-shift) for v2.0 | More transparent and easier to debug; weight-shift deferred to v2.1 once pin CTR measured. | — Pending |
-| (v2.0) Hybrid storage: Postgres precomputed signals + Redis top-N cache (6h TTL) | Postgres holds durable signal vectors; Redis serves fresh top-N cheaply; on completion S6 seed update is synchronous so the pin appears immediately. | — Pending |
-| (v2.0) Anonymous user personalization deferred to v2.1 | X-Anon-ID exists but no aggregated history; trending row is sufficient cold-start UX for v2.0. | — Pending |
-| (v2.0) S5 TF-IDF time-weighting with Kodik episode-count fallback | 84% of watch_history is Kodik with unreliable duration; falling back to integer episode count keeps S5 honest. | — Pending |
-| (v2.0) Pluggable `SignalModule` interface from day one | Architectural payoff: future signals (S7-S10) plug in without rewrites. Single seam = single review surface for new signals. | — Pending |
+| (v2.0) Weighted ensemble pattern over tiered fallback or two-stage retrieval+ranker | Dataset is uneven across users; ensemble degrades gracefully where tiered cliffs are jarring; admin debug page becomes per-signal contribution table for free; can grow into two-stage at ~100k users without rewrite. | ✓ Validated 2026-05-07 |
+| (v2.0) Per-pool min-max normalization (architectural fix) | Without it, raw scales (S1 ~[0,10] vs S5 ~[0,0.05]) silently dominate or vanish regardless of weight. | ✓ Validated 2026-05-07 |
+| (v2.0) S6 score threshold ≥ 7 (not ≥ 6) with fallback to ≥ 5 if pool too thin | More conservative than my recommendation; cleaner signal; avoids "more like the thing they hated". | ✓ Validated 2026-05-07 |
+| (v2.0) S6 Variant B (pinned tile) over Variant A (weight-shift) for v2.0 | More transparent and easier to debug; weight-shift deferred to v2.1 once pin CTR measured. | ✓ Validated 2026-05-07 |
+| (v2.0) Hybrid storage: Postgres precomputed signals + Redis top-N cache (6h TTL) | Postgres holds durable signal vectors; Redis serves fresh top-N cheaply; on completion S6 seed update is synchronous so the pin appears immediately. | ✓ Validated 2026-05-07 |
+| (v2.0) Anonymous user personalization deferred to v2.1 | X-Anon-ID exists but no aggregated history; trending row is sufficient cold-start UX for v2.0. | ✓ Validated 2026-05-07 |
+| (v2.0) S5 TF-IDF time-weighting with Kodik episode-count fallback | 84% of watch_history is Kodik with unreliable duration; falling back to integer episode count keeps S5 honest. | ✓ Validated 2026-05-07 |
+| (v2.0) Pluggable `SignalModule` interface from day one | Architectural payoff: future signals (S7-S10) plug in without rewrites. Single seam = single review surface for new signals. | ✓ Validated 2026-05-07 |
 
 ### Loki retention constraint (carried from v1.0)
 
@@ -173,4 +172,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-04 — v2.0 Recommendations Engine milestone started; v1.0 Active items consolidated into VAL-10..VAL-16.*
+*Last updated: 2026-05-09 — v2.0 Recommendations Engine milestone closed (shipped 2026-05-07, audit passed, requirements archived). Next milestone (universal anime scraper) pending definition via `/gsd-new-milestone`.*
