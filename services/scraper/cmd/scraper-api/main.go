@@ -11,6 +11,10 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/embeds"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
 )
 
@@ -23,15 +27,26 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
-	if cfg.MegacloudExtractorURL == "" {
+	if cfg.MegacloudExtractor.URL == "" {
 		log.Warnw("MEGACLOUD_EXTRACTOR_URL is empty; megacloud-backed extraction will fail when invoked")
 	}
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("scraper")
 
-	// Initialize router. Plan 03 will extend the signature to accept handlers.
-	router := transport.NewRouter(cfg, log, metricsCollector)
+	// Build the embed extractor registry. Phase 15 plan 03 registers
+	// MegacloudClient as the only extractor; Phase 19+ adds Kwik etc.
+	registry := domain.NewRegistry()
+	mcClient := embeds.NewMegacloudClient(cfg.MegacloudExtractor.URL, cfg.MegacloudExtractor.Timeout)
+	registry.Register(mcClient)
+
+	// Build the orchestrator. Phase 15 registers ZERO providers — every
+	// business call returns ErrNotFound until Phase 16 lands AnimePahe.
+	orchestrator := service.NewOrchestrator(log, registry)
+
+	// HTTP handler + router wiring.
+	scraperHandler := handler.NewScraperHandler(orchestrator, log)
+	router := transport.NewRouter(scraperHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -43,9 +58,12 @@ func main() {
 	}
 
 	go func() {
-		log.Infow("starting scraper service",
+		log.Infow("scraper service ready",
+			"port", cfg.Server.Port,
 			"address", cfg.Server.Address(),
-			"megacloud_extractor_url", cfg.MegacloudExtractorURL,
+			"providers", len(orchestrator.HealthSnapshot(context.Background())),
+			"embed_extractors", len(registry.Names()),
+			"megacloud_url", cfg.MegacloudExtractor.URL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)
