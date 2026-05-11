@@ -143,6 +143,20 @@
     "native": "Native",
     "recommendedVoice": "Recommended voice acting",
     "episodeShort": "ep.",
+    "tabEnglish": "English",
+    "tabDebugSuffix": "(debug)",
+    "source": "Source",
+    "sourceSingleTooltip": "Source: {provider} (only provider available)",
+    "sourceMultiTooltip": "Change video source",
+    "sourceUnhealthy": "Currently unreachable — orchestrator skipped this source",
+    "englishNotAvailable": {
+      "heading": "Not available in English yet",
+      "body": "This anime isn't on the English providers we track. Try Kodik or AnimeLib for Russian options."
+    },
+    "sourceSwitchFailed": "Couldn't switch source — staying on {provider}",
+    "sourceUnavailable": "Source unavailable. Tried: {chain}",
+    "reportProvider": "Provider",
+    "reportTried": "Tried",
     "error": {
       "loadEpisodes": "Failed to load episode list",
       "loadTranslations": "Failed to load translations",

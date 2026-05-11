@@ -143,6 +143,20 @@
     "native": "ネイティブ",
     "recommendedVoice": "おすすめの吹替",
     "episodeShort": "話",
+    "tabEnglish": "英語",
+    "tabDebugSuffix": "(デバッグ)",
+    "source": "ソース",
+    "sourceSingleTooltip": "ソース: {provider} (利用可能な唯一のプロバイダー)",
+    "sourceMultiTooltip": "動画ソースを変更",
+    "sourceUnhealthy": "現在到達不能 — オーケストレーターがスキップしました",
+    "englishNotAvailable": {
+      "heading": "英語版はまだ利用できません",
+      "body": "この作品は当方が追跡している英語プロバイダーには登録されていません。ロシア語版は Kodik または AnimeLib をお試しください。"
+    },
+    "sourceSwitchFailed": "ソース切替に失敗 — {provider} のままです",
+    "sourceUnavailable": "ソース利用不可。試行: {chain}",
+    "reportProvider": "プロバイダー",
+    "reportTried": "試行",
     "error": {
       "loadEpisodes": "エピソードリストの読み込みに失敗しました",
       "loadTranslations": "吹替リストの読み込みに失敗しました",

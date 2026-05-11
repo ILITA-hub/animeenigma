@@ -143,6 +143,20 @@
     "native": "Нативный",
     "recommendedVoice": "Рекомендуемая озвучка",
     "episodeShort": "эп.",
+    "tabEnglish": "Английский",
+    "tabDebugSuffix": "(отладка)",
+    "source": "Источник",
+    "sourceSingleTooltip": "Источник: {provider} (единственный доступный)",
+    "sourceMultiTooltip": "Сменить источник видео",
+    "sourceUnhealthy": "Сейчас недоступен — оркестратор пропустил этот источник",
+    "englishNotAvailable": {
+      "heading": "Английская озвучка пока недоступна",
+      "body": "Это аниме отсутствует у отслеживаемых нами английских провайдеров. Попробуйте Kodik или AnimeLib для русской озвучки."
+    },
+    "sourceSwitchFailed": "Не удалось сменить источник — остаёмся на {provider}",
+    "sourceUnavailable": "Источник недоступен. Пробовали: {chain}",
+    "reportProvider": "Провайдер",
+    "reportTried": "Пробовали",
     "error": {
       "loadEpisodes": "Не удалось загрузить список серий",
       "loadTranslations": "Не удалось загрузить список озвучек",

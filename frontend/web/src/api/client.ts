@@ -403,6 +403,42 @@ export const hiAnimeApi = {
   search: (query: string) => apiClient.get('/hianime/search', { params: { q: query } }),
 }
 
+/**
+ * Phase 16 — scraperApi targets the new /api/anime/{id}/scraper/* routes
+ * served by the catalog→scraper pipeline. Replaces hiAnimeApi + consumetApi
+ * end-to-end; those two remain in place (and reachable via ?legacy=1) until
+ * Phase 20 cutover.
+ *
+ * The `prefer` parameter is the per-anime user override from the Source
+ * dropdown inside EnglishPlayer; when omitted, the orchestrator picks its
+ * default (currently AnimePahe — Phase 18 will add 9anime).
+ */
+export const scraperApi = {
+  getEpisodes: (animeId: string, prefer?: string) =>
+    apiClient.get(`/anime/${animeId}/scraper/episodes`, {
+      params: prefer ? { prefer } : undefined,
+    }),
+  getServers: (animeId: string, episodeId: string, prefer?: string) =>
+    apiClient.get(`/anime/${animeId}/scraper/servers`, {
+      params: { episode: episodeId, ...(prefer && { prefer }) },
+    }),
+  getStream: (
+    animeId: string,
+    episodeId: string,
+    serverId: string,
+    category: 'sub' | 'dub',
+    prefer?: string,
+  ) =>
+    apiClient.get(`/anime/${animeId}/scraper/stream`, {
+      params: { episode: episodeId, server: serverId, category, ...(prefer && { prefer }) },
+    }),
+  // Health is per-service (not per-anime) but the catalog route is templated
+  // on animeId for routing reasons. The catalog forwards to scraper without
+  // touching animeId for the health path. Pass any UUID (e.g. an underscore
+  // placeholder).
+  getHealth: () => apiClient.get(`/anime/_/scraper/health`),
+}
+
 export const jimakuApi = {
   getSubtitles: (animeId: string, episode: number) =>
     apiClient.get(`/anime/${animeId}/jimaku/subtitles`, {
