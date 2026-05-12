@@ -479,3 +479,16 @@ func TestOrchestrator_OrderedProviderNames(t *testing.T) {
 		t.Errorf("OrderedProviderNames on zero-provider orchestrator = %v; want []", got)
 	}
 }
+
+// TestParseQuery_PreferLengthCap — WR-01: an oversize `prefer` is truncated
+// at parse time so a malicious caller can't balloon log/response payloads
+// (the value is echoed into meta.tried + structured log fields).
+func TestParseQuery_PreferLengthCap(t *testing.T) {
+	t.Parallel()
+	huge := strings.Repeat("A", 1024)
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+huge, nil)
+	qp := parseQuery(req)
+	if len(qp.prefer) != maxPreferLength {
+		t.Errorf("len(prefer) = %d; want %d", len(qp.prefer), maxPreferLength)
+	}
+}

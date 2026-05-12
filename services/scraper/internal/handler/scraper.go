@@ -69,14 +69,24 @@ type queryParams struct {
 	prefer   string
 }
 
+// maxPreferLength caps the `prefer` query-string parameter at parse time so
+// a malicious caller can't balloon log lines or response bodies via the
+// `meta.tried` echo path. Provider names are short identifiers (e.g.
+// "animepahe", "9anime") — 64 chars is generous. See REVIEW.md WR-01.
+const maxPreferLength = 64
+
 func parseQuery(r *http.Request) queryParams {
 	q := r.URL.Query()
+	prefer := strings.TrimSpace(q.Get("prefer"))
+	if len(prefer) > maxPreferLength {
+		prefer = prefer[:maxPreferLength]
+	}
 	return queryParams{
 		malID:    strings.TrimSpace(q.Get("mal_id")),
 		episode:  strings.TrimSpace(q.Get("episode")),
 		server:   strings.TrimSpace(q.Get("server")),
 		category: strings.TrimSpace(q.Get("category")),
-		prefer:   strings.TrimSpace(q.Get("prefer")),
+		prefer:   prefer,
 	}
 }
 
