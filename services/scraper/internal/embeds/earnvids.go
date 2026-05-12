@@ -34,8 +34,9 @@ type EarnvidsExtractor struct {
 	*packedExtractor
 }
 
-// NewEarnvidsExtractor constructs the extractor with default HTTP / goja
-// timeouts (both 15s — matches StreamHG and the Kwik extractor).
+// NewEarnvidsExtractor constructs the extractor with HTTP=15s, goja=5s —
+// matches StreamHG and the Kwik extractor (HTTP wider than the JS budget so
+// slow networks don't starve the goja runtime).
 func NewEarnvidsExtractor() *EarnvidsExtractor {
 	base := &packedExtractor{
 		name:               "earnvids",
@@ -45,7 +46,7 @@ func NewEarnvidsExtractor() *EarnvidsExtractor {
 		selectorRegexFail:  "earnvids_hls2_regex",
 		selectorBodyFail:   "earnvids_body_read",
 		http:               &http.Client{Timeout: defaultPackedHTTPTimeout},
-		timeout:            defaultPackedHTTPTimeout,
+		timeout:            defaultPackedGojaTimeout,
 	}
 	return &EarnvidsExtractor{packedExtractor: base}
 }

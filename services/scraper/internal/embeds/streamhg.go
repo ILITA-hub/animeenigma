@@ -38,8 +38,9 @@ type StreamHGExtractor struct {
 	*packedExtractor
 }
 
-// NewStreamHGExtractor constructs the extractor with default HTTP / goja
-// timeouts (both 15s — matches the Kwik extractor's defaults).
+// NewStreamHGExtractor constructs the extractor with HTTP=15s, goja=5s —
+// matches the Kwik extractor's defaults (HTTP wider than the JS budget so
+// slow networks don't starve the goja runtime).
 func NewStreamHGExtractor() *StreamHGExtractor {
 	base := &packedExtractor{
 		name:               "streamhg",
@@ -49,7 +50,7 @@ func NewStreamHGExtractor() *StreamHGExtractor {
 		selectorRegexFail:  "streamhg_hls2_regex",
 		selectorBodyFail:   "streamhg_body_read",
 		http:               &http.Client{Timeout: defaultPackedHTTPTimeout},
-		timeout:            defaultPackedHTTPTimeout,
+		timeout:            defaultPackedGojaTimeout,
 	}
 	return &StreamHGExtractor{packedExtractor: base}
 }

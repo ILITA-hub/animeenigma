@@ -50,6 +50,14 @@ import (
 // without breaking the orchestrator's per-stage SLO.
 const defaultPackedHTTPTimeout = 15 * time.Second
 
+// defaultPackedGojaTimeout bounds the goja-runtime JS execution budget per
+// Extract call. Mirrors KwikExtractor's defaultKwikTimeout (5s) so hostile
+// packed-JS payloads cannot pin a goroutine for the full 15s HTTP budget.
+// WR-01 in the Phase 18 review — pre-fix, both StreamHG and Earnvids reused
+// defaultPackedHTTPTimeout (15s) as the goja budget despite the comment
+// claiming parity with Kwik.
+const defaultPackedGojaTimeout = 5 * time.Second
+
 // maxPackedBody caps the response body at 2 MiB. Real packed-JS wrapper pages
 // are <200 KiB; this cap is purely a DoS guard against a hostile upstream
 // streaming gigabytes (T-18-16).
