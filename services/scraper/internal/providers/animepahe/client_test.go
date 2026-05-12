@@ -15,7 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
 
@@ -618,6 +621,11 @@ func TestProvider_GetStream_ExpiredURL_NoCacheWrite(t *testing.T) {
 
 // TestProvider_HealthCheck: returns Health with provider="animepahe" and
 // the four canonical stage keys.
+//
+// Phase 17 Plan 02 — keys renamed from the legacy {find_id, list_episodes,
+// list_servers, get_stream} to the canonical 5-stage strings owned by
+// services/scraper/internal/health/stage.go. The fifth stage (stream_segment)
+// is owned by the probe runner, NOT this provider, so it does NOT appear here.
 func TestProvider_HealthCheck(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.NotFoundHandler())
@@ -628,12 +636,28 @@ func TestProvider_HealthCheck(t *testing.T) {
 	if h.Provider != "animepahe" {
 		t.Errorf("Provider = %q; want \"animepahe\"", h.Provider)
 	}
-	wantStages := []string{"find_id", "list_episodes", "list_servers", "get_stream"}
+	wantStages := []string{"search", "episodes", "servers", "stream"}
 	for _, s := range wantStages {
 		if _, ok := h.Stages[s]; !ok {
-			t.Errorf("missing stage %q in health snapshot", s)
+			t.Errorf("missing canonical stage %q in health snapshot; got keys=%v", s, mapKeys(h.Stages))
 		}
 	}
+	// Negative — legacy keys must be gone.
+	legacy := []string{"find_id", "list_episodes", "list_servers", "get_stream"}
+	for _, s := range legacy {
+		if _, ok := h.Stages[s]; ok {
+			t.Errorf("legacy stage key %q still present in health snapshot", s)
+		}
+	}
+}
+
+// mapKeys returns the keys of a string-keyed map (for error messages).
+func mapKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // TestProvider_FindID_QuerySafetyEscape: a ref.Title with shell/regex
@@ -728,4 +752,37 @@ func TestNew_RequiresDependencies(t *testing.T) {
 			t.Fatal("New(no log) returned nil Provider")
 		}
 	})
+}
+
+// TestProvider_ListEpisodes_ZeroMatchEmitsCounter — when upstream returns
+// page 1 with empty `data` array, parser_zero_match_total{provider="animepahe",
+// selector="episode_list_item"} increments by exactly 1. Anchors SCRAPER-NF-04.
+//
+// The test does NOT t.Parallel because the metric is a global counter; running
+// in parallel with another test that also triggers it would flake the delta
+// assertion. Other tests in this file use page-1 empty data fixtures but they
+// each get a unique provider/selector child via the namespaced counter.
+func TestProvider_ListEpisodes_ZeroMatchEmitsCounter(t *testing.T) {
+	// Snapshot the counter BEFORE we trigger the emit so the test is robust
+	// to whatever other tests have done to the global registry.
+	before := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "episode_list_item"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"current_page":1,"last_page":1,"data":[]}`))
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+
+	eps, err := p.ListEpisodes(context.Background(), "12345-zero-match-test")
+	if err != nil {
+		t.Fatalf("ListEpisodes err = %v; want nil (real-empty is not an error)", err)
+	}
+	if len(eps) != 0 {
+		t.Fatalf("len(eps) = %d; want 0", len(eps))
+	}
+
+	after := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "episode_list_item"))
+	if delta := after - before; delta != 1 {
+		t.Errorf("parser_zero_match_total delta = %v; want 1", delta)
+	}
 }

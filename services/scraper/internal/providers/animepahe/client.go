@@ -46,7 +46,9 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 )
 
 // providerName is the stable identifier returned by Name() and used as the
@@ -74,7 +76,33 @@ const maxBodyAPI = 4 << 20
 const maxBodyHTML = 2 << 20
 
 // stageNames lock the canonical stage keys returned by HealthCheck.
-var stageNames = []string{"find_id", "list_episodes", "list_servers", "get_stream"}
+// Phase 17 Plan 02: renamed from legacy keys (find_id / list_episodes / etc.)
+// to the canonical 5-stage strings from services/scraper/internal/health/stage.go.
+// The four pipeline stages exposed by the provider itself are search /
+// episodes / servers / stream; the fifth canonical stage (stream_segment)
+// is owned by the probe runner, not the provider, so it is NOT in this slice.
+//
+// These strings appear VERBATIM as Prometheus label values + Grafana queries;
+// treat as a versioned contract.
+var stageNames = []string{
+	health.StageSearch,
+	health.StageEpisodes,
+	health.StageServers,
+	health.StageStream,
+}
+
+// Selector identifiers for parser_zero_match_total. These MUST be short
+// stable identifiers — NOT raw CSS — to bound the cardinality of the
+// {selector=...} label (RESEARCH P-02 cardinality bomb mitigation).
+//
+// Adding a new selector miss path? Define a new const here and reference
+// it at the call site. Never call ParserZeroMatchTotal.WithLabelValues
+// with a string literal.
+const (
+	selectorEpisodeListItem = "episode_list_item"
+	selectorServerLink      = "server_link"
+	selectorKwikPackedJS    = "kwik_packed_js"
+)
 
 // malSyncClient is the malsync lookup contract — abstracted so tests can
 // inject a fake without standing up a real malsync HTTP server.
@@ -217,14 +245,14 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 	// 1. malsync hit?
 	if ref.ShikimoriID != "" {
 		if id, ok, err := p.malsync.Lookup(ctx, ref.ShikimoriID, providerName); err == nil && ok {
-			p.markStage("find_id", nil)
+			p.markStage(health.StageSearch, nil)
 			return id, nil
 		}
 	}
 	// 2. Fuzzy /api?m=search fallback.
 	if ref.Title == "" {
 		err := domain.WrapNotFound(errors.New("no title"), "animepahe: cannot search without a title")
-		p.markStage("find_id", err)
+		p.markStage(health.StageSearch, err)
 		return "", err
 	}
 	q := url.QueryEscape(ref.Title)
@@ -232,7 +260,7 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 	resp, err := p.getWithDDoSGuard(ctx, searchURL)
 	if err != nil {
 		err = domain.WrapProviderDown(err, "animepahe: search fetch")
-		p.markStage("find_id", err)
+		p.markStage(health.StageSearch, err)
 		return "", err
 	}
 	defer func() {
@@ -241,24 +269,24 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 	}()
 	if resp.StatusCode != http.StatusOK {
 		err = domain.WrapProviderDown(fmt.Errorf("status %d", resp.StatusCode), "animepahe: search non-200")
-		p.markStage("find_id", err)
+		p.markStage(health.StageSearch, err)
 		return "", err
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyAPI))
 	if err != nil {
 		err = domain.WrapProviderDown(err, "animepahe: search read body")
-		p.markStage("find_id", err)
+		p.markStage(health.StageSearch, err)
 		return "", err
 	}
 	var sr searchResponse
 	if err := json.Unmarshal(body, &sr); err != nil {
 		err = domain.WrapExtractFailed(err, "animepahe: search decode")
-		p.markStage("find_id", err)
+		p.markStage(health.StageSearch, err)
 		return "", err
 	}
 	if len(sr.Data) == 0 {
 		err := domain.WrapNotFound(nil, "animepahe: 0 search results for "+ref.Title)
-		p.markStage("find_id", err)
+		p.markStage(health.StageSearch, err)
 		return "", err
 	}
 	// 3. Score each entry; pick the best ≥ threshold.
@@ -279,10 +307,10 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 			fmt.Errorf("best score %.4f", best.score),
 			"animepahe: no fuzzy match for "+ref.Title,
 		)
-		p.markStage("find_id", err)
+		p.markStage(health.StageSearch, err)
 		return "", err
 	}
-	p.markStage("find_id", nil)
+	p.markStage(health.StageSearch, nil)
 	return best.session, nil
 }
 
@@ -293,7 +321,7 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 	cacheKey := fmt.Sprintf("episodes:%s:%s", providerName, providerID)
 	var cached []domain.Episode
 	if err := p.cache.Get(ctx, cacheKey, &cached); err == nil {
-		p.markStage("list_episodes", nil)
+		p.markStage(health.StageEpisodes, nil)
 		return cached, nil
 	}
 
@@ -303,7 +331,7 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 		resp, err := p.getWithDDoSGuard(ctx, u)
 		if err != nil {
 			err = domain.WrapProviderDown(err, "animepahe: release fetch")
-			p.markStage("list_episodes", err)
+			p.markStage(health.StageEpisodes, err)
 			return nil, err
 		}
 		if resp.StatusCode != http.StatusOK {
@@ -313,21 +341,32 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 				fmt.Errorf("status %d, body=%q", resp.StatusCode, string(body)),
 				fmt.Sprintf("animepahe: release page %d non-200", page),
 			)
-			p.markStage("list_episodes", err)
+			p.markStage(health.StageEpisodes, err)
 			return nil, err
 		}
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyAPI))
 		_ = resp.Body.Close()
 		if err != nil {
 			err = domain.WrapProviderDown(err, "animepahe: release read body")
-			p.markStage("list_episodes", err)
+			p.markStage(health.StageEpisodes, err)
 			return nil, err
 		}
 		var rr releaseResponse
 		if err := json.Unmarshal(body, &rr); err != nil {
 			err = domain.WrapExtractFailed(err, "animepahe: release decode")
-			p.markStage("list_episodes", err)
+			p.markStage(health.StageEpisodes, err)
 			return nil, err
+		}
+		// SCRAPER-NF-04: emit parser_zero_match_total when the upstream
+		// returns zero episode items on the FIRST page. Distinct from
+		// "anime exists but no episodes aired yet" only by context — both
+		// look the same from JSON. We bias toward instrumenting all
+		// zero-result first pages so a real upstream selector drift (the
+		// items key changed name, returns empty) is observable as a sudden
+		// jump in this counter. Real-empty new anime contribute a baseline
+		// drift that's still well-bounded by golden-pool selection.
+		if page == 1 && len(rr.Data) == 0 {
+			metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorEpisodeListItem).Inc()
 		}
 		for _, ep := range rr.Data {
 			all = append(all, domain.Episode{
@@ -344,7 +383,7 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 	// 6h cache — even for the real-empty case, so we don't re-hit upstream
 	// on every list view when the anime has no episodes aired yet.
 	_ = p.cache.Set(ctx, cacheKey, all, episodesCacheTTL)
-	p.markStage("list_episodes", nil)
+	p.markStage(health.StageEpisodes, nil)
 	return all, nil
 }
 
@@ -355,7 +394,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	resp, err := p.getWithDDoSGuard(ctx, u)
 	if err != nil {
 		err = domain.WrapProviderDown(err, "animepahe: /play fetch")
-		p.markStage("list_servers", err)
+		p.markStage(health.StageServers, err)
 		return nil, err
 	}
 	defer func() {
@@ -364,13 +403,13 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	}()
 	if resp.StatusCode != http.StatusOK {
 		err = domain.WrapProviderDown(fmt.Errorf("status %d", resp.StatusCode), "animepahe: /play non-200")
-		p.markStage("list_servers", err)
+		p.markStage(health.StageServers, err)
 		return nil, err
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyHTML))
 	if err != nil {
 		err = domain.WrapProviderDown(err, "animepahe: /play read body")
-		p.markStage("list_servers", err)
+		p.markStage(health.StageServers, err)
 		return nil, err
 	}
 	// Selector drift sentinel: an empty body is structurally distinct from a
@@ -380,13 +419,13 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 			errors.New("/play response body is empty"),
 			"animepahe: /play selector drift (empty body)",
 		)
-		p.markStage("list_servers", err)
+		p.markStage(health.StageServers, err)
 		return nil, err
 	}
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
 	if err != nil {
 		err = domain.WrapExtractFailed(err, "animepahe: /play parse")
-		p.markStage("list_servers", err)
+		p.markStage(health.StageServers, err)
 		return nil, err
 	}
 	servers := make([]domain.Server, 0, 4)
@@ -420,7 +459,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		}
 		servers = append(servers, domain.Server{ID: src, Name: "kwik", Type: cat})
 	})
-	p.markStage("list_servers", nil)
+	p.markStage(health.StageServers, nil)
 	return servers, nil
 }
 
@@ -452,14 +491,14 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 
 	var cached domain.Stream
 	if err := p.cache.Get(ctx, cacheKey, &cached); err == nil {
-		p.markStage("get_stream", nil)
+		p.markStage(health.StageStream, nil)
 		return &cached, nil
 	}
 
 	ext, err := p.embeds.Find(serverID)
 	if err != nil {
 		err = domain.WrapExtractFailed(err, "animepahe: no matching extractor for "+serverID)
-		p.markStage("get_stream", err)
+		p.markStage(health.StageStream, err)
 		return nil, err
 	}
 	// Provide Referer = p.baseURL so the Kwik upstream accepts the embed
@@ -468,12 +507,12 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	stream, err := ext.Extract(ctx, serverID, headers)
 	if err != nil {
 		// Pass the error through; the extractor already wrapped it.
-		p.markStage("get_stream", err)
+		p.markStage(health.StageStream, err)
 		return nil, err
 	}
 	if stream == nil || len(stream.Sources) == 0 {
 		err = domain.WrapExtractFailed(errors.New("empty stream"), "animepahe: extractor returned empty stream")
-		p.markStage("get_stream", err)
+		p.markStage(health.StageStream, err)
 		return nil, err
 	}
 	// Cache decision: TTL = min(expires-30s, 5min) of the first source URL.
@@ -481,7 +520,7 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	if ttl > 0 {
 		_ = p.cache.Set(ctx, cacheKey, *stream, ttl)
 	}
-	p.markStage("get_stream", nil)
+	p.markStage(health.StageStream, nil)
 	return stream, nil
 }
 
