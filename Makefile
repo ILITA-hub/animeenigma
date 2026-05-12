@@ -117,6 +117,14 @@ capture-goldens-animepahe: ## Recapture services/scraper/testdata/animepahe/* fi
 		echo "OK: no leaked tokens" ; \
 	fi
 
+.PHONY: capture-goldens-gogoanime
+capture-goldens-gogoanime: ## Recapture services/scraper/testdata/gogoanime/* fixtures from anitaku.to (Phase 18)
+	@echo "Capturing Gogoanime/Anitaku goldens — see services/scraper/testdata/gogoanime/README.md"
+	@bash services/scraper/scripts/capture-gogoanime-goldens.sh
+	@if grep -rE '(Set-Cookie|__ddg2_|cf_clearance|Bearer )' services/scraper/testdata/gogoanime/ ; then \
+		echo "ERROR: forbidden auth pattern in goldens — refusing to ship" && exit 1 ; \
+	fi
+
 # ============================================================================
 # Code Quality
 # ============================================================================
