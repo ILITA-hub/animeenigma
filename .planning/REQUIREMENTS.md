@@ -67,6 +67,8 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ### Second Provider — 9anime (Phase 18)
 
+> **Implementation note (2026-05-12):** SCRAPER-9ANI-01..06 are implemented by the Gogoanime/Anitaku provider (display label "Anitaku", backend slug "gogoanime"). The 9anime mirror chain (9anime.to to aniwave.to to kaido.to) is unreachable as of 2026-05-12; only anitaku.to survives as the canonical EN provider. See .planning/phases/18-9anime/18-RESEARCH.md section "Mirror Viability". Requirement IDs keep their literal SCRAPER-9ANI-* prefix.
+
 - [ ] **SCRAPER-9ANI-01**: Given a Shikimori/MAL ID, the 9anime client resolves the matching 9anime slug via `malsync.moe` lookup with the same caching + fuzzy fallback as AnimePahe.
 - [ ] **SCRAPER-9ANI-02**: `ListEpisodes` returns the full episode list scraped from 9anime's WordPress/Madara-themed markup (`bsx`, `bixbox`, `bs`, `bt` class family). Sub/dub split surfaced where present. Cached 6 hours.
 - [ ] **SCRAPER-9ANI-03**: `ListServers` enumerates 9anime's embed hosts per episode. The set of embed hosts 9anime uses (`mp4upload`, `streamsb`, `streamtape`, megacloud variants, etc.) is discovered during implementation and **each is registered as an `EmbedExtractor`** so future providers using the same hosts reuse the extractor.

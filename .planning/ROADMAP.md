@@ -43,7 +43,7 @@
 - [x] **Phase 15: Foundation** — Provider interface, orchestrator skeleton, EmbedExtractor registry, BaseHTTPClient, megacloud-extractor Go wrapper, golden-file harness, 503-stub HTTP endpoints (completed 2026-05-11)
 - [x] **Phase 16: AnimePahe + New EnglishPlayer** — First live provider (Kwik via goja), new unified `EnglishPlayer.vue` replacing both HiAnime + Consumet tabs end-to-end (completed 2026-05-12)
 - [x] **Phase 17: Observability** — Per-provider/per-stage health gauges, 15-min liveness probe with golden anime pool, orchestrator skips unhealthy, Grafana alert, admin health endpoint (completed 2026-05-12)
-- [ ] **Phase 18: 9anime** — Second provider (WordPress/Madara markup), failover AnimePahe → 9anime verified end-to-end, new embed extractors registered
+- [ ] **Phase 18: 9anime → Anitaku/Gogoanime** — Second provider (pivoted per 2026-05-12 research — see .planning/phases/18-9anime/18-RESEARCH.md), failover AnimePahe → Gogoanime verified end-to-end, new embed extractors registered
 - [ ] **Phase 19: AnimeKai (gated)** — Third provider behind `SCRAPER_ANIMEKAI_ENABLED` feature flag; in-house token generator in megacloud-extractor sidecar (no `enc-dec.app`); flag default-off carryover acceptable if R&D doesn't converge
 - [ ] **Phase 20: Cutover** — Delete HiAnime + Consumet code paths, containers, env vars, frontend exports; gated on ≥ 7 days clean prod traffic on EnglishPlayer
 
@@ -101,7 +101,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 - [x] 17-02-PLAN.md — Wave 2: ProbeRunner (15-min ± 20% jitter, 5-stage pipeline, 3-of-15-min sliding window, defer-recover) + golden pool + main.go wiring + AnimePahe stage-key rename + first ParserZeroMatchTotal emit
 - [x] 17-03-PLAN.md — Wave 3: GET /api/admin/scraper/health admin endpoint (scraper handler + transport route) + gateway proxy config/handler/router (specific-before-general /admin/scraper/* before /admin/*)
 
-### Phase 18: 9anime
+### Phase 18: 9anime → Anitaku/Gogoanime (pivoted)
 **Goal**: A second alive EN provider is in rotation so a single provider failure does not blank the English tab for users.
 **Depends on**: Phase 17
 **Requirements**: SCRAPER-9ANI-01, SCRAPER-9ANI-02, SCRAPER-9ANI-03, SCRAPER-9ANI-04, SCRAPER-9ANI-05, SCRAPER-9ANI-06
