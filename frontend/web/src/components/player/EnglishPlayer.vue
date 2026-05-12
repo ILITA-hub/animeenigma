@@ -984,11 +984,20 @@ async function switchProvider(next: string) {
     }
   } catch (err) {
     selectedProvider.value = prior
-    setPreferredScraperProvider(prior)
-    // No toast helper exists in this component — fetchServers populates
-    // error.value directly for the user-facing overlay. Surface the
-    // rollback at debug level so on-call can trace switch failures in the
-    // browser console without needing additional UI plumbing.
+    // WR-08 — `prior` may be null if the user hadn't yet committed to a
+    // provider (cold-start switch attempt). useWatchPreferences accepts
+    // null as the clearing call, but the guard makes the intent explicit
+    // and avoids serialising literal "null" into localStorage on any
+    // future signature tightening of the composable.
+    if (prior !== null) {
+      setPreferredScraperProvider(prior)
+    }
+    // WR-07 — surface the failure via the same error overlay used by
+    // fetchServers. The locale key (sourceSwitchFailed) ships in all three
+    // bundles; pre-fix it was dead code and the rollback was silent.
+    error.value = t('player.sourceSwitchFailed', {
+      provider: capitalizeProvider(prior || availableProviders.value[0] || 'animepahe'),
+    })
     console.warn(
       '[EnglishPlayer] source switch failed; rolled back to',
       prior,
