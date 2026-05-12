@@ -20,9 +20,51 @@ import { test, expect } from '@playwright/test'
  * page load. The ui_audit_bot account is the permanent test user.
  */
 
-const TEST_ANIME_ID = 'c076bca7-a93f-4089-90a3-0cb69b9cbf25' // Frieren S2 (likely-covered MAL ID)
+// WR-09: do NOT hard-code a magic UUID — the seed can drift (e.g. rebuilds
+// without Frieren) and the test would silently fall through to
+// "still pass if not visible" guards.
+//
+// FALLBACK_TEST_ANIME_ID is consulted only if the API search has no hits;
+// the test then explicitly fails the run rather than passing on no real
+// coverage.
+const FALLBACK_TEST_ANIME_ID = 'c076bca7-a93f-4089-90a3-0cb69b9cbf25'
+const TEST_ANIME_SEARCH_QUERY = 'Frieren'
 const UI_AUDIT_USERNAME = 'ui_audit_bot'
 const UI_AUDIT_PASSWORD = 'audit_bot_test_password_2026'
+
+/**
+ * Resolve a test anime UUID at runtime by hitting the search API. Fails
+ * the test loudly when zero hits are returned so seed drift cannot
+ * masquerade as a green run. See REVIEW.md WR-09.
+ */
+async function resolveTestAnimeID(page: import('@playwright/test').Page): Promise<string> {
+  const result = await page.evaluate(
+    async (q: string) => {
+      try {
+        const res = await fetch(`/api/anime/search?q=${encodeURIComponent(q)}`)
+        if (!res.ok) return { ok: false, status: res.status, items: [] as Array<{ id: string }> }
+        const payload = await res.json()
+        const data = payload?.data ?? payload
+        const items: Array<{ id: string }> =
+          (Array.isArray(data) ? data : data?.items ?? data?.results ?? data?.animes) ?? []
+        return { ok: true, status: 200, items }
+      } catch (err) {
+        return { ok: false, status: 0, items: [] as Array<{ id: string }>, error: String(err) }
+      }
+    },
+    TEST_ANIME_SEARCH_QUERY,
+  )
+  if (result.ok && result.items.length > 0 && result.items[0].id) {
+    return result.items[0].id
+  }
+  // Surface a clear failure rather than silently routing to a UUID that
+  // may not exist in the seed.
+  throw new Error(
+    `WR-09: anime search for "${TEST_ANIME_SEARCH_QUERY}" returned no results (status=${result.status}). ` +
+      `Fallback UUID ${FALLBACK_TEST_ANIME_ID} is NOT used to avoid a false-pass. ` +
+      `Reseed via scripts/seed-ui-audit-user.sh or pick a different query.`,
+  )
+}
 
 /**
  * Log in as ui_audit_bot via /api/auth/login from inside the page so the
@@ -56,6 +98,7 @@ async function loginAsUiAuditBot(page: import('@playwright/test').Page) {
 test.describe('EnglishPlayer — Phase 16 unified English-source player', () => {
   test('English tab is the default; HiAnime + Consumet hidden without ?legacy=1', async ({ page }) => {
     await loginAsUiAuditBot(page)
+    const TEST_ANIME_ID = await resolveTestAnimeID(page)
 
     await page.goto(`/anime/${TEST_ANIME_ID}`)
     await page.waitForLoadState('networkidle')
@@ -100,6 +143,7 @@ test.describe('EnglishPlayer — Phase 16 unified English-source player', () => 
 
   test('Legacy flag (?legacy=1) reveals HiAnime + Consumet (debug) tabs', async ({ page }) => {
     await loginAsUiAuditBot(page)
+    const TEST_ANIME_ID = await resolveTestAnimeID(page)
 
     await page.goto(`/anime/${TEST_ANIME_ID}?legacy=1`)
     await page.waitForLoadState('networkidle')
@@ -131,6 +175,7 @@ test.describe('EnglishPlayer — Phase 16 unified English-source player', () => 
 
   test('ReportButton modal surfaces Provider + Tried rows from meta.tried', async ({ page }) => {
     await loginAsUiAuditBot(page)
+    const TEST_ANIME_ID = await resolveTestAnimeID(page)
 
     await page.goto(`/anime/${TEST_ANIME_ID}`)
     await page.waitForLoadState('networkidle')
@@ -183,6 +228,7 @@ test.describe('EnglishPlayer — Phase 16 unified English-source player', () => 
     // test.skip wrapper. The empty-state copy is keyed off
     // $t('player.englishNotAvailable.heading') in EnglishPlayer.vue.
     await loginAsUiAuditBot(page)
+    const TEST_ANIME_ID = await resolveTestAnimeID(page)
     await page.goto(`/anime/${TEST_ANIME_ID}`)
     const heading = page.locator('text=/Not available in English yet|Английская озвучка пока недоступна|英語版はまだ利用できません/')
     await expect(heading).toBeVisible()
