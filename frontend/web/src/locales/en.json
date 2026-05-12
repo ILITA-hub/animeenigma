@@ -477,10 +477,10 @@
     "expiresIn": "Expires in {seconds}s",
     "sessionExpired": "Session expired",
     "tryAgain": "Try again",
-    "troubleshootingHint": "Having trouble? Make sure you haven't blocked @animeenigma_auth_bot in Telegram.",
+    "troubleshootingHint": "Having trouble? Make sure you haven't blocked {'@'}animeenigma_auth_bot in Telegram.",
     "openInBrowser": "Don't have the app? Open in browser",
     "tgWebToggle": "Using Telegram Web?",
-    "tgWebInstructions": "Open @animeenigma_auth_bot in Telegram and send this message:",
+    "tgWebInstructions": "Open {'@'}animeenigma_auth_bot in Telegram and send this message:",
     "tgWebCopy": "Copy",
     "tgWebCopied": "Copied"
   },
