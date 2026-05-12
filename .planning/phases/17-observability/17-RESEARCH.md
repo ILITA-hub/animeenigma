@@ -808,27 +808,31 @@ This phase is greenfield additive — no rename / refactor / migration. The Runt
 | A6 | `math/rand/v2` (go 1.22+) is available in the scraper service | "Standard Stack" | Repo's `go.mod` declares `go 1.23.0` — verified, safe. |
 | A7 | The `defer recover` + restart pattern for probe panics is non-controversial; an unhandled panic in a goroutine crashes the whole process | "Code Examples" / Pattern 1 | This is correct per Go spec — verified by web search results on goroutine panic recovery. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should each provider get its own probe goroutine, or one shared goroutine iterating providers?**
    - What we know: Phase 17 ships with one provider (animepahe); Phase 18+ adds 9anime; Phase 19 adds AnimeKai (gated). The CONTEXT.md does not lock this.
    - What's unclear: Per-provider isolation (recommendation) costs N goroutines but prevents head-of-line blocking; shared iteration is simpler but a stuck provider stalls others.
    - Recommendation: **Per-provider goroutine**. Each starts in `main.go` after `orchestrator.Register(...)`. The probe code is the same in either case — just the spawn loop differs.
+   - **RESOLVED:** Per-provider goroutine. Pinned in Plan 17-02 Task 2. Reason: prevents head-of-line blocking when one provider's 5-stage probe takes longer than another's.
 
 2. **Where exactly does the probe's "first HLS segment" fetch happen — inside `Provider.GetStream` or after it?**
    - What we know: `Provider.GetStream` returns a `*Stream` with `Sources []Source` (each is an `{URL, Type, Quality}`). The probe needs to verify the URL actually serves data.
    - What's unclear: The probe could (a) call `GetStream` and trust the returned URL, OR (b) call `GetStream` and then issue a GET to `Sources[0].URL` and verify the response body is non-empty (a few KB of HLS segment).
    - Recommendation: **(b) — fetch the segment**. Reasoning: a 404 on the actual CDN URL is a different failure mode than `GetStream` returning a valid-looking URL. This is the "stream_segment" stage by name and contract.
+   - **RESOLVED:** Probe-owned separate stage AFTER GetStream returns. Pinned in Plan 17-02 Task 1 (probe.go pipeline definition). Reason: keeps the stage boundary observable as its own gauge dimension; HLS m3u8 parse + first segment HEAD lives inside probe.go, not inside the Provider interface.
 
 3. **Should the orchestrator skip-on-unhealthy emit a SEPARATE counter (e.g. `provider_skipped_total{provider,reason="health_down"}`) or reuse `parser_fallback_total{from,to}`?**
    - What we know: `parser_fallback_total` is currently incremented on every retryable failure in the failover loop.
    - What's unclear: Whether health-skip is conceptually a "failover from X" or a separate event.
    - Recommendation: Reuse `parser_fallback_total` with `from=<skipped_provider>`, `to=<next_provider>`. Same data shape, same dashboard. Add a comment in `orchestrator.go` documenting the semantic.
+   - **RESOLVED:** Reuse parser_fallback_total{from=<provider>,to=<skipped>}. Pinned in Plan 17-01 Task 3 (orchestrator skip-unhealthy wiring). Reason: avoids a fifth metric family; the existing fallback counter already represents "request was deflected somewhere else".
 
 4. **Should the `health/admin` route be `/scraper/health/admin` or `/scraper/admin/health`?**
    - What we know: D6 says route at `/api/admin/scraper/health` at the gateway. The scraper side is free.
    - What's unclear: Path naming convention.
    - Recommendation: `/scraper/admin/health` (admin-namespace inside scraper-namespace, matching the catalog pattern at `services/catalog/internal/transport/router.go:123`). Gateway rewrites `/api/admin/scraper/health` → `/scraper/admin/health`.
+   - **RESOLVED:** /scraper/health/admin (NOT the originally recommended /scraper/admin/health). Pinned in Plan 17-03 Task 2 (transport router) and Plan 17-03 Task 3 (gateway proxy). Reason: existing /scraper/health public route is established; nesting admin underneath as /scraper/health/admin reads as a privileged variant of the same resource, matches the "admin debug for an existing endpoint" framing in CONTEXT.md D6, and avoids creating a new top-level /scraper/admin/* namespace just for this single endpoint. The gateway still maps /api/admin/scraper/* → scraper:8088/scraper/health/admin via path-rewrite.
 
 ## Environment Availability
 
