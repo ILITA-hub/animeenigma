@@ -281,7 +281,7 @@ export const userApi = {
     ms_since_load: number
     tier: string | null
     tier_number: number | null
-    player: 'kodik' | 'animelib' | 'hianime' | 'consumet'
+    player: 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'english'
   }) => apiClient.post('/preferences/override', data),
   getAnimePreference: (animeId: string) =>
     apiClient.get<WatchCombo & { updated_at: string }>(`/users/preferences/${animeId}`),

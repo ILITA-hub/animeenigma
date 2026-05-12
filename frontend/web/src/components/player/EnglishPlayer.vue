@@ -1,0 +1,1668 @@
+<template>
+  <div class="english-player">
+    <!-- Loading state for episodes -->
+    <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
+      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+    </div>
+
+    <!-- No episodes available (no malsync coverage) -->
+    <div v-else-if="episodes.length === 0 && !loadingEpisodes" class="text-center py-20">
+      <svg class="w-12 h-12 mx-auto mb-3 opacity-50 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      </svg>
+      <h3 class="text-white/80 text-base font-medium">{{ $t('player.englishNotAvailable.heading') }}</h3>
+      <p class="text-white/40 text-sm mt-2 max-w-md mx-auto">{{ $t('player.englishNotAvailable.body') }}</p>
+    </div>
+
+    <!-- Main content when episodes available -->
+    <div v-else class="flex flex-col lg:flex-row gap-4">
+      <!-- Left: Video Player -->
+      <div class="flex-1 min-w-0">
+        <div ref="playerContainer" class="relative aspect-video bg-black rounded-xl overflow-hidden">
+          <!-- Loading overlay -->
+          <div
+            v-if="loadingStream"
+            class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
+          >
+            <div class="text-center">
+              <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}</p>
+            </div>
+          </div>
+
+          <!-- Video.js Player -->
+          <div v-if="streamUrl && streamType === 'hls' && playerType === 'videojs'" class="absolute inset-0">
+            <video ref="videoRef" class="video-js vjs-default-skin vjs-big-play-centered"></video>
+          </div>
+
+          <!-- Native HLS Player -->
+          <video
+            v-else-if="streamUrl && streamType === 'hls' && playerType === 'native'"
+            ref="nativeVideoRef"
+            class="absolute inset-0 w-full h-full"
+            controls
+            playsinline
+            @timeupdate="handleTimeUpdate"
+            @pause="handlePause"
+            @ended="handleEnded"
+          >
+          </video>
+
+          <!-- Iframe fallback -->
+          <iframe
+            v-else-if="streamUrl && streamType === 'iframe'"
+            :src="streamUrl"
+            class="absolute inset-0 w-full h-full"
+            frameborder="0"
+            allowfullscreen
+            allow="autoplay; fullscreen; encrypted-media"
+          />
+
+          <!-- Placeholder when no video loaded -->
+          <div
+            v-else-if="!loadingStream"
+            class="absolute inset-0 flex items-center justify-center"
+          >
+            <div class="text-center text-white/40">
+              <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              <p>{{ $t('player.selectEpisode') }}</p>
+            </div>
+          </div>
+
+          <!-- Subtitle Overlay (renders all subtitle types) -->
+          <SubtitleOverlay
+            :video-element="activeVideoElement"
+            :subtitle-url="activeSubtitleUrl"
+            :format="activeSubtitleFormat"
+            :visible="showSubtitleOverlay"
+            :fullscreen-container="playerContainer"
+            :offset="jpSubtitleOffset"
+            @loading="(v: boolean) => loadingSubOverlay = v"
+            @error="(msg: string) => jimakuError = msg"
+          />
+        </div>
+
+        <!-- Episode selector below player -->
+        <div class="mt-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-white/60 text-sm flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              {{ $t('player.episodesCount', { count: episodes.length }) }}
+            </h3>
+            <!-- Mark as watched button -->
+            <button
+              v-if="authStore.isAuthenticated"
+              @click="markCurrentEpisodeWatched"
+              :disabled="markingWatched"
+              class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              :class="episodeMarkedWatched
+                ? 'accent-bg-muted accent-text border accent-border'
+                : 'bg-white/10 text-white hover:bg-white/20'"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span class="hidden sm:inline">{{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}</span>
+            </button>
+          </div>
+          <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
+            <button
+              v-for="ep in episodes"
+              :key="ep.id"
+              @click="selectEpisode(ep)"
+              class="relative w-12 h-10 rounded-lg text-sm font-medium transition-all"
+              :class="[
+                selectedEpisode?.id === ep.id
+                  ? 'accent-bg text-white'
+                  : isEpisodeWatched(ep.number)
+                    ? 'accent-bg-muted accent-text border accent-border hover:brightness-125'
+                    : ep.is_filler
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+              ]"
+              :title="ep.title || `Episode ${ep.number}`"
+            >
+              {{ ep.number }}
+              <!-- Watched indicator -->
+              <span
+                v-if="isEpisodeWatched(ep.number) && selectedEpisode?.id !== ep.id"
+                class="absolute -top-1 -right-1 w-3 h-3 accent-bg rounded-full flex items-center justify-center"
+              >
+                <svg class="w-2 h-2 text-black" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Server selector -->
+      <div class="lg:w-72 flex-shrink-0">
+        <!-- Source dropdown — Phase 16 single-option collapse; multi-option panel arrives in Phase 18 -->
+        <div class="mb-4">
+          <h3 class="text-white/60 text-sm flex items-center gap-2 mb-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c2.5-2.5 4-6 4-9s-1.5-6.5-4-9m0 18c-2.5-2.5-4-6-4-9s1.5-6.5 4-9m-9 9h18" />
+            </svg>
+            {{ $t('player.source') }}
+          </h3>
+          <div
+            v-if="availableProviders.length === 1"
+            class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm font-medium text-white cursor-default flex items-center justify-between"
+            :title="$t('player.sourceSingleTooltip', { provider: capitalizeProvider(availableProviders[0]) })"
+            data-testid="source-chip"
+          >
+            <span class="capitalize">{{ capitalizeProvider(availableProviders[0]) }}</span>
+            <svg class="w-4 h-4 text-white/40" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" /></svg>
+          </div>
+          <!-- TODO Phase 18 — replace this fallback chip with the multi-option dropdown panel per UI-SPEC §ProviderSourceDropdown -->
+          <div
+            v-else
+            class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+            data-testid="source-chip"
+          >
+            <span class="capitalize">{{ capitalizeProvider(selectedProvider || availableProviders[0]) }}</span>
+          </div>
+        </div>
+
+        <!-- Player type toggle -->
+        <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {{ $t('player.playerLabel') }}
+        </h3>
+        <div class="flex gap-2 mb-4">
+          <button
+            @click="switchPlayerType('videojs')"
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+            :class="playerType === 'videojs'
+              ? 'accent-bg-muted accent-text border accent-border'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            Video.js
+          </button>
+          <button
+            @click="switchPlayerType('native')"
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+            :class="playerType === 'native'
+              ? 'accent-bg-muted accent-text border accent-border'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            {{ $t('player.native') }}
+          </button>
+        </div>
+
+        <!-- Category tabs (Sub/Dub) -->
+        <div class="flex gap-2 mb-3">
+          <button
+            @click="setSelectedCategory('sub')"
+            class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+            :class="selectedCategory === 'sub'
+              ? 'accent-bg-muted accent-text border accent-border'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            </svg>
+            {{ $t('player.sub') }}
+            <span class="text-xs opacity-70">({{ subServers.length }})</span>
+          </button>
+          <button
+            @click="setSelectedCategory('dub')"
+            class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+            :class="selectedCategory === 'dub'
+              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            {{ $t('player.dub') }}
+            <span class="text-xs opacity-70">({{ dubServers.length }})</span>
+          </button>
+        </div>
+
+        <!-- Loading servers -->
+        <div v-if="loadingServers" class="flex items-center justify-center py-8">
+          <div class="w-8 h-8 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+        </div>
+
+        <!-- Server list -->
+        <div v-else class="space-y-2 max-h-[350px] lg:max-h-[450px] overflow-y-auto custom-scrollbar pr-1">
+          <template v-if="filteredServers.length > 0">
+            <button
+              v-for="server in filteredServers"
+              :key="server.id"
+              @click="selectServer(server)"
+              class="w-full text-left p-3 rounded-lg transition-all"
+              :class="selectedServer?.id === server.id
+                ? (selectedCategory === 'sub' ? 'accent-bg-muted border accent-border' : 'bg-blue-500/20 border border-blue-500/50')
+                : 'bg-white/5 border border-transparent hover:bg-white/10'"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                  <p class="text-white font-medium truncate">{{ server.name }}</p>
+                </div>
+                <div
+                  v-if="selectedServer?.id === server.id"
+                  class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                  :class="selectedCategory === 'sub' ? 'accent-bg' : 'bg-blue-500'"
+                >
+                  <svg class="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </button>
+          </template>
+          <div v-else class="text-center py-8 text-white/40">
+            <p>{{ selectedCategory === 'sub' ? $t('player.noSubtitlesAvailable') : $t('player.noDubAvailable') }}</p>
+          </div>
+        </div>
+
+        <!-- Subtitles section -->
+        <div v-if="subtitles.length > 0 || selectedEpisode" class="mt-4 p-3 rounded-lg bg-white/5">
+          <h4 class="text-white/60 text-sm mb-2">{{ $t('player.subtitles') }}</h4>
+
+          <div class="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+            <!-- "Off" option -->
+            <button
+              @click="deactivateSubtitle"
+              class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+              :class="!activeSubtitleUrl
+                ? 'accent-bg-muted accent-text'
+                : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
+            >
+              Off
+            </button>
+
+            <!-- Stream subtitles (EN, etc.) -->
+            <button
+              v-for="sub in subtitles"
+              :key="sub.url"
+              @click="activateStreamSubtitle(sub)"
+              class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+              :class="activeSubtitleUrl === sub.url
+                ? 'accent-bg-muted accent-text'
+                : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
+            >
+              {{ sub.label || sub.lang }}
+            </button>
+
+            <!-- Jimaku JP subs -->
+            <button
+              v-for="(sub, index) in jimakuSubtitles"
+              :key="'jp-' + index"
+              @click="activateJimakuSubtitle(sub)"
+              class="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+              :class="activeSubtitleUrl === sub.url
+                ? 'bg-red-500/20 text-red-400'
+                : 'text-white/50 hover:bg-white/5 hover:text-white/70'"
+            >
+              JP {{ sub.file_name }} ({{ sub.format }})
+            </button>
+          </div>
+
+          <!-- Load JP Subs button -->
+          <button
+            v-if="selectedEpisode && !jimakuLoaded"
+            @click="fetchJimakuSubtitles"
+            :disabled="loadingJimaku"
+            class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+            :class="loadingJimaku
+              ? 'bg-white/5 text-white/40'
+              : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+          >
+            <svg v-if="loadingJimaku" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span v-else>JP</span>
+            Load JP Subs
+          </button>
+          <div v-if="jimakuError" class="mt-1 text-xs text-red-400/70">{{ jimakuError }}</div>
+
+          <!-- Toggle visibility -->
+          <button
+            v-if="activeSubtitleUrl"
+            @click="showSubtitleOverlay = !showSubtitleOverlay"
+            class="mt-2 w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="showSubtitleOverlay
+              ? 'accent-bg-muted accent-text border accent-border'
+              : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'"
+          >
+            {{ showSubtitleOverlay ? 'Hide Subs' : 'Show Subs' }}
+          </button>
+
+          <!-- Subtitle timing offset (only for JP subs) -->
+          <div
+            v-if="activeJimakuSub"
+            class="mt-3 pt-3 border-t border-white/10"
+          >
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-white/60 text-xs">Timing offset</span>
+              <span class="text-[10px] text-white/30" title="Hotkeys: Z / X">Z / X</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button
+                @click="adjustJpSubtitleOffset(-0.5)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="-0.5s"
+              >−0.5</button>
+              <button
+                @click="adjustJpSubtitleOffset(-0.1)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="-0.1s"
+              >−0.1</button>
+              <input
+                type="number"
+                step="0.1"
+                :value="jpSubtitleOffset.toFixed(1)"
+                @change="onJpSubtitleOffsetInput(($event.target as HTMLInputElement).value)"
+                class="flex-1 min-w-0 px-1 py-1 rounded bg-white/5 text-white text-xs text-center border border-transparent focus:border-white/20 focus:outline-none"
+                aria-label="JP subtitle offset in seconds"
+              />
+              <span class="text-[10px] text-white/40">s</span>
+              <button
+                @click="adjustJpSubtitleOffset(0.1)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="+0.1s"
+              >+0.1</button>
+              <button
+                @click="adjustJpSubtitleOffset(0.5)"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="+0.5s"
+              >+0.5</button>
+              <button
+                @click="resetJpSubtitleOffset"
+                class="px-1.5 py-1 rounded bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                title="Reset to 0"
+                aria-label="Reset offset"
+              >⟲</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Server load warning -->
+    <div v-if="serverLoadWarning" class="mt-4 p-4 bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-400">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        {{ serverLoadWarning }}
+      </div>
+    </div>
+
+    <!-- Error message -->
+    <div v-if="error" class="mt-4 p-4 bg-pink-500/20 border border-pink-500/30 rounded-lg text-pink-400">
+      {{ error }}
+    </div>
+
+    <!-- Report button -->
+    <ReportButton
+      player-type="english"
+      :anime-id="animeId"
+      :anime-name="animeName || animeId"
+      :episode-number="selectedEpisode?.number"
+      :server-name="selectedServer?.name"
+      :stream-url="streamUrl"
+      :error-message="error"
+      :accent-color="ACCENT_COLOR"
+      :scraper-provider="reportProvider"
+      :tried-chain="triedChain"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, toRef, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+import videojs from 'video.js'
+import 'video.js/dist/video-js.css'
+import Hls from 'hls.js'
+import { scraperApi, jimakuApi, userApi } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
+import { useOverrideTracker } from '@/composables/useOverrideTracker'
+import { useWatchSession } from '@/composables/useWatchSession'
+import { useWatchPreferences } from '@/composables/useWatchPreferences'
+import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
+import SubtitleOverlay from './SubtitleOverlay.vue'
+import ReportButton from './ReportButton.vue'
+import type { WatchCombo } from '@/types/preference'
+
+// Cyan accent for the unified English-source player (Phase 16 UI-SPEC §Color).
+const ACCENT_COLOR = '#00d4ff'
+
+interface ScraperEpisode {
+  id: string
+  number: number
+  title: string
+  is_filler: boolean
+}
+
+interface ScraperServer {
+  id: string
+  name: string
+  type: string // sub, dub, raw
+}
+
+interface ScraperSubtitle {
+  url: string
+  lang: string
+  label: string
+  default: boolean
+}
+
+interface ScraperStream {
+  url: string
+  type: string // hls, mp4, iframe
+  subtitles?: ScraperSubtitle[]
+  headers?: Record<string, string>
+  intro?: { start: number; end: number }
+  outro?: { start: number; end: number }
+}
+
+// Display label helper — provider names stay verbatim per UI-SPEC §Copywriting,
+// but the slug 'animepahe' should render with a capital A: "AnimePahe".
+function capitalizeProvider(name: string | null | undefined): string {
+  if (!name) return ''
+  const slug = name.toLowerCase()
+  if (slug === 'animepahe') return 'AnimePahe'
+  if (slug === '9anime') return '9anime'
+  if (slug === 'animekai') return 'AnimeKai'
+  // Default: capitalize first letter — keeps unknown providers readable.
+  return slug.charAt(0).toUpperCase() + slug.slice(1)
+}
+
+interface ProxyStatus {
+  active_connections: number
+  max_connections: number
+  load_percent: number
+  available: boolean
+}
+
+type PlayerType = 'videojs' | 'native'
+
+const props = defineProps<{
+  animeId: string
+  animeName?: string
+  totalEpisodes?: number
+  initialEpisode?: number
+  preferredCombo?: WatchCombo | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'progress', data: { episode: number; time: number; maxTime: number }): void
+  (e: 'episodeWatched', data: { episode: number }): void
+  (e: 'availableTranslations', combos: WatchCombo[]): void
+}>()
+
+const authStore = useAuthStore()
+const { t } = useI18n()
+
+// Player type (persisted)
+const playerType = ref<PlayerType>(
+  (localStorage.getItem('preferred_player') as PlayerType) || 'videojs'
+)
+
+// State
+const episodes = ref<ScraperEpisode[]>([])
+const servers = ref<ScraperServer[]>([])
+const selectedEpisode = ref<ScraperEpisode | null>(null)
+const selectedServer = ref<ScraperServer | null>(null)
+const selectedCategory = ref<'sub' | 'dub'>('sub')
+const streamUrl = ref<string | null>(null)
+const streamType = ref<'hls' | 'mp4' | 'iframe'>('hls')
+const subtitles = ref<ScraperSubtitle[]>([])
+const streamReferer = ref('')
+
+const loadingEpisodes = ref(false)
+const loadingServers = ref(false)
+const loadingStream = ref(false)
+const error = ref<string | null>(null)
+const serverLoadWarning = ref<string | null>(null)
+
+// Phase 16 — orchestrator state surfaced through the Source dropdown + ReportButton.
+// availableProviders is populated from scraperApi.getHealth() on mount; it stays
+// at ['animepahe'] when the health probe fails (fail-open per UI-SPEC Edge Cases).
+// selectedProvider null means "let the orchestrator default" (Phase 16: AnimePahe).
+// triedChain mirrors response.data.meta.tried after every scraper call so the
+// ReportButton modal can show "Provider: AnimePahe / Tried: animepahe".
+const availableProviders = ref<string[]>(['animepahe'])
+const selectedProvider = ref<string | null>(null)
+const triedChain = ref<string[]>([])
+const { preferredScraperProvider, setPreferredScraperProvider } = useWatchPreferences(props.animeId)
+
+// Restore prior per-anime scraper provider preference (24h TTL inside the composable).
+if (
+  preferredScraperProvider.value &&
+  availableProviders.value.includes(preferredScraperProvider.value)
+) {
+  selectedProvider.value = preferredScraperProvider.value
+}
+
+// Effective provider name for ReportButton (never null — falls back to first
+// available, then to 'animepahe' as the safety net).
+const reportProvider = computed(
+  () => selectedProvider.value || availableProviders.value[0] || 'animepahe',
+)
+
+// Helper to extract `meta.tried` from both success and error envelopes. The
+// scraper handler wraps successes via httputil.OK (data.data.meta.tried) and
+// puts meta at the top level on errors (data.meta.tried) — Phase 16-05 contract.
+function extractTried(raw: unknown): string[] {
+  const obj = raw as { data?: { meta?: { tried?: unknown }; tried?: unknown }; meta?: { tried?: unknown } } | undefined
+  const a = obj?.data?.meta?.tried
+  if (Array.isArray(a)) return a.map(String)
+  const b = obj?.meta?.tried
+  if (Array.isArray(b)) return b.map(String)
+  return []
+}
+
+function updateTriedChain(envelope: unknown) {
+  const next = extractTried(envelope)
+  triedChain.value = next.length > 0
+    ? next
+    : [selectedProvider.value || availableProviders.value[0] || 'animepahe']
+}
+
+const playerContainer = ref<HTMLDivElement | null>(null)
+const videoRef = ref<HTMLVideoElement | null>(null)
+const nativeVideoRef = ref<HTMLVideoElement | null>(null)
+let vjsPlayer: ReturnType<typeof videojs> | null = null
+const vjsPlayerReady = ref(false)
+let hls: Hls | null = null
+let decodeErrorCount = 0
+let codecRetryCount = 0
+
+// Progress tracking
+const currentTime = ref(0)
+const maxTime = ref(0)
+const lastSaveTime = ref(0)
+const SAVE_INTERVAL = 30
+const AUTO_MARK_THRESHOLD = 20 * 60 // 20 minutes
+
+// Jimaku Japanese subtitles
+interface JimakuSubtitle {
+  url: string
+  file_name: string
+  lang: string
+  format: string
+}
+const jimakuSubtitles = ref<JimakuSubtitle[]>([])
+const loadingJimaku = ref(false)
+const jimakuLoaded = ref(false)
+const jimakuError = ref<string | null>(null)
+// Subtitle overlay state
+const activeSubtitleUrl = ref<string | null>(null)
+const activeSubtitleFormat = ref<'ass' | 'srt' | 'vtt' | null>(null)
+const showSubtitleOverlay = ref(true)
+const loadingSubOverlay = ref(false)
+
+// JP subtitle timing offset (seconds). Stored per (animeId, subtitle team)
+// in localStorage so corrections stick across episodes and sessions for the
+// same release group, but reset when the user switches to a different group.
+const jpSubtitleOffset = ref(0)
+const activeJimakuSub = ref<JimakuSubtitle | null>(null)
+
+/** Extract a stable "team signature" from a Jimaku filename.
+ *  Prefers a leading "[Team Name]" tag (e.g. "[Erai-raws] Frieren - 01.ass"),
+ *  falls back to the first alphanumeric token, then to "default". */
+function extractSubtitleTeam(fileName: string): string {
+  const tag = fileName.match(/^\s*\[([^\]]+)\]/)
+  if (tag) return tag[1].trim().toLowerCase()
+  const token = fileName.match(/^\s*([A-Za-z0-9_-]+)/)
+  if (token) return token[1].toLowerCase()
+  return 'default'
+}
+
+function jpOffsetStorageKey(sub: JimakuSubtitle): string {
+  return `jp_sub_offset:${props.animeId}:${extractSubtitleTeam(sub.file_name)}`
+}
+
+function loadJpSubtitleOffset(sub: JimakuSubtitle): number {
+  try {
+    const raw = localStorage.getItem(jpOffsetStorageKey(sub))
+    if (raw === null) return 0
+    const n = parseFloat(raw)
+    return Number.isFinite(n) ? n : 0
+  } catch {
+    return 0
+  }
+}
+
+function saveJpSubtitleOffset() {
+  if (!activeJimakuSub.value) return
+  try {
+    if (jpSubtitleOffset.value === 0) {
+      localStorage.removeItem(jpOffsetStorageKey(activeJimakuSub.value))
+    } else {
+      localStorage.setItem(
+        jpOffsetStorageKey(activeJimakuSub.value),
+        jpSubtitleOffset.value.toFixed(2),
+      )
+    }
+  } catch {
+    // localStorage unavailable — silently keep in-memory only
+  }
+}
+
+function adjustJpSubtitleOffset(delta: number) {
+  // Clamp to a sane range (±30s) and round to 2 decimals to avoid FP drift.
+  const next = Math.max(-30, Math.min(30, jpSubtitleOffset.value + delta))
+  jpSubtitleOffset.value = Math.round(next * 100) / 100
+  saveJpSubtitleOffset()
+}
+
+function resetJpSubtitleOffset() {
+  jpSubtitleOffset.value = 0
+  saveJpSubtitleOffset()
+}
+
+function onJpSubtitleOffsetInput(value: string) {
+  const n = parseFloat(value)
+  if (!Number.isFinite(n)) return
+  jpSubtitleOffset.value = Math.max(-30, Math.min(30, Math.round(n * 100) / 100))
+  saveJpSubtitleOffset()
+}
+
+// Computed: get the active video element for subtitle sync
+const activeVideoElement = computed<HTMLVideoElement | null>(() => {
+  if (playerType.value === 'videojs' && vjsPlayerReady.value && vjsPlayer) {
+    return vjsPlayer.el()?.querySelector('video') || null
+  }
+  return nativeVideoRef.value
+})
+
+// Watch tracking
+const markingWatched = ref(false)
+const episodeMarkedWatched = ref(false)
+const watchedEpisodes = ref(0)
+
+// Computed
+const subServers = computed(() => servers.value.filter(s => s.type === 'sub'))
+const dubServers = computed(() => servers.value.filter(s => s.type === 'dub'))
+const filteredServers = computed(() =>
+  selectedCategory.value === 'sub' ? subServers.value : dubServers.value
+)
+
+const currentCombo = computed((): WatchCombo | null => {
+  if (!selectedServer.value) return null
+  return {
+    player: 'english',
+    language: 'en',
+    watch_type: selectedCategory.value === 'dub' ? 'dub' : 'sub',
+    translation_id: selectedServer.value.id,
+    translation_title: selectedServer.value.name
+  }
+})
+
+// currentEpisodeNumber: numeric ref for the override tracker. EnglishPlayer
+// stores the episode as the full ScraperEpisode object — extract the number lazily.
+const currentEpisodeNumber = computed(() => selectedEpisode.value?.number ?? 0)
+
+// Override tracker. User-click handlers (selectEpisode, selectServer, the
+// sub/dub category toggle) wrap their existing logic with recordPickerEvent
+// BEFORE the work; programmatic call sites — fetchEpisodes initial auto-pick,
+// fetchServers initial auto-pick, tryNextServer, the selectedCategory watcher,
+// and the videojs/hls error-recovery handlers — bypass via _advanceServer /
+// _advanceEpisode siblings to avoid false-positive overrides on auto-advance.
+// See .planning/phases/01-instrumentation-baseline/01-RESEARCH.md §Pitfall 1.
+const tracker = useOverrideTracker({
+  animeId: props.animeId,
+  player: 'english',
+  resolvedCombo: toRef(props, 'preferredCombo'),
+  currentEpisode: currentEpisodeNumber,
+})
+
+// Phase 5 (G-04-lite + G-01): playback session correlation + drop-off beacon.
+const { sessionId, newSession, registerBeaconHooks } = useWatchSession()
+watch(currentEpisodeNumber, (n, old) => { if (n && n !== old) newSession() })
+registerBeaconHooks(() => {
+  const ep = selectedEpisode.value?.number
+  if (!ep || ep <= 0) return null
+  return {
+    animeId: props.animeId,
+    episodeNumber: ep,
+    progressSeconds: Math.floor(currentTime.value),
+  }
+})
+
+// Methods
+const fetchEpisodes = async (retries = 2) => {
+  loadingEpisodes.value = true
+  error.value = null
+
+  try {
+    const response = await scraperApi.getEpisodes(props.animeId, selectedProvider.value || undefined)
+    updateTriedChain(response.data)
+    // Scraper handler envelope: { success, data: { episodes: [...], meta: { tried } } }
+    const env = response.data as { data?: { episodes?: ScraperEpisode[] } } | ScraperEpisode[] | undefined
+    let list: ScraperEpisode[] = []
+    if (env && !Array.isArray(env) && env.data && Array.isArray(env.data.episodes)) {
+      list = env.data.episodes
+    } else if (Array.isArray(env)) {
+      list = env
+    }
+    episodes.value = list
+
+    // Mark episodes as loaded BEFORE selecting first episode
+    // This allows the video player container to render so videoRef is available
+    loadingEpisodes.value = false
+
+    // Auto-select first episode — programmatic, no override emission.
+    if (episodes.value.length > 0) {
+      const initialEp = props.initialEpisode
+        ? episodes.value.find(e => e.number === props.initialEpisode) || episodes.value[0]
+        : episodes.value[0]
+      await _advanceEpisode(initialEp)
+    }
+  } catch (err: unknown) {
+    if (retries > 0) {
+      // Retry after a short delay
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      return fetchEpisodes(retries - 1)
+    }
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || t('player.error.loadEpisodes')
+    episodes.value = []
+    loadingEpisodes.value = false
+  }
+}
+
+const fetchServers = async (episodeId: string) => {
+  loadingServers.value = true
+
+  try {
+    const response = await scraperApi.getServers(props.animeId, episodeId, selectedProvider.value || undefined)
+    updateTriedChain(response.data)
+    // Scraper handler envelope: { success, data: { servers: [...], meta: { tried } } }
+    const env = response.data as { data?: { servers?: ScraperServer[] } } | ScraperServer[] | undefined
+    let list: ScraperServer[] = []
+    if (env && !Array.isArray(env) && env.data && Array.isArray(env.data.servers)) {
+      list = env.data.servers
+    } else if (Array.isArray(env)) {
+      list = env
+    }
+    servers.value = list
+
+    // Emit available translations as WatchCombo[]
+    const combos: WatchCombo[] = servers.value.map(s => ({
+      player: 'english' as const,
+      language: 'en' as const,
+      watch_type: s.type === 'dub' ? 'dub' as const : 'sub' as const,
+      translation_id: s.id,
+      translation_title: s.name
+    }))
+    emit('availableTranslations', combos)
+
+    // Auto-select from preferredCombo if it matches this player. All branches
+    // here are programmatic auto-picks — bypass the user-click wrapper so no
+    // false override fires.
+    let autoSelected = false
+    if (props.preferredCombo?.player === 'english') {
+      const match = servers.value.find(
+        s => s.id === props.preferredCombo!.translation_id
+          || s.name === props.preferredCombo!.translation_title
+      )
+      if (match) {
+        selectedCategory.value = match.type as 'sub' | 'dub'
+        autoSelected = true
+        await _advanceServer(match)
+      }
+    }
+
+    if (!autoSelected) {
+      // Auto-select first server of preferred category
+      const preferredServers = selectedCategory.value === 'sub' ? subServers.value : dubServers.value
+      if (preferredServers.length > 0) {
+        await _advanceServer(preferredServers[0])
+      } else if (servers.value.length > 0) {
+        // Fall back to any available server
+        selectedCategory.value = servers.value[0].type as 'sub' | 'dub'
+        await _advanceServer(servers.value[0])
+      }
+    }
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || t('player.error.loadServers')
+    servers.value = []
+  } finally {
+    loadingServers.value = false
+  }
+}
+
+const checkServerLoad = async (): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/streaming/proxy-status')
+    if (!response.ok) return true // Assume available if status check fails
+
+    const status: ProxyStatus = await response.json()
+    if (status.load_percent > 80) {
+      serverLoadWarning.value = t('player.error.serverLoaded')
+    } else {
+      serverLoadWarning.value = null
+    }
+    return status.available
+  } catch {
+    return true // Assume available if status check fails
+  }
+}
+
+const disposeCurrentPlayer = () => {
+  if (vjsPlayer) {
+    vjsPlayer.dispose()
+    vjsPlayer = null
+    vjsPlayerReady.value = false
+  }
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+}
+
+const fetchStream = async () => {
+  if (!selectedEpisode.value || !selectedServer.value) return
+
+  // Dispose existing player BEFORE reactive state changes remove the DOM element
+  disposeCurrentPlayer()
+  streamUrl.value = null // Force Vue to remove old video element and create fresh one
+
+  loadingStream.value = true
+  error.value = null
+  serverLoadWarning.value = null
+
+  try {
+    // Check server load before fetching stream
+    await checkServerLoad()
+
+    // Pass server ID through to the scraper orchestrator. Phase 16's AnimePahe
+    // provider keys streams by its internal server ID; lowercasing isn't
+    // required for the scraper contract (Phase 16-05 handler does no normalisation).
+    const serverId = selectedServer.value.id
+    const response = await scraperApi.getStream(
+      props.animeId,
+      selectedEpisode.value.id,
+      serverId,
+      selectedCategory.value,
+      selectedProvider.value || undefined,
+    )
+    updateTriedChain(response.data)
+    // Scraper handler envelope: { success, data: { stream: {...}, meta: { tried } } }
+    const env = response.data as { data?: { stream?: ScraperStream } | ScraperStream } | undefined
+    let data: ScraperStream
+    if (env && (env as { data?: { stream?: ScraperStream } }).data && (env as { data: { stream?: ScraperStream } }).data.stream) {
+      data = (env as { data: { stream: ScraperStream } }).data.stream
+    } else if (env && (env as { data?: ScraperStream }).data && (env as { data: ScraperStream }).data.url) {
+      // Tolerate non-nested data.url envelope (legacy / fallthrough).
+      data = (env as { data: ScraperStream }).data
+    } else {
+      throw new Error('scraper stream response missing data.stream')
+    }
+
+    streamUrl.value = data.url
+    streamType.value = data.type as 'hls' | 'mp4' | 'iframe'
+    subtitles.value = data.subtitles || []
+
+    const headers = data.headers || {}
+    const referer = headers['Referer'] || headers['referer'] || ''
+    streamReferer.value = referer
+
+    // Initialize player if HLS
+    if (data.type === 'hls' && data.url) {
+      // Wait for Vue to render the video element
+      await nextTick()
+
+      const targetRef = playerType.value === 'videojs' ? videoRef : nativeVideoRef
+      let retries = 0
+      while (!targetRef.value && retries < 5) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+        retries++
+      }
+
+      if (!targetRef.value) {
+        console.error('[English] Video element not found')
+        error.value = t('player.error.playerInit')
+        return
+      }
+
+      initPlayer(data.url, referer)
+    }
+  } catch (err: unknown) {
+    // Show detailed error from backend
+    const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
+    const message = e.response?.data?.error?.message
+      || e.response?.data?.message
+      || t('player.error.loadVideo')
+    // Show friendly message for rate-limited servers
+    if (message.includes('overloaded') || message.includes('429')) {
+      error.value = `😔 Server ${selectedServer.value?.name || ''} is overloaded right now. Try selecting a different server.`
+    } else {
+      error.value = message
+    }
+    streamUrl.value = null
+  } finally {
+    loadingStream.value = false
+  }
+}
+
+const buildProxyUrl = (url: string, referer: string): string => {
+  // Route HLS streams through our backend proxy which can set the Referer header
+  const params = new URLSearchParams()
+  params.set('url', url)
+  if (referer) {
+    params.set('referer', referer)
+  }
+  return `/api/streaming/hls-proxy?${params.toString()}`
+}
+
+// Jimaku Japanese subtitles
+const fetchJimakuSubtitles = async () => {
+  if (!selectedEpisode.value || loadingJimaku.value) return
+
+  loadingJimaku.value = true
+  jimakuError.value = null
+
+  try {
+    const response = await jimakuApi.getSubtitles(props.animeId, selectedEpisode.value.number)
+    const data = response.data?.data || response.data
+    jimakuSubtitles.value = data.subtitles || []
+    jimakuLoaded.value = true
+
+    if (jimakuSubtitles.value.length === 0) {
+      jimakuError.value = t('player.error.noJpSubs')
+    }
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { error?: string; message?: string } }; message?: string }
+    const msg = e.response?.data?.error || e.response?.data?.message || e.message
+    jimakuError.value = msg || t('player.error.loadJpSubs')
+    jimakuLoaded.value = false
+  } finally {
+    loadingJimaku.value = false
+  }
+}
+
+const activateStreamSubtitle = (sub: { url: string; lang: string; label?: string }) => {
+  activeSubtitleUrl.value = sub.url
+  activeSubtitleFormat.value = 'vtt' // Scraper stream subs are VTT
+  showSubtitleOverlay.value = true
+  // Stream subs don't use the JP offset — clear it to avoid a stale shift.
+  activeJimakuSub.value = null
+  jpSubtitleOffset.value = 0
+}
+
+const deactivateSubtitle = () => {
+  activeSubtitleUrl.value = ''
+  activeSubtitleFormat.value = null
+  showSubtitleOverlay.value = false
+  activeJimakuSub.value = null
+  jpSubtitleOffset.value = 0
+}
+
+const activateJimakuSubtitle = (sub: JimakuSubtitle) => {
+  activeSubtitleUrl.value = sub.url
+  activeSubtitleFormat.value = (sub.format as 'ass' | 'srt' | 'vtt') || 'ass'
+  showSubtitleOverlay.value = true
+  activeJimakuSub.value = sub
+  jpSubtitleOffset.value = loadJpSubtitleOffset(sub)
+}
+
+const initPlayer = (url: string, referer: string) => {
+  if (playerType.value === 'videojs') {
+    initVideoJsPlayer(url, referer)
+  } else {
+    initHlsPlayer(url, referer)
+  }
+}
+
+const initVideoJsPlayer = (url: string, referer: string = '') => {
+  if (vjsPlayer) {
+    vjsPlayer.dispose()
+    vjsPlayer = null
+  }
+
+  if (!videoRef.value) return
+
+  const proxyUrl = buildProxyUrl(url, referer)
+
+  vjsPlayer = videojs(videoRef.value, {
+    controls: true,
+    autoplay: false,
+    preload: 'auto',
+    fill: true,
+    playsinline: true,
+  })
+
+  // Attach events
+  vjsPlayer.on('timeupdate', handleTimeUpdate)
+  vjsPlayer.on('pause', handlePause)
+  vjsPlayer.on('ended', handleEnded)
+  vjsPlayer.on('error', () => {
+    const err = vjsPlayer?.error()
+    if (err) {
+      console.error('[English Video.js Error]', err.code, err.message)
+      if (err.code === 3 && decodeErrorCount < 1) {
+        decodeErrorCount++
+        tryNextServer()
+        return
+      }
+      error.value = t('player.error.playback')
+    }
+  })
+
+  // Set source, then add subtitles and play
+  vjsPlayer.src({ src: proxyUrl, type: 'application/x-mpegURL' })
+  vjsPlayer.ready(() => {
+    vjsPlayerReady.value = true
+    vjsPlayer?.play()?.catch(() => {})
+
+    // Override fullscreen to target the outer container (which includes SubtitleOverlay)
+    // so subtitles remain visible in fullscreen mode.
+    if (playerContainer.value && vjsPlayer) {
+      const container = playerContainer.value
+      const player = vjsPlayer
+      player.requestFullscreen = () => container.requestFullscreen()
+      player.exitFullscreen = () => document.exitFullscreen()
+    }
+  })
+}
+
+const initHlsPlayer = (url: string, referer: string = '') => {
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+
+  const video = nativeVideoRef.value
+  if (!video) return
+
+  const proxyUrl = buildProxyUrl(url, referer)
+
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      backBufferLength: 90,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      maxBufferSize: 60 * 1000 * 1000,
+      startLevel: -1,
+      defaultAudioCodec: 'mp4a.40.2',
+    })
+
+    hls.loadSource(proxyUrl)
+    hls.attachMedia(video)
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play().catch(() => {})
+    })
+
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) {
+        console.error('[English HLS Error]', data.type, data.details)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((data as any).response?.code === 503) {
+          error.value = t('player.error.serverBusy')
+        } else {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls?.startLoad()
+              break
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              if (data.details === 'bufferAddCodecError' && codecRetryCount < 1) {
+                codecRetryCount++
+                console.warn('[English] Unsupported audio codec (likely mp4a.40.1), reinitializing with AAC-LC fallback')
+                initHlsPlayer(url, referer)
+                break
+              }
+              if (decodeErrorCount < 1) {
+                decodeErrorCount++
+                hls?.recoverMediaError()
+              } else {
+                tryNextServer()
+              }
+              break
+            default:
+              error.value = t('player.error.playback')
+          }
+        }
+      }
+    })
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Native HLS support (Safari) - still needs proxy
+    video.src = proxyUrl
+    video.addEventListener('loadedmetadata', () => {
+      video.play().catch(() => {})
+    })
+  } else {
+    error.value = t('player.error.hlsUnsupported')
+  }
+}
+
+const switchPlayerType = async (type: PlayerType) => {
+  if (type === playerType.value) return
+
+  disposeCurrentPlayer()
+
+  const savedUrl = streamUrl.value
+  const savedReferer = streamReferer.value
+  const savedType = streamType.value
+
+  // Clear stream to remove player DOM elements
+  streamUrl.value = null
+  playerType.value = type
+  localStorage.setItem('preferred_player', type)
+
+  // Re-init player if HLS stream was active
+  if (savedUrl && savedType === 'hls') {
+    await nextTick()
+
+    streamUrl.value = savedUrl
+    streamType.value = savedType
+    await nextTick()
+
+    const targetRef = type === 'videojs' ? videoRef : nativeVideoRef
+    let retries = 0
+    while (!targetRef.value && retries < 5) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      retries++
+    }
+
+    if (targetRef.value) {
+      initPlayer(savedUrl, savedReferer)
+    }
+  } else if (savedUrl) {
+    // Non-HLS stream (iframe) - just restore URL
+    streamUrl.value = savedUrl
+    streamType.value = savedType
+  }
+}
+
+// Programmatic (no-tracking) episode selector. Used by fetchEpisodes initial
+// auto-pick and any other non-user code path. Keep behavior identical to
+// selectEpisode minus the recordPickerEvent.
+const _advanceEpisode = async (episode: ScraperEpisode) => {
+  if (selectedEpisode.value?.id === episode.id) return
+
+  // Save progress before switching
+  saveProgress()
+
+  selectedEpisode.value = episode
+  episodeMarkedWatched.value = isEpisodeWatched(episode.number)
+  currentTime.value = 0
+  maxTime.value = 0
+  lastSaveTime.value = 0
+
+  // Reset stream and jimaku state
+  streamUrl.value = null
+  servers.value = []
+  selectedServer.value = null
+  jimakuSubtitles.value = []
+  jimakuLoaded.value = false
+  jimakuError.value = null
+  activeSubtitleUrl.value = null
+  activeSubtitleFormat.value = null
+  activeJimakuSub.value = null
+  jpSubtitleOffset.value = 0
+
+  // Fetch servers for this episode
+  await fetchServers(episode.id)
+}
+
+// User-click episode selector — fires combo_override ('episode') BEFORE the work.
+const selectEpisode = async (episode: ScraperEpisode) => {
+  if (selectedEpisode.value?.id === episode.id) return
+  tracker.recordPickerEvent('episode', { episode: episode.number })
+  await _advanceEpisode(episode)
+}
+
+const tryNextServer = async () => {
+  const currentServers = filteredServers.value
+  const currentIdx = currentServers.findIndex(s => s.id === selectedServer.value?.id)
+  const nextServer = currentServers[currentIdx + 1]
+  if (nextServer) {
+    console.warn(`[English] Decode error, switching to server: ${nextServer.name}`)
+    error.value = t('player.error.decoding', { server: nextServer.name })
+    // Programmatic auto-advance — bypass the tracker (Pitfall 1).
+    await _advanceServer(nextServer)
+  } else {
+    error.value = t('player.error.decodingFallback')
+  }
+}
+
+// Programmatic (no-tracking) server selector. Called from tryNextServer (auto-
+// recovery on decode/media error), fetchServers initial auto-pick, and the
+// selectedCategory watcher's auto-advance to a server matching the new
+// category. Keep behavior identical to selectServer minus the recordPickerEvent.
+const _advanceServer = async (server: ScraperServer) => {
+  if (selectedServer.value?.id === server.id) return
+
+  selectedServer.value = server
+  decodeErrorCount = 0
+  codecRetryCount = 0
+  await fetchStream()
+}
+
+// User-click server selector — fires combo_override ('team') BEFORE the work.
+const selectServer = async (server: ScraperServer) => {
+  if (selectedServer.value?.id === server.id) return
+  tracker.recordPickerEvent('team', {
+    translation_title: server.name,
+    player: 'english',
+  })
+  await _advanceServer(server)
+}
+
+// User-click category toggle — fires combo_override ('language') BEFORE the
+// state mutation. The watcher on selectedCategory below picks the matching
+// server via _advanceServer, so the watch fires no false-positive 'team'
+// override.
+const setSelectedCategory = (category: 'sub' | 'dub') => {
+  if (selectedCategory.value === category) return
+  tracker.recordPickerEvent('language', {
+    watch_type: category,
+  })
+  selectedCategory.value = category
+}
+
+// DEV-only test hook (WARNING #7): drives the auto-advance code path
+// deterministically from the E2E spec to verify Pitfall 1 invariant —
+// programmatic advances do NOT funnel through the user-click handler and
+// therefore do NOT increment combo_override_total. Gated by import.meta.env.DEV
+// so this whole block is dead-code-eliminated from `bunx vite build` output.
+// NEVER use this in production code paths.
+if (import.meta.env.DEV) {
+  const w = window as unknown as { __aenigForceAdvanceEnglish?: () => void }
+  w.__aenigForceAdvanceEnglish = () => {
+    // Pick the first server in the currently-filtered category that is NOT
+    // already selected; if none exists, fall back to the next episode. Either
+    // way, the call goes through _advanceServer / _advanceEpisode (the
+    // unwrapped siblings) — never through selectServer / selectEpisode.
+    const candidates = filteredServers.value.filter(s => s.id !== selectedServer.value?.id)
+    if (candidates.length > 0) {
+      void _advanceServer(candidates[0])
+      return
+    }
+    const epIdx = episodes.value.findIndex(e => e.id === selectedEpisode.value?.id)
+    const nextEp = episodes.value[epIdx + 1]
+    if (nextEp) void _advanceEpisode(nextEp)
+  }
+}
+
+// Progress tracking
+const handleTimeUpdate = () => {
+  if (!selectedEpisode.value) return
+
+  if (vjsPlayer) {
+    currentTime.value = vjsPlayer.currentTime() || 0
+  } else if (nativeVideoRef.value) {
+    currentTime.value = nativeVideoRef.value.currentTime
+  } else {
+    return
+  }
+
+  if (currentTime.value > maxTime.value) {
+    maxTime.value = currentTime.value
+  }
+
+  // Emit progress
+  emit('progress', {
+    episode: selectedEpisode.value?.number || 0,
+    time: currentTime.value,
+    maxTime: maxTime.value
+  })
+
+  // Save progress every 30 seconds
+  if (currentTime.value - lastSaveTime.value >= SAVE_INTERVAL) {
+    lastSaveTime.value = currentTime.value
+    saveProgress()
+  }
+
+  // Auto-mark as watched after 20 minutes
+  if (authStore.isAuthenticated && !episodeMarkedWatched.value && currentTime.value >= AUTO_MARK_THRESHOLD) {
+    autoMarkEpisodeWatched()
+  }
+}
+
+const handlePause = () => {
+  saveProgress()
+}
+
+const handleEnded = () => {
+  saveProgress()
+  if (!episodeMarkedWatched.value) {
+    autoMarkEpisodeWatched()
+  }
+}
+
+const saveProgress = () => {
+  if (!selectedEpisode.value || currentTime.value <= 0) return
+
+  // Save to localStorage
+  const key = `watch_progress:${props.animeId}`
+  const data = JSON.parse(localStorage.getItem(key) || '{}')
+  data[selectedEpisode.value.number] = {
+    time: currentTime.value,
+    maxTime: maxTime.value,
+    updatedAt: Date.now()
+  }
+  localStorage.setItem(key, JSON.stringify(data))
+
+  // Save to server if authenticated
+  if (authStore.isAuthenticated) {
+    userApi.updateProgress({
+      anime_id: props.animeId,
+      episode_number: selectedEpisode.value.number,
+      progress: Math.floor(currentTime.value),
+      duration: Math.floor(maxTime.value) || null,
+      session_id: sessionId.value,
+      ...currentCombo.value,
+    }).catch((err) => console.warn('[English] Failed to save progress:', err))
+  }
+}
+
+// Watch tracking
+const fetchWatchedEpisodes = async () => {
+  if (!authStore.isAuthenticated) {
+    watchedEpisodes.value = 0
+    return
+  }
+
+  try {
+    const response = await userApi.getWatchlistEntry(props.animeId)
+    const entry = response.data?.data || response.data
+    watchedEpisodes.value = entry?.episodes || 0
+  } catch {
+    watchedEpisodes.value = 0
+  }
+}
+
+const isEpisodeWatched = (episodeNum: number): boolean => {
+  return episodeNum <= watchedEpisodes.value
+}
+
+const markCurrentEpisodeWatched = async () => {
+  if (!authStore.isAuthenticated || !selectedEpisode.value || markingWatched.value) return
+
+  markingWatched.value = true
+  try {
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined, sessionId.value)
+    episodeMarkedWatched.value = true
+    if (selectedEpisode.value.number > watchedEpisodes.value) {
+      watchedEpisodes.value = selectedEpisode.value.number
+    }
+    emit('episodeWatched', { episode: selectedEpisode.value.number })
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || t('player.error.markWatched')
+  } finally {
+    markingWatched.value = false
+  }
+}
+
+const autoMarkEpisodeWatched = async () => {
+  if (!authStore.isAuthenticated || !selectedEpisode.value || episodeMarkedWatched.value) return
+
+  try {
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value.number, currentCombo.value ?? undefined, sessionId.value)
+    episodeMarkedWatched.value = true
+    if (selectedEpisode.value.number > watchedEpisodes.value) {
+      watchedEpisodes.value = selectedEpisode.value.number
+    }
+    emit('episodeWatched', { episode: selectedEpisode.value.number })
+    // Phase 14 (REC-EVAL-01): emit rec_watched if a click for this anime
+    // landed in the last hour. Strict click→watched correlation; no match
+    // = no emit (not all auto-marks originate from a recs row click).
+    const recent = findRecentClick(props.animeId)
+    if (recent) {
+      void emitRecWatched({
+        event_type: 'rec_watched',
+        anime_id: props.animeId,
+        signal_id: recent.signal_id,
+        pinned: recent.pinned,
+        pin_source: recent.pin_source,
+        pin_seed_anime_id: recent.pin_seed_anime_id,
+        source_route: 'player',
+        rank: recent.rank,
+      })
+    }
+  } catch (err) {
+    console.warn('[English] Failed to mark episode watched:', err)
+  }
+}
+
+// Keyboard shortcuts (document-level so they work regardless of focus)
+const handleKeyDown = (e: KeyboardEvent) => {
+  const target = e.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+  if (!streamUrl.value) return
+
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault()
+      if (playerType.value === 'videojs' && vjsPlayer) {
+        vjsPlayer.paused() ? vjsPlayer.play() : vjsPlayer.pause()
+      } else if (nativeVideoRef.value) {
+        nativeVideoRef.value.paused ? nativeVideoRef.value.play() : nativeVideoRef.value.pause()
+      }
+      break
+    case 'ArrowLeft':
+      e.preventDefault()
+      if (playerType.value === 'videojs' && vjsPlayer) {
+        vjsPlayer.currentTime(Math.max(0, (vjsPlayer.currentTime() || 0) - 5))
+      } else if (nativeVideoRef.value) {
+        nativeVideoRef.value.currentTime = Math.max(0, nativeVideoRef.value.currentTime - 5)
+      }
+      break
+    case 'ArrowRight':
+      e.preventDefault()
+      if (playerType.value === 'videojs' && vjsPlayer) {
+        vjsPlayer.currentTime((vjsPlayer.currentTime() || 0) + 5)
+      } else if (nativeVideoRef.value) {
+        nativeVideoRef.value.currentTime += 5
+      }
+      break
+    case 'KeyZ':
+      // JP subtitle offset −0.1s (only when JP subs active)
+      if (activeJimakuSub.value) {
+        e.preventDefault()
+        adjustJpSubtitleOffset(-0.1)
+      }
+      break
+    case 'KeyX':
+      // JP subtitle offset +0.1s (only when JP subs active)
+      if (activeJimakuSub.value) {
+        e.preventDefault()
+        adjustJpSubtitleOffset(0.1)
+      }
+      break
+  }
+}
+
+// Watchers
+watch(selectedCategory, () => {
+  // When category changes, select first server of new category. Use the
+  // programmatic _advanceServer sibling — the user already accepted the
+  // language change via setSelectedCategory (which emitted the 'language'
+  // override); the side-effect of picking a matching server is NOT a separate
+  // 'team' override (Pitfall 1).
+  const newServers = selectedCategory.value === 'sub' ? subServers.value : dubServers.value
+  if (newServers.length > 0 && selectedServer.value?.type !== selectedCategory.value) {
+    _advanceServer(newServers[0])
+  }
+})
+
+watch(() => props.animeId, () => {
+  saveProgress()
+  disposeCurrentPlayer()
+  streamUrl.value = null
+  episodes.value = []
+  servers.value = []
+  selectedEpisode.value = null
+  selectedServer.value = null
+  currentTime.value = 0
+  maxTime.value = 0
+  watchedEpisodes.value = 0
+  episodeMarkedWatched.value = false
+  activeJimakuSub.value = null
+  jpSubtitleOffset.value = 0
+  fetchEpisodes()
+  fetchWatchedEpisodes()
+})
+
+// Sync Video.js fullscreen class when outer container is the fullscreen target
+const handleFullscreenChange = () => {
+  if (!vjsPlayer) return
+  const fsEl = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
+  if (fsEl && playerContainer.value?.contains(fsEl) || fsEl === playerContainer.value) {
+    vjsPlayer.addClass('vjs-fullscreen')
+  } else if (!fsEl) {
+    vjsPlayer.removeClass('vjs-fullscreen')
+  }
+}
+
+// Lifecycle
+onMounted(async () => {
+  document.addEventListener('keydown', handleKeyDown)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  // Phase 16 — populate the Source dropdown from the orchestrator's health
+  // report. Fail-open: a getHealth error leaves availableProviders at its
+  // ['animepahe'] default per UI-SPEC §Edge Cases.
+  try {
+    const { data } = await scraperApi.getHealth()
+    // Envelope: { success: true, data: { providers: { animepahe: {...}, ... } } }
+    const env = data as { data?: { providers?: Record<string, unknown> } } | undefined
+    const providers = env?.data?.providers ? Object.keys(env.data.providers) : []
+    if (providers.length > 0) {
+      availableProviders.value = providers
+      // If the prior preference is still in the live provider set, keep it
+      // selected; otherwise drop it via the composable setter so a stale
+      // cache value can't bind to a now-missing provider.
+      if (
+        preferredScraperProvider.value &&
+        !providers.includes(preferredScraperProvider.value)
+      ) {
+        setPreferredScraperProvider(null)
+        selectedProvider.value = null
+      }
+    }
+  } catch {
+    // Fail-open per UI-SPEC §Edge Cases — orchestrator will still attribute
+    // tried[] on every per-request response.
+  }
+  fetchEpisodes()
+  fetchWatchedEpisodes()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleKeyDown)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  saveProgress()
+  disposeCurrentPlayer()
+})
+</script>
+
+<style scoped>
+.english-player {
+  /* Phase 16 UI-SPEC §Color — cyan accent (#00d4ff) anchors the new English
+     tab to the brand spine (matches main.css --color-cyan-400 focus ring). */
+  --player-accent: #00d4ff;
+  --player-accent-rgb: 0, 212, 255;
+  width: 100%;
+}
+
+.accent-bg { background-color: var(--player-accent); }
+.accent-bg-hover:hover { background-color: color-mix(in srgb, var(--player-accent), black 15%); }
+/* UA-036: lightened text mix keeps contrast ≥4.5:1 over accent-bg-muted */
+.accent-text { color: color-mix(in srgb, var(--player-accent), white 40%); }
+.accent-border { border-color: var(--player-accent); }
+.accent-bg-muted { background-color: rgba(var(--player-accent-rgb), 0.28); }
+.accent-ring { --tw-ring-color: rgba(var(--player-accent-rgb), 0.5); }
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Video.js overrides — cyan accent */
+:deep(.video-js) {
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+}
+
+:deep(.video-js .vjs-big-play-button) {
+  background-color: rgba(var(--player-accent-rgb), 0.9);
+  border: none;
+  border-radius: 50%;
+  width: 2em;
+  height: 2em;
+  line-height: 2em;
+  font-size: 3em;
+  transition: all 0.3s;
+}
+
+:deep(.video-js .vjs-big-play-button:hover) {
+  background-color: var(--player-accent);
+  transform: scale(1.1);
+}
+
+:deep(.video-js:hover .vjs-big-play-button),
+:deep(.video-js .vjs-big-play-button:focus) {
+  background-color: var(--player-accent);
+}
+
+:deep(.video-js .vjs-control-bar) {
+  background-color: rgba(26, 26, 26, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+:deep(.video-js .vjs-play-progress) {
+  background-color: var(--player-accent);
+}
+
+:deep(.video-js .vjs-volume-level) {
+  background-color: var(--player-accent);
+}
+
+:deep(.video-js .vjs-slider-horizontal .vjs-volume-level:before) {
+  color: var(--player-accent);
+}
+
+:deep(.video-js .vjs-load-progress) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+:deep(.video-js .vjs-progress-holder) {
+  height: 0.5em;
+}
+
+:deep(.video-js .vjs-play-progress:before) {
+  font-size: 1em;
+  top: -0.25em;
+}
+</style>

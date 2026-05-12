@@ -25,7 +25,7 @@ import type { WatchCombo, ResolvedCombo } from '@/types/preference'
 
 export type OverrideDimension = 'language' | 'player' | 'team' | 'episode'
 
-export type PlayerName = 'kodik' | 'animelib' | 'hianime' | 'consumet'
+export type PlayerName = 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'english'
 
 // We accept WatchCombo (the prop shape players hold) rather than the stricter
 // ResolvedCombo. The tier/tier_number fields are optional — the composable
