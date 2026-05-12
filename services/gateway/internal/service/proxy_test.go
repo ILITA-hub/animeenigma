@@ -10,6 +10,129 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/config"
 )
 
+// TestProxyService_Forward_StripsHopByHopHeaders — BLK-02 regression. The
+// gateway MUST NOT forward RFC 7230 §6.1 hop-by-hop headers verbatim to the
+// upstream service. Forwarding Transfer-Encoding / TE / Connection /
+// Proxy-Authorization is a request-smuggling primitive; forwarding Cookie
+// leaks the auth-service refresh-token cookie to backend services.
+func TestProxyService_Forward_StripsHopByHopHeaders(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Copy so the channel receiver sees a stable snapshot.
+		h := r.Header.Clone()
+		gotHeaders <- h
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/scraper/health", nil)
+	req.Header.Set("Connection", "close")
+	req.Header.Set("Keep-Alive", "timeout=5")
+	req.Header.Set("Te", "trailers")
+	req.Header.Set("Trailer", "Expires")
+	req.Header.Set("Transfer-Encoding", "chunked")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Proxy-Authenticate", "Basic")
+	req.Header.Set("Proxy-Authorization", "Basic Zm9vOmJhcg==")
+	req.Header.Set("Cookie", "refresh_token=secret_value; session=xyz")
+	// And a legitimate end-to-end header that MUST pass through.
+	req.Header.Set("X-Request-ID", "test-req-id")
+
+	resp, err := p.Forward(req, "scraper")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	forbidden := []string{
+		"Connection", "Keep-Alive", "Te", "Trailer", "Transfer-Encoding",
+		"Upgrade", "Proxy-Authenticate", "Proxy-Authorization", "Cookie",
+	}
+	for _, h := range forbidden {
+		if got := headers.Get(h); got != "" {
+			t.Errorf("backend received hop-by-hop header %s = %q; must be stripped", h, got)
+		}
+	}
+	if got := headers.Get("X-Request-ID"); got != "test-req-id" {
+		t.Errorf("backend lost legitimate end-to-end header X-Request-ID = %q; want test-req-id", got)
+	}
+}
+
+// TestProxyService_Forward_HonoursConnectionHeaderList — BLK-02 regression
+// for the request-smuggling sub-case. A client sending
+// `Connection: Authorization, X-Forwarded-For` MUST cause those headers to
+// also be stripped from the upstream request (RFC 7230 §6.1).
+func TestProxyService_Forward_HonoursConnectionHeaderList(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/scraper/health", nil)
+	// Client claims these are hop-by-hop via the Connection list.
+	req.Header.Set("Connection", "X-Smuggled, X-Forwarded-For")
+	req.Header.Set("X-Smuggled", "attacker_value")
+	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+	// A legitimate header NOT named in Connection must still pass.
+	req.Header.Set("X-Request-ID", "ok")
+
+	resp, err := p.Forward(req, "scraper")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	for _, h := range []string{"X-Smuggled", "X-Forwarded-For"} {
+		if got := headers.Get(h); got != "" {
+			t.Errorf("backend received Connection-named header %s = %q; must be stripped", h, got)
+		}
+	}
+	if headers.Get("X-Request-ID") != "ok" {
+		t.Errorf("legitimate X-Request-ID was dropped; got %q", headers.Get("X-Request-ID"))
+	}
+}
+
+// TestProxyService_Forward_PreservesAuthorization — BLK-02 regression.
+// JWTValidationMiddleware uses r.Header.Set("Authorization", ...) so
+// exactly ONE Authorization value reaches Forward. That value MUST be
+// forwarded to the backend so protected routes can authenticate the user.
+// Authorization is NOT a hop-by-hop header per RFC 7230.
+func TestProxyService_Forward_PreservesAuthorization(t *testing.T) {
+	t.Parallel()
+	gotAuth := make(chan []string, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth <- r.Header.Values("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/scraper/health", nil)
+	req.Header.Set("Authorization", "Bearer gateway_minted_jwt")
+
+	resp, err := p.Forward(req, "scraper")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	got := <-gotAuth
+	if len(got) != 1 {
+		t.Fatalf("backend received %d Authorization values; want 1", len(got))
+	}
+	if got[0] != "Bearer gateway_minted_jwt" {
+		t.Errorf("backend Authorization = %q; want %q", got[0], "Bearer gateway_minted_jwt")
+	}
+}
+
 // newTestProxy constructs a ProxyService wired to a config with the given
 // scraper URL. The other service URLs are left as zero-value strings — tests
 // in this file only exercise the scraper case.

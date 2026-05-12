@@ -12,6 +12,78 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/config"
 )
 
+// hopByHopHeaders are the headers RFC 7230 §6.1 says a proxy MUST NOT
+// forward verbatim. Plus Cookie — backend services have no business with
+// the auth-service refresh-token cookie (REVIEW.md BLK-02 concern: the
+// cookie leaks to any service in the chain).
+//
+// Authorization is INTENTIONALLY NOT in this list. JWTValidationMiddleware
+// uses r.Header.Set("Authorization", ...) which replaces (not appends) the
+// client's original value with a freshly-minted JWT for ak_ API-key auth,
+// or leaves a valid JWT untouched. Either way exactly ONE Authorization
+// value reaches Forward, and that value is what the backend should see.
+//
+// Keys are canonical form (http.CanonicalHeaderKey) so case-insensitive
+// header comparison works against both r.Header (canonical) and the values
+// parsed out of the Connection: <name> handshake (uppercased by us).
+var hopByHopHeaders = map[string]struct{}{
+	"Connection":          {},
+	"Keep-Alive":          {},
+	"Proxy-Authenticate":  {},
+	"Proxy-Authorization": {},
+	"Te":                  {},
+	"Trailer":             {},
+	"Trailers":            {},
+	"Transfer-Encoding":   {},
+	"Upgrade":             {},
+	"Cookie":              {},
+}
+
+// copyForwardHeaders copies src → dst while filtering hop-by-hop headers
+// (REVIEW.md BLK-02). Honours Connection: <name>, <name>, ... per
+// RFC 7230 §6.1 — every header named in Connection is also stripped before
+// forwarding (this is the request-smuggling primitive: a client could send
+// `Connection: Authorization` to ask the proxy to drop the JWT, then send
+// its own header value).
+func copyForwardHeaders(dst, src http.Header) {
+	// RFC 7230: Connection: close, foo, bar  →  also strip "foo", "bar".
+	for _, name := range strings.Split(src.Get("Connection"), ",") {
+		name = http.CanonicalHeaderKey(strings.TrimSpace(name))
+		if name != "" {
+			dst.Del(name)
+		}
+	}
+	for key, values := range src {
+		canon := http.CanonicalHeaderKey(key)
+		if _, hop := hopByHopHeaders[canon]; hop {
+			continue
+		}
+		// Also defensively skip anything named via Connection (already
+		// stripped from dst above, but the src loop would re-add it).
+		if isInConnectionList(src, canon) {
+			continue
+		}
+		for _, v := range values {
+			dst.Add(key, v)
+		}
+	}
+}
+
+// isInConnectionList reports whether `canon` is named in the comma-separated
+// Connection header of src. canon must already be canonical form.
+func isInConnectionList(src http.Header, canon string) bool {
+	conn := src.Get("Connection")
+	if conn == "" {
+		return false
+	}
+	for _, name := range strings.Split(conn, ",") {
+		if http.CanonicalHeaderKey(strings.TrimSpace(name)) == canon {
+			return true
+		}
+	}
+	return false
+}
+
 type ProxyService struct {
 	serviceURLs config.ServiceURLs
 	client      *http.Client
@@ -92,12 +164,12 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 		return nil, errors.Internal(fmt.Sprintf("create proxy request: %v", err))
 	}
 
-	// Copy headers
-	for key, values := range r.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
+	// Copy headers — filter hop-by-hop + Cookie + Authorization per
+	// REVIEW.md BLK-02 (RFC 7230 §6.1). Any fresh Authorization for the
+	// backend is set by JWTValidationMiddleware on the inbound request
+	// BEFORE Forward is called; copyForwardHeaders strips the original
+	// client Authorization so the backend never sees two values.
+	copyForwardHeaders(req.Header, r.Header)
 
 	// Forward request
 	resp, err := s.client.Do(req)
