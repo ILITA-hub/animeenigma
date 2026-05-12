@@ -106,6 +106,17 @@ capture-goldens: ## Refresh golden-file test fixtures for services/scraper (Phas
 	@echo "Capturing scraper goldens..."
 	cd services/scraper && go test -update ./... -run "Golden" || true
 
+.PHONY: capture-goldens-animepahe
+capture-goldens-animepahe: ## Recapture services/scraper/testdata/animepahe/* fixtures (requires Plan 16-03 DDoS-Guard cookie helper to be live)
+	@echo "Capturing AnimePahe goldens — see services/scraper/testdata/animepahe/README.md for the procedure"
+	@bash services/scraper/scripts/capture-animepahe-goldens.sh 2>/dev/null || echo "TODO: create services/scraper/scripts/capture-animepahe-goldens.sh from README.md procedure (Plan 16-03 work)"
+	@echo "Running anonymization gate..."
+	@if grep -rE '(Set-Cookie|__ddg2_|cf_clearance|Bearer )' services/scraper/testdata/animepahe/ ; then \
+		echo "FAIL: leaked tokens above — strip before commit" >&2 ; exit 1 ; \
+	else \
+		echo "OK: no leaked tokens" ; \
+	fi
+
 # ============================================================================
 # Code Quality
 # ============================================================================
