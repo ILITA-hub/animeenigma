@@ -24,9 +24,16 @@
 // and (b) their failures would be caused by the earlier stage's break,
 // not real downstream brokenness. The skipped stages keep their last gauge.
 //
-// Panic safety: Start() wraps the loop in `defer recover()`; if a provider
-// panics mid-call the goroutine logs, emits a metric, and re-spawns itself
-// via `go r.Start(ctx)`. A single bad tick MUST NOT take down observability.
+// Panic safety: Start() has TWO panic-recover layers.
+//   - The inner layer (runOneTickSafely) absorbs per-tick provider panics
+//     and lets the loop continue to the next interval. This is the common
+//     case — a flaky provider method shouldn't kill observability.
+//   - The outer layer (Start's deferred recover) catches a panic in the
+//     loop body itself (e.g. nextSleep / computeInitialDelay) and logs +
+//     emits a metric + returns. It does NOT re-spawn the goroutine
+//     (REVIEW.md BLK-03) — re-spawning without a backoff would turn a
+//     deterministic panic into a goroutine creation hot-loop. The missing
+//     heartbeat will fire the dead-probe alert (RESEARCH P-07).
 package health
 
 import (
@@ -35,9 +42,13 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -77,6 +88,11 @@ type ProbeRunner struct {
 	http     *http.Client // bounded-timeout client for the segment-fetch stage
 	now      func() time.Time
 	rng      *rand.Rand
+	// allowPrivateHosts disables the SSRF host-allowlist check inside
+	// fetchSegment. Production callers MUST leave this false — only tests
+	// that point fetchSegment at an httptest.Server (127.0.0.1:randomport)
+	// flip it via WithAllowPrivateHosts.
+	allowPrivateHosts bool
 }
 
 // ProbeOption is a functional option for NewProbeRunner. Used by tests to
@@ -94,8 +110,28 @@ func WithRNG(rng *rand.Rand) ProbeOption { return func(r *ProbeRunner) { r.rng =
 // client that talks to an httptest.Server.
 func WithHTTPClient(c *http.Client) ProbeOption { return func(r *ProbeRunner) { r.http = c } }
 
+// WithAllowPrivateHosts disables the SSRF host-allowlist check in
+// fetchSegment. Use ONLY in tests that need to hit an httptest.Server
+// (which binds to 127.0.0.1:randomport and would otherwise be rejected
+// by the production-grade SSRF guard from REVIEW.md BLK-01). Production
+// callers MUST NOT use this option.
+func WithAllowPrivateHosts() ProbeOption {
+	return func(r *ProbeRunner) { r.allowPrivateHosts = true }
+}
+
 // NewProbeRunner constructs a ProbeRunner with production defaults. Apply
 // ProbeOptions to override for tests.
+//
+// The default HTTP client is locked down per REVIEW.md BLK-01 (SSRF mitigation):
+//   - CheckRedirect refuses to follow redirects (http.ErrUseLastResponse). A
+//     compromised upstream cannot bounce the probe at an internal service via
+//     302 Location.
+//   - Transport has bounded connection limits + IdleConnTimeout (WR-06). The
+//     probe runs every 15 min ± 20% so per-tick fan-out is small, but
+//     explicit limits stop a misbehaving upstream from holding idle conns.
+//
+// The host-allowlist (also part of BLK-01) is enforced inside fetchSegment
+// rather than via DialContext so the rejection error message is informative.
 func NewProbeRunner(p domain.Provider, pool []domain.AnimeRef, cache *InMemoryHealthCache, log *logger.Logger, opts ...ProbeOption) *ProbeRunner {
 	r := &ProbeRunner{
 		provider: p,
@@ -103,9 +139,24 @@ func NewProbeRunner(p domain.Provider, pool []domain.AnimeRef, cache *InMemoryHe
 		cache:    cache,
 		log:      log,
 		windows:  newWindowSet(),
-		http:     &http.Client{Timeout: segmentTimeout},
-		now:      time.Now,
-		rng:      rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0)),
+		http: &http.Client{
+			Timeout: segmentTimeout,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				// BLK-01: do NOT follow redirects. A 302 to an internal
+				// service (postgres:5432, auth:8080/internal/..., cloud
+				// metadata at 169.254.169.254) would otherwise let an
+				// attacker who controls an upstream URL probe the docker
+				// network from inside the scraper.
+				return http.ErrUseLastResponse
+			},
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost: 2,
+				MaxConnsPerHost:     4,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
+		now: time.Now,
+		rng: rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0)),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -115,10 +166,19 @@ func NewProbeRunner(p domain.Provider, pool []domain.AnimeRef, cache *InMemoryHe
 
 // Start blocks until ctx is cancelled. Designed for `go r.Start(ctx)`.
 //
-// Wraps the per-tick loop in `defer recover()`; on panic, logs and
-// re-spawns the goroutine. The first tick fires after a randomized
-// initial delay (0 to interval/4) to avoid boot-time stampede and
-// give the cookie-jar a moment to warm up (RESEARCH P-06).
+// Panic-recover layering (REVIEW.md BLK-03):
+//   - The outer deferred recover here catches a panic in the loop body
+//     itself (computeInitialDelay / nextSleep / time.After plumbing).
+//     It LOGS + emits a metric + RETURNS — it does NOT re-spawn the
+//     goroutine. A respawn without backoff would turn a deterministic
+//     panic into a goroutine-creation hot-loop. The missing heartbeat
+//     fires the dead-probe alert (RESEARCH P-07) so the operator notices.
+//   - Per-tick panics (e.g. a flaky provider method) are absorbed by
+//     runOneTickSafely's own inner recover; the loop keeps ticking.
+//
+// The first tick fires after a randomized initial delay (0 to interval/4)
+// to avoid boot-time stampede and give the cookie-jar a moment to warm up
+// (RESEARCH P-06).
 //
 // Test/CI fast-path: set initialDelayEnvVar to a non-negative integer
 // to override the random delay (use 0 for "tick immediately"). Production
@@ -126,12 +186,15 @@ func NewProbeRunner(p domain.Provider, pool []domain.AnimeRef, cache *InMemoryHe
 func (r *ProbeRunner) Start(ctx context.Context) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			r.log.Errorw("scraper.probe: panicked, restarting",
+			r.log.Errorw("scraper.probe: fatal panic in loop body, goroutine exiting",
 				"provider", r.provider.Name(),
 				"panic", rec,
+				"stack", string(debug.Stack()),
 			)
-			// Re-spawn so a single bad tick doesn't kill observability.
-			go r.Start(ctx)
+			// BLK-03: do NOT respawn. A respawn-without-backoff would
+			// spin a goroutine-creation hot-loop on a deterministic
+			// panic; the missing heartbeat will fire the dead-probe
+			// alert (RESEARCH P-07).
 		}
 	}()
 	r.log.Infow("scraper.probe: started",
@@ -180,10 +243,17 @@ func (r *ProbeRunner) computeInitialDelay() time.Duration {
 	return time.Duration(r.rng.Int64N(int64(probeBaseInterval / 4)))
 }
 
-// nextSleep returns probeBaseInterval ± probeJitterPct.
+// nextSleep returns probeBaseInterval ± probeJitterPct, clamped to a minimum
+// of probeBaseInterval/2 (REVIEW.md WR-07) as defense against a future
+// maintainer pumping probeJitterPct up to ≥1.0, which would otherwise allow
+// a zero / negative sleep and a tight-loop tick against upstream.
 func nextSleep(rng *rand.Rand) time.Duration {
 	delta := (rng.Float64()*2 - 1) * probeJitterPct
-	return time.Duration(float64(probeBaseInterval) * (1 + delta))
+	out := time.Duration(float64(probeBaseInterval) * (1 + delta))
+	if out < probeBaseInterval/2 {
+		return probeBaseInterval / 2
+	}
+	return out
 }
 
 // RunOnce exercises exactly one tick. Exposed for tests; production callers
@@ -317,9 +387,35 @@ func (r *ProbeRunner) commit(name string, stages map[string]StageStatus, now tim
 // Counts as success only if HTTP 2xx + at least one non-empty byte.
 // Empty URL is treated as failure (the upstream pipeline returned a stream
 // with no playable source — that's a broken stage, not "nothing to test").
+//
+// SSRF mitigation (REVIEW.md BLK-01): validate scheme + host BEFORE issuing
+// any I/O. The URL ultimately originates from an extractor pipeline
+// (provider.GetStream → embed extractor → packed JS), any link of which an
+// attacker who compromises the upstream may poison. Reject:
+//   - non-http(s) schemes
+//   - empty host
+//   - loopback / link-local / RFC-1918 / RFC-4193 / unspecified destinations
+//
+// The CheckRedirect policy installed in NewProbeRunner also refuses to follow
+// 3xx Location bounces, so even an allow-listed origin cannot trampoline the
+// probe at an internal service.
 func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string) error {
 	if urlStr == "" {
 		return errors.New("stream_segment: empty source URL")
+	}
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return fmt.Errorf("stream_segment: parse url: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("stream_segment: rejected scheme %q", u.Scheme)
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return errors.New("stream_segment: rejected empty host")
+	}
+	if !r.allowPrivateHosts && isPrivateOrLoopback(host) {
+		return fmt.Errorf("stream_segment: rejected host %q", host)
 	}
 	ctx, cancel := context.WithTimeout(ctx, segmentTimeout)
 	defer cancel()
@@ -335,13 +431,65 @@ func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string) error {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
+	// A 3xx response here means CheckRedirect refused the bounce
+	// (http.ErrUseLastResponse). Treat 3xx as failure — a healthy segment
+	// upstream serves 2xx directly. This also closes the SSRF redirect
+	// surface (BLK-01): a 302 to postgres:5432 would otherwise be a TCP
+	// reach test even without following the bounce.
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("stream_segment: status %d", resp.StatusCode)
 	}
 	buf := make([]byte, 4096)
-	n, _ := io.ReadFull(resp.Body, buf)
+	n, readErr := io.ReadFull(resp.Body, buf)
 	if n == 0 {
 		return errors.New("stream_segment: empty body")
 	}
+	// WR-08: distinguish three cases.
+	//   n>0, err==nil           → full 4 KiB read, success.
+	//   n>0, err=ErrUnexpectedEOF → real short body, success (e.g. a small
+	//                               m3u8 manifest fits in <4 KiB).
+	//   n>0, any other err       → partial read aborted mid-stream
+	//                               (connection reset, etc.) → fail.
+	if readErr != nil && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+		return fmt.Errorf("stream_segment: read body: %w", readErr)
+	}
 	return nil
+}
+
+// isPrivateOrLoopback reports whether `host` resolves to (or literally is)
+// an IP in a private / loopback / link-local / unspecified range. Used by
+// fetchSegment to block SSRF against the docker internal network.
+//
+// Hostnames that are not IP literals are checked against a small allow-list
+// of well-known internal service names that appear in docker-compose.yml.
+// This is defense-in-depth: in production the upstream is always a public
+// CDN (kwik.cx, animepahe.ru), so any hostname match against
+// `postgres|redis|auth|catalog|player|streaming|rooms|themes|scraper|gateway|prometheus|grafana|loki|minio`
+// indicates the probe URL has been tampered with.
+//
+// A non-resolving public hostname returns false (caller proceeds to GET);
+// the http.Client's timeout + the underlying DNS error will turn that into
+// a normal stream_segment failure via resp/err handling.
+func isPrivateOrLoopback(host string) bool {
+	// Internal docker-compose service names. If an upstream is somehow
+	// returning a URL like http://auth:8080/, refuse regardless of how it
+	// would resolve.
+	switch host {
+	case "localhost",
+		"postgres", "redis", "auth", "catalog", "player",
+		"streaming", "rooms", "themes", "scraper", "gateway",
+		"prometheus", "grafana", "loki", "minio", "pgadmin",
+		"alertmanager", "node-exporter", "cadvisor", "promtail":
+		return true
+	}
+	// IP literal? Check the address ranges directly.
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() ||
+			ip.IsPrivate() ||
+			ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() ||
+			ip.IsUnspecified() ||
+			ip.IsMulticast()
+	}
+	return false
 }
