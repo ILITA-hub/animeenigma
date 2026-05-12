@@ -7,6 +7,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
+	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/hashicorp/go-retryablehttp v0.7.7
@@ -21,6 +22,7 @@ require (
 require (
 	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0 // indirect
 	github.com/ajg/form v1.5.1 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
