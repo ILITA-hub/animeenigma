@@ -118,7 +118,14 @@ func main() {
 	// nil-cache backcompat path observes a Grafana panel reading 1, matching
 	// the "no probe yet, assume healthy" semantic. Plan 17-02 flips this
 	// based on real probe data.
-	for _, p := range orchestrator.RegisteredProviders() {
+	//
+	// REVIEW.md WR-01: take ONE snapshot of the registered-providers list
+	// and reuse it for both the metric-seed loop and the probe-spawn loop.
+	// Taking two snapshots invites a bug where a future maintainer inserts
+	// a Register() between the two and the seeded metric set diverges from
+	// the spawned probe set.
+	providers := orchestrator.RegisteredProviders()
+	for _, p := range providers {
 		for _, stage := range health.AllStages {
 			metrics.ProviderHealthUp.WithLabelValues(p.Name(), stage).Set(1)
 		}
@@ -147,7 +154,7 @@ func main() {
 	// gauges + provider_probe_last_tick_timestamp{provider} heartbeat on
 	// every tick (15 min ± 20% jitter).
 	probeCtx, probeCancel := context.WithCancel(context.Background())
-	for _, p := range orchestrator.RegisteredProviders() {
+	for _, p := range providers {
 		runner := health.NewProbeRunner(p, health.DefaultGoldenPool, cache, log)
 		go runner.Start(probeCtx)
 		log.Infow("scraper.probe: spawned", "provider", p.Name())
