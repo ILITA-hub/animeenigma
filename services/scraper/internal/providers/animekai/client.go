@@ -30,15 +30,16 @@ import (
 // also "AnimeKai" (no rebrand).
 const providerName = "animekai"
 
-// stageNames lock the canonical stage keys returned by HealthCheck. Phase 17
-// canonical 5-stage strings minus the fifth (stream_segment) which is owned
-// by the probe runner, not the provider.
-var stageNames = []string{
-	health.StageSearch,
-	health.StageEpisodes,
-	health.StageServers,
-	health.StageStream,
-}
+// stageNames is the canonical stage list used by the escape-hatch stub. It
+// is an alias of health.AllStages (all five canonical stages, INCLUDING
+// stream_segment) — WR-04. Earlier drafts kept a 4-stage local copy "because
+// stream_segment is owned by the probe runner", but that silent divergence
+// from health.AllStages is a footgun: a maintainer iterating stageNames
+// would miss stream_segment — precisely the stage SCRAPER-OBS-04 alerts on.
+// For the escape-hatch invariant to hold end-to-end, every stage the metric
+// surface knows about must also be present in the in-memory snapshot, so
+// Grafana cannot show a green panel for any animekai stage at boot.
+var stageNames = health.AllStages
 
 // errAnimeKaiStub is the canonical stub cause. Wrapping it with the
 // provider-down wrapper makes errors.Is(err, domain.ErrProviderDown) AND

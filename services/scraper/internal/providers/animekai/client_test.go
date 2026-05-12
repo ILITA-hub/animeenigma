@@ -116,16 +116,19 @@ func TestProvider_GetStream_StubReturnsErrProviderDown(t *testing.T) {
 	}
 }
 
-// Test 6 — HealthCheck reports all four canonical stages as DOWN at boot
-// (escape-hatch invariant: Grafana must NOT see a green panel for the
-// ~15 min before the first probe tick fires).
+// Test 6 — HealthCheck reports all FIVE canonical stages (WR-04) as DOWN
+// at boot (escape-hatch invariant: Grafana must NOT see a green panel for
+// the ~15 min before the first probe tick fires). The stub MUST include
+// stream_segment so the in-memory snapshot mirrors the metric surface
+// seeded by main.go — otherwise the two surfaces disagree on which stages
+// exist for animekai.
 func TestProvider_HealthCheck_AllStagesDownAtBoot(t *testing.T) {
 	p := newStubProvider(t)
 	h := p.HealthCheck(context.Background())
 	if h.Provider != "animekai" {
 		t.Errorf("Health.Provider = %q; want \"animekai\"", h.Provider)
 	}
-	wantStages := []string{health.StageSearch, health.StageEpisodes, health.StageServers, health.StageStream}
+	wantStages := health.AllStages
 	if got, want := len(h.Stages), len(wantStages); got != want {
 		t.Fatalf("len(Stages) = %d; want %d (stages=%v)", got, want, h.Stages)
 	}
@@ -140,6 +143,23 @@ func TestProvider_HealthCheck_AllStagesDownAtBoot(t *testing.T) {
 		}
 		if !strings.Contains(sh.LastErr, "escape-hatch") {
 			t.Errorf("Stages[%q].LastErr = %q; want substring 'escape-hatch'", stage, sh.LastErr)
+		}
+	}
+}
+
+// TestProvider_StageNames_MatchesHealthAllStages — WR-04 regression guard.
+// stageNames MUST equal health.AllStages so the in-memory snapshot returned
+// by HealthCheck matches the metric surface seeded by main.go. If a future
+// stage is added to health.AllStages (e.g. "stream_decrypt"), this test
+// breaks here so the maintainer knows the escape-hatch provider also needs
+// to mark it down at boot.
+func TestProvider_StageNames_MatchesHealthAllStages(t *testing.T) {
+	if got, want := len(stageNames), len(health.AllStages); got != want {
+		t.Fatalf("len(stageNames) = %d; want %d (must mirror health.AllStages so escape-hatch invariant holds end-to-end)", got, want)
+	}
+	for i, s := range health.AllStages {
+		if stageNames[i] != s {
+			t.Errorf("stageNames[%d] = %q; want %q (must equal health.AllStages[%d])", i, stageNames[i], s, i)
 		}
 	}
 }
