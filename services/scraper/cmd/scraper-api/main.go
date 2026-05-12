@@ -15,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/embeds"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
@@ -99,9 +100,36 @@ func main() {
 	}
 
 	// Build the orchestrator and register the provider before HTTP starts.
-	orchestrator := service.NewOrchestrator(log, registry)
+	// Phase 17 Plan 01 introduces the optional health cache; we pass nil here
+	// because the probe runner (Plan 17-02) is what wires the actual cache.
+	// Until then, nil preserves Phase 16 behaviour: no skip-unhealthy gating.
+	orchestrator := service.NewOrchestrator(log, registry, nil)
 	orchestrator.Register(animePaheProvider)
 	log.Infow("registered provider", "name", animePaheProvider.Name())
+
+	// Phase 17 Plan 01: seed the provider_health_up gauge family with zero-
+	// initialized children for every (provider, stage) pair so the HELP/TYPE
+	// lines appear in /metrics from boot. The probe runner (Plan 17-02) will
+	// overwrite these once it ticks. Without this seed, Prometheus exposition
+	// suppresses the metric family until the first observation lands.
+	//
+	// We initialize Up=1 (the optimistic default) so the orchestrator's
+	// nil-cache backcompat path observes a Grafana panel reading 1, matching
+	// the "no probe yet, assume healthy" semantic. Plan 17-02 flips this
+	// based on real probe data.
+	for _, p := range orchestrator.RegisteredProviders() {
+		for _, stage := range health.AllStages {
+			metrics.ProviderHealthUp.WithLabelValues(p.Name(), stage).Set(1)
+		}
+		// Heartbeat starts at 0 (never ticked) — the probe sets it on each tick.
+		metrics.ProviderProbeLastTick.WithLabelValues(p.Name()).Set(0)
+		// Seed parser_zero_match_total with a no-op Add(0) so the HELP/TYPE
+		// lines appear in /metrics from boot. The label `selector="_seeded"`
+		// is a sentinel that means "no real zero-match event yet" — once
+		// parsers start incrementing real selectors (Phase 18+), this sentinel
+		// becomes background noise on a single low-value child.
+		metrics.ParserZeroMatchTotal.WithLabelValues(p.Name(), "_seeded").Add(0)
+	}
 
 	// HTTP handler + router wiring.
 	scraperHandler := handler.NewScraperHandler(orchestrator, log)

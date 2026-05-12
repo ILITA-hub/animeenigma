@@ -44,7 +44,8 @@ func freshTestRouter(t *testing.T) http.Handler {
 			URL: "http://localhost:0",
 		},
 	}
-	orch := service.NewOrchestrator(log, domain.NewRegistry())
+	// Phase 17: nil cache preserves Phase 16 dispatch behaviour for router tests.
+	orch := service.NewOrchestrator(log, domain.NewRegistry(), nil)
 	sh := handler.NewScraperHandler(orch, log)
 	return NewRouter(sh, cfg, log, getSharedMC())
 }

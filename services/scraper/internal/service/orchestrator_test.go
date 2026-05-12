@@ -10,6 +10,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
@@ -61,7 +62,23 @@ func (f *fakeProvider) HealthCheck(ctx context.Context) domain.Health {
 func newTestOrchestrator(t *testing.T, providers ...domain.Provider) *Orchestrator {
 	t.Helper()
 	log := logger.Default()
-	o := NewOrchestrator(log, domain.NewRegistry())
+	// Phase 17: existing tests pass nil cache to preserve Phase 16 behaviour
+	// (no skip-unhealthy). Tests that exercise the cache use
+	// newTestOrchestratorWithCache below.
+	o := NewOrchestrator(log, domain.NewRegistry(), nil)
+	for _, p := range providers {
+		o.Register(p)
+	}
+	return o
+}
+
+// newTestOrchestratorWithCache constructs an orchestrator with a real
+// *health.InMemoryHealthCache. Used by Phase 17 tests that verify the
+// skip-unhealthy + rejoin behaviour without monkey-patching globals.
+func newTestOrchestratorWithCache(t *testing.T, cache *health.InMemoryHealthCache, providers ...domain.Provider) *Orchestrator {
+	t.Helper()
+	log := logger.Default()
+	o := NewOrchestrator(log, domain.NewRegistry(), cache)
 	for _, p := range providers {
 		o.Register(p)
 	}
@@ -521,5 +538,213 @@ func TestOrchestrator_EmbedRegistryAccessor(t *testing.T) {
 	}
 	if names := reg.Names(); len(names) != 0 {
 		t.Errorf("Names() on empty registry = %v; want empty", names)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Phase 17 Plan 01 — orchestrator skip-unhealthy tests (SCRAPER-OBS-03).
+// -----------------------------------------------------------------------------
+
+// downCacheEntry is a helper that writes a fresh DOWN entry for `provider`
+// into `c` (LastUpdated = now() so it's not stale).
+func downCacheEntry(c *health.InMemoryHealthCache, provider string) {
+	c.Update(provider, health.ProviderHealth{
+		Stages:      map[string]health.StageStatus{health.StageStreamSegment: {Up: false}},
+		LastUpdated: time.Now(),
+	})
+}
+
+// upCacheEntry is the same but Up=true (the "rejoined" state).
+func upCacheEntry(c *health.InMemoryHealthCache, provider string) {
+	c.Update(provider, health.ProviderHealth{
+		Stages:      map[string]health.StageStatus{health.StageStreamSegment: {Up: true}},
+		LastUpdated: time.Now(),
+	})
+}
+
+// TestOrchestrator_NilCache_Backcompat verifies the Phase 16-vs-17 boundary:
+// constructing with nil cache MUST preserve the existing dispatch behaviour
+// for every failover path (no skipping; providers receive every call).
+func TestOrchestrator_NilCache_Backcompat(t *testing.T) {
+	t.Parallel()
+
+	p := &fakeProvider{
+		nameVal:        "back_compat",
+		findIDFn:       func(ctx context.Context, ref domain.AnimeRef) (string, error) { return "id-1", nil },
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) { return []domain.Episode{{ID: "ep1"}}, nil },
+		listServersFn:  func(ctx context.Context, pid, eid string) ([]domain.Server, error) { return []domain.Server{{ID: "srv1"}}, nil },
+		getStreamFn: func(ctx context.Context, pid, eid, sid string, c domain.Category) (*domain.Stream, error) {
+			return &domain.Stream{Sources: []domain.Source{{URL: "u"}}}, nil
+		},
+	}
+	// nil cache — Phase 16 semantics.
+	o := newTestOrchestrator(t, p)
+
+	ctx := context.Background()
+	if id, err := o.FindID(ctx, domain.AnimeRef{}, ""); err != nil || id != "id-1" {
+		t.Errorf("FindID = (%q, %v); want (id-1, nil)", id, err)
+	}
+	if eps, err := o.ListEpisodes(ctx, "x", ""); err != nil || len(eps) != 1 {
+		t.Errorf("ListEpisodes = (%+v, %v); want one episode", eps, err)
+	}
+	if srvs, err := o.ListServers(ctx, "x", "y", ""); err != nil || len(srvs) != 1 {
+		t.Errorf("ListServers = (%+v, %v); want one server", srvs, err)
+	}
+	if s, err := o.GetStream(ctx, "x", "y", "z", domain.CategorySub, ""); err != nil || s == nil {
+		t.Errorf("GetStream = (%+v, %v); want a stream", s, err)
+	}
+}
+
+// TestOrchestrator_SkipsUnhealthyProvider — the core SCRAPER-OBS-03 contract:
+// when the cache reports the first-registered provider DOWN, the orchestrator
+// MUST skip it and route the call to the next provider, emitting
+// parser_fallback_total{from, to} once.
+func TestOrchestrator_SkipsUnhealthyProvider(t *testing.T) {
+	t.Parallel()
+
+	cache := health.NewInMemoryHealthCache()
+	downCacheEntry(cache, "animepahe_skip")
+
+	pa := &fakeProvider{
+		nameVal: "animepahe_skip",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
+			t.Errorf("animepahe_skip.FindID was called; expected skip")
+			return "should-not-happen", nil
+		},
+	}
+	pb := &fakeProvider{
+		nameVal: "fallback_provider",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
+			return "fallback-id", nil
+		},
+	}
+	o := newTestOrchestratorWithCache(t, cache, pa, pb)
+
+	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("animepahe_skip", "fallback_provider"))
+	id, err := o.FindID(context.Background(), domain.AnimeRef{}, "")
+	if err != nil {
+		t.Fatalf("FindID err = %v; want nil", err)
+	}
+	if id != "fallback-id" {
+		t.Errorf("FindID = %q; want fallback-id", id)
+	}
+	after := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("animepahe_skip", "fallback_provider"))
+	if d := after - before; d != 1.0 {
+		t.Errorf("parser_fallback_total{from=animepahe_skip, to=fallback_provider} delta = %v; want 1.0", d)
+	}
+	// Sanity: skipped provider must not have its FindID method invoked.
+	// (Asserted via the t.Errorf in the closure above.)
+}
+
+// TestOrchestrator_RejoinsHealthyProvider — once the cache flips back to UP,
+// the next request reaches the previously-skipped provider.
+func TestOrchestrator_RejoinsHealthyProvider(t *testing.T) {
+	t.Parallel()
+
+	cache := health.NewInMemoryHealthCache()
+	downCacheEntry(cache, "rejoin_provider")
+
+	var callsToA int32
+	pa := &fakeProvider{
+		nameVal: "rejoin_provider",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
+			atomic.AddInt32(&callsToA, 1)
+			return "rejoined-id", nil
+		},
+	}
+	pb := &fakeProvider{
+		nameVal:  "rejoin_fallback",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) { return "fallback-id", nil },
+	}
+	o := newTestOrchestratorWithCache(t, cache, pa, pb)
+
+	// First call: A is DOWN, B answers.
+	id, err := o.FindID(context.Background(), domain.AnimeRef{}, "")
+	if err != nil || id != "fallback-id" {
+		t.Fatalf("first FindID = (%q, %v); want (fallback-id, nil)", id, err)
+	}
+	if got := atomic.LoadInt32(&callsToA); got != 0 {
+		t.Errorf("after first call, rejoin_provider was called %d times; want 0", got)
+	}
+
+	// Flip the cache to UP — next request reaches A.
+	upCacheEntry(cache, "rejoin_provider")
+
+	id, err = o.FindID(context.Background(), domain.AnimeRef{}, "")
+	if err != nil || id != "rejoined-id" {
+		t.Fatalf("second FindID = (%q, %v); want (rejoined-id, nil)", id, err)
+	}
+	if got := atomic.LoadInt32(&callsToA); got != 1 {
+		t.Errorf("after rejoin, rejoin_provider was called %d times; want 1", got)
+	}
+}
+
+// TestOrchestrator_AllProvidersDown_ReturnsAggregateError — when every
+// provider is cache-DOWN, the orchestrator MUST surface ErrProviderDown
+// (not ErrNotFound) so callers can correctly distinguish "providers exist
+// but are skipped" from "no provider has this anime".
+func TestOrchestrator_AllProvidersDown_ReturnsAggregateError(t *testing.T) {
+	t.Parallel()
+
+	cache := health.NewInMemoryHealthCache()
+	downCacheEntry(cache, "all_down_A")
+	downCacheEntry(cache, "all_down_B")
+
+	pa := &fakeProvider{
+		nameVal: "all_down_A",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
+			t.Errorf("all_down_A.FindID was called; expected skip")
+			return "", nil
+		},
+	}
+	pb := &fakeProvider{
+		nameVal: "all_down_B",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
+			t.Errorf("all_down_B.FindID was called; expected skip")
+			return "", nil
+		},
+	}
+	o := newTestOrchestratorWithCache(t, cache, pa, pb)
+
+	_, err := o.FindID(context.Background(), domain.AnimeRef{}, "")
+	if err == nil {
+		t.Fatal("FindID err = nil; want non-nil")
+	}
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Errorf("err = %v; want errors.Is match ErrProviderDown", err)
+	}
+}
+
+// TestOrchestrator_StaleCache_DoesNotSkip — stale (>60s) DOWN entries are
+// treated as unknown and the orchestrator dispatches normally (fail-open).
+// This guards against a probe outage silently shutting off all providers.
+func TestOrchestrator_StaleCache_DoesNotSkip(t *testing.T) {
+	t.Parallel()
+
+	// now() returns "70 seconds in the future" so the entry's LastUpdated
+	// (real wall-clock now) is treated as stale.
+	staleNow := time.Now().Add(70 * time.Second)
+	cache := health.NewInMemoryHealthCacheWithNow(func() time.Time { return staleNow })
+	cache.Update("stale_provider", health.ProviderHealth{
+		Stages:      map[string]health.StageStatus{health.StageStreamSegment: {Up: false}},
+		LastUpdated: time.Now(), // 70s "in the past" from cache's POV
+	})
+
+	var called int32
+	p := &fakeProvider{
+		nameVal: "stale_provider",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
+			atomic.AddInt32(&called, 1)
+			return "stale-id", nil
+		},
+	}
+	o := newTestOrchestratorWithCache(t, cache, p)
+
+	id, err := o.FindID(context.Background(), domain.AnimeRef{}, "")
+	if err != nil || id != "stale-id" {
+		t.Fatalf("FindID = (%q, %v); want (stale-id, nil)", id, err)
+	}
+	if got := atomic.LoadInt32(&called); got != 1 {
+		t.Errorf("stale_provider was called %d times; want 1 (stale = fail-open, no skip)", got)
 	}
 }

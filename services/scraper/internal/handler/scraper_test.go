@@ -68,7 +68,7 @@ func (f *fakeProvider) HealthCheck(context.Context) domain.Health { return f.hea
 func newTestHandler(t *testing.T, providers ...domain.Provider) *ScraperHandler {
 	t.Helper()
 	log := logger.Default()
-	o := service.NewOrchestrator(log, domain.NewRegistry())
+	o := service.NewOrchestrator(log, domain.NewRegistry(), nil)
 	for _, p := range providers {
 		o.Register(p)
 	}
@@ -454,7 +454,7 @@ func TestOrchestrator_OrderedProviderNames(t *testing.T) {
 	a := &fakeProvider{name: "a"}
 	b := &fakeProvider{name: "b"}
 	log := logger.Default()
-	o := service.NewOrchestrator(log, domain.NewRegistry())
+	o := service.NewOrchestrator(log, domain.NewRegistry(), nil)
 	o.Register(a)
 	o.Register(b)
 
@@ -474,7 +474,7 @@ func TestOrchestrator_OrderedProviderNames(t *testing.T) {
 		t.Errorf("OrderedProviderNames(\"zzz\") = %v; want [a b]", got)
 	}
 	// Zero providers — empty slice.
-	o2 := service.NewOrchestrator(log, domain.NewRegistry())
+	o2 := service.NewOrchestrator(log, domain.NewRegistry(), nil)
 	if got := o2.OrderedProviderNames(""); len(got) != 0 {
 		t.Errorf("OrderedProviderNames on zero-provider orchestrator = %v; want []", got)
 	}

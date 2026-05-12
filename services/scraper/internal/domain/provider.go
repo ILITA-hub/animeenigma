@@ -101,8 +101,15 @@ type StageHealth struct {
 	LastErr string    `json:"last_err,omitempty"`
 }
 
-// Health is a per-provider health snapshot. Stages are keyed by stage name
-// (e.g. "find_id", "list_episodes", "list_servers", "get_stream").
+// Health is a per-provider health snapshot. Stages are keyed by the five
+// canonical pipeline-stage names defined in
+// services/scraper/internal/health/stage.go:
+//
+//	"search", "episodes", "servers", "stream", "stream_segment"
+//
+// These strings appear verbatim as Prometheus label values in
+// provider_health_up{stage=...} and in Grafana dashboards / alert rules.
+// Renaming any of them breaks the dashboard. Treat as a versioned contract.
 type Health struct {
 	Provider string                 `json:"provider"`
 	Stages   map[string]StageHealth `json:"stages"`
