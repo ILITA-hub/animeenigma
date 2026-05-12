@@ -896,7 +896,10 @@ function loadLastEpisode(animeId: string) {
     for (const [ep, info] of Object.entries(data)) {
       if (info.updatedAt && info.updatedAt > latest) {
         latest = info.updatedAt
-        latestEp = parseInt(ep)
+        // WR-10: explicit radix 10 to defend against the historic octal-on-
+        // leading-zero foot-gun ("08" -> 0 in pre-ES5 engines) and to satisfy
+        // ESLint's `radix` rule.
+        latestEp = parseInt(ep, 10)
       }
     }
     if (latestEp && !isNaN(latestEp)) lastEpisode.value = latestEp
