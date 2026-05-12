@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
-status: verifying
+status: ready_to_plan
 stopped_at: Phase 19 Plan 19-01 complete; AnimeKai escape hatch shipped flag-off (stub provider + sidecar 501 + REQUIREMENTS carryover); production deploy verified (2 providers registered, sidecar 501 smoke passed); SCRAPER-KAI-01..04 + KAI-07 carry to v3.1
 last_updated: "2026-05-12T17:40:11.519Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 19
   completed_plans: 19
   percent: 100
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 ## Current Position
 
-Phase: 19 (AnimeKai (gated)) — READY FOR VERIFICATION
-Plan: 1 of 1
-Status: Phase complete — ready for verification (run `/gsd-verify-phase 19`)
-Last activity: 2026-05-12 -- Phase 19 Plan 19-01 escape hatch shipped (flag-off, prod-verified)
+Phase: 20
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-12
 
 ## Shipped Milestones
 
