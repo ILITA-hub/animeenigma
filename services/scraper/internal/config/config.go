@@ -19,6 +19,7 @@ type Config struct {
 	MegacloudExtractor MegacloudExtractorConfig
 	Redis              RedisConfig
 	AnimePahe          AnimePaheConfig
+	Gogoanime          GogoanimeConfig
 }
 
 // ServerConfig controls the HTTP listener.
@@ -61,6 +62,14 @@ type AnimePaheConfig struct {
 	BaseURL string
 }
 
+// GogoanimeConfig is the per-provider override surface for the gogoanime.Provider
+// (Phase 18 — pivots to Anitaku at anitaku.to). BaseURL defaults to
+// https://anitaku.to; override via SCRAPER_GOGOANIME_BASE_URL when the mirror
+// rotates. Invalid URL fails service boot.
+type GogoanimeConfig struct {
+	BaseURL string
+}
+
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 //
@@ -88,6 +97,9 @@ func Load() (*Config, error) {
 		AnimePahe: AnimePaheConfig{
 			BaseURL: getEnv("ANIMEPAHE_BASE_URL", "https://animepahe.ru"),
 		},
+		Gogoanime: GogoanimeConfig{
+			BaseURL: getEnv("SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.to"),
+		},
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
 		parsed, err := url.Parse(u)
@@ -105,6 +117,15 @@ func Load() (*Config, error) {
 		}
 		if parsed.Scheme == "" || parsed.Host == "" {
 			return nil, fmt.Errorf("invalid ANIMEPAHE_BASE_URL %q: missing scheme or host", u)
+		}
+	}
+	if u := cfg.Gogoanime.BaseURL; u != "" {
+		parsed, err := url.Parse(u)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SCRAPER_GOGOANIME_BASE_URL %q: %w", u, err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid SCRAPER_GOGOANIME_BASE_URL %q: missing scheme or host", u)
 		}
 	}
 	return cfg, nil

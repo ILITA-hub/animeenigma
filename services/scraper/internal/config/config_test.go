@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -119,4 +120,41 @@ func TestConfig_Load_InvalidAnimePaheURL(t *testing.T) {
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() error = nil; want error for malformed ANIMEPAHE_BASE_URL")
 	}
+}
+
+// TestLoad_GogoanimeConfig_DefaultsAndOverride pins Phase 18's new env-var
+// surface — Gogoanime.BaseURL reads SCRAPER_GOGOANIME_BASE_URL; defaults to
+// https://anitaku.to; rejects malformed URLs at boot with an error message
+// that names the env var verbatim (so operators can grep logs).
+func TestLoad_GogoanimeConfig_DefaultsAndOverride(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		unsetEnv(t, "SCRAPER_GOGOANIME_BASE_URL")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Gogoanime.BaseURL != "https://anitaku.to" {
+			t.Fatalf("default = %q, want https://anitaku.to", cfg.Gogoanime.BaseURL)
+		}
+	})
+	t.Run("override", func(t *testing.T) {
+		setEnv(t, "SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.io")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Gogoanime.BaseURL != "https://anitaku.io" {
+			t.Fatalf("override = %q, want https://anitaku.io", cfg.Gogoanime.BaseURL)
+		}
+	})
+	t.Run("invalid", func(t *testing.T) {
+		setEnv(t, "SCRAPER_GOGOANIME_BASE_URL", "not-a-url")
+		_, err := Load()
+		if err == nil {
+			t.Fatal("expected error for invalid URL")
+		}
+		if !strings.Contains(err.Error(), "SCRAPER_GOGOANIME_BASE_URL") {
+			t.Fatalf("error %q must mention SCRAPER_GOGOANIME_BASE_URL", err.Error())
+		}
+	})
 }
