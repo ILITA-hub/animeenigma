@@ -2,18 +2,17 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
-status: phase_16_wave_1_paused_usage_exhaustion
-stopped_at: "Phase 16 (AnimePahe + EnglishPlayer) wave 1 paused on Anthropic usage exhaustion (resets 12:30pm Europe/Berlin). Discuss + UI-SPEC + RESEARCH + 6-plan plan are all committed. Wave 1 dispatched 3 parallel executor agents (16-01, 16-02, 16-04); all 3 ran out mid-execution. Partial work preserved in locked worktrees: 16-01 zero commits, 16-02 has RED test scaffold only, 16-04 has 2 commits (scraperApi + ReportButton diagnostics). Wave 2 (16-03 AnimePahe Provider), Wave 3 (16-05 boot wiring), Wave 4 (16-06 EnglishPlayer.vue + Anime.vue) untouched. Phase 15 fully complete and verified (passed 6/6). Resume after 12:30pm Berlin with /clear then /gsd-autonomous --from 16."
-last_updated: "2026-05-12T05:30:00.000Z"
-last_activity: 2026-05-12
+status: phase_16_complete_advancing_to_17
+stopped_at: "Phase 16 complete (6/6 plans + SUMMARY each, code review iter1 fixed 16 findings, iter2 clean of BLOCKERs; VERIFICATION human_needed for 6 live runtime items deferred to deploy-operator + milestone audit). Advancing to Phase 17 (Observability)."
+last_updated: "2026-05-12T05:50:00.000Z"
+last_activity: 2026-05-12 -- Phase 16 complete, advancing to Phase 17
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 10
-  completed_plans: 4
-  percent: 17
+  completed_phases: 2
+  total_plans: 16
+  completed_plans: 10
+  percent: 33
 ---
-
 
 # Project State
 
@@ -23,14 +22,14 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
 
-**Current focus:** Phase 16 — animepahe-and-new-englishplayer
+**Current focus:** Phase 17 — Observability (next)
 
 ## Current Position
 
-Phase: 16 (animepahe-and-new-englishplayer) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 16
-Last activity: 2026-05-11 -- Phase 16 execution started
+Phase: 16 → 17 (advancing)
+Plan: 6 of 6 complete for phase 16
+Status: Phase 16 complete; starting Phase 17 (Observability)
+Last activity: 2026-05-12 -- Phase 16 verification committed (human_needed; deferred), advancing to Phase 17
 
 ## Shipped Milestones
 

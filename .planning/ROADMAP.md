@@ -41,7 +41,7 @@
 ### v3.0 Universal Anime Scraper (Phases 15-20)
 
 - [x] **Phase 15: Foundation** — Provider interface, orchestrator skeleton, EmbedExtractor registry, BaseHTTPClient, megacloud-extractor Go wrapper, golden-file harness, 503-stub HTTP endpoints (completed 2026-05-11)
-- [ ] **Phase 16: AnimePahe + New EnglishPlayer** — First live provider (Kwik via goja), new unified `EnglishPlayer.vue` replacing both HiAnime + Consumet tabs end-to-end
+- [x] **Phase 16: AnimePahe + New EnglishPlayer** — First live provider (Kwik via goja), new unified `EnglishPlayer.vue` replacing both HiAnime + Consumet tabs end-to-end (completed 2026-05-12)
 - [ ] **Phase 17: Observability** — Per-provider/per-stage health gauges, 15-min liveness probe with golden anime pool, orchestrator skips unhealthy, Grafana alert, admin health endpoint
 - [ ] **Phase 18: 9anime** — Second provider (WordPress/Madara markup), failover AnimePahe → 9anime verified end-to-end, new embed extractors registered
 - [ ] **Phase 19: AnimeKai (gated)** — Third provider behind `SCRAPER_ANIMEKAI_ENABLED` feature flag; in-house token generator in megacloud-extractor sidecar (no `enc-dec.app`); flag default-off carryover acceptable if R&D doesn't converge
