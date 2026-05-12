@@ -419,7 +419,16 @@ func hostnameOf(s string) string {
 // GetStream delegates to the registry's extractor for the kwik URL and
 // caches the result with TTL min(expires-30s, 5min). Already-expired URLs
 // are NOT cached (a cached expired URL would just be a known-bad URL).
+//
+// WR-06: the `category` parameter is INFORMATIONAL on this provider —
+// sub/dub selection happens at ListServers time (each kwik URL is tagged
+// with its Server.Type derived from the play page's `data-audio` attribute).
+// We accept the parameter to satisfy domain.Provider but do not branch on
+// it: the caller has already picked a serverID whose audio matches their
+// preference. Cache namespacing also ignores category for the same reason
+// (the kwik URL is sufficient to disambiguate sub vs dub).
 func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverID string, category domain.Category) (*domain.Stream, error) {
+	_ = category // informational only; see WR-06 note above.
 	// Cache key: hash the serverID (kwik URL) for bounded length.
 	h := sha256.Sum256([]byte(serverID))
 	cacheKey := fmt.Sprintf("stream:%s:%s:%s:%s", providerName, providerID, episodeID, hex.EncodeToString(h[:8]))
