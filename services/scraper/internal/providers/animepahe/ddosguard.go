@@ -12,10 +12,13 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
 
-// ddosCookieName is the cookie DDoS-Guard sets on the target host after a
-// successful bypass GET. Once present in the jar, subsequent requests to the
-// target succeed without re-running the handshake.
-const ddosCookieName = "__ddg2_"
+// ddosCookieNamePrefix is the prefix for the cookie DDoS-Guard sets on the
+// target host after a successful bypass GET. In 2025/2026 the cookie name
+// includes a versioned suffix (e.g. `__ddg2_BvHvjMmh`), so an exact-match
+// check would always miss the real cookie and force the handshake to
+// re-run on every request — or worse, mis-report the handshake as failed.
+// See REVIEW.md CR-05.
+const ddosCookieNamePrefix = "__ddg2_"
 
 // ddosCheckURL is the path that DDoS-Guard's bootstrap JS lives at. The
 // response body is shaped like  var x='/foo/bar/baz';  — a single-quoted path
@@ -58,7 +61,7 @@ func ensureDDoSCookie(ctx context.Context, hc *domain.BaseHTTPClient, target *ur
 		return errors.New("ensureDDoSCookie: client has no cookie jar")
 	}
 	for _, c := range jar.Cookies(target) {
-		if c.Name == ddosCookieName && c.Value != "" {
+		if strings.HasPrefix(c.Name, ddosCookieNamePrefix) && c.Value != "" {
 			return nil
 		}
 	}
@@ -114,14 +117,15 @@ func ensureDDoSCookie(ctx context.Context, hc *domain.BaseHTTPClient, target *ur
 	}()
 	// Don't error on non-200 here — DDoS-Guard sometimes returns 200, sometimes
 	// 403, but always SETS the cookie if the bypass URL is reachable.
-	// Re-check the jar:
+	// Re-check the jar (matches on the `__ddg2_` prefix, not exact name — see
+	// CR-05; real cookies carry a versioned suffix like `__ddg2_BvHvjMmh`):
 	for _, c := range jar.Cookies(target) {
-		if c.Name == ddosCookieName && c.Value != "" {
+		if strings.HasPrefix(c.Name, ddosCookieNamePrefix) && c.Value != "" {
 			return nil
 		}
 	}
 	return domain.WrapExtractFailed(
-		errors.New("__ddg2_ cookie not set after bypass GET"),
+		errors.New("__ddg2_* cookie not set after bypass GET"),
 		"ddos-guard handshake produced no cookie",
 	)
 }

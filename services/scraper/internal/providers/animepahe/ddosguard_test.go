@@ -24,16 +24,43 @@ func newTestHTTPClient(t *testing.T) *domain.BaseHTTPClient {
 	return domain.NewBaseHTTPClient(log, domain.WithMaxRetries(0))
 }
 
-// TestEnsureDDoSCookie_AlreadyHave: jar already has __ddg2_ → no HTTP call.
+// TestEnsureDDoSCookie_AlreadyHave: jar already has __ddg2_<suffix> → no
+// HTTP call. CR-05: matches the prefix, not an exact name — real DDoS-Guard
+// cookies in 2025/2026 carry a versioned suffix like `BvHvjMmh`.
 func TestEnsureDDoSCookie_AlreadyHave(t *testing.T) {
 	t.Parallel()
 	hc := newTestHTTPClient(t)
 	target, _ := url.Parse("https://example.org")
-	// Pre-populate the jar.
-	hc.Jar().SetCookies(target, []*http.Cookie{{Name: ddosCookieName, Value: "existing-ddg2"}})
+	// Pre-populate the jar with a real-shape cookie name (prefix + suffix).
+	hc.Jar().SetCookies(target, []*http.Cookie{{Name: ddosCookieNamePrefix + "BvHvjMmh", Value: "existing-ddg2"}})
 
 	if err := ensureDDoSCookie(context.Background(), hc, target); err != nil {
 		t.Fatalf("ensureDDoSCookie err = %v; want nil", err)
+	}
+}
+
+// TestEnsureDDoSCookie_PrefixMatch_NoHTTP: CR-05 anchors the contract that
+// a jar pre-populated with `__ddg2_<random>` short-circuits ensureDDoSCookie
+// (no HTTP call). Regression guard for the exact-match bug that would have
+// re-run the handshake on every request.
+func TestEnsureDDoSCookie_PrefixMatch_NoHTTP(t *testing.T) {
+	t.Parallel()
+	hc := newTestHTTPClient(t)
+	target, _ := url.Parse("https://animepahe.ru")
+	hc.Jar().SetCookies(target, []*http.Cookie{{Name: "__ddg2_BvHvjMmh", Value: "abc"}})
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	if err := ensureDDoSCookie(context.Background(), hc, target); err != nil {
+		t.Fatalf("ensureDDoSCookie err = %v; want nil", err)
+	}
+	if calls.Load() != 0 {
+		t.Errorf("HTTP must not be called when __ddg2_<suffix> already present; got %d calls", calls.Load())
 	}
 }
 
@@ -58,7 +85,7 @@ func TestEnsureDDoSCookie_FullHandshake(t *testing.T) {
 	// This test verifies the helper short-circuits when the jar is
 	// pre-populated, which is the same idempotency contract.
 	target, _ := url.Parse("https://animepahe.ru")
-	hc.Jar().SetCookies(target, []*http.Cookie{{Name: ddosCookieName, Value: "abc-xyz"}})
+	hc.Jar().SetCookies(target, []*http.Cookie{{Name: ddosCookieNamePrefix + "FullHandshake", Value: "abc-xyz"}})
 
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
