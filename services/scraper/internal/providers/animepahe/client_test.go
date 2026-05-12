@@ -392,6 +392,7 @@ func TestProvider_ListServers_HappyPath(t *testing.T) {
 	if len(servers) != 3 {
 		t.Fatalf("len(servers) = %d; want 3", len(servers))
 	}
+	subCount := 0
 	for _, s := range servers {
 		if !strings.HasPrefix(s.ID, "https://kwik.cx/") {
 			t.Errorf("server.ID should be a kwik URL; got %q", s.ID)
@@ -399,6 +400,49 @@ func TestProvider_ListServers_HappyPath(t *testing.T) {
 		if s.Name != "kwik" {
 			t.Errorf("server.Name = %q; want \"kwik\"", s.Name)
 		}
+		// CR-02: the fixture buttons all carry data-audio="jpn", so every
+		// server entry should be tagged CategorySub. The frontend's
+		// `subServers.filter(s => s.type === 'sub')` would otherwise produce
+		// an empty list.
+		if s.Type == domain.CategorySub {
+			subCount++
+		}
+	}
+	if subCount != 3 {
+		t.Errorf("expected 3 sub-tagged servers; got %d", subCount)
+	}
+}
+
+// TestProvider_ListServers_DubAudio: a play page with data-audio="eng" maps
+// to CategoryDub. Anchors CR-02's contract.
+func TestProvider_ListServers_DubAudio(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body>
+<button data-src="https://kwik.cx/e/dub-720p" data-audio="eng" data-resolution="720">EngDub · 720p</button>
+<button data-src="https://kwik.cx/e/sub-720p" data-audio="jpn" data-resolution="720">JpSub · 720p</button>
+</body></html>`))
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+	servers, err := p.ListServers(context.Background(), "a", "b")
+	if err != nil {
+		t.Fatalf("ListServers err = %v", err)
+	}
+	if len(servers) != 2 {
+		t.Fatalf("len(servers) = %d; want 2", len(servers))
+	}
+	var sawSub, sawDub bool
+	for _, s := range servers {
+		switch s.Type {
+		case domain.CategorySub:
+			sawSub = true
+		case domain.CategoryDub:
+			sawDub = true
+		}
+	}
+	if !sawSub || !sawDub {
+		t.Errorf("want both sub and dub server entries; got sub=%v dub=%v", sawSub, sawDub)
 	}
 }
 

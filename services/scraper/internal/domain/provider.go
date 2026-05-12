@@ -46,9 +46,15 @@ type Episode struct {
 // Server is one of the streaming servers a provider lists for an episode
 // (e.g. "vidstreaming", "megacloud"). The orchestrator picks the first server
 // whose GetStream call succeeds.
+//
+// Type carries the audio category (sub/dub/raw) so the frontend's
+// server-selection UI can group entries. The frontend filters servers by
+// `s.type === 'sub' | 'dub'`; providers that cannot detect the category
+// should default to CategorySub for safety (the most common case).
 type Server struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   string   `json:"id"`
+	Name string   `json:"name"`
+	Type Category `json:"type"`
 }
 
 // Source is one playable URL for a Stream. Multiple sources per Stream are

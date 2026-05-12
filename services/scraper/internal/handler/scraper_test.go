@@ -162,7 +162,7 @@ func TestScraperHandler_GetServers_Live(t *testing.T) {
 	t.Parallel()
 	fp := &fakeProvider{
 		name:              "fakeprov",
-		listServersResult: []domain.Server{{ID: "srv1", Name: "kwik"}},
+		listServersResult: []domain.Server{{ID: "srv1", Name: "kwik", Type: domain.CategorySub}},
 	}
 	h := newTestHandler(t, fp)
 

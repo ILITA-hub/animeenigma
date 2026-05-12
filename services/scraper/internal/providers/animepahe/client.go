@@ -383,7 +383,17 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 			host != "kwik.si" && !strings.HasSuffix(host, ".kwik.si") {
 			return
 		}
-		servers = append(servers, domain.Server{ID: src, Name: "kwik"})
+		// CR-02: derive sub/dub from the surrounding `data-audio` attribute
+		// (AnimePahe surfaces `jpn`/`eng` per kwik variant). Default to
+		// CategorySub for safety — sub is the dominant case on AnimePahe and
+		// an unknown attribute should not vanish from the frontend filter.
+		audio, _ := sel.Attr("data-audio")
+		cat := domain.CategorySub
+		switch strings.ToLower(strings.TrimSpace(audio)) {
+		case "eng", "dub", "english":
+			cat = domain.CategoryDub
+		}
+		servers = append(servers, domain.Server{ID: src, Name: "kwik", Type: cat})
 	})
 	p.markStage("list_servers", nil)
 	return servers, nil
