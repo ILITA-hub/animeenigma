@@ -43,6 +43,7 @@ func NewEarnvidsExtractor() *EarnvidsExtractor {
 		hosts:              earnvidsHosts,
 		referer:            earnvidsReferer,
 		selectorPackerFail: "earnvids_packer_balance",
+		selectorGojaFail:   "earnvids_goja",
 		selectorRegexFail:  "earnvids_hls2_regex",
 		selectorBodyFail:   "earnvids_body_read",
 		http:               &http.Client{Timeout: defaultPackedHTTPTimeout},

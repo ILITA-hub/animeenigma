@@ -47,6 +47,7 @@ func NewStreamHGExtractor() *StreamHGExtractor {
 		hosts:              streamhgHosts,
 		referer:            streamhgReferer,
 		selectorPackerFail: "streamhg_packer_balance",
+		selectorGojaFail:   "streamhg_goja",
 		selectorRegexFail:  "streamhg_hls2_regex",
 		selectorBodyFail:   "streamhg_body_read",
 		http:               &http.Client{Timeout: defaultPackedHTTPTimeout},

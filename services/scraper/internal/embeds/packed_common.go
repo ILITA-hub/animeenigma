@@ -80,10 +80,17 @@ type packedExtractor struct {
 	// referer is forced as the upstream Referer header when the caller does not
 	// supply one. Required by both upstreams (they 403 otherwise).
 	referer string
-	// selectorPackerFail / selectorRegexFail / selectorBodyFail are stable
-	// short identifiers emitted via parser_zero_match_total on each failure
-	// path. They MUST be low-cardinality (no raw HTML/regex strings).
+	// selectorPackerFail / selectorGojaFail / selectorRegexFail /
+	// selectorBodyFail are stable short identifiers emitted via
+	// parser_zero_match_total on each failure path. They MUST be
+	// low-cardinality (no raw HTML/regex strings).
+	//
+	// WR-02 — selectorGojaFail was added so a runtime trip inside goja
+	// (upstream JS shape change / infinite loop / timeout) is distinct
+	// from extractPacker's balance-paren miss (upstream HTML shape change).
+	// Conflating them masked one inside the other on the Phase 17 dashboard.
 	selectorPackerFail string
+	selectorGojaFail   string
 	selectorRegexFail  string
 	selectorBodyFail   string
 	// http is the HTTP client used for the wrapper fetch. Tests inject a custom
@@ -204,7 +211,9 @@ func (e *packedExtractor) Extract(ctx context.Context, embedURL string, headers 
 	wrapper := "(" + iife + ")"
 	unpacked, err := runGoja(ctx, wrapper, e.timeout)
 	if err != nil {
-		metrics.ParserZeroMatchTotal.WithLabelValues(e.name, e.selectorPackerFail).Inc()
+		// WR-02 — emit the goja-specific selector so the Phase 17 dashboard
+		// can split runtime trips from extractPacker balance-paren misses.
+		metrics.ParserZeroMatchTotal.WithLabelValues(e.name, e.selectorGojaFail).Inc()
 		return nil, domain.WrapExtractFailed(err, e.name+": goja unpack")
 	}
 
