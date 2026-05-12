@@ -27,13 +27,17 @@ const streamTTLFallback = streamTTLCap
 // Earnvids: query param `e=<seconds_to_live>` (delta, not absolute Unix ts).
 // Returns:
 //   - streamTTLFallback when no `e=` query param is present (vibeplayer
-//     static-m3u8 case).
+//     static-m3u8 case) — URL is treated as static / unsigned.
 //   - When `s=<unix_signed_at>` is also present, treat (s+e)-now as the
 //     headroom (absolute expiry semantics).
 //   - When only `e=<delta>` is present, treat e as a delta-from-now.
-//   - 0 when the resulting headroom (minus 30s guard) is non-positive — the
-//     caller must NOT cache in that case (the cached URL would just be a
-//     known-bad URL).
+//   - 0 when the resulting headroom (minus 30s guard) is non-positive OR
+//     when `e=` is present but unparseable / non-positive. The caller must
+//     NOT cache in that case (the cached URL would just hand out a known-
+//     bad URL on every replay). CR-03 — pre-fix this path returned
+//     streamTTLFallback for malformed e=, which conflated "static unsigned
+//     URL" with "signing scheme just rotated upstream" and caused 5-minute
+//     stuck-broken windows for every anime when the CDN rotated keys.
 //
 // NOTE: This differs from animepahe/cache.go::computeStreamTTL which parses
 // an absolute `expires=<unix>` timestamp. The StreamHG/Earnvids signed URLs
@@ -47,11 +51,16 @@ func computeStreamTTL(streamURL string, now time.Time) time.Duration {
 	q := u.Query()
 	eStr := q.Get("e")
 	if eStr == "" {
+		// No expiry param at all — URL is static (vibeplayer-style).
 		return streamTTLFallback
 	}
 	eSec, err := strconv.ParseInt(eStr, 10, 64)
 	if err != nil || eSec <= 0 {
-		return streamTTLFallback
+		// `e=` is present but unparseable or non-positive — the URL CLAIMS
+		// to be signed but the signature value is bogus or expired. Return
+		// 0 so the orchestrator re-extracts on the next request instead of
+		// caching the broken URL for streamTTLCap (5min).
+		return 0
 	}
 	// Prefer the (s + e) absolute-expiry interpretation when s= is present
 	// and parses. Falls back to the delta-from-now interpretation otherwise.

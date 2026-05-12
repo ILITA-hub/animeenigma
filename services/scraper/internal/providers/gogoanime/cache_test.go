@@ -67,11 +67,30 @@ func TestComputeStreamTTL_StreamHGSignedURL(t *testing.T) {
 			want:      streamTTLCap,
 		},
 		{
-			// Non-integer e= falls back to streamTTLFallback (parse error path).
-			name:      "non_integer_e_returns_fallback",
+			// Non-integer e= returns 0 — the URL CLAIMS to be signed (e=
+			// is present) but the value is bogus, so caching the URL for
+			// streamTTLFallback (5min) would hand out a known-bad URL on
+			// every replay until the cache entry expired. CR-03.
+			name:      "non_integer_e_returns_zero",
 			streamURL: "https://x.example.com/abc?e=notanumber",
 			now:       now,
-			want:      streamTTLFallback,
+			want:      0,
+		},
+		{
+			// e=0 explicitly — claims zero TTL → already expired → don't
+			// cache. CR-03.
+			name:      "zero_e_returns_zero",
+			streamURL: "https://x.example.com/abc?e=0",
+			now:       now,
+			want:      0,
+		},
+		{
+			// e=-1 → claimed negative TTL → already expired → don't cache.
+			// CR-03.
+			name:      "negative_e_returns_zero",
+			streamURL: "https://x.example.com/abc?e=-1",
+			now:       now,
+			want:      0,
 		},
 	}
 	for _, tc := range cases {
