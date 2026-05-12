@@ -4,8 +4,8 @@ milestone: v3.0
 milestone_name: Universal Anime Scraper
 status: executing
 stopped_at: "Phase 15 (Foundation) — discuss + plan done, 4 PLAN.md files committed, execution paused on Anthropic usage exhaustion (resets 7:30am Europe/Berlin)."
-last_updated: "2026-05-12T11:15:57.864Z"
-last_activity: 2026-05-12 -- Phase 17 planning complete
+last_updated: "2026-05-12T11:17:07.665Z"
+last_activity: 2026-05-12 -- Phase 17 execution started
 progress:
   total_phases: 6
   completed_phases: 2
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
 
-**Current focus:** Phase 17 — Observability (planning paused)
+**Current focus:** Phase 17 — Observability
 
 ## Current Position
 
-Phase: 17 (observability) — PLANNING
-Plan: 0 of TBD (planner agent paused on usage exhaustion)
-Status: Ready to execute
-Last activity: 2026-05-12 -- Phase 17 planning complete
+Phase: 17 (Observability) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 17
+Last activity: 2026-05-12 -- Phase 17 execution started
 
 ## Shipped Milestones
 

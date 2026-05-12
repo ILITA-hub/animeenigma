@@ -96,8 +96,8 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
   4. The orchestrator skips any provider whose in-memory 60-second health cache reads 0; skipped providers re-enter rotation on the next probe pass that flips them back to 1.
   5. `GET /api/admin/scraper/health` returns the per-provider/per-stage snapshot plus last-success timestamps; `parser_requests_total`, `parser_request_duration_seconds`, `parser_fallback_total{from,to}`, and `parser_zero_match_total{provider,selector}` all emit with `{provider}` labels.
 **Plans**: 4 plans across 3 waves (Wave 1: 17-01 + 17-04 parallel; Wave 2: 17-02; Wave 3: 17-03 — 17-03 bumped to Wave 3 because it shares main.go edits with 17-02)
-- [ ] 17-01-PLAN.md — Wave 1: domain/cache foundation — provider_health_up gauge family + InMemoryHealthCache + stage constants + orchestrator skip-unhealthy wiring + parser_zero_match_total counter
-- [ ] 17-04-PLAN.md — Wave 1: Prometheus scrape job (the missing P-04 blocker) + Grafana scraper-health dashboard + provider-health-stream-segment-down Telegram alert + changelog entry
+- [x] 17-01-PLAN.md — Wave 1: domain/cache foundation — provider_health_up gauge family + InMemoryHealthCache + stage constants + orchestrator skip-unhealthy wiring + parser_zero_match_total counter
+- [x] 17-04-PLAN.md — Wave 1: Prometheus scrape job (the missing P-04 blocker) + Grafana scraper-health dashboard + provider-health-stream-segment-down Telegram alert + changelog entry
 - [ ] 17-02-PLAN.md — Wave 2: ProbeRunner (15-min ± 20% jitter, 5-stage pipeline, 3-of-15-min sliding window, defer-recover) + golden pool + main.go wiring + AnimePahe stage-key rename + first ParserZeroMatchTotal emit
 - [ ] 17-03-PLAN.md — Wave 3: GET /api/admin/scraper/health admin endpoint (scraper handler + transport route) + gateway proxy config/handler/router (specific-before-general /admin/scraper/* before /admin/*)
 
@@ -146,7 +146,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 | 9-14 | v2.0 | 8/8 | ✅ Complete | 2026-05-06 → 2026-05-07 |
 | 15 | v3.0 | 4/4 | Complete    | 2026-05-11 |
 | 16 | v3.0 | 0/6 | Planned     | — |
-| 17 | v3.0 | 0/4 | Planned     | — |
+| 17 | v3.0 | 2/4 | In Progress|  |
 | 18 | v3.0 | 0/? | Not started | — |
 | 19 | v3.0 | 0/? | Not started | — |
 | 20 | v3.0 | 0/? | Not started | — |
