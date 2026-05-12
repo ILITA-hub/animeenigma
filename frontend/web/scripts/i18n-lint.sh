@@ -153,17 +153,41 @@ else
 fi
 
 # ============================================================================
+# 4. Message-format syntax (runs the @intlify/message-compiler parser at lint
+#    time — catches things like a bare `@foo` that the runtime would parse as
+#    a linked-message reference and throw `SyntaxError` at render).
+# ============================================================================
+echo ""
+echo "=== Checking message-format syntax in locale files ==="
+SYNTAX_ERRORS=0
+ESLINT_OUT="$(cd "$SCRIPT_DIR/.." && bunx eslint --no-eslintrc --config .eslintrc.cjs --ext .json src/locales 2>&1 || true)"
+if echo "$ESLINT_OUT" | grep -q '@intlify/vue-i18n/valid-message-syntax'; then
+  echo -e "  ${RED}FAIL${NC} — invalid message syntax found:"
+  echo "$ESLINT_OUT" | sed 's/^/    /'
+  SYNTAX_ERRORS=1
+else
+  echo -e "  ${GREEN}OK${NC} All locale messages parse cleanly"
+fi
+
+# ============================================================================
 # Summary
 # ============================================================================
 echo ""
 echo "=== Summary ==="
 echo -e "  Missing keys:    ${MISSING_ERRORS:-0}"
+echo -e "  Syntax errors:   ${SYNTAX_ERRORS}"
 echo -e "  Hardcoded text:  $HARDCODED_COUNT (warning)"
 echo -e "  Unused keys:     $UNUSED_COUNT (warning)"
 
 if [ "$MISSING_ERRORS" -gt 0 ]; then
   echo ""
   echo -e "${RED}FAIL${NC}: Missing translation keys found. Add them to all locale files."
+  exit 1
+fi
+
+if [ "$SYNTAX_ERRORS" -gt 0 ]; then
+  echo ""
+  echo -e "${RED}FAIL${NC}: Invalid message-format syntax. Escape literal '@' as {'@'} (see .eslintrc.cjs)."
   exit 1
 fi
 
