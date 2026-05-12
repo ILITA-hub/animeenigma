@@ -10,11 +10,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 )
 
 // Orchestrator runs business methods against a registered list of providers
@@ -23,16 +25,27 @@ import (
 // scraper concern.
 //
 // Construct via NewOrchestrator. Zero value is not usable.
+//
+// Phase 17 (SCRAPER-OBS-03): the optional `cache` field is the in-memory
+// provider-health cache. When non-nil, runFailover consults it before
+// dispatching to a provider — a cache reading DOWN causes the orchestrator
+// to skip the provider and increment parser_fallback_total. nil cache
+// preserves Phase 16 behaviour (no skipping).
 type Orchestrator struct {
 	mu        sync.RWMutex
 	providers []domain.Provider
 	registry  *domain.Registry
 	log       *logger.Logger
+	cache     *health.InMemoryHealthCache
 }
 
 // NewOrchestrator builds an orchestrator with zero providers. Use Register
 // to add providers (Phase 16+).
-func NewOrchestrator(log *logger.Logger, registry *domain.Registry) *Orchestrator {
+//
+// Phase 17: `cache` is the in-memory provider-health cache (Plan 17-01).
+// Pass nil to disable skip-unhealthy behaviour — existing tests use nil so
+// they exercise Phase 16's loop verbatim.
+func NewOrchestrator(log *logger.Logger, registry *domain.Registry, cache *health.InMemoryHealthCache) *Orchestrator {
 	if registry == nil {
 		registry = domain.NewRegistry()
 	}
@@ -40,6 +53,7 @@ func NewOrchestrator(log *logger.Logger, registry *domain.Registry) *Orchestrato
 		providers: make([]domain.Provider, 0, 4),
 		registry:  registry,
 		log:       log,
+		cache:     cache,
 	}
 }
 
@@ -149,10 +163,23 @@ func summarizeFailover(errs []error) error {
 //
 // Each retryable failure increments parser_fallback_total{from,to} where
 // `to` is the next provider's Name() (or "" if this was the last one).
+//
+// Phase 17 (SCRAPER-OBS-03): when `cache` is non-nil, each provider is
+// gated by cache.IsHealthy(name) BEFORE the call() dispatch. A cached DOWN
+// state causes the orchestrator to:
+//   - skip the call entirely (no upstream request)
+//   - emit parser_fallback_total{from, to=next}  — same metric the failure
+//     path uses, so dashboards see the skip as a fallback event
+//   - append a "skipped: health gauge 0" error to errs so summarizeFailover
+//     can return ErrProviderDown if every provider is skipped
+//
+// The cache is fail-open (missing or stale entries return true), so a probe
+// outage does NOT blank the service — only an actively-reported DOWN does.
 func runFailover[T any](
 	ctx context.Context,
 	log *logger.Logger,
 	providers []domain.Provider,
+	cache *health.InMemoryHealthCache,
 	call func(p domain.Provider) (T, error),
 ) (T, error) {
 	var zero T
@@ -165,6 +192,28 @@ func runFailover[T any](
 		// Context check before each attempt — fast bail on cancellation.
 		if err := ctx.Err(); err != nil {
 			return zero, err
+		}
+
+		// SCRAPER-OBS-03: skip providers flagged DOWN by the in-memory health
+		// cache. Cache is fail-open (missing/stale entries return true), so
+		// this only skips when the probe confirmed at least 3 consecutive
+		// failures within the last 15 min on the stream_segment stage.
+		if cache != nil && !cache.IsHealthy(p.Name()) {
+			next := ""
+			if i+1 < len(providers) {
+				next = providers[i+1].Name()
+			}
+			metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
+			// Wrap with ErrProviderDown so summarizeFailover() picks it up as
+			// a non-NotFound failure (otherwise an all-skipped chain would
+			// degrade to ErrNotFound, which would be a wrong signal — the
+			// providers exist; they're just gated unhealthy).
+			errs = append(errs, fmt.Errorf("provider %s skipped: health gauge 0: %w", p.Name(), domain.ErrProviderDown))
+			if log != nil {
+				log.Debugw("scraper: provider skipped (health cache says down)",
+					"from", p.Name(), "to", next)
+			}
+			continue
 		}
 
 		result, err := call(p)
@@ -230,7 +279,7 @@ func (o *Orchestrator) OrderedProviderNames(prefer string) []string {
 // per-method business calls so the catalog can pass `mal_id` and the
 // orchestrator resolves it through the registered provider chain.
 func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer string) (string, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer),
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
 		func(p domain.Provider) (string, error) {
 			return p.FindID(ctx, ref)
 		})
@@ -238,7 +287,7 @@ func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer s
 
 // ListEpisodes runs the provider chain for episode listing.
 func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer string) ([]domain.Episode, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer),
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
 		func(p domain.Provider) ([]domain.Episode, error) {
 			return p.ListEpisodes(ctx, providerID)
 		})
@@ -246,7 +295,7 @@ func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer stri
 
 // ListServers runs the provider chain for server listing for one episode.
 func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, prefer string) ([]domain.Server, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer),
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
 		func(p domain.Provider) ([]domain.Server, error) {
 			return p.ListServers(ctx, providerID, episodeID)
 		})
@@ -254,7 +303,7 @@ func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, p
 
 // GetStream runs the provider chain to pull a playable Stream.
 func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, serverID string, cat domain.Category, prefer string) (*domain.Stream, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer),
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
 		func(p domain.Provider) (*domain.Stream, error) {
 			return p.GetStream(ctx, providerID, episodeID, serverID, cat)
 		})
@@ -283,5 +332,19 @@ func (o *Orchestrator) HealthSnapshot(ctx context.Context) map[string]domain.Hea
 	for _, p := range providers {
 		out[p.Name()] = p.HealthCheck(ctx)
 	}
+	return out
+}
+
+// RegisteredProviders returns a snapshot of currently-registered providers.
+// Locking discipline (REVIEW.md CR-02): snapshot under RLock and release
+// before any caller-side iteration that may do I/O. Phase 17 plans 02 and 03
+// consume this — the probe runner uses it to spawn one goroutine per
+// provider, and the admin handler uses it to enumerate names without
+// touching the orchestrator's internal lock from a request handler.
+func (o *Orchestrator) RegisteredProviders() []domain.Provider {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	out := make([]domain.Provider, len(o.providers))
+	copy(out, o.providers)
 	return out
 }

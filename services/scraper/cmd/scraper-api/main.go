@@ -99,7 +99,10 @@ func main() {
 	}
 
 	// Build the orchestrator and register the provider before HTTP starts.
-	orchestrator := service.NewOrchestrator(log, registry)
+	// Phase 17 Plan 01 introduces the optional health cache; we pass nil here
+	// because the probe runner (Plan 17-02) is what wires the actual cache.
+	// Until then, nil preserves Phase 16 behaviour: no skip-unhealthy gating.
+	orchestrator := service.NewOrchestrator(log, registry, nil)
 	orchestrator.Register(animePaheProvider)
 	log.Infow("registered provider", "name", animePaheProvider.Name())
 
