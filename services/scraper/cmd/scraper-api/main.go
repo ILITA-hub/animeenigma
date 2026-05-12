@@ -17,6 +17,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
 )
@@ -51,6 +52,21 @@ func main() {
 	mcClient := embeds.NewMegacloudClient(cfg.MegacloudExtractor.URL, cfg.MegacloudExtractor.Timeout)
 	registry.Register(mcClient)
 	log.Infow("registered embed extractor", "name", mcClient.Name())
+
+	// Phase 18 — Gogoanime/Anitaku embed wrappers. These MUST be registered
+	// BEFORE the gogoanime.Provider constructor below so the provider's
+	// embeds.Find dispatch can hit them at GetStream time.
+	vibeplayerExtractor := embeds.NewVibePlayerExtractor()
+	registry.Register(vibeplayerExtractor)
+	log.Infow("registered embed extractor", "name", vibeplayerExtractor.Name())
+
+	streamhgExtractor := embeds.NewStreamHGExtractor()
+	registry.Register(streamhgExtractor)
+	log.Infow("registered embed extractor", "name", streamhgExtractor.Name())
+
+	earnvidsExtractor := embeds.NewEarnvidsExtractor()
+	registry.Register(earnvidsExtractor)
+	log.Infow("registered embed extractor", "name", earnvidsExtractor.Name())
 
 	// Redis cache — shared by malsync, episodes, stream TTLs. We fatal here
 	// instead of degrading gracefully because every AnimePahe response is
@@ -107,6 +123,35 @@ func main() {
 	orchestrator := service.NewOrchestrator(log, registry, cache)
 	orchestrator.Register(animePaheProvider)
 	log.Infow("registered provider", "name", animePaheProvider.Name())
+
+	// Gogoanime/Anitaku — second EN provider (Phase 18).
+	// Pivoted from "9anime" since the entire 9anime mirror chain is dead per
+	// 2026-05-12 research (.planning/phases/18-9anime/18-RESEARCH.md).
+	// Backend slug is "gogoanime"; the user-facing display label is "Anitaku".
+	// Registration ORDER is the failover ORDER (CONTEXT.md D5) — animepahe
+	// is tried first; gogoanime is the second-chance provider when animepahe
+	// is unhealthy or returns ErrNotFound.
+	gogoanimeBaseHTTP := domain.NewBaseHTTPClient(log,
+		domain.WithPerHostRPS("anitaku.to", 1.0, 2),
+		domain.WithPerHostRPS("vibeplayer.site", 1.0, 2),
+		domain.WithPerHostRPS("otakuhg.site", 1.0, 2),
+		domain.WithPerHostRPS("otakuvid.online", 1.0, 2),
+		domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
+	)
+	gogoanimeMalsync := gogoanime.NewMalSyncClient(redisCache)
+	gogoanimeProvider, err := gogoanime.New(gogoanime.Deps{
+		BaseURL: cfg.Gogoanime.BaseURL,
+		HTTP:    gogoanimeBaseHTTP,
+		Embeds:  registry,
+		MalSync: gogoanimeMalsync,
+		Cache:   redisCache,
+		Log:     log,
+	})
+	if err != nil {
+		log.Fatalw("failed to construct Gogoanime provider", "error", err)
+	}
+	orchestrator.Register(gogoanimeProvider)
+	log.Infow("registered provider", "name", gogoanimeProvider.Name())
 
 	// Phase 17 Plan 01: seed the provider_health_up gauge family with zero-
 	// initialized children for every (provider, stage) pair so the HELP/TYPE
@@ -176,6 +221,15 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Phase 18 wiring invariant — fatal if the provider chain didn't grow
+	// to 2 (animepahe + gogoanime). A future maintainer dropping one of the
+	// orchestrator.Register calls would silently degrade the failover chain
+	// to a single provider; this guard surfaces the regression at boot.
+	if got, want := len(orchestrator.RegisteredProviders()), 2; got != want {
+		log.Fatalw("Phase 18 wiring invariant broken: expected 2 providers (animepahe + gogoanime)",
+			"got", got, "want", want)
+	}
+
 	go func() {
 		log.Infow("scraper service ready",
 			"port", cfg.Server.Port,
@@ -184,6 +238,7 @@ func main() {
 			"embed_extractors", len(registry.Names()),
 			"megacloud_url", cfg.MegacloudExtractor.URL,
 			"animepahe_base_url", cfg.AnimePahe.BaseURL,
+			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)
