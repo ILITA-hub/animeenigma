@@ -78,6 +78,27 @@ func WithHeaders(h http.Header) Option {
 	return func(c *BaseHTTPClient) { c.headers = h.Clone() }
 }
 
+// WithTransport overrides the underlying http.RoundTripper used by the
+// retryablehttp client. Used by tests to route all outgoing traffic to an
+// httptest.Server while preserving the BaseHTTPClient's retry + rate-limit
+// + cookie-jar pipeline.
+//
+// Phase 18 motivation: the orchestrator failover integration test
+// (services/scraper/internal/service/orchestrator_phase18_test.go) needs to
+// exercise a REAL gogoanime.Provider against an offline httptest.Server.
+// Without this Option, the only way to redirect traffic would be to either
+// (a) hand-roll a separate http.Client (defeats the SCRAPER-FOUND-06
+// "no hand-rolled clients" invariant) or (b) expose BaseHTTPClient.client
+// as a public field (breaks encapsulation).
+//
+// Phase 19 (AnimeKai) will reuse this for its own offline integration test.
+//
+// Production callers MUST NOT set this — the default retryablehttp transport
+// is the right choice for real upstreams.
+func WithTransport(rt http.RoundTripper) Option {
+	return func(c *BaseHTTPClient) { c.client.HTTPClient.Transport = rt }
+}
+
 // NewBaseHTTPClient builds a configured *BaseHTTPClient.
 func NewBaseHTTPClient(log *logger.Logger, opts ...Option) *BaseHTTPClient {
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})

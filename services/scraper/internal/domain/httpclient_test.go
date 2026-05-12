@@ -362,3 +362,49 @@ func TestBaseHTTPClient_DoMethod(t *testing.T) {
 		t.Errorf("caller-set X-Custom not preserved; got %q", customHeader)
 	}
 }
+
+// countingTransport stubs http.RoundTripper, counting calls and returning a
+// minimal 200 OK so the test doesn't need a real upstream.
+type countingTransport struct {
+	calls int32
+}
+
+func (c *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	atomic.AddInt32(&c.calls, 1)
+	return &http.Response{
+		StatusCode: 200,
+		Body:       http.NoBody,
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
+}
+
+// TestWithTransport_RoutesAllTraffic locks the WithTransport Option contract
+// (Phase 18 Plan 18-04 Task 1a): a caller-supplied http.RoundTripper receives
+// every outgoing request from a BaseHTTPClient.Get / .Do dispatch. Used by the
+// orchestrator failover integration test (orchestrator_phase18_test.go) to
+// route all gogoanime traffic to an httptest.Server while keeping the retry +
+// rate-limit + cookie pipeline intact.
+//
+// Motivation (kept here for future maintainers): BaseHTTPClient.client is
+// unexported, so tests can't mutate the underlying retryablehttp transport
+// directly. Without this Option, the only ways to redirect traffic would be
+// (a) hand-roll a separate http.Client (defeats the SCRAPER-FOUND-06
+// "no hand-rolled clients" invariant) or (b) export the field (breaks
+// encapsulation). WithTransport is the third path.
+func TestWithTransport_RoutesAllTraffic(t *testing.T) {
+	t.Parallel()
+	ct := &countingTransport{}
+	c := NewBaseHTTPClient(testLogger(t),
+		WithTransport(ct),
+		// Disable retries so a 5xx from the stub doesn't fan out — we only
+		// want to count the original dispatch.
+		WithMaxRetries(0),
+	)
+	if _, err := c.Get(context.Background(), "https://example.invalid/"); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got := atomic.LoadInt32(&ct.calls); got != 1 {
+		t.Errorf("injected transport saw %d calls, want 1", got)
+	}
+}
