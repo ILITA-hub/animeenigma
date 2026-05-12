@@ -1,0 +1,44 @@
+{
+  "total": 3,
+  "per_page": 8,
+  "current_page": 1,
+  "last_page": 1,
+  "data": [
+    {
+      "id": 4,
+      "title": "Naruto",
+      "type": "TV",
+      "episodes": 220,
+      "status": "Finished Airing",
+      "season": "Fall",
+      "year": 2002,
+      "score": 7.97,
+      "poster": "https://i.animepahe.ru/posters/4.jpg",
+      "session": "anime-session-naruto-001"
+    },
+    {
+      "id": 1735,
+      "title": "Naruto: Shippuuden",
+      "type": "TV",
+      "episodes": 500,
+      "status": "Finished Airing",
+      "season": "Winter",
+      "year": 2007,
+      "score": 8.26,
+      "poster": "https://i.animepahe.ru/posters/1735.jpg",
+      "session": "anime-session-narutoshippuden-001"
+    },
+    {
+      "id": 957,
+      "title": "Naruto: Naruto to Mashin to Sannin no Onegai Dattebayo!!",
+      "type": "OVA",
+      "episodes": 1,
+      "status": "Finished Airing",
+      "season": "Spring",
+      "year": 2003,
+      "score": 6.85,
+      "poster": "https://i.animepahe.ru/posters/957.jpg",
+      "session": "anime-session-naruto-ova-001"
+    }
+  ]
+}
