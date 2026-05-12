@@ -250,12 +250,20 @@ const server = http.createServer(async (req, res) => {
   // already wired (services/scraper/internal/providers/animekai/).
   if (parsed.pathname === "/animekai-token" && req.method === "POST") {
     console.warn(`/animekai-token called — escape-hatch stub returning 501`);
-    res.writeHead(501, { "Content-Type": "application/json" });
-    res.end(
-      JSON.stringify({
-        error: "AnimeKai sidecar not yet converged — carry to v3.1",
-      })
-    );
+    // WR-02: drain the POST body before responding. Writing 501 and ending
+    // the response without consuming `req` lets keep-alive callers (the Go
+    // http.Client) race the response close with their request write and
+    // surface ECONNRESET instead of a clean 501 — which would mask the
+    // intended domain.ErrProviderDown mapping.
+    req.on("data", () => {});
+    req.on("end", () => {
+      res.writeHead(501, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          error: "AnimeKai sidecar not yet converged — carry to v3.1",
+        })
+      );
+    });
     return;
   }
 
