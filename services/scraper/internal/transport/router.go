@@ -51,12 +51,15 @@ func NewRouter(
 	})
 
 	// Scraper business routes — Phase 15 ships 503 stubs for the first three
-	// and a live HealthSnapshot for the fourth.
+	// and a live HealthSnapshot for the fourth. Phase 17 Plan 03 adds the
+	// admin debug endpoint (gateway-gated; this handler trusts the gateway
+	// gate per D6).
 	r.Route("/scraper", func(r chi.Router) {
 		r.Get("/episodes", scraperHandler.GetEpisodes)
 		r.Get("/servers", scraperHandler.GetServers)
 		r.Get("/stream", scraperHandler.GetStream)
 		r.Get("/health", scraperHandler.GetHealth)
+		r.Get("/health/admin", scraperHandler.GetAdminHealth) // Plan 17-03
 	})
 
 	return r
