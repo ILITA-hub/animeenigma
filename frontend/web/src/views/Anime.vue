@@ -353,24 +353,37 @@
               </button>
             </template>
             <template v-else-if="videoLanguage === 'en'">
+              <!-- Phase 16 — unified English tab (default for EN-language users). -->
               <button
-                @click="onUserPickedProvider('hianime')"
+                @click="onUserPickedProvider('english')"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'hianime'
-                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                :class="videoProvider === 'english'
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
                   : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
               >
-                HiAnime
+                {{ $t('player.tabEnglish') }}
               </button>
-              <button
-                @click="onUserPickedProvider('consumet')"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'consumet'
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                Consumet
-              </button>
+              <!-- Legacy debug tabs — only when ?legacy=1 (SCRAPER-UI-04) -->
+              <template v-if="$route.query.legacy === '1'">
+                <button
+                  @click="onUserPickedProvider('hianime')"
+                  class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  :class="videoProvider === 'hianime'
+                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                    : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+                >
+                  HiAnime <span class="text-xs opacity-60 ml-1">{{ $t('player.tabDebugSuffix') }}</span>
+                </button>
+                <button
+                  @click="onUserPickedProvider('consumet')"
+                  class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  :class="videoProvider === 'consumet'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                    : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+                >
+                  Consumet <span class="text-xs opacity-60 ml-1">{{ $t('player.tabDebugSuffix') }}</span>
+                </button>
+              </template>
             </template>
             <template v-else-if="videoLanguage === '18+'">
               <button
@@ -433,7 +446,17 @@
               :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
             />
-            <!-- HiAnime Player -->
+            <!-- English Player (Phase 16) — unified English-source player; replaces HiAnime+Consumet for non-debug users -->
+            <EnglishPlayer
+              v-else-if="videoProvider === 'english'"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :preferred-combo="resolvedCombo"
+              :initial-episode="resumeStartEpisode"
+              @available-translations="handleAvailableTranslations"
+            />
+            <!-- HiAnime Player (legacy — visible only via ?legacy=1) -->
             <HiAnimePlayer
               v-else-if="videoProvider === 'hianime'"
               :anime-id="anime.id"
@@ -759,6 +782,8 @@ const HiAnimePlayer = defineAsyncComponent(() => import('@/components/player/HiA
 const ConsumetPlayer = defineAsyncComponent(() => import('@/components/player/ConsumetPlayer.vue'))
 const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
+// Phase 16 — unified English-source player atop the scraper orchestrator (replaces HiAnime + Consumet for non-debug users).
+const EnglishPlayer = defineAsyncComponent(() => import('@/components/player/EnglishPlayer.vue'))
 import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { parseDescription } from '@/utils/description-parser'
@@ -830,8 +855,11 @@ const savingShikimoriId = ref(false)
 const videoLanguage = ref<'ru' | 'en' | '18+'>(
   (localStorage.getItem('preferred_video_language') as 'ru' | 'en' | '18+') || 'ru'
 )
-const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime'>(
-  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime') || 'kodik'
+// Phase 16 — 'english' joins the union as the unified English-source tab.
+// Legacy 'hianime' / 'consumet' stay in the type so the ?legacy=1 debug
+// tabs continue to compile until Phase 20 cutover.
+const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime' | 'english'>(
+  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime' | 'english') || 'kodik'
 )
 
 // Last-watched episode. For authenticated users this comes from server-side
@@ -957,7 +985,7 @@ const playerSwitchTracker = useOverrideTracker({
   currentEpisode: currentEpisodeForTracker,
 })
 
-function onUserPickedProvider(newProvider: 'kodik' | 'animelib' | 'hianime' | 'consumet') {
+function onUserPickedProvider(newProvider: 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'english') {
   // Only fire override if the user is genuinely SWITCHING. The composable's
   // first-per-(load_session_id, dimension) lock would also catch repeats, but
   // an explicit guard keeps E2E timing predictable.
@@ -1283,8 +1311,10 @@ const switchLanguage = (lang: 'ru' | 'en' | '18+') => {
     const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'animelib' | null
     videoProvider.value = savedRu || 'kodik'
   } else if (lang === 'en') {
-    const savedEn = localStorage.getItem('preferred_en_provider') as 'hianime' | 'consumet' | null
-    videoProvider.value = savedEn || 'hianime'
+    // Phase 16: English tab is the new default for EN-language users.
+    // Legacy 'hianime'/'consumet' are still selectable via ?legacy=1 sub-tabs.
+    const savedEn = localStorage.getItem('preferred_en_provider') as 'english' | 'hianime' | 'consumet' | null
+    videoProvider.value = savedEn || 'english'
   } else if (lang === '18+') {
     videoProvider.value = 'hanime'
   }
@@ -1295,7 +1325,8 @@ watch(videoProvider, (newProvider) => {
   localStorage.setItem('preferred_video_provider', newProvider)
   if (videoLanguage.value === 'ru') {
     localStorage.setItem('preferred_ru_provider', newProvider)
-  } else {
+  } else if (videoLanguage.value === 'en') {
+    // Phase 16: include 'english' alongside legacy 'hianime'/'consumet' in the saved values.
     localStorage.setItem('preferred_en_provider', newProvider)
   }
 })
