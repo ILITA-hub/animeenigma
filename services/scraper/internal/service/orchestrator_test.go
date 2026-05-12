@@ -144,23 +144,28 @@ func TestOrchestrator_SingleProvider_Passthrough(t *testing.T) {
 // TestOrchestrator_FailoverOnProviderDown verifies the failover loop: provider
 // A returns ErrProviderDown, provider B returns success → orchestrator returns
 // B's result AND increments parser_fallback_total{from=A,to=B}.
+//
+// REVIEW.md WR-05: provider names embed t.Name() so they cannot collide with
+// any other parallel test that reads the same global metric.
 func TestOrchestrator_FailoverOnProviderDown(t *testing.T) {
 	t.Parallel()
+	fromName := "A_down_" + t.Name()
+	toName := "B_ok_" + t.Name()
 	pa := &fakeProvider{
-		nameVal: "A_down",
+		nameVal: fromName,
 		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
 			return nil, domain.WrapProviderDown(errors.New("conn refused"), "A")
 		},
 	}
 	pb := &fakeProvider{
-		nameVal: "B_ok",
+		nameVal: toName,
 		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
 			return []domain.Episode{{ID: "ep1"}}, nil
 		},
 	}
 	o := newTestOrchestrator(t, pa, pb)
 
-	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_down", "B_ok"))
+	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(fromName, toName))
 	got, err := o.ListEpisodes(context.Background(), "x", "")
 	if err != nil {
 		t.Fatalf("ListEpisodes err = %v; want nil after failover", err)
@@ -168,32 +173,37 @@ func TestOrchestrator_FailoverOnProviderDown(t *testing.T) {
 	if len(got) != 1 || got[0].ID != "ep1" {
 		t.Errorf("ListEpisodes returned %+v; want B's result", got)
 	}
-	after := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_down", "B_ok"))
+	after := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(fromName, toName))
 	if delta := after - before; delta != 1.0 {
-		t.Errorf("parser_fallback_total{from=A_down,to=B_ok} delta = %v; want 1.0", delta)
+		t.Errorf("parser_fallback_total{from=%s,to=%s} delta = %v; want 1.0", fromName, toName, delta)
 	}
 }
 
 // TestOrchestrator_FailoverOnNotFound verifies ErrNotFound also triggers
 // failover (and counter). Real-empty (no error, empty slice) does NOT trigger
 // failover — that is a different case, exercised by Passthrough.
+//
+// REVIEW.md WR-05: provider names embed t.Name() so they cannot collide with
+// any other parallel test that reads the same global metric.
 func TestOrchestrator_FailoverOnNotFound(t *testing.T) {
 	t.Parallel()
+	fromName := "A_nf_" + t.Name()
+	toName := "B_ok2_" + t.Name()
 	pa := &fakeProvider{
-		nameVal: "A_nf",
+		nameVal: fromName,
 		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
 			return nil, domain.ErrNotFound
 		},
 	}
 	pb := &fakeProvider{
-		nameVal: "B_ok2",
+		nameVal: toName,
 		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
 			return []domain.Episode{{ID: "epX"}}, nil
 		},
 	}
 	o := newTestOrchestrator(t, pa, pb)
 
-	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_nf", "B_ok2"))
+	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(fromName, toName))
 	got, err := o.ListEpisodes(context.Background(), "x", "")
 	if err != nil {
 		t.Fatalf("ListEpisodes err = %v; want nil after NotFound failover", err)
@@ -201,9 +211,9 @@ func TestOrchestrator_FailoverOnNotFound(t *testing.T) {
 	if len(got) != 1 || got[0].ID != "epX" {
 		t.Errorf("ListEpisodes returned %+v; want B's result", got)
 	}
-	after := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_nf", "B_ok2"))
+	after := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(fromName, toName))
 	if delta := after - before; delta != 1.0 {
-		t.Errorf("parser_fallback_total{from=A_nf,to=B_ok2} delta = %v; want 1.0", delta)
+		t.Errorf("parser_fallback_total{from=%s,to=%s} delta = %v; want 1.0", fromName, toName, delta)
 	}
 }
 
@@ -453,24 +463,29 @@ func TestOrchestrator_PreferPriority_NoDuplicates(t *testing.T) {
 // if the same provider were called twice with the same `from`/`to` pair
 // in different orders.
 //
-// See REVIEW.md WR-08 for context on global-registry metric pollution.
+// See REVIEW.md WR-08 (now WR-05) for context on global-registry metric
+// pollution. Provider names embed t.Name() so they cannot collide with
+// any other parallel test that reads the same global metric.
 func TestOrchestrator_FailoverFallbackTotalIncrementCount(t *testing.T) {
 	t.Parallel()
+	aName := "A_count_" + t.Name()
+	bName := "B_count_" + t.Name()
+	cName := "C_count_" + t.Name()
 
 	pa := &fakeProvider{
-		nameVal: "A_count",
+		nameVal: aName,
 		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
 			return nil, domain.WrapProviderDown(errors.New("A down"), "A")
 		},
 	}
 	pb := &fakeProvider{
-		nameVal: "B_count",
+		nameVal: bName,
 		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
 			return nil, domain.WrapProviderDown(errors.New("B down"), "B")
 		},
 	}
 	pc := &fakeProvider{
-		nameVal: "C_count",
+		nameVal: cName,
 		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
 			return []domain.Episode{{ID: "ep"}}, nil
 		},
@@ -478,21 +493,21 @@ func TestOrchestrator_FailoverFallbackTotalIncrementCount(t *testing.T) {
 	o := newTestOrchestrator(t, pa, pb, pc)
 
 	// Capture all (from,to) deltas we expect: A→B and B→C.
-	beforeAB := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_count", "B_count"))
-	beforeBC := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("B_count", "C_count"))
+	beforeAB := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(aName, bName))
+	beforeBC := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(bName, cName))
 
 	if _, err := o.ListEpisodes(context.Background(), "x", ""); err != nil {
 		t.Fatalf("ListEpisodes err = %v; want nil after C recovers", err)
 	}
 
-	afterAB := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("A_count", "B_count"))
-	afterBC := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("B_count", "C_count"))
+	afterAB := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(aName, bName))
+	afterBC := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(bName, cName))
 
 	if d := afterAB - beforeAB; d != 1.0 {
-		t.Errorf("ParserFallbackTotal{from=A_count,to=B_count} delta = %v; want 1.0", d)
+		t.Errorf("ParserFallbackTotal{from=%s,to=%s} delta = %v; want 1.0", aName, bName, d)
 	}
 	if d := afterBC - beforeBC; d != 1.0 {
-		t.Errorf("ParserFallbackTotal{from=B_count,to=C_count} delta = %v; want 1.0", d)
+		t.Errorf("ParserFallbackTotal{from=%s,to=%s} delta = %v; want 1.0", bName, cName, d)
 	}
 
 	// Total increments = (afterAB-beforeAB) + (afterBC-beforeBC) must equal
@@ -599,28 +614,33 @@ func TestOrchestrator_NilCache_Backcompat(t *testing.T) {
 // when the cache reports the first-registered provider DOWN, the orchestrator
 // MUST skip it and route the call to the next provider, emitting
 // parser_fallback_total{from, to} once.
+//
+// REVIEW.md WR-05: provider names embed t.Name() so they cannot collide with
+// any other parallel test that reads the same global metric.
 func TestOrchestrator_SkipsUnhealthyProvider(t *testing.T) {
 	t.Parallel()
+	skipName := "animepahe_skip_" + t.Name()
+	fbName := "fallback_provider_" + t.Name()
 
 	cache := health.NewInMemoryHealthCache()
-	downCacheEntry(cache, "animepahe_skip")
+	downCacheEntry(cache, skipName)
 
 	pa := &fakeProvider{
-		nameVal: "animepahe_skip",
+		nameVal: skipName,
 		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
-			t.Errorf("animepahe_skip.FindID was called; expected skip")
+			t.Errorf("%s.FindID was called; expected skip", skipName)
 			return "should-not-happen", nil
 		},
 	}
 	pb := &fakeProvider{
-		nameVal: "fallback_provider",
+		nameVal: fbName,
 		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) {
 			return "fallback-id", nil
 		},
 	}
 	o := newTestOrchestratorWithCache(t, cache, pa, pb)
 
-	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("animepahe_skip", "fallback_provider"))
+	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(skipName, fbName))
 	id, err := o.FindID(context.Background(), domain.AnimeRef{}, "")
 	if err != nil {
 		t.Fatalf("FindID err = %v; want nil", err)
@@ -628,9 +648,9 @@ func TestOrchestrator_SkipsUnhealthyProvider(t *testing.T) {
 	if id != "fallback-id" {
 		t.Errorf("FindID = %q; want fallback-id", id)
 	}
-	after := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues("animepahe_skip", "fallback_provider"))
+	after := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(skipName, fbName))
 	if d := after - before; d != 1.0 {
-		t.Errorf("parser_fallback_total{from=animepahe_skip, to=fallback_provider} delta = %v; want 1.0", d)
+		t.Errorf("parser_fallback_total{from=%s, to=%s} delta = %v; want 1.0", skipName, fbName, d)
 	}
 	// Sanity: skipped provider must not have its FindID method invoked.
 	// (Asserted via the t.Errorf in the closure above.)
