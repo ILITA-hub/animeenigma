@@ -59,11 +59,11 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ### Observability (Phase 17)
 
-- [ ] **SCRAPER-OBS-01**: A background liveness probe runs every 15 min ± 20 % jitter, exercising the full pipeline (search → episodes → servers → stream → first segment) against a rotating 5-10 anime golden pool **per provider**.
-- [ ] **SCRAPER-OBS-02**: A Prometheus gauge family `provider_health_up{provider, stage}` reports per-stage health for 5 stages: `search`, `episodes`, `servers`, `stream`, `stream_segment`. A stage flips to 0 after 3 consecutive failures within 15 min.
-- [ ] **SCRAPER-OBS-03**: The orchestrator skips any provider whose health gauge reads 0 in the last 60 s (in-memory health cache). Skipped providers re-enter rotation when the probe flips them back to 1.
-- [ ] **SCRAPER-OBS-04**: A Grafana dashboard panel + alert fires when any `provider_health_up{stage="stream_segment"}` reads 0 for 15 min. Alerts target the existing Telegram admin chat (`TELEGRAM_ADMIN_CHAT_ID`).
-- [ ] **SCRAPER-OBS-05**: `GET /api/admin/scraper/health` exposes the current per-provider / per-stage health snapshot + last successful timestamps for admin debugging.
+- [x] **SCRAPER-OBS-01**: A background liveness probe runs every 15 min ± 20 % jitter, exercising the full pipeline (search → episodes → servers → stream → first segment) against a rotating 5-10 anime golden pool **per provider**.
+- [x] **SCRAPER-OBS-02**: A Prometheus gauge family `provider_health_up{provider, stage}` reports per-stage health for 5 stages: `search`, `episodes`, `servers`, `stream`, `stream_segment`. A stage flips to 0 after 3 consecutive failures within 15 min.
+- [x] **SCRAPER-OBS-03**: The orchestrator skips any provider whose health gauge reads 0 in the last 60 s (in-memory health cache). Skipped providers re-enter rotation when the probe flips them back to 1.
+- [x] **SCRAPER-OBS-04**: A Grafana dashboard panel + alert fires when any `provider_health_up{stage="stream_segment"}` reads 0 for 15 min. Alerts target the existing Telegram admin chat (`TELEGRAM_ADMIN_CHAT_ID`).
+- [x] **SCRAPER-OBS-05**: `GET /api/admin/scraper/health` exposes the current per-provider / per-stage health snapshot + last successful timestamps for admin debugging.
 
 ### Second Provider — 9anime (Phase 18)
 
@@ -99,7 +99,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 - [x] **SCRAPER-NF-01**: Every upstream HTTP call has a hard 10 s timeout. No call hangs indefinitely.
 - [ ] **SCRAPER-NF-02**: Cache TTLs match the data freshness contract: 24 h for malsync ID lookups, 6 h for episode lists, 15 min for search results, **≤ min(parsed expiry − 30 s, 5 min)** for stream URLs.
 - [x] **SCRAPER-NF-03**: `hashicorp/go-retryablehttp` handles 429 / 5xx with exponential backoff (1 s → 2 s → 4 s → 8 s) and a 5-minute circuit-break per host after repeated failures. Hand-rolled retry loops from the old parsers are not ported.
-- [ ] **SCRAPER-NF-04**: `parser_requests_total`, `parser_request_duration_seconds`, `parser_fallback_total{from,to}`, and `parser_zero_match_total{provider,selector}` Prometheus metrics emit for the scraper using the existing `libs/metrics/parser.go` patterns. Per-provider breakdown labelled `{provider}`.
+- [x] **SCRAPER-NF-04**: `parser_requests_total`, `parser_request_duration_seconds`, `parser_fallback_total{from,to}`, and `parser_zero_match_total{provider,selector}` Prometheus metrics emit for the scraper using the existing `libs/metrics/parser.go` patterns. Per-provider breakdown labelled `{provider}`.
 - [ ] **SCRAPER-NF-05**: `ReportButton` from existing players emits a `provider:<name>` field plus the active orchestrator provider chain (`tried: [animepahe, 9anime]`) so user-reported bugs are sourceable to a specific provider in the report payload.
 
 ---
@@ -155,11 +155,11 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 | SCRAPER-UI-02 | Phase 16 | Pending |
 | SCRAPER-UI-03 | Phase 16 | Pending |
 | SCRAPER-UI-04 | Phase 16 | Pending |
-| SCRAPER-OBS-01 | Phase 17 | Pending |
-| SCRAPER-OBS-02 | Phase 17 | Pending |
-| SCRAPER-OBS-03 | Phase 17 | Pending |
-| SCRAPER-OBS-04 | Phase 17 | Pending |
-| SCRAPER-OBS-05 | Phase 17 | Pending |
+| SCRAPER-OBS-01 | Phase 17 | Complete |
+| SCRAPER-OBS-02 | Phase 17 | Complete |
+| SCRAPER-OBS-03 | Phase 17 | Complete |
+| SCRAPER-OBS-04 | Phase 17 | Complete |
+| SCRAPER-OBS-05 | Phase 17 | Complete |
 | SCRAPER-9ANI-01 | Phase 18 | Pending |
 | SCRAPER-9ANI-02 | Phase 18 | Pending |
 | SCRAPER-9ANI-03 | Phase 18 | Pending |
@@ -183,7 +183,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 | SCRAPER-NF-01 | Phase 15 (woven through 15-19) | Complete |
 | SCRAPER-NF-02 | Phase 16 (woven through 16-19) | Pending |
 | SCRAPER-NF-03 | Phase 15 (woven through 15-19) | Complete |
-| SCRAPER-NF-04 | Phase 17 (woven through 17-19) | Pending |
+| SCRAPER-NF-04 | Phase 17 (woven through 17-19) | Complete |
 | SCRAPER-NF-05 | Phase 16 (woven through 16-19) | Pending |
 
 **Coverage:** 49/49 SCRAPER-* requirements mapped. No orphans. Each NF requirement is anchored to the earliest phase where it must be observable; remaining phases inherit the constraint as an invariant.
