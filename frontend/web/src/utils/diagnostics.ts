@@ -64,16 +64,32 @@ const consoleLogs: ConsoleEntry[] = []
 const networkLogs: NetworkEntry[] = []
 let initialized = false
 
-function addConsoleEntry(level: string, args: unknown[]) {
-  const message = args
-    .map((a) => {
-      try {
-        return typeof a === 'object' ? JSON.stringify(a) : String(a)
-      } catch {
-        return String(a)
+// WR-08: safeStringify is the bounded, circular-safe stringifier used by
+// addConsoleEntry. JSON.stringify on deep DOM nodes or Vue refs can either
+// throw (caught) or produce massive strings before the .slice(0, 2000) cap
+// fires — on a 60 Hz logging hot path (video events) that synchronous walk
+// pushes the requestAnimationFrame budget over on slow devices.
+function safeStringify(v: unknown, maxLen = 2000): string {
+  if (typeof v !== 'object' || v === null) {
+    return String(v).slice(0, maxLen)
+  }
+  try {
+    const seen = new WeakSet<object>()
+    const s = JSON.stringify(v, (_key, val) => {
+      if (typeof val === 'object' && val !== null) {
+        if (seen.has(val as object)) return '[Circular]'
+        seen.add(val as object)
       }
+      return val
     })
-    .join(' ')
+    return (s ?? String(v)).slice(0, maxLen)
+  } catch {
+    return String(v).slice(0, maxLen)
+  }
+}
+
+function addConsoleEntry(level: string, args: unknown[]) {
+  const message = args.map((a) => safeStringify(a)).join(' ')
 
   consoleLogs.push({
     time: new Date().toISOString(),
