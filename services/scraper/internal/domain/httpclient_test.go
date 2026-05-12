@@ -291,6 +291,44 @@ func TestBaseHTTPClient_PerHostLimiterIsolation(t *testing.T) {
 	}
 }
 
+// TestBaseHTTPClient_JarAccessor locks the Jar() accessor that Plan 16-03's
+// DDoS-Guard cookie inspection relies on (Phase-15 one-line amend mandated by
+// 16-RESEARCH.md §Pattern 3 / Assumption A4). The accessor must return a
+// non-nil http.CookieJar that round-trips a Set/Get pair.
+func TestBaseHTTPClient_JarAccessor(t *testing.T) {
+	t.Parallel()
+	c := NewBaseHTTPClient(testLogger(t))
+
+	jar := c.Jar()
+	if jar == nil {
+		t.Fatal("Jar() returned nil; expected a live http.CookieJar")
+	}
+
+	u, err := url.Parse("https://animepahe.ru/")
+	if err != nil {
+		t.Fatalf("url.Parse: %v", err)
+	}
+	jar.SetCookies(u, []*http.Cookie{
+		{Name: "ddg_probe", Value: "abc", Path: "/", Domain: "animepahe.ru"},
+	})
+
+	got := jar.Cookies(u)
+	if len(got) != 1 || got[0].Name != "ddg_probe" || got[0].Value != "abc" {
+		t.Errorf("Jar().Cookies(animepahe.ru) = %+v; want one cookie ddg_probe=abc", got)
+	}
+}
+
+// TestBaseHTTPClient_JarAccessor_StableInstance proves Jar() returns the same
+// underlying jar instance on repeated calls — providers can hold the
+// reference and observe cookies written by the http stack on later requests.
+func TestBaseHTTPClient_JarAccessor_StableInstance(t *testing.T) {
+	t.Parallel()
+	c := NewBaseHTTPClient(testLogger(t))
+	if a, b := c.Jar(), c.Jar(); a != b {
+		t.Errorf("Jar() returned two different instances (%p vs %p); want the same live jar", a, b)
+	}
+}
+
 // TestBaseHTTPClient_DoMethod verifies the lower-level Do method accepts a
 // caller-built *http.Request and applies the same limiter / retry / baseline
 // headers.
