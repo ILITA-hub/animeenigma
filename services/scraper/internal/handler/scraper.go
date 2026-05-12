@@ -116,12 +116,19 @@ var preferAllowed = regexp.MustCompile(`^[a-z0-9_-]{1,64}$`)
 func parseQuery(r *http.Request) queryParams {
 	q := r.URL.Query()
 	prefer := strings.TrimSpace(q.Get("prefer"))
-	if len(prefer) > maxPreferLength {
-		prefer = prefer[:maxPreferLength]
-	}
-	// WR-09: enforce the allow-list AFTER truncation so a 65-char value
-	// can never sneak in via the substring slice.
-	if prefer != "" && !preferAllowed.MatchString(prefer) {
+	// REVIEW.md iter-2 WR-NEW-03: the regex's `{1,64}` quantifier
+	// structurally enforces the maxPreferLength cap, so the previous
+	// byte-truncation step (`prefer = prefer[:maxPreferLength]`) was
+	// dead code for any non-ASCII input — the truncation could split a
+	// UTF-8 codepoint, and the regex would then reject the orphan
+	// continuation bytes anyway. Apply the regex first; the length cap
+	// is encoded in the regex.
+	//
+	// Net contract:
+	//   - prefer matches ^[a-z0-9_-]{1,64}$ → kept as-is (≤64 chars)
+	//   - anything else → coerced to "" (silently rejected, matching
+	//     the existing "unknown prefer silently ignored" behaviour)
+	if !preferAllowed.MatchString(prefer) {
 		prefer = ""
 	}
 	return queryParams{

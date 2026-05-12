@@ -495,19 +495,54 @@ func TestOrchestrator_OrderedProviderNames(t *testing.T) {
 	}
 }
 
-// TestParseQuery_PreferLengthCap — WR-01: an oversize `prefer` is truncated
-// at parse time so a malicious caller can't balloon log/response payloads
-// (the value is echoed into meta.tried + structured log fields).
-//
-// Sends an oversized value of lowercase characters so it survives the WR-09
-// allow-list (^[a-z0-9_-]{1,64}$) and pins the truncation-to-64 behaviour.
+// TestParseQuery_PreferLengthCap — WR-01 + REVIEW.md iter-2 WR-NEW-03/04:
+// an oversize `prefer` cannot exceed maxPreferLength in the parsed output.
+// The regex allow-list (`^[a-z0-9_-]{1,64}$`) structurally enforces the
+// cap, so the previous byte-truncation step was removed. Under the new
+// implementation an oversized input is rejected (regex no-match → "");
+// the contract pinned by this test is simply that the parsed value is
+// either empty OR ≤ maxPreferLength — i.e. the upper bound is locked
+// regardless of implementation order.
 func TestParseQuery_PreferLengthCap(t *testing.T) {
 	t.Parallel()
 	huge := strings.Repeat("a", 1024)
 	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+huge, nil)
 	qp := parseQuery(req)
-	if len(qp.prefer) != maxPreferLength {
-		t.Errorf("len(prefer) = %d; want %d", len(qp.prefer), maxPreferLength)
+	if qp.prefer != "" && len(qp.prefer) > maxPreferLength {
+		t.Errorf("len(prefer) = %d; want empty or ≤ %d", len(qp.prefer), maxPreferLength)
+	}
+}
+
+// TestParseQuery_PreferRejectsOversize — REVIEW.md iter-2 WR-NEW-04
+// regression. A 65-char prefer value (one byte over the 64-char cap)
+// MUST be rejected to "" — proves the regex's `{1,64}` quantifier is
+// the active length enforcer, not silent byte truncation. Locks the
+// contract that the upper bound is the regex's responsibility now that
+// WR-NEW-03 removed the truncation step.
+func TestParseQuery_PreferRejectsOversize(t *testing.T) {
+	t.Parallel()
+	// 65 lowercase chars — every byte individually passes the char-set
+	// check (all [a-z]) but the total exceeds the regex's {1,64} cap.
+	oversize := strings.Repeat("a", 65)
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+oversize, nil)
+	qp := parseQuery(req)
+	if qp.prefer != "" {
+		t.Errorf("65-char prefer = %q (len=%d); want \"\" (rejected by regex {1,64} cap)",
+			qp.prefer, len(qp.prefer))
+	}
+}
+
+// TestParseQuery_PreferAcceptsBoundary — companion to
+// TestParseQuery_PreferRejectsOversize: a 64-char prefer (exactly the
+// cap) MUST pass through. Proves the regex is `{1,64}` inclusive, not
+// `{1,63}`.
+func TestParseQuery_PreferAcceptsBoundary(t *testing.T) {
+	t.Parallel()
+	boundary := strings.Repeat("a", maxPreferLength)
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+boundary, nil)
+	qp := parseQuery(req)
+	if qp.prefer != boundary {
+		t.Errorf("64-char prefer = %q; want %q (regex {1,64} should accept the boundary)", qp.prefer, boundary)
 	}
 }
 
