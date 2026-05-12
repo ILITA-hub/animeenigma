@@ -171,7 +171,11 @@ func main() {
 			BaseURL: cfg.AnimeKai.BaseURL,
 			HTTP:    animeKaiBaseHTTP,
 			Embeds:  registry,
-			MalSync: nil, // stub does not call malsync; v3.1 fill-in adds NewMalSyncClient
+			// WR-01: a non-nil malsync client is REQUIRED by animekai.New().
+			// The stub never calls Lookup on the success path; the noop here
+			// closes the v3.1 fill-in nil-pointer footgun. Replace with
+			// animekai.NewMalSyncClient(redisCache) when the fill-in lands.
+			MalSync: animekai.NewNoopMalSync(),
 			Cache:   redisCache,
 			Log:     log,
 		})

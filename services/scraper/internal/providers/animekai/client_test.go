@@ -20,18 +20,21 @@ import (
 // newStubProvider constructs a Provider with real-but-minimal Deps. The
 // escape-hatch stub never makes HTTP calls, so the BaseHTTPClient is just a
 // placeholder; the Registry is empty (no extractors needed); the Cache is
-// the in-memory fakeCache from helpers_test.go. MalSync is intentionally
-// nil — the stub provider does not call it and New() accepts nil for it.
+// the in-memory fakeCache from helpers_test.go. MalSync is the exported
+// no-op sentinel — the stub provider does not call Lookup on the success
+// path, but New() rejects nil to close the v3.1 fill-in nil-pointer
+// footgun (WR-01).
 func newStubProvider(t *testing.T) *Provider {
 	t.Helper()
 	log := logger.Default()
 	httpClient := domain.NewBaseHTTPClient(log)
 	registry := domain.NewRegistry()
 	p, err := New(Deps{
-		HTTP:   httpClient,
-		Embeds: registry,
-		Cache:  newFakeCache(),
-		Log:    log,
+		HTTP:    httpClient,
+		Embeds:  registry,
+		Cache:   newFakeCache(),
+		MalSync: NewNoopMalSync(),
+		Log:     log,
 	})
 	if err != nil {
 		t.Fatalf("newStubProvider: New() error = %v; want nil", err)
@@ -141,13 +144,16 @@ func TestProvider_HealthCheck_AllStagesDownAtBoot(t *testing.T) {
 	}
 }
 
-// Test 7 — New() validates required deps. HTTP/Embeds/Cache are required;
-// MalSync is OPTIONAL for the stub (the v3.1 fill-in will tighten this).
-func TestProvider_New_RequiresHTTPAndEmbeds(t *testing.T) {
+// Test 7 — New() validates required deps. HTTP/Embeds/Cache/MalSync are all
+// required (WR-01). MalSync is required even though the stub never calls
+// Lookup, so a v3.1 fill-in PR that adds body-only logic to FindID cannot
+// silently land a nil-pointer-deref footgun.
+func TestProvider_New_RequiresAllDeps(t *testing.T) {
 	log := logger.Default()
 	httpClient := domain.NewBaseHTTPClient(log)
 	registry := domain.NewRegistry()
 	fc := newFakeCache()
+	ms := NewNoopMalSync()
 
 	// Empty Deps -> error (missing HTTP).
 	if _, err := New(Deps{}); err == nil {
@@ -161,10 +167,19 @@ func TestProvider_New_RequiresHTTPAndEmbeds(t *testing.T) {
 	if _, err := New(Deps{HTTP: httpClient, Embeds: registry}); err == nil {
 		t.Error("New(Deps{HTTP+Embeds only}) error = nil; want non-nil (missing Cache)")
 	}
-	// All required deps set (MalSync nil) -> no error.
-	p, err := New(Deps{HTTP: httpClient, Embeds: registry, Cache: fc})
+	// WR-01: missing MalSync -> error. The error message names the field
+	// and points at the NewNoopMalSync() helper so a maintainer who hits
+	// this at boot can fix the wiring in one line.
+	_, err := New(Deps{HTTP: httpClient, Embeds: registry, Cache: fc})
+	if err == nil {
+		t.Error("New(Deps{HTTP+Embeds+Cache only, no MalSync}) error = nil; want non-nil (missing MalSync — WR-01 footgun guard)")
+	} else if !strings.Contains(err.Error(), "MalSync") {
+		t.Errorf("New() error %q must mention MalSync field (WR-01 actionable diagnostic)", err.Error())
+	}
+	// All required deps set (including non-nil MalSync) -> no error.
+	p, err := New(Deps{HTTP: httpClient, Embeds: registry, Cache: fc, MalSync: ms})
 	if err != nil {
-		t.Fatalf("New(valid Deps with nil MalSync) error = %v; want nil", err)
+		t.Fatalf("New(valid Deps with NewNoopMalSync) error = %v; want nil", err)
 	}
 	if p == nil {
 		t.Fatal("New(valid Deps) returned nil provider")

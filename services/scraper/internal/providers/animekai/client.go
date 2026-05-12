@@ -53,11 +53,34 @@ var stageNames = []string{
 var errAnimeKaiStub = errors.New("animekai: escape-hatch stub (SCRAPER-KAI-01..04 carried to v3.1)")
 
 // malSyncClient is the malsync lookup contract — kept here for forward-compat
-// with the v3.1 fill-in PR. The escape-hatch stub never calls it; Deps.MalSync
-// may be nil for the stub but the field is preserved so the v3.1 PR is a
-// body-only change.
+// with the v3.1 fill-in PR. The escape-hatch stub never calls it on the
+// success path, but New() requires a non-nil value (WR-01) so a v3.1 fill-in
+// PR cannot silently land a nil-pointer-deref footgun by forgetting to wire
+// the real client in main.go.
 type malSyncClient interface {
 	Lookup(ctx context.Context, malID, provider string) (string, bool, error)
+}
+
+// noopMalSync is a sentinel malSyncClient that returns (empty, false, nil)
+// for every Lookup. main.go uses it for the Phase 19 stub so Deps.MalSync
+// is non-nil at boot; the v3.1 fill-in PR replaces this with a real
+// NewMalSyncClient(redisCache) mirroring gogoanime.
+type noopMalSync struct{}
+
+func (noopMalSync) Lookup(ctx context.Context, malID, provider string) (string, bool, error) {
+	return "", false, nil
+}
+
+// NewNoopMalSync returns a no-op malSyncClient suitable for the Phase 19
+// escape-hatch stub. The stub never calls Lookup on the success path, but
+// New() requires Deps.MalSync to be non-nil so a v3.1 maintainer adding
+// body-only logic to FindID cannot accidentally introduce a nil-pointer
+// dereference by forgetting to wire a real malsync client.
+//
+// When the v3.1 fill-in PR lands, replace `animekai.NewNoopMalSync()` in
+// main.go with `animekai.NewMalSyncClient(redisCache)` (mirroring gogoanime).
+func NewNoopMalSync() malSyncClient { //nolint:revive // exported for main.go wire-up
+	return noopMalSync{}
 }
 
 // Deps is the constructor input for New(). Mirrors gogoanime.Deps so main.go
@@ -85,12 +108,16 @@ type Provider struct {
 	stages   map[string]domain.StageHealth
 }
 
-// New constructs a Provider. Required dependencies (HTTP, Embeds, Cache) are
-// validated eagerly — main.go fatals on a non-nil error so misconfiguration
-// surfaces at boot, not as a confusing nil-pointer 502 minutes later.
+// New constructs a Provider. Required dependencies (HTTP, Embeds, Cache,
+// MalSync) are validated eagerly — main.go fatals on a non-nil error so
+// misconfiguration surfaces at boot, not as a confusing nil-pointer 502
+// minutes later.
 //
-// Deps.MalSync is OPTIONAL for the Phase 19 stub (the stub never calls it).
-// The v3.1 fill-in PR will tighten this to required, matching gogoanime.
+// Deps.MalSync is REQUIRED (WR-01). The Phase 19 stub never calls Lookup
+// on the success path, but accepting nil here would let a v3.1 fill-in PR
+// that adds body-only logic to FindID land a silent nil-pointer-deref
+// footgun. Use `animekai.NewNoopMalSync()` for the stub wire-up; the v3.1
+// PR replaces it with `animekai.NewMalSyncClient(redisCache)`.
 //
 // Default BaseURL is https://anikai.to (the canonical AnimeKai mirror as of
 // 2026-05-12; animekai.to 301s here).
@@ -108,6 +135,9 @@ func New(d Deps) (*Provider, error) {
 	}
 	if d.Cache == nil {
 		return nil, errors.New("animekai: Deps.Cache is required")
+	}
+	if d.MalSync == nil {
+		return nil, errors.New("animekai: Deps.MalSync is required (use animekai.NewNoopMalSync() for stub wire-up)")
 	}
 	if d.Log == nil {
 		d.Log = logger.Default()
