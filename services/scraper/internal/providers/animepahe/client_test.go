@@ -101,7 +101,7 @@ func newTestProvider(t *testing.T, srv *httptest.Server) (*Provider, *fakeCache,
 	reg.Register(fk)
 
 	baseURL := srv.URL
-	p := New(Deps{
+	p, err := New(Deps{
 		BaseURL: baseURL,
 		HTTP:    hc,
 		Embeds:  reg,
@@ -109,6 +109,9 @@ func newTestProvider(t *testing.T, srv *httptest.Server) (*Provider, *fakeCache,
 		Cache:   fc,
 		Log:     log,
 	})
+	if err != nil {
+		t.Fatalf("New(Deps{...}) = err %v; want nil", err)
+	}
 	return p, fc, fm, fk
 }
 
@@ -657,4 +660,72 @@ func TestProvider_FindID_QuerySafetyEscape(t *testing.T) {
 	// exact encoding here; we just verify the round-trip works, which it can
 	// only do if we used url.QueryEscape (raw interpolation would yield
 	// q=a&b#c?d=e/f → server would see q="a" and ignore the rest).
+}
+
+// TestNew_RequiresDependencies — WR-11 anchor. New now validates that every
+// required Deps field is non-nil and returns an explicit error rather than
+// silently constructing a Provider that nil-panics at first use.
+func TestNew_RequiresDependencies(t *testing.T) {
+	t.Parallel()
+	log := newTestLogger(t)
+	hc := domain.NewBaseHTTPClient(log, domain.WithMaxRetries(0))
+	reg := domain.NewRegistry()
+	fm := &fakeMalSync{mappings: map[string]string{}, misses: map[string]bool{}}
+	fc := newFakeCache()
+
+	cases := []struct {
+		name string
+		deps Deps
+		want string
+	}{
+		{
+			name: "missing HTTP",
+			deps: Deps{Embeds: reg, MalSync: fm, Cache: fc, Log: log},
+			want: "HTTP",
+		},
+		{
+			name: "missing Embeds",
+			deps: Deps{HTTP: hc, MalSync: fm, Cache: fc, Log: log},
+			want: "Embeds",
+		},
+		{
+			name: "missing MalSync",
+			deps: Deps{HTTP: hc, Embeds: reg, Cache: fc, Log: log},
+			want: "MalSync",
+		},
+		{
+			name: "missing Cache",
+			deps: Deps{HTTP: hc, Embeds: reg, MalSync: fm, Log: log},
+			want: "Cache",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p, err := New(tc.deps)
+			if err == nil {
+				t.Fatalf("New(%s) = nil err; want error", tc.name)
+			}
+			if p != nil {
+				t.Errorf("New(%s) returned non-nil Provider on error", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("err = %v; want substring %q", err, tc.want)
+			}
+		})
+	}
+
+	// And the happy-path control: all four deps present → no error, Log may
+	// be nil (falls back to logger.Default()).
+	t.Run("optional log defaults", func(t *testing.T) {
+		t.Parallel()
+		p, err := New(Deps{HTTP: hc, Embeds: reg, MalSync: fm, Cache: fc})
+		if err != nil {
+			t.Fatalf("New(no log) = err %v; want nil", err)
+		}
+		if p == nil {
+			t.Fatal("New(no log) returned nil Provider")
+		}
+	})
 }

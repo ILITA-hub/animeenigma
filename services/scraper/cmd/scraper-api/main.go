@@ -83,7 +83,10 @@ func main() {
 	malSyncClient := animepahe.NewMalSyncClient(redisCache)
 
 	// AnimePahe provider — first live Provider in v3.0.
-	animePaheProvider := animepahe.New(animepahe.Deps{
+	// WR-11: New now validates required dependencies eagerly and returns an
+	// error so a misconfigured Deps surfaces at boot, not via a runtime
+	// 502 (nil pointer dereference) minutes after deploy.
+	animePaheProvider, err := animepahe.New(animepahe.Deps{
 		BaseURL: cfg.AnimePahe.BaseURL,
 		HTTP:    animePaheBaseHTTP,
 		Embeds:  registry,
@@ -91,6 +94,9 @@ func main() {
 		Cache:   redisCache,
 		Log:     log,
 	})
+	if err != nil {
+		log.Fatalw("failed to construct AnimePahe provider", "error", err)
+	}
 
 	// Build the orchestrator and register the provider before HTTP starts.
 	orchestrator := service.NewOrchestrator(log, registry)

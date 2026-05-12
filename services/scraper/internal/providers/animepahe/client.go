@@ -112,10 +112,27 @@ type Provider struct {
 }
 
 // New constructs a Provider with sane defaults — empty BaseURL falls back to
-// https://animepahe.ru, and missing dependencies result in panic at first
-// use (we don't silently no-op because that would make production failures
-// hard to debug).
-func New(d Deps) *Provider {
+// https://animepahe.ru. WR-11: required dependencies (HTTP, Embeds, MalSync,
+// Cache) are validated eagerly and a non-nil error is returned if any is
+// missing. main.go fatals on the error, so misconfiguration surfaces at
+// boot rather than later as a confusing nil-pointer dereference 502.
+// d.Log is optional and falls back to logger.Default().
+func New(d Deps) (*Provider, error) {
+	if d.HTTP == nil {
+		return nil, errors.New("animepahe: Deps.HTTP is required")
+	}
+	if d.Embeds == nil {
+		return nil, errors.New("animepahe: Deps.Embeds is required")
+	}
+	if d.MalSync == nil {
+		return nil, errors.New("animepahe: Deps.MalSync is required")
+	}
+	if d.Cache == nil {
+		return nil, errors.New("animepahe: Deps.Cache is required")
+	}
+	if d.Log == nil {
+		d.Log = logger.Default()
+	}
 	base := d.BaseURL
 	if base == "" {
 		base = "https://animepahe.ru"
@@ -134,7 +151,7 @@ func New(d Deps) *Provider {
 	for _, s := range stageNames {
 		p.stages[s] = domain.StageHealth{Up: true}
 	}
-	return p
+	return p, nil
 }
 
 // Name returns the stable identifier "animepahe".
