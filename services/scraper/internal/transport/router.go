@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"net"
 	"net/http"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -11,6 +12,42 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
+
+// privateOnlyMiddleware refuses requests whose RemoteAddr is not a
+// private / loopback IP — defense-in-depth for REVIEW.md WR-10. The
+// admin handler trusts the gateway gate (D6 in plan 17-03) AND it lives
+// on the docker-internal network, but if a future maintainer accidentally
+// changes SERVER_HOST or exposes the port externally, the docker-internal
+// IP check here still rejects external traffic.
+//
+// Inside docker-compose every other container's source IP falls in the
+// bridge subnet (172.x.x.x — RFC-1918), so legitimate gateway → scraper
+// traffic is accepted. Direct external traffic (a public IP) is rejected
+// with 403.
+//
+// This is intentionally lenient: it does NOT replace the gateway's JWT
+// + AdminRoleMiddleware gate — it only guarantees that "this request
+// could only have come from a docker-internal sibling".
+func privateOnlyMiddleware(log *logger.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				host = r.RemoteAddr
+			}
+			ip := net.ParseIP(host)
+			if ip == nil || !(ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()) {
+				log.Warnw("scraper.admin: rejected non-private RemoteAddr",
+					"remote_addr", r.RemoteAddr,
+					"path", r.URL.Path,
+				)
+				httputil.Forbidden(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 // NewRouter builds the chi router for the scraper service.
 //
@@ -53,13 +90,21 @@ func NewRouter(
 	// Scraper business routes — Phase 15 ships 503 stubs for the first three
 	// and a live HealthSnapshot for the fourth. Phase 17 Plan 03 adds the
 	// admin debug endpoint (gateway-gated; this handler trusts the gateway
-	// gate per D6).
+	// gate per D6, with the WR-10 private-IP defense-in-depth applied to
+	// the admin sub-route only).
 	r.Route("/scraper", func(r chi.Router) {
 		r.Get("/episodes", scraperHandler.GetEpisodes)
 		r.Get("/servers", scraperHandler.GetServers)
 		r.Get("/stream", scraperHandler.GetStream)
 		r.Get("/health", scraperHandler.GetHealth)
-		r.Get("/health/admin", scraperHandler.GetAdminHealth) // Plan 17-03
+		// REVIEW.md WR-10: even though plan 17-03 D6 documents that this
+		// route is gateway-gated, add a private-IP guard so a future
+		// SERVER_HOST=0.0.0.0 + accidental port exposure does NOT allow
+		// public access to the admin snapshot.
+		r.Group(func(r chi.Router) {
+			r.Use(privateOnlyMiddleware(log))
+			r.Get("/health/admin", scraperHandler.GetAdminHealth)
+		})
 	})
 
 	return r
