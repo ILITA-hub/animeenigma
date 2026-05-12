@@ -121,7 +121,9 @@ capture-goldens-animepahe: ## Recapture services/scraper/testdata/animepahe/* fi
 capture-goldens-gogoanime: ## Recapture services/scraper/testdata/gogoanime/* fixtures from anitaku.to (Phase 18)
 	@echo "Capturing Gogoanime/Anitaku goldens — see services/scraper/testdata/gogoanime/README.md"
 	@bash services/scraper/scripts/capture-gogoanime-goldens.sh
-	@if grep -rE '(Set-Cookie|__ddg2_|cf_clearance|Bearer )' services/scraper/testdata/gogoanime/ ; then \
+	@# Scope the gate to *.html and *.json — the README intentionally documents
+	@# the forbidden patterns as part of the contract description.
+	@if grep -E '(Set-Cookie|__ddg2_|cf_clearance|Bearer )' services/scraper/testdata/gogoanime/*.html services/scraper/testdata/gogoanime/*.json ; then \
 		echo "ERROR: forbidden auth pattern in goldens — refusing to ship" && exit 1 ; \
 	fi
 

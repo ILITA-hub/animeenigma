@@ -73,7 +73,9 @@ fi
 # Anonymization sweep — strip any leaked Set-Cookie / DDoS / CF / Bearer headers.
 sed -i -E '/(Set-Cookie|__ddg2_|cf_clearance|Bearer )/d' "$OUTDIR"/*.html
 
-if grep -rE '(Set-Cookie|__ddg2_|cf_clearance|Bearer )' "$OUTDIR/" ; then
+# Scope the gate to *.html and *.json — README intentionally documents the
+# forbidden patterns as part of the contract.
+if grep -E '(Set-Cookie|__ddg2_|cf_clearance|Bearer )' "$OUTDIR"/*.html "$OUTDIR"/*.json ; then
     echo "ERROR: forbidden auth pattern in goldens" >&2 ; exit 1
 fi
 echo "all goldens captured + anonymized"
