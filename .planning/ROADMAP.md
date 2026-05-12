@@ -141,7 +141,16 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
   3. The catalog service starts without `ANIWATCH_API_URL` or `CONSUMET_API_URL` env vars set; `docker/megacloud-extractor/patch-aniwatch.sh` is deleted and the `megacloud-extractor` container entrypoint is plain `node server.js`.
   4. The frontend has no remaining `HiAnimePlayer.vue`, `ConsumetPlayer.vue`, `hianimeApi`, `consumetApi`, or `?legacy=1` flag — verified by `grep -r "HiAnimePlayer\|ConsumetPlayer\|hianimeApi\|consumetApi\|legacy=1" frontend/web/src/` returning nothing.
   5. Redis cache keys from the dead namespaces (`search:hianime:*`, `search:consumet:*`, `stream:hianime:*`, `stream:consumet:*`, `episodes:hianime:*`, `episodes:consumet:*`) are deleted by the one-shot script committed alongside the PR; `ru.json` / `en.json` / `ja.json` contain only the unified "English" tab label, no HiAnime/Consumet strings.
-**Plans**: TBD
+**Plans**: 5 plans across 4 waves (Wave 0: 20-01 pre-flight guardrail; Wave 1: 20-02 + 20-03 parallel; Wave 2: 20-04; Wave 3: 20-05)
+- [ ] 20-01-PLAN.md — Wave 0: pre-flight guardrail script (4 gates: date ≥ 2026-05-19, per-provider error_rate ≤ 5%, zero ProviderHealthStreamSegmentDown alerts in 7d, no new docs/issues player-breakage entries in 7d); exits non-zero if any gate fails
+- [ ] 20-02-PLAN.md — Wave 1: backend catalog deletion — parser/hianime + parser/consumet directories, 8 handler funcs, 8 routes, HiAnimeConfig + ConsumetConfig, HiAnime + Consumet health probes, service-layer wiring, main.go args
+- [ ] 20-03-PLAN.md — Wave 1: docker deletion — aniwatch + consumet service blocks in docker-compose.yml, ANIWATCH_API_URL + CONSUMET_API_URL env entries, patch-aniwatch.sh file, Makefile redeploy-% catalog cache-purge hook
+- [ ] 20-04-PLAN.md — Wave 2: frontend deletion — HiAnimePlayer.vue + ConsumetPlayer.vue components, hiAnimeApi + consumetApi exports, ?legacy=1 plumbing in Anime.vue, narrow player/PlayerName type unions, localStorage migration to 'english', drop tabDebugSuffix from 3 locale files
+- [ ] 20-05-PLAN.md — Wave 3: Redis purge script (SCAN+UNLINK) + run against prod + smoke tests + changelog.json entry + Telegram notification + /animeenigma-after-update final invocation
+
+### Next Milestone (TBD)
+
+After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 
 ## Progress
 
@@ -154,4 +163,4 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 | 17 | v3.0 | 4/4 | Complete    | 2026-05-12 |
 | 18 | v3.0 | 4/4 | Complete    | 2026-05-12 |
 | 19 | v3.0 | 1/1 | Complete    | 2026-05-12 |
-| 20 | v3.0 | 0/? | Not started | — |
+| 20 | v3.0 | 0/5 | Planned     | — |
