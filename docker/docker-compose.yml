@@ -162,6 +162,11 @@ services:
       REDIS_PASSWORD: ""
       REDIS_DB: 0
       ANIMEPAHE_BASE_URL: https://animepahe.ru
+      # Phase 19 — AnimeKai (gated). Flag is default-off in production.
+      # See docker/.env.example and .planning/REQUIREMENTS.md SCRAPER-KAI-05.
+      # Toggle live with: SCRAPER_ANIMEKAI_ENABLED=true docker compose up -d scraper
+      SCRAPER_ANIMEKAI_ENABLED: ${SCRAPER_ANIMEKAI_ENABLED:-false}
+      SCRAPER_ANIMEKAI_BASE_URL: ${SCRAPER_ANIMEKAI_BASE_URL:-https://anikai.to}
     ports:
       - "127.0.0.1:8088:8088"
     depends_on:

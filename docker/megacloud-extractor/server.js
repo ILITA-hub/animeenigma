@@ -239,6 +239,26 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Phase 19 — AnimeKai escape-hatch stub. Returns HTTP 501 so the Go
+  // scraper's animekai.Provider can map status==501 → domain.ErrProviderDown
+  // once with a clear log warning, then the in-memory healthCache flips
+  // to 0 after 3 consecutive 501s and the probe deregisters. This avoids
+  // the 500-status retry-storm pitfall (19-RESEARCH.md Pitfall 4).
+  //
+  // SCRAPER-KAI-04 is explicitly carried to v3.1 — when this stub becomes
+  // a real implementation, only this handler changes; the Go side is
+  // already wired (services/scraper/internal/providers/animekai/).
+  if (parsed.pathname === "/animekai-token" && req.method === "POST") {
+    console.warn(`/animekai-token called — escape-hatch stub returning 501`);
+    res.writeHead(501, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        error: "AnimeKai sidecar not yet converged — carry to v3.1",
+      })
+    );
+    return;
+  }
+
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "not found" }));
 });

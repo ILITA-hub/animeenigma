@@ -78,6 +78,8 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ### Third Provider — AnimeKai, gated (Phase 19)
 
+> **Implementation note (2026-05-12 — Phase 19 escape hatch):** SCRAPER-KAI-01..04 are **carried to v3.1**. Phase 19 shipped only the gate (SCRAPER-KAI-05 ✓), the failover ordering (SCRAPER-KAI-06 — flag default-off locked, in-cluster sidecar stub returns HTTP 501), and the v3.1 carryover annotation in this document. The provider package `services/scraper/internal/providers/animekai/` exists as a stub whose every Provider method returns `domain.ErrProviderDown`; the sidecar route `POST /animekai-token` returns HTTP 501. AnimeKai officially announced shutdown on 2026-05-10 (2 days before Phase 19 research). See `.planning/phases/19-animekai-gated/19-RESEARCH.md` §Convergence Probability Assessment for the rationale. SCRAPER-KAI-07 (end-to-end stream-from-AnimeKai verification) is **blocked on SCRAPER-KAI-01..04** and also carries to v3.1.
+
 - [ ] **SCRAPER-KAI-01**: Given a Shikimori/MAL ID, the AnimeKai client resolves the matching AnimeKai slug via `malsync.moe`.
 - [ ] **SCRAPER-KAI-02**: `ListEpisodes` returns the full episode list scraped from AnimeKai's custom markup (`aitem-wrapper`, `alist-group`, `azlist` class family). Sub/dub split surfaced.
 - [ ] **SCRAPER-KAI-03**: `ListServers` enumerates AnimeKai's embed hosts. AnimeKai is known to use MegaUp/megacloud-variant embeds; these route to the existing `megacloud` `EmbedExtractor` (extended if necessary).
@@ -108,7 +110,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ## Future Requirements (deferred to v3.1+)
 
-- **AnimeKai full enablement** if Phase 19's R&D doesn't converge — token-generator implementation work + flag flip.
+- **AnimeKai full enablement** — Phase 19 R&D did not converge (token generator escape hatch taken 2026-05-12). SCRAPER-KAI-01..04 and SCRAPER-KAI-07 carry to v3.1. The Phase 19 scaffold (provider package + flag + sidecar 501 route) is in place; v3.1 fill-in is a body-only PR (client.go method bodies + server.js handler body).
 - **DIFF-04** fuzzy title fallback against AniList when malsync.moe returns no match (only if v3.0 ships and the empirical miss rate ≥ 5 %).
 - **DIFF-06** `/api/admin/scraper/diag/:shikimoriId` admin debug endpoint that walks the full pipeline for one ID and dumps every intermediate response.
 - **Anitaku/Gogoanime as fourth provider** — domain volatility (5+ rotations in 18 months) means maintenance cost is high; coverage overlap with the v3.0 trio is already high. Pull in only if a documented user-coverage gap appears.
@@ -168,13 +170,13 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 | SCRAPER-9ANI-04 | Phase 18 | Complete |
 | SCRAPER-9ANI-05 | Phase 18 | Complete |
 | SCRAPER-9ANI-06 | Phase 18 | Complete |
-| SCRAPER-KAI-01 | Phase 19 | Pending |
-| SCRAPER-KAI-02 | Phase 19 | Pending |
-| SCRAPER-KAI-03 | Phase 19 | Pending |
-| SCRAPER-KAI-04 | Phase 19 | Pending |
-| SCRAPER-KAI-05 | Phase 19 | Pending |
-| SCRAPER-KAI-06 | Phase 19 | Pending |
-| SCRAPER-KAI-07 | Phase 19 | Pending |
+| SCRAPER-KAI-01 | Phase 19 → v3.1 | Carry — escape hatch |
+| SCRAPER-KAI-02 | Phase 19 → v3.1 | Carry — escape hatch |
+| SCRAPER-KAI-03 | Phase 19 → v3.1 | Carry — escape hatch |
+| SCRAPER-KAI-04 | Phase 19 → v3.1 | Carry — escape hatch |
+| SCRAPER-KAI-05 | Phase 19 | Done (flag wired, default off) |
+| SCRAPER-KAI-06 | Phase 19 | Done (escape hatch taken; flag default-off documented) |
+| SCRAPER-KAI-07 | Phase 19 → v3.1 | Carry — blocked on KAI-01..04 |
 | SCRAPER-CUT-01 | Phase 20 | Pending |
 | SCRAPER-CUT-02 | Phase 20 | Pending |
 | SCRAPER-CUT-03 | Phase 20 | Pending |
