@@ -1002,7 +1002,11 @@ const activateStreamSubtitle = (sub: { url: string; lang: string; label?: string
 }
 
 const deactivateSubtitle = () => {
-  activeSubtitleUrl.value = ''
+  // WR-03: activeSubtitleUrl is typed `string | null`; use null to stay
+  // consistent with the watcher (`!activeSubtitleUrl`) and to avoid the
+  // SubtitleOverlay seeing an empty-string URL that some implementations
+  // would treat as a load-of-empty-url network call.
+  activeSubtitleUrl.value = null
   activeSubtitleFormat.value = null
   showSubtitleOverlay.value = false
   activeJimakuSub.value = null
