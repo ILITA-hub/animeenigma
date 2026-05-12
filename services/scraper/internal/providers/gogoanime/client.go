@@ -479,12 +479,13 @@ func (p *Provider) fetchEpisodes(ctx context.Context, slug string) ([]domain.Epi
 		return nil, domain.WrapNotFound(nil, "gogoanime: /category "+slug+" soft-404 (Pages not found)")
 	}
 
-	// Determine sub/dub from the slug suffix.
-	cat := domain.CategorySub
+	// Determine sub/dub from the slug suffix. WR-09 — the previous
+	// implementation also bound `cat` (domain.CategorySub|Dub) and then
+	// discarded it with `_ = cat` inside the goquery loop because the
+	// category is re-derived in ListServers from the episode-ID slug.
+	// Dropping the unused binding keeps the intent ("isDub gates the
+	// loop's href filter") clear.
 	isDub := strings.HasSuffix(slug, "-dub")
-	if isDub {
-		cat = domain.CategoryDub
-	}
 
 	rows := make([]domain.Episode, 0, 64)
 	seen := make(map[int]bool)
@@ -512,7 +513,6 @@ func (p *Provider) fetchEpisodes(ctx context.Context, slug string) ([]domain.Epi
 			return
 		}
 		seen[n] = true
-		_ = cat // category derived from slug suffix below
 		rows = append(rows, domain.Episode{
 			ID:     strings.TrimPrefix(href, "/"),
 			Number: n,
