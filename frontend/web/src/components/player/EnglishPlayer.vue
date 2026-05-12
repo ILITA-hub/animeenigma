@@ -1520,14 +1520,22 @@ watch(() => props.animeId, () => {
   fetchWatchedEpisodes()
 })
 
-// Sync Video.js fullscreen class when outer container is the fullscreen target
+// Sync Video.js fullscreen class when outer container is the fullscreen target.
+// WR-02: the original expression
+//   fsEl && playerContainer.value?.contains(fsEl) || fsEl === playerContainer.value
+// parses as `(fsEl && contains) || (fsEl === playerContainer)` because && binds
+// tighter than ||. Restructure to make the intent explicit: when no fullscreen
+// element, clear the class; otherwise add the class only if the fullscreen
+// element is our container (or contained in it).
 const handleFullscreenChange = () => {
   if (!vjsPlayer) return
   const fsEl = document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
-  if (fsEl && playerContainer.value?.contains(fsEl) || fsEl === playerContainer.value) {
-    vjsPlayer.addClass('vjs-fullscreen')
-  } else if (!fsEl) {
+  if (!fsEl) {
     vjsPlayer.removeClass('vjs-fullscreen')
+    return
+  }
+  if (playerContainer.value?.contains(fsEl) || fsEl === playerContainer.value) {
+    vjsPlayer.addClass('vjs-fullscreen')
   }
 }
 
