@@ -41,6 +41,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -417,12 +418,12 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 		for k := range byNum {
 			nums = append(nums, k)
 		}
-		// Simple insertion sort — len is small in practice.
-		for i := 1; i < len(nums); i++ {
-			for j := i; j > 0 && nums[j] < nums[j-1]; j-- {
-				nums[j], nums[j-1] = nums[j-1], nums[j]
-			}
-		}
+		// WR-05 — stdlib introsort. Was a hand-rolled insertion sort under
+		// the "len is small in practice" assumption, but any future shape
+		// change to anitaku.to that produces non-contiguous episode numbers
+		// (e.g. paginated layout) would push this to O(n^2) on every cold
+		// cache hit.
+		sort.Ints(nums)
 		for _, n := range nums {
 			e := byNum[n]
 			if e.hasSub {
