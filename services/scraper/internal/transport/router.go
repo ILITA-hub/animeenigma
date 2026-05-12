@@ -13,17 +13,28 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// privateOnlyMiddleware refuses requests whose RemoteAddr is not a
-// private / loopback IP — defense-in-depth for REVIEW.md WR-10. The
-// admin handler trusts the gateway gate (D6 in plan 17-03) AND it lives
-// on the docker-internal network, but if a future maintainer accidentally
-// changes SERVER_HOST or exposes the port externally, the docker-internal
-// IP check here still rejects external traffic.
+// privateOnlyMiddleware refuses requests whose transport-level peer IP
+// is not a private / loopback IP — defense-in-depth for REVIEW.md WR-10.
+// The admin handler trusts the gateway gate (D6 in plan 17-03) AND it
+// lives on the docker-internal network, but if a future maintainer
+// accidentally changes SERVER_HOST or exposes the port externally, this
+// IP check still rejects external traffic.
 //
 // Inside docker-compose every other container's source IP falls in the
 // bridge subnet (172.x.x.x — RFC-1918), so legitimate gateway → scraper
 // traffic is accepted. Direct external traffic (a public IP) is rejected
 // with 403.
+//
+// **REVIEW.md iter-2 BLK-NEW-01:** this middleware MUST read the raw
+// transport-level peer address, NOT chi `middleware.RealIP`-modified
+// `r.RemoteAddr`. RealIP rewrites `r.RemoteAddr` from attacker-controlled
+// `X-Forwarded-For` / `X-Real-IP` / `True-Client-IP` headers — so if
+// RealIP ran BEFORE this middleware, an external attacker could forge a
+// private IP and bypass the guard. We solve this by NOT mounting
+// `middleware.RealIP` on the scraper router at all (it is a
+// backend-to-backend service and has no use for the "real" client IP) —
+// see NewRouter below. `r.RemoteAddr` therefore reflects the genuine
+// transport peer.
 //
 // This is intentionally lenient: it does NOT replace the gateway's JWT
 // + AdminRoleMiddleware gate — it only guarantees that "this request
@@ -74,7 +85,18 @@ func NewRouter(
 	// catalog) — it is never hit directly from a browser, so an
 	// `Access-Control-Allow-Origin: *` header would be both unnecessary and
 	// silently permissive if the bind address changes in the future.
-	r.Use(middleware.RealIP)
+	//
+	// REVIEW.md iter-2 BLK-NEW-01: `middleware.RealIP` is INTENTIONALLY NOT
+	// mounted on this router. RealIP overwrites `r.RemoteAddr` from
+	// attacker-controlled `X-Forwarded-For` / `X-Real-IP` / `True-Client-IP`
+	// headers — which would trivially defeat the `privateOnlyMiddleware`
+	// gate on `/scraper/health/admin` below (an external attacker would just
+	// send `X-Forwarded-For: 10.0.0.1` to forge a private IP). The scraper
+	// is a backend-to-backend service: it has no IP-based rate limiting,
+	// no IP-based auth, no IP-set-cookie logic, and audit-logging the "real"
+	// client IP is the gateway's job. Leaving `r.RemoteAddr` as the genuine
+	// transport-level peer is both safe and what `privateOnlyMiddleware`
+	// requires.
 
 	// Service liveness (docker-compose healthcheck target). Distinct from
 	// /scraper/health which returns the per-provider orchestrator snapshot.

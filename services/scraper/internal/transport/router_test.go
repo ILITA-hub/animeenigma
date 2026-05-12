@@ -152,6 +152,57 @@ func TestRouter_AdminHealthRejectsPublicRemoteAddr(t *testing.T) {
 	}
 }
 
+// TestRouter_AdminHealthRejectsForgedXForwardedFor — REVIEW.md iter-2
+// BLK-NEW-01 regression. The previous iteration mounted
+// `middleware.RealIP` on the scraper router, which rewrites
+// `r.RemoteAddr` from attacker-controlled `X-Forwarded-For` /
+// `X-Real-IP` / `True-Client-IP` headers. That would have allowed any
+// external caller to forge a private IP and bypass the
+// `privateOnlyMiddleware` admin-route guard. The fix removes
+// `middleware.RealIP` from the router; this test pins the contract.
+//
+// An attacker on a public IP MUST NOT be able to reach
+// `/scraper/health/admin` by sending a private `X-Forwarded-For`.
+func TestRouter_AdminHealthRejectsForgedXForwardedFor(t *testing.T) {
+	t.Parallel()
+	r := freshTestRouter(t)
+
+	forgeHeaders := []struct {
+		header string
+		value  string
+	}{
+		{"X-Forwarded-For", "172.18.0.5"},
+		{"X-Forwarded-For", "10.0.0.1"},
+		{"X-Forwarded-For", "127.0.0.1"},
+		{"X-Real-IP", "172.18.0.5"},
+		{"X-Real-IP", "10.0.0.1"},
+		{"True-Client-IP", "172.18.0.5"},
+	}
+	// Chained X-Forwarded-For (downstream proxies append) — chi's realIP
+	// would take the first comma-separated IP, which is the client-supplied
+	// one. Even though we no longer mount RealIP, prove the gate stays shut.
+	forgeHeaders = append(forgeHeaders, struct {
+		header string
+		value  string
+	}{"X-Forwarded-For", "192.168.1.1, 8.8.8.8"})
+
+	for _, tc := range forgeHeaders {
+		tc := tc
+		t.Run(tc.header+"_"+tc.value, func(t *testing.T) {
+			t.Parallel()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/scraper/health/admin", nil)
+			req.RemoteAddr = "8.8.8.8:54321" // genuine public peer
+			req.Header.Set(tc.header, tc.value)
+			r.ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("public peer with forged %s=%s got status %d; want 403",
+					tc.header, tc.value, rec.Code)
+			}
+		})
+	}
+}
+
 // TestRouter_AdminHealthAcceptsPrivateRemoteAddr — WR-10 positive case.
 // Docker-bridge / loopback / link-local IPs MUST be allowed through so
 // the legitimate gateway → scraper admin path keeps working.
