@@ -158,3 +158,129 @@ func TestLoad_GogoanimeConfig_DefaultsAndOverride(t *testing.T) {
 		}
 	})
 }
+
+// TestLoad_AnimeKaiDefaults — with NO env vars set, AnimeKai is disabled
+// and BaseURL defaults to https://anikai.to (the canonical mirror as of
+// 2026-05-12; animekai.to 301s here).
+func TestLoad_AnimeKaiDefaults(t *testing.T) {
+	unsetEnv(t,
+		"SCRAPER_ANIMEKAI_ENABLED", "SCRAPER_ANIMEKAI_BASE_URL",
+		"REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB",
+		"ANIMEPAHE_BASE_URL",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AnimeKai.Enabled {
+		t.Fatalf("AnimeKai.Enabled = true; want false (default-off in production)")
+	}
+	if cfg.AnimeKai.BaseURL != "https://anikai.to" {
+		t.Fatalf("AnimeKai.BaseURL = %q; want https://anikai.to", cfg.AnimeKai.BaseURL)
+	}
+}
+
+// TestLoad_AnimeKaiEnabledTrue — SCRAPER_ANIMEKAI_ENABLED=true flips the flag.
+func TestLoad_AnimeKaiEnabledTrue(t *testing.T) {
+	unsetEnv(t, "SCRAPER_ANIMEKAI_BASE_URL")
+	setEnv(t, "SCRAPER_ANIMEKAI_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.AnimeKai.Enabled {
+		t.Fatalf("AnimeKai.Enabled = false; want true")
+	}
+}
+
+// TestLoad_AnimeKaiEnabledFalseExplicit — explicit "false" keeps the flag off.
+func TestLoad_AnimeKaiEnabledFalseExplicit(t *testing.T) {
+	unsetEnv(t, "SCRAPER_ANIMEKAI_BASE_URL")
+	setEnv(t, "SCRAPER_ANIMEKAI_ENABLED", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AnimeKai.Enabled {
+		t.Fatalf("AnimeKai.Enabled = true; want false")
+	}
+}
+
+// TestLoad_AnimeKaiEnabledInvalid — unparseable value falls back to default.
+// Matches the lenient getEnv* convention. Adversary cannot enable the
+// provider via SCRAPER_ANIMEKAI_ENABLED=yes-please-enable.
+func TestLoad_AnimeKaiEnabledInvalid(t *testing.T) {
+	unsetEnv(t, "SCRAPER_ANIMEKAI_BASE_URL")
+	setEnv(t, "SCRAPER_ANIMEKAI_ENABLED", "garbage")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v (must not error on garbage value)", err)
+	}
+	if cfg.AnimeKai.Enabled {
+		t.Fatalf("AnimeKai.Enabled = true; want default false on unparseable value")
+	}
+}
+
+// TestLoad_AnimeKaiBaseURLOverride — SCRAPER_ANIMEKAI_BASE_URL takes precedence.
+func TestLoad_AnimeKaiBaseURLOverride(t *testing.T) {
+	setEnv(t, "SCRAPER_ANIMEKAI_BASE_URL", "https://anikai.cc")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AnimeKai.BaseURL != "https://anikai.cc" {
+		t.Fatalf("AnimeKai.BaseURL = %q; want https://anikai.cc", cfg.AnimeKai.BaseURL)
+	}
+}
+
+// TestLoad_AnimeKaiInvalidBaseURL — malformed URL fails Load() at boot with
+// an error that names the env var verbatim.
+func TestLoad_AnimeKaiInvalidBaseURL(t *testing.T) {
+	setEnv(t, "SCRAPER_ANIMEKAI_BASE_URL", "not-a-url")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load: nil error; want non-nil for malformed SCRAPER_ANIMEKAI_BASE_URL")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_ANIMEKAI_BASE_URL") {
+		t.Fatalf("error %q must mention SCRAPER_ANIMEKAI_BASE_URL", err.Error())
+	}
+}
+
+// TestGetEnvBool_Truthy — strconv.ParseBool semantics: "1", "true", "True",
+// "TRUE", "t" all return true.
+func TestGetEnvBool_Truthy(t *testing.T) {
+	cases := []string{"1", "true", "True", "TRUE", "t"}
+	const probeKey = "SCRAPER_TEST_ANIMEKAI_BOOL"
+	for _, c := range cases {
+		c := c
+		t.Run(c, func(t *testing.T) {
+			setEnv(t, probeKey, c)
+			if got := getEnvBool(probeKey, false); !got {
+				t.Errorf("getEnvBool(%q) = false; want true", c)
+			}
+		})
+	}
+}
+
+// TestGetEnvBool_Falsy — "0", "false", "f", "False" all return false; AND
+// unparseable values fall back to the default (also false here).
+func TestGetEnvBool_Falsy(t *testing.T) {
+	cases := []string{"0", "false", "f", "False", "garbage", "yes-please"}
+	const probeKey = "SCRAPER_TEST_ANIMEKAI_BOOL"
+	for _, c := range cases {
+		c := c
+		t.Run(c, func(t *testing.T) {
+			setEnv(t, probeKey, c)
+			// Default = true to prove unparseable falls back to default;
+			// valid falsy values still return false.
+			got := getEnvBool(probeKey, true)
+			isCanonicalFalse := c == "0" || c == "false" || c == "f" || c == "False"
+			if isCanonicalFalse && got {
+				t.Errorf("getEnvBool(%q, default=true) = true; want false for canonical falsy value", c)
+			}
+			if !isCanonicalFalse && !got {
+				t.Errorf("getEnvBool(%q, default=true) = false; want true (unparseable should fall back to default=true)", c)
+			}
+		})
+	}
+}

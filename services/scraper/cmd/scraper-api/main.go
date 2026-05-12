@@ -16,6 +16,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/embeds"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
@@ -153,6 +154,39 @@ func main() {
 	orchestrator.Register(gogoanimeProvider)
 	log.Infow("registered provider", "name", gogoanimeProvider.Name())
 
+	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
+	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
+	// ErrProviderDown so failover lands on the previous two providers.
+	// The provider's Go methods are stubs (escape-hatch); the sidecar route
+	// POST /animekai-token returns HTTP 501. SCRAPER-KAI-01..04 + KAI-07 are
+	// carried to v3.1 — see .planning/REQUIREMENTS.md and
+	// .planning/phases/19-animekai-gated/19-RESEARCH.md for rationale.
+	if cfg.AnimeKai.Enabled {
+		animeKaiBaseHTTP := domain.NewBaseHTTPClient(log,
+			domain.WithPerHostRPS("anikai.to", 1.0, 2),
+			domain.WithPerHostRPS("megaup.cc", 1.0, 2),
+			domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
+		)
+		animeKaiProvider, err := animekai.New(animekai.Deps{
+			BaseURL: cfg.AnimeKai.BaseURL,
+			HTTP:    animeKaiBaseHTTP,
+			Embeds:  registry,
+			MalSync: nil, // stub does not call malsync; v3.1 fill-in adds NewMalSyncClient
+			Cache:   redisCache,
+			Log:     log,
+		})
+		if err != nil {
+			log.Fatalw("failed to construct AnimeKai provider", "error", err)
+		}
+		orchestrator.Register(animeKaiProvider)
+		log.Infow("registered provider", "name", animeKaiProvider.Name(),
+			"flag", "SCRAPER_ANIMEKAI_ENABLED=true",
+			"mode", "escape-hatch-stub")
+	} else {
+		log.Infow("AnimeKai provider SKIPPED (flag off)",
+			"flag", "SCRAPER_ANIMEKAI_ENABLED=false")
+	}
+
 	// Phase 17 Plan 01: seed the provider_health_up gauge family with zero-
 	// initialized children for every (provider, stage) pair so the HELP/TYPE
 	// lines appear in /metrics from boot. The probe runner (Plan 17-02) will
@@ -221,13 +255,20 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Phase 18 wiring invariant — fatal if the provider chain didn't grow
-	// to 2 (animepahe + gogoanime). A future maintainer dropping one of the
-	// orchestrator.Register calls would silently degrade the failover chain
-	// to a single provider; this guard surfaces the regression at boot.
-	if got, want := len(orchestrator.RegisteredProviders()), 2; got != want {
-		log.Fatalw("Phase 18 wiring invariant broken: expected 2 providers (animepahe + gogoanime)",
-			"got", got, "want", want)
+	// Phase 19 wiring invariant — adapts the Phase 18 invariant to the
+	// flag-conditional shape. With flag off (prod default): 2 providers
+	// (animepahe + gogoanime). With flag on (R&D / staging): 3 providers —
+	// animepahe, gogoanime, animekai (escape-hatch stub). A future
+	// maintainer dropping any Register() call surfaces the regression at
+	// boot via this fatal.
+	expectedProviders := 2
+	if cfg.AnimeKai.Enabled {
+		expectedProviders = 3
+	}
+	if got := len(orchestrator.RegisteredProviders()); got != expectedProviders {
+		log.Fatalw("Phase 19 wiring invariant broken",
+			"got", got, "want", expectedProviders,
+			"flag", cfg.AnimeKai.Enabled)
 	}
 
 	go func() {
@@ -239,6 +280,8 @@ func main() {
 			"megacloud_url", cfg.MegacloudExtractor.URL,
 			"animepahe_base_url", cfg.AnimePahe.BaseURL,
 			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
+			"animekai_enabled", cfg.AnimeKai.Enabled,
+			"animekai_base_url", cfg.AnimeKai.BaseURL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)

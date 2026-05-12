@@ -20,6 +20,7 @@ type Config struct {
 	Redis              RedisConfig
 	AnimePahe          AnimePaheConfig
 	Gogoanime          GogoanimeConfig
+	AnimeKai           AnimeKaiConfig
 }
 
 // ServerConfig controls the HTTP listener.
@@ -70,6 +71,18 @@ type GogoanimeConfig struct {
 	BaseURL string
 }
 
+// AnimeKaiConfig is the per-provider override surface for animekai.Provider
+// (Phase 19 — gated, ESCAPE-HATCH path). Enabled defaults to FALSE in
+// production. Toggle via SCRAPER_ANIMEKAI_ENABLED=true. BaseURL defaults to
+// https://anikai.to (animekai.to 301-redirects here as of 2026-05-12).
+// Override via SCRAPER_ANIMEKAI_BASE_URL when the mirror rotates.
+// SCRAPER-KAI-05: flag is read at orchestrator startup; restart-not-rebuild
+// is achieved via `docker compose restart scraper`.
+type AnimeKaiConfig struct {
+	Enabled bool
+	BaseURL string
+}
+
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 //
@@ -100,6 +113,10 @@ func Load() (*Config, error) {
 		Gogoanime: GogoanimeConfig{
 			BaseURL: getEnv("SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.to"),
 		},
+		AnimeKai: AnimeKaiConfig{
+			Enabled: getEnvBool("SCRAPER_ANIMEKAI_ENABLED", false),
+			BaseURL: getEnv("SCRAPER_ANIMEKAI_BASE_URL", "https://anikai.to"),
+		},
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
 		parsed, err := url.Parse(u)
@@ -128,6 +145,15 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid SCRAPER_GOGOANIME_BASE_URL %q: missing scheme or host", u)
 		}
 	}
+	if u := cfg.AnimeKai.BaseURL; u != "" {
+		parsed, err := url.Parse(u)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SCRAPER_ANIMEKAI_BASE_URL %q: %w", u, err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid SCRAPER_ANIMEKAI_BASE_URL %q: missing scheme or host", u)
+		}
+	}
 	return cfg, nil
 }
 
@@ -151,6 +177,20 @@ func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
 	if val := os.Getenv(key); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {
 			return d
+		}
+	}
+	return defaultVal
+}
+
+// getEnvBool reads a boolean env var using strconv.ParseBool semantics.
+// Accepts "1", "t", "T", "TRUE", "true", "True" → true; "0", "f", "F",
+// "FALSE", "false", "False" → false. Unparseable values fall back to the
+// default (matching the lenient getEnv / getEnvInt / getEnvDuration pattern).
+// Phase 19 introduced this helper for SCRAPER_ANIMEKAI_ENABLED.
+func getEnvBool(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			return b
 		}
 	}
 	return defaultVal
