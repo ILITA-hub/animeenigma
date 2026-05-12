@@ -7,6 +7,10 @@
         "message": "⚙️📈 Phase 17 — Observability shipped (admin-only)! Поднимаем prod-наблюдаемость нашего self-hosted scraper'а. Prometheus теперь скрапит scraper:8088/metrics (раньше эта job-а отсутствовала — все метрики Phase 16 молча терялись). Добавили Grafana-дашборд `scraper-health` с per-provider/per-stage стат-плитками по всем 5 стадиям (search → episodes → servers → stream → stream_segment), heartbeat-плиткой (`time() - provider_probe_last_tick_timestamp`) и графиком провайдер-fallback'ов. И новый Telegram-алерт `provider-health-stream-segment-down` (severity=critical, for=15m) на случай, если какой-то провайдер не может достать первый HLS-сегмент 15+ минут подряд. На пользователях не отражается — это чистый scaffolding под multi-provider failover в Phase 18 (9anime) 🚀"
       },
       {
+        "type": "infrastructure",
+        "message": "🛡️ Admin-only: новый endpoint `GET /api/admin/scraper/health` (JWT admin-gated)! Возвращает per-provider/per-stage снимок здоровья из in-memory кеша плюс `last_ok` timestamps и обрезанные `last_err` excerpts (200 chars, с redaction Authorization/Cookie заголовков — T-17-03-02). Удобно для дебага без захода в Grafana. Маршрут специфично-перед-общим зарегистрирован в gateway: `/api/admin/scraper/*` → scraper:8088 ДО общего `/api/admin/*` → catalog (chi longest-prefix gotcha). Пользователям не видно 🛠️"
+      },
+      {
         "type": "feature",
         "message": "🎬 Новая вкладка «English» в плеере! Запустили собственный self-hosted скрапер AnimePahe — больше не зависим от мёртвых сторонних API (HiAnime закрылся, у Consumet сломался Megacloud). Теперь английская озвучка/субтитры на каждой серии — через свой backend на Go + Vue 3, с собственным in-process JS-распаковщиком ссылок (без внешних headless-сервисов!). Старые вкладки HiAnime + Consumet остались на debug-пути `?legacy=1` на случай отката 🚀"
       },
