@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
@@ -164,10 +165,20 @@ func (m *MalSyncClient) Lookup(ctx context.Context, malID, provider string) (str
 		_ = m.cache.Set(ctx, missKey, true, malSyncMissTTL)
 		return "", false, nil
 	}
-	// Pick the first entry. Real malsync data has one or two entries per
-	// provider (sub/dub variants); for AnimePahe specifically the identifier
-	// is the AnimePahe anime ID and any entry yields the same value.
-	for _, entry := range site {
+	// Pick the entry with the lexicographically-smallest key. Real malsync
+	// data has one or two entries per provider (sub/dub variants); for
+	// AnimePahe specifically the identifier is the AnimePahe anime ID and
+	// any entry yields the same value. WR-07: Go map iteration order is
+	// randomized, so iterating `site` directly produced a non-deterministic
+	// cached value across cold starts. Sort the keys first so the cache is
+	// stable per (mal_id, provider).
+	keys := make([]string, 0, len(site))
+	for k := range site {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		entry := site[k]
 		id := fmt.Sprintf("%v", entry.Identifier)
 		if id != "" && id != "<nil>" {
 			_ = m.cache.Set(ctx, hitKey, id, malSyncCacheTTL)
