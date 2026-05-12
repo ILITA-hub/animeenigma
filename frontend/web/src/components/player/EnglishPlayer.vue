@@ -761,9 +761,14 @@ const fetchEpisodes = async (retries = 2) => {
     loadingEpisodes.value = false
 
     // Auto-select first episode — programmatic, no override emission.
+    // WR-04: explicit positive check instead of truthy `props.initialEpisode ?`
+    // so a stray 0 (which parseInt("0") could produce upstream) does not
+    // silently fall through and pick episode 1 when the user actually wanted
+    // a search by number.
     if (episodes.value.length > 0) {
-      const initialEp = props.initialEpisode
-        ? episodes.value.find(e => e.number === props.initialEpisode) || episodes.value[0]
+      const requested = props.initialEpisode
+      const initialEp = (requested != null && requested > 0)
+        ? episodes.value.find(e => e.number === requested) || episodes.value[0]
         : episodes.value[0]
       await _advanceEpisode(initialEp)
     }
