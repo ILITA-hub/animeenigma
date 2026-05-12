@@ -82,6 +82,35 @@ func TestCache_MissingStreamSegmentStage_FailsOpen(t *testing.T) {
 	}
 }
 
+// TestCache_ShortCircuitedProbe_FailsOpen_DivergesFromAlerts — REVIEW.md
+// WR-03 lock-in test. When the probe short-circuits on an earlier stage
+// (e.g. search FindID fails), only that stage gets a Stages map entry.
+// stream_segment is absent → IsHealthy returns true (fail-open) so the
+// orchestrator keeps dispatching the provider.
+//
+// This DIVERGES from the alert rule `provider-health-stream-segment-down`
+// which only fires on a fresh stream_segment Up=false event. The probe's
+// search-stage alert (or any earlier-stage alert) is what pages the
+// operator for a fully-broken upstream. This test pins the divergence
+// so a future PR that changes IsHealthy semantics must also update the
+// alert rules in lockstep.
+func TestCache_ShortCircuitedProbe_FailsOpen_DivergesFromAlerts(t *testing.T) {
+	t.Parallel()
+	c := NewInMemoryHealthCache()
+	// Simulate what `commit()` writes when the probe short-circuits on
+	// the FIRST stage: only `search` is present, the rest are missing
+	// because the probe never reached them.
+	c.Update("animepahe", ProviderHealth{
+		Stages: map[string]StageStatus{
+			StageSearch: {Up: false, LastErr: "FindID failed"},
+		},
+		LastUpdated: time.Now(),
+	})
+	if !c.IsHealthy("animepahe") {
+		t.Errorf("IsHealthy with search=down + missing stream_segment = false; want true (orchestrator gate diverges from alert rule by design — see WR-03)")
+	}
+}
+
 // TestCache_AdminSnapshot_ReturnsCopy verifies the admin endpoint can mutate
 // the returned map without affecting cache state (deep copy semantics).
 func TestCache_AdminSnapshot_ReturnsCopy(t *testing.T) {

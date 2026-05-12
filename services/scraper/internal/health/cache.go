@@ -78,6 +78,34 @@ func NewInMemoryHealthCacheWithNow(now func() time.Time) *InMemoryHealthCache {
 //
 // Only branch 4-inverse (fresh entry, has stream_segment, Up=false) returns
 // false — the single condition that causes the orchestrator to skip.
+//
+// IMPORTANT — divergence with alerting (REVIEW.md WR-03):
+// Branch 3 (missing stream_segment key) is hit whenever the probe SHORT-
+// CIRCUITED on an earlier pipeline stage (search/episodes/servers/stream)
+// and never reached stream_segment. In that case:
+//
+//   - IsHealthy returns TRUE (orchestrator keeps dispatching). Rationale:
+//     the probe's search/FindID may fail for golden-pool reasons (MAL ID
+//     drift, anime removed) without user lookups also failing. Fail-open
+//     here matches the broader "probe outage MUST NOT blank the service"
+//     posture from RESEARCH P-08.
+//
+//   - The alert rule `provider-health-stream-segment-down` only fires on
+//     a fresh stream_segment Up=false event — NOT on missing-key. So a
+//     provider whose first stage is broken will keep getting traffic AND
+//     will not page anyone.
+//
+// This is by design — the alert rule
+// `provider-health-search-down` (or equivalent for whichever earlier
+// stage flipped) covers the page-the-operator side. The orchestrator
+// gate is intentionally less aggressive than the alert: a single broken
+// upstream stage is not a reason to immediately stop dispatching, because
+// real users may still get good streams via the failover chain or via
+// the partial pipeline that does work.
+//
+// If a future Phase decides the gate should be more aggressive (e.g.
+// "any DOWN stage = skip"), update both IsHealthy AND the alert rules
+// in one PR — the two MUST agree on the gate semantics.
 func (c *InMemoryHealthCache) IsHealthy(provider string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
