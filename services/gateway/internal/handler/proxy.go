@@ -41,6 +41,14 @@ func (h *ProxyHandler) ProxyToRooms(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "rooms")
 }
 
+// ProxyToScraper proxies requests to the scraper service (Phase 17 Plan 03).
+// Used for /api/admin/scraper/* admin debug endpoints; the gateway router
+// gates this group with JWTValidationMiddleware + AdminRoleMiddleware so
+// the handler itself does not enforce auth.
+func (h *ProxyHandler) ProxyToScraper(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "scraper")
+}
+
 // ProxyToStreaming proxies requests to streaming service
 func (h *ProxyHandler) ProxyToStreaming(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "streaming")

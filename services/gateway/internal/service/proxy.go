@@ -61,6 +61,20 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 	case "loki":
 		// /admin/loki/... -> /... (Loki serves from root)
 		path = strings.TrimPrefix(path, "/admin/loki")
+	case "scraper":
+		// Phase 17 Plan 03: gateway-side admin debug routes.
+		//   /api/admin/scraper/health → /scraper/health/admin (the admin
+		//     endpoint mounts under the existing /scraper subroute group).
+		//   /api/admin/scraper/<other> → /scraper/<other> (generic
+		//     fallthrough — strip the /admin segment; no /admin suffix
+		//     append because no other admin routes exist yet).
+		// Future admin routes get their own explicit branch above the
+		// generic strip so the path-rewrite never silently 404s.
+		if path == "/api/admin/scraper/health" {
+			path = "/scraper/health/admin"
+		} else {
+			path = strings.Replace(path, "/api/admin/scraper", "/scraper", 1)
+		}
 	case "streaming":
 		// /api/streaming/... -> /api/v1/... (streaming service uses /api/v1)
 		path = strings.Replace(path, "/api/streaming/", "/api/v1/", 1)
@@ -104,6 +118,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.PlayerService, nil
 	case "rooms":
 		return s.serviceURLs.RoomsService, nil
+	case "scraper":
+		return s.serviceURLs.ScraperService, nil
 	case "streaming":
 		return s.serviceURLs.StreamingService, nil
 	case "themes":
