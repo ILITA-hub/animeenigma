@@ -154,10 +154,20 @@ services:
       SERVER_PORT: 8088
       SERVER_HOST: 0.0.0.0
       MEGACLOUD_EXTRACTOR_URL: http://megacloud-extractor:3200
+      # Phase 16 plan 05 additions — Redis cache for malsync/episodes/stream
+      # and the AnimePahe base URL (env-controlled so domain rotation is
+      # restart-not-rebuild per the Wave 1 16-01 connectivity finding).
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      ANIMEPAHE_BASE_URL: https://animepahe.ru
     ports:
       - "127.0.0.1:8088:8088"
     depends_on:
       megacloud-extractor:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8088/health"]
