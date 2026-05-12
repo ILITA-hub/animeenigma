@@ -154,7 +154,10 @@ func main() {
 	}
 
 	// HTTP handler + router wiring.
-	scraperHandler := handler.NewScraperHandler(orchestrator, log)
+	// Phase 17 Plan 03: thread the same in-memory health cache the probe
+	// runner writes to so /scraper/health/admin can read the enriched
+	// per-stage snapshot.
+	scraperHandler := handler.NewScraperHandler(orchestrator, cache, log)
 	router := transport.NewRouter(scraperHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server

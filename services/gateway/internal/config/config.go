@@ -35,6 +35,7 @@ type ServiceURLs struct {
 	CatalogService   string
 	PlayerService    string
 	RoomsService     string
+	ScraperService   string // Phase 17 Plan 03: scraper service URL for /api/admin/scraper/*.
 	StreamingService string
 	ThemesService    string
 	WebService       string
@@ -75,6 +76,7 @@ func Load() (*Config, error) {
 			CatalogService:   getEnv("CATALOG_SERVICE_URL", "http://catalog:8081"),
 			PlayerService:    getEnv("PLAYER_SERVICE_URL", "http://player:8083"),
 			RoomsService:     getEnv("ROOMS_SERVICE_URL", "http://rooms:8084"),
+			ScraperService:   getEnv("SCRAPER_SERVICE_URL", "http://scraper:8088"),
 			StreamingService: getEnv("STREAMING_SERVICE_URL", "http://streaming:8082"),
 			ThemesService:    getEnv("THEMES_SERVICE_URL", "http://themes:8086"),
 			WebService:       getEnv("WEB_SERVICE_URL", "http://web:80"),

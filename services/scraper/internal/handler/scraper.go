@@ -28,22 +28,35 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 )
 
 // ScraperHandler is the HTTP handler for /scraper/* routes.
+//
+// The optional `cache` field (added in Phase 17 Plan 03) backs the admin
+// debug endpoint /scraper/health/admin. The public GetHealth handler does
+// NOT consult this cache — it returns the orchestrator's live HealthSnapshot
+// for backward compatibility with the catalog forwarder. A nil cache is
+// permitted so unit tests that exercise only the public surface can keep
+// using the lighter newTestHandler harness.
 type ScraperHandler struct {
-	svc *service.Orchestrator
-	log *logger.Logger
+	svc   *service.Orchestrator
+	cache *health.InMemoryHealthCache
+	log   *logger.Logger
 }
 
-// NewScraperHandler builds a ScraperHandler.
-func NewScraperHandler(svc *service.Orchestrator, log *logger.Logger) *ScraperHandler {
-	return &ScraperHandler{svc: svc, log: log}
+// NewScraperHandler builds a ScraperHandler. The cache argument may be nil
+// for tests that do not exercise /scraper/health/admin; production callers
+// MUST thread the same *InMemoryHealthCache that the probe runner writes to
+// (see cmd/scraper-api/main.go).
+func NewScraperHandler(svc *service.Orchestrator, cache *health.InMemoryHealthCache, log *logger.Logger) *ScraperHandler {
+	return &ScraperHandler{svc: svc, cache: cache, log: log}
 }
 
 // errorCode constants surface in `error.code` for every non-2xx response.
@@ -206,6 +219,46 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 func (h *ScraperHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	snap := h.svc.HealthSnapshot(r.Context())
 	httputil.OK(w, map[string]any{"providers": snap})
+}
+
+// GetAdminHealth handles GET /scraper/health/admin. Returns the orchestrator's
+// public HealthSnapshot alongside the in-memory cache's enriched AdminSnapshot
+// (per-stage LastOK timestamps + truncated LastErr excerpts).
+//
+// Auth model (per Plan 17-03 D6): JWT + AdminRoleMiddleware enforced at the
+// gateway. The scraper binds to 127.0.0.1 inside the docker network so this
+// handler trusts the gateway gate (A5 documented). No defense-in-depth auth
+// check inside the scraper handler.
+//
+// Defense-in-depth LastErr truncation (RESEARCH P-05): the probe runner is
+// expected to truncate to MaxLastErrChars BEFORE Update — but a future code
+// path that bypasses the probe could leak unbounded upstream error text into
+// the response. Re-truncate here so the JSON we emit is always bounded.
+func (h *ScraperHandler) GetAdminHealth(w http.ResponseWriter, r *http.Request) {
+	public := h.svc.HealthSnapshot(r.Context())
+
+	enriched := map[string]health.ProviderHealth{}
+	if h.cache != nil {
+		snap := h.cache.AdminSnapshot()
+		for prov, ph := range snap {
+			// AdminSnapshot already deep-copies the Stages map, so it is
+			// safe to mutate the StageStatus values in place without
+			// racing the cache.
+			for st, ss := range ph.Stages {
+				if len(ss.LastErr) > health.MaxLastErrChars {
+					ss.LastErr = ss.LastErr[:health.MaxLastErrChars]
+					ph.Stages[st] = ss
+				}
+			}
+			enriched[prov] = ph
+		}
+	}
+
+	httputil.OK(w, map[string]any{
+		"providers":    public,
+		"admin":        enriched,
+		"generated_at": time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 // resolveProviderID converts an incoming mal_id query value into a

@@ -44,9 +44,11 @@ func freshTestRouter(t *testing.T) http.Handler {
 			URL: "http://localhost:0",
 		},
 	}
-	// Phase 17: nil cache preserves Phase 16 dispatch behaviour for router tests.
+	// Phase 17: nil cache preserves Phase 16 dispatch behaviour for router tests
+	// (both the orchestrator and the admin-handler caches default to nil here —
+	// these router tests assert route registration, not cache snapshot content).
 	orch := service.NewOrchestrator(log, domain.NewRegistry(), nil)
-	sh := handler.NewScraperHandler(orch, log)
+	sh := handler.NewScraperHandler(orch, nil, log)
 	return NewRouter(sh, cfg, log, getSharedMC())
 }
 
@@ -65,6 +67,9 @@ func TestRouter_AllScraperRoutesRegistered(t *testing.T) {
 		{"/scraper/servers", http.StatusServiceUnavailable},
 		{"/scraper/stream", http.StatusServiceUnavailable},
 		{"/scraper/health", http.StatusOK},
+		// Phase 17 Plan 03: admin debug endpoint. With a nil cache the
+		// handler still returns 200 (just an empty admin map).
+		{"/scraper/health/admin", http.StatusOK},
 	}
 	for _, tc := range cases {
 		tc := tc
