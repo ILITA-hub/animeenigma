@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
 
 // MalSync default endpoint. Override with WithMalSyncBaseURL for tests.
@@ -60,6 +61,9 @@ type MalSyncClient struct {
 	http    *http.Client
 	cache   cache.Cache
 	baseURL string
+	// log surfaces unexpected cache-backend errors at warn level. Falls
+	// back to logger.Default() if WithMalSyncLogger isn't supplied. WR-06.
+	log *logger.Logger
 }
 
 // MalSyncOption configures a MalSyncClient. See WithMalSyncHTTPClient,
@@ -89,6 +93,16 @@ func WithMalSyncBaseURL(u string) MalSyncOption {
 	}
 }
 
+// WithMalSyncLogger overrides the logger used to surface unexpected cache-
+// backend errors. Defaults to logger.Default(). WR-06.
+func WithMalSyncLogger(l *logger.Logger) MalSyncOption {
+	return func(m *MalSyncClient) {
+		if l != nil {
+			m.log = l
+		}
+	}
+}
+
 // NewMalSyncClient builds a MalSyncClient with the given cache and options.
 // The Cache MUST be non-nil — there's no in-memory fallback because the
 // 24h TTL needs durable storage to be worth anything.
@@ -102,6 +116,7 @@ func NewMalSyncClient(c cache.Cache, opts ...MalSyncOption) *MalSyncClient {
 		http:    &http.Client{Timeout: 10 * time.Second},
 		cache:   c,
 		baseURL: defaultMalSyncBaseURL,
+		log:     logger.Default(),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -141,9 +156,13 @@ func (m *MalSyncClient) Lookup(ctx context.Context, malID, provider string) (str
 	if err := m.cache.Get(ctx, hitKey, &cached); err == nil && cached != "" {
 		return cached, true, nil
 	} else if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		// Unexpected cache backend failure — treat as a miss and fall through
-		// to the upstream. Don't propagate redis blips into the lookup path.
-		_ = err
+		// Unexpected cache backend failure — treat as a miss and fall
+		// through to the upstream so a transient Redis blip doesn't
+		// propagate into the Lookup path. WR-06 — pre-fix the dead
+		// `_ = err` swallow looked like intentional suppression in a
+		// future grep. Logging a warn-level breadcrumb is the right
+		// behaviour for an unexpected backend failure.
+		m.log.Warnw("malsync cache get failed", "key", hitKey, "error", err)
 	}
 
 	// 2. Negative cache hit?
