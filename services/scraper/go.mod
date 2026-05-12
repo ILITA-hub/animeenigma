@@ -3,6 +3,7 @@ module github.com/ILITA-hub/animeenigma/services/scraper
 go 1.23.0
 
 require (
+	github.com/ILITA-hub/animeenigma/libs/cache v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
@@ -23,6 +24,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/go-chi/render v1.0.3 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
@@ -33,6 +35,7 @@ require (
 	github.com/prometheus/client_model v0.6.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/redis/go-redis/v9 v9.5.1 // indirect
 	github.com/sergi/go-diff v1.0.0 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
@@ -52,3 +55,5 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
 )
+
+replace github.com/ILITA-hub/animeenigma/libs/cache => ../../libs/cache
