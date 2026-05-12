@@ -57,6 +57,16 @@ export function useWatchPreferences(animeId: string) {
   const resolvedCombo = ref<ResolvedCombo | null>(null)
   const isLoading = ref(false)
 
+  // Phase 16 SCRAPER-NF-02 — per-anime preferred English scraper provider
+  // (e.g. 'animepahe', '9anime'). Persisted to localStorage under
+  // `pref:scraper:${animeId}` with the same 24h TTL as resolvedCombo. The
+  // existing backend resolver does not own this field — it's local-only for
+  // Phase 16, mirroring how `preferred_en_provider` is currently a flat
+  // localStorage key in Anime.vue. Phase 18+ can promote it to server-side
+  // if cross-device sync becomes a requirement.
+  const preferredScraperProvider = ref<string | null>(null)
+  const scraperCacheKey = `pref:scraper:${animeId}`
+
   // Try cached result first
   const cacheKey = `pref:${animeId}`
   const cached = localStorage.getItem(cacheKey)
@@ -67,6 +77,28 @@ export function useWatchPreferences(animeId: string) {
         resolvedCombo.value = data
       }
     } catch { /* ignore corrupt cache */ }
+  }
+
+  // Phase 16 — load scraper preference cache. Separate key (and shape) from
+  // resolvedCombo so the two caches can be invalidated independently.
+  try {
+    const rawScraper = localStorage.getItem(scraperCacheKey)
+    if (rawScraper) {
+      const parsed = JSON.parse(rawScraper) as { value: string | null; ts: number }
+      if (Date.now() - parsed.ts < CACHE_TTL) {
+        preferredScraperProvider.value = parsed.value
+      }
+    }
+  } catch { /* ignore corrupt cache */ }
+
+  function setPreferredScraperProvider(value: string | null) {
+    preferredScraperProvider.value = value
+    try {
+      localStorage.setItem(
+        scraperCacheKey,
+        JSON.stringify({ value, ts: Date.now() }),
+      )
+    } catch { /* quota errors swallowed — non-essential */ }
   }
 
   async function resolve(available: WatchCombo[]) {
@@ -119,5 +151,11 @@ export function useWatchPreferences(animeId: string) {
     }
   }
 
-  return { resolvedCombo, isLoading, resolve }
+  return {
+    resolvedCombo,
+    isLoading,
+    resolve,
+    preferredScraperProvider,        // Phase 16 SCRAPER-NF-02
+    setPreferredScraperProvider,     // Phase 16 SCRAPER-NF-02
+  }
 }
