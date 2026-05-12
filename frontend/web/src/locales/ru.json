@@ -155,6 +155,8 @@
     },
     "sourceSwitchFailed": "Не удалось сменить источник — остаёмся на {provider}",
     "sourceUnavailable": "Источник недоступен. Пробовали: {chain}",
+    "sourceSwitchedAnnouncement": "Переключено на {provider}",
+    "sourceOfflineSuffix": " (недоступно)",
     "reportProvider": "Провайдер",
     "reportTried": "Пробовали",
     "error": {

@@ -155,6 +155,8 @@
     },
     "sourceSwitchFailed": "Couldn't switch source — staying on {provider}",
     "sourceUnavailable": "Source unavailable. Tried: {chain}",
+    "sourceSwitchedAnnouncement": "Switched to {provider}",
+    "sourceOfflineSuffix": " (offline)",
     "reportProvider": "Provider",
     "reportTried": "Tried",
     "error": {

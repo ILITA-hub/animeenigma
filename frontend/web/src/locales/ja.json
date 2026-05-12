@@ -155,6 +155,8 @@
     },
     "sourceSwitchFailed": "ソース切替に失敗 — {provider} のままです",
     "sourceUnavailable": "ソース利用不可。試行: {chain}",
+    "sourceSwitchedAnnouncement": "{provider}に切り替えました",
+    "sourceOfflineSuffix": "（オフライン）",
     "reportProvider": "プロバイダー",
     "reportTried": "試行",
     "error": {

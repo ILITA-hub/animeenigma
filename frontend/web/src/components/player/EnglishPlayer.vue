@@ -161,13 +161,70 @@
             <span class="capitalize">{{ capitalizeProvider(availableProviders[0]) }}</span>
             <svg class="w-4 h-4 text-white/40" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" /></svg>
           </div>
-          <!-- TODO Phase 18 — replace this fallback chip with the multi-option dropdown panel per UI-SPEC §ProviderSourceDropdown -->
-          <div
-            v-else
-            class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-            data-testid="source-chip"
-          >
-            <span class="capitalize">{{ capitalizeProvider(selectedProvider || availableProviders[0]) }}</span>
+          <!-- Phase 18 — multi-option dropdown (UI-SPEC §ProviderSourceDropdown). -->
+          <div v-else class="relative">
+            <button
+              type="button"
+              role="combobox"
+              :aria-expanded="panelOpen"
+              aria-controls="source-panel"
+              :aria-label="$t('player.sourceMultiTooltip')"
+              :class="[
+                'w-full rounded-lg px-3 py-2 text-sm font-medium text-white min-h-[44px] flex items-center justify-between border transition-colors',
+                panelOpen ? 'accent-bg-muted accent-border' : 'bg-white/5 border-white/10 hover:bg-white/10',
+              ]"
+              data-testid="source-trigger"
+              @click="panelOpen = !panelOpen"
+              @keydown="onSourceTriggerKeydown"
+            >
+              <span class="capitalize">{{ capitalizeProvider(selectedProvider || availableProviders[0]) }}</span>
+              <svg :class="['w-4 h-4 transition-transform', panelOpen && 'rotate-180']" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <div
+              v-if="panelOpen"
+              id="source-panel"
+              role="listbox"
+              class="absolute z-10 mt-1 w-full bg-[#1a1a24] border border-white/10 rounded-lg overflow-hidden shadow-xl"
+            >
+              <button
+                v-for="slug in availableProviders"
+                :key="slug"
+                type="button"
+                role="option"
+                :aria-selected="slug === (selectedProvider || availableProviders[0])"
+                :aria-disabled="unhealthyProviders.includes(slug)"
+                :disabled="unhealthyProviders.includes(slug)"
+                :title="unhealthyProviders.includes(slug) ? $t('player.sourceUnhealthy') : undefined"
+                :class="[
+                  'w-full text-left px-3 py-2 text-sm flex items-center gap-2',
+                  slug === (selectedProvider || availableProviders[0])
+                    ? 'accent-bg-muted accent-text border-l-2 accent-border'
+                    : unhealthyProviders.includes(slug)
+                      ? 'opacity-40 cursor-not-allowed text-white'
+                      : 'text-white hover:bg-white/10',
+                ]"
+                :data-testid="`source-option-${slug}`"
+                @click="switchProvider(slug)"
+                @keydown="onSourceItemKeydown($event, slug)"
+              >
+                <span class="text-base">{{ slug === (selectedProvider || availableProviders[0]) ? '●' : '○' }}</span>
+                <span class="capitalize flex-1">{{ capitalizeProvider(slug) }}</span>
+                <span v-if="unhealthyProviders.includes(slug)" class="text-xs text-pink-400">{{ $t('player.sourceOfflineSuffix') }}</span>
+              </button>
+            </div>
+
+            <p
+              v-if="triedChain.length > 1 && selectedProvider === null"
+              class="text-xs text-white/40 mt-1"
+              data-testid="tried-chain-debug"
+            >
+              tried: {{ triedChain.map(capitalizeProvider).join(' → ') }}
+            </p>
+
+            <div aria-live="polite" class="sr-only">{{ srAnnouncement }}</div>
           </div>
         </div>
 
@@ -480,6 +537,9 @@ function capitalizeProvider(name: string | null | undefined): string {
   if (slug === 'animepahe') return 'AnimePahe'
   if (slug === '9anime') return '9anime'
   if (slug === 'animekai') return 'AnimeKai'
+  // Phase 18: backend slug 'gogoanime' renders as the brand name 'Anitaku'
+  // (CONTEXT.md — the mirror chain pivoted from 9anime → gogoanime → anitaku.to).
+  if (slug === 'gogoanime') return 'Anitaku'
   // Default: capitalize first letter — keeps unknown providers readable.
   return slug.charAt(0).toUpperCase() + slug.slice(1)
 }
@@ -541,6 +601,14 @@ const serverLoadWarning = ref<string | null>(null)
 const availableProviders = ref<string[]>(['animepahe'])
 const selectedProvider = ref<string | null>(null)
 const triedChain = ref<string[]>([])
+// Phase 18 — multi-option source dropdown state.
+// panelOpen toggles the listbox; srAnnouncement feeds the aria-live region so
+// screen readers get a short "Switched to {provider}" notification after a
+// successful switch. unhealthyProviders is populated from scraperApi.getHealth()
+// on mount + when responses surface DOWN providers.
+const panelOpen = ref(false)
+const srAnnouncement = ref('')
+const unhealthyProviders = ref<string[]>([])
 const { preferredScraperProvider, setPreferredScraperProvider } = useWatchPreferences(props.animeId)
 
 // Restore prior per-anime scraper provider preference (24h TTL inside the composable).
@@ -873,6 +941,95 @@ const disposeCurrentPlayer = () => {
   if (hls) {
     hls.destroy()
     hls = null
+  }
+}
+
+// Phase 18 — switchProvider drives the multi-option source dropdown. It
+// preserves the user's current playback position across the source change,
+// rolls back on a failed switch (so the user is never stranded on a broken
+// source they didn't pick), and emits an aria-live announcement on success.
+//
+// Note (Issue 8): EnglishPlayer.vue has NO toast helper imported (verified by
+// grep). The failed-switch path uses console.warn and relies on the existing
+// fetchStream error-overlay path for user-facing feedback. Success uses the
+// srAnnouncement aria-live region.
+async function switchProvider(next: string) {
+  if (!next || next === selectedProvider.value) {
+    panelOpen.value = false
+    return
+  }
+  const prior = selectedProvider.value
+  const resumeAt =
+    vjsPlayer?.currentTime() ??
+    nativeVideoRef.value?.currentTime ??
+    0
+
+  selectedProvider.value = next
+  setPreferredScraperProvider(next)
+  panelOpen.value = false
+
+  try {
+    // Re-walk the scraper pipeline for the new provider. fetchServers will
+    // populate servers + auto-select; that auto-select triggers fetchStream
+    // via the existing watcher path. Awaiting fetchServers gives us a
+    // signal to roll back on a hard failure.
+    if (selectedEpisode.value) {
+      await fetchServers(selectedEpisode.value.id)
+    }
+  } catch (err) {
+    selectedProvider.value = prior
+    setPreferredScraperProvider(prior)
+    // No toast helper exists in this component — fetchServers populates
+    // error.value directly for the user-facing overlay. Surface the
+    // rollback at debug level so on-call can trace switch failures in the
+    // browser console without needing additional UI plumbing.
+    console.warn(
+      '[EnglishPlayer] source switch failed; rolled back to',
+      prior,
+      'error:',
+      err,
+    )
+    return
+  }
+
+  await nextTick()
+  if (vjsPlayer) {
+    vjsPlayer.currentTime(resumeAt)
+  } else if (nativeVideoRef.value) {
+    nativeVideoRef.value.currentTime = resumeAt
+  }
+
+  srAnnouncement.value = t('player.sourceSwitchedAnnouncement', { provider: capitalizeProvider(next) })
+  setTimeout(() => { srAnnouncement.value = '' }, 1000)
+}
+
+// Trigger keyboard handler — Escape closes the panel + restores focus.
+function onSourceTriggerKeydown(ev: KeyboardEvent) {
+  if (ev.key === 'Escape') {
+    panelOpen.value = false
+    ;(ev.currentTarget as HTMLElement)?.focus()
+  }
+}
+
+// Per-option keyboard handler — Enter/Space invoke the click handler.
+function onSourceItemKeydown(ev: KeyboardEvent, slug: string) {
+  if (ev.key === 'Enter' || ev.key === ' ') {
+    ev.preventDefault()
+    void switchProvider(slug)
+  }
+}
+
+// Click-outside handler — closes the panel when the user clicks anywhere
+// outside the trigger or the panel itself. Wired in onMounted, torn down in
+// onBeforeUnmount.
+function onWindowClickClosePanel(ev: MouseEvent) {
+  const target = ev.target as HTMLElement | null
+  if (!target) return
+  if (
+    !target.closest('[data-testid="source-trigger"]') &&
+    !target.closest('#source-panel')
+  ) {
+    panelOpen.value = false
   }
 }
 
@@ -1559,10 +1716,24 @@ onMounted(async () => {
   try {
     const { data } = await scraperApi.getHealth()
     // Envelope: { success: true, data: { providers: { animepahe: {...}, ... } } }
-    const env = data as { data?: { providers?: Record<string, unknown> } } | undefined
-    const providers = env?.data?.providers ? Object.keys(env.data.providers) : []
+    const env = data as { data?: { providers?: Record<string, { stages?: Record<string, { up?: boolean }> }> } } | undefined
+    const providersMap = env?.data?.providers || {}
+    const providers = Object.keys(providersMap)
     if (providers.length > 0) {
       availableProviders.value = providers
+      // Phase 18 — surface DOWN providers in the dropdown via the
+      // unhealthyProviders array. A provider is treated as unhealthy if the
+      // probe's search stage is Up=false; the orchestrator skips it anyway
+      // via the health-cache gate, but rendering it as disabled (with the
+      // "(offline)" suffix) makes that visible to the user.
+      const offline: string[] = []
+      for (const [slug, info] of Object.entries(providersMap)) {
+        const searchUp = info?.stages?.search?.up
+        if (searchUp === false) {
+          offline.push(slug)
+        }
+      }
+      unhealthyProviders.value = offline
       // If the prior preference is still in the live provider set, keep it
       // selected; otherwise drop it via the composable setter so a stale
       // cache value can't bind to a now-missing provider.
@@ -1578,6 +1749,9 @@ onMounted(async () => {
     // Fail-open per UI-SPEC §Edge Cases — orchestrator will still attribute
     // tried[] on every per-request response.
   }
+  // Phase 18 — click-outside handler that closes the multi-option panel.
+  // Scoped to onMounted so it can also be torn down in onBeforeUnmount.
+  document.addEventListener('click', onWindowClickClosePanel)
   fetchEpisodes()
   fetchWatchedEpisodes()
 })
@@ -1586,6 +1760,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.removeEventListener('click', onWindowClickClosePanel)
   saveProgress()
   disposeCurrentPlayer()
 })
