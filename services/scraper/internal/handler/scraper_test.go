@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 )
 
@@ -72,7 +74,20 @@ func newTestHandler(t *testing.T, providers ...domain.Provider) *ScraperHandler 
 	for _, p := range providers {
 		o.Register(p)
 	}
-	return NewScraperHandler(o, log)
+	return NewScraperHandler(o, nil, log)
+}
+
+// newTestHandlerWithCache constructs a handler with both an orchestrator
+// (zero registered providers by default) and a real InMemoryHealthCache so
+// the admin endpoint tests can drive both surfaces.
+func newTestHandlerWithCache(t *testing.T, cache *health.InMemoryHealthCache, providers ...domain.Provider) *ScraperHandler {
+	t.Helper()
+	log := logger.Default()
+	o := service.NewOrchestrator(log, domain.NewRegistry(), nil)
+	for _, p := range providers {
+		o.Register(p)
+	}
+	return NewScraperHandler(o, cache, log)
 }
 
 // requireJSON asserts the response body is a JSON object and returns the
@@ -490,5 +505,192 @@ func TestParseQuery_PreferLengthCap(t *testing.T) {
 	qp := parseQuery(req)
 	if len(qp.prefer) != maxPreferLength {
 		t.Errorf("len(prefer) = %d; want %d", len(qp.prefer), maxPreferLength)
+	}
+}
+
+// adminResponseEnvelope is the typed wrapper for httputil.OK's envelope so
+// the admin endpoint tests can assert structure without typo-prone map keys.
+type adminResponseEnvelope struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Providers   map[string]domain.Health         `json:"providers"`
+		Admin       map[string]health.ProviderHealth `json:"admin"`
+		GeneratedAt string                           `json:"generated_at"`
+	} `json:"data"`
+}
+
+func decodeAdminResponse(t *testing.T, resp *http.Response) adminResponseEnvelope {
+	t.Helper()
+	var env adminResponseEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode admin body: %v", err)
+	}
+	return env
+}
+
+// TestAdminHealthHandler_ReturnsCacheSnapshot — cache pre-populated with one
+// provider/stage → GET /scraper/health/admin surfaces it under
+// data.admin.<provider>.stages.<stage>.{up,last_ok,last_err}.
+func TestAdminHealthHandler_ReturnsCacheSnapshot(t *testing.T) {
+	t.Parallel()
+	cache := health.NewInMemoryHealthCache()
+	now := time.Now().UTC().Truncate(time.Second)
+	cache.Update("animepahe", health.ProviderHealth{
+		Stages: map[string]health.StageStatus{
+			health.StageStreamSegment: {Up: true, LastOK: now, LastErr: ""},
+		},
+		LastUpdated: now,
+	})
+	h := newTestHandlerWithCache(t, cache)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/health/admin", nil)
+	h.GetAdminHealth(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	env := decodeAdminResponse(t, resp)
+	if !env.Success {
+		t.Errorf("success = false; want true")
+	}
+	prov, ok := env.Data.Admin["animepahe"]
+	if !ok {
+		t.Fatalf("data.admin missing animepahe key; got %+v", env.Data.Admin)
+	}
+	stage, ok := prov.Stages[health.StageStreamSegment]
+	if !ok {
+		t.Fatalf("missing stream_segment stage; got %+v", prov.Stages)
+	}
+	if !stage.Up {
+		t.Errorf("stage.Up = false; want true")
+	}
+	if stage.LastOK.IsZero() {
+		t.Errorf("stage.LastOK is zero; want non-zero")
+	}
+}
+
+// TestAdminHealthHandler_EmptyCacheReturnsEmptyAdmin — empty cache must NOT
+// crash and must return a 200 with admin as an empty (but present) object.
+func TestAdminHealthHandler_EmptyCacheReturnsEmptyAdmin(t *testing.T) {
+	t.Parallel()
+	cache := health.NewInMemoryHealthCache()
+	h := newTestHandlerWithCache(t, cache)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/health/admin", nil)
+	h.GetAdminHealth(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	env := decodeAdminResponse(t, resp)
+	if env.Data.Admin == nil {
+		t.Errorf("data.admin = nil; want empty (but non-nil) map")
+	}
+	if len(env.Data.Admin) != 0 {
+		t.Errorf("len(data.admin) = %d; want 0", len(env.Data.Admin))
+	}
+}
+
+// TestAdminHealthHandler_TruncatesLastErrTo256Chars — defense-in-depth: even
+// if a (hypothetical future) caller bypassed the probe's truncation and
+// stuffed a 400-char LastErr into the cache, the admin handler MUST clamp
+// the visible LastErr to at most MaxLastErrChars (256).
+func TestAdminHealthHandler_TruncatesLastErrTo256Chars(t *testing.T) {
+	t.Parallel()
+	cache := health.NewInMemoryHealthCache()
+	longErr := strings.Repeat("x", 400)
+	cache.Update("animepahe", health.ProviderHealth{
+		Stages: map[string]health.StageStatus{
+			health.StageStreamSegment: {Up: false, LastErr: longErr},
+		},
+		LastUpdated: time.Now(),
+	})
+	h := newTestHandlerWithCache(t, cache)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/health/admin", nil)
+	h.GetAdminHealth(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	env := decodeAdminResponse(t, resp)
+	stage := env.Data.Admin["animepahe"].Stages[health.StageStreamSegment]
+	if got := len(stage.LastErr); got > health.MaxLastErrChars {
+		t.Errorf("len(last_err) = %d; want <= %d", got, health.MaxLastErrChars)
+	}
+}
+
+// TestAdminHealthHandler_IncludesGeneratedAt — the response surface includes
+// a `generated_at` RFC3339 string so an operator can spot a frozen response
+// (e.g. cached upstream by a buggy proxy) at a glance.
+func TestAdminHealthHandler_IncludesGeneratedAt(t *testing.T) {
+	t.Parallel()
+	cache := health.NewInMemoryHealthCache()
+	h := newTestHandlerWithCache(t, cache)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/health/admin", nil)
+	h.GetAdminHealth(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	env := decodeAdminResponse(t, resp)
+	if env.Data.GeneratedAt == "" {
+		t.Fatalf("data.generated_at missing")
+	}
+	if _, err := time.Parse(time.RFC3339, env.Data.GeneratedAt); err != nil {
+		t.Errorf("data.generated_at = %q; not RFC3339: %v", env.Data.GeneratedAt, err)
+	}
+}
+
+// TestAdminHealthHandler_IncludesPublicProvidersField — the admin endpoint
+// MUST also expose the orchestrator's existing HealthSnapshot under the same
+// `providers` key as the public /scraper/health endpoint so a downstream
+// dashboard can ingest one response instead of two.
+func TestAdminHealthHandler_IncludesPublicProvidersField(t *testing.T) {
+	t.Parallel()
+	fp := &fakeProvider{
+		name: "fakeprov",
+		health: domain.Health{
+			Provider: "fakeprov",
+			Stages: map[string]domain.StageHealth{
+				"find_id": {Up: true},
+			},
+		},
+	}
+	cache := health.NewInMemoryHealthCache()
+	h := newTestHandlerWithCache(t, cache, fp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/health/admin", nil)
+	h.GetAdminHealth(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	env := decodeAdminResponse(t, resp)
+	if env.Data.Providers == nil {
+		t.Fatalf("data.providers nil; want non-nil HealthSnapshot map")
+	}
+	got, ok := env.Data.Providers["fakeprov"]
+	if !ok {
+		t.Fatalf("data.providers missing fakeprov; got keys %v", env.Data.Providers)
+	}
+	if got.Provider != "fakeprov" {
+		t.Errorf("data.providers.fakeprov.provider = %q; want fakeprov", got.Provider)
 	}
 }
