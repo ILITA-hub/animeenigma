@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -185,13 +186,24 @@ func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
 // getEnvBool reads a boolean env var using strconv.ParseBool semantics.
 // Accepts "1", "t", "T", "TRUE", "true", "True" → true; "0", "f", "F",
 // "FALSE", "false", "False" → false. Unparseable values fall back to the
-// default (matching the lenient getEnv / getEnvInt / getEnvDuration pattern).
-// Phase 19 introduced this helper for SCRAPER_ANIMEKAI_ENABLED.
+// default (matching the lenient getEnv / getEnvInt / getEnvDuration pattern),
+// but the helper ALSO logs a WARN-level line on parse failure (WR-03) so
+// an operator who typo'd the value (e.g. "yes-please" or "on") sees their
+// value was rejected instead of silently shipping the default. Phase 19
+// introduced this helper for SCRAPER_ANIMEKAI_ENABLED.
 func getEnvBool(key string, defaultVal bool) bool {
-	if val := os.Getenv(key); val != "" {
-		if b, err := strconv.ParseBool(val); err == nil {
-			return b
-		}
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
 	}
+	b, err := strconv.ParseBool(val)
+	if err == nil {
+		return b
+	}
+	// WR-03: unparseable value — log a warning so the operator notices
+	// their intent did not take effect. We do not return an error here
+	// because callers (and downstream tests like TestLoad_AnimeKaiEnabledInvalid)
+	// rely on the lenient fall-back-to-default convention.
+	log.Printf("WARN config: %s=%q is not a valid boolean; falling back to default=%v (accepted values: 1/0, t/f, true/false, T/F, TRUE/FALSE, True/False)", key, val, defaultVal)
 	return defaultVal
 }

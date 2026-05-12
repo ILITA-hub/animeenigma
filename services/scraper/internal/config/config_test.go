@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log"
 	"os"
 	"strings"
 	"testing"
@@ -243,6 +245,44 @@ func TestLoad_AnimeKaiInvalidBaseURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SCRAPER_ANIMEKAI_BASE_URL") {
 		t.Fatalf("error %q must mention SCRAPER_ANIMEKAI_BASE_URL", err.Error())
+	}
+}
+
+// TestGetEnvBool_LogsOnUnparseable — WR-03. Unparseable values fall back to
+// the default (lenient convention preserved) BUT the helper MUST emit a
+// WARN log line naming the env-var key and the rejected value so an
+// operator who typo'd "yes-please" sees their value was rejected. The fix
+// matters because SCRAPER_ANIMEKAI_ENABLED is the only gate between the
+// escape-hatch stub being registered or not — silent fall-through means
+// operators can think the flag is on when it isn't.
+func TestGetEnvBool_LogsOnUnparseable(t *testing.T) {
+	const probeKey = "SCRAPER_TEST_WARN_ANIMEKAI_BOOL"
+	setEnv(t, probeKey, "yes-please")
+
+	var buf bytes.Buffer
+	prevOut := log.Writer()
+	prevFlags := log.Flags()
+	log.SetOutput(&buf)
+	// Drop the timestamp prefix so the substring match below is stable.
+	log.SetFlags(0)
+	t.Cleanup(func() {
+		log.SetOutput(prevOut)
+		log.SetFlags(prevFlags)
+	})
+
+	got := getEnvBool(probeKey, false)
+	if got {
+		t.Fatalf("getEnvBool(%q, default=false) = true; want false (unparseable must fall back)", "yes-please")
+	}
+	logged := buf.String()
+	if !strings.Contains(logged, "WARN") {
+		t.Errorf("log output %q must contain WARN level (operator-visible diagnostic)", logged)
+	}
+	if !strings.Contains(logged, probeKey) {
+		t.Errorf("log output %q must name the env-var key %q so operators can grep", logged, probeKey)
+	}
+	if !strings.Contains(logged, "yes-please") {
+		t.Errorf("log output %q must include the rejected value so operators see their typo", logged)
 	}
 }
 
