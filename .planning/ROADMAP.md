@@ -42,7 +42,7 @@
 
 - [x] **Phase 15: Foundation** — Provider interface, orchestrator skeleton, EmbedExtractor registry, BaseHTTPClient, megacloud-extractor Go wrapper, golden-file harness, 503-stub HTTP endpoints (completed 2026-05-11)
 - [x] **Phase 16: AnimePahe + New EnglishPlayer** — First live provider (Kwik via goja), new unified `EnglishPlayer.vue` replacing both HiAnime + Consumet tabs end-to-end (completed 2026-05-12)
-- [ ] **Phase 17: Observability** — Per-provider/per-stage health gauges, 15-min liveness probe with golden anime pool, orchestrator skips unhealthy, Grafana alert, admin health endpoint
+- [x] **Phase 17: Observability** — Per-provider/per-stage health gauges, 15-min liveness probe with golden anime pool, orchestrator skips unhealthy, Grafana alert, admin health endpoint (completed 2026-05-12)
 - [ ] **Phase 18: 9anime** — Second provider (WordPress/Madara markup), failover AnimePahe → 9anime verified end-to-end, new embed extractors registered
 - [ ] **Phase 19: AnimeKai (gated)** — Third provider behind `SCRAPER_ANIMEKAI_ENABLED` feature flag; in-house token generator in megacloud-extractor sidecar (no `enc-dec.app`); flag default-off carryover acceptable if R&D doesn't converge
 - [ ] **Phase 20: Cutover** — Delete HiAnime + Consumet code paths, containers, env vars, frontend exports; gated on ≥ 7 days clean prod traffic on EnglishPlayer
@@ -99,7 +99,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 - [x] 17-01-PLAN.md — Wave 1: domain/cache foundation — provider_health_up gauge family + InMemoryHealthCache + stage constants + orchestrator skip-unhealthy wiring + parser_zero_match_total counter
 - [x] 17-04-PLAN.md — Wave 1: Prometheus scrape job (the missing P-04 blocker) + Grafana scraper-health dashboard + provider-health-stream-segment-down Telegram alert + changelog entry
 - [x] 17-02-PLAN.md — Wave 2: ProbeRunner (15-min ± 20% jitter, 5-stage pipeline, 3-of-15-min sliding window, defer-recover) + golden pool + main.go wiring + AnimePahe stage-key rename + first ParserZeroMatchTotal emit
-- [ ] 17-03-PLAN.md — Wave 3: GET /api/admin/scraper/health admin endpoint (scraper handler + transport route) + gateway proxy config/handler/router (specific-before-general /admin/scraper/* before /admin/*)
+- [x] 17-03-PLAN.md — Wave 3: GET /api/admin/scraper/health admin endpoint (scraper handler + transport route) + gateway proxy config/handler/router (specific-before-general /admin/scraper/* before /admin/*)
 
 ### Phase 18: 9anime
 **Goal**: A second alive EN provider is in rotation so a single provider failure does not blank the English tab for users.
@@ -146,7 +146,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 | 9-14 | v2.0 | 8/8 | ✅ Complete | 2026-05-06 → 2026-05-07 |
 | 15 | v3.0 | 4/4 | Complete    | 2026-05-11 |
 | 16 | v3.0 | 0/6 | Planned     | — |
-| 17 | v3.0 | 3/4 | In Progress|  |
+| 17 | v3.0 | 4/4 | Complete   | 2026-05-12 |
 | 18 | v3.0 | 0/? | Not started | — |
 | 19 | v3.0 | 0/? | Not started | — |
 | 20 | v3.0 | 0/? | Not started | — |
