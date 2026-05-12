@@ -118,6 +118,13 @@ func (c *BaseHTTPClient) Timeout() time.Duration {
 	return c.client.HTTPClient.Timeout
 }
 
+// Jar returns the cookie jar attached to this client. Providers use it to
+// inspect cookies set by the upstream (e.g. AnimePahe's DDoS-Guard bypass
+// cookie — see services/scraper/internal/providers/animepahe).
+// Returns the live jar instance; callers MUST treat it as read-mostly
+// (the http stack writes to it on every response).
+func (c *BaseHTTPClient) Jar() http.CookieJar { return c.jar }
+
 // applyBaselineHeaders writes baseline headers into req.Header WITHOUT
 // overwriting any header the caller already set on the request.
 func (c *BaseHTTPClient) applyBaselineHeaders(h http.Header) {
