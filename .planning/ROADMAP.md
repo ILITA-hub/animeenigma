@@ -43,7 +43,7 @@
 - [x] **Phase 15: Foundation** — Provider interface, orchestrator skeleton, EmbedExtractor registry, BaseHTTPClient, megacloud-extractor Go wrapper, golden-file harness, 503-stub HTTP endpoints (completed 2026-05-11)
 - [x] **Phase 16: AnimePahe + New EnglishPlayer** — First live provider (Kwik via goja), new unified `EnglishPlayer.vue` replacing both HiAnime + Consumet tabs end-to-end (completed 2026-05-12)
 - [x] **Phase 17: Observability** — Per-provider/per-stage health gauges, 15-min liveness probe with golden anime pool, orchestrator skips unhealthy, Grafana alert, admin health endpoint (completed 2026-05-12)
-- [ ] **Phase 18: 9anime → Anitaku/Gogoanime** — Second provider (pivoted per 2026-05-12 research — see .planning/phases/18-9anime/18-RESEARCH.md), failover AnimePahe → Gogoanime verified end-to-end, new embed extractors registered
+- [x] **Phase 18: 9anime → Anitaku/Gogoanime** — Second provider (pivoted per 2026-05-12 research — see .planning/phases/18-9anime/18-RESEARCH.md), failover AnimePahe → Gogoanime wired + verified at integration-test + production-health-probe layer (live browser smoke deferred to HUMAN-UAT.md), 3 new embed extractors registered (vibeplayer, streamhg, earnvids)
 - [ ] **Phase 19: AnimeKai (gated)** — Third provider behind `SCRAPER_ANIMEKAI_ENABLED` feature flag; in-house token generator in megacloud-extractor sidecar (no `enc-dec.app`); flag default-off carryover acceptable if R&D doesn't converge
 - [ ] **Phase 20: Cutover** — Delete HiAnime + Consumet code paths, containers, env vars, frontend exports; gated on ≥ 7 days clean prod traffic on EnglishPlayer
 
@@ -115,7 +115,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 - [x] 18-01-PLAN.md — Wave 1: Wave-0 scaffolding (shared fuzzy/ pkg, goldens, RED test files, config + Makefile target, REQUIREMENTS/ROADMAP annotations)
 - [x] 18-02-PLAN.md — Wave 2: Gogoanime provider package (client/dto/malsync/cache) — fuzzy-first FindID, sub/dub merge ListEpisodes, anime_muti_link ListServers, GetStream via registry
 - [x] 18-03-PLAN.md — Wave 2: Three embed extractors (vibeplayer regex-only; streamhg + earnvids share Dean-Edwards packedExtractor base)
-- [ ] 18-04-PLAN.md — Wave 3: Orchestrator + extractor registration in main.go, HLS proxy allowlist append (5 hostnames), EnglishPlayer.vue multi-option dropdown activation + capitalizeProvider gogoanime branch, /animeenigma-after-update + failover-metric verification
+- [x] 18-04-PLAN.md — Wave 3: Orchestrator + extractor registration in main.go, HLS proxy allowlist append (5 hostnames), EnglishPlayer.vue multi-option dropdown activation + capitalizeProvider gogoanime branch, /animeenigma-after-update + failover-metric verification (live browser failover smoke deferred to HUMAN-UAT.md; compensating integration test PASS)
 **UI hint**: yes
 
 ### Phase 19: AnimeKai (gated)
@@ -151,6 +151,6 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 | 15 | v3.0 | 4/4 | Complete    | 2026-05-11 |
 | 16 | v3.0 | 0/6 | Planned     | — |
 | 17 | v3.0 | 4/4 | Complete    | 2026-05-12 |
-| 18 | v3.0 | 3/4 | In Progress|  |
+| 18 | v3.0 | 4/4 | Complete    | 2026-05-12 |
 | 19 | v3.0 | 0/? | Not started | — |
 | 20 | v3.0 | 0/? | Not started | — |
