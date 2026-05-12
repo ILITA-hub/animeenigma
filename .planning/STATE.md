@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
-status: ready_to_plan
-stopped_at: Phase 19 Plan 19-01 complete; AnimeKai escape hatch shipped flag-off (stub provider + sidecar 501 + REQUIREMENTS carryover); production deploy verified (2 providers registered, sidecar 501 smoke passed); SCRAPER-KAI-01..04 + KAI-07 carry to v3.1
-last_updated: "2026-05-12T17:40:11.519Z"
+status: executing
+stopped_at: Phase 18 Plan 18-04 complete; gogoanime wired end-to-end (registry+provider+failover+HLS-allowlist+EnglishPlayer dropdown+changelog); production deploy verified healthy; live browser failover smoke deferred to HUMAN-UAT.md
+last_updated: "2026-05-12T18:17:49.141Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 6
-  completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
-  percent: 100
+  completed_phases: 5
+  total_plans: 24
+  completed_plans: 20
+  percent: 83
 ---
 
 # Project State
@@ -22,13 +22,13 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
 
-**Current focus:** Phase 19 — AnimeKai (gated)
+**Current focus:** Phase 20 — Cutover
 
 ## Current Position
 
-Phase: 20
-Plan: Not started
-Status: Ready to plan
+Phase: 20 (Cutover) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-05-12
 
 ## Shipped Milestones
@@ -63,6 +63,6 @@ Last activity: 2026-05-12
 
 ## Session Continuity
 
-Last session: 2026-05-12T17:39:53.685Z
+Last session: 2026-05-12T18:17:31.188Z
 Stopped at: Phase 18 Plan 18-04 complete; gogoanime wired end-to-end (registry+provider+failover+HLS-allowlist+EnglishPlayer dropdown+changelog); production deploy verified healthy; live browser failover smoke deferred to HUMAN-UAT.md
 Resume from: `/gsd-verify-phase 18` to run the phase-verifier sweep, then `/gsd-autonomous --from 19` (AnimeKai, gated). HUMAN-UAT.md will document the deferred live-browser failover smoke for user execution before Phase 19 begins. Compensating control: TestOrchestrator_AnimePaheToGogoanimeFailover PASS + production /scraper/health + /metrics confirm gogoanime is live across all 5 stages.

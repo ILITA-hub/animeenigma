@@ -90,7 +90,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 ### Cutover — delete dead code (Phase 20)
 
-- [ ] **SCRAPER-CUT-01**: After ≥ 7 days of clean production traffic on the new EnglishPlayer (per-provider error rate ≤ 5 %, no Telegram alerts, no user-reported player breakage), the following Go code is deleted in a single PR: `services/catalog/internal/parser/hianime/`, `services/catalog/internal/parser/consumet/`, the seven HiAnime + Consumet handler funcs in `services/catalog/internal/handler/catalog.go`, the six old routes in `services/catalog/internal/transport/router.go` (`/api/anime/{id}/hianime/*`, `/api/anime/{id}/consumet/*`).
+- [ ] **SCRAPER-CUT-01**: After ≥ 7 days of clean production traffic on the new EnglishPlayer (per-provider error rate ≤ 5 %, no Telegram alerts, no user-reported player breakage), the following Go code is deleted in a single PR: `services/catalog/internal/parser/hianime/`, `services/catalog/internal/parser/consumet/`, the seven HiAnime + Consumet handler funcs in `services/catalog/internal/handler/catalog.go`, the six old routes in `services/catalog/internal/transport/router.go` (`/api/anime/{id}/hianime/*`, `/api/anime/{id}/consumet/*`). [Wave 0 guardrail script in place — Plan 20-01 done 2026-05-12; deletion gated until ≥ 2026-05-19 via scripts/cutover-preflight.sh]
 - [ ] **SCRAPER-CUT-02**: `services/catalog/internal/config/` removes `AniwatchAPIURL` and `ConsumetAPIURL`. The catalog service no longer accepts or requires those env vars.
 - [ ] **SCRAPER-CUT-03**: The `aniwatch` and `consumet` service blocks are removed from `docker/docker-compose.yml`. `docker compose ps` after redeploy shows neither container.
 - [ ] **SCRAPER-CUT-04**: `docker/megacloud-extractor/patch-aniwatch.sh` is deleted (the Node string-substitution patch into `node_modules/aniwatch/dist/index.js` no longer has a target). The `megacloud-extractor` container entrypoint reverts to a plain `node server.js`.
@@ -177,7 +177,7 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 | SCRAPER-KAI-05 | Phase 19 | Done (flag wired, default off) |
 | SCRAPER-KAI-06 | Phase 19 | Done (escape hatch taken; flag default-off documented) |
 | SCRAPER-KAI-07 | Phase 19 → v3.1 | Carry — blocked on KAI-01..04 |
-| SCRAPER-CUT-01 | Phase 20 | Pending |
+| SCRAPER-CUT-01 | Phase 20 | Guardrail in place (Plan 20-01); deletion pending Plans 20-02+ on/after 2026-05-19 |
 | SCRAPER-CUT-02 | Phase 20 | Pending |
 | SCRAPER-CUT-03 | Phase 20 | Pending |
 | SCRAPER-CUT-04 | Phase 20 | Pending |
