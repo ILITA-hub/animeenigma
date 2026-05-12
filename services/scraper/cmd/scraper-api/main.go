@@ -193,10 +193,17 @@ func main() {
 	// overwrite these once it ticks. Without this seed, Prometheus exposition
 	// suppresses the metric family until the first observation lands.
 	//
-	// We initialize Up=1 (the optimistic default) so the orchestrator's
-	// nil-cache backcompat path observes a Grafana panel reading 1, matching
-	// the "no probe yet, assume healthy" semantic. Plan 17-02 flips this
-	// based on real probe data.
+	// For most providers we initialize Up=1 (the optimistic default) so the
+	// orchestrator's nil-cache backcompat path observes a Grafana panel
+	// reading 1, matching the "no probe yet, assume healthy" semantic.
+	// Plan 17-02 flips this based on real probe data.
+	//
+	// Phase 19 (CR-01): escape-hatch providers like AnimeKai MUST be seeded
+	// with Up=0 so Grafana NEVER shows a green panel during the ~15 min
+	// before the first probe tick fires when the flag is on. This preserves
+	// the documented invariant in animekai/client.go and ensures the
+	// SCRAPER-OBS-04 alert ("stream_segment=0 for 15 min") can fire during
+	// the escape-hatch window — see bootHealthSeedValue() below.
 	//
 	// REVIEW.md WR-01: take ONE snapshot of the registered-providers list
 	// and reuse it for both the metric-seed loop and the probe-spawn loop.
@@ -205,8 +212,9 @@ func main() {
 	// the spawned probe set.
 	providers := orchestrator.RegisteredProviders()
 	for _, p := range providers {
+		seedValue := bootHealthSeedValue(p.Name())
 		for _, stage := range health.AllStages {
-			metrics.ProviderHealthUp.WithLabelValues(p.Name(), stage).Set(1)
+			metrics.ProviderHealthUp.WithLabelValues(p.Name(), stage).Set(seedValue)
 		}
 		// Heartbeat starts at 0 (never ticked) — the probe sets it on each tick.
 		metrics.ProviderProbeLastTick.WithLabelValues(p.Name()).Set(0)
@@ -306,4 +314,24 @@ func main() {
 	}
 
 	log.Info("server stopped")
+}
+
+// bootHealthSeedValue returns the initial value for the provider_health_up
+// gauge children seeded at startup, given the provider's stable name.
+//
+// Most providers seed Up=1 ("no probe yet, assume healthy"); escape-hatch
+// providers must seed Up=0 so Grafana never shows a green panel during the
+// ~15 min before the first probe tick fires. AnimeKai is registered as an
+// escape-hatch stub in Phase 19 (see animekai/client.go and
+// .planning/phases/19-animekai-gated/19-REVIEW.md CR-01).
+//
+// A name-based decision is an intentional pragmatic shortcut for Phase 19;
+// the longer-term refactor is to expose this as an optional method on the
+// domain.Provider interface so each provider declares its own boot state.
+// When that lands, drop the name switch here and call the interface method.
+func bootHealthSeedValue(name string) float64 {
+	if name == "animekai" {
+		return 0
+	}
+	return 1
 }
