@@ -198,6 +198,44 @@ func runFailover[T any](
 	return zero, summarizeFailover(errs)
 }
 
+// OrderedProviderNames returns the names of registered providers in the
+// failover order the orchestrator would use for a `prefer` argument:
+// preferred name first if it matches a registered provider, then the
+// rest in registration order. Unknown prefer values are silently ignored.
+//
+// Phase 16 plan 05 (SCRAPER-NF-05 backend half): exposed publicly so the
+// HTTP handler can render `meta.tried` on every response — both success
+// and error — without poking the orchestrator's internal lock again.
+// Returns an empty (non-nil) slice when no providers are registered so
+// the handler can encode `"tried":[]` unconditionally.
+func (o *Orchestrator) OrderedProviderNames(prefer string) []string {
+	ps := o.orderedProviders(prefer)
+	if len(ps) == 0 {
+		return []string{}
+	}
+	out := make([]string, len(ps))
+	for i, p := range ps {
+		out[i] = p.Name()
+	}
+	return out
+}
+
+// FindID runs the provider chain for AnimeRef → provider-internal ID
+// resolution. The returned ID is the value to pass to ListEpisodes /
+// ListServers / GetStream for the provider that succeeded. Failover
+// semantics match the business methods (ErrNotFound is retryable; ctx
+// errors are terminal).
+//
+// Phase 16 plan 05: the scraper HTTP handler calls this before the
+// per-method business calls so the catalog can pass `mal_id` and the
+// orchestrator resolves it through the registered provider chain.
+func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer string) (string, error) {
+	return runFailover(ctx, o.log, o.orderedProviders(prefer),
+		func(p domain.Provider) (string, error) {
+			return p.FindID(ctx, ref)
+		})
+}
+
 // ListEpisodes runs the provider chain for episode listing.
 func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer string) ([]domain.Episode, error) {
 	return runFailover(ctx, o.log, o.orderedProviders(prefer),
