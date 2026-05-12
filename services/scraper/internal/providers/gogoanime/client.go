@@ -658,8 +658,14 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	headers := http.Header{"Referer": []string{"https://anitaku.to/"}}
 	stream, err := ext.Extract(ctx, serverID, headers)
 	if err != nil {
-		// Extractor already wrapped the error family.
-		p.markStage(health.StageStream, err)
+		// WR-04 — record only the high-level category in stage health.
+		// The raw extractor error includes the wrapped serverID / signed-
+		// URL path, which can leak token-bearing query params (e.g.
+		// `?s=...&e=...&token=...` from StreamHG/Earnvids) through the
+		// admin /api/admin/scraper/health endpoint. The original err is
+		// still returned to the orchestrator (and logged at the boundary)
+		// so failover behaviour is unchanged.
+		p.markStage(health.StageStream, errors.New("gogoanime: stream "+classifyStreamErr(err)))
 		return nil, err
 	}
 	if stream == nil || len(stream.Sources) == 0 {
@@ -674,6 +680,24 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	}
 	p.markStage(health.StageStream, nil)
 	return stream, nil
+}
+
+// classifyStreamErr maps an extractor error to a generic category string
+// for stage-health storage. WR-04 — the full extractor error wraps the raw
+// serverID / signed-URL path which can carry token-bearing query params,
+// and that value is surfaced to admins via /api/admin/scraper/health.
+// Keeping only the category strips PII / signing tokens before storage.
+func classifyStreamErr(err error) string {
+	switch {
+	case errors.Is(err, domain.ErrExtractFailed):
+		return "extract_failed"
+	case errors.Is(err, domain.ErrProviderDown):
+		return "provider_down"
+	case errors.Is(err, domain.ErrNotFound):
+		return "not_found"
+	default:
+		return "unknown"
+	}
 }
 
 // Compile-time assertion: *Provider satisfies domain.Provider.
