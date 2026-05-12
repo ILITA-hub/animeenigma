@@ -30,8 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dop251/goja"
-
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
 
@@ -427,40 +425,19 @@ func (k *KwikExtractor) Extract(ctx context.Context, embedURL string, headers ht
 // a FRESH goja runtime with a watchdog goroutine that fires vm.Interrupt() on
 // either ctx cancellation or the timeout, whichever comes first.
 //
+// Plan 18-03 refactor: the goja-runtime + watchdog body has been LIFTED into
+// a package-level helper (`runGoja` in packed_common.go) so the same logic is
+// consumed by KwikExtractor (via this method) and the shared packedExtractor
+// base type (StreamHG / Earnvids). This method is now a thin one-line wrapper
+// that forwards the call with k.timeout — Phase 16 callers and tests are
+// unchanged.
+//
 // Pitfall 2: a fresh runtime per call — never cached, never pooled.
 // Pitfall 3: Interrupt() comes from a goroutine other than the one running
 // RunString. The `done` channel ensures the watchdog goroutine exits promptly
 // after a normal completion so we don't leak goroutines.
 func (k *KwikExtractor) runGoja(ctx context.Context, expr string) (string, error) {
-	vm := goja.New()
-
-	done := make(chan struct{})
-	defer close(done)
-
-	go func() {
-		// Pitfall 3: this Interrupt() MUST come from a goroutine separate from
-		// the RunString goroutine — otherwise an infinite loop in the script
-		// blocks the only goroutine that could cancel it.
-		timer := time.NewTimer(k.timeout)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-			vm.Interrupt("kwik: unpack timeout")
-		case <-ctx.Done():
-			vm.Interrupt("kwik: ctx cancel")
-		case <-done:
-			// Normal completion — exit cleanly.
-		}
-	}()
-
-	val, runErr := vm.RunString(expr)
-	if runErr != nil {
-		return "", runErr
-	}
-	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
-		return "", errors.New("goja runtime returned undefined/null")
-	}
-	return val.String(), nil
+	return runGoja(ctx, expr, k.timeout)
 }
 
 // Compile-time assertion: KwikExtractor satisfies domain.EmbedExtractor.
