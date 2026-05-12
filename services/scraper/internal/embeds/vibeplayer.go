@@ -41,6 +41,12 @@ const (
 	// strings, low-cardinality (P-02 from Phase 17 RESEARCH).
 	selectorVibePlayerSrcRegex = "vibeplayer_src_const"
 	selectorVibePlayerBodyRead = "vibeplayer_body_read"
+	// selectorVibePlayerSubURLShape is emitted when the captured `const
+	// subtitle = "..."` string fails the URL-shape allowlist (CR-01).
+	// The stream itself is still returned; only the suspicious Track is
+	// dropped so a hostile or compromised vibeplayer.site can't inject
+	// arbitrary URLs (incl. javascript:, file:, data:) into the player.
+	selectorVibePlayerSubURLShape = "vibeplayer_sub_url_shape"
 )
 
 // vibePlayerHosts is the case-insensitive allowlist. Match policy: host
@@ -61,7 +67,20 @@ var (
 	// emits `const subtitle = ""` when no captions exist — caller checks
 	// for non-empty submatch before appending a Track.
 	vibePlayerSubRegex = regexp.MustCompile(`const\s+subtitle\s*=\s*"([^"]*)"`)
+	// vibePlayerSubURLRegex defends the captured subtitle URL against
+	// scheme/extension injection. Only https?:// URLs ending in
+	// .vtt/.srt/.ass (optionally followed by a query string) survive the
+	// shape check; javascript:, file://, data:, ftp:, and arbitrary paths
+	// are rejected. Pairs with the host allowlist below for defence in
+	// depth — CR-01 in the Phase 18 review.
+	vibePlayerSubURLRegex = regexp.MustCompile(`^https?://[^"\s]+\.(?:vtt|srt|ass)(?:\?[^"\s]*)?$`)
 )
+
+// vibePlayerSubHosts is the case-insensitive host allowlist for captured
+// subtitle URLs. Match policy mirrors vibePlayerHosts: host equality OR
+// strict subdomain (HasSuffix on "."+known). CR-01 — without this gate the
+// regex would happily capture an attacker-controlled host.
+var vibePlayerSubHosts = []string{"vibeplayer.site", "cdn.cimovix.store"}
 
 // VibePlayerExtractor pulls the inline `const src="...m3u8"` URL out of a
 // vibeplayer.site wrapper page. Pure regex — no goja.
@@ -163,14 +182,39 @@ func (e *VibePlayerExtractor) Extract(ctx context.Context, embedURL string, head
 		Headers: map[string]string{"Referer": vibePlayerReferer},
 	}
 	// Optional captions: emit a Track only when subtitle const is non-empty.
+	// CR-01 defence-in-depth — the captured string must (a) match the
+	// shape regex (https?://, .vtt|.srt|.ass extension, no quotes or
+	// whitespace) AND (b) resolve to a host in vibePlayerSubHosts.
+	// A failure on either gate drops the suspicious Track but keeps the
+	// stream playable; we emit a low-cardinality zero-match counter so a
+	// hostile-upstream regression is visible without flooding the metric.
 	if subM := vibePlayerSubRegex.FindSubmatch(body); subM != nil && len(subM[1]) > 0 {
-		stream.Tracks = []domain.Track{
-			{
-				File:    string(subM[1]),
-				Label:   "English",
-				Kind:    "captions",
-				Default: true,
-			},
+		subURL := string(subM[1])
+		if !vibePlayerSubURLRegex.MatchString(subURL) {
+			metrics.ParserZeroMatchTotal.WithLabelValues("vibeplayer", selectorVibePlayerSubURLShape).Inc()
+		} else if pu, perr := url.Parse(subURL); perr == nil {
+			host := strings.ToLower(pu.Hostname())
+			allowed := false
+			for _, known := range vibePlayerSubHosts {
+				if host == known || strings.HasSuffix(host, "."+known) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				metrics.ParserZeroMatchTotal.WithLabelValues("vibeplayer", selectorVibePlayerSubURLShape).Inc()
+			} else {
+				stream.Tracks = []domain.Track{
+					{
+						File:    subURL,
+						Label:   "English",
+						Kind:    "captions",
+						Default: true,
+					},
+				}
+			}
+		} else {
+			metrics.ParserZeroMatchTotal.WithLabelValues("vibeplayer", selectorVibePlayerSubURLShape).Inc()
 		}
 	}
 	return stream, nil

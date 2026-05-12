@@ -151,3 +151,143 @@ func TestVibePlayer_Extract_NoSrc(t *testing.T) {
 		t.Fatal("Extract: error = nil; want wrapped ErrExtractFailed")
 	}
 }
+
+// TestVibePlayer_Extract_SubtitleURLValidation verifies CR-01 from the Phase
+// 18 review: VibePlayerExtractor MUST drop any captured `const subtitle =
+// "..."` payload that fails the (shape, host) allowlist gates. The stream
+// itself is still returned — only the suspicious Track is omitted, so a
+// hostile or compromised vibeplayer.site cannot inject javascript:, file:,
+// data:, ftp:, or attacker-controlled subtitle URLs into the player.
+//
+// Each case constructs a wrapper page that emits a valid m3u8 src AND a
+// crafted subtitle const; the test asserts that the m3u8 survives but the
+// Tracks slice is empty for every attacker payload, and non-empty for the
+// known-good cdn.cimovix.store / vibeplayer.site captions URL.
+func TestVibePlayer_Extract_SubtitleURLValidation(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		subtitle  string
+		wantTrack bool
+	}{
+		{
+			name:      "javascript_scheme_rejected",
+			subtitle:  "javascript:alert(1)",
+			wantTrack: false,
+		},
+		{
+			name:      "file_scheme_rejected",
+			subtitle:  "file:///etc/passwd",
+			wantTrack: false,
+		},
+		{
+			name:      "data_scheme_rejected",
+			subtitle:  "data:text/plain;base64,AAAA",
+			wantTrack: false,
+		},
+		{
+			name:      "ftp_scheme_rejected",
+			subtitle:  "ftp://evil.example.com/sub.vtt",
+			wantTrack: false,
+		},
+		{
+			name:      "https_offhost_rejected",
+			subtitle:  "https://evil.example.com/sub.vtt",
+			wantTrack: false,
+		},
+		{
+			name:      "https_offhost_suffix_attack_rejected",
+			subtitle:  "https://vibeplayer.site.evil.com/sub.vtt",
+			wantTrack: false,
+		},
+		{
+			name:      "https_wrong_extension_rejected",
+			subtitle:  "https://cdn.cimovix.store/sub.exe",
+			wantTrack: false,
+		},
+		{
+			name:      "https_no_extension_rejected",
+			subtitle:  "https://cdn.cimovix.store/sub",
+			wantTrack: false,
+		},
+		{
+			name:      "valid_cimovix_vtt_accepted",
+			subtitle:  "https://cdn.cimovix.store/foo/sub.vtt",
+			wantTrack: true,
+		},
+		{
+			name:      "valid_cimovix_srt_accepted",
+			subtitle:  "https://cdn.cimovix.store/foo/sub.srt",
+			wantTrack: true,
+		},
+		{
+			name:      "valid_cimovix_ass_accepted",
+			subtitle:  "https://cdn.cimovix.store/foo/sub.ass",
+			wantTrack: true,
+		},
+		{
+			name:      "valid_vibeplayer_subdomain_accepted",
+			subtitle:  "https://sub.vibeplayer.site/foo.vtt",
+			wantTrack: true,
+		},
+		{
+			name:      "valid_with_query_string_accepted",
+			subtitle:  "https://cdn.cimovix.store/sub.vtt?expires=123",
+			wantTrack: true,
+		},
+		{
+			name:      "empty_subtitle_no_track",
+			subtitle:  "",
+			wantTrack: false,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			page := `<html><body><script>
+const src = "https://vibeplayer.site/public/stream/abc/master.m3u8";
+const subtitle = "` + tc.subtitle + `";
+</script></body></html>`
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(page))
+			}))
+			t.Cleanup(srv.Close)
+
+			e := NewVibePlayerExtractor()
+			e.http = &http.Client{
+				Transport: &rewriteToSrv{srvURL: srv.URL},
+				Timeout:   5 * time.Second,
+			}
+			stream, err := e.Extract(
+				context.Background(),
+				"https://vibeplayer.site/embed-test",
+				http.Header{},
+			)
+			if err != nil {
+				t.Fatalf("Extract: %v", err)
+			}
+			if stream == nil || len(stream.Sources) == 0 {
+				t.Fatalf("Extract returned empty stream: %+v", stream)
+			}
+			// The m3u8 must always survive — defence is about Tracks only.
+			if !strings.HasSuffix(stream.Sources[0].URL, ".m3u8") {
+				t.Errorf("source URL = %q; want .m3u8", stream.Sources[0].URL)
+			}
+			gotTrack := len(stream.Tracks) > 0
+			if gotTrack != tc.wantTrack {
+				t.Errorf("len(Tracks) = %d; want_track = %v; subtitle = %q",
+					len(stream.Tracks), tc.wantTrack, tc.subtitle)
+			}
+			if tc.wantTrack && len(stream.Tracks) > 0 {
+				if stream.Tracks[0].File != tc.subtitle {
+					t.Errorf("Tracks[0].File = %q; want %q",
+						stream.Tracks[0].File, tc.subtitle)
+				}
+			}
+		})
+	}
+}
