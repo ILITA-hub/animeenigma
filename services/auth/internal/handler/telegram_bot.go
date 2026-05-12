@@ -264,9 +264,21 @@ func (h *TelegramBotHandler) callBotAPI(method string, payload interface{}) {
 }
 
 // SetWebhook registers the webhook URL with Telegram Bot API.
+//
+// Always calls deleteWebhook first to clear any silent-disable state Telegram
+// may have entered (e.g., after repeated 5xx or transient TLS issues, Telegram
+// stops delivering without setting last_error_date in getWebhookInfo, and a
+// plain setWebhook returns "already set" without re-enabling delivery).
 func (h *TelegramBotHandler) SetWebhook(webhookURL string) error {
+	deleteURL := fmt.Sprintf("https://api.telegram.org/bot%s/deleteWebhook", h.botToken)
+	if delResp, err := http.Post(deleteURL, "application/json", bytes.NewReader([]byte(`{"drop_pending_updates":true}`))); err == nil {
+		_ = delResp.Body.Close()
+	}
+
 	payload := map[string]interface{}{
-		"url": webhookURL,
+		"url":                  webhookURL,
+		"allowed_updates":      []string{"message", "callback_query"},
+		"drop_pending_updates": true,
 	}
 	if h.webhookSecret != "" {
 		payload["secret_token"] = h.webhookSecret
