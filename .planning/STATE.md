@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Universal Anime Scraper
-status: phase_16_complete_advancing_to_17
-stopped_at: "Phase 16 complete (6/6 plans + SUMMARY each, code review iter1 fixed 16 findings, iter2 clean of BLOCKERs; VERIFICATION human_needed for 6 live runtime items deferred to deploy-operator + milestone audit). Advancing to Phase 17 (Observability)."
-last_updated: "2026-05-12T05:50:00.000Z"
-last_activity: 2026-05-12 -- Phase 16 complete, advancing to Phase 17
+status: phase_17_paused_usage_exhaustion_at_plan_phase
+stopped_at: "Phase 17 (Observability) discuss complete (17-CONTEXT.md committed, autonomous-generated). Planner agent paused on Anthropic usage exhaustion (resets 10:50am Europe/Berlin). No plans written yet. Resume with /gsd-autonomous --from 17 after reset; CONTEXT.md will be detected (has_context=true) so workflow will skip straight to plan-phase."
+last_updated: "2026-05-12T06:01:00.000Z"
+last_activity: 2026-05-12 -- Phase 17 discuss done, planner paused on usage exhaustion
 progress:
   total_phases: 6
   completed_phases: 2
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
 
-**Current focus:** Phase 17 — Observability (next)
+**Current focus:** Phase 17 — Observability (planning paused)
 
 ## Current Position
 
-Phase: 16 → 17 (advancing)
-Plan: 6 of 6 complete for phase 16
-Status: Phase 16 complete; starting Phase 17 (Observability)
-Last activity: 2026-05-12 -- Phase 16 verification committed (human_needed; deferred), advancing to Phase 17
+Phase: 17 (observability) — PLANNING
+Plan: 0 of TBD (planner agent paused on usage exhaustion)
+Status: 17-CONTEXT.md committed; PLAN.md files not yet created
+Last activity: 2026-05-12 -- Phase 17 discuss done; planner paused (resets 10:50am Europe/Berlin)
 
 ## Shipped Milestones
 
