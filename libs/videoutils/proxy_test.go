@@ -100,3 +100,22 @@ func TestIsHLSDomainAllowed_PortStripping(t *testing.T) {
 	assert.True(t, isHLSDomainAllowed("netmagcdn.com:8080"), "should strip port and match domain")
 	assert.False(t, isHLSDomainAllowed("evil.com:443"), "should strip port but still reject unknown domain")
 }
+
+// TestHLSProxyAllowedDomains_HasAnimePaheHosts locks the three AnimePahe CDN
+// hosts in HLSProxyAllowedDomains. Without these, the HLS proxy returns 403
+// for every AnimePahe stream → user-visible breakage. This is a
+// regression-lock per SCRAPER-PAHE-05; the hosts are already present in
+// libs/videoutils/proxy.go from prior work — this test PREVENTS a future
+// PR from accidentally removing them.
+func TestHLSProxyAllowedDomains_HasAnimePaheHosts(t *testing.T) {
+	required := []string{"kwik.cx", "owocdn.top", "uwucdn.top"}
+	have := make(map[string]bool, len(HLSProxyAllowedDomains))
+	for _, d := range HLSProxyAllowedDomains {
+		have[d] = true
+	}
+	for _, host := range required {
+		if !have[host] {
+			t.Errorf("HLSProxyAllowedDomains missing AnimePahe CDN host %q (required by SCRAPER-PAHE-05)", host)
+		}
+	}
+}
