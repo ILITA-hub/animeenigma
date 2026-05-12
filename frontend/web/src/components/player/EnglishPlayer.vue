@@ -611,7 +611,13 @@ const srAnnouncement = ref('')
 const unhealthyProviders = ref<string[]>([])
 const { preferredScraperProvider, setPreferredScraperProvider } = useWatchPreferences(props.animeId)
 
-// Restore prior per-anime scraper provider preference (24h TTL inside the composable).
+// Restore prior per-anime scraper provider preference (24h TTL inside the
+// composable). On cold load `availableProviders.value` is still its initial
+// ['animepahe'] default — `onMounted` populates the real list from
+// `scraperApi.getHealth()` later — so this synchronous check matches ONLY
+// when the prior pref was 'animepahe'. The real restore path for other
+// providers (e.g. 'gogoanime') runs in onMounted AFTER the health response
+// arrives. CR-02 in the Phase 18 review.
 if (
   preferredScraperProvider.value &&
   availableProviders.value.includes(preferredScraperProvider.value)
@@ -1734,6 +1740,19 @@ onMounted(async () => {
         }
       }
       unhealthyProviders.value = offline
+      // CR-02 — restore the prior pref AFTER the real provider list has
+      // landed. The synchronous `<script setup>` check earlier in the file
+      // only sees the ['animepahe'] default, so a user who picked
+      // 'gogoanime' yesterday wouldn't otherwise resume on it today.
+      // Only assign if the watcher hasn't already picked a provider for
+      // some other reason.
+      if (
+        preferredScraperProvider.value &&
+        providers.includes(preferredScraperProvider.value) &&
+        selectedProvider.value === null
+      ) {
+        selectedProvider.value = preferredScraperProvider.value
+      }
       // If the prior preference is still in the live provider set, keep it
       // selected; otherwise drop it via the composable setter so a stale
       // cache value can't bind to a now-missing provider.
