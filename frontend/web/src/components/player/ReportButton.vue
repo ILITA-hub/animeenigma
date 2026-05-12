@@ -79,8 +79,8 @@
         </button>
         <button
           v-if="!submitted"
-          class="px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
-          :class="submitButtonClasses"
+          class="px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 report-submit-btn"
+          :style="submitButtonStyle"
           :disabled="submitting"
           @click="submitReport"
         >
@@ -143,9 +143,16 @@ const buttonClasses = computed(() => {
   return 'bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/70 border border-white/10'
 })
 
-const submitButtonClasses = computed(() => {
-  return `bg-[${props.accentColor}]/20 text-[${props.accentColor}] hover:bg-[${props.accentColor}]/30`
-})
+// CR-04: previously used Tailwind JIT-class strings like `bg-[${color}]/20`,
+// which the build-time JIT cannot extract — the resulting class produced no
+// styles and the report submit button was rendered as invisible text. Switch
+// to inline CSS custom properties + an inline style for background/text so
+// the accent color survives the build pipeline regardless of Tailwind version.
+const submitButtonStyle = computed(() => ({
+  '--report-accent': props.accentColor,
+  backgroundColor: `color-mix(in srgb, ${props.accentColor} 20%, transparent)`,
+  color: props.accentColor,
+}))
 
 function handleClick() {
   if (authStore.isAuthenticated) {
@@ -189,3 +196,13 @@ async function submitReport() {
   }
 }
 </script>
+
+<style scoped>
+/* CR-04: hover state for the accent-colored submit button. The base
+   background/foreground are set inline via :style="submitButtonStyle" so
+   the dynamic accentColor prop survives Tailwind JIT; the hover is layered
+   on via the CSS custom property the inline style sets. */
+.report-submit-btn:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--report-accent) 30%, transparent);
+}
+</style>
