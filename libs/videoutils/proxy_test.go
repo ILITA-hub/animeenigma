@@ -119,3 +119,79 @@ func TestHLSProxyAllowedDomains_HasAnimePaheHosts(t *testing.T) {
 		}
 	}
 }
+
+// TestHLSProxyAllowedDomains_Phase18Additions locks the 5 new Anitaku/Gogoanime
+// CDN hosts appended in Phase 18 Plan 18-04 Task 2. Missing entries cause the
+// HLS proxy to 403 every stream coming through the gogoanime.Provider failover
+// chain — user-visible breakage. Append-only edit: existing Phase 16 entries
+// are protected by TestHLSProxyAllowedDomains_Phase16RegressionLocked below.
+func TestHLSProxyAllowedDomains_Phase18Additions(t *testing.T) {
+	want := []string{
+		"anitaku.to",
+		"vibeplayer.site",
+		"premilkyway.com",
+		"dramiyos-cdn.com",
+		"cdn.cimovix.store",
+	}
+	present := make(map[string]bool, len(HLSProxyAllowedDomains))
+	for _, d := range HLSProxyAllowedDomains {
+		present[d] = true
+	}
+	for _, d := range want {
+		if !present[d] {
+			t.Errorf("HLSProxyAllowedDomains missing %q (Phase 18 addition)", d)
+		}
+	}
+}
+
+// TestHLSProxyAllowedDomains_Phase16RegressionLocked is the append-only
+// invariant guard: every Phase 16 entry (and the jimaku.cc Phase 14 entry that
+// shipped alongside) MUST still be present after the Phase 18 edit. Catches a
+// regression where a future maintainer accidentally clobbers the slice
+// declaration during an "append" edit.
+func TestHLSProxyAllowedDomains_Phase16RegressionLocked(t *testing.T) {
+	// kwik.cx + owocdn.top + uwucdn.top are AnimePahe CDN hosts (SCRAPER-PAHE-05).
+	// jimaku.cc carries the Japanese subtitle files (Phase 14).
+	want := []string{"kwik.cx", "owocdn.top", "uwucdn.top", "jimaku.cc"}
+	present := make(map[string]bool, len(HLSProxyAllowedDomains))
+	for _, d := range HLSProxyAllowedDomains {
+		present[d] = true
+	}
+	for _, d := range want {
+		if !present[d] {
+			t.Errorf("Phase 16/14 entry %q is missing — append-only invariant broken", d)
+		}
+	}
+}
+
+// TestIsHLSDomainAllowed_RotatingSubdomains exercises the rotating-subdomain
+// match policy needed by the new StreamHG + Earnvids CDNs (e.g.
+// OkqtSs1gBbNcA8e.premilkyway.com per segment fetch). The existing
+// strings.HasSuffix(host, "."+allowed) gate is the SSRF defense — the leading
+// dot prevents impostor TLDs like evilanitaku.to from matching anitaku.to.
+func TestIsHLSDomainAllowed_RotatingSubdomains(t *testing.T) {
+	cases := []struct {
+		host  string
+		want  bool
+		label string
+	}{
+		{"anitaku.to", true, "Phase 18 exact"},
+		{"sub.anitaku.to", true, "Phase 18 subdomain"},
+		{"OkqtSs1gBbNcA8e.premilkyway.com", true, "StreamHG rotating subdomain"},
+		{"pfabiWMFmEza.dramiyos-cdn.com", true, "Earnvids rotating subdomain"},
+		{"vibeplayer.site", true, "vibeplayer exact"},
+		{"cdn.cimovix.store", true, "subtitle host exact"},
+		{"evilanitaku.to", false, "impostor — no leading dot"},
+		{"premilkyway.com.evil.com", false, "TLD impostor"},
+		{"pacha.kwik.cx", true, "Phase 16 invariant — kwik subdomain"},
+		{"jimaku.cc", true, "Phase 14 invariant — jimaku exact"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.label, func(t *testing.T) {
+			if got := isHLSDomainAllowed(c.host); got != c.want {
+				t.Errorf("isHLSDomainAllowed(%q) = %v, want %v", c.host, got, c.want)
+			}
+		})
+	}
+}

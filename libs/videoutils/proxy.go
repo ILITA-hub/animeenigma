@@ -252,6 +252,14 @@ var HLSProxyAllowedDomains = []string{
 	"htv-*",        // htv-belias.com, htv-hydaelyn.com, etc.
 	"hydaelyn-*",   // hydaelyn-25x-00.top through hydaelyn-25x-19.top
 	"zodiark-*",    // zodiark-25x-00.top through zodiark-25x-09.top
+	// Phase 18 — Anitaku/Gogoanime CDN entries.
+	// Rotating subdomains (e.g. abc.premilkyway.com) match via the existing
+	// strings.HasSuffix(host, "."+allowed) gate in isHLSDomainAllowed.
+	"anitaku.to",        // optional — frontend may proxy anitaku poster URLs in future
+	"vibeplayer.site",   // vibeplayer same-origin HLS host
+	"premilkyway.com",   // StreamHG primary CDN (rotating subdomain on this eTLD+1)
+	"dramiyos-cdn.com",  // Earnvids primary CDN (rotating subdomain on this eTLD+1)
+	"cdn.cimovix.store", // subtitle .vtt host (shared by vibeplayer + streamhg + earnvids)
 }
 
 // UpstreamError represents an error from the upstream CDN.
