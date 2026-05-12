@@ -48,6 +48,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/fuzzy"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 )
 
@@ -290,13 +291,13 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 		return "", err
 	}
 	// 3. Score each entry; pick the best ≥ threshold.
-	normTitle := normalizeTitle(ref.Title)
+	normTitle := fuzzy.NormalizeTitle(ref.Title)
 	best := struct {
 		score   float64
 		session string
 	}{}
 	for _, e := range sr.Data {
-		score := jaroWinkler(normTitle, normalizeTitle(e.Title))
+		score := fuzzy.JaroWinkler(normTitle, fuzzy.NormalizeTitle(e.Title))
 		if score > best.score {
 			best.score = score
 			best.session = e.Session

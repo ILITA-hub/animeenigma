@@ -32,9 +32,9 @@ func TestComputeStreamTTL(t *testing.T) {
 			want: 5 * time.Minute,
 		},
 		{
-			name: "expires_near_future_returns_headroom_minus_guard",
-			url:  "https://kwik.cx/abc?expires=1700000060&token=xxx",
-			want: 30 * time.Second,
+			name:   "expires_near_future_returns_headroom_minus_guard",
+			url:    "https://kwik.cx/abc?expires=1700000060&token=xxx",
+			want:   30 * time.Second,
 			approx: true,
 		},
 		{
@@ -77,60 +77,5 @@ func TestComputeStreamTTL(t *testing.T) {
 	}
 }
 
-// TestJaroWinkler verifies the in-package Jaro-Winkler implementation against
-// well-known reference values from the original Jaro-Winkler paper.
-//
-// The threshold used by Provider.FindID's fuzzy fallback is 0.85, so the
-// table includes cases that bracket that boundary.
-func TestJaroWinkler(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		a, b string
-		// approx within 0.01.
-		want float64
-	}{
-		{"naruto", "naruto", 1.00},                              // exact
-		{"naruto", "narutoo", 0.97},                             // off-by-one
-		{"naruto", "naruto shippuuden", 0.88},                   // prefix-match boost
-		{"vinland saga", "vinland saga season 2", 0.92},         // shared prefix
-		{"one piece", "two piece", 0.85},                        // partial-rewrite (e/o shared, prefix differs)
-		{"naruto", "xxxxxxx", 0.00},                             // no common chars
-		{"", "", 1.00},                                          // both empty: exact
-		{"", "naruto", 0.00},                                    // one empty
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.a+"_vs_"+tc.b, func(t *testing.T) {
-			t.Parallel()
-			got := jaroWinkler(tc.a, tc.b)
-			if math.Abs(got-tc.want) > 0.05 {
-				t.Errorf("jaroWinkler(%q,%q) = %.4f; want ~%.4f", tc.a, tc.b, got, tc.want)
-			}
-		})
-	}
-}
-
-// TestNormalizeTitle verifies the season-suffix folding used by Provider.FindID
-// to bridge "Vinland Saga Season 2" / "Vinland Saga: 2nd Season" / "Vinland
-// Saga Part 2" into one canonical form before Jaro-Winkler scoring.
-func TestNormalizeTitle(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		in, want string
-	}{
-		{"Vinland Saga: 2nd Season", "vinland saga season 2"},
-		{"Vinland Saga Part 2", "vinland saga season 2"},
-		{"Naruto", "naruto"},
-		{"Naruto: Shippuuden", "naruto shippuuden"},
-		{"  Spaces  collapsed  ", "spaces collapsed"},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.in, func(t *testing.T) {
-			t.Parallel()
-			if got := normalizeTitle(tc.in); got != tc.want {
-				t.Errorf("normalizeTitle(%q) = %q; want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
+// NOTE: TestJaroWinkler + TestNormalizeTitle migrated to
+// services/scraper/internal/fuzzy/fuzzy_test.go in Phase 18 Plan 18-01 Task 2.
