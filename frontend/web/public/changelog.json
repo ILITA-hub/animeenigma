@@ -3,6 +3,10 @@
     "date": "2026-05-12",
     "entries": [
       {
+        "type": "infrastructure",
+        "message": "🚧 Phase 19 — AnimeKai (gated, escape-hatch) shipped! Подготовили scaffolding для третьего английского провайдера AnimeKai. Из-за того, что 10 мая AnimeKai официально объявили о закрытии, а R&D in-house генератора MegaUp-токенов не сошёлся, провайдер прилетел в проде FLAG-OFF: переменная `SCRAPER_ANIMEKAI_ENABLED=false` по умолчанию, в реестре scraper'а — только animepahe + gogoanime (как и раньше), и пользователи никаких изменений не видят. Под капотом: написали полный stub-пакет `services/scraper/internal/providers/animekai/` (все методы возвращают `ErrProviderDown` → orchestrator soft-skip на следующего провайдера), добавили условную регистрацию в main.go под флагом, расширили wiring-инвариант (2 провайдера если флаг off, 3 если on, fatal иначе), плюс sidecar megacloud-extractor получил роут `POST /animekai-token` возвращающий HTTP 501 (специально не 500 — это deregister-once вместо retry-storm'а). SCRAPER-KAI-01..04 + KAI-07 перенесены в v3.1 как body-only PR; SCRAPER-KAI-05..06 закрыты сейчас. Это разблокирует Phase 20 (cutover мёртвого HiAnime/Consumet кода) — Phase 19 R&D больше не блокер. На пользователях не отражается — escape hatch чистый 🛡️"
+      },
+      {
         "type": "feature",
         "message": "🎌 Добавили резервный английский источник Anitaku/Gogoanime — если AnimePahe не отвечает, плеер автоматически переключится на новый провайдер без перерыва в просмотре. В английском плеере появилась кнопка выбора источника: AnimePahe или Anitaku, ваш выбор запоминается отдельно для каждого аниме на 24 часа. 🚀"
       },

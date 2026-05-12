@@ -44,7 +44,7 @@
 - [x] **Phase 16: AnimePahe + New EnglishPlayer** — First live provider (Kwik via goja), new unified `EnglishPlayer.vue` replacing both HiAnime + Consumet tabs end-to-end (completed 2026-05-12)
 - [x] **Phase 17: Observability** — Per-provider/per-stage health gauges, 15-min liveness probe with golden anime pool, orchestrator skips unhealthy, Grafana alert, admin health endpoint (completed 2026-05-12)
 - [x] **Phase 18: 9anime → Anitaku/Gogoanime** — Second provider (pivoted per 2026-05-12 research — see .planning/phases/18-9anime/18-RESEARCH.md), failover AnimePahe → Gogoanime wired + verified at integration-test + production-health-probe layer (live browser smoke deferred to HUMAN-UAT.md), 3 new embed extractors registered (vibeplayer, streamhg, earnvids)
-- [ ] **Phase 19: AnimeKai (gated)** — Third provider behind `SCRAPER_ANIMEKAI_ENABLED` feature flag; in-house token generator in megacloud-extractor sidecar (no `enc-dec.app`); flag default-off carryover acceptable if R&D doesn't converge
+- [x] **Phase 19: AnimeKai (gated)** — Third provider behind `SCRAPER_ANIMEKAI_ENABLED` feature flag; in-house token generator in megacloud-extractor sidecar (no `enc-dec.app`); flag default-off carryover acceptable if R&D doesn't converge (completed 2026-05-12)
 - [ ] **Phase 20: Cutover** — Delete HiAnime + Consumet code paths, containers, env vars, frontend exports; gated on ≥ 7 days clean prod traffic on EnglishPlayer
 
 ### Next Milestone (TBD)
@@ -128,7 +128,8 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
   3. With the flag on, the failover chain AnimePahe → 9anime → AnimeKai is verified end-to-end: forcing the first two providers' health gauges to 0 still produces a playable stream from AnimeKai (recorded by `parser_fallback_total`).
   4. With the flag off in production for ≥ 7 days, no AnimeKai traffic reaches the upstream — confirmed by `parser_requests_total{provider="animekai"}` staying flat-zero during that window.
   5. If the in-house token generator does not converge (extractor returns errors against live `animekai.to`), the phase exits with flag default-off and the four AnimeKai impl requirements (`SCRAPER-KAI-01..04`) explicitly documented as v3.1 carryover — Phase 20 cutover is not blocked.
-**Plans**: TBD
+**Plans**: 1 plan in 1 wave (ESCAPE-HATCH path per 19-RESEARCH.md §Convergence Probability Assessment — AnimeKai officially announced shutdown 2026-05-10)
+- [x] 19-01-PLAN.md — Wave 1: Provider package scaffold (stub returning ErrProviderDown) + AnimeKaiConfig + conditional main.go registration + sidecar /animekai-token HTTP 501 stub + REQUIREMENTS.md v3.1 carryover annotation
 
 ### Phase 20: Cutover
 **Goal**: Dead HiAnime + Consumet code paths are deleted in a single PR. The frontend has one English player surface, one backend route family, and one set of locale strings. Catalog image size drops; docker-compose ps shows neither dead container.
@@ -152,5 +153,5 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 | 16 | v3.0 | 0/6 | Planned     | — |
 | 17 | v3.0 | 4/4 | Complete    | 2026-05-12 |
 | 18 | v3.0 | 4/4 | Complete    | 2026-05-12 |
-| 19 | v3.0 | 0/? | Not started | — |
+| 19 | v3.0 | 1/1 | Complete   | 2026-05-12 |
 | 20 | v3.0 | 0/? | Not started | — |
