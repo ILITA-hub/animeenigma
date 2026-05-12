@@ -268,10 +268,16 @@ func (k *KwikExtractor) Name() string { return "kwik" }
 // Matches reports whether embedURL points to a kwik-family host. Match policy:
 // host equality OR strict subdomain (HasSuffix on "."+known). Substring matches
 // in path / query are NOT matched — see TestKwik_Matches_RejectsSubdomainImposters
-// for the explicit SSRF regression test.
+// for the explicit SSRF regression test. WR-05: reject schemes other than
+// http/https up-front so an embedURL like `kwik://kwik.cx/` does not pretend
+// to match — Go's HTTP client would later reject the unknown scheme with an
+// unhelpful error mapping (ErrProviderDown), but it should never get that far.
 func (k *KwikExtractor) Matches(embedURL string) bool {
 	u, err := url.Parse(embedURL)
 	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())

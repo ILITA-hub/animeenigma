@@ -82,6 +82,9 @@ func TestKwik_Matches(t *testing.T) {
 		"",                                     // empty
 		"not a url",                            // unparseable
 		"://no-scheme.example.com/path",        // malformed
+		"kwik://kwik.cx/e/abc",                 // WR-05: non-http(s) scheme rejected
+		"ftp://kwik.cx/e/abc",                  // WR-05: non-http(s) scheme rejected
+		"file:///kwik.cx/passwd",               // WR-05: non-http(s) scheme rejected
 	}
 	for _, u := range nonMatches {
 		u := u

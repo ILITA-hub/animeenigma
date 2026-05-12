@@ -378,7 +378,15 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		if src == "" {
 			return
 		}
-		host := strings.ToLower(hostnameOf(src))
+		// WR-05: reject any non-http(s) scheme up-front. `url.Parse` accepts
+		// arbitrary schemes (e.g. `kwik://kwik.cx/`) so a path-traversal-style
+		// embedURL could otherwise satisfy the host filter and propagate to
+		// the orchestrator's extract step.
+		pu, perr := url.Parse(src)
+		if perr != nil || (pu.Scheme != "http" && pu.Scheme != "https") {
+			return
+		}
+		host := strings.ToLower(pu.Hostname())
 		if host != "kwik.cx" && !strings.HasSuffix(host, ".kwik.cx") &&
 			host != "kwik.si" && !strings.HasSuffix(host, ".kwik.si") {
 			return
