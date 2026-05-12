@@ -140,7 +140,19 @@ func NewRouter(
 		r.HandleFunc("/consumet/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/animelib/*", proxyHandler.ProxyToCatalog)
 
-		// Admin routes (protected, proxied to catalog)
+		// Phase 17 Plan 03: admin scraper routes (protected, proxied to scraper).
+		// CRITICAL ORDER — this group MUST be registered BEFORE the generic
+		// /admin/* → catalog group below. chi resolves routes in registration
+		// order; the /api/admin/recs/* group at the bottom of this file is the
+		// existing precedent for the same "specific-before-general" gotcha.
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(AdminRoleMiddleware)
+			r.HandleFunc("/admin/scraper/*", proxyHandler.ProxyToScraper)
+		})
+
+		// Admin routes (protected, proxied to catalog) — MUST stay AFTER the
+		// more-specific /admin/scraper/* group above.
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(AdminRoleMiddleware)
