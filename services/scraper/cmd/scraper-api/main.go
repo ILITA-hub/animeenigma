@@ -277,10 +277,20 @@ func main() {
 	if cfg.AnimeKai.Enabled {
 		expectedProviders = 3
 	}
-	if got := len(orchestrator.RegisteredProviders()); got != expectedProviders {
+	registered := orchestrator.RegisteredProviders()
+	if got := len(registered); got != expectedProviders {
+		// WR-05: include the actual registered provider names so an on-call
+		// hitting this fatal sees WHICH providers landed in the orchestrator
+		// without having to read source. Mirrors the "error" + context shape
+		// of the other Fatalw call sites in this file (e.g. line 116).
+		names := make([]string, 0, len(registered))
+		for _, p := range registered {
+			names = append(names, p.Name())
+		}
 		log.Fatalw("Phase 19 wiring invariant broken",
 			"got", got, "want", expectedProviders,
-			"flag", cfg.AnimeKai.Enabled)
+			"flag", cfg.AnimeKai.Enabled,
+			"registered", names)
 	}
 
 	go func() {
