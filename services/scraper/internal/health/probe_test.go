@@ -6,7 +6,6 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -145,8 +144,8 @@ func TestProbe_FirstSuccessAfterDown_FlipsBackUp(t *testing.T) {
 	r := NewProbeRunner(fake, DefaultGoldenPool, cache, log,
 		WithNow(nowFn),
 		WithRNG(rand.New(rand.NewPCG(42, 0))),
-		WithAllowPrivateHosts(), // BLK-01: httptest binds 127.0.0.1
 	)
+	allowPrivateHostsForTest(r) // BLK-01: httptest binds 127.0.0.1 (WR-NEW-02: test-only helper)
 
 	// 3 failures → down
 	for i := 0; i < 3; i++ {
@@ -219,8 +218,8 @@ func TestProbe_LastTickHeartbeatAdvances(t *testing.T) {
 	r := NewProbeRunner(fake, DefaultGoldenPool, cache, log,
 		WithNow(nowFn),
 		WithRNG(rand.New(rand.NewPCG(42, 0))),
-		WithAllowPrivateHosts(), // BLK-01: httptest binds 127.0.0.1
 	)
+	allowPrivateHostsForTest(r) // BLK-01: httptest binds 127.0.0.1 (WR-NEW-02: test-only helper)
 
 	r.RunOnce(context.Background())
 	if got := testutil.ToFloat64(metrics.ProviderProbeLastTick.WithLabelValues(name)); got != float64(t0.Unix()) {
@@ -262,8 +261,8 @@ func TestProbe_PanicInProviderRecovers(t *testing.T) {
 	r := NewProbeRunner(fake, DefaultGoldenPool, cache, log,
 		WithNow(nowFn),
 		WithRNG(rand.New(rand.NewPCG(42, 0))),
-		WithAllowPrivateHosts(), // BLK-01: httptest binds 127.0.0.1
 	)
+	allowPrivateHostsForTest(r) // BLK-01: httptest binds 127.0.0.1 (WR-NEW-02: test-only helper)
 
 	// runOneTickSafely MUST not propagate the panic.
 	r.runOneTickSafely(context.Background())
@@ -340,8 +339,8 @@ func TestProbe_AllFiveStagesEmitGauge_OnFullSuccess(t *testing.T) {
 	r := NewProbeRunner(fake, DefaultGoldenPool, cache, log,
 		WithNow(nowFn),
 		WithRNG(rand.New(rand.NewPCG(42, 0))),
-		WithAllowPrivateHosts(), // BLK-01: httptest binds 127.0.0.1
 	)
+	allowPrivateHostsForTest(r) // BLK-01: httptest binds 127.0.0.1 (WR-NEW-02: test-only helper)
 
 	r.RunOnce(context.Background())
 
@@ -428,8 +427,8 @@ func TestProbe_HTTPClientRefusesRedirects(t *testing.T) {
 	r := NewProbeRunner(&FakeProvider{NameVal: name}, DefaultGoldenPool, cache, log,
 		WithNow(nowFn),
 		WithRNG(rand.New(rand.NewPCG(42, 0))),
-		WithAllowPrivateHosts(), // allow the httptest.Server itself
 	)
+	allowPrivateHostsForTest(r) // allow the httptest.Server itself (WR-NEW-02: test-only helper)
 
 	err := r.fetchSegment(context.Background(), srv.URL)
 	if err == nil {
@@ -442,69 +441,75 @@ func TestProbe_HTTPClientRefusesRedirects(t *testing.T) {
 	}
 }
 
-// TestProbe_FatalPanicDoesNotRespawn — BLK-03 regression. A panic in the
-// loop body MUST cause Start() to exit cleanly (no goroutine respawn). The
-// dead-probe alert (RESEARCH P-07) catches the resulting heartbeat freeze.
+// TestProbe_FatalPanicDoesNotRespawn — BLK-03 regression, hardened per
+// REVIEW.md iter-2 WR-NEW-01. The previous version of this test ran a
+// synthetic anonymous goroutine that panicked + recovered, then counted
+// goroutines — which only verified a property of the Go runtime, not the
+// production code. A future regression that reintroduces
+// `go r.Start(ctx)` into `Start`'s outer recover would NOT have been
+// caught.
+//
+// This version drives the production `Start()` path directly. It uses
+// the `withComputeInitialDelayForTest` test-only injection seam to make
+// `Start` panic from inside its real loop body, then asserts that
+// `Start` RETURNS (i.e. the outer defer-recover did NOT respawn the
+// goroutine via `go r.Start(ctx)`).
 func TestProbe_FatalPanicDoesNotRespawn(t *testing.T) {
 	name := "tp-fatal-panic"
 	defer resetProviderMetrics(name)
 
 	cache := NewInMemoryHealthCache()
 	log := newProbeTestLogger(t)
-	// computeInitialDelay reads from r.rng — give it a value, then poison
-	// the RNG so nextSleep panics on the second consumer. We can't easily
-	// poison rand.Rand mid-flight, so instead we drive the outer recover
-	// by panicking from `nextSleep` via a custom RNG that panics on
-	// Float64. Since rand.Rand uses *rand.PCG via the v2 interface, we
-	// wrap it. The simplest approach: a Source that panics on Uint64,
-	// which both Int64N and Float64 consume.
+
+	// Make computeInitialDelay panic the first time Start invokes it.
+	// The production outer defer-recover sees this panic. If the recover
+	// silently calls `go r.Start(ctx)` again, that respawned Start would
+	// also panic immediately — and Start would never return. Our select
+	// on `done` would then time out, failing the test.
+	var calls atomic.Int32
+	panicHook := func() time.Duration {
+		calls.Add(1)
+		panic("WR-NEW-01: injected panic inside Start loop body")
+	}
+
 	r := NewProbeRunner(
 		fullSuccessProvider(name, "https://example.invalid/seg"),
 		DefaultGoldenPool, cache, log,
 		WithNow(time.Now),
-		// Use real RNG so computeInitialDelay completes; the panic must
-		// come from somewhere else. Driving the outer recover deterministically
-		// from a unit test is awkward without invasive injection — the goal of
-		// this test is to assert that the outer recover does NOT call
-		// `go r.Start(ctx)`. We exercise that by counting goroutines around
-		// a synthetic panic via a helper.
 		WithRNG(rand.New(rand.NewPCG(42, 0))),
-		WithAllowPrivateHosts(),
+		withComputeInitialDelayForTest(panicHook),
 	)
+	allowPrivateHostsForTest(r)
 
-	// Helper: invoke a closure that mimics what the outer recover does and
-	// confirm it returns without spawning a new goroutine.
-	before := goroutineCount()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
 	done := make(chan struct{})
 	go func() {
-		defer close(done)
-		defer func() {
-			// Mirror the production recover. The contract under test is
-			// that this defer does NOT contain `go r.Start(ctx)`.
-			_ = recover()
-		}()
-		panic("simulated loop-body panic")
+		// Note: NOT `defer close(done)` inside a wrapping recover. We want
+		// the actual r.Start path. r.Start has its OWN outer defer-recover
+		// (the contract under test). If that recover ever respawns the
+		// goroutine, Start will not return and `done` will never close.
+		r.Start(ctx)
+		close(done)
 	}()
-	<-done
 
-	// Give the scheduler a moment to reap any erroneously-spawned goroutine.
-	time.Sleep(50 * time.Millisecond)
-	after := goroutineCount()
-
-	// Allow for ±1 noise from runtime housekeeping goroutines.
-	if after > before+1 {
-		t.Errorf("goroutine count increased from %d → %d; outer recover must not respawn", before, after)
+	select {
+	case <-done:
+		// Good — Start returned cleanly after the outer recover absorbed
+		// the injected panic. The outer recover did NOT respawn the
+		// goroutine.
+	case <-time.After(1 * time.Second):
+		t.Fatalf("Start did not return after injected panic — outer recover may have respawned (calls observed: %d)", calls.Load())
 	}
 
-	// Defensive: assert ProbeRunner's outer recover does not contain the
-	// pattern by inspecting that r exists and didn't accidentally start a
-	// background goroutine itself.
-	_ = r
-}
-
-func goroutineCount() int {
-	return runtime.NumGoroutine()
+	// Exactly one call into the panic hook: Start invoked
+	// computeInitialDelayFn once, panicked, the outer recover absorbed
+	// it, and Start returned. A respawn-on-panic regression would
+	// produce >1 calls (each respawned Start also calls the hook).
+	if n := calls.Load(); n != 1 {
+		t.Errorf("panic hook called %d times; want exactly 1 (>1 implies outer recover respawned Start)", n)
+	}
 }
 
 // TestProbe_NextSleepClamp — WR-07 regression. nextSleep MUST never return

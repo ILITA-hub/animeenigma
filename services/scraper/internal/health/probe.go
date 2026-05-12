@@ -91,8 +91,16 @@ type ProbeRunner struct {
 	// allowPrivateHosts disables the SSRF host-allowlist check inside
 	// fetchSegment. Production callers MUST leave this false — only tests
 	// that point fetchSegment at an httptest.Server (127.0.0.1:randomport)
-	// flip it via WithAllowPrivateHosts.
+	// flip it via the test-only allowPrivateHostsForTest helper.
 	allowPrivateHosts bool
+	// computeInitialDelayFn, when non-nil, is invoked instead of the default
+	// computeInitialDelay inside Start. REVIEW.md iter-2 WR-NEW-01: this
+	// injection seam lets a test deterministically drive the outer
+	// defer-recover by panicking inside a function that Start actually
+	// invokes (so a future regression that reintroduces `go r.Start(ctx)`
+	// in the outer recover IS caught). Production callers MUST leave this
+	// nil; only test code may set it via the test-only helper.
+	computeInitialDelayFn func() time.Duration
 }
 
 // ProbeOption is a functional option for NewProbeRunner. Used by tests to
@@ -110,14 +118,14 @@ func WithRNG(rng *rand.Rand) ProbeOption { return func(r *ProbeRunner) { r.rng =
 // client that talks to an httptest.Server.
 func WithHTTPClient(c *http.Client) ProbeOption { return func(r *ProbeRunner) { r.http = c } }
 
-// WithAllowPrivateHosts disables the SSRF host-allowlist check in
-// fetchSegment. Use ONLY in tests that need to hit an httptest.Server
-// (which binds to 127.0.0.1:randomport and would otherwise be rejected
-// by the production-grade SSRF guard from REVIEW.md BLK-01). Production
-// callers MUST NOT use this option.
-func WithAllowPrivateHosts() ProbeOption {
-	return func(r *ProbeRunner) { r.allowPrivateHosts = true }
-}
+// REVIEW.md iter-2 WR-NEW-02: the previous `WithAllowPrivateHosts`
+// public functional option has been removed. The SSRF host-allowlist is
+// disabled at probe construction only via the unexported test-only
+// helper `allowPrivateHostsForTest` (see probe_test.go), which lives in
+// a `_test.go` file and is therefore inaccessible to non-test callers
+// in any package. This shrinks the attacker-friendly surface: a future
+// integration test in `services/scraper/cmd/...` or a sibling package
+// can no longer opt out of the SSRF guard with a one-line import.
 
 // NewProbeRunner constructs a ProbeRunner with production defaults. Apply
 // ProbeOptions to override for tests.
@@ -203,7 +211,15 @@ func (r *ProbeRunner) Start(ctx context.Context) {
 		"base_interval", probeBaseInterval.String(),
 	)
 
-	initialDelay := r.computeInitialDelay()
+	// REVIEW.md iter-2 WR-NEW-01: route through the optional injection seam
+	// so tests can drive the outer defer-recover deterministically. The
+	// production path (computeInitialDelayFn == nil) is unchanged.
+	var initialDelay time.Duration
+	if r.computeInitialDelayFn != nil {
+		initialDelay = r.computeInitialDelayFn()
+	} else {
+		initialDelay = r.computeInitialDelay()
+	}
 	select {
 	case <-ctx.Done():
 		r.log.Infow("scraper.probe: stopped", "provider", r.provider.Name())
