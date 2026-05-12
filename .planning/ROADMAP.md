@@ -112,7 +112,7 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
   4. 9anime CDN hostnames (mp4upload / streamsb / streamtape resolved hosts plus 9anime's static asset hosts) are added to `libs/videoutils/proxy.go::HLSProxyAllowedDomains` and verified by a successful stream proxy in production.
   5. 9anime episode lists surface sub/dub split where present and are cached 6 hours; ID resolution uses malsync with fuzzy fallback identical to AnimePahe's contract.
 **Plans**: 4 plans across 3 waves (Wave 1: 18-01; Wave 2: 18-02 + 18-03 parallel; Wave 3: 18-04)
-- [ ] 18-01-PLAN.md — Wave 1: Wave-0 scaffolding (shared fuzzy/ pkg, goldens, RED test files, config + Makefile target, REQUIREMENTS/ROADMAP annotations)
+- [x] 18-01-PLAN.md — Wave 1: Wave-0 scaffolding (shared fuzzy/ pkg, goldens, RED test files, config + Makefile target, REQUIREMENTS/ROADMAP annotations)
 - [ ] 18-02-PLAN.md — Wave 2: Gogoanime provider package (client/dto/malsync/cache) — fuzzy-first FindID, sub/dub merge ListEpisodes, anime_muti_link ListServers, GetStream via registry
 - [ ] 18-03-PLAN.md — Wave 2: Three embed extractors (vibeplayer regex-only; streamhg + earnvids share Dean-Edwards packedExtractor base)
 - [ ] 18-04-PLAN.md — Wave 3: Orchestrator + extractor registration in main.go, HLS proxy allowlist append (5 hostnames), EnglishPlayer.vue multi-option dropdown activation + capitalizeProvider gogoanime branch, /animeenigma-after-update + failover-metric verification
@@ -151,6 +151,6 @@ After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
 | 15 | v3.0 | 4/4 | Complete    | 2026-05-11 |
 | 16 | v3.0 | 0/6 | Planned     | — |
 | 17 | v3.0 | 4/4 | Complete    | 2026-05-12 |
-| 18 | v3.0 | 0/? | Not started | — |
+| 18 | v3.0 | 1/4 | In Progress|  |
 | 19 | v3.0 | 0/? | Not started | — |
 | 20 | v3.0 | 0/? | Not started | — |

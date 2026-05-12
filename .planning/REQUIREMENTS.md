@@ -69,12 +69,12 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 > **Implementation note (2026-05-12):** SCRAPER-9ANI-01..06 are implemented by the Gogoanime/Anitaku provider (display label "Anitaku", backend slug "gogoanime"). The 9anime mirror chain (9anime.to to aniwave.to to kaido.to) is unreachable as of 2026-05-12; only anitaku.to survives as the canonical EN provider. See .planning/phases/18-9anime/18-RESEARCH.md section "Mirror Viability". Requirement IDs keep their literal SCRAPER-9ANI-* prefix.
 
-- [ ] **SCRAPER-9ANI-01**: Given a Shikimori/MAL ID, the 9anime client resolves the matching 9anime slug via `malsync.moe` lookup with the same caching + fuzzy fallback as AnimePahe.
-- [ ] **SCRAPER-9ANI-02**: `ListEpisodes` returns the full episode list scraped from 9anime's WordPress/Madara-themed markup (`bsx`, `bixbox`, `bs`, `bt` class family). Sub/dub split surfaced where present. Cached 6 hours.
-- [ ] **SCRAPER-9ANI-03**: `ListServers` enumerates 9anime's embed hosts per episode. The set of embed hosts 9anime uses (`mp4upload`, `streamsb`, `streamtape`, megacloud variants, etc.) is discovered during implementation and **each is registered as an `EmbedExtractor`** so future providers using the same hosts reuse the extractor.
-- [ ] **SCRAPER-9ANI-04**: `GetStream` resolves an embed URL via `ListServers`, then dispatches to the matching `EmbedExtractor`. No embed extraction logic lives inside the 9anime client itself — only HTML scraping + URL extraction.
-- [ ] **SCRAPER-9ANI-05**: 9anime CDN hostnames (whatever `mp4upload` / `streamsb` / `streamtape` resolve to today, plus 9anime's own static asset hosts) are appended to `libs/videoutils/proxy.go::HLSProxyAllowedDomains`.
-- [ ] **SCRAPER-9ANI-06**: The orchestrator's sequential failover ordering AnimePahe → 9anime is verified end-to-end: forcing AnimePahe's health gauge to 0 produces a playable stream from 9anime; `parser_fallback_total{from="animepahe",to="9anime"}` increments.
+- [x] **SCRAPER-9ANI-01**: Given a Shikimori/MAL ID, the 9anime client resolves the matching 9anime slug via `malsync.moe` lookup with the same caching + fuzzy fallback as AnimePahe.
+- [x] **SCRAPER-9ANI-02**: `ListEpisodes` returns the full episode list scraped from 9anime's WordPress/Madara-themed markup (`bsx`, `bixbox`, `bs`, `bt` class family). Sub/dub split surfaced where present. Cached 6 hours.
+- [x] **SCRAPER-9ANI-03**: `ListServers` enumerates 9anime's embed hosts per episode. The set of embed hosts 9anime uses (`mp4upload`, `streamsb`, `streamtape`, megacloud variants, etc.) is discovered during implementation and **each is registered as an `EmbedExtractor`** so future providers using the same hosts reuse the extractor.
+- [x] **SCRAPER-9ANI-04**: `GetStream` resolves an embed URL via `ListServers`, then dispatches to the matching `EmbedExtractor`. No embed extraction logic lives inside the 9anime client itself — only HTML scraping + URL extraction.
+- [x] **SCRAPER-9ANI-05**: 9anime CDN hostnames (whatever `mp4upload` / `streamsb` / `streamtape` resolve to today, plus 9anime's own static asset hosts) are appended to `libs/videoutils/proxy.go::HLSProxyAllowedDomains`.
+- [x] **SCRAPER-9ANI-06**: The orchestrator's sequential failover ordering AnimePahe → 9anime is verified end-to-end: forcing AnimePahe's health gauge to 0 produces a playable stream from 9anime; `parser_fallback_total{from="animepahe",to="9anime"}` increments.
 
 ### Third Provider — AnimeKai, gated (Phase 19)
 
@@ -162,12 +162,12 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 | SCRAPER-OBS-03 | Phase 17 | Complete |
 | SCRAPER-OBS-04 | Phase 17 | Complete |
 | SCRAPER-OBS-05 | Phase 17 | Complete |
-| SCRAPER-9ANI-01 | Phase 18 | Pending |
-| SCRAPER-9ANI-02 | Phase 18 | Pending |
-| SCRAPER-9ANI-03 | Phase 18 | Pending |
-| SCRAPER-9ANI-04 | Phase 18 | Pending |
-| SCRAPER-9ANI-05 | Phase 18 | Pending |
-| SCRAPER-9ANI-06 | Phase 18 | Pending |
+| SCRAPER-9ANI-01 | Phase 18 | Complete |
+| SCRAPER-9ANI-02 | Phase 18 | Complete |
+| SCRAPER-9ANI-03 | Phase 18 | Complete |
+| SCRAPER-9ANI-04 | Phase 18 | Complete |
+| SCRAPER-9ANI-05 | Phase 18 | Complete |
+| SCRAPER-9ANI-06 | Phase 18 | Complete |
 | SCRAPER-KAI-01 | Phase 19 | Pending |
 | SCRAPER-KAI-02 | Phase 19 | Pending |
 | SCRAPER-KAI-03 | Phase 19 | Pending |
