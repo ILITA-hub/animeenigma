@@ -528,6 +528,53 @@ groups:
           summary: "Player {{ $labels.player }} is DOWN"
           description: "Player {{ $labels.player }} has been unavailable for 30+ minutes. Check external API status."
 
+      - uid: provider-health-stream-segment-down
+        title: Scraper Provider Stream-Segment Down
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: provider_health_up{stage="stream_segment"}
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        labels:
+          severity: critical
+        annotations:
+          summary: "Scraper provider {{ $labels.provider }} stream_segment DOWN"
+          description: "Provider {{ $labels.provider }} cannot fetch the first HLS segment from the golden pool for 15+ min — likely upstream broken or selector drift. Check /api/admin/scraper/health."
+
       - uid: player-unavailable-flaky
         title: Player Unavailable (Flaky)
         noDataState: OK
