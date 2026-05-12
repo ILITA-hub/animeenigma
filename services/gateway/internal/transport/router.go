@@ -28,6 +28,22 @@ func NewRouter(
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
 ) http.Handler {
+	h, _ := NewRouterWithCleanup(proxyHandler, cfg, log, metricsCollector)
+	return h
+}
+
+// NewRouterWithCleanup is the test-friendly variant of NewRouter. Returns
+// the handler AND a Cleanup function that stops the per-IP rate-limiter's
+// background eviction goroutine. Production callers can keep using
+// NewRouter (the goroutine lives as long as the process). Test callers
+// MUST register cleanup via `t.Cleanup(cleanup)` so each test does not
+// leak one goroutine per `NewRouter` invocation — see REVIEW.md WR-04.
+func NewRouterWithCleanup(
+	proxyHandler *handler.ProxyHandler,
+	cfg *config.Config,
+	log *logger.Logger,
+	metricsCollector *metrics.Collector,
+) (http.Handler, func()) {
 	if cfg.DevMode {
 		log.Warnw("⚠️  DEV MODE ENABLED — admin auth is BYPASSED. Do NOT use in production!")
 	}
@@ -43,7 +59,8 @@ func NewRouter(
 	r.Use(httputil.SecurityHeaders)
 	r.Use(middleware.RealIP)
 	r.Use(MaxBodySizeMiddleware(10 * 1024 * 1024)) // 10MB
-	r.Use(RateLimitMiddleware(cfg.RateLimit))
+	rateLimitMW, rateLimiter := RateLimitMiddlewareWithStop(cfg.RateLimit)
+	r.Use(rateLimitMW)
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +280,7 @@ func NewRouter(
 		})
 	})
 
-	return r
+	return r, rateLimiter.Stop
 }
 
 // apiKeyHTTPClient is a shared HTTP client for API key resolution calls.
@@ -497,10 +514,26 @@ func (rl *IPRateLimiter) getLimiter(ip string) *rate.Limiter {
 }
 
 // RateLimitMiddleware implements per-IP rate limiting.
+//
+// Returns the middleware factory. In tests that want to clean up the
+// background eviction goroutine, use RateLimitMiddlewareWithStop which
+// also returns the *IPRateLimiter so callers can register `Stop` on
+// t.Cleanup. REVIEW.md WR-04 — without that, every NewRouter() in a
+// gateway test leaks one goroutine for the duration of the test binary.
 func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Handler {
+	mw, _ := RateLimitMiddlewareWithStop(cfg)
+	return mw
+}
+
+// RateLimitMiddlewareWithStop is the test-friendly variant of
+// RateLimitMiddleware. Returns the middleware factory PLUS the underlying
+// IPRateLimiter so callers can `t.Cleanup(rl.Stop)` and not leak the
+// background eviction goroutine. Production callers can ignore the
+// second return value (the goroutine lives as long as the process).
+func RateLimitMiddlewareWithStop(cfg config.RateLimitConfig) (func(http.Handler) http.Handler, *IPRateLimiter) {
 	rl := NewIPRateLimiter(rate.Limit(cfg.RequestsPerSecond), cfg.BurstSize)
 
-	return func(next http.Handler) http.Handler {
+	mw := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip, _, err := net.SplitHostPort(r.RemoteAddr)
 			if err != nil {
@@ -513,6 +546,7 @@ func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Han
 			next.ServeHTTP(w, r)
 		})
 	}
+	return mw, rl
 }
 
 // MaxBodySizeMiddleware limits the size of incoming request bodies.

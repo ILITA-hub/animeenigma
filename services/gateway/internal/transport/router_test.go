@@ -105,7 +105,11 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 	log := logger.Default()
 	proxySvc := service.NewProxyService(cfg.Services, log)
 	proxyHandler := handler.NewProxyHandler(proxySvc, log)
-	router := NewRouter(proxyHandler, cfg, log, sharedGatewayCollector())
+	router, rateLimiterStop := NewRouterWithCleanup(proxyHandler, cfg, log, sharedGatewayCollector())
+	// REVIEW.md WR-04: stop the per-IP rate-limiter's eviction goroutine
+	// when the test ends, otherwise each NewRouter invocation in the test
+	// suite leaks one goroutine for the lifetime of the binary.
+	t.Cleanup(rateLimiterStop)
 
 	return &testGateway{
 		router:        router,
