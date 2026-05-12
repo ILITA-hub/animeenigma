@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -45,10 +46,14 @@ import (
 // for backward compatibility with the catalog forwarder. A nil cache is
 // permitted so unit tests that exercise only the public surface can keep
 // using the lighter newTestHandler harness.
+//
+// REVIEW.md WR-11: `now` is injectable so tests can lock the generated_at
+// timestamp in admin responses. Production defaults to time.Now.
 type ScraperHandler struct {
 	svc   *service.Orchestrator
 	cache *health.InMemoryHealthCache
 	log   *logger.Logger
+	now   func() time.Time
 }
 
 // NewScraperHandler builds a ScraperHandler. The cache argument may be nil
@@ -56,7 +61,16 @@ type ScraperHandler struct {
 // MUST thread the same *InMemoryHealthCache that the probe runner writes to
 // (see cmd/scraper-api/main.go).
 func NewScraperHandler(svc *service.Orchestrator, cache *health.InMemoryHealthCache, log *logger.Logger) *ScraperHandler {
-	return &ScraperHandler{svc: svc, cache: cache, log: log}
+	return &ScraperHandler{svc: svc, cache: cache, log: log, now: time.Now}
+}
+
+// SetNow overrides the clock used for admin response timestamps. Test-only.
+// WR-11: prefer this over patching globals.
+func (h *ScraperHandler) SetNow(now func() time.Time) {
+	if now == nil {
+		now = time.Now
+	}
+	h.now = now
 }
 
 // errorCode constants surface in `error.code` for every non-2xx response.
@@ -88,11 +102,27 @@ type queryParams struct {
 // "animepahe", "9anime") — 64 chars is generous. See REVIEW.md WR-01.
 const maxPreferLength = 64
 
+// preferAllowed is the regex defense-in-depth check for the `prefer` query
+// param (REVIEW.md WR-09). Provider names are short identifiers — restrict
+// to [a-z0-9_-]{1,64} so a value like "animepahe\n[FORGED_LOG_LINE]" never
+// reaches a structured-log field. zap's JSON encoder escapes newlines so the
+// impact would be bounded today, but the value would still appear in log
+// queries.
+//
+// A non-matching value is silently coerced to empty string, matching the
+// existing "unknown prefer silently ignored" contract.
+var preferAllowed = regexp.MustCompile(`^[a-z0-9_-]{1,64}$`)
+
 func parseQuery(r *http.Request) queryParams {
 	q := r.URL.Query()
 	prefer := strings.TrimSpace(q.Get("prefer"))
 	if len(prefer) > maxPreferLength {
 		prefer = prefer[:maxPreferLength]
+	}
+	// WR-09: enforce the allow-list AFTER truncation so a 65-char value
+	// can never sneak in via the substring slice.
+	if prefer != "" && !preferAllowed.MatchString(prefer) {
+		prefer = ""
 	}
 	return queryParams{
 		malID:    strings.TrimSpace(q.Get("mal_id")),
@@ -241,23 +271,36 @@ func (h *ScraperHandler) GetAdminHealth(w http.ResponseWriter, r *http.Request) 
 	if h.cache != nil {
 		snap := h.cache.AdminSnapshot()
 		for prov, ph := range snap {
-			// AdminSnapshot already deep-copies the Stages map, so it is
-			// safe to mutate the StageStatus values in place without
-			// racing the cache.
+			// REVIEW.md WR-02: build a fresh stages map instead of
+			// modifying ph.Stages while iterating it. Today the in-place
+			// write `ph.Stages[st] = ss` only re-writes the current key
+			// (well-defined per the Go spec) but the iteration-mutate
+			// pattern is brittle — a future change that fans out a
+			// sibling redaction key would be undefined behaviour. The
+			// AdminSnapshot returned map is already deep-copied so the
+			// allocation here doesn't waste anything user-visible.
+			redactedStages := make(map[string]health.StageStatus, len(ph.Stages))
 			for st, ss := range ph.Stages {
 				if len(ss.LastErr) > health.MaxLastErrChars {
 					ss.LastErr = ss.LastErr[:health.MaxLastErrChars]
-					ph.Stages[st] = ss
 				}
+				redactedStages[st] = ss
 			}
-			enriched[prov] = ph
+			enriched[prov] = health.ProviderHealth{
+				Stages:      redactedStages,
+				LastUpdated: ph.LastUpdated,
+			}
 		}
 	}
 
+	now := h.now
+	if now == nil {
+		now = time.Now
+	}
 	httputil.OK(w, map[string]any{
 		"providers":    public,
 		"admin":        enriched,
-		"generated_at": time.Now().UTC().Format(time.RFC3339),
+		"generated_at": now().UTC().Format(time.RFC3339),
 	})
 }
 

@@ -498,13 +498,64 @@ func TestOrchestrator_OrderedProviderNames(t *testing.T) {
 // TestParseQuery_PreferLengthCap — WR-01: an oversize `prefer` is truncated
 // at parse time so a malicious caller can't balloon log/response payloads
 // (the value is echoed into meta.tried + structured log fields).
+//
+// Sends an oversized value of lowercase characters so it survives the WR-09
+// allow-list (^[a-z0-9_-]{1,64}$) and pins the truncation-to-64 behaviour.
 func TestParseQuery_PreferLengthCap(t *testing.T) {
 	t.Parallel()
-	huge := strings.Repeat("A", 1024)
+	huge := strings.Repeat("a", 1024)
 	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+huge, nil)
 	qp := parseQuery(req)
 	if len(qp.prefer) != maxPreferLength {
 		t.Errorf("len(prefer) = %d; want %d", len(qp.prefer), maxPreferLength)
+	}
+}
+
+// TestParseQuery_PreferRejectsInvalidChars — WR-09: a `prefer` value that
+// contains characters outside [a-z0-9_-] is silently coerced to empty,
+// matching the existing "unknown prefer silently ignored" contract. Closes
+// the log-injection vector where prefer="animepahe\n[FORGED_LOG]" would
+// otherwise reach a structured log field.
+func TestParseQuery_PreferRejectsInvalidChars(t *testing.T) {
+	t.Parallel()
+	// Encoded forms so httptest.NewRequest accepts the URL — the decoded
+	// value is what reaches parseQuery via r.URL.Query().Get.
+	cases := []struct {
+		name string
+		// Use URL-encoded forms in the path; decoded value reaches parseQuery.
+		raw string
+	}{
+		{"newline_injection", "animepahe%0a[FORGED]"},
+		{"uppercase_only", "ANIMEPAHE"},
+		{"path_traversal", "..%2Fetc%2Fpasswd"},
+		{"control_null", "anime%00pahe"},
+		{"space", "animepahe%20pahe"},
+		{"dot_separator", "anime.pahe"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+tc.raw, nil)
+			qp := parseQuery(req)
+			if qp.prefer != "" {
+				t.Errorf("parseQuery(prefer=%q).prefer = %q; want \"\" (silently rejected)", tc.raw, qp.prefer)
+			}
+		})
+	}
+}
+
+// TestParseQuery_PreferAcceptsValid — WR-09 sanity check: legitimate
+// provider-name shapes pass through unchanged.
+func TestParseQuery_PreferAcceptsValid(t *testing.T) {
+	t.Parallel()
+	cases := []string{"animepahe", "hianime", "9anime_alt", "kodik-ru", "abc123"}
+	for _, in := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+in, nil)
+		qp := parseQuery(req)
+		if qp.prefer != in {
+			t.Errorf("parseQuery(prefer=%q).prefer = %q; want %q", in, qp.prefer, in)
+		}
 	}
 }
 
