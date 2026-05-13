@@ -290,11 +290,16 @@ func (r *ListRepository) UpsertReview(ctx context.Context, userID, animeID, user
 		return nil, err
 	}
 	// Reload to capture any preserved fields (status, episodes, etc.).
+	// REVIEW.md CR-03: propagate the reload error rather than returning
+	// the locally-constructed `entry` — that entry has no ID (Postgres
+	// gen_random_uuid() default fires server-side), no canonical
+	// CreatedAt, and no preserved pre-existing fields on the conflict
+	// path. Returning it would let clients PATCH/DELETE with an empty ID.
 	var fresh domain.AnimeListEntry
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ? AND anime_id = ?", userID, animeID).
 		First(&fresh).Error; err != nil {
-		return entry, nil // fall back to the constructed entry if reload fails
+		return nil, apperrors.Wrap(err, apperrors.CodeInternal, "failed to reload review after upsert")
 	}
 	return &fresh, nil
 }
