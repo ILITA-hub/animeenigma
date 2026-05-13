@@ -269,6 +269,14 @@ func main() {
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(listRepo, activityRepo, log)
 
+	// Phase 1 (workstream: social) plan 04 — comments CRUD pipeline.
+	// Plan 03 built CommentRepository / CommentService / CommentHandler as
+	// production-ready stubs; this is the wiring that makes them reachable
+	// over HTTP. The chi routes are mounted in transport.NewRouter below.
+	commentRepo := repo.NewCommentRepository(db.DB)
+	commentService := service.NewCommentService(commentRepo, activityRepo, log)
+	commentHandler := handler.NewCommentHandler(commentService, log)
+
 	// Initialize MAL export service
 	malExportService := service.NewMALExportService(log)
 
@@ -315,7 +323,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, recEventsHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, recEventsHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
