@@ -3,7 +3,7 @@ phase: 1
 workstream: social
 plan: 4
 type: execute
-wave: 3
+wave: 4
 depends_on: [2, 3]
 files_modified:
   - services/player/cmd/player-api/main.go

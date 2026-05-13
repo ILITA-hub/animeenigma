@@ -3,7 +3,7 @@ phase: 1
 workstream: social
 plan: 6
 type: execute
-wave: 4
+wave: 5
 depends_on: [4, 5]
 files_modified:
   - frontend/web/src/views/Anime.vue

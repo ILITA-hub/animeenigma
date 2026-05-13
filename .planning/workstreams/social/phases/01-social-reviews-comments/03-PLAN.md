@@ -3,7 +3,7 @@ phase: 1
 workstream: social
 plan: 3
 type: execute
-wave: 2
+wave: 3
 depends_on: [1, 2]
 files_modified:
   - services/player/internal/repo/comment.go

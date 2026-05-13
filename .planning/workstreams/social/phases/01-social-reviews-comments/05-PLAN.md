@@ -3,7 +3,7 @@ phase: 1
 workstream: social
 plan: 5
 type: execute
-wave: 3
+wave: 4
 depends_on: [3]
 files_modified:
   - frontend/web/src/api/client.ts
