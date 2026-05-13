@@ -115,7 +115,7 @@
     "ugc": {
       "reviewsTab": "Отзывы",
       "commentsTab": "Комментарии",
-      "commentsCount": "{count, plural, one {# комментарий} few {# комментария} many {# комментариев} other {# комментария}}",
+      "commentsCount": "{count} комментарий | {count} комментария | {count} комментариев",
       "commentPlaceholder": "Добавить комментарий…",
       "postComment": "Опубликовать комментарий",
       "posting": "Публикация…",

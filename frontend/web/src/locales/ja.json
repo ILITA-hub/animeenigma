@@ -115,7 +115,7 @@
     "ugc": {
       "reviewsTab": "レビュー",
       "commentsTab": "コメント",
-      "commentsCount": "{count, plural, one {# 件のコメント} other {# 件のコメント}}",
+      "commentsCount": "{count} 件のコメント",
       "commentPlaceholder": "コメントを追加…",
       "postComment": "コメントを投稿",
       "posting": "投稿中…",

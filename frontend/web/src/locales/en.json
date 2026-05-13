@@ -115,7 +115,7 @@
     "ugc": {
       "reviewsTab": "Reviews",
       "commentsTab": "Comments",
-      "commentsCount": "{count, plural, one {# comment} other {# comments}}",
+      "commentsCount": "{count} comment | {count} comments",
       "commentPlaceholder": "Add a comment…",
       "postComment": "Post comment",
       "posting": "Posting…",
