@@ -57,7 +57,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, toRef, watch, onMounted, onUnmounted } from 'vue'
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 
 interface Props {
   modelValue: boolean
@@ -104,14 +105,14 @@ const handleClose = () => {
   }
 }
 
-// Lock body scroll when modal is open
+// Refcount-based body scroll lock — cooperates with other consumers
+// (e.g. Navbar mobile drawer) instead of stomping their state.
+useBodyScrollLock(toRef(props, 'modelValue'))
+
+// Focus the modal for keyboard navigation when opening.
 watch(() => props.modelValue, (isOpen) => {
   if (isOpen) {
-    document.body.style.overflow = 'hidden'
-    // Focus the modal for keyboard navigation
     setTimeout(() => modalRef.value?.focus(), 0)
-  } else {
-    document.body.style.overflow = ''
   }
 })
 
@@ -128,7 +129,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
-  document.body.style.overflow = ''
+  // Scroll lock is released automatically by useBodyScrollLock's onScopeDispose.
 })
 </script>
 
