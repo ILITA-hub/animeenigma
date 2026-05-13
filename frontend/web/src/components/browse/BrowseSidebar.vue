@@ -1,0 +1,299 @@
+<template>
+  <aside class="bg-slate-900/40 border border-white/10 rounded-xl p-4 space-y-1">
+    <header class="flex items-center justify-between pb-2">
+      <h2 class="text-lg font-semibold text-white">{{ $t('browse.filters.title') }}</h2>
+    </header>
+
+    <!-- Genres — multi-select checkbox list, scroll on overflow -->
+    <FilterSection
+      :label="$t('browse.filters.section.genres')"
+      :count="filters.genres.value.length"
+    >
+      <div class="max-h-48 overflow-y-auto pr-1 space-y-1">
+        <label
+          v-for="g in genres"
+          :key="g.id"
+          class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
+        >
+          <input
+            type="checkbox"
+            :value="g.id"
+            :checked="filters.genres.value.includes(g.id)"
+            class="rounded border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
+            @change="onGenreToggle(g.id, ($event.target as HTMLInputElement).checked)"
+          />
+          <span>{{ localizedGenre(g) }}</span>
+        </label>
+      </div>
+    </FilterSection>
+
+    <!-- Format (kind) — single-select radio -->
+    <FilterSection
+      :label="$t('browse.filters.section.format')"
+      :count="filters.kind.value ? 1 : 0"
+    >
+      <label
+        v-for="opt in kindOptions"
+        :key="opt.value || 'any-kind'"
+        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
+      >
+        <input
+          type="radio"
+          name="kind-filter"
+          :value="opt.value"
+          :checked="filters.kind.value === opt.value"
+          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
+          @change="onKindChange(opt.value)"
+        />
+        <span>{{ opt.label }}</span>
+      </label>
+    </FilterSection>
+
+    <!-- Status — single-select radio -->
+    <FilterSection
+      :label="$t('browse.filters.section.status')"
+      :count="filters.status.value ? 1 : 0"
+    >
+      <label
+        v-for="opt in statusOptions"
+        :key="opt.value || 'any-status'"
+        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
+      >
+        <input
+          type="radio"
+          name="status-filter"
+          :value="opt.value"
+          :checked="filters.status.value === opt.value"
+          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
+          @change="onStatusChange(opt.value)"
+        />
+        <span>{{ opt.label }}</span>
+      </label>
+    </FilterSection>
+
+    <!-- Year range -->
+    <FilterSection
+      :label="$t('browse.filters.section.year')"
+      :count="filters.yearFrom.value || filters.yearTo.value ? 1 : 0"
+    >
+      <div class="flex items-center gap-2">
+        <input
+          type="number"
+          :min="MIN_YEAR"
+          :max="MAX_YEAR"
+          :value="filters.yearFrom.value ?? ''"
+          :placeholder="$t('browse.filters.year.from')"
+          :aria-label="$t('browse.filters.year.from')"
+          class="w-1/2 px-2 py-1 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:ring-2 focus:ring-cyan-500/40 focus:outline-none"
+          @change="onYearChange('from', ($event.target as HTMLInputElement).valueAsNumber)"
+        />
+        <span class="text-white/40">—</span>
+        <input
+          type="number"
+          :min="MIN_YEAR"
+          :max="MAX_YEAR"
+          :value="filters.yearTo.value ?? ''"
+          :placeholder="$t('browse.filters.year.to')"
+          :aria-label="$t('browse.filters.year.to')"
+          class="w-1/2 px-2 py-1 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:ring-2 focus:ring-cyan-500/40 focus:outline-none"
+          @change="onYearChange('to', ($event.target as HTMLInputElement).valueAsNumber)"
+        />
+      </div>
+    </FilterSection>
+
+    <!-- Provider — checkbox list with per-provider accent colors -->
+    <FilterSection
+      :label="$t('browse.filters.section.provider')"
+      :count="filters.providers.value.length"
+    >
+      <label
+        v-for="opt in providerOptions"
+        :key="opt.value"
+        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
+      >
+        <input
+          type="checkbox"
+          :value="opt.value"
+          :checked="filters.providers.value.includes(opt.value)"
+          :class="['rounded border-white/20 bg-transparent focus:ring-2', opt.accent]"
+          @change="onProviderToggle(opt.value, ($event.target as HTMLInputElement).checked)"
+        />
+        <span>{{ opt.label }}</span>
+      </label>
+    </FilterSection>
+
+    <!-- Sort — radio set (Phase 11's 5-axis options reused at sidebar density) -->
+    <FilterSection
+      :label="$t('browse.filters.section.sort')"
+      :count="filters.sort.value !== 'popularity' ? 1 : 0"
+    >
+      <label
+        v-for="opt in sortOptions"
+        :key="opt.value"
+        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
+      >
+        <input
+          type="radio"
+          name="sort-filter"
+          :value="opt.value"
+          :checked="filters.sort.value === opt.value"
+          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
+          @change="onSortChange(opt.value)"
+        />
+        <span>{{ opt.label }}</span>
+      </label>
+    </FilterSection>
+
+    <!-- Reset -->
+    <div class="pt-3">
+      <button
+        type="button"
+        class="w-full px-3 py-2 rounded-md bg-pink-500/10 border border-pink-400/20 text-pink-300 hover:text-pink-200 hover:bg-pink-500/20 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-pink-400/50"
+        @click="onReset"
+      >
+        {{ $t('browse.filters.reset') }}
+      </button>
+    </div>
+  </aside>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import {
+  useBrowseFilters,
+  type Provider,
+  type Kind,
+  type Sort,
+} from '@/composables/useBrowseFilters'
+import FilterSection from './FilterSection.vue'
+import { getLocalizedGenre } from '@/utils/title'
+
+// Phase 15 (UX-31) — Browse.vue passes the genre list down (no
+// duplicate fetch) and the parent's useBrowseFilters instance so the
+// sidebar mutates the same reactive state.
+
+interface Genre {
+  id: string
+  name: string
+  name_ru?: string
+}
+
+// Phase 15 (UX-31) — sidebar consumes the parent's useBrowseFilters
+// instance via prop so Browse.vue's loadAnime() watcher and the sidebar
+// share a single source of truth. The sidebar does NOT instantiate the
+// composable itself.
+const props = defineProps<{
+  genres: Genre[]
+  filters: ReturnType<typeof useBrowseFilters>
+}>()
+const { t } = useI18n()
+
+const MIN_YEAR = 1960
+const MAX_YEAR = new Date().getFullYear() + 1
+
+const kindOptions = computed<{ value: Kind; label: string }[]>(() => [
+  { value: '', label: t('browse.filters.format.any') },
+  { value: 'tv', label: t('browse.filters.format.tv') },
+  { value: 'movie', label: t('browse.filters.format.movie') },
+  { value: 'ova', label: t('browse.filters.format.ova') },
+  { value: 'ona', label: t('browse.filters.format.ona') },
+  { value: 'special', label: t('browse.filters.format.special') },
+])
+
+const statusOptions = computed(() => [
+  { value: '', label: t('browse.filters.status.any') },
+  { value: 'released', label: t('browse.filters.status.released') },
+  { value: 'ongoing', label: t('browse.filters.status.ongoing') },
+  { value: 'announced', label: t('browse.filters.status.anons') },
+])
+
+// Per-provider Tailwind accent classes (locked in CONTEXT.md "specifics").
+const providerOptions = computed<{ value: Provider; label: string; accent: string }[]>(() => [
+  {
+    value: 'kodik',
+    label: t('browse.filters.provider.kodik'),
+    accent: 'text-cyan-500 focus:ring-cyan-500',
+  },
+  {
+    value: 'animelib',
+    label: t('browse.filters.provider.animelib'),
+    accent: 'text-orange-500 focus:ring-orange-500',
+  },
+  {
+    value: 'hianime',
+    label: t('browse.filters.provider.hianime'),
+    accent: 'text-purple-500 focus:ring-purple-500',
+  },
+  {
+    value: 'consumet',
+    label: t('browse.filters.provider.consumet'),
+    accent: 'text-emerald-500 focus:ring-emerald-500',
+  },
+])
+
+const sortOptions = computed<{ value: Sort; label: string }[]>(() => [
+  { value: 'popularity', label: t('browse.sort.popularity') },
+  { value: 'rating', label: t('browse.sort.rating') },
+  { value: 'year', label: t('browse.sort.year') },
+  { value: 'updated', label: t('browse.sort.updated') },
+  { value: 'title', label: t('browse.sort.title') },
+])
+
+function localizedGenre(g: Genre) {
+  return getLocalizedGenre(g.name, g.name_ru)
+}
+
+function onGenreToggle(id: string, checked: boolean) {
+  const set = new Set(props.filters.genres.value)
+  if (checked) set.add(id)
+  else set.delete(id)
+  props.filters.genres.value = [...set]
+  props.filters.writeUrl()
+}
+
+function onProviderToggle(p: Provider, checked: boolean) {
+  const set = new Set(props.filters.providers.value)
+  if (checked) set.add(p)
+  else set.delete(p)
+  props.filters.providers.value = [...set]
+  props.filters.writeUrl()
+}
+
+function onKindChange(v: Kind) {
+  props.filters.kind.value = v
+  props.filters.writeUrl()
+}
+
+function onStatusChange(v: string) {
+  // Composable's status ref accepts the same whitelisted string set.
+  props.filters.status.value = v as typeof props.filters.status.value
+  props.filters.writeUrl()
+}
+
+function onSortChange(v: Sort) {
+  props.filters.sort.value = v
+  props.filters.writeUrl()
+}
+
+function onYearChange(which: 'from' | 'to', n: number) {
+  const v = Number.isFinite(n) && n >= MIN_YEAR && n <= MAX_YEAR ? n : null
+  if (which === 'from') {
+    props.filters.yearFrom.value = v
+    // Client-side validation: from <= to (locked in CONTEXT.md specifics).
+    if (v && props.filters.yearTo.value && v > props.filters.yearTo.value) {
+      props.filters.yearTo.value = v
+    }
+  } else {
+    props.filters.yearTo.value = v
+    if (v && props.filters.yearFrom.value && v < props.filters.yearFrom.value) {
+      props.filters.yearFrom.value = v
+    }
+  }
+  props.filters.writeUrl()
+}
+
+function onReset() {
+  props.filters.reset()
+}
+</script>
