@@ -1,4 +1,4 @@
-import { watch, nextTick, type Ref } from 'vue'
+import { watch, nextTick, onScopeDispose, getCurrentScope, type Ref } from 'vue'
 
 /**
  * Naive focus trap for modal-like containers.
@@ -7,7 +7,11 @@ import { watch, nextTick, type Ref } from 'vue'
  * `container` while `active` is true. On activation, focuses the first focusable
  * child. On deactivation, restores focus to `returnFocusTo` if provided.
  *
- * Zero dependencies — no `focus-trap` npm package. ~30 LOC.
+ * Cleanup: the global `keydown` listener is unconditionally detached on scope
+ * disposal (parent component unmount) — even if `active` is still true. This
+ * prevents listener leaks when a host tears down mid-open.
+ *
+ * Zero dependencies — no `focus-trap` npm package.
  *
  * Usage:
  *   const drawerRef = ref<HTMLElement | null>(null)
@@ -30,8 +34,11 @@ export function useFocusTrap(options: UseFocusTrapOptions): void {
   function getFocusables(): HTMLElement[] {
     const root = container.value
     if (!root) return []
+    // The selector already excludes [disabled] for button/input/select/textarea.
+    // Keep only the visibility filter (offsetParent !== null skips display:none
+    // and elements detached from layout).
     return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-      .filter(el => !el.hasAttribute('disabled') && el.offsetParent !== null)
+      .filter(el => el.offsetParent !== null)
   }
 
   function onKeydown(event: KeyboardEvent): void {
@@ -72,5 +79,14 @@ export function useFocusTrap(options: UseFocusTrapOptions): void {
         returnFocusTo.value.focus()
       }
     }
-  })
+  }, { immediate: true })
+
+  // Unconditional cleanup on parent unmount. Guard against being called outside
+  // a reactive scope (e.g. ad-hoc invocation in tests): onScopeDispose is a no-op
+  // when there is no current scope, but we check explicitly for clarity.
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      document.removeEventListener('keydown', onKeydown)
+    })
+  }
 }
