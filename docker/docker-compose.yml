@@ -334,6 +334,12 @@ services:
       CORS_ORIGINS: "http://localhost:3003,http://localhost:8000"
       SITE_URL: ${SITE_URL:-https://animeenigma.ru}
       DEV_MODE: "true"
+      # Phase 11 / UX-24 — system-status banner. Default off; operators
+      # flip ACTIVE=true + set MESSAGE to surface a thin red banner at
+      # the top of Home until users dismiss it (per-incident
+      # localStorage flag).
+      SYSTEM_BANNER_ACTIVE: ${SYSTEM_BANNER_ACTIVE:-false}
+      SYSTEM_BANNER_MESSAGE: ${SYSTEM_BANNER_MESSAGE:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

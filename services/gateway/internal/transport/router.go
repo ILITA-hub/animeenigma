@@ -140,6 +140,13 @@ func NewRouterWithCleanup(
 		// Auth service routes (public)
 		r.HandleFunc("/auth/*", proxyHandler.ProxyToAuth)
 
+		// Phase 11 / UX-24 — System status banner (public, no JWT).
+		// Sourced from gateway env (SYSTEM_BANNER_ACTIVE +
+		// SYSTEM_BANNER_MESSAGE). The existing CORS / rate-limit /
+		// security-headers stack at the top of NewRouter already applies.
+		sysStatusHandler := handler.NewSystemStatusHandler(cfg)
+		r.Get("/system/status", sysStatusHandler.GetStatus)
+
 		// Player service routes - reviews (must be before /anime/* catch-all)
 		r.Post("/anime/ratings/batch", proxyHandler.ProxyToPlayer)
 		r.Get("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)

@@ -19,6 +19,12 @@ type Config struct {
 	Environment string // "production", "staging", "development", etc.
 	DevMode     bool   // Skip admin auth when true (for local development)
 	SiteURL     string // Public-facing base URL for OG meta tags (e.g. "https://animeenigma.ru")
+	// Phase 11 / UX-24 — env-backed system-status banner. When
+	// SystemBannerActive=true AND SystemBannerMessage is non-empty,
+	// GET /api/system/status returns a single Incident sourced from
+	// these vars. Defaults: off + empty.
+	SystemBannerActive  bool
+	SystemBannerMessage string
 }
 
 type ServerConfig struct {
@@ -98,6 +104,9 @@ func Load() (*Config, error) {
 		Environment: strings.ToLower(getEnv("ENVIRONMENT", "")),
 		DevMode:     getEnvBool("DEV_MODE", false),
 		SiteURL:     strings.TrimRight(getEnv("SITE_URL", ""), "/"),
+		// Phase 11 / UX-24 — system-status banner env vars.
+		SystemBannerActive:  getEnvBool("SYSTEM_BANNER_ACTIVE", false),
+		SystemBannerMessage: getEnv("SYSTEM_BANNER_MESSAGE", ""),
 	}
 
 	// Production safeguard: refuse to enable DevMode in production
