@@ -9,6 +9,7 @@
       </span>
       <input
         :id="inputId"
+        v-bind="$attrs"
         v-model="model"
         :type="type"
         :placeholder="placeholder"
@@ -39,6 +40,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+
+defineOptions({ inheritAttrs: false })
 
 interface Props {
   modelValue?: string
