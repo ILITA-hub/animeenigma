@@ -712,5 +712,11 @@
       "defaultTitle": "サービス状況のお知らせ",
       "dismiss": "閉じる"
     }
+  },
+  "watchlist": {
+    "errors": {
+      "updateFailed": "更新できませんでした、再試行してください",
+      "removeFailed": "削除できませんでした、再試行してください"
+    }
   }
 }

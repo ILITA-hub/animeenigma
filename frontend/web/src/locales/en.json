@@ -712,5 +712,11 @@
       "defaultTitle": "Service status update",
       "dismiss": "Dismiss"
     }
+  },
+  "watchlist": {
+    "errors": {
+      "updateFailed": "Couldn't update — please retry",
+      "removeFailed": "Couldn't remove — please retry"
+    }
   }
 }
