@@ -1008,7 +1008,6 @@ import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } 
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
-import { useDebounceFn } from '@vueuse/core'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 import { useContextMenu } from '@/composables/useContextMenu'
