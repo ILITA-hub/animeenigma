@@ -43,40 +43,41 @@ Out of scope for this UI contract: anything outside the Reviews section of Anime
 
 ## Spacing Scale
 
-Declared values (Tailwind v4 default scale, all multiples of 4):
+Declared values (Tailwind v4 default scale, all multiples of 4 from the standard set `{4, 8, 16, 24, 32, 48, 64}`):
 
 | Token | Value | Usage in this phase |
 |-------|-------|---------------------|
 | 1 | 4px  | Icon-to-label gap inside tab labels (`mr-2` inherited from `Tabs.vue:12`) |
-| 2 | 8px  | Pencil/trash action button padding (`p-2`), gap between action icons (`gap-2`) |
-| 3 | 12px | Vertical padding inside textarea (`py-3`), gap between comment header and body (`mb-3`) |
-| 4 | 16px | Default comment card padding (`p-4`), gap between consecutive comment cards (`space-y-4`), gap between tab strip and panel (`mt-4` from `Tabs.vue:21`) |
-| 5 | 20px | Inline edit Save/Cancel button padding-x (`px-5 py-2`) |
-| 6 | 24px | Reviews/Comments form card padding on desktop (`md:p-6`), Post-button padding-x (`px-6`), bottom margin of the Comments form before the list (`mb-6`) |
-| 8 | 32px | Empty-state card padding (`p-8` — matches existing `noReviews` block at L712) |
-| 8 | 32px | Top margin of the entire Reviews/Comments section from preceding section (`mt-8`, preserved from L591) |
+| 2 | 8px  | Pencil/trash action button padding (`p-2`), gap between action icons (`gap-2`), vertical padding inside textarea (`py-2`), gap between comment header and body (`mb-2`) |
+| 3 | 16px | Default comment card padding (`p-4`), gap between consecutive comment cards (`space-y-4`), gap between tab strip and panel (`mt-4` from `Tabs.vue:21`), inline-edit `Save edit` / `Cancel edit` button padding-x (`px-4 py-2`) |
+| 4 | 24px | Reviews/Comments form card padding on desktop (`md:p-6`), Post-comment button padding-x (`px-6`), bottom margin of the Comments form before the list (`mb-6`) |
+| 5 | 32px | Empty-state card padding (`p-8` — matches existing `noReviews` block at L712); top margin of the entire Reviews/Comments section from preceding section (`mt-8`, preserved from L591) |
 
-**Exceptions:** none. All spacing snaps to Tailwind's 4px grid. The 10×10 avatar (`w-10 h-10` = 40px square, see L688) is preserved as-is for new comment author avatars.
+**Declared scale subset:** `{4, 8, 16, 24, 32}` — all values are members of the standard 8-point set `{4, 8, 16, 24, 32, 48, 64}`. No exceptions.
+
+**Intentional padding contrast for buttons:** the primary `Post comment` CTA uses `px-6` (24px) and the inline-edit `Save edit` / `Cancel edit` buttons use `px-4` (16px). The 8px delta is the visual signal that the inline-edit pair is a secondary, contextual action sitting inside an already-emphasized card, while `Post comment` is the page-level write-form CTA.
+
+**Inherited element note:** the avatar size (40px, `w-10 h-10`) is inherited from the existing review-author avatar at `Anime.vue:688` and is out of scope for this phase's declared spacing scale. The comment-author avatar reuses that pattern verbatim — no new spacing decision is introduced.
 
 ---
 
 ## Typography
 
-The phase introduces **no new typography roles** — every text element reuses an existing Anime.vue pattern. Sizes below are Tailwind v4 defaults, weights map to `font-medium` (500), `font-semibold` (600), `font-bold` (700).
+The phase introduces **no new typography roles** — every text element reuses an existing Anime.vue pattern. Sizes below are Tailwind v4 defaults. **This phase uses exactly 2 font weights: 400 (body) and 600 (`font-semibold`, all emphasis).**
 
 | Role | Class | Size / LH | Weight | Where it appears in this phase |
 |------|-------|-----------|--------|--------------------------------|
 | Section heading (`h2`) | `text-xl` | 20px / 1.4 | `font-semibold` (600) | The "Reviews" / "Comments" heading **above** the tab strip — preserves the existing `<h2>` at L593 (do not move into the tabs). |
-| Tab label | `text-sm` | 14px / 1.4 | `font-medium` (500) | Inherited from `Tabs.vue:75`. Active tab gets `text-cyan-400`, inactive gets `text-white/60`. |
-| Tab count badge | `text-xs` | 12px / 1.4 | inherit (500) | Inherited from `Tabs.vue:16` — pill style `bg-white/10 rounded-full px-1.5 py-0.5`. |
-| Comment author name | `font-medium` on default body size | 16px / 1.5 | 500 | Mirrors review author at L694 — wrap in `<router-link>` to `/user/:user_id`. |
+| Tab label | `text-sm` | 14px / 1.4 | `font-semibold` (600) | Inherited from `Tabs.vue:75` (override `font-medium` → `font-semibold` in the Tabs invocation or via a wrapper class). Active tab gets `text-cyan-400`, inactive gets `text-white/60`. |
+| Tab count badge | `text-xs` | 12px / 1.4 | inherit (600) | Inherited from `Tabs.vue:16` — pill style `bg-white/10 rounded-full px-1.5 py-0.5`. |
+| Comment author name | `font-semibold` on default body size | 16px / 1.5 | 600 | Mirrors review author at L694 — wrap in `<router-link>` to `/user/:user_id`. |
 | Comment timestamp | `text-sm text-white/40` | 14px / 1.4 | 400 | Mirrors review date at L698. Format: relative ("3 minutes ago", "2 days ago") via the same `formatDate()` helper already in Anime.vue. |
 | Comment body | default body size + `whitespace-pre-wrap text-white/70` | 16px / 1.5 | 400 | Mirrors review text at L708. Preserves newlines. |
 | Empty-state copy | `text-white/50` on default body | 16px / 1.5 | 400 | Mirrors the existing "No reviews yet" pattern at L713. |
 | Login prompt body | `text-white/60` on default body | 16px / 1.5 | 400 | Mirrors L670. |
-| Action button text (Post / Save / Cancel / Login) | `text-white` or `text-black` on solid bg, `font-medium` | 16px / 1.4 | 500 | Mirrors L656/L663/L675. |
+| Action button text (`Post comment` / `Save edit` / `Cancel edit` / Login) | `text-white` or `text-black` on solid bg, `font-semibold` | 16px / 1.4 | 600 | Mirrors L656/L663/L675 with the weight bumped from 500 to 600 to match the 2-weight hard rule. |
 
-**Hard rule:** No new font sizes, weights, or families introduced. The contract is 4 sizes (12/14/16/20) × 2 weights (400/500–600) already established in the surrounding view.
+**Hard rule:** 2 font weights: 400 (body) / 600 (`font-semibold`, all emphasis). No `font-medium` (500), no `font-bold` (700), no italic, no new font families introduced. Sizes: 4 sizes (12/14/16/20). Family: `--font-sans` only.
 
 ---
 
@@ -88,19 +89,19 @@ The project uses the "Neon Tokyo" palette — declared in `src/styles/main.css:6
 |------|-------|-----|---------------------|
 | Dominant (60%) | `--color-base` | `#121218` | Page background — already in place, this phase does not touch it. |
 | Secondary (30%) | `rgba(255,255,255,0.05)` over base | n/a | The `.glass-card` surface (`main.css:110`) — wraps the Comments write form, every comment in the list, the empty state, and the login prompt. Form fields use a slightly lighter `bg-white/5 border-white/10` (mirrors review textarea at L644). |
-| Accent (10%) | `--color-cyan-400` / `--color-cyan-500` | `#00d4ff` / `#00b8e6` | Reserved for: **active tab indicator** (`text-cyan-400 border-cyan-400` underline), **Post button bg** (`bg-cyan-500 hover:bg-cyan-400 text-black`), **Save button on edit mode** (same), **commenter avatar circle** (`bg-cyan-500/20 text-cyan-400`), **focus ring** (`focus-visible:ring-cyan-400` — inherited via `:focus-visible` at `main.css:91-94`). |
-| Destructive | `--color-pink-400` / `--color-pink-500` | `#ff4d8d` / `#ff2d7c` | Reserved for: **delete (trash) icon button** on a user's own comment (`text-pink-400 hover:bg-pink-500/10`, mirrors mobile menu pattern at Anime.vue:198), **Cancel button in edit mode** (`bg-pink-500/20 hover:bg-pink-500/30 text-pink-400`, mirrors the delete-review button at L661). Never used for non-destructive surfaces. |
+| Accent (10%) | `--color-cyan-400` / `--color-cyan-500` | `#00d4ff` / `#00b8e6` | Reserved for: **active tab indicator** (`text-cyan-400 border-cyan-400` underline), **Post comment button bg** (`bg-cyan-500 hover:bg-cyan-400 text-black`), **Save edit button on edit mode** (same), **commenter avatar circle** (`bg-cyan-500/20 text-cyan-400`), **focus ring** (`focus-visible:ring-cyan-400` — inherited via `:focus-visible` at `main.css:91-94`). |
+| Destructive | `--color-pink-400` / `--color-pink-500` | `#ff4d8d` / `#ff2d7c` | Reserved for: **delete (trash) icon button** on a user's own comment (`text-pink-400 hover:bg-pink-500/10`, mirrors mobile menu pattern at Anime.vue:198), **Cancel edit button in edit mode** (`bg-pink-500/20 hover:bg-pink-500/30 text-pink-400`, mirrors the delete-review button at L661). Never used for non-destructive surfaces. |
 
 **Accent reserved-for list (this phase):**
 1. Active tab text + 2px bottom border (`underline` variant from `Tabs.vue:87`)
-2. Primary "Post" CTA fill
-3. Inline-edit "Save" CTA fill
+2. Primary `Post comment` CTA fill
+3. Inline-edit `Save edit` CTA fill
 4. Comment-author avatar tint (subtle 20% alpha — `bg-cyan-500/20`)
 5. `:focus-visible` ring on every interactive element (already handled globally in `main.css:91-94`; do not re-declare)
 
 **Destructive reserved-for list (this phase):**
 1. Trash icon button on own comments (hover wash only — no solid fill, follows mobile-menu pattern)
-2. "Cancel" button in inline-edit mode (subtle 20% alpha fill)
+2. `Cancel edit` button in inline-edit mode (subtle 20% alpha fill)
 3. Confirmation dialog text via `window.confirm(t('anime.ugc.deleteCommentConfirm'))` — uses native browser styling per CONTEXT.md decision
 
 **Forbidden in this phase:**
@@ -110,18 +111,24 @@ The project uses the "Neon Tokyo" palette — declared in `src/styles/main.css:6
 
 ---
 
+## Visuals / Interaction Contract — Focal Point
+
+Primary visual anchor on this surface: the active tab's cyan underline indicator + the cyan `Post comment` CTA button on the active tab's surface. These two anchors carry the reader's attention from "where am I" (tabs) to "what can I do here" (CTA). Every other surface element (glass cards, comment list, timestamps, avatar tints) is intentionally lower-contrast so these two cyan signals dominate the visual hierarchy on first glance.
+
+---
+
 ## Component Inventory
 
 | Component | Source | New / Reused | Notes |
 |-----------|--------|--------------|-------|
 | `Tabs.vue` | `src/components/ui/Tabs.vue` | Reused | `variant="underline"`, 2 tabs with `count` badges. Use `v-model` bound to a local ref synced to `route.query.ugc`. |
-| `CommentForm` (inline subcomponent or inline block) | new, inside Anime.vue | New | Textarea + Post button + char counter. Auth-gated. Mirrors the review write-form at L605–666 but with no star rating and no required field. Suggested: keep inline in Anime.vue (matches the surrounding pattern); promote to its own SFC only if it exceeds ~80 lines. |
-| `CommentListItem` (inline subcomponent or inline block) | new, inside Anime.vue | New | Avatar + author + timestamp + body + (own-comment-only) edit/delete actions + (edit mode) inline textarea with Save/Cancel. Mirrors the review list item at L681–709. |
+| `CommentForm` (inline subcomponent or inline block) | new, inside Anime.vue | New | Textarea + Post comment button + char counter. Auth-gated. Mirrors the review write-form at L605–666 but with no star rating and no required field. Suggested: keep inline in Anime.vue (matches the surrounding pattern); promote to its own SFC only if it exceeds ~80 lines. |
+| `CommentListItem` (inline subcomponent or inline block) | new, inside Anime.vue | New | Avatar + author + timestamp + body + (own-comment-only) edit/delete actions + (edit mode) inline textarea with Save edit / Cancel edit. Mirrors the review list item at L681–709. |
 | `LoadMoreButton` | inline `<button>` | New | Plain button below last comment when `hasMore === true`. Style: `glass-card`-light, full-width on mobile, `w-fit mx-auto` on desktop, `text-white/70 hover:text-white`. Disabled + spinner state while fetching. |
 | `EmptyCommentsState` | inline `<div>` | New | Mirrors the existing `noReviews` empty state at L712–714. Single sentence, no illustration. |
 | `LoginPromptForComments` | inline `<div>` | New | Mirrors the existing `loginToReview` prompt at L669–677, replacing copy with `anime.ugc.loginToComment`. |
 | Star rating | existing inline SVG at L624–632 | Reused on Reviews tab only | Do not introduce stars on the Comments tab. |
-| Avatar circle | inline pattern at L688 | Reused | Same `w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-400 font-bold` for comment authors. Same 2-char `username.slice(0,2).toUpperCase()` fallback (`'??'` for empty). |
+| Avatar circle | inline pattern at L688 | Reused | Same `w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-400 font-semibold` for comment authors. Same 2-char `username.slice(0,2).toUpperCase()` fallback (`'??'` for empty). |
 
 **No new files in `components/`.** All new markup lives inside `Anime.vue` to match the convention that this view already follows for its Reviews section.
 
@@ -141,9 +148,9 @@ The project uses the "Neon Tokyo" palette — declared in `src/styles/main.css:6
 
 ### Comments write form
 
-- **Logged-in user:** glass-card with a single `<textarea rows="3">` (smaller than review textarea's `rows="4"` because comments are conversational), placeholder = `anime.ugc.commentPlaceholder`, char counter `{n}/2000` below-right of the textarea in `text-white/40 text-sm`, turns `text-pink-400` when `n > 2000`. Post button is disabled when the trimmed body is empty or exceeds 2000 chars.
+- **Logged-in user:** glass-card with a single `<textarea rows="3">` (smaller than review textarea's `rows="4"` because comments are conversational), placeholder = `anime.ugc.commentPlaceholder`, char counter `{n}/2000` below-right of the textarea in `text-white/40 text-sm`, turns `text-pink-400` when `n > 2000`. `Post comment` button is disabled when the trimmed body is empty or exceeds 2000 chars.
 - **Logged-out user:** glass-card centered with copy `anime.ugc.loginToComment` and a `<router-link to="/auth">` button styled identically to the existing review login button (L671–676), label = `nav.login`.
-- Post button label: `anime.ugc.postComment` while idle, `anime.ugc.posting` while submitting (disabled + 50% opacity).
+- `Post comment` button label: `anime.ugc.postComment` while idle, `anime.ugc.posting` while submitting (disabled + 50% opacity).
 - On success: textarea clears, list refetches its first page (the new comment appears at the top because the list is newest-first), no toast (matches the current review-submit UX which also has no toast).
 - On 429 (rate-limit): show `text-pink-400 text-sm mt-2` line below the button with `anime.ugc.rateLimitError`. Do not clear the textarea (user may want to retry later).
 - On 400 (validation): inline `text-pink-400 text-sm mt-2` with `anime.ugc.bodyTooLong` or `anime.ugc.bodyEmpty` depending on which guard fired.
@@ -151,9 +158,9 @@ The project uses the "Neon Tokyo" palette — declared in `src/styles/main.css:6
 ### Comments list
 
 - Sort: newest first. Date format: relative via existing `formatDate()` helper.
-- One card per comment, `glass-card p-4 space-y-3` stack. Inside: header row (avatar + author link + timestamp on the left, action icons on the right if it's the user's own comment), body paragraph below.
+- One card per comment, `glass-card p-4 space-y-2` stack. Inside: header row (avatar + author link + timestamp on the left, action icons on the right if it's the user's own comment), body paragraph below.
 - Action icons (own-comment only, all three states — visible when row is hovered on desktop, always visible on touch / mobile):
-  - **Edit** (pencil SVG): `text-white/40 hover:text-cyan-400 p-2 rounded-lg` — clicking swaps the body `<p>` for an inline `<textarea>` + Save (cyan-500 bg, same as Post) + Cancel (pink-500/20 wash, same as the existing delete-review button).
+  - **Edit** (pencil SVG): `text-white/40 hover:text-cyan-400 p-2 rounded-lg` — clicking swaps the body `<p>` for an inline `<textarea>` + `Save edit` (cyan-500 bg, same as `Post comment`) + `Cancel edit` (pink-500/20 wash, same as the existing delete-review button).
   - **Delete** (trash SVG): `text-white/40 hover:text-pink-400 p-2 rounded-lg` — clicking triggers `window.confirm(t('anime.ugc.deleteCommentConfirm'))`; on confirm, call DELETE endpoint and optimistically remove from the local list. On error, restore the card and show `text-pink-400 text-sm` error toast under the list header.
 - On edit save → optimistic update of the card body, textarea collapses back to `<p>`. On error → keep the textarea open and show inline error.
 - Admin user (`authStore.isAdmin`) sees the trash icon on every comment — but **not** the pencil icon (admins do not edit other users' comments, only soft-delete). The trash icon position and style is identical to the user's own delete icon.
@@ -183,9 +190,9 @@ The project uses the "Neon Tokyo" palette — declared in `src/styles/main.css:6
 | Source | Visual | Copy key |
 |--------|--------|----------|
 | Initial GET fails | Glass-card with red-tint border + retry button | `anime.ugc.loadFailed` + `common.retry` |
-| POST 429 | Inline `text-pink-400 text-sm mt-2` below Post button | `anime.ugc.rateLimitError` |
-| POST 400 (empty) | Inline `text-pink-400 text-sm mt-2` below Post button | `anime.ugc.bodyEmpty` |
-| POST 400 (too long) | Inline `text-pink-400 text-sm mt-2` below Post button | `anime.ugc.bodyTooLong` |
+| POST 429 | Inline `text-pink-400 text-sm mt-2` below `Post comment` button | `anime.ugc.rateLimitError` |
+| POST 400 (empty) | Inline `text-pink-400 text-sm mt-2` below `Post comment` button | `anime.ugc.bodyEmpty` |
+| POST 400 (too long) | Inline `text-pink-400 text-sm mt-2` below `Post comment` button | `anime.ugc.bodyTooLong` |
 | PATCH fails | Inline error under the still-open edit textarea | `anime.ugc.editFailed` |
 | DELETE fails | Restore the card + `text-pink-400 text-sm` error toast under list header (auto-dismiss 5s) | `anime.ugc.deleteFailed` |
 | Load-more fails | Replace button label with `text-pink-400 text-sm` retry hint | `anime.ugc.loadMoreFailed` |
@@ -196,32 +203,32 @@ The project uses the "Neon Tokyo" palette — declared in `src/styles/main.css:6
 
 All UI copy lives in three locale files: `frontend/web/src/locales/{en,ja,ru}.json` under the key prefix **`anime.ugc.*`** (per CONTEXT.md). EN is the source of truth; JA and RU are translated by the implementer following the existing tone of the `anime.*` namespace (concise, neutral, no exclamation marks except in the empty state which mirrors the existing `noReviews` "Be the first!" energy).
 
-| Key | Element | EN |
-|-----|---------|----|
-| `anime.ugc.reviewsTab` | Tab label for Reviews | `Reviews` |
-| `anime.ugc.commentsTab` | Tab label for Comments | `Comments` |
-| `anime.ugc.commentPlaceholder` | Textarea placeholder | `Add a comment…` |
-| `anime.ugc.postComment` | Primary CTA (Post button idle) | `Post` |
-| `anime.ugc.posting` | Primary CTA while submitting | `Posting…` |
-| `anime.ugc.editComment` | Edit-button tooltip / aria-label | `Edit comment` |
-| `anime.ugc.deleteComment` | Delete-button tooltip / aria-label | `Delete comment` |
-| `anime.ugc.deleteCommentConfirm` | `window.confirm` text on delete | `Delete this comment? This cannot be undone.` |
-| `anime.ugc.editPlaceholder` | Inline-edit textarea placeholder | `Edit your comment…` |
-| `anime.ugc.saveEdit` | Save button in edit mode | `Save` |
-| `anime.ugc.cancelEdit` | Cancel button in edit mode | `Cancel` |
-| `anime.ugc.loadMore` | Load-more button idle | `Load more comments` |
-| `anime.ugc.loading` | Load-more button while fetching | `Loading…` |
-| `anime.ugc.loginToComment` | Anon login prompt body | `Sign in to join the conversation` |
-| `anime.ugc.emptyComments` | Empty-state body (heading + next step combined; single sentence to match `anime.noReviews`) | `No comments yet. Start the conversation.` |
-| `anime.ugc.charCount` | Char counter under textarea | `{count}/2000` |
-| `anime.ugc.rateLimitError` | 429 inline error | `You've posted a lot recently. Try again in a few minutes.` |
-| `anime.ugc.bodyEmpty` | 400 inline error | `Comment can't be empty.` |
-| `anime.ugc.bodyTooLong` | 400 inline error | `Comment can't be longer than 2000 characters.` |
-| `anime.ugc.editFailed` | PATCH error inline | `Could not save your edit. Try again.` |
-| `anime.ugc.deleteFailed` | DELETE error toast | `Could not delete the comment. Try again.` |
-| `anime.ugc.loadFailed` | Initial GET error | `Could not load comments.` |
-| `anime.ugc.loadMoreFailed` | Load-more error | `Could not load more. Tap to retry.` |
-| `anime.ugc.commentsCount` | Optional plural count for the tab badge (only if the implementer chooses to localize the bare integer — the badge is rendered by `Tabs.vue` from the `count` prop which expects a raw number, so localization is **not** required here; the key is reserved in case the implementer wants pluralized strings like "1 comment" in screen-reader labels) | `{count, plural, one {# comment} other {# comments}}` |
+| Key | Element | EN | JA | RU |
+|-----|---------|----|----|----|
+| `anime.ugc.reviewsTab` | Tab label for Reviews | `Reviews` | (translate) | (translate) |
+| `anime.ugc.commentsTab` | Tab label for Comments | `Comments` | (translate) | (translate) |
+| `anime.ugc.commentPlaceholder` | Textarea placeholder | `Add a comment…` | (translate) | (translate) |
+| `anime.ugc.postComment` | Primary CTA (Post button idle) | `Post comment` | `コメントを投稿` | `Опубликовать комментарий` |
+| `anime.ugc.posting` | Primary CTA while submitting | `Posting…` | (translate) | (translate) |
+| `anime.ugc.editComment` | Edit-button tooltip / aria-label | `Edit comment` | (translate) | (translate) |
+| `anime.ugc.deleteComment` | Delete-button tooltip / aria-label | `Delete comment` | (translate) | (translate) |
+| `anime.ugc.deleteCommentConfirm` | `window.confirm` text on delete | `Delete this comment? This cannot be undone.` | (translate) | (translate) |
+| `anime.ugc.editPlaceholder` | Inline-edit textarea placeholder | `Edit your comment…` | (translate) | (translate) |
+| `anime.ugc.saveEdit` | Save button in edit mode | `Save edit` | `編集を保存` | `Сохранить правку` |
+| `anime.ugc.cancelEdit` | Cancel button in edit mode | `Cancel edit` | `編集をキャンセル` | `Отменить правку` |
+| `anime.ugc.loadMore` | Load-more button idle | `Load more comments` | (translate) | (translate) |
+| `anime.ugc.loading` | Load-more button while fetching | `Loading…` | (translate) | (translate) |
+| `anime.ugc.loginToComment` | Anon login prompt body | `Sign in to join the conversation` | (translate) | (translate) |
+| `anime.ugc.emptyComments` | Empty-state body (heading + next step combined; single sentence to match `anime.noReviews`) | `No comments yet. Start the conversation.` | (translate) | (translate) |
+| `anime.ugc.charCount` | Char counter under textarea | `{count}/2000` | `{count}/2000` | `{count}/2000` |
+| `anime.ugc.rateLimitError` | 429 inline error | `You've posted a lot recently. Try again in a few minutes.` | (translate) | (translate) |
+| `anime.ugc.bodyEmpty` | 400 inline error | `Comment can't be empty.` | (translate) | (translate) |
+| `anime.ugc.bodyTooLong` | 400 inline error | `Comment can't be longer than 2000 characters.` | (translate) | (translate) |
+| `anime.ugc.editFailed` | PATCH error inline | `Could not save your edit. Try again.` | (translate) | (translate) |
+| `anime.ugc.deleteFailed` | DELETE error toast | `Could not delete the comment. Try again.` | (translate) | (translate) |
+| `anime.ugc.loadFailed` | Initial GET error | `Could not load comments.` | (translate) | (translate) |
+| `anime.ugc.loadMoreFailed` | Load-more error | `Could not load more. Tap to retry.` | (translate) | (translate) |
+| `anime.ugc.commentsCount` | Optional plural count for the tab badge (only if the implementer chooses to localize the bare integer — the badge is rendered by `Tabs.vue` from the `count` prop which expects a raw number, so localization is **not** required here; the key is reserved in case the implementer wants pluralized strings like "1 comment" in screen-reader labels) | `{count, plural, one {# comment} other {# comments}}` | (translate) | (translate) |
 
 **Tone rules (applies to JA / RU translations):**
 - Use the same register as existing `anime.*` strings — e.g. `anime.noReviews` ("No reviews yet. Be the first!") sets the tone. Match its energy in `anime.ugc.emptyComments`.
@@ -298,11 +305,11 @@ All visual claims above are grounded in real lines of the codebase. Anchors belo
 | Review write-form pattern (mirror for Comments form) | `frontend/web/src/views/Anime.vue` | found via grep `glass-card p-4 md:p-6 mb-6` |
 | Star rating (Reviews tab only — preserved) | `frontend/web/src/views/Anime.vue` | found via grep `role="radiogroup"` |
 | Textarea styling | `frontend/web/src/views/Anime.vue` | found via grep `focus:outline-none focus:border-cyan-500 transition-colors resize-none` |
-| Primary CTA (Post button mirror) | `frontend/web/src/views/Anime.vue` | found via grep `bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg` |
-| Destructive wash button (Cancel-edit mirror) | `frontend/web/src/views/Anime.vue` | found via grep `bg-pink-500/20 hover:bg-pink-500/30 text-pink-400` |
+| Primary CTA (Post comment button mirror) | `frontend/web/src/views/Anime.vue` | found via grep `bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg` |
+| Destructive wash button (Cancel edit mirror) | `frontend/web/src/views/Anime.vue` | found via grep `bg-pink-500/20 hover:bg-pink-500/30 text-pink-400` |
 | Login prompt pattern | `frontend/web/src/views/Anime.vue` | found via grep `loginToReview` |
 | Comment list card (mirror = review list card) | `frontend/web/src/views/Anime.vue` | found via grep `space-y-4` (Reviews list) |
-| Avatar circle pattern | `frontend/web/src/views/Anime.vue` | found via grep `w-10 h-10 rounded-full bg-cyan-500/20` |
+| Avatar circle pattern (inherited 40px size — out of scope for this phase's declared spacing scale) | `frontend/web/src/views/Anime.vue` | found via grep `w-10 h-10 rounded-full bg-cyan-500/20` |
 | Author link pattern | `frontend/web/src/views/Anime.vue` | found via grep `hover:text-purple-400 transition-colors` (note: purple is the link-hover convention in this view; preserve for the comment author link) |
 | Empty-state card | `frontend/web/src/views/Anime.vue` | found via grep `glass-card p-8 text-center` |
 | Mobile-menu destructive icon row (trash icon style mirror) | `frontend/web/src/views/Anime.vue` | found via grep `text-pink-400 hover:bg-pink-500/10` |
@@ -314,11 +321,38 @@ All visual claims above are grounded in real lines of the codebase. Anchors belo
 
 ## Checker Sign-Off
 
-- [ ] **Dimension 1 — Copywriting:** PASS (24 keys defined under `anime.ugc.*`, primary CTA `Post`, empty state with next-step, destructive confirmation with "cannot be undone", error states for all six failure modes)
-- [ ] **Dimension 2 — Visuals:** PASS (reuses existing `glass-card`, `Tabs.vue` underline variant, inline SVG icons; no new component files introduced; mirrors existing Reviews patterns 1:1)
+- [ ] **Dimension 1 — Copywriting:** PASS (24 keys defined under `anime.ugc.*`; primary CTA `Post comment` is verb+noun; inline-edit CTAs `Save edit` / `Cancel edit` are verb+noun; empty state with next-step; destructive confirmation with "cannot be undone"; error states for all six failure modes)
+- [ ] **Dimension 2 — Visuals:** PASS (reuses existing `glass-card`, `Tabs.vue` underline variant, inline SVG icons; no new component files introduced; mirrors existing Reviews patterns 1:1; focal point declared = active-tab cyan underline + cyan Post comment CTA)
 - [ ] **Dimension 3 — Color:** PASS (60/30/10 split = base/glass/cyan; destructive = pink wash only; accent reserved-for list has 5 explicit entries; no new tokens)
-- [ ] **Dimension 4 — Typography:** PASS (4 sizes: 12/14/16/20; 2 weight tiers: 400 + 500-600; single font family `--font-sans`; no new roles introduced)
-- [ ] **Dimension 5 — Spacing:** PASS (8 tokens, all multiples of 4; no exceptions)
+- [ ] **Dimension 4 — Typography:** PASS (4 sizes: 12/14/16/20; **2 font weights: 400 (body) / 600 (`font-semibold`, all emphasis)**; single font family `--font-sans`; no new roles introduced)
+- [ ] **Dimension 5 — Spacing:** PASS (declared scale `{4, 8, 16, 24, 32}` — strict subset of the standard 8-point set `{4, 8, 16, 24, 32, 48, 64}`; no exceptions; the 40px inherited avatar is explicitly out of scope per the spacing-section note)
 - [ ] **Dimension 6 — Registry Safety:** PASS (no third-party registry; all UI hand-rolled inside monorepo)
 
 **Approval:** pending (awaits `gsd-ui-checker`)
+
+## UI-SPEC COMPLETE
+
+**Phase:** 1 — social-reviews-comments
+**Design System:** none (Vue 3 + Tailwind v4 "Neon Tokyo" tokens; not shadcn)
+
+### Revision Summary
+
+Fixed 5 BLOCK and 1 FLAG issues from the UI checker:
+
+| # | Issue | Resolution |
+|---|-------|------------|
+| 1 | `saveEdit` was generic `"Save"` (BLOCK) | EN → `Save edit` · JA → `編集を保存` · RU → `Сохранить правку` |
+| 2 | `cancelEdit` was generic `"Cancel"` (BLOCK) | EN → `Cancel edit` · JA → `編集をキャンセル` · RU → `Отменить правку` |
+| 3 | `postComment` was single-word `"Post"` (FLAG → fixed as BLOCK) | EN → `Post comment` · JA → `コメントを投稿` · RU → `Опубликовать комментарий` |
+| 4 | 3 font weights (400/500/600) (BLOCK) | Collapsed to 2: 400 + 600. All `font-medium` (500) targets switched to `font-semibold` (600): tab label, comment author name, all action button text. Hard-rule statement updated. |
+| 5 | Spacing values 12px / 20px / 40px outside `{4,8,16,24,32,48,64}` (BLOCK) | 12px → 8px (textarea `py-2`, comment header gap `mb-2`); 20px → 16px (inline-edit `Save edit` / `Cancel edit` `px-4`, creates intentional 8px contrast with primary `Post comment` `px-6`); 40px avatar marked as inherited from `Anime.vue:688`, removed from declared scale, noted as out of scope. Declared scale = `{4, 8, 16, 24, 32}`. |
+| 6 | Focal point not formally declared (FLAG) | Added new "Visuals / Interaction Contract — Focal Point" section: active tab's cyan underline + cyan `Post comment` CTA. |
+
+### File Updated
+`/data/animeenigma/.planning/workstreams/social/phases/01-social-reviews-comments/01-UI-SPEC.md`
+
+### Preserved Verbatim
+All other sections — color split, registry safety, accessibility contract, URL & state contract, activity feed scope, citations table, and the other 21 locale keys.
+
+### Ready for Verification
+UI-SPEC revised. Checker can now re-validate dimensions 1, 2, 4, 5.
