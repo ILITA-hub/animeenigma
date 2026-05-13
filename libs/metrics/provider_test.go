@@ -69,6 +69,80 @@ func TestParserZeroMatchTotal_IncrementsCorrectly(t *testing.T) {
 	}
 }
 
+// TestParserUnplayableTotal_IncrementsCorrectly verifies the SCRAPER-HEAL-06
+// counter: name `parser_unplayable_total`, labels `{provider, server, reason}`,
+// and that .Inc() bumps the value by exactly 1.0.
+func TestParserUnplayableTotal_IncrementsCorrectly(t *testing.T) {
+	ParserUnplayableTotal.Reset()
+	before := testutil.ToFloat64(ParserUnplayableTotal.WithLabelValues("gogoanime", "vibeplayer", "ad_decoy"))
+	ParserUnplayableTotal.WithLabelValues("gogoanime", "vibeplayer", "ad_decoy").Inc()
+	after := testutil.ToFloat64(ParserUnplayableTotal.WithLabelValues("gogoanime", "vibeplayer", "ad_decoy"))
+	if d := after - before; d != 1.0 {
+		t.Fatalf("ParserUnplayableTotal delta = %v; want 1.0", d)
+	}
+
+	name, labels := descMeta(t, ParserUnplayableTotal)
+	if name != "parser_unplayable_total" {
+		t.Errorf("metric name = %q; want %q", name, "parser_unplayable_total")
+	}
+	wantLabels := map[string]bool{"provider": true, "server": true, "reason": true}
+	if !labelSetEqual(labels, wantLabels) {
+		t.Errorf("labels = %v; want %v", labels, wantLabels)
+	}
+}
+
+// TestParserAdDecoyTotal_IncrementsCorrectly verifies the SCRAPER-HEAL-06
+// dedicated ad-decoy subset counter: name `parser_ad_decoy_total`, labels
+// `{provider, server}`, and .Inc() bumps by 1.0.
+func TestParserAdDecoyTotal_IncrementsCorrectly(t *testing.T) {
+	ParserAdDecoyTotal.Reset()
+	before := testutil.ToFloat64(ParserAdDecoyTotal.WithLabelValues("gogoanime", "vibeplayer"))
+	ParserAdDecoyTotal.WithLabelValues("gogoanime", "vibeplayer").Inc()
+	after := testutil.ToFloat64(ParserAdDecoyTotal.WithLabelValues("gogoanime", "vibeplayer"))
+	if d := after - before; d != 1.0 {
+		t.Fatalf("ParserAdDecoyTotal delta = %v; want 1.0", d)
+	}
+
+	name, labels := descMeta(t, ParserAdDecoyTotal)
+	if name != "parser_ad_decoy_total" {
+		t.Errorf("metric name = %q; want %q", name, "parser_ad_decoy_total")
+	}
+	wantLabels := map[string]bool{"provider": true, "server": true}
+	if !labelSetEqual(labels, wantLabels) {
+		t.Errorf("labels = %v; want %v", labels, wantLabels)
+	}
+}
+
+// TestParserUnplayableTotal_AllReasonsAccepted exercises every value of the
+// libs/streamprobe.ReasonEnum as a `reason` label value. The metrics package
+// does NOT import libs/streamprobe (to keep the package dependency-free and
+// avoid a cyclic potential), so this table test enforces string identity by
+// listing the 7 canonical values verbatim. Any future addition to the enum
+// MUST also be added here.
+func TestParserUnplayableTotal_AllReasonsAccepted(t *testing.T) {
+	ParserUnplayableTotal.Reset()
+	reasons := []string{
+		"playable",
+		"ad_decoy",
+		"zero_match",
+		"status_403",
+		"signed_url_expired",
+		"cdn_unreachable",
+		"empty_response",
+	}
+	for _, reason := range reasons {
+		reason := reason
+		t.Run(reason, func(t *testing.T) {
+			c := ParserUnplayableTotal.WithLabelValues("gogoanime", "vibeplayer", reason)
+			if c == nil {
+				t.Fatalf("WithLabelValues(provider=gogoanime, server=vibeplayer, reason=%q) returned nil", reason)
+			}
+			// Must not panic.
+			c.Inc()
+		})
+	}
+}
+
 // --- helpers ----------------------------------------------------------------
 
 // descMeta extracts (FQName, labelNames) from any collector via Describe().
