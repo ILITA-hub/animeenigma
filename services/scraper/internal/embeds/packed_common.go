@@ -110,6 +110,15 @@ var hls2Regex = regexp.MustCompile(`"hls2"\s*:\s*"(https?://[^"]+\.m3u8[^"]*)"`)
 // Name implements domain.EmbedExtractor.
 func (e *packedExtractor) Name() string { return e.name }
 
+// Hosts implements embeds.HostingExtractor — returns the lowercase host
+// allowlist (StreamHG: ["otakuhg.site"], Earnvids: ["otakuvid.online"]).
+// Used by main.go to build the gogoanime priority host→name map.
+func (e *packedExtractor) Hosts() []string {
+	out := make([]string, len(e.hosts))
+	copy(out, e.hosts)
+	return out
+}
+
 // Matches reports whether embedURL is in this extractor's host allowlist.
 // Match policy: host equality OR strict subdomain. Substring matches in path
 // or query are NOT matched. T-18-14 / T-18-15.

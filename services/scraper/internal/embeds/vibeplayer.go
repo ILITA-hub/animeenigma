@@ -101,6 +101,15 @@ func NewVibePlayerExtractor() *VibePlayerExtractor {
 // Name implements domain.EmbedExtractor.
 func (e *VibePlayerExtractor) Name() string { return "vibeplayer" }
 
+// Hosts implements embeds.HostingExtractor — returns the lowercase host
+// allowlist (["vibeplayer.site"] as of Phase 18). Used by main.go to
+// build the gogoanime priority host→name map.
+func (e *VibePlayerExtractor) Hosts() []string {
+	out := make([]string, len(vibePlayerHosts))
+	copy(out, vibePlayerHosts)
+	return out
+}
+
 // Matches reports whether embedURL points to vibeplayer.site (or a strict
 // subdomain). T-18-14 / T-18-15.
 func (e *VibePlayerExtractor) Matches(embedURL string) bool {

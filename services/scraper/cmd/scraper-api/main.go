@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -138,13 +139,43 @@ func main() {
 		domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
 	)
 	gogoanimeMalsync := gogoanime.NewMalSyncClient(redisCache)
+
+	// Phase 21 SCRAPER-HEAL-03: build the host→extractor-name map +
+	// validate SCRAPER_SERVER_PRIORITY against the known-extractor set
+	// BEFORE constructing the gogoanime.Provider. Fail-fast on typos so
+	// boot logs surface the typo'd name (CONTEXT.md §risks: "Server-
+	// priority env typo silently demotes a real server").
+	gogoanimeExtractors := []embeds.HostingExtractor{
+		vibeplayerExtractor, streamhgExtractor, earnvidsExtractor,
+	}
+	hostExtractor := map[string]string{}
+	knownExtractorNames := make([]string, 0, len(gogoanimeExtractors))
+	for _, ext := range gogoanimeExtractors {
+		knownExtractorNames = append(knownExtractorNames, ext.Name())
+		for _, h := range ext.Hosts() {
+			hostExtractor[strings.ToLower(h)] = ext.Name()
+		}
+	}
+	if err := gogoanime.ValidatePriorityList(cfg.Gogoanime.ServerPriority, knownExtractorNames); err != nil {
+		log.Fatalw("invalid SCRAPER_SERVER_PRIORITY", "error", err,
+			"configured", cfg.Gogoanime.ServerPriority,
+			"known", knownExtractorNames)
+	}
+	log.Infow("gogoanime server priority configured",
+		"priority", cfg.Gogoanime.ServerPriority,
+		"known_extractors", knownExtractorNames)
+
 	gogoanimeProvider, err := gogoanime.New(gogoanime.Deps{
-		BaseURL: cfg.Gogoanime.BaseURL,
-		HTTP:    gogoanimeBaseHTTP,
-		Embeds:  registry,
-		MalSync: gogoanimeMalsync,
-		Cache:   redisCache,
-		Log:     log,
+		BaseURL:        cfg.Gogoanime.BaseURL,
+		HTTP:           gogoanimeBaseHTTP,
+		Embeds:         registry,
+		MalSync:        gogoanimeMalsync,
+		Cache:          redisCache,
+		Log:            log,
+		ServerPriority: cfg.Gogoanime.ServerPriority,
+		HostExtractor:  hostExtractor,
+		// Probe nil → New() defaults to libs/streamprobe.Probe.
+		Probe: nil,
 	})
 	if err != nil {
 		log.Fatalw("failed to construct Gogoanime provider", "error", err)
