@@ -46,6 +46,13 @@
     "pinBadge": "PINNED",
     "pinReason": {
       "becauseYouFinished": "{name}を観終わったので"
+    },
+    "reason": {
+      "s1": "あなたのトップピックに類似",
+      "s2": "ジャンルから",
+      "s3": "トレンド",
+      "s4": "高評価",
+      "s5": "今季の新作"
     }
   },
   "card": {

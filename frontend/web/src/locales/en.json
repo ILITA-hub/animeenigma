@@ -46,6 +46,13 @@
     "pinBadge": "PINNED",
     "pinReason": {
       "becauseYouFinished": "Because you finished {name}"
+    },
+    "reason": {
+      "s1": "Like your top picks",
+      "s2": "By genres",
+      "s3": "Trending",
+      "s4": "Highly rated",
+      "s5": "Fresh this season"
     }
   },
   "card": {
