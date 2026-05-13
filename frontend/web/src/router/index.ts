@@ -111,12 +111,15 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, from, savedPosition) {
     if (savedPosition) {
       return savedPosition
-    } else {
-      return { top: 0 }
     }
+    // Same route, only query/hash changed (e.g. ?ugc= tab switch) — preserve scroll position
+    if (to.path === from.path) {
+      return false
+    }
+    return { top: 0 }
   }
 })
 
