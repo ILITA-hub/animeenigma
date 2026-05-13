@@ -253,6 +253,13 @@ export const userApi = {
     apiClient.get('/users/continue-watching', {
       params: typeof limit === 'number' ? { limit } : undefined,
     }),
+  // Phase 9 (UX-16) — bulk per-card progress map. JWT-protected; ids capped
+  // at 50 server-side. Returns { [animeId]: ProgressEntry } for animes the
+  // user has progress on (missing animes omitted).
+  getAnimeProgress: (ids: string[]) =>
+    apiClient.get('/users/anime-progress', {
+      params: { ids: ids.join(',') },
+    }),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
   importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),
