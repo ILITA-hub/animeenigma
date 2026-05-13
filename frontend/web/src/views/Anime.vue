@@ -268,8 +268,17 @@
         </div>
       </div>
 
+      <!-- Phase 11 / UX-22 — Quick-Nav sticky pill list (desktop floating
+           right column + mobile horizontal pill row). Wrapped in a
+           .non-player-content div so theater-mode (UX-23) hides it
+           alongside the other non-player sections. -->
+      <div class="non-player-content">
+        <AnimeQuickNav />
+      </div>
+
       <!-- Synopsis -->
-      <section class="mt-8">
+      <!-- Phase 11 / UX-22 — section-overview anchor for AnimeQuickNav. -->
+      <section id="section-overview" class="mt-8 non-player-content">
         <h2 class="text-xl font-semibold text-white mb-3">{{ $t('anime.synopsis') }}</h2>
         <div class="glass-card p-4">
           <p
@@ -288,7 +297,14 @@
       </section>
 
       <!-- Video Player Section -->
-      <section class="mt-8" ref="playerSectionRef">
+      <!-- Phase 11 / UX-22 — section-episodes anchor. Phase 11 / UX-23 —
+           data-anime-player-wrapper hook so theater-mode CSS can widen it. -->
+      <section
+        id="section-episodes"
+        data-anime-player-wrapper="true"
+        class="mt-8"
+        ref="playerSectionRef"
+      >
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
@@ -604,7 +620,8 @@
       </section>
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
-      <section class="mt-8">
+      <!-- Phase 11 / UX-22 — section-comments anchor for AnimeQuickNav. -->
+      <section id="section-comments" class="mt-8 non-player-content">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
@@ -919,7 +936,12 @@
       </section>
 
       <!-- Related Anime -->
-      <section v-if="relatedAnime.length > 0" class="mt-8">
+      <!-- Phase 11 / UX-22 — section-similar anchor for AnimeQuickNav. -->
+      <section
+        v-if="relatedAnime.length > 0"
+        id="section-similar"
+        class="mt-8 non-player-content"
+      >
         <Carousel
           :items="relatedAnime"
           :title="$t('anime.related')"
@@ -977,7 +999,7 @@ import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button, ButtonGroup } from '@/components/ui'
-import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
+import { GenreChip, AnimeCardNew, AnimeContextMenu, AnimeQuickNav } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
