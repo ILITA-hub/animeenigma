@@ -8,7 +8,9 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/streamprobe v0.0.0-00010101000000-000000000000
 	github.com/go-chi/chi/v5 v5.0.12
+	github.com/prometheus/client_golang v1.19.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.9.0
 	gorm.io/driver/sqlite v1.6.0
@@ -32,7 +34,6 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.19.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
@@ -59,4 +60,5 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/httputil => ../../libs/httputil
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
+	github.com/ILITA-hub/animeenigma/libs/streamprobe => ../../libs/streamprobe
 )
