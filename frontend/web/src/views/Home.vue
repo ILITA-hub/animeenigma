@@ -24,6 +24,13 @@
       </div>
     </div>
 
+    <!-- Continue-Watching row (Phase 8 / UX-15 / UA-061). Hidden when
+         anonymous OR when the logged-in user has no in-progress
+         watch_progress rows. The component owns its own v-if gate so
+         we just always mount it here. Placed above the trending row
+         so it claims the top-of-home anchor for logged-in users. -->
+    <ContinueWatchingRow />
+
     <!-- Trending Now Row (Phase 10 — anonymous trending; Phase 11 — switches
          label to "Up Next for you" for logged-in users via row_label_key;
          Phase 13 — adds an S6 pin treatment when recs[0].pinned===true:
@@ -382,6 +389,7 @@ import { SearchAutocomplete } from '@/components/ui'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
+import ContinueWatchingRow from '@/components/home/ContinueWatchingRow.vue'
 
 interface HomeAnime {
   id: string
