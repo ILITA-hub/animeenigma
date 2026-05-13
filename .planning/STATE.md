@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Scraper Self-Healing
-status: verifying
-stopped_at: Phase 23 Plan 23-03 (alerts + maintenance-bot dispatch verify) SHIPPED 2026-05-13. Three Grafana alert rules (ScraperPlayabilityRegression, ScraperAdDecoySurge, ScraperUnplayableSpike) live with provider/server/reason labels routing to maintenance-webhook. Synthetic Pattern 6/7 webhook tests + maintenance-prompt symbol-stability tests + libs/streamprobe-driven reason-coverage test all PASSING under -race. Milestone v3.1 is feature-complete — ready for /gsd-audit-milestone + cleanup.
-last_updated: "2026-05-13T07:40:00.000Z"
-last_activity: 2026-05-13
+status: completed
+stopped_at: "Phase 23 Plan 23-03 (alerts + maintenance verify) SHIPPED 2026-05-13. Three Grafana alert rules live (warning/warning/critical), 11 new tests passing under -race, .claude/maintenance-prompt.md unmodified per D6 (verified by git diff --quiet). Pending user smoke: Task 4 checkpoint — trigger canary, watch Grafana state transition, confirm maintenance-bot Telegram diagnosis."
+last_updated: "2026-05-13T07:46:48.952Z"
+last_activity: 2026-05-13 -- Phase 23 marked complete
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 33
-  completed_plans: 30
-  percent: 91
+  completed_plans: 29
+  percent: 88
 ---
 
 # Project State
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 
 ## Current Position
 
-Phase: 23 (Self-Maintenance Loop) — COMPLETE
+Phase: 23 — COMPLETE
 Plan: 3 of 3 SHIPPED
-Status: Milestone v3.1 feature-complete — ready for /gsd-audit-milestone
-Last activity: 2026-05-13
+Status: Phase 23 complete
+Last activity: 2026-05-13 -- Phase 23 marked complete
 
 ## Shipped Milestones
 
