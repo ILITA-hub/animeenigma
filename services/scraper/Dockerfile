@@ -27,6 +27,7 @@ COPY libs/pagination/go.mod libs/pagination/go.sum* ./libs/pagination/
 COPY libs/animeparser/go.mod libs/animeparser/go.sum* ./libs/animeparser/
 COPY libs/videoutils/go.mod libs/videoutils/go.sum* ./libs/videoutils/
 COPY libs/metrics/go.mod libs/metrics/go.sum* ./libs/metrics/
+COPY libs/streamprobe/go.mod libs/streamprobe/go.sum* ./libs/streamprobe/
 COPY services/auth/go.mod services/auth/go.sum* ./services/auth/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 COPY services/streaming/go.mod services/streaming/go.sum* ./services/streaming/

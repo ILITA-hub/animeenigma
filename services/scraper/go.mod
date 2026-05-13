@@ -59,3 +59,5 @@ replace (
 )
 
 replace github.com/ILITA-hub/animeenigma/libs/cache => ../../libs/cache
+
+replace github.com/ILITA-hub/animeenigma/libs/streamprobe => ../../libs/streamprobe
