@@ -164,6 +164,54 @@ func TestHLSProxyAllowedDomains_Phase16RegressionLocked(t *testing.T) {
 	}
 }
 
+// TestHLSProxyAllowedDomains_HasStreamhgHls3Hosts locks the two hls3 CDN
+// hosts added in Phase 22 / SCRAPER-HEAL-10. Without these the multi-URL
+// fallback shipped in Plan 22-01 returns URLs the streaming service refuses
+// to proxy → user-visible breakage when hls2 signed URLs expire. This is a
+// regression-lock that PREVENTS a future PR from accidentally removing them.
+func TestHLSProxyAllowedDomains_HasStreamhgHls3Hosts(t *testing.T) {
+	required := []string{"managementadvisory.sbs", "exoplanethunting.space"}
+	have := make(map[string]bool, len(HLSProxyAllowedDomains))
+	for _, d := range HLSProxyAllowedDomains {
+		have[d] = true
+	}
+	for _, host := range required {
+		if !have[host] {
+			t.Errorf("HLSProxyAllowedDomains missing hls3 CDN host %q (required by SCRAPER-HEAL-10)", host)
+		}
+	}
+}
+
+// TestIsHLSDomainAllowed_Hls3Hosts exercises the gate behavior for the
+// Phase 22 hls3 CDN hosts. Subdomain match (HasSuffix on "."+allowed),
+// exact match, port-stripping, and the impostor-rejection contract are
+// all pinned. Threat T-22-06 (SSRF expansion) is mitigated by the leading
+// dot in the HasSuffix rule: `evilmanagementadvisory.sbs` does not match
+// `managementadvisory.sbs`.
+func TestIsHLSDomainAllowed_Hls3Hosts(t *testing.T) {
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"managementadvisory.sbs", true},
+		{"cdn.managementadvisory.sbs", true},
+		{"a.b.managementadvisory.sbs", true},
+		{"cdn.managementadvisory.sbs:443", true},
+		{"managementadvisory.com", false},
+		{"evilmanagementadvisory.sbs", false},
+		{"managementadvisory.sbs.attacker.com", false},
+		{"exoplanethunting.space", true},
+		{"x.exoplanethunting.space", true},
+		{"exoplanethunting.org", false},
+		{"exoplanethunting.space:8080", true},
+	}
+	for _, c := range cases {
+		if got := isHLSDomainAllowed(c.host); got != c.want {
+			t.Errorf("isHLSDomainAllowed(%q) = %v; want %v", c.host, got, c.want)
+		}
+	}
+}
+
 // TestIsHLSDomainAllowed_RotatingSubdomains exercises the rotating-subdomain
 // match policy needed by the new StreamHG + Earnvids CDNs (e.g.
 // OkqtSs1gBbNcA8e.premilkyway.com per segment fetch). The existing
