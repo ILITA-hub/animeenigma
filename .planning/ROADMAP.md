@@ -51,7 +51,7 @@
 ### v3.1 Scraper Self-Healing (Phases 21-23) — Planning
 
 - [ ] **Phase 21: Playability Foundation** — `libs/streamprobe/` package (Probe + hardcoded ad-CDN blocklist + Redis-lift TODO), gogoanime server-priority + per-server fallback, Redis winning-server cache, `parser_unplayable_total` + `parser_ad_decoy_total` metrics, scraper `meta.gated` response field, `EnglishPlayer.vue` three-phase loader (EN + RU). Restores production playback by routing around ad-poisoned VibePlayer transparently. See `.planning/phases/21-playability-foundation/21-CONTEXT.md`.
-- [ ] **Phase 22: Provider Robustness** — Multi-URL extraction (`hls2` signed `.m3u8` + `hls3` unsigned `.txt`) in streamhg/earnvids embeds, HLS proxy allowlist additions (`managementadvisory.sbs` + `exoplanethunting.space`), ISS-011 inline incident entry. Adds per-server URL-family fallback. See `.planning/phases/22-provider-robustness/22-CONTEXT.md`.
+- [x] **Phase 22: Provider Robustness** — Multi-URL extraction (`hls2` signed `.m3u8` + `hls3` unsigned `.txt`) in streamhg/earnvids embeds, HLS proxy allowlist additions (`managementadvisory.sbs` + `exoplanethunting.space`), ISS-011 inline incident entry. Adds per-server URL-family fallback. See `.planning/phases/22-provider-robustness/22-CONTEXT.md`. (completed 2026-05-13)
 - [ ] **Phase 23: Self-Maintenance Loop** — Daily 03:00 canary cron (Frieren + One Piece + 3 dynamic from watch_history), `playability_canary_runs_total` metric, Grafana dashboard, three alert rules → existing `services/maintenance` webhook. Maintenance prompt Patterns 6/7 + Scraper Playability Regression section already in place (shipped 2026-05-13 alongside the spec). See `.planning/phases/23-self-maintenance-loop/23-CONTEXT.md`.
 
 ### Next Milestone (TBD)
@@ -188,7 +188,9 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
   2. `libs/videoutils/proxy.go` `HLSProxyAllowedDomains` contains `managementadvisory.sbs` and `exoplanethunting.space` (the hls3 CDN hosts); integration test fetches a synthetic hls3 m3u8 through the HLS proxy and confirms 200 OK passthrough.
   3. End-to-end synthetic: when `hls2` returns 403 (simulated via test fixture), gogoanime `GetStream` falls through to `hls3` via Phase 21's per-server iteration and returns a playable URL.
   4. `docs/issues/README.md` contains an inline `ISS-011: VibePlayer Ad-Decoy Poisoning` entry documenting the PoC 2026-05-13 findings — status `Mitigated` (not Resolved) since root cause (IP-level poisoning) persists; entry sits in Active Issues until WARP recovery (future phase) flips it.
-**Plans**: TBD (estimated 2 plans, single wave — 22-01 multi-URL extraction + allowlist; 22-02 ISS-011 doc)
+**Plans**: 2 plans in 1 wave (parallel — file scopes do not overlap)
+- [x] 22-01-PLAN.md — Wave 1: Multi-URL extraction in streamhg/earnvids (hls2 + hls3) + cold-path Sources iteration in gogoanime.coldPathGated (SCRAPER-HEAL-09)
+- [x] 22-02-hls-proxy-allowlist-and-iss011-PLAN.md — Wave 1: HLS proxy allowlist (managementadvisory.sbs + exoplanethunting.space) + handler-level integration smoke + ISS-011 inline doc entry + /animeenigma-after-update (SCRAPER-HEAL-10, SCRAPER-HEAL-11)
 
 ### Phase 23: Self-Maintenance Loop
 **Goal**: A regression at any upstream site is detected within 24 hours by a daily canary that exercises real production code paths, surfaces a labeled alert into the existing `services/maintenance` bot, and gets dispatched per `.claude/maintenance-prompt.md` Patterns 6/7 — without a human needing to notice.
