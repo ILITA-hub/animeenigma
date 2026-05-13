@@ -4,7 +4,7 @@ workstream: social
 plan: 3
 type: execute
 wave: 2
-depends_on: [1]
+depends_on: [1, 2]
 files_modified:
   - services/player/internal/repo/comment.go
   - services/player/internal/repo/comment_test.go

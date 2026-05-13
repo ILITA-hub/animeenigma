@@ -290,6 +290,23 @@ Reference for Vue+router pattern (from 01-RESEARCH.md Pattern 6):
   <resume-signal>Type "approved" if all 10 verification steps pass with no console errors and no missing-key warnings. If any step fails (visual, functional, locale), describe the symptom and the planner will produce a revision targeting the specific failure mode.</resume-signal>
 </task>
 
+
+<task type="checkpoint:human-action" gate="blocking">
+  <name>Task 6.4: Invoke /animeenigma-after-update to lint, build, redeploy, update changelog, commit, and push</name>
+  <files>frontend/web/public/changelog.json (modified by the skill; not edited directly here)</files>
+  <action>After checkpoint 6.3 is approved, the executor MUST invoke the `/animeenigma-after-update` slash skill. The skill is interactive — do NOT attempt to script its steps or run them piecemeal. The skill itself handles: lint + build of touched code, `make redeploy-<service>` for each changed service (web + player), health checks, appending a user-facing changelog entry to `frontend/web/public/changelog.json` (dated 2026-05-13, mentioning Reviews + Comments tabs, written in the informative + enthusiastic tone with emojis per the project convention), and the commit + push (with the mandatory co-authors per project memory). Do not pre-stage files, do not pre-commit anything — the skill owns the commit. Pause here until the user types the resume signal confirming the skill has finished cleanly.</action>
+  <how-to-verify>
+    1. Run `/animeenigma-after-update` and let it complete end-to-end.
+    2. After it finishes, confirm:
+       - `frontend/web/public/changelog.json` contains a new top-level entry with `date: "2026-05-13"` (or the current date if different) whose summary text mentions both "Reviews" and "Comments" (or their localized equivalents). Verify: `jq '.[0]' frontend/web/public/changelog.json` shows the new entry.
+       - The latest commit was authored with the three project co-authors. Verify: `git log -1 --format=%B` contains all three `Co-Authored-By:` lines (Claude Opus 4.6, 0neymik0, NANDIorg) exactly as in MEMORY.md.
+       - `git log -1 --format=%s` shows a non-empty commit subject (the skill's auto-generated message).
+       - The commit was pushed: `git status` shows the local branch is in sync with origin (no "ahead by" message).
+       - `make health` reports all services healthy.
+  </how-to-verify>
+  <resume-signal>Type "shipped" once the skill has completed, the changelog entry is visible, the commit has the three co-authors, and the push succeeded. If the skill fails partway, describe the failure mode and the planner will produce a recovery revision.</resume-signal>
+</task>
+
 </tasks>
 
 <threat_model>

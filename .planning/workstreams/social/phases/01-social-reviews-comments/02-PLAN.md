@@ -110,49 +110,18 @@ From services/player/internal/repo/list.go (existing methods to consult / extend
 <tasks>
 
 <task type="auto" tdd="true">
-  <name>Task 2.1: Extend ListRepository with review-shaped query methods</name>
-  <files>services/player/internal/repo/list.go</files>
+  <name>Task 2.1: Extend ListRepository with review-shaped queries AND refactor ReviewService to consume them</name>
+  <files>services/player/internal/repo/list.go, services/player/internal/service/review.go</files>
   <behavior>
+    Repository methods (added to ListRepository):
     - `GetReviewsByAnime(ctx, animeID)` returns rows from `anime_list WHERE anime_id = ? AND (score > 0 OR review_text != '') AND deleted_at IS NULL` (note: anime_list has no DeletedAt in current schema — verify; if absent, omit that clause). Order: `created_at DESC`. Preloads Anime.
     - `GetUserReview(ctx, userID, animeID)` returns the single anime_list row for that pair, errors.NotFound if no row OR if both score=0 AND review_text=''. Preloads Anime.
     - `UpsertReview(ctx, userID, animeID, username string, score int, reviewText string)` — UPSERT into anime_list. If no row exists, create with `status='completed'`, the given score + review_text + username, leaving notes/tags/episodes empty. If row exists, UPDATE only score + review_text + username + updated_at (preserve status, episodes, notes, tags, etc.). Returns the resulting `*domain.AnimeListEntry`.
     - `ClearReview(ctx, userID, animeID)` — UPDATE anime_list SET score=0, review_text='', updated_at=NOW() WHERE user_id=? AND anime_id=?. Returns nil on no-match (idempotent).
     - `GetAnimeRating(ctx, animeID)` returns `(*domain.AnimeRating, error)` with average + count from `SELECT AVG(score), COUNT(*) FROM anime_list WHERE anime_id = ? AND score > 0`. Identical contract to the old `ReviewRepository.GetAnimeRating`.
     - `GetBatchAnimeRatings(ctx, animeIDs []string)` returns `map[string]*domain.AnimeRating` for the supplied anime IDs, querying anime_list grouped by anime_id with `WHERE anime_id IN (?) AND score > 0`. Identical contract to `ReviewRepository.GetBatchAnimeRatings`.
-  </behavior>
-  <read_first>
-    - services/player/internal/repo/list.go (full file — existing Upsert pattern, GetByUserAndAnime)
-    - services/player/internal/repo/review.go (full file — methods being absorbed)
-    - services/player/internal/domain/watch.go (AnimeListEntry, AnimeRating shape)
-    - .planning/workstreams/social/phases/01-social-reviews-comments/01-RESEARCH.md (Pitfall 2 — score-preservation note: live POST always sets the new score; CASE-WHEN is only for the migration)
-  </read_first>
-  <action>
-    Add the six methods declared in `<behavior>` to `ListRepository` in `services/player/internal/repo/list.go`. Use GORM idioms throughout — `r.db.WithContext(ctx).Where(...).Find(...).Error`. For `UpsertReview` use `clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "anime_id"}}, DoUpdates: clause.Assignments(map[string]interface{}{ ... })}` per existing `Upsert` precedent (list.go:54-77). The DoUpdates map sets only `score`, `review_text`, `username`, `updated_at` — explicitly NOT `status`, `episodes`, `notes`, `tags`, etc. (preserves the existing watchlist row).
 
-    Write tests in a new file `services/player/internal/repo/list_review_test.go` (or append to existing repo test file if conventional — check `services/player/internal/repo/recs_test.go` for the in-memory-DB pattern). At minimum:
-    - `TestListRepo_GetReviewsByAnime_IncludesScoreOnlyRows` — seed two anime_list rows for the same anime: one with score=8 review_text='', one with score=0 review_text='great'; assert both appear in result.
-    - `TestListRepo_UpsertReview_PreservesExistingWatchlistFields` — seed an anime_list row with status='watching', episodes=5, notes='foo'; call UpsertReview with score=9 reviewText='cool' username='bob'; reload row; assert status still 'watching', episodes still 5, notes still 'foo', score now 9, review_text now 'cool', username now 'bob'.
-    - `TestListRepo_ClearReview_PreservesRow` — UpsertReview then ClearReview; reload row; assert row STILL EXISTS with score=0 review_text=''.
-    - `TestListRepo_GetAnimeRating_ExcludesZeroScores` — seed 3 rows for anime X with scores 7, 0, 9; assert avg=8 (only the non-zero rows) and count=2.
-
-    Use the `setupTestDB` helper from `services/player/internal/repo/sync_test.go` for the SQLite fixture (per Wave 0 convention).
-  </action>
-  <verify>
-    <automated>cd services/player && go test ./internal/repo/ -run 'TestListRepo_GetReviewsByAnime_IncludesScoreOnlyRows|TestListRepo_UpsertReview_PreservesExistingWatchlistFields|TestListRepo_ClearReview_PreservesRow|TestListRepo_GetAnimeRating_ExcludesZeroScores' -v -count=1</automated>
-  </verify>
-  <acceptance_criteria>
-    - All four new tests pass (`--- PASS`).
-    - `grep -E 'func \(r \*ListRepository\) (GetReviewsByAnime|GetUserReview|UpsertReview|ClearReview|GetAnimeRating|GetBatchAnimeRatings)' services/player/internal/repo/list.go | wc -l` outputs `6`.
-    - `cd services/player && go build ./...` exits 0.
-    - `cd services/player && go test ./internal/repo/...` exits 0 (no regressions in existing list/sync/recs tests).
-  </acceptance_criteria>
-  <done>ListRepository owns all the queries previously in ReviewRepository, all backed by the unified `anime_list` schema, all tested.</done>
-</task>
-
-<task type="auto" tdd="true">
-  <name>Task 2.2: Refactor ReviewService to use ListRepository; preserve all six public method signatures</name>
-  <files>services/player/internal/service/review.go</files>
-  <behavior>
+    Service refactor (services/player/internal/service/review.go):
     - `NewReviewService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, log *logger.Logger) *ReviewService` — note: removes the `reviewRepo` parameter entirely.
     - `CreateOrUpdateReview(ctx, userID, username string, req *domain.CreateReviewRequest) (*domain.AnimeListEntry, error)` — return type changes from `*domain.Review` to `*domain.AnimeListEntry`. Validates `score >= 0 && score <= 10` (matches existing rule). Calls `listRepo.UpsertReview(...)`. On success, emits activity event with per-day dedup logic IDENTICAL to current `service/review.go:50-86` (dedup is for reviews; comments use a different code path in plan 03). For the activity event, populate `OldValue`/`NewValue` from the prior score/review_text if available (parity with existing behavior).
     - `GetAnimeReviews(ctx, animeID)` returns `[]*domain.AnimeListEntry, error` (was `[]*domain.Review`) via `listRepo.GetReviewsByAnime`.
@@ -162,36 +131,52 @@ From services/player/internal/repo/list.go (existing methods to consult / extend
     - `DeleteReview(ctx, userID, animeID)` calls `listRepo.ClearReview`. Returns nil on no-row (idempotent matching current behavior).
   </behavior>
   <read_first>
+    - services/player/internal/repo/list.go (full file — existing Upsert pattern, GetByUserAndAnime)
+    - services/player/internal/repo/review.go (full file — methods being absorbed)
     - services/player/internal/service/review.go (full file — preserve all activity dedup logic verbatim)
     - services/player/internal/repo/activity.go (GetTodayByUserAnimeType signature for the dedup check)
-    - services/player/internal/repo/list.go (after task 2.1 — the new methods exist)
+    - services/player/internal/domain/watch.go (AnimeListEntry, AnimeRating shape)
+    - .planning/workstreams/social/phases/01-social-reviews-comments/01-RESEARCH.md (Pitfall 2 — score-preservation note: live POST always sets the new score; CASE-WHEN is only for the migration)
   </read_first>
   <action>
-    Rewrite `services/player/internal/service/review.go` in place. The `ReviewService` struct now has: `listRepo *repo.ListRepository`, `activityRepo *repo.ActivityRepository`, `log *logger.Logger`. Remove `reviewRepo *repo.ReviewRepository` from the struct entirely.
+    PART A — Add the six methods declared in `<behavior>` to `ListRepository` in `services/player/internal/repo/list.go`. Use GORM idioms throughout — `r.db.WithContext(ctx).Where(...).Find(...).Error`. For `UpsertReview` use `clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "anime_id"}}, DoUpdates: clause.Assignments(map[string]interface{}{ ... })}` per existing `Upsert` precedent (list.go:54-77). The DoUpdates map sets only `score`, `review_text`, `username`, `updated_at` — explicitly NOT `status`, `episodes`, `notes`, `tags`, etc. (preserves the existing watchlist row).
 
-    Every method body changes its repository target from `s.reviewRepo.*` to `s.listRepo.*`. Method signatures change return types as documented in `<behavior>` (from `*domain.Review` to `*domain.AnimeListEntry`). The activity-emission block (lines 50-86 of the original) stays line-for-line identical — only the field reads change (`existingReview.Score` → `existing.Score` where `existing *domain.AnimeListEntry`).
+    PART B — Rewrite `services/player/internal/service/review.go` in place. The `ReviewService` struct now has: `listRepo *repo.ListRepository`, `activityRepo *repo.ActivityRepository`, `log *logger.Logger`. Remove `reviewRepo *repo.ReviewRepository` from the struct entirely. Every method body changes its repository target from `s.reviewRepo.*` to `s.listRepo.*`. Method signatures change return types as documented in `<behavior>` (from `*domain.Review` to `*domain.AnimeListEntry`). The activity-emission block (lines 50-86 of the original) stays line-for-line identical — only the field reads change (`existingReview.Score` → `existing.Score` where `existing *domain.AnimeListEntry`).
 
-    Add a test `services/player/internal/service/review_test.go` (or `review_refactor_test.go` if a `review_test.go` already exists — check) covering:
+    PART C — Tests. Add repo tests in `services/player/internal/repo/list_review_test.go` (or append to existing repo test file if conventional — check `services/player/internal/repo/recs_test.go` for the in-memory-DB pattern):
+    - `TestListRepo_GetReviewsByAnime_IncludesScoreOnlyRows` — seed two anime_list rows for the same anime: one with score=8 review_text='', one with score=0 review_text='great'; assert both appear in result.
+    - `TestListRepo_UpsertReview_PreservesExistingWatchlistFields` — seed an anime_list row with status='watching', episodes=5, notes='foo'; call UpsertReview with score=9 reviewText='cool' username='bob'; reload row; assert status still 'watching', episodes still 5, notes still 'foo', score now 9, review_text now 'cool', username now 'bob'.
+    - `TestListRepo_ClearReview_PreservesRow` — UpsertReview then ClearReview; reload row; assert row STILL EXISTS with score=0 review_text=''.
+    - `TestListRepo_GetAnimeRating_ExcludesZeroScores` — seed 3 rows for anime X with scores 7, 0, 9; assert avg=8 (only the non-zero rows) and count=2.
+
+    Add service tests in `services/player/internal/service/review_test.go` (or `review_refactor_test.go` if a `review_test.go` already exists — check):
     - `TestReviewService_CreateOrUpdateReview_EmitsActivityOnce` — create new review → assert 1 activity event with type='review'.
     - `TestReviewService_CreateOrUpdateReview_DedupsWithinSameDay` — create then update same day → assert still 1 activity event (dedup preserved).
     - `TestReviewService_DeleteReview_ClearsScoreAndText` — assert the anime_list row's score becomes 0 and review_text becomes '' but the row STILL EXISTS.
 
-    Use the same SQLite-in-memory pattern as the repo tests.
+    Use the `setupTestDB` helper from `services/player/internal/repo/sync_test.go` for the SQLite fixture (per Wave 0 convention).
+
+    Note: the SERVICE PACKAGE must build standalone (`cd services/player && go build ./internal/service/...` exits 0). The full `go build ./...` may fail at `main.go` until task 2.3 rewires it; that is expected.
   </action>
   <verify>
-    <automated>cd services/player && go test ./internal/service/ -run 'TestReviewService' -v -count=1 && grep -c 'reviewRepo' services/player/internal/service/review.go</automated>
+    <automated>cd services/player && go build ./internal/service/... && go build ./internal/repo/... && go test ./internal/repo/ -run 'TestListRepo_GetReviewsByAnime_IncludesScoreOnlyRows|TestListRepo_UpsertReview_PreservesExistingWatchlistFields|TestListRepo_ClearReview_PreservesRow|TestListRepo_GetAnimeRating_ExcludesZeroScores' -v -count=1 && go test ./internal/service/ -run 'TestReviewService' -v -count=1 && grep -c 'reviewRepo' services/player/internal/service/review.go</automated>
   </verify>
   <acceptance_criteria>
+    - All four new repo tests pass (`--- PASS`).
     - All three new `TestReviewService_*` tests pass.
+    - `grep -E 'func \(r \*ListRepository\) (GetReviewsByAnime|GetUserReview|UpsertReview|ClearReview|GetAnimeRating|GetBatchAnimeRatings)' services/player/internal/repo/list.go | wc -l` outputs `6`.
     - `grep -c 'reviewRepo' services/player/internal/service/review.go` outputs `0` (no leftover references to the old repo).
     - `grep -c 'listRepo' services/player/internal/service/review.go` outputs ≥ 6 (one per refactored method).
-    - `cd services/player && go build ./...` exits 0 (will fail until task 2.4 because main.go still wires `reviewRepo`; if the build fails on `main.go`, that is expected — task 2.4 fixes wiring; the SERVICE PACKAGE itself must build standalone: `cd services/player && go build ./internal/service/...` must exit 0).
+    - `cd services/player && go build ./internal/service/...` exits 0 (service package compiles independently).
+    - `cd services/player && go build ./internal/repo/...` exits 0.
+    - `cd services/player && go test ./internal/repo/...` exits 0 (no regressions in existing list/sync/recs tests).
+    - The full `go build ./...` may fail on `cmd/player-api/main.go` until task 2.3 rewires it; this is expected.
   </acceptance_criteria>
-  <done>ReviewService is fully ported to ListRepository while preserving its public surface and activity-event behavior. The service package compiles independently; main.go still needs task 2.4 to compile end-to-end.</done>
+  <done>ListRepository owns all the queries previously in ReviewRepository, all backed by the unified `anime_list` schema, all tested. ReviewService is fully ported to ListRepository while preserving its public surface and activity-event behavior. The service + repo packages compile independently; main.go still needs task 2.3 to compile end-to-end.</done>
 </task>
 
 <task type="auto" tdd="true">
-  <name>Task 2.3: Add reviewResponse projection to handler/review.go to preserve wire shape</name>
+  <name>Task 2.2: Add reviewResponse projection to handler/review.go to preserve wire shape</name>
   <files>services/player/internal/handler/review.go</files>
   <behavior>
     - `reviewResponse` is an unexported struct in `handler/review.go` with exactly 7 JSON-tagged fields: `id`, `user_id`, `anime_id`, `username`, `score`, `review_text`, `created_at`. Plus `anime *AnimeInfoResponse` (or `*domain.AnimeInfo` if its JSON tags don't leak unwanted fields — verify).
@@ -210,7 +195,7 @@ From services/player/internal/repo/list.go (existing methods to consult / extend
   <action>
     Edit `services/player/internal/handler/review.go`:
     1. Add the `reviewResponse` struct + helpers near the top of the file (after imports, before the `ReviewHandler` struct).
-    2. Update each handler method to call the projection. The `Get*` methods change their `*domain.Review` interface accesses to `*domain.AnimeListEntry` (the service layer returns the new type after task 2.2), then immediately project to `reviewResponse`.
+    2. Update each handler method to call the projection. The `Get*` methods change their `*domain.Review` interface accesses to `*domain.AnimeListEntry` (the service layer returns the new type after task 2.1), then immediately project to `reviewResponse`.
     3. `GetAnimeReviews` body: `entries, err := h.reviewService.GetAnimeReviews(ctx, animeID); if err != nil { httputil.Error(w, err); return }; httputil.OK(w, toReviewResponses(entries))`. Empty slice case: `if entries == nil { entries = []*domain.AnimeListEntry{} }` so JSON encodes as `[]` not `null`.
 
     Write a test `services/player/internal/handler/review_shape_test.go`:
@@ -226,13 +211,13 @@ From services/player/internal/repo/list.go (existing methods to consult / extend
     - Both `*ShapeIsExactly7Fields` tests pass.
     - `grep -c 'reviewResponse' services/player/internal/handler/review.go` outputs ≥ 5 (struct decl + 4 method projections at minimum).
     - The test assertion explicitly checks that `notes`, `status`, `episodes`, `tags`, `mal_id` do NOT appear in the JSON keys. Verify: `grep -E '"notes"|"status"|"episodes"|"tags"|"mal_id"' services/player/internal/handler/review_shape_test.go` finds these strings inside the negative assertion (`NotContains`).
-    - `cd services/player && go build ./internal/handler/...` exits 0 (service package compiles; main.go may still be broken pending task 2.4).
+    - `cd services/player && go build ./internal/handler/...` exits 0 (service package compiles; main.go may still be broken pending task 2.3).
   </acceptance_criteria>
   <done>Wire shape is locked. Even if AnimeListEntry adds fields later, the reviews endpoint will continue to expose exactly 7 scalars + 1 preload.</done>
 </task>
 
 <task type="auto">
-  <name>Task 2.4: Delete ReviewRepository + domain.Review; rewire main.go; restore build</name>
+  <name>Task 2.3: Delete ReviewRepository + domain.Review; rewire main.go; restore build</name>
   <files>services/player/internal/repo/review.go, services/player/internal/domain/watch.go, services/player/cmd/player-api/main.go</files>
   <read_first>
     - services/player/internal/repo/review.go (entire file — confirm no surviving consumers outside the four files we control)
@@ -266,13 +251,13 @@ From services/player/internal/repo/list.go (existing methods to consult / extend
     - `grep -c 'NewReviewService(listRepo' services/player/cmd/player-api/main.go` outputs `1`.
     - `cd services/player && go build ./...` exits 0.
     - `cd services/player && go vet ./...` exits 0.
-    - `cd services/player && go test ./...` exits 0 (full package test suite — including the new tests from tasks 2.1-2.3).
+    - `cd services/player && go test ./...` exits 0 (full package test suite — including the new tests from tasks 2.1-2.2).
   </acceptance_criteria>
   <done>The codebase is shape-equivalent to "reviews never existed as a separate table." Build + vet + tests are green end-to-end.</done>
 </task>
 
 <task type="checkpoint:human-verify" gate="blocking">
-  <name>Checkpoint 2.5: Deploy + golden-file diff of six review endpoints</name>
+  <name>Checkpoint 2.4: Deploy + golden-file diff of six review endpoints</name>
   <what-built>
     All six review endpoints now backed by `anime_list` through the refactored ReviewService. Handler projection ensures the response shape is byte-identical (7 scalars + 1 preload).
   </what-built>
@@ -280,10 +265,10 @@ From services/player/internal/repo/list.go (existing methods to consult / extend
   <how-to-verify>
     1. BEFORE deploy: capture pre-refactor JSON for a known anime + the `ui_audit_bot` user. From `scripts/capture-reviews-fixtures.sh` (created in Wave 0):
        `ANIME_ID=<id_of_anime_with_known_review_data> bash scripts/capture-reviews-fixtures.sh > tmp/reviews-pre.json`
-       NOTE: this step had to be performed BEFORE plan 02 deployed. If skipped, fall back to comparing the handler shape test in task 2.3 (which is unit-test-equivalent to the golden file).
+       NOTE: this step had to be performed BEFORE plan 02 deployed. If skipped, fall back to comparing the handler shape test in task 2.2 (which is unit-test-equivalent to the golden file).
     2. Run `make redeploy-player`.
     3. AFTER deploy: rerun the capture script: `ANIME_ID=<same id> bash scripts/capture-reviews-fixtures.sh > tmp/reviews-post.json`.
-    4. Diff: `diff tmp/reviews-pre.json tmp/reviews-post.json | head -50` — MUST be empty (no shape changes) OR show only `created_at` / `updated_at` reordering / floating-point representation drift (tolerable). If new keys appear like `notes`, `status`, `episodes` — STOP — task 2.3 projection is broken.
+    4. Diff: `diff tmp/reviews-pre.json tmp/reviews-post.json | head -50` — MUST be empty (no shape changes) OR show only `created_at` / `updated_at` reordering / floating-point representation drift (tolerable). If new keys appear like `notes`, `status`, `episodes` — STOP — task 2.2 projection is broken.
     5. Functional smoke: from a logged-in browser session on `/anime/<id>`, post a review → confirm it appears in the list → delete it → confirm it disappears. The frontend should run with ZERO code changes.
     6. Confirm MAL-imported visibility: pick a user who has an MAL-imported `score=8` row but no review_text on a given anime. Verify they appear in the `GET /api/anime/<id>/reviews` response with score=8 review_text=''.
   </how-to-verify>
@@ -322,5 +307,5 @@ SOCIAL-03 satisfied: all six review endpoints work, frontend unchanged, no `doma
 </success_criteria>
 
 <output>
-After completion, create `.planning/workstreams/social/phases/01-social-reviews-comments/01-02-SUMMARY.md` documenting: the deleted artifacts (file path + struct names), the new ListRepository method surface, the reviewResponse projection contract, and the golden-file diff outcome from checkpoint 2.5.
+After completion, create `.planning/workstreams/social/phases/01-social-reviews-comments/01-02-SUMMARY.md` documenting: the deleted artifacts (file path + struct names), the new ListRepository method surface, the reviewResponse projection contract, and the golden-file diff outcome from checkpoint 2.4.
 </output>

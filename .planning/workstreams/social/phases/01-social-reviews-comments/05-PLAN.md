@@ -52,7 +52,7 @@ must_haves:
 ---
 
 <objective>
-Land the frontend plumbing that plan 06 will consume: an axios `commentApi` wrapper mirroring `reviewApi`, the full 24-key `anime.ugc.*` block translated to all three locales, and a 3-line `comment` branch in `ActivityFeed.vue` so existing review/status events keep working while new comment events render with a locale-correct label.
+Land the frontend plumbing that plan 06 will consume: an axios `commentApi` wrapper mirroring `reviewApi`, 24 anime.ugc.* locale keys across en/ja/ru, and a 3-line `comment` branch in `ActivityFeed.vue` so existing review/status events keep working while new comment events render with a locale-correct label.
 
 Purpose: SOCIAL-06 (UI locale strings) + SOCIAL-05 (activity feed renders comment events). Plan 06 implements the Anime.vue tab strip — it depends on commentApi existing and the locale keys being resolvable. Splitting this plan from plan 06 keeps each plan within the 2-3-task budget and lets Plan 06 focus entirely on Anime.vue editing.
 
