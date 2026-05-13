@@ -58,3 +58,11 @@ func (s *ProgressService) GetProgress(ctx context.Context, userID, animeID strin
 func (s *ProgressService) MarkDropOff(ctx context.Context, userID, animeID string, req *domain.DropOffRequest) error {
 	return s.progressRepo.MarkDropOff(ctx, userID, animeID, req.EpisodeNumber, req.Progress)
 }
+
+// ListContinueWatching returns the user's most-recent in-progress episodes,
+// one row per anime, ordered by last_watched_at DESC. Phase 8 (UX-15 / UA-061).
+func (s *ProgressService) ListContinueWatching(
+	ctx context.Context, userID string, limit int,
+) ([]*domain.ContinueWatchingItem, error) {
+	return s.progressRepo.ListContinueWatching(ctx, userID, limit)
+}

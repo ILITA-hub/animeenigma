@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
@@ -118,4 +119,35 @@ func (h *ProgressHandler) MarkDropOff(w http.ResponseWriter, r *http.Request) {
 	}
 	metrics.WatchProgressSavesTotal.Inc()
 	httputil.OK(w, map[string]bool{"recorded": true})
+}
+
+// ListContinueWatching returns the Continue-Watching row for the
+// authenticated user — at most `limit` (default 10, max 20) anime, one
+// row per anime, ordered by last_watched_at DESC. Phase 8 (UX-15 / UA-061).
+func (h *ProgressHandler) ListContinueWatching(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	limit := 10
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	items, err := h.progressService.ListContinueWatching(r.Context(), claims.UserID, limit)
+	if err != nil {
+		h.log.Errorw("failed to list continue-watching",
+			"user_id", claims.UserID, "error", err)
+		httputil.Error(w, err)
+		return
+	}
+	// Always return a non-nil slice so the frontend can safely call .length.
+	if items == nil {
+		items = []*domain.ContinueWatchingItem{}
+	}
+	httputil.OK(w, items)
 }
