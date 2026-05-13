@@ -14,7 +14,12 @@ findings:
   warning: 5
   info: 3
   total: 8
-status: issues_found
+status: fixed
+fixed_at: 2026-05-13T00:00:00Z
+fixed:
+  warning: 5
+  info: 2
+  skipped: 1
 ---
 
 # Phase 6: Code Review Report
@@ -182,6 +187,92 @@ Note that `wasActive` will be `undefined` on the immediate run; the existing `el
 
 ---
 
+## Fixes Applied
+
+**Date:** 2026-05-13
+
+### WR-01 — Focus-trap document listener leak — **FIXED** (commit 391eed7)
+
+Added `onScopeDispose` (guarded by `getCurrentScope()`) inside `useFocusTrap.ts`
+that unconditionally detaches the `document.keydown` listener when the host
+component's reactive scope is disposed — even when `active` is still true.
+Prevents the listener from leaking onto `document` for the lifetime of the
+page when a host unmounts mid-open.
+
+### WR-02 — Body scroll lock stomps Modal.vue's lock — **FIXED** (commits 2f83192, 7dd1128, bdd3745)
+
+Extracted a shared `useBodyScrollLock(active: Ref<boolean>)` composable in
+`frontend/web/src/composables/useBodyScrollLock.ts`. Module-level refcount
+captures `document.body.style.overflow` on the 0→1 transition and restores
+it on the 1→0 transition, so multiple consumers (Navbar mobile drawer +
+Modal) cooperate instead of stomping each other.
+
+Migrated both `Modal.vue` and `Navbar.vue` to the composable. Dropped both
+files' manual `onUnmounted(() => { document.body.style.overflow = '' })`
+calls — the composable's `onScopeDispose` handles teardown including the
+"unmount-mid-lock" case.
+
+### WR-03 — Desktop resize strands the drawer in open state — **FIXED** (commit bdd3745)
+
+Added `useMediaQuery('(min-width: 768px)')` watcher to `Navbar.vue`. When the
+viewport crosses into `md` while `mobileMenuOpen === true`, the watcher sets
+it false. This unwinds the scroll lock, focus trap, and body state through
+the existing watchers — no extra cleanup needed.
+
+### WR-04 — ESC handler scoped to drawer subtree — **FIXED** (commit bdd3745)
+
+Moved the ESC handler from `@keydown.escape` on the drawer `<div>` to
+`useEventListener(document, 'keydown', ...)` in `<script setup>`. The handler
+checks `mobileMenuOpen.value` before reacting, and `useEventListener` from
+`@vueuse/core` auto-detaches on scope dispose. The template attribute was
+removed. ESC now works regardless of where focus is (hamburger, logo,
+anywhere on the page) while the drawer is open — matching `Modal.vue`'s
+existing pattern and the WAI-ARIA dialog spec.
+
+### WR-05 — Watcher missing `{ immediate: true }` — **FIXED** (commit 391eed7)
+
+Added `{ immediate: true }` to the `watch(active, …)` call in `useFocusTrap.ts`.
+The existing `else if (wasActive)` guard correctly skips the cleanup branch
+when `wasActive === undefined` on the immediate run, so no further change was
+needed. Consumers mounting with `active: ref(true)` (a documented use case)
+now get the initial focus + listener attachment.
+
+### IN-01 — Redundant `[disabled]` filter — **FIXED** (commit 391eed7)
+
+Dropped the post-`querySelectorAll` `.filter(el => !el.hasAttribute('disabled')`
+call in `getFocusables()`. The `FOCUSABLE_SELECTOR` already excludes
+`:disabled` for button/input/select/textarea. Kept the `offsetParent !== null`
+visibility filter.
+
+### IN-02 — `aria-controls` dangling reference — **SKIPPED**
+
+Per the audit's own note, ARIA spec permits this and screen readers handle
+it correctly. `v-if` is the convention in this codebase for transient
+dialog content (it keeps focus trap latency-sensitive and matches Modal.vue).
+The drawer's `aria-labelledby="mobile-drawer-title"` references an element
+inside the drawer subtree, so it's only "dangling" while the whole subtree
+is absent — which is exactly when no AT will resolve it. No fix needed.
+
+### IN-03 — JSDoc "~30 LOC" claim outdated — **FIXED** (commit 391eed7)
+
+Rewrote the `useFocusTrap.ts` JSDoc to document the cleanup contract and
+drop the LOC claim entirely. Future readers won't be misled if the file
+grows.
+
+---
+
+**Fixed:** 7 of 8 findings (5 Warning + 2 Info)
+**Skipped:** 1 of 8 (IN-02, intentionally — see rationale above)
+
+Verification: `bunx vue-tsc --noEmit` clean. `make redeploy-web` succeeded.
+Grep confirms `useBodyScrollLock` is wired into Modal + Navbar, `useEventListener`
+is wired into Navbar, and `onScopeDispose` + `immediate: true` are present in
+`useFocusTrap.ts`.
+
+---
+
 _Reviewed: 2026-05-13_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Fixed: 2026-05-13_
+_Fixer: Claude (gsd-code-fixer)_
