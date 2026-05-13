@@ -271,7 +271,7 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning-tpl:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - ../infra/grafana/dashboards:/var/lib/grafana/dashboards/infra:ro
+      - ../infra/grafana/dashboards:/var/lib/grafana/dashboards-infra:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       prometheus:

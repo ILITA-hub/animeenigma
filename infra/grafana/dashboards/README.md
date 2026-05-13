@@ -32,7 +32,7 @@ dashboards that target a similar area.
 | Directory | Role |
 |-----------|------|
 | `docker/grafana/dashboards/` | Legacy dev-only mount. Existing 7 dashboards predate this convention and stay where they are. |
-| `infra/grafana/dashboards/` | v3.1+ source-of-truth, mounted into dev Grafana at `/var/lib/grafana/dashboards/infra` via a second file-provisioner provider entry (`infra-self-healing`, folder `Self-Healing`). |
+| `infra/grafana/dashboards/` | v3.1+ source-of-truth, mounted into dev Grafana at `/var/lib/grafana/dashboards-infra` (sibling path — a subdirectory of the existing `/var/lib/grafana/dashboards` read-only mount cannot host a second mountpoint) via a second file-provisioner provider entry (`infra-self-healing`, folder `Self-Healing`). |
 | `deploy/kustomize/base/monitoring/grafana/configmap-dashboards.yaml` | Production K8s dashboards configmap — will sync from this directory in a future deploy plan. **Out of scope for Phase 23.** |
 
 ## Current dashboards

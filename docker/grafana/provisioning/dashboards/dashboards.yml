@@ -17,4 +17,4 @@ providers:
     disableDeletion: false
     editable: true
     options:
-      path: /var/lib/grafana/dashboards/infra
+      path: /var/lib/grafana/dashboards-infra
