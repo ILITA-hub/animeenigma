@@ -140,12 +140,15 @@ func main() {
 	// Phase 17 (UX-33) — editorial collections service + handler.
 	collectionService := service.NewCollectionService(collectionRepo, log)
 	collectionHandler := handler.NewCollectionHandler(collectionService, log)
+	// Phase 18 (UX-34) — skip-intro/skip-outro proxy of aniskip.com.
+	// Stateless handler with embedded http.Client + shared redis cache.
+	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

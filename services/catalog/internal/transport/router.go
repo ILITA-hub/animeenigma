@@ -18,6 +18,7 @@ func NewRouter(
 	adminHandler *handler.AdminHandler,
 	newsHandler *handler.NewsHandler,
 	collectionHandler *handler.CollectionHandler,
+	skipTimesHandler *handler.SkipTimesHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -117,6 +118,12 @@ func NewRouter(
 
 		// AnimeLib search
 		r.Get("/animelib/search", catalogHandler.SearchAnimeLib)
+
+		// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTA timestamps.
+		// Public, no auth. Backend proxy of aniskip.com with 7d cache.
+		// Both path segments must be positive integers — the handler
+		// enforces this so chi's path-param parse is not the only gate.
+		r.Get("/skip-times/{malId}/{episode}", skipTimesHandler.Get)
 
 		r.Get("/genres", catalogHandler.GetGenres)
 
