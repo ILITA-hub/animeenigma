@@ -244,7 +244,7 @@
     }
   },
   "search": {
-    "placeholder": "アニメを検索...",
+    "placeholder": "検索: タイトルまたはジャンル",
     "submit": "検索",
     "recent": "最近の検索",
     "clearAll": "すべて削除",

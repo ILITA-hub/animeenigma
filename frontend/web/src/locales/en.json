@@ -244,7 +244,7 @@
     }
   },
   "search": {
-    "placeholder": "Search anime...",
+    "placeholder": "Search: title or genre",
     "submit": "Search",
     "recent": "Recent Searches",
     "clearAll": "Clear All",
