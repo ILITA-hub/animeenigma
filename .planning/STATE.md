@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Scraper Self-Healing
-status: completed
+status: Awaiting next milestone
 stopped_at: "Phase 23 Plan 23-03 (alerts + maintenance verify) SHIPPED 2026-05-13. Three Grafana alert rules live (warning/warning/critical), 11 new tests passing under -race, .claude/maintenance-prompt.md unmodified per D6 (verified by git diff --quiet). Pending user smoke: Task 4 checkpoint — trigger canary, watch Grafana state transition, confirm maintenance-bot Telegram diagnosis."
-last_updated: "2026-05-13T07:46:48.952Z"
-last_activity: 2026-05-13 -- Phase 23 marked complete
+last_updated: "2026-05-13T07:59:27.618Z"
+last_activity: 2026-05-13 — Milestone v3.1 completed and archived
 progress:
   total_phases: 9
   completed_phases: 8
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 
 ## Current Position
 
-Phase: 23 — COMPLETE
-Plan: 3 of 3 SHIPPED
-Status: Phase 23 complete
-Last activity: 2026-05-13 -- Phase 23 marked complete
+Phase: Milestone v3.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-13 — Milestone v3.1 completed and archived
 
 ## Shipped Milestones
 
@@ -75,3 +75,7 @@ Last activity: 2026-05-13 -- Phase 23 marked complete
 Last session: 2026-05-13T07:40:00.000Z
 Stopped at: Phase 23 Plan 23-03 (alerts + maintenance verify) SHIPPED 2026-05-13. Three Grafana alert rules live (warning/warning/critical), 11 new tests passing under -race, .claude/maintenance-prompt.md unmodified per D6 (verified by git diff --quiet). Pending user smoke: Task 4 checkpoint — trigger canary, watch Grafana state transition, confirm maintenance-bot Telegram diagnosis.
 Resume from: `/gsd-audit-milestone --milestone v3.1` (full milestone audit — phases 21 + 22 + 23 ready for cleanup + announcement).
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
