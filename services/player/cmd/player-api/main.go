@@ -404,6 +404,11 @@ func runSocialMigration(db *gorm.DB, log *logger.Logger) error {
 	//   * Existing row: preserve non-zero score (user already chose one in
 	//     their watchlist); overwrite review_text; only fill username when
 	//     the existing row's username is empty (NULLIF guard).
+	// SQLite parses `INSERT INTO ... SELECT ... ON CONFLICT` ambiguously
+	// (the ON CONFLICT could bind to the SELECT or the INSERT). The fix
+	// per https://sqlite.org/lang_upsert.html is an explicit `WHERE true`
+	// before ON CONFLICT — Postgres accepts the same form, so it stays
+	// portable across both dialects.
 	upsertSQL := `
 		INSERT INTO anime_list (
 			id, user_id, anime_id, status, score, episodes,
@@ -414,6 +419,7 @@ func runSocialMigration(db *gorm.DB, log *logger.Logger) error {
 		       r.review_text, r.username,
 		       ` + now + `, ` + now + `
 		FROM reviews r
+		WHERE true
 		ON CONFLICT (user_id, anime_id) DO UPDATE SET
 			score        = CASE WHEN anime_list.score = 0 THEN EXCLUDED.score ELSE anime_list.score END,
 			review_text  = EXCLUDED.review_text,

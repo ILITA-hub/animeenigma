@@ -79,6 +79,13 @@ func setupListServiceTestDB(t *testing.T) (*ListService, *gorm.DB) {
 			episodes INTEGER NOT NULL DEFAULT 0,
 			notes TEXT,
 			tags TEXT,
+			-- Phase 1 (workstream: social) — review_text + username are
+			-- new columns on AnimeListEntry. domain.AnimeListEntry maps
+			-- them with GORM tags so production INSERTs reference them
+			-- unconditionally; this hand-rolled SQLite schema must mirror
+			-- the struct shape or db.Create fails with "no such column".
+			review_text TEXT NOT NULL DEFAULT '',
+			username TEXT NOT NULL DEFAULT '',
 			is_rewatching INTEGER DEFAULT 0,
 			priority TEXT,
 			mal_id INTEGER,
