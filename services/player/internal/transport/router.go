@@ -17,6 +17,7 @@ func NewRouter(
 	listHandler *handler.ListHandler,
 	historyHandler *handler.HistoryHandler,
 	reviewHandler *handler.ReviewHandler,
+	commentHandler *handler.CommentHandler,
 	malImportHandler *handler.MALImportHandler,
 	malExportHandler *handler.MALExportHandler,
 	shikimoriImportHandler *handler.ShikimoriImportHandler,
@@ -174,6 +175,10 @@ func NewRouter(
 			// Public routes
 			r.Get("/reviews", reviewHandler.GetAnimeReviews)
 			r.Get("/rating", reviewHandler.GetAnimeRating)
+			// Phase 1 (workstream: social) plan 04 — public comment listing.
+			// MUST live outside the AuthMiddleware-protected group below so
+			// anonymous readers can fetch the comments feed.
+			r.Get("/comments", commentHandler.ListComments)
 
 			// Protected routes
 			r.Group(func(r chi.Router) {
@@ -181,6 +186,10 @@ func NewRouter(
 				r.Post("/reviews", reviewHandler.CreateOrUpdateReview)
 				r.Get("/reviews/me", reviewHandler.GetUserReview)
 				r.Delete("/reviews", reviewHandler.DeleteReview)
+				// Phase 1 (workstream: social) plan 04 — comment mutations.
+				r.Post("/comments", commentHandler.CreateComment)
+				r.Patch("/comments/{commentId}", commentHandler.UpdateComment)
+				r.Delete("/comments/{commentId}", commentHandler.DeleteComment)
 			})
 		})
 	})
