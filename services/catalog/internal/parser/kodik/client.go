@@ -560,6 +560,32 @@ func (c *Client) GetTranslations(shikimoriID string) ([]Translation, error) {
 	return translations, nil
 }
 
+// ResultsHaveDub returns true when at least one Kodik search result (or any
+// of the cached Translation entries) has Type == "voice" — Kodik's dub
+// indicator. Used by the catalog service when persisting an Anime row to set
+// Anime.HasDub. Phase 9 (UX-18).
+func ResultsHaveDub(results []SearchResult) bool {
+	for _, r := range results {
+		if r.Translation != nil && r.Translation.Type == "voice" {
+			return true
+		}
+	}
+	return false
+}
+
+// TranslationsHaveDub mirrors ResultsHaveDub but operates on the deduped
+// translation slice returned by Client.GetTranslations. Convenient because
+// GetKodikTranslations already holds that slice and avoids re-iterating the
+// raw search results. Phase 9 (UX-18).
+func TranslationsHaveDub(translations []Translation) bool {
+	for _, t := range translations {
+		if t.Type == "voice" {
+			return true
+		}
+	}
+	return false
+}
+
 // GetEpisodeLink returns the embed link for a specific episode
 func (c *Client) GetEpisodeLink(shikimoriID string, episode int, translationID int) (string, error) {
 	results, err := c.SearchByShikimoriID(shikimoriID)

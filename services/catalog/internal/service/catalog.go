@@ -1458,6 +1458,21 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 		}
 	}
 
+	// Phase 9 (UX-18): lazily backfill animes.has_dub whenever the catalog
+	// touches Kodik for this anime. Best-effort — failures are logged but
+	// non-fatal (the dub badge is decorative, never blocks playback). Only
+	// write when the computed value differs from the stored row to avoid
+	// noisy UPDATE traffic.
+	hasDub := kodik.TranslationsHaveDub(translations)
+	if hasDub != anime.HasDub {
+		if updateErr := s.animeRepo.SetHasDub(ctx, anime.ID, hasDub); updateErr != nil {
+			s.log.Warnw("failed to persist anime.has_dub from kodik translations",
+				"anime_id", animeID,
+				"has_dub", hasDub,
+				"error", updateErr)
+		}
+	}
+
 	// Cache for 1 hour
 	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
 
