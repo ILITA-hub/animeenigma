@@ -216,10 +216,12 @@ func (s *JobService) TriggerCalendarSync(ctx context.Context) {
 
 // TriggerScraperPlayabilityCanary manually triggers the canary job. Used by
 // the manual-trigger HTTP handler (POST /api/v1/jobs/scraper_playability_canary)
-// and by the synthetic Pattern 6 test in Plan 23-03.
+// and by the synthetic Pattern 6 test in Plan 23-03. Uses RunNoJitter so
+// admins don't wait up to 5 minutes for a result — the jitter only matters
+// for the scheduled 03:00 tick to avoid upstream fingerprinting.
 func (s *JobService) TriggerScraperPlayabilityCanary(ctx context.Context) {
 	s.log.Info("manually triggering scraper playability canary")
-	if err := s.scraperPlayabilityCanaryJob.Run(ctx); err != nil {
+	if err := s.scraperPlayabilityCanaryJob.RunNoJitter(ctx); err != nil {
 		s.log.Errorw("scraper playability canary failed", "error", err)
 	} else {
 		metrics.SchedulerJobLastSuccess.WithLabelValues("scraper_playability_canary").SetToCurrentTime()

@@ -33,12 +33,15 @@ func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	// animes table (subset of services/catalog domain.Anime).
+	// animes table (subset of services/catalog domain.Anime). Production
+	// `animes.mal_id` is varchar(50) and the Russian title lives in `name_ru`
+	// — schema mirrored exactly so the canary's queries hit the same column
+	// names in both sqlite tests and Postgres prod.
 	require.NoError(t, db.Exec(`
 		CREATE TABLE animes (
 			id TEXT PRIMARY KEY,
-			mal_id INTEGER,
-			russian TEXT,
+			mal_id TEXT,
+			name_ru TEXT,
 			updated_at DATETIME,
 			deleted_at DATETIME
 		)
@@ -56,12 +59,13 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// seedAnime inserts an anime row.
-func seedAnime(t *testing.T, db *gorm.DB, id string, malID int, russian string, updatedAt time.Time) {
+// seedAnime inserts an anime row. mal_id is stored as text to mirror the
+// production schema (varchar(50)).
+func seedAnime(t *testing.T, db *gorm.DB, id string, malID int, nameRu string, updatedAt time.Time) {
 	t.Helper()
 	require.NoError(t, db.Exec(`
-		INSERT INTO animes (id, mal_id, russian, updated_at) VALUES (?, ?, ?, ?)
-	`, id, malID, russian, updatedAt).Error)
+		INSERT INTO animes (id, mal_id, name_ru, updated_at) VALUES (?, ?, ?, ?)
+	`, id, fmt.Sprintf("%d", malID), nameRu, updatedAt).Error)
 }
 
 // seedWatchHistory inserts a watch_history row.
@@ -389,6 +393,29 @@ func TestCanary_JitterIsBounded(t *testing.T) {
 	assert.LessOrEqual(t, maxD, 5*time.Minute, "jitter max > +5min")
 	// Sanity: span should be reasonably wide given 1000 samples.
 	assert.Greater(t, maxD-minD, 5*time.Minute, "jitter span too narrow — RNG may be broken")
+}
+
+// TestCanary_RunNoJitter_SkipsJitter asserts the manual-trigger entry point
+// does NOT block on the ±5min jitter. Critical for the HTTP trigger admins
+// invoke from the synthetic test in Plan 23-03 — waiting up to 5 minutes
+// would make the smoke test unworkable. Build the job with a real (non-test)
+// rng so we'd actually sleep if jitter was applied; measure wall time.
+func TestCanary_RunNoJitter_SkipsJitter(t *testing.T) {
+	db := newTestDB(t)
+	scraper := newFakeScraper(t, fakeScraperConfig{servers: []map[string]any{}})
+	defer scraper.Close()
+
+	log := logger.Default()
+	cfg := &config.JobsConfig{ScraperBaseURL: scraper.URL, CanaryReportDir: t.TempDir()}
+	j := NewScraperPlayabilityCanaryJob(db, cfg, log)
+	j.probe = stubProbe
+	// Bias rng so computeJitter returns ~5min (would otherwise block).
+	j.rng = rand.New(rand.NewSource(99))
+
+	start := time.Now()
+	require.NoError(t, j.RunNoJitter(context.Background()))
+	elapsed := time.Since(start)
+	assert.Less(t, elapsed, 2*time.Second, "RunNoJitter should not block on jitter (took %s)", elapsed)
 }
 
 func TestCanary_ScraperUnreachable_DoesNotPanic(t *testing.T) {

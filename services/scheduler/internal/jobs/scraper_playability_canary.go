@@ -16,12 +16,14 @@ package jobs
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -176,10 +178,24 @@ func NewScraperPlayabilityCanaryJob(db *gorm.DB, cfg *config.JobsConfig, log *lo
 // log. Returns nil on success; only returns an error when the run cannot
 // even start (e.g. ctx already canceled). Individual probe failures are
 // recorded as metric tuples, not propagated.
+//
+// Always applies the configured jitter on scheduled runs. Use RunNoJitter
+// for the manual-trigger HTTP path (synthetic test + ops smoke) so admins
+// don't wait up to 5 minutes for a result.
 func (j *ScraperPlayabilityCanaryJob) Run(ctx context.Context) error {
-	// Apply ±5min jitter unless tests opted out.
-	if !j.skipJitter {
-		jitter := j.computeJitter()
+	return j.run(ctx, !j.skipJitter)
+}
+
+// RunNoJitter is the manual-trigger entry point: same body as Run but
+// skips the ±5min sleep. Cron schedule still uses Run.
+func (j *ScraperPlayabilityCanaryJob) RunNoJitter(ctx context.Context) error {
+	return j.run(ctx, false)
+}
+
+func (j *ScraperPlayabilityCanaryJob) run(ctx context.Context, applyJitter bool) error {
+	jitter := time.Duration(0)
+	if applyJitter {
+		jitter = j.computeJitter()
 		if jitter > 0 {
 			select {
 			case <-ctx.Done():
@@ -190,7 +206,6 @@ func (j *ScraperPlayabilityCanaryJob) Run(ctx context.Context) error {
 	}
 
 	runStart := j.now()
-	jitter := time.Duration(0) // recorded into RunSummary for triage
 
 	ctx, cancel := context.WithTimeout(ctx, canaryRunBudget)
 	defer cancel()
@@ -278,13 +293,17 @@ func (j *ScraperPlayabilityCanaryJob) composeAnimeList(ctx context.Context) ([]c
 // lookupTitle returns the russian title for the given MAL ID, or empty
 // string when not present. Best-effort — errors are swallowed because the
 // title is purely for the JSON log's human readability.
+//
+// The production `animes` schema stores mal_id as varchar (string), so we
+// pass the int formatted as a decimal string. The `name_ru` column is the
+// Russian title (NOT `russian` — schema drift caught during smoke).
 func (j *ScraperPlayabilityCanaryJob) lookupTitle(ctx context.Context, malID int) string {
 	if j.db == nil {
 		return ""
 	}
 	var title string
 	row := j.db.WithContext(ctx).Raw(
-		`SELECT russian FROM animes WHERE mal_id = ? LIMIT 1`, malID,
+		`SELECT name_ru FROM animes WHERE mal_id = ? LIMIT 1`, fmt.Sprintf("%d", malID),
 	).Row()
 	if err := row.Scan(&title); err != nil {
 		return ""
@@ -295,6 +314,12 @@ func (j *ScraperPlayabilityCanaryJob) lookupTitle(ctx context.Context, malID int
 // recentFromWatchHistory returns the 3 most-recently-watched distinct
 // anime from the last 24h. Joins watch_history with animes for MAL id +
 // title. Returns nil when the DB is empty or unavailable.
+//
+// Schema note: production `animes` stores mal_id as varchar(50), not int —
+// scanned into a string and parsed via strconv.Atoi. Rows with a missing or
+// unparseable mal_id are skipped (the canary needs a numeric ID for the
+// upstream /scraper/* calls). Column `name_ru` (NOT `russian`) is the
+// Russian title.
 func (j *ScraperPlayabilityCanaryJob) recentFromWatchHistory(ctx context.Context) []canaryAnime {
 	if j.db == nil {
 		return nil
@@ -303,7 +328,7 @@ func (j *ScraperPlayabilityCanaryJob) recentFromWatchHistory(ctx context.Context
 	// last 24h, then join + order. Works on both sqlite (tests) and
 	// Postgres (prod).
 	rows, err := j.db.WithContext(ctx).Raw(`
-		SELECT a.mal_id, a.russian, last_watched
+		SELECT a.mal_id, a.name_ru, last_watched
 		FROM (
 			SELECT anime_id, MAX(watched_at) AS last_watched
 			FROM watch_history
@@ -322,19 +347,23 @@ func (j *ScraperPlayabilityCanaryJob) recentFromWatchHistory(ctx context.Context
 	var out []canaryAnime
 	for rows.Next() {
 		var (
-			malID   int
-			russian string
+			malIDStr sql.NullString
+			nameRu   sql.NullString
 			// last_watched is scanned as interface{} because sqlite returns
 			// MAX(DATETIME) as string (driver.Value type) while Postgres returns
 			// it as time.Time. The canary only uses this column for ORDER BY
 			// in SQL — never for arithmetic in Go — so the loose type is safe.
 			lastWatched interface{}
 		)
-		if err := rows.Scan(&malID, &russian, &lastWatched); err != nil {
+		if err := rows.Scan(&malIDStr, &nameRu, &lastWatched); err != nil {
 			j.log.Warnw("canary recentFromWatchHistory row scan failed", "error", err)
 			continue
 		}
-		out = append(out, canaryAnime{MALID: malID, Title: russian})
+		malID := parseMALID(malIDStr.String)
+		if malID == 0 {
+			continue
+		}
+		out = append(out, canaryAnime{MALID: malID, Title: nameRu.String})
 	}
 	return out
 }
@@ -343,14 +372,20 @@ func (j *ScraperPlayabilityCanaryJob) recentFromWatchHistory(ctx context.Context
 // animes by updated_at DESC. The spec uses the "anime_list" identifier
 // loosely — in practice the data lives in the `animes` table (one row per
 // anime, not per user-watchlist-entry).
+//
+// Schema note (production): mal_id is varchar(50), name_ru is the Russian
+// title. Rows with NULL / unparseable mal_id are skipped — we need a
+// numeric ID for upstream /scraper/* calls. Filter to anime that actually
+// have a numeric mal_id at the SQL layer so we don't read a giant catalog
+// row just to throw it away.
 func (j *ScraperPlayabilityCanaryJob) recentFromAnimeList(ctx context.Context) []canaryAnime {
 	if j.db == nil {
 		return nil
 	}
 	rows, err := j.db.WithContext(ctx).Raw(`
-		SELECT mal_id, russian
+		SELECT mal_id, name_ru
 		FROM animes
-		WHERE deleted_at IS NULL
+		WHERE deleted_at IS NULL AND mal_id IS NOT NULL AND mal_id != ''
 		ORDER BY updated_at DESC
 		LIMIT 3
 	`).Rows()
@@ -362,15 +397,33 @@ func (j *ScraperPlayabilityCanaryJob) recentFromAnimeList(ctx context.Context) [
 	var out []canaryAnime
 	for rows.Next() {
 		var (
-			malID   int
-			russian string
+			malIDStr sql.NullString
+			nameRu   sql.NullString
 		)
-		if err := rows.Scan(&malID, &russian); err != nil {
+		if err := rows.Scan(&malIDStr, &nameRu); err != nil {
 			continue
 		}
-		out = append(out, canaryAnime{MALID: malID, Title: russian})
+		malID := parseMALID(malIDStr.String)
+		if malID == 0 {
+			continue
+		}
+		out = append(out, canaryAnime{MALID: malID, Title: nameRu.String})
 	}
 	return out
+}
+
+// parseMALID converts the production schema's varchar(50) mal_id into the
+// int the canary uses for upstream /scraper/* calls. Returns 0 for any
+// unparseable or empty input — the caller skips zero values.
+func parseMALID(s string) int {
+	if s == "" {
+		return 0
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 // probeOne iterates every server returned by /scraper/servers for the
