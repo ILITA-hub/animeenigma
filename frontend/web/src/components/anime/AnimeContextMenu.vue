@@ -146,6 +146,7 @@ import ContextMenu from '@/components/ui/ContextMenu.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { userApi } from '@/api/client'
+import { useToast } from '@/composables/useToast'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageFallbackUrl } from '@/composables/useImageProxy'
 
@@ -196,6 +197,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
+const toast = useToast()
 
 // Provided by ContextMenu wrapper so we can mark close-reason='item' on activation.
 const closeWithReason = inject<(reason: 'item') => void>('ctxMenuClose', () => emit('update:visible', false))
@@ -328,33 +330,31 @@ async function activate(action: MenuAction) {
 async function setStatus(status: string) {
   if (!props.anime) return
   const animeId = String(props.anime.id)
+  // Optimistic: mutate store first so any subscribed UI flips immediately.
+  // Emit before the await so callers (cards/grids) sync their local mirrors.
+  emit('statusChange', animeId, status)
+  closeWithReason('item')
   try {
-    if (props.listStatus) {
-      await userApi.updateWatchlistStatus(animeId, status)
-    } else {
-      await userApi.addToWatchlist(animeId, status)
-    }
-    watchlistStore.invalidate()
-    await watchlistStore.fetchWatchlist(true)
-    emit('statusChange', animeId, status)
+    await watchlistStore.setStatusOptimistic(animeId, status)
   } catch (e) {
     console.error('Failed to update watchlist status:', e)
+    toast.push(t('watchlist.errors.updateFailed'))
   }
-  closeWithReason('item')
 }
 
 async function removeFromList() {
   if (!props.anime) return
   const animeId = String(props.anime.id)
+  // Optimistic: drop locally + emit so parent grids re-render before the
+  // network round-trip resolves.
+  emit('removeFromList', animeId)
+  closeWithReason('item')
   try {
-    await userApi.removeFromWatchlist(animeId)
-    watchlistStore.invalidate()
-    await watchlistStore.fetchWatchlist(true)
-    emit('removeFromList', animeId)
+    await watchlistStore.removeEntryOptimistic(animeId)
   } catch (e) {
     console.error('Failed to remove from watchlist:', e)
+    toast.push(t('watchlist.errors.removeFailed'))
   }
-  closeWithReason('item')
 }
 
 async function markNextWatched() {
