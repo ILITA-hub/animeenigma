@@ -183,7 +183,8 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 	if eps == nil {
 		eps = []domain.Episode{}
 	}
-	h.writeSuccess(w, map[string]any{"episodes": eps}, tried)
+	// gated=false: GetEpisodes does not run the playability gate.
+	h.writeSuccess(w, map[string]any{"episodes": eps}, tried, false)
 }
 
 // GetServers handles GET /scraper/servers?mal_id=...&episode=...&prefer=....
@@ -218,7 +219,8 @@ func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 	if srvs == nil {
 		srvs = []domain.Server{}
 	}
-	h.writeSuccess(w, map[string]any{"servers": srvs}, tried)
+	// gated=false: GetServers does not run the playability gate.
+	h.writeSuccess(w, map[string]any{"servers": srvs}, tried, false)
 }
 
 // GetStream handles GET /scraper/stream?mal_id=...&episode=...&server=...&category=...&prefer=....
@@ -259,7 +261,11 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		h.writeOrchestratorError(w, err, tried)
 		return
 	}
-	h.writeSuccess(w, map[string]any{"stream": stream}, tried)
+	// gated=false in Wave 1: Plan 21-03 will replace this literal with a
+	// value sourced from a new (*Stream, gated bool, error) orchestrator
+	// return signature. For now we ship gated=false so the build is green
+	// and the FE behaves as Phase 16 (no Phase 3 loader). SCRAPER-HEAL-07.
+	h.writeSuccess(w, map[string]any{"stream": stream}, tried, false)
 }
 
 // GetHealth handles GET /scraper/health. Returns the orchestrator's live
@@ -332,15 +338,30 @@ func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title, pr
 }
 
 // writeSuccess writes 200 with the standard envelope {success:true,
-// data:{<provided fields>, meta:{tried:[...]}}}. The meta key lives INSIDE
-// data so the frontend's existing axios response handler (which already
-// peels `data` off the envelope) sees meta as a sibling of the business
-// payload — convenient for ReportButton + diagnostics consumers.
-func (h *ScraperHandler) writeSuccess(w http.ResponseWriter, data map[string]any, tried []string) {
+// data:{<provided fields>, meta:{tried:[...], gated?:true}}}. The meta key
+// lives INSIDE data so the frontend's existing axios response handler
+// (which already peels `data` off the envelope) sees meta as a sibling of
+// the business payload — convenient for ReportButton + diagnostics
+// consumers.
+//
+// The `gated` field is emitted only when true (cache miss / cold path
+// where the playability gate actually ran). On gated=false the field is
+// OMITTED so cache-hit responses stay byte-identical to Phase 16's shape
+// and don't churn FE diffs. The FE (Plan 21-04) treats undefined === false
+// === "skip Phase 3 of the loader".
+//
+// NOTE: in Wave 1 (Plan 21-02) all three call sites pass gated=false
+// literally; Plan 21-03 wires the real bool from a new orchestrator return
+// signature in the GetStream path. SCRAPER-HEAL-07.
+func (h *ScraperHandler) writeSuccess(w http.ResponseWriter, data map[string]any, tried []string, gated bool) {
 	if tried == nil {
 		tried = []string{}
 	}
-	data["meta"] = map[string]any{"tried": tried}
+	meta := map[string]any{"tried": tried}
+	if gated {
+		meta["gated"] = true
+	}
+	data["meta"] = meta
 	httputil.OK(w, data)
 }
 
