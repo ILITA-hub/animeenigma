@@ -1,0 +1,5 @@
+# Active workstream marker — local-only.
+# This file is set by `/gsd-workstreams switch <name>` (or `gsd-sdk query workstream.set`)
+# and should never be committed: parallel sessions and machines must choose their own
+# active workstream via `GSD_WORKSTREAM` env, the `--ws <name>` flag, or local switching.
+active-workstream
