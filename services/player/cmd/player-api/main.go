@@ -233,7 +233,9 @@ func main() {
 	}
 
 	// Initialize repositories
-	progressRepo := repo.NewProgressRepository(db.DB)
+	// WR-02 (Phase 8): attach the service logger so the repo can warn when
+	// ListContinueWatching's INNER JOIN drops orphan or soft-deleted anime.
+	progressRepo := repo.NewProgressRepository(db.DB).WithLogger(log)
 	listRepo := repo.NewListRepository(db.DB)
 	historyRepo := repo.NewHistoryRepository(db.DB)
 	// Phase 1 (workstream: social) plan 02 — the legacy review repository

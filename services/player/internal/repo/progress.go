@@ -5,17 +5,28 @@ import (
 	"errors"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 type ProgressRepository struct {
-	db *gorm.DB
+	db  *gorm.DB
+	log *logger.Logger // optional; nil-safe via logIfPresent
 }
 
 func NewProgressRepository(db *gorm.DB) *ProgressRepository {
 	return &ProgressRepository{db: db}
+}
+
+// WithLogger attaches an optional logger. Used by main.go for observability
+// (Phase 8 / WR-02: warn when ListContinueWatching's INNER JOIN drops rows
+// whose anime row is missing or soft-deleted). Tests call NewProgressRepository
+// without a logger, in which case observability warnings are silently skipped.
+func (r *ProgressRepository) WithLogger(l *logger.Logger) *ProgressRepository {
+	r.log = l
+	return r
 }
 
 // UpsertProgress writes heartbeat progress for an episode (called from
@@ -213,6 +224,50 @@ func (r *ProgressRepository) ListContinueWatching(
 		Raw(sqlStr, userID, limit).
 		Scan(&rows).Error; err != nil {
 		return nil, err
+	}
+
+	// WR-02 (Phase 8): the INNER JOIN against animes silently drops any
+	// in-progress watch_progress rows whose anime row is missing or
+	// soft-deleted (a.deleted_at IS NOT NULL). User-facing impact is small
+	// (missing cards the user can't act on anyway) but the silent filter
+	// masks data-integrity issues — a real bug elsewhere could be losing
+	// watch_progress entries and this query would hide the symptom.
+	//
+	// Compare the JOIN result to the underlying "distinct anime_id in
+	// watch_progress" count for this user; warn on drift. This is a
+	// separate count query rather than a CTE-on-CTE rewrite because the
+	// observability check must succeed even when the main query returns
+	// fewer rows than expected — wrapping it inside the same statement
+	// would hide the symptom we're trying to surface.
+	if r.log != nil {
+		var distinctAnimeCount int64
+		// Count animes that the user has any in-progress (completed=false)
+		// progress against. This is the upper bound for ListContinueWatching
+		// output before the JOIN-induced filtering.
+		countErr := r.db.WithContext(ctx).Raw(
+			`SELECT COUNT(DISTINCT anime_id)
+             FROM watch_progress
+             WHERE user_id = ? AND completed = false`,
+			userID,
+		).Scan(&distinctAnimeCount).Error
+		if countErr == nil {
+			// Cap the upper bound at the request limit — the query was
+			// asked for at most `limit` rows, so dropping below `limit`
+			// when the upper bound is < limit is not "drift".
+			expected := distinctAnimeCount
+			if expected > int64(limit) {
+				expected = int64(limit)
+			}
+			if int64(len(rows)) < expected {
+				r.log.Warnw(
+					"continue-watching INNER JOIN dropped rows; orphaned or soft-deleted anime in watch_progress",
+					"user_id", userID,
+					"expected", expected,
+					"returned", len(rows),
+					"dropped", expected-int64(len(rows)),
+				)
+			}
+		}
 	}
 
 	items := make([]*domain.ContinueWatchingItem, 0, len(rows))
