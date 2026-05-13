@@ -11,6 +11,7 @@ use (
 	./libs/logger
 	./libs/metrics
 	./libs/pagination
+	./libs/streamprobe
 	./libs/tracing
 	./libs/videoutils
 	./services/auth
