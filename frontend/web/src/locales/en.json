@@ -381,6 +381,11 @@
     "settings": {
       "account": "Account",
       "signOut": "Sign Out",
+      "player": "Player",
+      "skipIntroDismissSec": {
+        "label": "Hide Skip-Intro button after (seconds)",
+        "hint": "How long the Skip-Intro / Skip-Outro button stays visible during the OP/ED window. Min 2, max 60. Default 8."
+      },
       "apiKey": "API Key",
       "apiKeyDescription": "Use an API key for CLI/script access without a password. Keep it secret.",
       "generateApiKey": "Generate API Key",

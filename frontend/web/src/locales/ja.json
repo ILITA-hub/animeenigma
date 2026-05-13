@@ -381,6 +381,11 @@
     "settings": {
       "account": "アカウント",
       "signOut": "ログアウト",
+      "player": "プレーヤー",
+      "skipIntroDismissSec": {
+        "label": "「OPスキップ」ボタンを非表示にするまでの時間（秒）",
+        "hint": "OP/EDの間、「OPスキップ / EDスキップ」ボタンが表示される秒数。最小2、最大60。デフォルトは8。"
+      },
       "apiKey": "APIキー",
       "apiKeyDescription": "パスワードなしでCLI/スクリプトからアクセスするためのAPIキーです。秘密にしてください。",
       "generateApiKey": "APIキーを生成",

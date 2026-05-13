@@ -718,6 +718,33 @@
                 </div>
               </div>
 
+              <!-- Phase 20 — Player polish: Skip-Intro CTA auto-dismiss
+                   timeout (localStorage-backed, no backend). The OP/ED skip
+                   CTA stays visible for the whole skip window otherwise,
+                   which is visually noisy for users who want to watch the OP.
+                   Composable: useSkipIntroSettings. Range clamped [2..60]. -->
+              <div class="glass-card p-6">
+                <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.player') }}</h2>
+                <div>
+                  <label for="skip-intro-dismiss-sec" class="block text-white/60 text-sm mb-2">
+                    {{ $t('profile.settings.skipIntroDismissSec.label') }}
+                  </label>
+                  <input
+                    id="skip-intro-dismiss-sec"
+                    type="number"
+                    :min="skipIntroMin"
+                    :max="skipIntroMax"
+                    step="1"
+                    :value="skipIntroSec"
+                    @change="onSkipIntroSecChange"
+                    class="w-32 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
+                  />
+                  <p class="text-white/60 text-xs mt-2">
+                    {{ $t('profile.settings.skipIntroDismissSec.hint') }}
+                  </p>
+                </div>
+              </div>
+
               <!-- API Key -->
               <div class="glass-card p-6">
                 <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.apiKey') }}</h2>
@@ -1011,6 +1038,7 @@ import { useToast } from '@/composables/useToast'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 import { useContextMenu } from '@/composables/useContextMenu'
+import { useSkipIntroSettings } from '@/composables/useSkipIntroSettings'
 
 interface ApiError {
   response?: {
@@ -1452,6 +1480,22 @@ const showAvatarModal = ref(false)
 const avatarPreview = ref<string | null>(null)
 const avatarDataUrl = ref<string | null>(null)
 const uploadingAvatar = ref(false)
+
+// Phase 20 — Skip-Intro CTA auto-dismiss setting. Persists to localStorage
+// via the composable; players observe the same reactive ref. Input handler
+// clamps + writes through `set` (out-of-range values are normalized).
+const skipIntroSettings = useSkipIntroSettings()
+const skipIntroSec = skipIntroSettings.seconds
+const skipIntroMin = skipIntroSettings.MIN_SEC
+const skipIntroMax = skipIntroSettings.MAX_SEC
+function onSkipIntroSecChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  const raw = Number(target.value)
+  skipIntroSettings.set(raw)
+  // Reflect the clamped value back into the input so the user sees the
+  // normalization happen if they typed something out of range.
+  target.value = String(skipIntroSettings.seconds.value)
+}
 
 // API Key
 const apiKeyLoading = ref(false)

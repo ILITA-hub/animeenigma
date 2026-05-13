@@ -399,6 +399,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
 import { useSkipTimes } from '@/composables/useSkipTimes'
+import { useSkipIntroSettings } from '@/composables/useSkipIntroSettings'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
@@ -622,16 +623,60 @@ const { opening: skipOpening, ending: skipEnding } = useSkipTimes(
   malIdRef,
   currentEpisodeNumber,
 )
-const showSkipIntro = computed(() => {
+const showSkipIntroRaw = computed(() => {
   const op = skipOpening.value
   if (!op) return false
   return currentTime.value >= op.start && currentTime.value < op.end - 1
 })
-const showSkipOutro = computed(() => {
+const showSkipOutroRaw = computed(() => {
   const ed = skipEnding.value
   if (!ed) return false
   return currentTime.value >= ed.start && currentTime.value < ed.end - 1
 })
+
+// Phase 20 — Skip CTA auto-dismiss. Mirrors HiAnimePlayer.vue: hide the OP/ED
+// CTA N seconds after it first appears in each window, reset on window close
+// so the next OP/ED window shows the CTA fresh. See useSkipIntroSettings.ts
+// for the persisted N value (default 8, clamped [2..60]).
+const { seconds: dismissSec } = useSkipIntroSettings()
+const skipIntroDismissed = ref(false)
+const skipOutroDismissed = ref(false)
+let skipIntroTimer: ReturnType<typeof setTimeout> | null = null
+let skipOutroTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(showSkipIntroRaw, (visible) => {
+  if (visible) {
+    if (skipIntroTimer) clearTimeout(skipIntroTimer)
+    skipIntroDismissed.value = false
+    skipIntroTimer = setTimeout(() => {
+      skipIntroDismissed.value = true
+    }, dismissSec.value * 1000)
+  } else {
+    if (skipIntroTimer) { clearTimeout(skipIntroTimer); skipIntroTimer = null }
+    skipIntroDismissed.value = false
+  }
+})
+
+watch(showSkipOutroRaw, (visible) => {
+  if (visible) {
+    if (skipOutroTimer) clearTimeout(skipOutroTimer)
+    skipOutroDismissed.value = false
+    skipOutroTimer = setTimeout(() => {
+      skipOutroDismissed.value = true
+    }, dismissSec.value * 1000)
+  } else {
+    if (skipOutroTimer) { clearTimeout(skipOutroTimer); skipOutroTimer = null }
+    skipOutroDismissed.value = false
+  }
+})
+
+onBeforeUnmount(() => {
+  if (skipIntroTimer) clearTimeout(skipIntroTimer)
+  if (skipOutroTimer) clearTimeout(skipOutroTimer)
+})
+
+const showSkipIntro = computed(() => showSkipIntroRaw.value && !skipIntroDismissed.value)
+const showSkipOutro = computed(() => showSkipOutroRaw.value && !skipOutroDismissed.value)
 
 // seekTo handles both Video.js + native HLS player paths. Player-agnostic so
 // the overlay buttons don't need to branch on playerType.value. Mirrors the

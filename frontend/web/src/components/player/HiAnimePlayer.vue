@@ -427,6 +427,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
 import { useSkipTimes } from '@/composables/useSkipTimes'
+import { useSkipIntroSettings } from '@/composables/useSkipIntroSettings'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
@@ -665,16 +666,62 @@ const { opening: skipOpening, ending: skipEnding } = useSkipTimes(
 // past the skip target" flicker and gives the user a deliberate dismiss
 // window if they want to actually watch the OP. Standard Crunchyroll
 // convention.
-const showSkipIntro = computed(() => {
+const showSkipIntroRaw = computed(() => {
   const op = skipOpening.value
   if (!op) return false
   return currentTime.value >= op.start && currentTime.value < op.end - 1
 })
-const showSkipOutro = computed(() => {
+const showSkipOutroRaw = computed(() => {
   const ed = skipEnding.value
   if (!ed) return false
   return currentTime.value >= ed.start && currentTime.value < ed.end - 1
 })
+
+// Phase 20 — Skip CTA auto-dismiss. The OP/ED CTA stays visible for the full
+// skip window (~90 s), which is visually noisy for users who want to watch
+// the OP. Auto-hide N seconds after the CTA first appears in each window;
+// reset the timer + dismiss flag when the window closes (so the next OP/ED
+// — e.g. next episode — shows the CTA fresh). Two separate flags so OP and
+// ED don't share dismissal state.
+const { seconds: dismissSec } = useSkipIntroSettings()
+const skipIntroDismissed = ref(false)
+const skipOutroDismissed = ref(false)
+let skipIntroTimer: ReturnType<typeof setTimeout> | null = null
+let skipOutroTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(showSkipIntroRaw, (visible) => {
+  if (visible) {
+    if (skipIntroTimer) clearTimeout(skipIntroTimer)
+    skipIntroDismissed.value = false
+    skipIntroTimer = setTimeout(() => {
+      skipIntroDismissed.value = true
+    }, dismissSec.value * 1000)
+  } else {
+    if (skipIntroTimer) { clearTimeout(skipIntroTimer); skipIntroTimer = null }
+    skipIntroDismissed.value = false
+  }
+})
+
+watch(showSkipOutroRaw, (visible) => {
+  if (visible) {
+    if (skipOutroTimer) clearTimeout(skipOutroTimer)
+    skipOutroDismissed.value = false
+    skipOutroTimer = setTimeout(() => {
+      skipOutroDismissed.value = true
+    }, dismissSec.value * 1000)
+  } else {
+    if (skipOutroTimer) { clearTimeout(skipOutroTimer); skipOutroTimer = null }
+    skipOutroDismissed.value = false
+  }
+})
+
+onBeforeUnmount(() => {
+  if (skipIntroTimer) clearTimeout(skipIntroTimer)
+  if (skipOutroTimer) clearTimeout(skipOutroTimer)
+})
+
+const showSkipIntro = computed(() => showSkipIntroRaw.value && !skipIntroDismissed.value)
+const showSkipOutro = computed(() => showSkipOutroRaw.value && !skipOutroDismissed.value)
 
 // seekTo handles both Video.js + native HLS player paths. Player-agnostic so
 // the overlay buttons don't need to branch on playerType.value. Mirrors the
