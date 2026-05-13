@@ -1,18 +1,16 @@
 ---
 gsd_state_version: 1.0
-workstream: social
-milestone: v0.1
-milestone_name: "Social: Reviews + Comments"
-status: ready-to-execute
-stopped_at: Phase 01 SPEC + ROADMAP + REQUIREMENTS bootstrapped in auto mode; ready for /gsd-autonomous --ws social --from 1.
-last_updated: "2026-05-13"
+milestone: v3.0
+milestone_name: Universal Anime Scraper
+status: executing
+last_updated: "2026-05-13T02:38:11.028Z"
 last_activity: 2026-05-13
 progress:
-  total_phases: 1
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 6
+  completed_phases: 5
+  total_plans: 24
+  completed_plans: 20
+  percent: 83
 ---
 
 # Project State — `social` workstream
@@ -23,13 +21,15 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 **Core value:** Make every user rating visible in the public reviews list (whether typed on-site or imported), and add a flat Comments stream with tab switching on the anime detail page.
 
-**Current focus:** Phase 1 — Reviews + Ratings + Comments (consolidate schema, refactor endpoints, ship Comments + tabs UI).
+**Current focus:** Phase 1 — Reviews + Ratings + Comments
 
 ## Current Position
 
+Phase: 1 (Reviews + Ratings + Comments) — EXECUTING
+Plan: 1 of 7
 **Phase:** 1 (Reviews + Ratings + Comments) — READY-TO-EXECUTE
 **Plan:** 0 of TBD (plans not yet authored — `/gsd-plan-phase 1 --ws social` will produce them)
-**Status:** SPEC locked (ambiguity 0.15, 6 functional + 2 non-functional requirements). ROADMAP + REQUIREMENTS bootstrapped. Awaiting discuss-phase (or skipped via autonomous).
+**Status:** Executing Phase 1
 **Last activity:** 2026-05-13
 
 ## Resume / Continuity

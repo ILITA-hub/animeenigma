@@ -4,7 +4,8 @@
 
 - ✅ **v1.0 Smart Watch Picker Overhaul** — Phases 1-8 (shipped 2026-05-03) — see `.planning/milestones/v1.0-ROADMAP.md`
 - ✅ **v2.0 Recommendations Engine** — Phases 9-14 (shipped 2026-05-07) — see `.planning/milestones/v2.0-ROADMAP.md`
-- 🟢 **v3.0 Universal Anime Scraper** — Phases 15-20 (planning) — see below
+- 🟢 **v3.0 Universal Anime Scraper** — Phases 15-20 (executing; Phase 20 cutover gated on 7-day soak) — see below
+- 🟢 **v3.1 Scraper Self-Healing** — Phases 21-23 (planning) — see `.planning/milestones/v3.1-ROADMAP.md`
 
 ## Phases
 
@@ -47,9 +48,17 @@
 - [x] **Phase 19: AnimeKai (gated)** — Third provider behind `SCRAPER_ANIMEKAI_ENABLED` feature flag; in-house token generator in megacloud-extractor sidecar (no `enc-dec.app`); flag default-off carryover acceptable if R&D doesn't converge (completed 2026-05-12)
 - [ ] **Phase 20: Cutover** — Delete HiAnime + Consumet code paths, containers, env vars, frontend exports; gated on ≥ 7 days clean prod traffic on EnglishPlayer
 
+### v3.1 Scraper Self-Healing (Phases 21-23) — Planning
+
+- [ ] **Phase 21: Playability Foundation** — `libs/streamprobe/` package (Probe + hardcoded ad-CDN blocklist + Redis-lift TODO), gogoanime server-priority + per-server fallback, Redis winning-server cache, `parser_unplayable_total` + `parser_ad_decoy_total` metrics, scraper `meta.gated` response field, `EnglishPlayer.vue` three-phase loader (EN + RU). Restores production playback by routing around ad-poisoned VibePlayer transparently. See `.planning/phases/21-playability-foundation/21-CONTEXT.md`.
+- [ ] **Phase 22: Provider Robustness** — Multi-URL extraction (`hls2` signed `.m3u8` + `hls3` unsigned `.txt`) in streamhg/earnvids embeds, HLS proxy allowlist additions (`managementadvisory.sbs` + `exoplanethunting.space`), ISS-011 inline incident entry. Adds per-server URL-family fallback. See `.planning/phases/22-provider-robustness/22-CONTEXT.md`.
+- [ ] **Phase 23: Self-Maintenance Loop** — Daily 03:00 canary cron (Frieren + One Piece + 3 dynamic from watch_history), `playability_canary_runs_total` metric, Grafana dashboard, three alert rules → existing `services/maintenance` webhook. Maintenance prompt Patterns 6/7 + Scraper Playability Regression section already in place (shipped 2026-05-13 alongside the spec). See `.planning/phases/23-self-maintenance-loop/23-CONTEXT.md`.
+
 ### Next Milestone (TBD)
 
-After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
+After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved future phases:
+- Phase 24: VibePlayer Recovery via WARP egress (separate spec when there is appetite to revive VibePlayer as a working server)
+- Phase 25: MinIO Hot Archival (separate v3.2 spec; rip + serve popular titles from MinIO)
 
 ## Phase Details
 
