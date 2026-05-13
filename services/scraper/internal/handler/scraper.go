@@ -240,10 +240,12 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, codeInvalidInput, "episode is required", tried)
 		return
 	}
-	if qp.server == "" {
-		h.writeError(w, http.StatusBadRequest, codeInvalidInput, "server is required", tried)
-		return
-	}
+	// Phase 21 SCRAPER-HEAL-04: empty `server` is the cold-path signal —
+	// the orchestrator routes through gogoanime.GetStreamWithGate which
+	// runs the playability gate over the configured priority list and
+	// caches the winning serverID. Non-empty `server` is the caller-pin
+	// path (Phase 16 semantics preserved). Both paths flow through
+	// GetStreamGated; the gated bool surfaces via data.meta.gated.
 
 	cat := domain.Category(qp.category)
 	if cat == "" {
