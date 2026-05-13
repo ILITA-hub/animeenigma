@@ -114,3 +114,4 @@ frontend/web/test-results/
 docker/backup/
 Trace-*.json.gz
 services/maintenance/maintenance
+/scraper-api
