@@ -69,4 +69,28 @@ const faqs = [
 summary::-webkit-details-marker {
   display: none;
 }
+
+/* Phase 20 — FAQ accordion polish.
+   <details> elements jump open instantly by default. We can't transition the
+   open/closed state via the `open` attribute alone, but we can animate the
+   answer paragraph's max-height so the expansion looks smoother than a hard
+   pop. The 1000px ceiling is an overshoot — none of the curated FAQ answers
+   approach that height. interpolate-size: allow-keywords is the modern Chrome
+   path; the max-height fallback works everywhere else.
+
+   Note: we don't animate the chevron rotation separately — it already uses
+   Tailwind's `transition-transform` on `group-open:rotate-180`, which is
+   smooth on all browsers. */
+details > p {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 200ms ease-out, opacity 150ms ease-out, margin-top 200ms ease-out;
+  margin-top: 0 !important;
+}
+details[open] > p {
+  max-height: 1000px;
+  opacity: 1;
+  margin-top: 0.75rem !important; /* matches `mt-3` */
+}
 </style>
