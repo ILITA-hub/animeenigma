@@ -144,6 +144,10 @@
         </div>
 
         <!-- Results Grid -->
+        <!-- UA-048 (UX-11 Phase 4): sr-only h2 to satisfy heading-order. The h1
+             at line 6 is "Browse"; the AnimeCardNew components render an h3 for
+             each title; without an intervening h2 axe heading-order flags it. -->
+        <h2 class="sr-only">{{ $t('browse.resultsHeading') }}</h2>
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
         <AnimeCardNew
           v-for="anime in animeList"

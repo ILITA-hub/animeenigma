@@ -529,7 +529,8 @@
     "sortYear": "По году",
     "sortTitle": "По названию",
     "searchShikimori": "Поиск на Shikimori",
-    "refreshShikimori": "Обновить с Shikimori"
+    "refreshShikimori": "Обновить с Shikimori",
+    "resultsHeading": "Результаты"
   },
   "themes": {
     "title": "Опенинги и Эндинги",

@@ -529,7 +529,8 @@
     "sortYear": "By Year",
     "sortTitle": "By Title",
     "searchShikimori": "Search on Shikimori",
-    "refreshShikimori": "Refresh from Shikimori"
+    "refreshShikimori": "Refresh from Shikimori",
+    "resultsHeading": "Results"
   },
   "themes": {
     "title": "Openings & Endings",

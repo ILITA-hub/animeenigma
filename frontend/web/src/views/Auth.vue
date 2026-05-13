@@ -74,7 +74,7 @@
             :href="webUrl"
             target="_blank"
             rel="noopener"
-            class="text-white/40 hover:text-white/70 text-xs underline-offset-2 hover:underline transition-colors"
+            class="text-white/60 hover:text-white/70 text-xs underline-offset-2 hover:underline transition-colors"
           >
             {{ $t('auth.openInBrowser') }}
           </a>
@@ -94,7 +94,7 @@
                users who have chatted with the bot before silently drop the start
                param). Copy-paste works universally. -->
           <details v-if="tokenReady" class="w-full text-xs">
-            <summary class="cursor-pointer text-white/40 hover:text-white/70 transition-colors select-none text-center">
+            <summary class="cursor-pointer text-white/60 hover:text-white/70 transition-colors select-none text-center">
               {{ $t('auth.tgWebToggle') }}
             </summary>
             <div class="mt-3 p-3 bg-black/30 border border-white/10 rounded-lg space-y-2">
@@ -117,7 +117,7 @@
       </div>
 
       <!-- Back to home -->
-      <p class="text-center mt-6 text-white/40 text-sm">
+      <p class="text-center mt-6 text-white/60 text-sm">
         <router-link to="/" class="hover:text-white transition-colors">
           {{ '← ' + $t('auth.backHome') }}
         </router-link>

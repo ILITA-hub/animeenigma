@@ -53,7 +53,7 @@
       <!-- No schedule -->
       <div v-else class="text-center py-12">
         <p class="text-white/60">{{ $t('schedule.noData') }}</p>
-        <p class="text-white/40 text-sm mt-2">{{ $t('schedule.hint') }}</p>
+        <p class="text-white/60 text-sm mt-2">{{ $t('schedule.hint') }}</p>
       </div>
     </div>
 

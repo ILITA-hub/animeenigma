@@ -59,7 +59,7 @@
                   @keydown.down.prevent="highlightNext"
                   @keydown.up.prevent="highlightPrev"
                 />
-                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <!-- Autocomplete Dropdown -->
@@ -84,7 +84,7 @@
                       />
                       <div class="flex-1 min-w-0">
                         <p class="text-white text-sm font-medium truncate">{{ result.title }}</p>
-                        <p class="text-white/40 text-xs">
+                        <p class="text-white/60 text-xs">
                           {{ result.releaseYear || '' }}{{ result.releaseYear && result.totalEpisodes ? ' \u00b7 ' : '' }}{{ result.totalEpisodes ? result.totalEpisodes + ' \u044d\u043f.' : '' }}
                         </p>
                       </div>
@@ -103,7 +103,7 @@
                 </Transition>
               </div>
               <button
-                class="p-1.5 text-white/40 hover:text-white transition-colors"
+                class="p-1.5 text-white/60 hover:text-white transition-colors"
                 :aria-label="$t('nav.closeSearch')"
                 @click="closeSearch"
               >

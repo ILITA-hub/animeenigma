@@ -529,7 +529,8 @@
     "sortYear": "年順",
     "sortTitle": "タイトル順",
     "searchShikimori": "Shikimoriで検索",
-    "refreshShikimori": "Shikimoriから更新"
+    "refreshShikimori": "Shikimoriから更新",
+    "resultsHeading": "結果"
   },
   "themes": {
     "title": "オープニング＆エンディング",

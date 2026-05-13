@@ -6,13 +6,13 @@ created: 2026-05-13
 # Project State
 
 ## Current Position
-**Status:** Phase 3 (bug fixes) complete; Phase 4 next.
-**Current Phase:** None (Phase 4 next)
+**Status:** Phase 4 (contrast + Browse sweep) complete; Phase 5 next.
+**Current Phase:** None (Phase 5 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 3 shipped under `/gsd-autonomous --ws ui-ux-audit`. UA-110 closed by clamping `lastWatched` at `totalEpisodes` inside `useResumeStateMachine.ts`. UA-111 closed by adding idempotent Step 0e to seed script that backfills watch_progress from watch_history. UA-057 closed by adding `pin_reason_key` + `pin_reason_data` to backend RecItem + AdminRecRow, plus `recs.pinReason.becauseYouFinished` i18n key in en/ru/ja. Also fixed pre-existing player Dockerfile bug missing `COPY services/scraper/go.mod`.
+**Last Activity Description:** Phase 4 shipped under `/gsd-autonomous --ws ui-ux-audit`. Global `text-white/40` → `/60` sweep across 7 audit-cited views (Anime, Themes, Schedule, Game, Navbar, Auth, Profile — 37 occurrences total). GenreFilterPopup gained `aria-haspopup="listbox"` + `aria-expanded` + placeholder /30→/60. Browse.vue gained sr-only h2 between h1 and grid h3 (heading-order). 11 audit findings closed.
 
 ## Progress
-**Phases Complete:** 3 / 20
+**Phases Complete:** 4 / 20
 **Current Plan:** N/A
 
 ## Next steps

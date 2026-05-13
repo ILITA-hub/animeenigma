@@ -1,14 +1,19 @@
 <template>
   <div ref="wrapperRef" class="relative">
     <!-- Trigger Button -->
+    <!-- UA-047 (UX-11 Phase 4): aria-haspopup="listbox" + aria-expanded bound
+         to isOpen so screen readers announce the popup role and its open state.
+         UA-046: placeholder bumped from text-white/30 (2.7:1) to text-white/60. -->
     <button
       type="button"
       :class="triggerClasses"
+      aria-haspopup="listbox"
+      :aria-expanded="isOpen"
       @click="toggle"
       @keydown="handleTriggerKeydown"
     >
       <span v-if="showEmoji && selectedGenre" class="text-base leading-none">{{ selectedEmoji }}</span>
-      <span :class="selectedGenre ? 'text-white' : 'text-white/30'" class="truncate">
+      <span :class="selectedGenre ? 'text-white' : 'text-white/60'" class="truncate">
         {{ selectedLabel || placeholder }}
       </span>
       <!-- Clear button -->

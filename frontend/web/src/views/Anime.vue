@@ -85,7 +85,7 @@
                 </svg>
                 <span class="font-bold text-lg">{{ anime.rating.toFixed(1) }}</span>
               </div>
-              <span class="text-white/40 text-sm">Shikimori</span>
+              <span class="text-white/60 text-sm">Shikimori</span>
             </div>
 
             <!-- Site Rating -->
@@ -96,7 +96,7 @@
                 </svg>
                 <span class="font-bold text-lg">{{ siteRating.average_score.toFixed(1) }}</span>
               </div>
-              <span class="text-white/40 text-sm">AnimeEnigma ({{ siteRating.total_reviews }})</span>
+              <span class="text-white/60 text-sm">AnimeEnigma ({{ siteRating.total_reviews }})</span>
             </div>
           </div>
 
@@ -598,7 +598,7 @@
               {{ $t('anime.reviews') }}
             </span>
           </h2>
-          <span v-if="reviews.length > 0" class="text-white/40 text-sm">{{ $t('anime.reviewsCount', { count: reviews.length }) }}</span>
+          <span v-if="reviews.length > 0" class="text-white/60 text-sm">{{ $t('anime.reviewsCount', { count: reviews.length }) }}</span>
         </div>
 
         <!-- Write Review Form -->
@@ -695,7 +695,7 @@
                   >
                     {{ review.username || $t('anime.user') }}
                   </router-link>
-                  <p class="text-white/40 text-sm">{{ formatDate(review.created_at) }}</p>
+                  <p class="text-white/60 text-sm">{{ formatDate(review.created_at) }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-1 text-amber-400">
@@ -728,7 +728,7 @@
                 :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String((item as RelatedAnime).id)"
                 @open-menu="(el: HTMLElement) => openContextMenuAt(el, (item as RelatedAnime))"
               />
-              <p v-if="(item as RelatedAnime).relationLabel" class="text-xs text-white/40 mt-1 text-center">
+              <p v-if="(item as RelatedAnime).relationLabel" class="text-xs text-white/60 mt-1 text-center">
                 {{ (item as RelatedAnime).relationLabel }}
               </p>
             </div>

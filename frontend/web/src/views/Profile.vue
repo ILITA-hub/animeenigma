@@ -63,7 +63,7 @@
               </h1>
               <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                 <Badge v-if="isOwnProfile" variant="primary" size="sm">{{ profileUser.role || 'Member' }}</Badge>
-                <span class="text-white/40 text-sm">
+                <span class="text-white/60 text-sm">
                   {{ isOwnProfile ? `${$t('profile.memberSince')} ${memberSinceYear}` : $t('profile.userProfile') }}
                 </span>
               </div>
@@ -219,7 +219,7 @@
                       :key="anime.anime_id"
                       class="border-b border-white/5 hover:bg-white/5 transition-colors"
                     >
-                      <td class="py-3 pr-2 text-white/40">{{ (watchlistPage - 1) * watchlistPerPage + index + 1 }}</td>
+                      <td class="py-3 pr-2 text-white/60">{{ (watchlistPage - 1) * watchlistPerPage + index + 1 }}</td>
                       <td class="py-3 px-2">
                         <router-link :to="`/anime/${anime.anime_id}`" class="block w-12 h-16 rounded overflow-hidden bg-surface">
                           <img
@@ -284,7 +284,7 @@
                             @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
                             class="w-10 h-6 text-center text-xs bg-white/10 border border-white/10 rounded text-white focus:outline-none focus:border-cyan-500"
                           />
-                          <span class="text-white/40">/</span>
+                          <span class="text-white/60">/</span>
                           <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
                           <button
                             @click="updateAnimeEpisodes(anime.anime_id, (anime.episodes || 0) + 1)"
@@ -294,7 +294,7 @@
                         </div>
                         <div v-else class="flex items-center gap-1">
                           <span class="text-white">{{ anime.episodes || 0 }}</span>
-                          <span class="text-white/40">/</span>
+                          <span class="text-white/60">/</span>
                           <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
                         </div>
                       </td>
@@ -427,7 +427,7 @@
                       {{ anime.episodes || 0 }} / {{ animeTotalEpisodes(anime) || '?' }} {{ $t('profile.ep') }}
                     </p>
                   </div>
-                  <p v-if="anime.started_at || anime.completed_at" class="text-xs text-white/40 mt-0.5">
+                  <p v-if="anime.started_at || anime.completed_at" class="text-xs text-white/60 mt-0.5">
                     <span v-if="anime.started_at">{{ formatDateDisplay(anime.started_at) }}</span>
                     <span v-if="anime.started_at && anime.completed_at"> - </span>
                     <span v-if="anime.completed_at">{{ formatDateDisplay(anime.completed_at) }}</span>
@@ -518,7 +518,7 @@
                         {{ malSync.importing ? $t('profile.import.importing') : $t('profile.import.import') }}
                       </Button>
                     </div>
-                    <p class="text-white/40 text-xs mt-2">
+                    <p class="text-white/60 text-xs mt-2">
                       {{ $t('profile.import.malDescription') }}
                     </p>
                     <!-- Progress bar -->
@@ -537,7 +537,7 @@
                       </p>
                     </div>
                     <div v-if="malSync.lastSync && !malSync.progress" class="mt-2">
-                      <p class="text-xs text-white/40">
+                      <p class="text-xs text-white/60">
                         {{ $t('profile.import.lastSynced', { time: timeAgo(malSync.lastSync.completed_at), imported: malSync.lastSync.imported, skipped: malSync.lastSync.skipped }) }}
                       </p>
                     </div>
@@ -569,7 +569,7 @@
                         {{ shikimoriSync.importing ? $t('profile.import.importing') : $t('profile.import.import') }}
                       </Button>
                     </div>
-                    <p class="text-white/40 text-xs mt-2">
+                    <p class="text-white/60 text-xs mt-2">
                       {{ $t('profile.import.shikimoriDescription') }}
                     </p>
                     <!-- Progress bar -->
@@ -588,7 +588,7 @@
                       </p>
                     </div>
                     <div v-if="shikimoriSync.lastSync && !shikimoriSync.progress" class="mt-2">
-                      <p class="text-xs text-white/40">
+                      <p class="text-xs text-white/60">
                         {{ $t('profile.import.lastSynced', { time: timeAgo(shikimoriSync.lastSync.completed_at), imported: shikimoriSync.lastSync.imported, skipped: shikimoriSync.lastSync.skipped }) }}
                       </p>
                     </div>
@@ -631,7 +631,7 @@
                     <label class="block text-white/60 text-sm mb-2">{{ $t('profile.profileLink') }}</label>
                     <div class="flex gap-2">
                       <div class="flex-1 flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
-                        <span class="px-3 text-white/40 text-sm">/user/</span>
+                        <span class="px-3 text-white/60 text-sm">/user/</span>
                         <input
                           v-model="publicId"
                           type="text"
@@ -654,7 +654,7 @@
                     </div>
                     <p v-if="publicIdError" class="text-pink-400 text-xs mt-2">{{ publicIdError }}</p>
                     <p v-else-if="publicIdSuccess" class="text-green-400 text-xs mt-2">{{ $t('profile.linkUpdated') }}</p>
-                    <p class="text-white/40 text-xs mt-2">
+                    <p class="text-white/60 text-xs mt-2">
                       {{ $t('profile.linkValidation') }}
                     </p>
                   </div>
@@ -752,7 +752,7 @@
                     </div>
                     <p v-if="apiKeyCopied" class="text-green-400 text-xs">{{ $t('profile.settings.apiKeyCopied') }}</p>
                     <div class="p-3 bg-white/5 rounded-lg">
-                      <p class="text-white/40 text-xs mb-1">{{ $t('profile.settings.apiKeyUsageHint') }}</p>
+                      <p class="text-white/60 text-xs mb-1">{{ $t('profile.settings.apiKeyUsageHint') }}</p>
                       <code class="text-xs text-cyan-400 break-all">curl -H "Authorization: Bearer {{ generatedApiKey }}" {{ siteOrigin }}/api/users/import/mal -d '{"username":"..."}'</code>
                     </div>
                   </div>
@@ -772,7 +772,7 @@
 
                   <!-- No key state -->
                   <div v-else class="space-y-3">
-                    <p class="text-sm text-white/40">{{ $t('profile.settings.apiKeyNone') }}</p>
+                    <p class="text-sm text-white/60">{{ $t('profile.settings.apiKeyNone') }}</p>
                     <Button variant="primary" size="sm" :disabled="apiKeyActioning" @click="generateApiKey">
                       {{ $t('profile.settings.generateApiKey') }}
                     </Button>
@@ -833,15 +833,15 @@
                   <!-- Tunables -->
                   <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                     <div class="glass-card p-3">
-                      <div class="text-white/40 text-xs">{{ $t('profile.advanced.totalWeight') }}</div>
+                      <div class="text-white/60 text-xs">{{ $t('profile.advanced.totalWeight') }}</div>
                       <div class="text-white font-mono mt-1">{{ tier2View.total_weight.toFixed(1) }}</div>
                     </div>
                     <div class="glass-card p-3">
-                      <div class="text-white/40 text-xs">{{ $t('profile.advanced.minConfidence') }}</div>
+                      <div class="text-white/60 text-xs">{{ $t('profile.advanced.minConfidence') }}</div>
                       <div class="text-white font-mono mt-1">{{ tier2View.min_confidence.toFixed(0) }}</div>
                     </div>
                     <div class="glass-card p-3">
-                      <div class="text-white/40 text-xs">{{ $t('profile.advanced.halfLifeDays') }}</div>
+                      <div class="text-white/60 text-xs">{{ $t('profile.advanced.halfLifeDays') }}</div>
                       <div class="text-white font-mono mt-1">{{ tier2View.half_life_days }}d</div>
                     </div>
                   </div>
@@ -850,12 +850,12 @@
                   <div>
                     <h3 class="text-white font-medium mb-2">{{ $t('profile.advanced.coarseTitle') }}</h3>
                     <p class="text-white/60 text-xs mb-3">{{ $t('profile.advanced.coarseDescription') }}</p>
-                    <div v-if="tier2View.coarse.length === 0" class="text-white/40 text-sm py-2">
+                    <div v-if="tier2View.coarse.length === 0" class="text-white/60 text-sm py-2">
                       {{ $t('profile.advanced.empty') }}
                     </div>
                     <div v-else class="overflow-x-auto">
                       <table class="w-full text-sm">
-                        <thead class="text-white/40 text-xs">
+                        <thead class="text-white/60 text-xs">
                           <tr>
                             <th class="pb-2 text-left">{{ $t('profile.advanced.col.lang') }}</th>
                             <th class="pb-2 text-left">{{ $t('profile.advanced.col.wt') }}</th>
@@ -877,12 +877,12 @@
                   <div>
                     <h3 class="text-white font-medium mb-2">{{ $t('profile.advanced.fineTitle') }}</h3>
                     <p class="text-white/60 text-xs mb-3">{{ $t('profile.advanced.fineDescription') }}</p>
-                    <div v-if="tier2View.fine.length === 0" class="text-white/40 text-sm py-2">
+                    <div v-if="tier2View.fine.length === 0" class="text-white/60 text-sm py-2">
                       {{ $t('profile.advanced.empty') }}
                     </div>
                     <div v-else class="overflow-x-auto">
                       <table class="w-full text-sm">
-                        <thead class="text-white/40 text-xs">
+                        <thead class="text-white/60 text-xs">
                           <tr>
                             <th class="pb-2 text-left">{{ $t('profile.advanced.col.team') }}</th>
                             <th class="pb-2 text-left">{{ $t('profile.advanced.col.lang') }}</th>
@@ -960,7 +960,7 @@
               @change="handleAvatarFile"
             />
           </label>
-          <p class="text-white/40 text-xs mt-2">{{ $t('profile.avatar.formats') }}</p>
+          <p class="text-white/60 text-xs mt-2">{{ $t('profile.avatar.formats') }}</p>
         </div>
       </div>
       <template #footer>
