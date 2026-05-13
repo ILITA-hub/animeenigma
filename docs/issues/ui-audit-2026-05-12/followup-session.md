@@ -129,13 +129,47 @@ This **strengthens UA-052** — the `text-white/40` sweep needs to cover MORE th
 
 **Proposed fix:** Same global `text-white/40 → /60` sweep recommended in UA-052.
 
+## UA-115 Follow-up — 30-day access log review (2026-05-13)
+
+**Triggered by:** Phase 1 of the `ui-ux-audit` workstream (Tier A catastrophic remediation).
+
+**Closed:** `GF_AUTH_ANONYMOUS_ENABLED` flipped to `"false"` in `docker/docker-compose.yml`; Grafana redeployed. Post-fix probe results:
+
+- `GET https://animeenigma.ru/admin/grafana/api/search` (unauthenticated) → `401 Unauthorized` ✅
+- `GET https://animeenigma.ru/admin/grafana/dashboards` (unauthenticated) → returns the SPA shell with `isSignedIn:false` and `orgRole:""` (previously `orgRole:"Admin"`) ✅
+
+**30-day access log review — limitations:**
+
+Container stdout logs are the only access-log source for both Grafana and the path-routing nginx layer (`animeenigma-web`). Both containers were rebuilt during this remediation, and `make redeploy-*` consistently destroys and recreates containers — meaning **stdout logs only retain entries since the most recent container start**. Effective log-retention for both is "since-last-redeploy", which is at the order of hours to days, not 30 days.
+
+What I could check that survives:
+
+| Source | Findings |
+|---|---|
+| `docker_grafana_data` persistent volume | Contains `grafana.db` SQLite, `dashboards/`, `plugins/`, `alerting/`, `csv/`, `png/`. No log files. |
+| `grafana.db` → `login_attempt` table | **0 rows.** No authenticated UI login has ever happened on this instance. |
+| `grafana.db` → `session` table | **0 rows.** No authenticated sessions ever created. |
+| `grafana.db` → `user_auth_token` table | **0 rows.** No persistent tokens issued. |
+
+**What this tells us:**
+1. For the lifetime of this Grafana instance (since `2026-02-08` per volume `_data` directory mtime), every access has been via the anonymous Admin role — there was no other auth flow.
+2. The SQLite database itself does NOT record per-request access — Grafana writes those to stdout only, and they're already gone.
+3. Therefore, the count and origin of historical anonymous-Admin requests is **unrecoverable** from existing artifacts. We can only confirm the leak existed since 2026-02-08 and is closed as of 2026-05-13.
+
+**No evidence of write-side exploitation** (no datasource edits, no dashboard mutations, no alerting changes) can be derived from in-cluster sources alone. The dashboards directory is read-only-mounted from `docker/grafana/dashboards/` and unchanged (git-tracked); `grafana.db` shows expected schema state for a fresh-default install (no extra orgs, no users).
+
+**Going-forward mitigations recommended (not part of Phase 1 scope):**
+1. Add stdout shipping for Grafana → Loki so future audit windows survive redeploys.
+2. Add an nginx auth-required guard on `location /admin/grafana` so that even if `GF_AUTH_ANONYMOUS_ENABLED` is ever accidentally flipped back on, an outer layer still blocks.
+3. Consider migrating Grafana off the public path route entirely to the IP-allowlisted `admin.animeenigma.ru` vhost.
+
 ## Open / deferred items for the next session
 
 - **True 500×723 mobile probe** — this host clamps at 828; needs DPR emulation via Chrome DevTools Protocol (not exposed by the MCP) or a different display.
 - **Drive 2-3 more Grafana dashboards** to capture per-dashboard panel-type appropriateness (Stat vs Time-series vs Gauge) and time-range defaults.
 - **Try /admin/prometheus + /admin/loki + /admin/pgadmin** for UX consistency check (each is also third-party with limited customization).
 - **Temporarily grant admin to ui_audit_bot** to drive `/admin/recs/:user_id` SPA and verify the static code findings (UA-090-101) live.
-- **Audit Grafana access logs** for the last 30 days (UA-115 follow-up).
+- ~~Audit Grafana access logs for the last 30 days (UA-115 follow-up).~~ **Done 2026-05-13** — see "UA-115 Follow-up" subsection above. Retention limitation prevents a historical request audit; the leak window is bounded as `2026-02-08 → 2026-05-13`.
 
 ## Updated severity counts
 

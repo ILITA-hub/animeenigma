@@ -257,7 +257,9 @@ services:
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SECURITY_CSRF_TRUSTED_ORIGINS: "animeenigma.ru localhost:8000 localhost:3004"
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      # UA-115 (2026-05-13): anonymous access closed; the Admin role + Main Org settings below are now no-ops
+      # but kept for grep-ability of the prior config. Re-enabling requires a Tier-A risk review.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
       GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
       GF_UNIFIED_ALERTING_ENABLED: "true"

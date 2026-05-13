@@ -321,6 +321,7 @@
       "regenerateApiKey": "再生成",
       "revokeApiKey": "取り消し",
       "apiKeyGenerated": "APIキー（一度だけ表示 — 今すぐコピーしてください）:",
+      "apiKeyCopy": "APIキーをコピー",
       "apiKeyCopied": "コピーしました！",
       "apiKeyUsageHint": "使用方法:",
       "apiKeyHasKey": "有効なAPIキーがあります。",

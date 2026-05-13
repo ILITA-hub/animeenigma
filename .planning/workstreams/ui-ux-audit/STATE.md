@@ -6,18 +6,14 @@ created: 2026-05-13
 # Project State
 
 ## Current Position
-**Status:** Roadmap planned, awaiting `/gsd-spec-phase 1 --ws ui-ux-audit`
-**Current Phase:** None (Phase 1 next)
+**Status:** Phase 1 (Tier A catastrophic) complete; Phase 2 next.
+**Current Phase:** None (Phase 2 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** ROADMAP + REQUIREMENTS + PROJECT bootstrapped. 20 phases defined mapping to Tier A → E batches from the 2026-05-12 UX reassessment.
+**Last Activity Description:** Phase 1 shipped under `/gsd-autonomous --ws ui-ux-audit`. UA-115 closed by disabling Grafana anonymous Admin (env var + redeploy + verified 401). UA-065 closed by adding `:aria-label="$t('profile.settings.apiKeyCopy')"` to Profile.vue copy button + i18n keys in en/ru/ja. 30-day Grafana access log review documented limitation (container-rebuild rotation) in followup-session.md.
 
 ## Progress
-**Phases Complete:** 0 / 20
+**Phases Complete:** 1 / 20
 **Current Plan:** N/A
-
-## Session Continuity
-**Stopped At:** N/A
-**Resume File:** None
 
 ## Next steps
 

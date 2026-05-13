@@ -739,6 +739,7 @@
                       <span class="flex-1">{{ generatedApiKey }}</span>
                       <button
                         @click="copyApiKey"
+                        :aria-label="$t('profile.settings.apiKeyCopy')"
                         class="flex-shrink-0 p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
                       >
                         <svg v-if="apiKeyCopied" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

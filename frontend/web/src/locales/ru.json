@@ -321,6 +321,7 @@
       "regenerateApiKey": "Перегенерировать",
       "revokeApiKey": "Отозвать",
       "apiKeyGenerated": "Ваш API-ключ (показан один раз — скопируйте сейчас):",
+      "apiKeyCopy": "Скопировать API-ключ",
       "apiKeyCopied": "Скопировано!",
       "apiKeyUsageHint": "Использование:",
       "apiKeyHasKey": "У вас есть активный API-ключ.",

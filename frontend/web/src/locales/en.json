@@ -321,6 +321,7 @@
       "regenerateApiKey": "Regenerate",
       "revokeApiKey": "Revoke",
       "apiKeyGenerated": "Your API key (shown once — copy it now):",
+      "apiKeyCopy": "Copy API key",
       "apiKeyCopied": "Copied!",
       "apiKeyUsageHint": "Usage:",
       "apiKeyHasKey": "You have an active API key.",
