@@ -250,6 +250,21 @@
               </router-link>
             </template>
 
+            <!-- Phase 14 / UX-30 — public About / FAQ link. No Footer
+                 component exists in this project, so the drawer is the
+                 canonical surface for the link. Mobile-only because the
+                 desktop navbar is intentionally minimal; desktop users
+                 reach /about via direct URL or footer pattern in later
+                 phases. -->
+            <router-link
+              to="/about"
+              class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              active-class="text-cyan-400 bg-cyan-500/10"
+              @click="mobileMenuOpen = false"
+            >
+              {{ $t('nav.about') }}
+            </router-link>
+
             <!-- Language -->
             <!-- UA-082 (UX-12 Phase 5): ButtonGroup wraps the mobile-drawer
                  language toggle with role="group" + aria-label; each lang

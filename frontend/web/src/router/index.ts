@@ -83,6 +83,13 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'status.title' }
   },
   {
+    // Phase 14 / UX-30 — public About / FAQ page.
+    path: '/about',
+    name: 'about',
+    component: () => import('@/views/About.vue'),
+    meta: { titleKey: 'about.title' }
+  },
+  {
     // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug page for the recs
     // engine. Route guard rejects non-admin users via meta.requiresAdmin.
     path: '/admin/recs/:user_id',
