@@ -195,7 +195,6 @@
           aria-modal="true"
           aria-labelledby="mobile-drawer-title"
           class="md:hidden py-4 border-t border-white/10 glass-nav rounded-b-2xl"
-          @keydown.escape="mobileMenuOpen = false"
         >
           <h2 id="mobile-drawer-title" class="sr-only">{{ $t('nav.drawerTitle') }}</h2>
           <div class="flex flex-col gap-1">
@@ -277,11 +276,12 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { onClickOutside, useDebounceFn } from '@vueuse/core'
+import { onClickOutside, useDebounceFn, useEventListener, useMediaQuery } from '@vueuse/core'
 import { animeApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
+import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
 
@@ -319,9 +319,30 @@ useFocusTrap({
   returnFocusTo: hamburgerButtonRef,
 })
 
-// Body scroll lock while drawer is open (standard dialog UX).
-watch(mobileMenuOpen, (open) => {
-  document.body.style.overflow = open ? 'hidden' : ''
+// Body scroll lock while drawer is open — refcount composable cooperates with
+// Modal.vue and any other locker instead of stomping their overflow state.
+useBodyScrollLock(mobileMenuOpen)
+
+// WR-03: viewport resize from mobile to desktop while drawer is open would
+// strand mobileMenuOpen === true (hamburger and drawer are both md:hidden, so
+// the user can't toggle it). Force-close on entry to >= md so the scroll lock,
+// focus trap, and body state all unwind cleanly via the existing watchers.
+const isDesktop = useMediaQuery('(min-width: 768px)')
+watch(isDesktop, (desktop) => {
+  if (desktop && mobileMenuOpen.value) {
+    mobileMenuOpen.value = false
+  }
+})
+
+// WR-04: ESC must work globally while the drawer is open — not just when focus
+// is inside the drawer subtree. Without this, clicking the hamburger or logo
+// (siblings of the drawer) moves focus out of the drawer and the
+// @keydown.escape template binding never fires. useEventListener auto-cleans
+// on scope dispose.
+useEventListener(document, 'keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && mobileMenuOpen.value) {
+    mobileMenuOpen.value = false
+  }
 })
 
 const userInitials = computed(() => {
@@ -434,8 +455,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
-  // Clear any residual body scroll lock if Navbar is torn down while drawer was open.
-  document.body.style.overflow = ''
+  // Scroll lock is released automatically by useBodyScrollLock's onScopeDispose.
 })
 </script>
 
