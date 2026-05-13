@@ -329,6 +329,12 @@ export const animeApi = {
     apiClient.get<Collection[] | { data: Collection[] }>('/collections', { params: { limit } }),
   getCollection: (slug: string) =>
     apiClient.get<Collection | { data: Collection }>(`/collections/${encodeURIComponent(slug)}`),
+  // Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTAs. Public, no auth.
+  // Backend proxies api.aniskip.com with a 7d cache. Empty response shape
+  // when MAL ID is missing from aniskip's crowdsourced DB:
+  //   { found: false, results: [] }
+  getSkipTimes: (malId: string, episode: number) =>
+    apiClient.get(`/skip-times/${encodeURIComponent(malId)}/${episode}`),
 }
 
 export const episodeApi = {
