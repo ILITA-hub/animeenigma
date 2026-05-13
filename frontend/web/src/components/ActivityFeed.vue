@@ -140,6 +140,9 @@ const loadMore = () => {
 }
 
 const actionText = (event: ActivityEvent): string => {
+  if (event.type === 'comment') {
+    return t('activity.comment.posted')
+  }
   if (event.type === 'score') {
     return t('activity.score', { score: event.new_value })
   }
