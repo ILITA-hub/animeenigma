@@ -260,25 +260,35 @@
               v-for="(anime, index) in topAnime"
               :key="anime.id"
               :to="`/anime/${anime.id}`"
-              class="relative flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+              class="relative flex gap-3 p-2 pl-12 md:pl-16 rounded-xl hover:bg-white/5 transition-colors group overflow-hidden"
               @touchstart="(e) => onHomeTouchstart(e, anime)"
               @touchmove="onHomeTouchmove"
               @touchend="onHomeTouchend"
             >
+              <!-- Phase 10 (UX-20): giant numeral behind the poster, à la Netflix Top-10.
+                   Only items 1-10 get the numeral; items 11+ render the row without it
+                   (the row is capped at 10 today, but the guard keeps this honest if the
+                   store ever returns more). The numeral sits at z-0 with reduced opacity
+                   so it reads as decorative depth, not the primary affordance. -->
+              <span
+                v-if="index < 10"
+                class="absolute -left-2 md:-left-4 top-1/2 -translate-y-1/2 text-[80px] md:text-[120px] lg:text-[160px] font-black leading-none text-cyan-400/10 z-0 pointer-events-none select-none"
+                aria-hidden="true"
+              >{{ index + 1 }}</span>
               <AnimeKebab
                 :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
                 @open="(el) => openHomeMenuAt(el, anime)"
               />
-              <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
+              <div class="relative z-10 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
                    :class="getRankClass(index)">
                 {{ index + 1 }}
               </div>
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
                 :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
-                class="w-16 h-20 object-cover rounded-lg flex-shrink-0"
+                class="relative z-10 w-16 h-20 object-cover rounded-lg flex-shrink-0"
               />
-              <div class="flex-1 min-w-0">
+              <div class="relative z-10 flex-1 min-w-0">
                 <h3 class="text-sm font-medium text-white group-hover:text-purple-400 transition-colors line-clamp-2">
                   {{ getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) }}
                 </h3>
