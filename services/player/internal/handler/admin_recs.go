@@ -119,7 +119,9 @@ type AdminRecRow struct {
 	TopContributor    string                 `json:"top_contributor"`
 	ContributorDetail map[string]interface{} `json:"contributor_detail,omitempty"`
 	Pinned            bool                   `json:"pinned,omitempty"`
-	PinReason         string                 `json:"pin_reason,omitempty"`
+	PinReason         string                 `json:"pin_reason,omitempty"`           // legacy English fallback
+	PinReasonKey      string                 `json:"pin_reason_key,omitempty"`       // UX-09 (Phase 3) — i18n key
+	PinReasonData     map[string]interface{} `json:"pin_reason_data,omitempty"`      // UX-09 (Phase 3) — interpolation values for PinReasonKey
 	PinSource         string                 `json:"pin_source,omitempty"`
 	PinSeedAnimeID    string                 `json:"pin_seed_anime_id,omitempty"`
 }
@@ -391,7 +393,9 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 						Weights:        weightsAsFloat64,
 						TopContributor: "s6_pin", // locked Phase-13 hand-off
 						Pinned:         true,
-						PinReason:      "Because you finished " + pin.SeedName,
+						PinReason:      "Because you finished " + pin.SeedName,                  // legacy English fallback
+						PinReasonKey:   "recs.pinReason.becauseYouFinished",                    // UX-09 (Phase 3) — i18n key
+						PinReasonData:  map[string]interface{}{"name": pin.SeedName},           // UX-09 (Phase 3) — interpolation values
 						PinSeedAnimeID: pin.SeedAnimeID,
 						PinSource:      pin.Source,
 						ContributorDetail: map[string]interface{}{

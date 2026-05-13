@@ -39,7 +39,10 @@
     "trending": "Тренды сейчас",
     "upNext": "Подобрано для вас",
     "empty": "Пока нет рекомендаций",
-    "pinBadge": "ВЫБРАНО"
+    "pinBadge": "ВЫБРАНО",
+    "pinReason": {
+      "becauseYouFinished": "Потому что вы посмотрели {name}"
+    }
   },
   "anime": {
     "detailsTitle": "Детали аниме",

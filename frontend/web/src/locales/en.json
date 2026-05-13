@@ -39,7 +39,10 @@
     "trending": "Trending now",
     "upNext": "Up Next for you",
     "empty": "No recommendations yet",
-    "pinBadge": "PINNED"
+    "pinBadge": "PINNED",
+    "pinReason": {
+      "becauseYouFinished": "Because you finished {name}"
+    }
   },
   "anime": {
     "detailsTitle": "Anime Details",

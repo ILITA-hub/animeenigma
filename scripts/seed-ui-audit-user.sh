@@ -119,6 +119,10 @@ SELECT
   NOW() - (rn::int || ' hours')::interval
 FROM picks;
 
+-- UX-08 (Phase 3): watch_progress rows are backfilled UNCONDITIONALLY in
+-- Step 0e below — kept out of this block so re-running the script on an
+-- existing user still refreshes /api/users/progress.
+
 INSERT INTO theme_ratings (user_id, theme_id, score)
 SELECT '${USER_ID}'::uuid, id, (7 + (RANDOM() * 3)::int)::bigint
 FROM anime_themes
@@ -131,6 +135,37 @@ SQL
 fi
 
 # ============================================================================
+# Step 0e: Backfill watch_progress for existing seeded users (UA-111 / UX-08)
+#
+# Runs UNCONDITIONALLY (idempotent via ON CONFLICT). The Step 0d block only
+# fires when watch_history is empty — so for users seeded BEFORE the Phase 3
+# fix landed, the new watch_progress rows wouldn't be added without this
+# follow-up. Re-running the seed script on an existing user will populate the
+# missing rows and refresh /api/users/progress responses.
+# ============================================================================
+$DC psql -U postgres -d animeenigma <<SQL
+WITH picks AS (
+  SELECT wh.anime_id, MAX(wh.episode_number) AS ep_max
+  FROM watch_history wh
+  WHERE wh.user_id = '${USER_ID}'::uuid
+  GROUP BY wh.anime_id
+)
+INSERT INTO watch_progress (user_id, anime_id, episode_number, progress, duration, completed, last_watched_at)
+SELECT
+  '${USER_ID}'::uuid,
+  picks.anime_id,
+  gs.ep::bigint,
+  (600 + gs.ep * 30)::bigint,
+  1440::bigint,
+  TRUE,
+  NOW() - (gs.ep || ' hours')::interval
+FROM picks
+CROSS JOIN LATERAL generate_series(1, picks.ep_max::int) AS gs(ep)
+ON CONFLICT (user_id, anime_id, episode_number) DO NOTHING;
+SQL
+echo "--- Step 0e done: watch_progress backfilled ---"
+
+# ============================================================================
 # Verification
 # ============================================================================
 echo ""
@@ -139,5 +174,6 @@ $DC psql -U postgres -d animeenigma -c "
   SELECT
     (SELECT COUNT(*) FROM anime_list WHERE user_id = '${USER_ID}') AS list_entries,
     (SELECT COUNT(*) FROM watch_history WHERE user_id = '${USER_ID}') AS history_entries,
+    (SELECT COUNT(*) FROM watch_progress WHERE user_id = '${USER_ID}') AS progress_entries,
     (SELECT COUNT(*) FROM theme_ratings WHERE user_id = '${USER_ID}') AS theme_ratings;
 "

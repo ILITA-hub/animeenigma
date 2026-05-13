@@ -48,8 +48,8 @@ export interface ResumeStateInputs {
 export interface ResumeStateMachine {
   /** True once init() has fetched server-side progress (or skipped — anon). */
   loaded: Ref<boolean>
-  /** Highest completed episode for this user; 0 if none. */
-  lastWatched: Ref<number>
+  /** Highest completed episode for this user, clamped at totalEpisodes; 0 if none. */
+  lastWatched: ComputedRef<number>
   /** Computed state. */
   kind: ComputedRef<ResumeKind>
   /** Episode the player should mount on. */
@@ -79,12 +79,16 @@ function deriveLastWatched(progress: Array<{ episode_number?: number; completed?
 
 export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMachine {
   const loaded = ref(false)
-  const lastWatched = ref(0)
+  // Raw value from the server-side progress aggregator. May exceed
+  // totalEpisodes if catalog/progress data is out of sync (UA-110); we expose
+  // `lastWatched` below as a CLAMPED computed so consumers never see a value
+  // greater than totalEpisodes.
+  const rawLastWatched = ref(0)
 
   async function init() {
     loaded.value = false
     if (!inputs.isAuthenticated.value) {
-      lastWatched.value = 0
+      rawLastWatched.value = 0
       loaded.value = true
       return
     }
@@ -94,12 +98,12 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
         episode_number?: number
         completed?: boolean
       }>
-      lastWatched.value = deriveLastWatched(data)
+      rawLastWatched.value = deriveLastWatched(data)
     } catch {
       // Best-effort: 404 / network failure leaves lastWatched at 0 (first-time
       // is a safe default — the user can still resume from localStorage in the
       // existing path, which the view continues to honor).
-      lastWatched.value = 0
+      rawLastWatched.value = 0
     } finally {
       loaded.value = true
     }
@@ -107,8 +111,20 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
 
   function reset() {
     loaded.value = false
-    lastWatched.value = 0
+    rawLastWatched.value = 0
   }
+
+  // UA-110 (UX-07 Phase 3): clamp lastWatched at totalEpisodes. Without this,
+  // out-of-sync data (e.g. ui_audit_bot seeded with 12 completed eps on a
+  // single-episode anime) produced "Continue from ep 12" alongside the
+  // "you finished, rewatch from ep 1" banner. Clamping here means every
+  // downstream computed (kind, startEpisode, finishedEpisode) and every
+  // consumer (Anime.vue: lastEpisode binding) sees a coherent value.
+  const lastWatched = computed(() => {
+    const total = inputs.totalEpisodes.value
+    if (total > 0 && rawLastWatched.value > total) return total
+    return rawLastWatched.value
+  })
 
   const kind = computed<ResumeKind>(() => {
     const total = inputs.totalEpisodes.value

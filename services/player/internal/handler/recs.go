@@ -89,7 +89,9 @@ type RecItem struct {
 	Anime          RecAnimePayload `json:"anime"`
 	Final          float64         `json:"final"`
 	Pinned         bool            `json:"pinned"`
-	PinReason      string          `json:"pin_reason,omitempty"`        // Phase 13 (REC-UX-03)
+	PinReason      string          `json:"pin_reason,omitempty"`        // Phase 13 (REC-UX-03) — legacy English fallback
+	PinReasonKey   string          `json:"pin_reason_key,omitempty"`    // UX-09 (Phase 3) — i18n key
+	PinReasonData  map[string]any  `json:"pin_reason_data,omitempty"`   // UX-09 (Phase 3) — interpolation values for PinReasonKey
 	PinSeedAnimeID string          `json:"pin_seed_anime_id,omitempty"` // Phase 13 (REC-UX-03)
 	PinSource      string          `json:"pin_source,omitempty"`        // Phase 13 (REC-UX-03)
 	Rank           int             `json:"rank"`
@@ -495,7 +497,9 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 						Anime:          anime,
 						Final:          0, // spec §B7: float64 zero approximates "null"; frontend gates on Pinned
 						Pinned:         true,
-						PinReason:      "Because you finished " + pin.SeedName,
+						PinReason:      "Because you finished " + pin.SeedName,                         // legacy fallback
+						PinReasonKey:   "recs.pinReason.becauseYouFinished",                           // UX-09: i18n key
+						PinReasonData:  map[string]any{"name": pin.SeedName},                          // UX-09: interpolation values
 						PinSeedAnimeID: pin.SeedAnimeID,
 						PinSource:      pin.Source,
 						Rank:           1,

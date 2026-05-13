@@ -33,10 +33,13 @@ export interface RecItem {
   pinned: boolean
   rank: number
   // Phase 13 (REC-UX-03) — present only when pinned===true. The server
-  // renders pin_reason with the seed name interpolated, so the frontend
-  // displays it as-is. pin_source distinguishes the cascade branch
-  // (admin debug in Phase 14 reads it).
+  // renders pin_reason with the seed name interpolated as legacy English text.
+  // UX-09 (Phase 3) adds pin_reason_key + pin_reason_data so the frontend can
+  // render via $t() with locale-aware copy; consumers should prefer the key
+  // path and fall back to pin_reason (raw English) when the key is absent.
   pin_reason?: string
+  pin_reason_key?: string
+  pin_reason_data?: Record<string, unknown>
   pin_seed_anime_id?: string
   pin_source?: 'local' | 'shikimori_similar' | 'score_5_fallback'
   // Phase 14 (REC-EVAL-01) — click-time signal_id surfaced by the backend

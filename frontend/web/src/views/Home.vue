@@ -33,14 +33,18 @@
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl md:text-2xl font-bold text-white">{{ t(rowLabelKey) }}</h2>
       </div>
-      <!-- Phase 13 (REC-UX-03): pin reason rendered above the row when the
-           first item is pinned. Server has already substituted the seed
-           name into pin_reason; frontend renders the string as-is. -->
+      <!-- Phase 13 (REC-UX-03) + UX-09 (Phase 3): pin reason rendered above
+           the row when the first item is pinned. Prefer the i18n key path
+           (pin_reason_key + pin_reason_data) so the line localizes; fall back
+           to the legacy raw pin_reason (English) when the backend hasn't
+           emitted a key yet. -->
       <p
-        v-if="trendingRecs[0]?.pinned && trendingRecs[0]?.pin_reason"
+        v-if="trendingRecs[0]?.pinned && (trendingRecs[0]?.pin_reason_key || trendingRecs[0]?.pin_reason)"
         class="text-sm text-cyan-300 mb-3"
       >
-        {{ trendingRecs[0].pin_reason }}
+        {{ trendingRecs[0].pin_reason_key
+          ? t(trendingRecs[0].pin_reason_key, trendingRecs[0].pin_reason_data ?? {})
+          : trendingRecs[0].pin_reason }}
       </p>
       <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-1 px-1">
         <router-link

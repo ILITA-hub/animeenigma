@@ -28,6 +28,7 @@ COPY services/scheduler/go.mod services/scheduler/go.sum* ./services/scheduler/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 COPY services/themes/go.mod services/themes/go.sum* ./services/themes/
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
+COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 
 RUN cd services/player && go mod download
 
