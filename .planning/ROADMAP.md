@@ -140,12 +140,15 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 **Plans**: 1 plan in 1 wave (ESCAPE-HATCH path per 19-RESEARCH.md §Convergence Probability Assessment — AnimeKai officially announced shutdown 2026-05-10)
 - [x] 19-01-PLAN.md — Wave 1: Provider package scaffold (stub returning ErrProviderDown) + AnimeKaiConfig + conditional main.go registration + sidecar /animekai-token HTTP 501 stub + REQUIREMENTS.md v3.1 carryover annotation
 
-### Phase 20: Cutover
+### Phase 20: Cutover — PAUSED 2026-05-13
+
+**Status note:** Paused after Plan 20-01 (pre-flight guardrail) because the EnglishPlayer is NOT actually serving clean production traffic — PoC 2026-05-13 proved VibePlayer (the default first server) returns ad-decoy m3u8s for the entire variant playlist. The 7-day soak gate is structurally unsatisfiable while EnglishPlayer can't deliver real video. v3.1 (Phases 21-23) restores playback and re-arms the soak clock; Phase 20 resumes from Plan 20-02 once v3.1 Phase 21 ships and the soak clock runs cleanly for 7 days.
+
 **Goal**: Dead HiAnime + Consumet code paths are deleted in a single PR. The frontend has one English player surface, one backend route family, and one set of locale strings. Catalog image size drops; docker-compose ps shows neither dead container.
-**Depends on**: Phase 19 (or Phase 18 if AnimeKai is shipped flag-default-off)
+**Depends on**: Phase 19 + v3.1 Phase 21 (functional playback) + 7-day clean soak post-Phase-21
 **Requirements**: SCRAPER-CUT-01, SCRAPER-CUT-02, SCRAPER-CUT-03, SCRAPER-CUT-04, SCRAPER-CUT-05, SCRAPER-CUT-06, SCRAPER-CUT-07
 **Success Criteria** (what must be TRUE):
-  1. **Hard guardrail (must be true before any deletion ships):** the new EnglishPlayer has served ≥ 7 days of clean production traffic — per-provider error rate ≤ 5%, zero Telegram alerts, zero user-reported player breakage in `docs/issues/` for that window.
+  1. **Hard guardrail (must be true before any deletion ships):** the new EnglishPlayer has served ≥ 7 days of clean production traffic — per-provider error rate ≤ 5%, zero Telegram alerts, zero user-reported player breakage in `docs/issues/` for that window. Soak clock starts the day v3.1 Phase 21 reaches production.
   2. After the cutover PR merges, `ls services/catalog/internal/parser/{hianime,consumet}/` returns "No such file"; `grep -E "aniwatch|consumet-api" docker/docker-compose.yml` returns nothing; `docker compose ps` after redeploy shows neither container.
   3. The catalog service starts without `ANIWATCH_API_URL` or `CONSUMET_API_URL` env vars set; `docker/megacloud-extractor/patch-aniwatch.sh` is deleted and the `megacloud-extractor` container entrypoint is plain `node server.js`.
   4. The frontend has no remaining `HiAnimePlayer.vue`, `ConsumetPlayer.vue`, `hianimeApi`, `consumetApi`, or `?legacy=1` flag — verified by `grep -r "HiAnimePlayer\|ConsumetPlayer\|hianimeApi\|consumetApi\|legacy=1" frontend/web/src/` returning nothing.
@@ -157,9 +160,54 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 - [ ] 20-04-PLAN.md — Wave 2: frontend deletion — HiAnimePlayer.vue + ConsumetPlayer.vue components, hiAnimeApi + consumetApi exports, ?legacy=1 plumbing in Anime.vue, narrow player/PlayerName type unions, localStorage migration to 'english', drop tabDebugSuffix from 3 locale files
 - [ ] 20-05-PLAN.md — Wave 3: Redis purge script (SCAN+UNLINK) + run against prod + smoke tests + changelog.json entry + Telegram notification + /animeenigma-after-update final invocation
 
+### Phase 21: Playability Foundation
+**Goal**: Production English playback works again. A request that would have hit an ad-poisoned server transparently rolls forward to the next server in priority order and plays real video — verified by a playability gate that catches the poison before the URL reaches the user. Latency cost is masked by a three-phase loader. v3.1's foundation phase; unblocks the v3.0 Phase 20 soak clock by making the EnglishPlayer functional.
+**Depends on**: v3.0 Phase 17 (metrics + health gauge infrastructure already shipped)
+**Requirements**: SCRAPER-HEAL-01, SCRAPER-HEAL-02, SCRAPER-HEAL-03, SCRAPER-HEAL-04, SCRAPER-HEAL-05, SCRAPER-HEAL-06, SCRAPER-HEAL-07, SCRAPER-HEAL-08
+**Success Criteria** (what must be TRUE):
+  1. **Hard fix-the-prod gate:** Production EnglishPlayer plays real video end-to-end for Frieren ep 1 (sub) — fetched master m3u8 contains zero `*.ibyteimg.com` / `p16-ad-sg.*` segments; first segment HEAD returns 200; user-visible playback confirmed manually (browser smoke or HUMAN-UAT).
+  2. New package `libs/streamprobe/` is registered in `go.work`, used by `services/scraper/internal/providers/gogoanime/`, and unit-test-covered for all 7 `Reason` enum values via synthetic m3u8 fixtures (incl. `ad_decoy`, `cdn_unreachable`, `signed_url_expired`, `zero_match`, `status_403`, `empty_response`, `playable`).
+  3. `gogoanime.ListServers` sorts results per env `SCRAPER_SERVER_PRIORITY` (default `streamhg,earnvids,vibeplayer`); typo'd entries fail-fast at scraper startup with a clear error message naming the unknown server.
+  4. `gogoanime.GetStream` iterates servers in priority order, runs the playability gate on each, returns first success; total in-call budget ≤ 8 s across servers. Winning server cached at Redis key `scraper:winning_server:<provider>:<anime>:<ep>` for 5 minutes; warm-path skips the gate on cache hit.
+  5. Scraper `/metrics` exposes `parser_unplayable_total{provider, server, reason}` and `parser_ad_decoy_total{provider, server}` with non-zero values exercised by test (curl the endpoint after a gated fetch).
+  6. `GET /scraper/stream` JSON response includes `meta.gated: true` whenever the gate ran on this call (absent / false on cache hit); a frontend integration test asserts the FE reads this field correctly.
+  7. `frontend/web/src/components/player/EnglishPlayer.vue` renders three sequential loader phases (EN + RU copy) driven by `loadingServers` / `loadingStream` / `validatingStream` refs — verified by Vitest component test exercising each phase + locale.
+**Plans**: 4 plans across 2 waves (Wave 1: 21-01 + 21-02 parallel; Wave 2: 21-03 + 21-04 parallel — no file overlap between 21-03 backend and 21-04 frontend)
+- [x] 21-01-PLAN.md — Wave 1: libs/streamprobe package — Probe(ctx, masterURL, headers) Result + 7-Reason enum + hardcoded ad-CDN host-suffix blocklist with Redis-lift TODO + SSRF guard
+- [x] 21-02-PLAN.md — Wave 1: parser_unplayable_total + parser_ad_decoy_total counters in libs/metrics + writeSuccess(..., gated bool) handler signature emitting meta.gated when true
+- [x] 21-03-PLAN.md — Wave 2: SCRAPER_SERVER_PRIORITY config + ValidatePriorityList fail-fast + gogoanime.GetStreamWithGate (parallel top-2 probe, sequential 3+, ≤8s budget) + winning-server Redis cache + boot wiring + maintenance-prompt reason-enum sync test + prod smoke
+- [x] 21-04-PLAN.md — Wave 2: EnglishPlayer.vue validatingStream ref + three-phase loader template (EN + RU inline copy per D6) + fetchStream meta.gated wiring + Vitest spec (9 cases) + changelog + after-update
+**Status**: SHIPPED 2026-05-13 — VERIFICATION.md `human_needed`, 5/7 must-haves fully met. Backend production smoke passed (meta.gated true on cold, absent on warm, parser_unplayable_total live increment caught a real streamhg failure → earnvids took over). Manual browser smoke for the three-phase loader is the only outstanding user gate; flaky `TestGetStreamWithGate_AdDecoy_Skipped` race logged as W-21-01 follow-up (implementation correct, only test is broken).
+
+### Phase 22: Provider Robustness
+**Goal**: When a single CDN behind a server fails (signed-URL expired, 403, geo-block), the orchestrator transparently tries that server's secondary URL family before giving up on the server. Catches the failure mode "the regex still works but the URL doesn't" — distinct from Phase 21's "the server is dead".
+**Depends on**: Phase 21 (gate + per-server fallback already iterates `[]Sources`)
+**Requirements**: SCRAPER-HEAL-09, SCRAPER-HEAL-10, SCRAPER-HEAL-11
+**Success Criteria** (what must be TRUE):
+  1. `services/scraper/internal/embeds/streamhg.go` and `earnvids.go` return BOTH the `hls2` (signed `.m3u8`) AND `hls3` (unsigned `.txt`) URLs as separate `Stream.Sources` entries, verified by unit test against golden packed-JS fixtures captured 2026-05-13.
+  2. `libs/videoutils/proxy.go` `HLSProxyAllowedDomains` contains `managementadvisory.sbs` and `exoplanethunting.space` (the hls3 CDN hosts); integration test fetches a synthetic hls3 m3u8 through the HLS proxy and confirms 200 OK passthrough.
+  3. End-to-end synthetic: when `hls2` returns 403 (simulated via test fixture), gogoanime `GetStream` falls through to `hls3` via Phase 21's per-server iteration and returns a playable URL.
+  4. `docs/issues/README.md` contains an inline `ISS-011: VibePlayer Ad-Decoy Poisoning` entry documenting the PoC 2026-05-13 findings — status `Mitigated` (not Resolved) since root cause (IP-level poisoning) persists; entry sits in Active Issues until WARP recovery (future phase) flips it.
+**Plans**: TBD (estimated 2 plans, single wave — 22-01 multi-URL extraction + allowlist; 22-02 ISS-011 doc)
+
+### Phase 23: Self-Maintenance Loop
+**Goal**: A regression at any upstream site is detected within 24 hours by a daily canary that exercises real production code paths, surfaces a labeled alert into the existing `services/maintenance` bot, and gets dispatched per `.claude/maintenance-prompt.md` Patterns 6/7 — without a human needing to notice.
+**Depends on**: Phase 21 (gate exists) + Phase 22 (multi-URL extraction live so the canary exercises full surface)
+**Requirements**: SCRAPER-HEAL-12, SCRAPER-HEAL-13, SCRAPER-HEAL-14, SCRAPER-HEAL-15, SCRAPER-HEAL-16
+**Success Criteria** (what must be TRUE):
+  1. `services/scheduler/internal/jobs/scraper_playability_canary.go` runs daily at 03:00 local (±5 min jitter), composes anime list as `[Frieren, One Piece, 3 distinct anime_ids from watch_history < 24h]` with fallback to `anime_list ORDER BY updated_at DESC` when history empty, and writes per-run logs to the `player_reports` Docker volume.
+  2. Scheduler `/metrics` exposes `playability_canary_runs_total{provider, server, result, reason, anime_slot}` with `anime_slot ∈ {anchor_frieren, anchor_one_piece, recent_1, recent_2, recent_3}` — verified by reading metrics after one canary run.
+  3. New Grafana dashboard `infra/grafana/dashboards/scraper-provider-health.json` shows stacked pass/fail per provider/server (24h), reason breakdown, last-canary timestamp, and top failing tuples.
+  4. Three Prometheus alert rules in `infra/grafana/alerts/scraper.yaml` route to existing `services/maintenance` `/api/grafana-webhook`: `ScraperPlayabilityRegression` (any canary fail in 25h, warning), `ScraperAdDecoySurge` (rate > 0 sustained 5m, warning), `ScraperUnplayableSpike` (rate / getstream-rate > 0.05 sustained 5m, critical). All labels include `provider`, `server`, `reason`.
+  5. Synthetic Pattern 6 alert injected into `/api/grafana-webhook` produces a maintenance bot response that (a) names Pattern 6 in `known_pattern`, (b) tiers as `button_fix` for the server-priority reorder fix path, (c) names the correct files; synthetic Pattern 7 alert similarly dispatches to selector/regex/allowlist fix paths.
+  6. `.claude/maintenance-prompt.md` Patterns 6/7 + Scraper Playability Regression section verified still present and parseable (SCRAPER-HEAL-16 — pre-shipped 2026-05-13).
+**Plans**: TBD (estimated 3 plans across 2 waves — Wave 1: 23-01 canary cron standalone; Wave 2: 23-02 dashboard + alert rules + 23-03 synthetic-alert verification)
+
 ### Next Milestone (TBD)
 
-After v3.0 ships, run `/gsd-new-milestone` to start the next cycle.
+After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved future phases:
+- Phase 24: VibePlayer Recovery via WARP egress (revives VibePlayer as a working server by routing scraper egress through Cloudflare WARP; separate spec when there is appetite)
+- Phase 25: MinIO Hot Archival (rip popular HLS streams to MinIO; serve from there to decouple from upstream availability; separate v3.2 spec)
 
 ## Progress
 

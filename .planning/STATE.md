@@ -1,35 +1,35 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: Universal Anime Scraper
-status: executing
-stopped_at: Phase 18 Plan 18-04 complete; gogoanime wired end-to-end (registry+provider+failover+HLS-allowlist+EnglishPlayer dropdown+changelog); production deploy verified healthy; live browser failover smoke deferred to HUMAN-UAT.md
-last_updated: "2026-05-12T18:17:49.141Z"
-last_activity: 2026-05-12
+milestone: v3.1
+milestone_name: Scraper Self-Healing
+status: completed
+stopped_at: v3.1 milestone artifacts complete — `.planning/milestones/v3.1-REQUIREMENTS.md`, `v3.1-ROADMAP.md`, `phases/21..23-*/CONTEXT.md`, ROADMAP.md Phase Details blocks for Phase 21/22/23, `.claude/maintenance-prompt.md` Patterns 6/7. PoC artifacts at `/tmp/extractor-poc/` (ephemeral, not committed).
+last_updated: "2026-05-13T06:15:58.721Z"
+last_activity: 2026-05-13 -- Phase 21 marked complete
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 24
-  completed_plans: 20
-  percent: 83
+  total_phases: 9
+  completed_phases: 6
+  total_plans: 28
+  completed_plans: 24
+  percent: 67
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-09 — v3.0 milestone started)
+See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v3.1 inherits the same project context).
 
-**Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row.
+**Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row. v3.1's contribution: when the user actually presses Play on an English-source anime, the player surfaces real video instead of upstream ad-decoy garbage.
 
-**Current focus:** Phase 20 — Cutover
+**Current focus:** Phase 21 — Playability Foundation
 
 ## Current Position
 
-Phase: 20 (Cutover) — EXECUTING
-Plan: 2 of 5
-Status: Ready to execute
-Last activity: 2026-05-12
+Phase: 21 — COMPLETE
+Plan: 1 of 4
+Status: Phase 21 complete
+Last activity: 2026-05-13 -- Phase 21 marked complete
 
 ## Shipped Milestones
 
@@ -38,31 +38,40 @@ Last activity: 2026-05-12
 | v1.0 Smart Watch Picker Overhaul | 2026-05-03 | 1-8 | — |
 | v2.0 Recommendations Engine | 2026-05-07 | 9-14 | 8/8 |
 
-## v3.0 Phase Map
+## In-Flight Milestones
+
+| Milestone | Phases | Status |
+|-----------|--------|--------|
+| v3.0 Universal Anime Scraper | 15-20 | Phase 15-19 SHIPPED 2026-05-11..12; Phase 20 PAUSED 2026-05-13 (1/5 plans done) — resumes after v3.1 Phase 21 + 7-day clean soak |
+| v3.1 Scraper Self-Healing | 21-23 | EXECUTING — Phase 21 ready to plan |
+
+## v3.1 Phase Map
 
 | Phase | Name | Requirements |
 |---|---|---|
-| 15 | Foundation | SCRAPER-FOUND-01..10, SCRAPER-NF-01, SCRAPER-NF-03 |
-| 16 | AnimePahe + new EnglishPlayer | SCRAPER-PAHE-01..05, SCRAPER-UI-01..04, SCRAPER-NF-02, SCRAPER-NF-05 |
-| 17 | Observability | SCRAPER-OBS-01..05, SCRAPER-NF-04 |
-| 18 | 9anime | SCRAPER-9ANI-01..06 |
-| 19 | AnimeKai (gated) | SCRAPER-KAI-01..07 |
-| 20 | Cutover | SCRAPER-CUT-01..07 (gated on ≥ 7 days clean prod traffic) |
+| 21 | Playability Foundation | SCRAPER-HEAL-01..08 |
+| 22 | Provider Robustness | SCRAPER-HEAL-09..11 |
+| 23 | Self-Maintenance Loop | SCRAPER-HEAL-12..16 |
 
-## v3.0 Drivers (carried from triage 2026-05-09)
+## v3.1 Drivers (from PoC 2026-05-13)
 
-- HiAnime ecosystem dead: `hianime.to` unreachable from this server; `hianime.nz` shows shutdown notice; `aniwatch-api` GitHub repo deleted; `aniwatchtv.to` returns 404. All 4 aniwatch endpoints (search/episodes/servers/sources) time out at 8s upstream.
-- Consumet broken: `riimuru/consumet-api:latest` (5 months stale) calls `enc-dec.app` with wrong body shape (`Expected body: text, agent`) → 100% of Zoro stream resolution fails. Other Consumet providers (animepahe, gogoanime) may still work but we don't currently route through them.
-- AnimeLib's Kodik-fallback path was just disabled (commit `9347143`, feedback memory `feedback_animelib_no_kodik_fallback.md`). Users with EN-only anime currently have no working player tab other than Kodik.
-- Verified alive provider sites (HTTP 200 + real body): AnimeKai (`animekai.to`), AnimePahe (alive mirror), Anitaku/Gogoanime (`anitaku.io`), AniZone (`anizone.to`). Verified dead: hianime.*, aniwatchtv.to, kaido.to, aniwave.to, animekai.bz.
+- VibePlayer (HD-1, the default first server returned by gogoanime) serves ad-decoy m3u8 manifests whose entire variant playlist points at TikTok's ad CDN (`p16-ad-sg.ibyteimg.com`). Real headless Chromium gets the same poison — confirmed IP-level, not fingerprint. Production EnglishPlayer plays *something* (manifest parses, duration loads) but never any actual video frame.
+- StreamHG (`otakuhg.site` → `premilkyway.com`) and Earnvids (`otakuvid.online` → `dramiyos-cdn.com`) work perfectly — Go regex on packed JS extracts a valid signed `.m3u8`, HLS proxy returns 200, real `.ts` segments. They were never tried because VibePlayer is sorted first.
+- Both StreamHG and Earnvids ALSO expose a secondary `hls3` URL family at rotated CDNs (`managementadvisory.sbs`, `exoplanethunting.space`) for use when `hls2` signed-URL TTL expires — currently unused.
+- v3.0 Phase 17 observability infrastructure (metrics, health gauges, admin endpoint) ships v3.1's metrics without new infrastructure work.
 
-## v1.0 / v2.0 Carryover (preserved across milestone switch)
+## v3.0 Carryover (resumable, not abandoned)
+
+- **v3.0 Phase 20 Cutover** — Plan 20-01 (pre-flight guardrail) complete. Plans 20-02 through 20-05 paused. The Cutover PR's gate ("≥ 7 days clean prod traffic on EnglishPlayer") is structurally unsatisfiable until v3.1 Phase 21 ships. After Phase 21 production deploy, soak clock starts; if 7 days pass cleanly, Phase 20 resumes from 20-02. If new regressions appear (caught by v3.1 Phase 23 canary), soak clock resets.
+- **AnimeKai (Phase 19) gated R&D** carried as `SCRAPER_ANIMEKAI_ENABLED=false`. Independent of v3.1.
+
+## v1.0 / v2.0 Carryover (preserved across milestone switches)
 
 - **v1.0 Phase 7 follow-up (override-rate re-snapshot)** ran post-deploy; tracked separately from active phases.
-- **v2.1 backlog** documented in `.planning/milestones/v2.0-MILESTONE-AUDIT.md`: editable weights UI, S1 neighbor expansion, S6 seed history, per-anime CTR breakdown, session-based attribution, GDPR delete path for rec_events, rec_events rate limit, pin signal_id observability split. Out of v3.0 scope unless explicitly pulled into a phase.
+- **v2.1 backlog** documented in `.planning/milestones/v2.0-MILESTONE-AUDIT.md`: editable weights UI, S1 neighbor expansion, S6 seed history, per-anime CTR breakdown, session-based attribution, GDPR delete path for rec_events, rec_events rate limit, pin signal_id observability split. Out of v3.1 scope unless explicitly pulled into a phase.
 
 ## Session Continuity
 
-Last session: 2026-05-12T18:17:31.188Z
-Stopped at: Phase 18 Plan 18-04 complete; gogoanime wired end-to-end (registry+provider+failover+HLS-allowlist+EnglishPlayer dropdown+changelog); production deploy verified healthy; live browser failover smoke deferred to HUMAN-UAT.md
-Resume from: `/gsd-verify-phase 18` to run the phase-verifier sweep, then `/gsd-autonomous --from 19` (AnimeKai, gated). HUMAN-UAT.md will document the deferred live-browser failover smoke for user execution before Phase 19 begins. Compensating control: TestOrchestrator_AnimePaheToGogoanimeFailover PASS + production /scraper/health + /metrics confirm gogoanime is live across all 5 stages.
+Last session: 2026-05-13T07:00:00.000Z
+Stopped at: v3.1 milestone artifacts complete — `.planning/milestones/v3.1-REQUIREMENTS.md`, `v3.1-ROADMAP.md`, `phases/21..23-*/CONTEXT.md`, ROADMAP.md Phase Details blocks for Phase 21/22/23, `.claude/maintenance-prompt.md` Patterns 6/7. PoC artifacts at `/tmp/extractor-poc/` (ephemeral, not committed).
+Resume from: `/gsd-plan-phase --phase 21` to draft Phase 21's 4 plans across 2 waves, then `/gsd-execute-phase --phase 21`. After Phase 21 production deploy, monitor canary signals (none yet — Phase 23 ships them) by hand for 24-48h, then proceed to Phase 22. Phase 23 last. v3.0 Phase 20 resumes only after v3.1 ships AND 7-day clean soak completes.
