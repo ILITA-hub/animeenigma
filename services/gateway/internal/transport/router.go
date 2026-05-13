@@ -133,6 +133,13 @@ func NewRouterWithCleanup(
 		// /admin route group's JWT + AdminRoleMiddleware above.
 		r.HandleFunc("/recs", proxyHandler.ProxyToWeb)
 		r.HandleFunc("/recs/*", proxyHandler.ProxyToWeb)
+
+		// Phase 17 (UX-33): /admin/collections/* falls through to the web
+		// SPA so AdminCollections.vue / AdminCollectionEdit.vue can render.
+		// Auth is already enforced by the surrounding /admin group's JWT
+		// + AdminRoleMiddleware above.
+		r.HandleFunc("/collections", proxyHandler.ProxyToWeb)
+		r.HandleFunc("/collections/*", proxyHandler.ProxyToWeb)
 	})
 
 	// API routes
@@ -183,6 +190,10 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/hianime/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/consumet/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/animelib/*", proxyHandler.ProxyToCatalog)
+		// Phase 17 (UX-33) — public editorial collections. /api/admin/collections/*
+		// is covered by the existing /admin/* admin-gated group below.
+		r.HandleFunc("/collections", proxyHandler.ProxyToCatalog)
+		r.HandleFunc("/collections/*", proxyHandler.ProxyToCatalog)
 
 		// Phase 17 Plan 03: admin scraper routes (protected, proxied to scraper).
 		// CRITICAL ORDER — this group MUST be registered BEFORE the generic

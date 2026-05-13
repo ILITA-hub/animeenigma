@@ -93,6 +93,8 @@ func main() {
 	animeRepo := repo.NewAnimeRepository(db.DB)
 	genreRepo := repo.NewGenreRepository(db.DB)
 	videoRepo := repo.NewVideoRepository(db.DB)
+	// Phase 17 (UX-33) — editorial collections repo.
+	collectionRepo := repo.NewCollectionRepository(db.DB)
 
 	// Initialize services
 	catalogService := service.NewCatalogService(
@@ -135,12 +137,15 @@ func main() {
 	catalogHandler := handler.NewCatalogHandler(catalogService, log)
 	adminHandler := handler.NewAdminHandler(catalogService, log)
 	newsHandler := handler.NewNewsHandler(telegramClient, redisCache, log)
+	// Phase 17 (UX-33) — editorial collections service + handler.
+	collectionService := service.NewCollectionService(collectionRepo, log)
+	collectionHandler := handler.NewCollectionHandler(collectionService, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

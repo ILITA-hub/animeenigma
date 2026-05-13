@@ -17,6 +17,7 @@ func NewRouter(
 	catalogHandler *handler.CatalogHandler,
 	adminHandler *handler.AdminHandler,
 	newsHandler *handler.NewsHandler,
+	collectionHandler *handler.CollectionHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -119,6 +120,16 @@ func NewRouter(
 
 		r.Get("/genres", catalogHandler.GetGenres)
 
+		// Phase 17 (UX-33) — public editorial collections. Registered
+		// BEFORE the /admin group so chi's longest-prefix match resolves
+		// public routes first (admin uses a literal /admin/ prefix so
+		// there's no actual collision, but the convention stays consistent
+		// with other public-before-admin blocks in this router).
+		r.Route("/collections", func(r chi.Router) {
+			r.Get("/", collectionHandler.ListPublic)
+			r.Get("/{slug}", collectionHandler.GetBySlug)
+		})
+
 		// Admin routes (require authentication)
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(AuthMiddleware(cfg.JWT))
@@ -139,6 +150,15 @@ func NewRouter(
 
 			// Link MAL ID
 			r.Patch("/anime/{animeId}/mal", adminHandler.LinkMALID)
+
+			// Phase 17 (UX-33) — editorial collections admin CRUD.
+			r.Get("/collections", collectionHandler.ListAdmin)
+			r.Post("/collections", collectionHandler.Create)
+			r.Get("/collections/{id}", collectionHandler.GetAdmin)
+			r.Put("/collections/{id}", collectionHandler.Update)
+			r.Delete("/collections/{id}", collectionHandler.Delete)
+			r.Post("/collections/{id}/items", collectionHandler.AddItem)
+			r.Delete("/collections/{id}/items/{animeId}", collectionHandler.RemoveItem)
 		})
 	})
 
