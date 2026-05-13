@@ -20,6 +20,26 @@
       </div>
     </div>
 
+    <!-- Phase 12 / UA-100: admin-guard redirect notice.
+         The router redirects non-admin users home on /admin/* and stashes
+         a key in sessionStorage; we surface a brief dismissible banner so
+         the redirect isn't silent. Auto-dismisses after 6 s. -->
+    <div
+      v-if="adminRedirectKey"
+      role="alert"
+      class="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)] bg-red-500/90 text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3"
+    >
+      <span class="flex-1 text-sm">{{ $t(adminRedirectKey) }}</span>
+      <button
+        type="button"
+        class="text-white/80 hover:text-white text-lg leading-none"
+        :aria-label="$t('system.statusBanner.dismiss')"
+        @click="adminRedirectKey = null"
+      >
+        ×
+      </button>
+    </div>
+
     <!-- Main Content -->
     <main v-else>
       <router-view v-slot="{ Component }">
@@ -46,12 +66,35 @@
 
 <script setup lang="ts">
 import { onMounted, onErrorCaptured, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/layout/Navbar.vue'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 const appError = ref<Error | null>(null)
+
+// Phase 12 / UA-100: pick up the admin-guard redirect reason that
+// router/index.ts stashed in sessionStorage before redirecting home.
+// Cleared on first read so the banner doesn't persist across navigation.
+const adminRedirectKey = ref<string | null>(null)
+
+function consumeAdminRedirectKey() {
+  try {
+    const key = sessionStorage.getItem('admin_redirect_reason')
+    if (key) {
+      sessionStorage.removeItem('admin_redirect_reason')
+      adminRedirectKey.value = key
+      // Auto-dismiss after 6 s so the banner doesn't linger forever.
+      window.setTimeout(() => {
+        adminRedirectKey.value = null
+      }, 6000)
+    }
+  } catch {
+    // sessionStorage may throw in privacy modes — silent failure is OK.
+  }
+}
 
 onErrorCaptured((err) => {
   appError.value = err
@@ -63,9 +106,16 @@ const reloadPage = () => window.location.reload()
 
 // Initialize auth state - fetch user if we have token but no user data
 onMounted(async () => {
+  consumeAdminRedirectKey()
   if (authStore.token && !authStore.user) {
     await authStore.fetchUser()
   }
+})
+
+// Phase 12 / UA-100: also surface after route changes, since the
+// admin-guard sets sessionStorage during navigation (not initial mount).
+router.afterEach(() => {
+  consumeAdminRedirectKey()
 })
 </script>
 

@@ -148,7 +148,17 @@ router.beforeEach((to, _from, next) => {
   // Phase 14: requiresAdmin gate. Non-admin users are sent home.
   // The route guard is purely UX — the actual security boundary is the
   // gateway + player AdminRoleMiddleware (defense-in-depth).
+  //
+  // Phase 12 / UA-100: surface a "not admin" message before the silent
+  // redirect. The router runs outside any component tree, so we hand off
+  // via sessionStorage; App.vue picks it up on the next mount and shows a
+  // dismissible red banner. Cleared after one read.
   if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    try {
+      sessionStorage.setItem('admin_redirect_reason', 'admin.errors.notAdmin')
+    } catch {
+      // sessionStorage can throw in privacy modes — silent failure is OK.
+    }
     next({ name: 'home' })
     return
   }
