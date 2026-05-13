@@ -35,7 +35,9 @@
     "updated": "Updated {time}",
     "airing": "Airing",
     "announced": "Announced",
-    "episodeCount": "{count} ep."
+    "episodeCount": "{count} ep.",
+    "continueWatching": "Continue Watching",
+    "continueWatchingEpisode": "Episode {n}"
   },
   "recs": {
     "trending": "Trending now",

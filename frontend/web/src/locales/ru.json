@@ -35,7 +35,9 @@
     "updated": "Обновлено {time}",
     "airing": "Выходит",
     "announced": "Анонс",
-    "episodeCount": "{count} эп."
+    "episodeCount": "{count} эп.",
+    "continueWatching": "Продолжить просмотр",
+    "continueWatchingEpisode": "Серия {n}"
   },
   "recs": {
     "trending": "Тренды сейчас",
