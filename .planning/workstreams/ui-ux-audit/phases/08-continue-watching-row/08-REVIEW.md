@@ -22,7 +22,10 @@ findings:
   warning: 3
   info: 3
   total: 7
-status: findings_found
+status: fixed
+fixed_at: 2026-05-13T00:00:00Z
+fixed: 7
+skipped: 0
 ---
 
 # Phase 8: Code Review Report
@@ -204,6 +207,61 @@ And in the template render `v-if="progressState(item) === 'value'"` for the cyan
 
 ---
 
+## Fixes Applied
+
+**Fixed at:** 2026-05-13
+**Total fixed:** 7 of 7 (100%)
+**Total skipped:** 0
+
+### CR-01 — fixed (`4f1103a`)
+Anime.vue now reads `route.query.episode`, parses + clamps it to
+`[1, totalEpisodes]`, and slots it into the `resumeStartEpisode`
+precedence chain above the state-machine resume but below the in-page
+"Rewatch" override. A watcher auto-activates the player when the
+query is present so the deep link lands the user ready to watch.
+The resume state machine is unchanged — the query is a HINT, not a
+hard override.
+
+### WR-01 — fixed (`e135765`)
+`ProgressHandler.ListContinueWatching` now validates `?limit=` at the
+API boundary: non-numeric or non-positive returns 400, > 50 returns
+400. Repo's `[1, 20]` clamp remains as defense-in-depth.
+
+### WR-02 — fixed (`f6f0226`)
+`ProgressRepository.ListContinueWatching` now logs a `Warnw` when the
+INNER JOIN against `animes` drops rows (orphaned `watch_progress`
+entries with missing or soft-deleted anime). Logger wired via an
+optional `WithLogger` setter so existing tests remain a no-op for
+the observability path. The query is unchanged.
+
+### WR-03 — fixed (`75afd7a`)
+Documented the SQLite/Postgres dialect divergence in
+`progress_test.go` (SQLite has no native BOOLEAN — fixture uses
+INTEGER; the literal `false` is silently coerced cross-dialect). Added
+a TODO pointing at the preferred fix (Postgres testcontainer
+integration test). No code change required for v1.
+
+### IN-01 — fixed (`ca6aff0`)
+ContinueWatchingRow.vue progress bar now uses `transition-[width]`
+instead of `transition-all`.
+
+### IN-02 — fixed (`ca6aff0`)
+When progress is genuinely > 0 but tiny in percentage terms, the bar
+renders with `min-width: 4px` so it's visible. When `progressPct === 0`
+the entire bar background is hidden (`v-if` guard) — distinguishing
+"no progress / unknown duration" from "just started".
+
+### IN-03 — fixed (`ca6aff0`)
+Dropped the dead `oldToken !== undefined` guard in
+`useContinueWatching`'s auth watcher. Both halves of the prior
+condition were defensive no-ops given the watcher's actual semantics
+(no `immediate: true`; `auth.token` is `string | null`, never
+`undefined`).
+
+---
+
 _Reviewed: 2026-05-13_
 _Reviewer: Claude (gsd-code-reviewer)_
+_Fixed: 2026-05-13_
+_Fixer: Claude (gsd-code-fixer)_
 _Depth: standard_
