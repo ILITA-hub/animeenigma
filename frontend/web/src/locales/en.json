@@ -748,6 +748,38 @@
       "forbidden": "You don't have permission",
       "serverError": "Server error, try again",
       "timeout": "Request timed out"
+    },
+    "collections": {
+      "title": "Collections (admin)",
+      "editTitle": "Edit collection",
+      "createNew": "Create collection",
+      "tableTitle": "Title",
+      "tableSlug": "Slug",
+      "tableItems": "Items",
+      "tableUpdated": "Updated",
+      "tableActions": "Actions",
+      "draftPill": "DRAFT",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this collection? Items are unlinked but anime records remain.",
+      "fieldSlug": "Slug (URL)",
+      "slugPlaceholder": "auto-generated from title if blank",
+      "fieldTitleEn": "Title (EN)",
+      "fieldTitleRu": "Title (RU)",
+      "fieldTitleJp": "Title (JP)",
+      "fieldDescriptionEn": "Description (EN)",
+      "fieldDescriptionRu": "Description (RU)",
+      "fieldDescriptionJp": "Description (JP)",
+      "fieldCover": "Cover image URL",
+      "fieldPublished": "Published",
+      "itemsSection": "Anime in this collection",
+      "itemsEmpty": "No anime yet — add one below.",
+      "itemSearchPlaceholder": "Search anime by name…",
+      "itemSortOrder": "Order",
+      "itemRemove": "Remove",
+      "save": "Save",
+      "saved": "Saved",
+      "preview": "Preview"
     }
   },
   "about": {
@@ -799,5 +831,11 @@
       "updateFailed": "Couldn't update — please retry",
       "removeFailed": "Couldn't remove — please retry"
     }
+  },
+  "collections": {
+    "title": "Collections",
+    "emptyItems": "No anime in this collection yet.",
+    "notFound": "Collection not found.",
+    "homeRowLabel": "Collections"
   }
 }

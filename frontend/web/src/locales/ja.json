@@ -748,6 +748,38 @@
       "forbidden": "アクセス権限がありません",
       "serverError": "サーバーエラー、再試行してください",
       "timeout": "リクエストがタイムアウトしました"
+    },
+    "collections": {
+      "title": "コレクション (管理)",
+      "editTitle": "コレクション編集",
+      "createNew": "コレクション作成",
+      "tableTitle": "タイトル",
+      "tableSlug": "スラッグ",
+      "tableItems": "件数",
+      "tableUpdated": "更新日時",
+      "tableActions": "操作",
+      "draftPill": "下書き",
+      "edit": "編集",
+      "delete": "削除",
+      "deleteConfirm": "このコレクションを削除しますか？ アニメ自体は残ります。",
+      "fieldSlug": "スラッグ (URL)",
+      "slugPlaceholder": "空欄ならタイトルから自動生成",
+      "fieldTitleEn": "タイトル (EN)",
+      "fieldTitleRu": "タイトル (RU)",
+      "fieldTitleJp": "タイトル (JP)",
+      "fieldDescriptionEn": "説明 (EN)",
+      "fieldDescriptionRu": "説明 (RU)",
+      "fieldDescriptionJp": "説明 (JP)",
+      "fieldCover": "カバー画像 URL",
+      "fieldPublished": "公開",
+      "itemsSection": "コレクション内のアニメ",
+      "itemsEmpty": "まだありません — 下から追加してください。",
+      "itemSearchPlaceholder": "アニメを名前で検索…",
+      "itemSortOrder": "順番",
+      "itemRemove": "削除",
+      "save": "保存",
+      "saved": "保存しました",
+      "preview": "プレビュー"
     }
   },
   "about": {
@@ -799,5 +831,11 @@
       "updateFailed": "更新できませんでした、再試行してください",
       "removeFailed": "削除できませんでした、再試行してください"
     }
+  },
+  "collections": {
+    "title": "コレクション",
+    "emptyItems": "このコレクションにはまだアニメがありません。",
+    "notFound": "コレクションが見つかりません。",
+    "homeRowLabel": "コレクション"
   }
 }

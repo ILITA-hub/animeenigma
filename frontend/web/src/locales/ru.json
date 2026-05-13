@@ -748,6 +748,38 @@
       "forbidden": "Нет доступа",
       "serverError": "Ошибка сервера, попробуйте снова",
       "timeout": "Превышено время ожидания"
+    },
+    "collections": {
+      "title": "Подборки (админ)",
+      "editTitle": "Редактирование подборки",
+      "createNew": "Создать подборку",
+      "tableTitle": "Название",
+      "tableSlug": "Слаг",
+      "tableItems": "Записей",
+      "tableUpdated": "Обновлено",
+      "tableActions": "Действия",
+      "draftPill": "ЧЕРНОВИК",
+      "edit": "Редактировать",
+      "delete": "Удалить",
+      "deleteConfirm": "Удалить эту подборку? Связи разорвутся, аниме останутся.",
+      "fieldSlug": "Слаг (URL)",
+      "slugPlaceholder": "сгенерируется автоматически, если пусто",
+      "fieldTitleEn": "Название (EN)",
+      "fieldTitleRu": "Название (RU)",
+      "fieldTitleJp": "Название (JP)",
+      "fieldDescriptionEn": "Описание (EN)",
+      "fieldDescriptionRu": "Описание (RU)",
+      "fieldDescriptionJp": "Описание (JP)",
+      "fieldCover": "URL обложки",
+      "fieldPublished": "Опубликовано",
+      "itemsSection": "Аниме в подборке",
+      "itemsEmpty": "Пока пусто — добавьте аниме ниже.",
+      "itemSearchPlaceholder": "Поиск аниме по названию…",
+      "itemSortOrder": "Порядок",
+      "itemRemove": "Удалить",
+      "save": "Сохранить",
+      "saved": "Сохранено",
+      "preview": "Превью"
     }
   },
   "about": {
@@ -799,5 +831,11 @@
       "updateFailed": "Не удалось обновить — повторите",
       "removeFailed": "Не удалось удалить — повторите"
     }
+  },
+  "collections": {
+    "title": "Подборки",
+    "emptyItems": "В этой подборке пока нет аниме.",
+    "notFound": "Подборка не найдена.",
+    "homeRowLabel": "Подборки"
   }
 }
