@@ -84,6 +84,27 @@
             @loading="(v: boolean) => loadingSubOverlay = v"
             @error="(msg: string) => jimakuError = msg"
           />
+
+          <!-- Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTAs.
+               Mirrors HiAnimePlayer.vue. bottom-20 keeps clear of native
+               video controls; z-10 sits above controls but below modal
+               dialogs. v-else-if guarantees OP and ED never stack. -->
+          <button
+            v-if="showSkipIntro && skipOpening"
+            @click="seekTo(skipOpening.end)"
+            class="absolute bottom-20 right-4 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-white text-sm font-medium rounded-lg shadow-lg z-10 transition-colors"
+            type="button"
+          >
+            {{ $t('player.skipIntro') }}
+          </button>
+          <button
+            v-else-if="showSkipOutro && skipEnding"
+            @click="seekTo(skipEnding.end)"
+            class="absolute bottom-20 right-4 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-white text-sm font-medium rounded-lg shadow-lg z-10 transition-colors"
+            type="button"
+          >
+            {{ $t('player.skipOutro') }}
+          </button>
         </div>
 
         <!-- Episode selector below player -->
@@ -377,6 +398,7 @@ import { consumetApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
+import { useSkipTimes } from '@/composables/useSkipTimes'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
@@ -424,6 +446,10 @@ const props = defineProps<{
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
   subOrDub?: 'sub' | 'dub'
+  // Phase 18 (UX-34) — MAL ID drives the skip-intro/skip-outro CTAs via
+  // useSkipTimes. Optional because not every anime has a MAL mapping;
+  // when null/undefined the CTA simply doesn't render.
+  malId?: string | number | null
 }>()
 
 const emit = defineEmits<{
@@ -585,6 +611,39 @@ const currentCombo = computed((): WatchCombo | null => {
 // currentEpisodeNumber: numeric ref for the override tracker. Consumet stores
 // the episode as the full ConsumetEpisode object — extract the number lazily.
 const currentEpisodeNumber = computed(() => selectedEpisode.value?.number ?? 0)
+
+// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTAs. Composable fetches the
+// (op, ed) timestamps from /api/skip-times whenever malId or episode
+// changes. When malId is missing or aniskip has no data, opening/ending
+// stay null and showSkipIntro/showSkipOutro evaluate false — CTA buttons
+// render nothing. Pure additive feature, mirrors HiAnimePlayer.vue.
+const malIdRef = toRef(props, 'malId')
+const { opening: skipOpening, ending: skipEnding } = useSkipTimes(
+  malIdRef,
+  currentEpisodeNumber,
+)
+const showSkipIntro = computed(() => {
+  const op = skipOpening.value
+  if (!op) return false
+  return currentTime.value >= op.start && currentTime.value < op.end - 1
+})
+const showSkipOutro = computed(() => {
+  const ed = skipEnding.value
+  if (!ed) return false
+  return currentTime.value >= ed.start && currentTime.value < ed.end - 1
+})
+
+// seekTo handles both Video.js + native HLS player paths. Player-agnostic so
+// the overlay buttons don't need to branch on playerType.value. Mirrors the
+// seek logic already used by the ArrowLeft / ArrowRight keyboard handler.
+function seekTo(time: number) {
+  if (!Number.isFinite(time) || time < 0) return
+  if (playerType.value === 'videojs' && vjsPlayer) {
+    vjsPlayer.currentTime(time)
+  } else if (nativeVideoRef.value) {
+    nativeVideoRef.value.currentTime = time
+  }
+}
 
 // Override tracker. User-click handlers (selectEpisode, selectServer) wrap
 // their existing logic with recordPickerEvent BEFORE the work; programmatic
