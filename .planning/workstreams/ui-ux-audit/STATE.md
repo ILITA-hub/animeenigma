@@ -1,26 +1,40 @@
 ---
-workstream: ui-ux-audit
-created: 2026-05-13
+gsd_state_version: 1.0
+milestone: v0.1
+milestone_name: UX Reassessment Remediation
+current_phase: None (Phase 11 next)
+current_plan: N/A
+status: completed
+last_updated: "2026-05-13T04:45:00.000Z"
+last_activity: 2026-05-13
+progress:
+  total_phases: 20
+  completed_phases: 10
+  total_plans: 26
+  completed_plans: 23
+  percent: 50
 ---
 
 # Project State
 
 ## Current Position
-**Status:** Phase 5 (ButtonGroup unification) complete; Phase 6 next.
-**Current Phase:** None (Phase 6 next)
+
+**Status:** Phase 10 (Recommendations polish — reasoning chip + Top-10 visual) complete; Phase 11 next.
+**Current Phase:** None (Phase 11 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 5 shipped under `/gsd-autonomous --ws ui-ux-audit`. New shared `<ButtonGroup>` component (role=group + aria-label slot wrapper). Migrated 5 toggle surfaces: Anime language switch (UA-062), Anime RU provider chips (UA-063), Themes type-filter (UA-075), Game answer-options (UA-078), Navbar mobile-lang (UA-082). Each button got `aria-pressed`. Bonus UA-069 closed via Tabs.vue gaining id/aria-controls/aria-labelledby linkage — cascades to all consumers including Profile tabs.
+**Last Activity Description:** Phase 10 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Two visual polish items on Home.vue plus 15 i18n entries. Reasoning chip (UX-19) renders one localized reason category below the trending row label, derived from the modal `top_contributor` across non-pinned items — first frontend consumer of `RecItem.top_contributor` (verifies UA-060). Top-10 numeral (UX-20) lifts the "Топ аниме" column with a giant cyan-400/10 numeral behind each of the first 10 posters à la Netflix; small accessible rank badge is preserved alongside. Three atomic commits: `6841d7e` chip, `c7c7a36` numeral, `0fda35b` i18n.
 
 ## Progress
-**Phases Complete:** 5 / 20
+
+**Phases Complete:** 10 / 20
 **Current Plan:** N/A
 
 ## Next steps
 
-1. `/gsd-spec-phase 1 --ws ui-ux-audit` — clarify Phase 1 scope (Tier A catastrophic) → produce SPEC.md
-2. `/gsd-plan-phase 1 --ws ui-ux-audit` — break Phase 1 into plans
-3. `/gsd-execute-phase 1 --ws ui-ux-audit` — ship Tier A
-4. After Phase 1 ships, either repeat 1-3 for each phase OR run `/gsd-autonomous --ws ui-ux-audit` to grind the queue.
+1. `/gsd-spec-phase 11 --ws ui-ux-audit` — Catalog browse + detail polish (sort, Quick-Nav, Theater, status banner)
+2. `/gsd-plan-phase 11 --ws ui-ux-audit` — break Phase 11 into plans
+3. `/gsd-execute-phase 11 --ws ui-ux-audit` — ship Phase 11
+4. Continue via `/gsd-autonomous --ws ui-ux-audit` for remaining queue.
 
 ## Phase queue (from ROADMAP.md)
 

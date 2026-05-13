@@ -181,7 +181,7 @@
 
 ---
 
-### Phase 10: Recommendations polish — reasoning chip + Top-10 visual
+### Phase 10: Recommendations polish — reasoning chip + Top-10 visual ✅ shipped 2026-05-13
 
 **Goal:** Close the personalization-explanation gap with Crunchyroll and add Netflix-iconic Top-10 visual treatment.
 
