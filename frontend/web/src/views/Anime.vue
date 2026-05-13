@@ -530,6 +530,7 @@
               :total-episodes="anime.totalEpisodes"
               :preferred-combo="resolvedCombo"
               :initial-episode="resumeStartEpisode"
+              :mal-id="anime.malId"
               @available-translations="handleAvailableTranslations"
             />
             <!-- Consumet Player -->
@@ -541,6 +542,7 @@
               :preferred-combo="resolvedCombo"
               :initial-episode="resumeStartEpisode"
               :sub-or-dub="'sub'"
+              :mal-id="anime.malId"
               @available-translations="handleAvailableTranslations"
             />
             <!-- Hanime Player -->
