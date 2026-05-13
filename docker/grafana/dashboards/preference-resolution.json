@@ -18,7 +18,7 @@
       },
       "id": 1,
       "panels": [],
-      "title": "Resolution Overview (Last 7 Days)",
+      "title": "Resolution Overview",
       "type": "row"
     },
     {
@@ -325,7 +325,7 @@
       },
       "id": 9,
       "panels": [],
-      "title": "Fallback Breakdown by Language",
+      "title": "Fallback",
       "type": "row"
     },
     {
@@ -429,7 +429,7 @@
       },
       "id": 11,
       "panels": [],
-      "title": "Resolution Timeline",
+      "title": "Time Series",
       "type": "row"
     },
     {
@@ -535,7 +535,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "Auto-Pick Override Rate (Phase 1 Baseline)",
+      "title": "Override Rate",
       "type": "row"
     },
     {
