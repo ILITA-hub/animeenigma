@@ -105,6 +105,7 @@ type animeByIDQuery struct {
 type shikimoriAnime struct {
 	ID            graphql.String     `graphql:"id"`
 	Name          graphql.String     `graphql:"name"`
+	English       graphql.String     `graphql:"english"`
 	Russian       graphql.String     `graphql:"russian"`
 	Japanese      graphql.String     `graphql:"japanese"`
 	Description   graphql.String     `graphql:"description"`
@@ -177,7 +178,7 @@ func (c *Client) SearchAnime(ctx context.Context, query string, page, limit int)
 	// Don't filter by kind to include TV, ONA, OVA, movies, etc.
 	gqlQuery := fmt.Sprintf(`{
 		animes(search: "%s", limit: %d, page: %d) {
-			id name russian japanese description score status kind rating origin episodes episodesAired duration
+			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
@@ -230,6 +231,7 @@ func (c *Client) executeRawQuery(ctx context.Context, query string) ([]*domain.A
 type rawAnime struct {
 	ID             string  `json:"id"`
 	Name           string  `json:"name"`
+	English        string  `json:"english"`
 	Russian        string  `json:"russian"`
 	Japanese       string  `json:"japanese"`
 	Description    string  `json:"description"`
@@ -275,6 +277,7 @@ func (c *Client) mapRawAnimeList(animes []rawAnime) []*domain.Anime {
 		anime := &domain.Anime{
 			ShikimoriID:     a.ID,
 			Name:            a.Name,
+			NameEN:          a.English,
 			NameRU:          a.Russian,
 			NameJP:          a.Japanese,
 			Description:     a.Description,
@@ -357,7 +360,7 @@ func (c *Client) GetAnimeByIDs(ctx context.Context, shikimoriIDs []string) ([]*d
 	ids := strings.Join(shikimoriIDs, ",")
 	gqlQuery := fmt.Sprintf(`{
 		animes(ids: "%s", limit: %d) {
-			id name russian japanese description score status kind rating origin episodes episodesAired duration
+			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
@@ -376,7 +379,7 @@ func (c *Client) GetTrendingAnime(ctx context.Context, page, limit int) ([]*doma
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, order: ranked) {
-			id name russian japanese description score status kind rating origin episodes episodesAired duration
+			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
@@ -395,7 +398,7 @@ func (c *Client) GetPopularAnime(ctx context.Context, page, limit int) ([]*domai
 
 	gqlQuery := fmt.Sprintf(`{
 		animes(limit: %d, page: %d, order: popularity) {
-			id name russian japanese description score status kind rating origin episodes episodesAired duration
+			id name english russian japanese description score status kind rating origin episodes episodesAired duration
 			airedOn { year month day }
 			nextEpisodeAt
 			malId
@@ -443,6 +446,7 @@ func (c *Client) mapAnime(sa shikimoriAnime) *domain.Anime {
 	anime := &domain.Anime{
 		ShikimoriID:     string(sa.ID),
 		Name:            string(sa.Name),
+		NameEN:          string(sa.English),
 		NameRU:          string(sa.Russian),
 		NameJP:          string(sa.Japanese),
 		Description:     string(sa.Description),

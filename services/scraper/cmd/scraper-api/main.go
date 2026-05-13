@@ -122,16 +122,14 @@ func main() {
 	// runner (spawned below) populates the cache on each tick.
 	cache := health.NewInMemoryHealthCache()
 	orchestrator := service.NewOrchestrator(log, registry, cache)
-	orchestrator.Register(animePaheProvider)
-	log.Infow("registered provider", "name", animePaheProvider.Name())
 
-	// Gogoanime/Anitaku — second EN provider (Phase 18).
+	// Gogoanime/Anitaku — PRIMARY EN provider (Phase 18 + 2026-05-13 reorder).
 	// Pivoted from "9anime" since the entire 9anime mirror chain is dead per
 	// 2026-05-12 research (.planning/phases/18-9anime/18-RESEARCH.md).
 	// Backend slug is "gogoanime"; the user-facing display label is "Anitaku".
-	// Registration ORDER is the failover ORDER (CONTEXT.md D5) — animepahe
-	// is tried first; gogoanime is the second-chance provider when animepahe
-	// is unhealthy or returns ErrNotFound.
+	// Registration ORDER is the failover ORDER (CONTEXT.md D5) — gogoanime is
+	// tried first; animepahe is the second-chance provider when gogoanime is
+	// unhealthy or returns ErrNotFound.
 	gogoanimeBaseHTTP := domain.NewBaseHTTPClient(log,
 		domain.WithPerHostRPS("anitaku.to", 1.0, 2),
 		domain.WithPerHostRPS("vibeplayer.site", 1.0, 2),
@@ -153,6 +151,14 @@ func main() {
 	}
 	orchestrator.Register(gogoanimeProvider)
 	log.Infow("registered provider", "name", gogoanimeProvider.Name())
+
+	// AnimePahe — SECOND-CHANCE EN provider. Demoted from primary on
+	// 2026-05-13 after gogoanime/Anitaku proved more reliable in real traffic
+	// (AnimePahe upstream observed timing out at ~65s on /api?m=release).
+	// Kept as the failover so a single-provider outage on Anitaku doesn't
+	// blank the English tab.
+	orchestrator.Register(animePaheProvider)
+	log.Infow("registered provider", "name", animePaheProvider.Name())
 
 	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
 	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns

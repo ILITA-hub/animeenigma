@@ -10,6 +10,7 @@ import (
 type Anime struct {
 	ID              string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Name            string         `gorm:"size:500;index" json:"name"`
+	NameEN          string         `gorm:"size:500" json:"name_en,omitempty"`
 	NameRU          string         `gorm:"size:500" json:"name_ru,omitempty"`
 	NameJP          string         `gorm:"size:500" json:"name_jp,omitempty"`
 	Description     string         `gorm:"type:text" json:"description,omitempty"`

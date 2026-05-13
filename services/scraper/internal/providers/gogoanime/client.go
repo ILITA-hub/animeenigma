@@ -489,6 +489,13 @@ func (p *Provider) fetchEpisodes(ctx context.Context, slug string) ([]domain.Epi
 
 	rows := make([]domain.Episode, 0, 64)
 	seen := make(map[int]bool)
+	// Every /category/<slug> page has a "Recent Releases" sidebar that links
+	// to episodes of unrelated anime (e.g. /case-closed-episode-1201). Those
+	// links all match `a[href*="-episode-"]` so we MUST gate the loop on the
+	// href's slug-root matching the target slug. Without this check the
+	// sidebar pollutes the returned list with foreign episodes (verified
+	// 2026-05-13 against anitaku.to/category/attack-on-titan).
+	expectSlug := strings.TrimSuffix(slug, "-dub")
 	doc.Find(`a[href*="-episode-"]`).Each(func(_ int, sel *goquery.Selection) {
 		href, _ := sel.Attr("href")
 		m := episodeHrefRe.FindStringSubmatch(href)
@@ -503,6 +510,12 @@ func (p *Provider) fetchEpisodes(ctx context.Context, slug string) ([]domain.Epi
 			return
 		}
 		if !isDub && hrefIsDub {
+			return
+		}
+		// Strip the -dub suffix on the href side for the equality check so
+		// the sub and dub variants of the same anime are recognized as the
+		// same series.
+		if strings.TrimSuffix(hrefSlug, "-dub") != expectSlug {
 			return
 		}
 		n, err := strconv.Atoi(m[2])

@@ -48,9 +48,10 @@ type scraperOps struct {
 }
 
 // resolveAnime looks up the catalog Anime by UUID and returns (malID, title)
-// to forward to the scraper. Title is the original Japanese romanization
-// (anime.Name) which is what malsync.moe and provider search endpoints
-// expect (see CLAUDE.md "Catalog mapped by original Japanese name").
+// to forward to the scraper. Title preference: NameEN (English) → Name
+// (Japanese romanization). English wins because the primary EN provider
+// (Anitaku/Gogoanime) indexes anime by their English release titles, and
+// AnimePahe's malsync path bypasses title anyway via ShikimoriID lookup.
 //
 // Resolution chain:
 //  1. animeRepo.GetByID — if NotFound, surface as liberrors.NotFound("anime").
@@ -71,7 +72,10 @@ func (o *scraperOps) resolveAnime(ctx context.Context, animeID string) (int, str
 		return 0, "", liberrors.NotFound("anime")
 	}
 
-	title := anime.Name
+	title := anime.NameEN
+	if title == "" {
+		title = anime.Name
+	}
 
 	if anime.ShikimoriID != "" {
 		if v, perr := strconv.Atoi(anime.ShikimoriID); perr == nil && v > 0 {
