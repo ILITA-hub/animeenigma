@@ -325,10 +325,12 @@ func (r *ListRepository) GetAnimeRating(ctx context.Context, animeID string) (*d
 		     FROM anime_list WHERE anime_id = ? AND score > 0`, animeID).
 		Scan(&result).Error
 	if err != nil {
-		// On query failure, return a zero rating rather than propagating
-		// (preserves the pre-refactor behavior — a failed rating lookup
-		// should not blow up the anime detail page).
-		return &domain.AnimeRating{AnimeID: animeID}, nil
+		// Propagate the error so callers can distinguish "no ratings yet"
+		// (legitimate AverageScore=0, TotalReviews=0) from "DB hiccup
+		// during lookup" — REVIEW.md CR-02. Previously the error was
+		// swallowed and the handler served a fake zero rating that was
+		// indistinguishable from a real one.
+		return nil, apperrors.Wrap(err, apperrors.CodeInternal, "failed to get anime rating")
 	}
 	return &domain.AnimeRating{
 		AnimeID:      animeID,
