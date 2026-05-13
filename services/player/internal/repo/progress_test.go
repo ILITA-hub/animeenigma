@@ -311,3 +311,96 @@ func TestProgressRepository_MarkDropOff_PreservesCompletedTrue(t *testing.T) {
 	// progress preserves max via GREATEST — original 1440 wins over 200.
 	assert.Equal(t, 1440, p.Progress, "progress must not regress on drop-off")
 }
+
+// TestProgressRepository_ListContinueWatching covers the happy path
+// (multiple anime, latest in-progress row per anime returned, completed=true
+// rows skipped, other users' rows ignored) and the empty case. Also smoke-
+// tests the limit clamp branches (0 -> default 10, 999 -> clamp 20).
+// Phase 8 (UX-15 / UA-061).
+func TestProgressRepository_ListContinueWatching(t *testing.T) {
+	r, db := setupProgressTestDB(t)
+	ctx := context.Background()
+
+	// Create a minimal animes table the JOIN can reference. No FK constraint
+	// (SQLite-style minimal columns matching the SELECT list in the repo).
+	require.NoError(t, db.Exec(`CREATE TABLE animes (
+        id TEXT PRIMARY KEY,
+        name TEXT, name_ru TEXT, name_jp TEXT,
+        poster_url TEXT,
+        episodes_count INTEGER DEFAULT 0,
+        deleted_at DATETIME
+    )`).Error)
+
+	require.NoError(t, db.Exec(
+		`INSERT INTO animes (id, name, poster_url, episodes_count) VALUES (?, ?, ?, ?)`,
+		"anime-A", "Anime A", "/a.jpg", 12).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO animes (id, name, poster_url, episodes_count) VALUES (?, ?, ?, ?)`,
+		"anime-B", "Anime B", "/b.jpg", 24).Error)
+
+	now := time.Now()
+	older := now.Add(-1 * time.Hour)
+
+	// Anime A E1: completed=true (must be excluded from the "in-progress" filter)
+	seedProgressRow(t, db, "user-1", "anime-A", 1, 1200, 1400, true)
+	// Anime A E2: in-progress, most recent last_watched_at.
+	require.NoError(t, db.Exec(
+		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number,
+            progress, duration, completed, watch_count, last_watched_at,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"seed-A2", "user-1", "anime-A", 2, 600, 1400, false, 1,
+		now, now, now).Error)
+
+	// Anime B E5: in-progress, OLDER last_watched_at — should sort second.
+	require.NoError(t, db.Exec(
+		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number,
+            progress, duration, completed, watch_count, last_watched_at,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"seed-B5", "user-1", "anime-B", 5, 300, 1500, false, 1,
+		older, older, older).Error)
+
+	// Different user — must NOT leak into user-1's rows.
+	require.NoError(t, db.Exec(
+		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number,
+            progress, duration, completed, watch_count, last_watched_at,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"seed-X", "user-2", "anime-A", 3, 100, 1400, false, 1,
+		now, now, now).Error)
+
+	// --- Happy path ---
+	items, err := r.ListContinueWatching(ctx, "user-1", 10)
+	require.NoError(t, err)
+	require.Len(t, items, 2, "expected one row per anime (A then B)")
+
+	// Anime A first — most recent last_watched_at.
+	assert.Equal(t, "anime-A", items[0].Anime.ID)
+	assert.Equal(t, 2, items[0].EpisodeNumber,
+		"should be latest in-progress episode (E2), not completed E1")
+	assert.Equal(t, 600, items[0].Progress)
+	assert.Equal(t, 1400, items[0].Duration)
+	assert.Equal(t, "Anime A", items[0].Anime.Name)
+	assert.Equal(t, "/a.jpg", items[0].Anime.PosterURL)
+	assert.Equal(t, 12, items[0].Anime.EpisodesCount)
+
+	// Anime B second — older last_watched_at.
+	assert.Equal(t, "anime-B", items[1].Anime.ID)
+	assert.Equal(t, 5, items[1].EpisodeNumber)
+
+	// --- Empty path ---
+	empty, err := r.ListContinueWatching(ctx, "user-no-rows", 10)
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+
+	// --- Limit clamp (smoke) ---
+	// limit=0 -> default 10, limit=999 -> clamp to 20. Both should still
+	// return the same two rows here.
+	itemsZero, err := r.ListContinueWatching(ctx, "user-1", 0)
+	require.NoError(t, err)
+	assert.Len(t, itemsZero, 2)
+	itemsHuge, err := r.ListContinueWatching(ctx, "user-1", 999)
+	require.NoError(t, err)
+	assert.Len(t, itemsHuge, 2)
+}
