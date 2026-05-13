@@ -42,10 +42,10 @@ type Anime struct {
 	// (kodik / animelib / hianime / consumet) lazily sets its corresponding
 	// flag the first time the catalog touches that provider for the anime.
 	// Mirrors HasDub. Default false; existing rows backfill over time.
-	HasKodik    bool `gorm:"default:false;index" json:"has_kodik"`
-	HasAnimeLib bool `gorm:"default:false;index" json:"has_animelib"`
-	HasHiAnime  bool `gorm:"default:false;index" json:"has_hianime"`
-	HasConsumet bool `gorm:"default:false;index" json:"has_consumet"`
+	HasKodik    bool `gorm:"default:false;index;column:has_kodik" json:"has_kodik"`
+	HasAnimeLib bool `gorm:"default:false;index;column:has_animelib" json:"has_animelib"`
+	HasHiAnime  bool `gorm:"default:false;index;column:has_hianime" json:"has_hianime"`
+	HasConsumet bool `gorm:"default:false;index;column:has_consumet" json:"has_consumet"`
 	Hidden          bool           `gorm:"default:false" json:"hidden"`
 	SortPriority    int            `gorm:"default:0" json:"sort_priority,omitempty"`
 	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`
