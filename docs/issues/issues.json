@@ -1,5 +1,5 @@
 {
-  "last_id": 83,
+  "last_id": 84,
   "issues": [
     {
       "id": "AUTO-001",
@@ -1384,6 +1384,18 @@
       "affected_service": "player",
       "actions": [],
       "resolution": "Alert resolved (no longer firing in Grafana)"
+    },
+    {
+      "id": "AUTO-084",
+      "created_at": "2026-05-09T06:35:01Z",
+      "source": "admin_request",
+      "category": "research",
+      "priority": "P1",
+      "status": "info_provided",
+      "title": "Research: animejoy.ru player architecture",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2000,
+      "actions": null
     }
   ]
 }

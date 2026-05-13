@@ -26,7 +26,7 @@ import (
 //   - cookiejar.Jar scoped to public-suffix etld+1 (DDoS-Guard cookie support)
 //   - Mozilla/5.0 Chrome 131 desktop User-Agent
 //   - Accept-Language: en-US,en;q=0.9
-//   - Accept-Encoding: gzip, deflate, br
+//   - Accept-Encoding: (unset — Go transport auto-injects gzip and decodes)
 //
 // Override any default at construction with the With* options. All option
 // setters are safe before the first request; mutating limiters after
@@ -117,7 +117,12 @@ func NewBaseHTTPClient(log *logger.Logger, opts ...Option) *BaseHTTPClient {
 	baseline.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 	baseline.Set("Accept-Language", "en-US,en;q=0.9")
 	baseline.Set("Accept", "*/*")
-	baseline.Set("Accept-Encoding", "gzip, deflate, br")
+	// Do NOT set Accept-Encoding. Go's net/http transport auto-injects
+	// "Accept-Encoding: gzip" and transparently decodes responses. Setting
+	// our own value (e.g. "gzip, deflate, br") DISABLES the auto-decoder,
+	// leaving callers to read raw compressed bytes — which broke gogoanime's
+	// HTML scraper against anitaku.to's Cloudflare edge (it serves Brotli).
+	// We don't ship a Brotli decoder, and gzip alone covers all upstreams.
 
 	c := &BaseHTTPClient{
 		client:   rc,

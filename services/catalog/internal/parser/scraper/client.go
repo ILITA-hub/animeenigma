@@ -67,20 +67,28 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
-// GetEpisodes forwards GET /scraper/episodes?mal_id=<id>&prefer=<prefer>.
-func (c *Client) GetEpisodes(ctx context.Context, malID int, prefer string) (int, []byte, error) {
+// GetEpisodes forwards GET /scraper/episodes?mal_id=<id>&title=<title>&prefer=<prefer>.
+// Title is required for providers whose malsync entries are missing (e.g. gogoanime),
+// which fall back to fuzzy title search; AnimePahe also uses it for its own fuzzy fallback.
+func (c *Client) GetEpisodes(ctx context.Context, malID int, title, prefer string) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
+	if title != "" {
+		q.Set("title", title)
+	}
 	if prefer != "" {
 		q.Set("prefer", prefer)
 	}
 	return c.doGET(ctx, "/scraper/episodes", q)
 }
 
-// GetServers forwards GET /scraper/servers?mal_id=<id>&episode=<ep>&prefer=<prefer>.
-func (c *Client) GetServers(ctx context.Context, malID int, episodeID, prefer string) (int, []byte, error) {
+// GetServers forwards GET /scraper/servers?mal_id=<id>&title=<title>&episode=<ep>&prefer=<prefer>.
+func (c *Client) GetServers(ctx context.Context, malID int, title, episodeID, prefer string) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
+	if title != "" {
+		q.Set("title", title)
+	}
 	q.Set("episode", episodeID)
 	if prefer != "" {
 		q.Set("prefer", prefer)
@@ -88,10 +96,13 @@ func (c *Client) GetServers(ctx context.Context, malID int, episodeID, prefer st
 	return c.doGET(ctx, "/scraper/servers", q)
 }
 
-// GetStream forwards GET /scraper/stream?mal_id=...&episode=...&server=...&category=...&prefer=...
-func (c *Client) GetStream(ctx context.Context, malID int, episodeID, serverID, category, prefer string) (int, []byte, error) {
+// GetStream forwards GET /scraper/stream?mal_id=...&title=...&episode=...&server=...&category=...&prefer=...
+func (c *Client) GetStream(ctx context.Context, malID int, title, episodeID, serverID, category, prefer string) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
+	if title != "" {
+		q.Set("title", title)
+	}
 	q.Set("episode", episodeID)
 	q.Set("server", serverID)
 	if category != "" {

@@ -31,14 +31,17 @@ func (f *fakeAnimeFetcher) GetByID(ctx context.Context, id string) (*domain.Anim
 // fakeScraperForwarder records the args every method was called with so the
 // service-layer tests can assert pass-through behavior.
 type fakeScraperForwarder struct {
-	gotEpisodesMALID int
+	gotEpisodesMALID  int
+	gotEpisodesTitle  string
 	gotEpisodesPrefer string
 
 	gotServersMALID   int
+	gotServersTitle   string
 	gotServersEpisode string
 	gotServersPrefer  string
 
 	gotStreamMALID    int
+	gotStreamTitle    string
 	gotStreamEpisode  string
 	gotStreamServer   string
 	gotStreamCategory string
@@ -52,21 +55,24 @@ type fakeScraperForwarder struct {
 	replyErr    error
 }
 
-func (f *fakeScraperForwarder) GetEpisodes(ctx context.Context, malID int, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetEpisodes(ctx context.Context, malID int, title, prefer string) (int, []byte, error) {
 	f.gotEpisodesMALID = malID
+	f.gotEpisodesTitle = title
 	f.gotEpisodesPrefer = prefer
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, episodeID, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, title, episodeID, prefer string) (int, []byte, error) {
 	f.gotServersMALID = malID
+	f.gotServersTitle = title
 	f.gotServersEpisode = episodeID
 	f.gotServersPrefer = prefer
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title, episodeID, serverID, category, prefer string) (int, []byte, error) {
 	f.gotStreamMALID = malID
+	f.gotStreamTitle = title
 	f.gotStreamEpisode = episodeID
 	f.gotStreamServer = serverID
 	f.gotStreamCategory = category

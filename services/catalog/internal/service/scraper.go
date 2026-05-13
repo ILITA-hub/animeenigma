@@ -27,10 +27,14 @@ type animeFetcher interface {
 // scraperForwarder is the minimal interface scraperOps needs from the
 // thin HTTP scraper client. Production wiring satisfies it via
 // *scraper.Client.
+//
+// title is forwarded so providers with empty malsync coverage (e.g.
+// gogoanime) can run their fuzzy title fallback; without it FindID
+// fails with "cannot search without a title".
 type scraperForwarder interface {
-	GetEpisodes(ctx context.Context, malID int, prefer string) (int, []byte, error)
-	GetServers(ctx context.Context, malID int, episodeID, prefer string) (int, []byte, error)
-	GetStream(ctx context.Context, malID int, episodeID, serverID, category, prefer string) (int, []byte, error)
+	GetEpisodes(ctx context.Context, malID int, title, prefer string) (int, []byte, error)
+	GetServers(ctx context.Context, malID int, title, episodeID, prefer string) (int, []byte, error)
+	GetStream(ctx context.Context, malID int, title, episodeID, serverID, category, prefer string) (int, []byte, error)
 	GetHealth(ctx context.Context) (int, []byte, error)
 }
 
@@ -43,75 +47,72 @@ type scraperOps struct {
 	scraperClient scraperForwarder
 }
 
-// resolveMALID looks up the catalog Anime by UUID and returns the MAL ID
-// to forward to the scraper.
+// resolveAnime looks up the catalog Anime by UUID and returns (malID, title)
+// to forward to the scraper. Title is the original Japanese romanization
+// (anime.Name) which is what malsync.moe and provider search endpoints
+// expect (see CLAUDE.md "Catalog mapped by original Japanese name").
 //
-// Resolution chain (per plan 15-04 §Task 2 + project memory):
+// Resolution chain:
 //  1. animeRepo.GetByID — if NotFound, surface as liberrors.NotFound("anime").
 //  2. Try parsing ShikimoriID as int; Shikimori IDs equal MAL IDs for anime
 //     (per `libs/idmapping` ARM mapping).
 //  3. If ShikimoriID is empty or unparseable, try MALID.
 //  4. Otherwise return ErrMalIDUnavailable so the handler can emit 422.
-func (o *scraperOps) resolveMALID(ctx context.Context, animeID string) (int, error) {
-	// Malformed UUID — skip the DB roundtrip entirely (Postgres would
-	// otherwise reject with SQLSTATE 22P02, surfaced as a 500). Behave
-	// as "anime not found" instead per plan 15-04 must_haves.truths.
+func (o *scraperOps) resolveAnime(ctx context.Context, animeID string) (int, string, error) {
 	if _, err := uuid.Parse(animeID); err != nil {
-		return 0, liberrors.NotFound("anime")
+		return 0, "", liberrors.NotFound("anime")
 	}
 
 	anime, err := o.animeRepo.GetByID(ctx, animeID)
 	if err != nil {
-		// liberrors.NotFound from the repo is already the right shape for
-		// the handler to render as 404 via httputil.Error.
-		return 0, err
+		return 0, "", err
 	}
 	if anime == nil {
-		// Defensive — the repo currently never returns (nil, nil), but if a
-		// future implementation does we treat it as not-found.
-		return 0, liberrors.NotFound("anime")
+		return 0, "", liberrors.NotFound("anime")
 	}
+
+	title := anime.Name
 
 	if anime.ShikimoriID != "" {
 		if v, perr := strconv.Atoi(anime.ShikimoriID); perr == nil && v > 0 {
-			return v, nil
+			return v, title, nil
 		}
 	}
 	if anime.MALID != "" {
 		if v, perr := strconv.Atoi(anime.MALID); perr == nil && v > 0 {
-			return v, nil
+			return v, title, nil
 		}
 	}
-	return 0, ErrMalIDUnavailable
+	return 0, title, ErrMalIDUnavailable
 }
 
 // GetScraperEpisodes resolves animeID -> MAL ID and forwards to the
 // scraper service. Returns the scraper's status + body verbatim so the
 // handler can passthrough 503s (Phase 15 not-yet-implemented contract).
 func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
-	malID, err := o.resolveMALID(ctx, animeID)
+	malID, title, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetEpisodes(ctx, malID, prefer)
+	return o.scraperClient.GetEpisodes(ctx, malID, title, prefer)
 }
 
-// GetScraperServers resolves animeID -> MAL ID and forwards.
+// GetScraperServers resolves animeID -> MAL ID + title and forwards.
 func (o *scraperOps) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error) {
-	malID, err := o.resolveMALID(ctx, animeID)
+	malID, title, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetServers(ctx, malID, episodeID, prefer)
+	return o.scraperClient.GetServers(ctx, malID, title, episodeID, prefer)
 }
 
-// GetScraperStream resolves animeID -> MAL ID and forwards.
+// GetScraperStream resolves animeID -> MAL ID + title and forwards.
 func (o *scraperOps) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error) {
-	malID, err := o.resolveMALID(ctx, animeID)
+	malID, title, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetStream(ctx, malID, episodeID, serverID, category, prefer)
+	return o.scraperClient.GetStream(ctx, malID, title, episodeID, serverID, category, prefer)
 }
 
 // GetScraperHealth bypasses the animeRepo entirely — the scraper's

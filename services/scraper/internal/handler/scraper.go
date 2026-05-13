@@ -90,11 +90,17 @@ const (
 // callers append trailing spaces accidentally.
 type queryParams struct {
 	malID    string
+	title    string
 	episode  string
 	server   string
 	category string
 	prefer   string
 }
+
+// maxTitleLength caps the `title` query-string parameter so an oversized
+// title can't balloon log lines or fuzzy-match comparison cost. Real anime
+// titles are well under 200 chars; 512 is generous.
+const maxTitleLength = 512
 
 // maxPreferLength caps the `prefer` query-string parameter at parse time so
 // a malicious caller can't balloon log lines or response bodies via the
@@ -131,8 +137,13 @@ func parseQuery(r *http.Request) queryParams {
 	if !preferAllowed.MatchString(prefer) {
 		prefer = ""
 	}
+	title := strings.TrimSpace(q.Get("title"))
+	if len(title) > maxTitleLength {
+		title = title[:maxTitleLength]
+	}
 	return queryParams{
 		malID:    strings.TrimSpace(q.Get("mal_id")),
+		title:    title,
 		episode:  strings.TrimSpace(q.Get("episode")),
 		server:   strings.TrimSpace(q.Get("server")),
 		category: strings.TrimSpace(q.Get("category")),
@@ -158,7 +169,7 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.prefer)
+	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -193,7 +204,7 @@ func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.prefer)
+	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -237,7 +248,7 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		cat = domain.CategorySub
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.prefer)
+	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -315,8 +326,8 @@ func (h *ScraperHandler) GetAdminHealth(w http.ResponseWriter, r *http.Request) 
 // provider-internal ID via the orchestrator's FindID chain. The catalog
 // already mapped catalog-UUID → MAL/Shikimori ID before forwarding, so we
 // pass the value as ShikimoriID (project memory: Shikimori IDs == MAL IDs).
-func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, prefer string) (string, error) {
-	ref := domain.AnimeRef{ShikimoriID: malID}
+func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title, prefer string) (string, error) {
+	ref := domain.AnimeRef{ShikimoriID: malID, Title: title}
 	return h.svc.FindID(ctx, ref, prefer)
 }
 
