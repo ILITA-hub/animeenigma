@@ -136,3 +136,102 @@ func (r *ProgressRepository) GetByUserAnimeEpisode(ctx context.Context, userID, 
 	}
 	return &p, err
 }
+
+// ListContinueWatching returns the user's most-recent in-progress episode per
+// anime (one row per anime), ordered by last_watched_at DESC. Uses a window
+// function (ROW_NUMBER() OVER (PARTITION BY anime_id ORDER BY
+// last_watched_at DESC)) so the JOIN against animes is one-shot.
+//
+// "In-progress" for MVP = watch_progress.completed = false. The
+// "completed-but-next-episode-exists" Crunchyroll case is deferred to Phase 9.
+//
+// limit is clamped to [1, 20]; default (limit<=0) is 10.
+//
+// Phase 8 (UX-15 / UA-061).
+func (r *ProgressRepository) ListContinueWatching(
+	ctx context.Context, userID string, limit int,
+) ([]*domain.ContinueWatchingItem, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	type scanRow struct {
+		AnimeID       string    `gorm:"column:anime_id"`
+		EpisodeNumber int       `gorm:"column:episode_number"`
+		Progress      int       `gorm:"column:progress"`
+		Duration      int       `gorm:"column:duration"`
+		LastWatchedAt time.Time `gorm:"column:last_watched_at"`
+		DroppedOffAt  *int      `gorm:"column:dropped_off_at"`
+		AnimeName     string    `gorm:"column:anime_name"`
+		AnimeNameRU   string    `gorm:"column:anime_name_ru"`
+		AnimeNameJP   string    `gorm:"column:anime_name_jp"`
+		AnimePoster   string    `gorm:"column:anime_poster"`
+		AnimeEpisodes int       `gorm:"column:anime_episodes"`
+	}
+
+	sqlStr := `
+        WITH ranked AS (
+            SELECT
+                wp.anime_id,
+                wp.episode_number,
+                wp.progress,
+                wp.duration,
+                wp.last_watched_at,
+                wp.dropped_off_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY wp.anime_id
+                    ORDER BY wp.last_watched_at DESC
+                ) AS rn
+            FROM watch_progress wp
+            WHERE wp.user_id = ?
+              AND wp.completed = false
+        )
+        SELECT
+            r.anime_id,
+            r.episode_number,
+            r.progress,
+            r.duration,
+            r.last_watched_at,
+            r.dropped_off_at,
+            a.name           AS anime_name,
+            a.name_ru        AS anime_name_ru,
+            a.name_jp        AS anime_name_jp,
+            a.poster_url     AS anime_poster,
+            a.episodes_count AS anime_episodes
+        FROM ranked r
+        JOIN animes a ON a.id = r.anime_id
+        WHERE r.rn = 1
+          AND a.deleted_at IS NULL
+        ORDER BY r.last_watched_at DESC
+        LIMIT ?`
+
+	var rows []scanRow
+	if err := r.db.WithContext(ctx).
+		Raw(sqlStr, userID, limit).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	items := make([]*domain.ContinueWatchingItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, &domain.ContinueWatchingItem{
+			Anime: domain.AnimeInfo{
+				ID:            row.AnimeID,
+				Name:          row.AnimeName,
+				NameRU:        row.AnimeNameRU,
+				NameJP:        row.AnimeNameJP,
+				PosterURL:     row.AnimePoster,
+				EpisodesCount: row.AnimeEpisodes,
+			},
+			EpisodeNumber: row.EpisodeNumber,
+			Progress:      row.Progress,
+			Duration:      row.Duration,
+			LastWatchedAt: row.LastWatchedAt,
+			DroppedOffAt:  row.DroppedOffAt,
+		})
+	}
+	return items, nil
+}
