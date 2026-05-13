@@ -3,6 +3,10 @@
     "date": "2026-05-13",
     "entries": [
       {
+        "type": "feature",
+        "message": "🎌 Anitaku/Gogoanime теперь основной источник для английского плеера! Раньше первым шёл AnimePahe, но он стал тормозить (release-эндпоинт отваливался через 65 секунд), и подавляющее большинство аниме не находилось — каталог отправлял японскую романизацию вроде «Shingeki no Kyojin», а Anitaku индексирует по английским названиям типа «Attack on Titan». Теперь добавили колонку `name_en` в каталог, заполнили её через Shikimori GraphQL для всех 2700 аниме, и переставили порядок: gogoanime → animepahe failover. Заодно починили три глубинных бага: 1) каталог не передавал название скрейперу, и gogoanime отвечал «cannot search without a title» на каждый запрос; 2) BaseHTTPClient запрашивал Brotli (`Accept-Encoding: gzip, deflate, br`), а декодера для него у нас нет — Cloudflare у Anitaku отдавал brotli-сжатые байты, и парсер видел нули совпадений; 3) ListEpisodes цеплял боковую панель «Recent Releases» и подмешивал в список AoT эпизод 1201 «Detective Conan» — теперь фильтруем строго по slug. Атака титанов корректно даёт 25 серий, Death Note — 37, One Piece — 1161 ⚡"
+      },
+      {
         "type": "fix",
         "message": "🛠️ Починили рандомные ошибки «Something went wrong / Unable to preload CSS for ...» после деплоев! Старый авто-reload ловил только Webpack-style сообщения и срабатывал только при переходе по роутам — а наш HiAnime/Consumet/AnimeLib плеер грузится через `defineAsyncComponent` уже внутри страницы аниме, и его ошибка пролетала мимо. Теперь общий обработчик ловит и Vite-сообщение `Unable to preload CSS`, и `Failed to fetch dynamically imported module`, висит и на `router.onError`, и на `window.unhandledrejection`, плюс есть защита от бесконечного reload-loop'а через sessionStorage cooldown — после первой неудачи в течение 10 секунд не пытается перезагрузиться снова. Открываете аниме сразу после деплоя — страница тихо перезагрузится и подтянет свежие хешированные ассеты ⚡"
       }
