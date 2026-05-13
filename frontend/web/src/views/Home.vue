@@ -1,5 +1,12 @@
 <template>
   <div class="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black">
+    <!-- Phase 11 / UX-24 — System status banner. Permanent mount at the
+         very top; renders nothing when no incident is active (gateway env
+         SYSTEM_BANNER_ACTIVE=false, the default) or when the user has
+         dismissed the current incident. Above <h1 sr-only> so screen
+         readers see the alert before the page title. -->
+    <SystemStatusBanner />
+
     <!-- Search Bar -->
     <h1 class="sr-only">AnimeEnigma</h1>
     <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
@@ -23,13 +30,6 @@
         </router-link>
       </div>
     </div>
-
-    <!-- Continue-Watching row (Phase 8 / UX-15 / UA-061). Hidden when
-         anonymous OR when the logged-in user has no in-progress
-         watch_progress rows. The component owns its own v-if gate so
-         we just always mount it here. Placed above the trending row
-         so it claims the top-of-home anchor for logged-in users. -->
-    <ContinueWatchingRow />
 
     <!-- Trending Now Row (Phase 10 — anonymous trending; Phase 11 — switches
          label to "Up Next for you" for logged-in users via row_label_key;
@@ -132,7 +132,7 @@
     </div>
 
     <!-- Three Columns Layout -->
-    <div class="px-4 lg:px-8 max-w-7xl mx-auto pb-12">
+    <div class="px-4 lg:px-8 max-w-7xl mx-auto mb-6">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
         <!-- Ongoing Column -->
@@ -385,8 +385,19 @@
         </div>
       </div>
 
-      <!-- Activity Feed + Last Updates -->
-      <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+    </div>
+
+    <!-- Continue-Watching row (Phase 8 / UX-15 / UA-061). Hidden when
+         anonymous OR when the logged-in user has no in-progress
+         watch_progress rows. The component owns its own v-if gate so
+         we just always mount it here. Sits above the Activity + Updates
+         grid so logged-in users still find it on the home page, but
+         below the top-of-home discovery rows. -->
+    <ContinueWatchingRow />
+
+    <!-- Activity Feed + Last Updates -->
+    <div class="px-4 lg:px-8 max-w-7xl mx-auto pb-12">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ActivityFeed />
         <LastUpdates />
       </div>
@@ -424,6 +435,7 @@ import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
 import ContinueWatchingRow from '@/components/home/ContinueWatchingRow.vue'
+import SystemStatusBanner from '@/components/home/SystemStatusBanner.vue'
 
 interface HomeAnime {
   id: string
