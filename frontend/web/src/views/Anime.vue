@@ -1362,7 +1362,13 @@ const isHentai = computed(() =>
 
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('ru-RU', {
+  // REVIEW.md WR-05: respect the i18n locale instead of hardcoding ru-RU.
+  // English / Japanese users previously saw review and comment dates
+  // formatted as Russian (e.g. "13 мая 2026 г."). Map the active vue-i18n
+  // locale to a BCP-47 tag accepted by Intl. The pattern mirrors the
+  // existing formatNextEpisode helper a few lines below.
+  const loc = locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US'
+  return date.toLocaleDateString(loc, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
