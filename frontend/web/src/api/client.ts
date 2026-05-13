@@ -247,6 +247,12 @@ export const userApi = {
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: Record<string, unknown>) => apiClient.post('/users/progress', data),
   getProgress: (animeId: string) => apiClient.get(`/users/progress/${animeId}`),
+  // Phase 8 (UX-15 / UA-061) — Continue-Watching row. JWT-protected; returns
+  // one item per anime (latest in-progress episode), ordered by last_watched_at DESC.
+  getContinueWatching: (limit?: number) =>
+    apiClient.get('/users/continue-watching', {
+      params: typeof limit === 'number' ? { limit } : undefined,
+    }),
   getMyReviews: () => apiClient.get('/users/reviews'),
   importMAL: (username: string) => apiClient.post('/users/import/mal', { username }),
   importShikimori: (nickname: string) => apiClient.post('/users/import/shikimori', { nickname }),
