@@ -19,13 +19,13 @@ import (
 //     does not JOIN users on every request.
 type Comment struct {
 	ID        string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID    string         `gorm:"type:uuid;index:idx_comments_user_created" json:"user_id"`
-	AnimeID   string         `gorm:"type:uuid;index:idx_comments_anime_created" json:"anime_id"`
+	UserID    string         `gorm:"type:uuid;not null;index:idx_comments_user_created" json:"user_id"`
+	AnimeID   string         `gorm:"type:uuid;not null;index:idx_comments_anime_created" json:"anime_id"`
 	Username  string         `gorm:"size:32" json:"username"`
-	Body      string         `gorm:"type:text" json:"body"`
+	Body      string         `gorm:"type:text;not null" json:"body"`
 	ParentID  *string        `gorm:"type:uuid" json:"parent_id,omitempty"`
-	CreatedAt time.Time      `gorm:"index:idx_comments_anime_created,sort:desc;index:idx_comments_user_created,sort:desc" json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	CreatedAt time.Time      `gorm:"not null;default:now();index:idx_comments_anime_created,sort:desc;index:idx_comments_user_created,sort:desc" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"not null;default:now()" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

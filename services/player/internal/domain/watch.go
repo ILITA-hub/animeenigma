@@ -65,6 +65,13 @@ type AnimeListEntry struct {
 	Episodes     int        `json:"episodes"`
 	Notes        string     `gorm:"type:text" json:"notes"`
 	Tags         string     `json:"tags"`
+	// ReviewText / Username — Phase 1 (workstream: social). These columns
+	// absorb the legacy `reviews` table so a single anime_list row carries
+	// both the user's score AND their optional written review. NOT NULL with
+	// '' default so legacy rows remain valid pre-migration. See
+	// cmd/player-api/main.go runSocialMigration helper.
+	ReviewText   string     `gorm:"type:text;not null;default:''" json:"review_text"`
+	Username     string     `gorm:"size:32;not null;default:''" json:"username"`
 	IsRewatching bool       `gorm:"default:false" json:"is_rewatching"`
 	Priority     string     `gorm:"size:20" json:"priority"`
 	MalID        *int       `json:"mal_id,omitempty"`
