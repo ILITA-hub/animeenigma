@@ -28,11 +28,23 @@
           <div class="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/70 backdrop-blur-sm text-xs font-semibold text-white">
             {{ $t('home.continueWatchingEpisode', { n: item.episode_number }) }}
           </div>
-          <!-- Thin progress bar at the bottom of the poster -->
-          <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10">
+          <!-- Thin progress bar at the bottom of the poster.
+               IN-01 (Phase 8): use transition-[width] instead of
+               transition-all so the cyan bar animates only on width
+               changes — not on every animatable property.
+               IN-02 (Phase 8): when progress is known and > 0 but
+               represents < ~5% of duration, the bar is visually
+               indistinguishable from 0%. Render a 4px minimum so the
+               user can tell they've started the episode. The 0% case
+               (no progress at all, or unknown duration) still renders
+               width:0% so it's invisibly hidden. -->
+          <div
+            v-if="progressPct(item) > 0"
+            class="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10"
+          >
             <div
-              class="h-full bg-cyan-400 transition-all"
-              :style="{ width: progressPct(item) + '%' }"
+              class="h-full bg-cyan-400 transition-[width]"
+              :style="progressBarStyle(item)"
             />
           </div>
         </div>
@@ -67,5 +79,23 @@ function progressPct(item: ContinueWatchingItem): number {
   const pct = (item.progress / item.duration) * 100
   // Cap at 100 in case progress > duration (clock skew between heartbeats).
   return Math.max(0, Math.min(100, pct))
+}
+
+// IN-02 (Phase 8): when the user is genuinely past 0 but at a tiny
+// percentage of the episode, render the cyan bar with a min-width of 4px
+// so it's visible. Pure CSS would suffice (min-width on the inner div)
+// but inline styles are friendlier to dynamic px values that depend on
+// the parent's pixel width (which we can't easily measure here). We
+// achieve the same effect by using min(width%, 100%) with a CSS calc
+// fallback through min-width via the inline style. Width is set as a
+// percentage so the bar scales with parent width.
+function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
+  const pct = progressPct(item)
+  // pct === 0 case is handled by v-if on the wrapping div, so we know pct > 0
+  // here. Use minWidth so very small percentages still render visibly.
+  return {
+    width: pct + '%',
+    minWidth: '4px',
+  }
 }
 </script>

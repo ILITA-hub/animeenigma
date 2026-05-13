@@ -62,12 +62,17 @@ export function useContinueWatching(limit = 10) {
   // Re-fetch on auth transitions (login from anonymous, logout to anonymous).
   // Mirrors the pattern in useRecs.ts so the row appears/disappears without
   // a hard reload when the user signs in or signs out.
+  //
+  // IN-03 (Phase 8): dropped the prior `oldToken !== undefined` guard. The
+  // watch source is auth.token, which is initialized to
+  // localStorage.getItem('token') (string | null), never undefined. Without
+  // immediate:true on this watcher the callback only fires on change, so
+  // newToken !== oldToken is already guaranteed; both halves of the prior
+  // condition were defensive no-ops.
   watch(
     () => auth.token,
-    (newToken, oldToken) => {
-      if (newToken !== oldToken && oldToken !== undefined) {
-        fetchItems()
-      }
+    () => {
+      fetchItems()
     },
   )
 
