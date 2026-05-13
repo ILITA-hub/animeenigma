@@ -56,6 +56,21 @@ func setupProgressTestDB(t *testing.T) (*ProgressRepository, *gorm.DB) {
 	}, &gorm.Config{})
 	require.NoError(t, err)
 
+	// WR-03 (Phase 8) — Dialect divergence: production Postgres declares
+	// watch_progress.completed as BOOLEAN, but this SQLite fixture declares it
+	// INTEGER DEFAULT 0 because SQLite has no native bool type. The repo's
+	// query uses the literal `false` (a Postgres bool literal). SQLite
+	// silently coerces this to the integer 0, so existing queries happen to
+	// work cross-dialect — but a future query using `IS FALSE`, `IS NOT TRUE`,
+	// or partial-index filters with NULL-handling semantics would NOT execute
+	// identically across both backends and could pass these unit tests while
+	// failing in production.
+	//
+	// TODO: revisit this when integration tests against a real Postgres
+	// (testcontainers, per CLAUDE.md "Testing" section) land for the player
+	// service. The preferred fix is a //go:build integration-tagged Postgres
+	// test for ListContinueWatching rather than papering over the type gap
+	// here.
 	err = db.Exec(`CREATE TABLE watch_progress (
 		id TEXT PRIMARY KEY,
 		user_id TEXT NOT NULL,
@@ -63,7 +78,7 @@ func setupProgressTestDB(t *testing.T) (*ProgressRepository, *gorm.DB) {
 		episode_number INTEGER NOT NULL,
 		progress INTEGER DEFAULT 0,
 		duration INTEGER DEFAULT 0,
-		completed INTEGER DEFAULT 0,
+		completed INTEGER DEFAULT 0, -- production: BOOLEAN; see WR-03 note above
 		watch_count INTEGER DEFAULT 1,
 		dropped_off_at INTEGER,
 		last_watched_at DATETIME,
