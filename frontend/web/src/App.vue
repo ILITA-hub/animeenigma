@@ -49,6 +49,9 @@
       </router-view>
     </main>
 
+    <!-- Phase 13 / UX-27: global toast renderer for optimistic-action rollbacks -->
+    <Toaster />
+
     <!-- Footer -->
     <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10">
       <div class="max-w-7xl mx-auto flex items-center justify-center gap-4">
@@ -69,6 +72,7 @@ import { onMounted, onErrorCaptured, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/layout/Navbar.vue'
+import Toaster from '@/components/ui/Toaster.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
