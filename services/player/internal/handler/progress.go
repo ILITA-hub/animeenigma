@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
@@ -170,4 +171,53 @@ func (h *ProgressHandler) ListContinueWatching(w http.ResponseWriter, r *http.Re
 		items = []*domain.ContinueWatchingItem{}
 	}
 	httputil.OK(w, items)
+}
+
+// GetBulkProgress returns the bulk per-anime progress map for the
+// authenticated user, scoped to the comma-separated `ids` query param.
+// Caps at 50 IDs per request — the AnimeCardNew composable batches per
+// visible grid page. Phase 9 (UX-16).
+func (h *ProgressHandler) GetBulkProgress(w http.ResponseWriter, r *http.Request) {
+	const maxIDs = 50
+
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	raw := r.URL.Query().Get("ids")
+	if raw == "" {
+		httputil.OK(w, domain.BulkAnimeProgressMap{})
+		return
+	}
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		ids = append(ids, p)
+	}
+	if len(ids) == 0 {
+		httputil.OK(w, domain.BulkAnimeProgressMap{})
+		return
+	}
+	if len(ids) > maxIDs {
+		httputil.BadRequest(w, "ids must contain at most 50 entries")
+		return
+	}
+
+	out, err := h.progressService.GetBulkProgress(r.Context(), claims.UserID, ids)
+	if err != nil {
+		h.log.Errorw("failed to bulk-load anime progress",
+			"user_id", claims.UserID, "count", len(ids), "error", err)
+		httputil.Error(w, err)
+		return
+	}
+	if out == nil {
+		out = domain.BulkAnimeProgressMap{}
+	}
+	httputil.OK(w, out)
 }

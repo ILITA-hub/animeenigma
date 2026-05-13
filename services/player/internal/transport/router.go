@@ -82,6 +82,12 @@ func NewRouter(
 			// gateway route.
 			r.Get("/continue-watching", progressHandler.ListContinueWatching)
 
+			// Bulk per-card anime-progress (Phase 9 / UX-16). Comma-separated
+			// ?ids=a,b,c (max 50). Returns a JSON object keyed by anime_id
+			// with the user's furthest episode reached + completion flags.
+			// The AnimeCardNew composable batches per visible grid page.
+			r.Get("/anime-progress", progressHandler.GetBulkProgress)
+
 			// History routes
 			r.Get("/history", historyHandler.GetWatchHistory)
 
