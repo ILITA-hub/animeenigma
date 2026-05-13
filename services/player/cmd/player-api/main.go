@@ -20,6 +20,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs/signals"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/transport"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -54,6 +55,12 @@ func main() {
 		&domain.UserAnimePreference{},
 		&domain.UserPrefsVersion{},
 		&domain.Review{},
+		// Phase 1 (workstream: social) — AutoMigrate the new `comments`
+		// table. Domain struct: services/player/internal/domain/comment.go.
+		// Note: &domain.Review{} above stays in this block for plan 01;
+		// plan 02 deletes it after the runSocialMigration block below
+		// drops the underlying `reviews` table at runtime.
+		&domain.Comment{},
 		&domain.SyncJob{},
 		&domain.ActivityEvent{},
 		&domain.RecUserSignals{},
@@ -62,6 +69,18 @@ func main() {
 		&domain.RecEvent{}, // Phase 14 (REC-EVAL-01)
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
+	}
+
+	// Phase 1 (workstream: social) — one-shot idempotent migration that
+	// merges every legacy `reviews` row into `anime_list` then drops the
+	// `reviews` table. Guarded by db.Migrator().HasTable("reviews"); after
+	// the first successful run the table is gone, so subsequent boots
+	// short-circuit and emit NO `social migration` log line. The helper
+	// lives below main() so the test in main_test.go can exercise it
+	// directly against an in-memory SQLite DB (HasTable is dialect-aware
+	// and works on both Postgres + SQLite).
+	if err := runSocialMigration(db.DB, log); err != nil {
+		log.Fatalw("social migration failed", "error", err)
 	}
 
 	// Phase 9: rec engine FK constraints + last_computed indexes — created via
@@ -331,4 +350,101 @@ func main() {
 	}
 
 	log.Info("server stopped")
+}
+
+// runSocialMigration is the one-shot idempotent bootstrap that merges legacy
+// `reviews` rows into `anime_list` (preserving non-zero list scores, copying
+// review_text + username), backfills empty `anime_list.username` from `users`,
+// and drops the `reviews` table.
+//
+// Idempotency contract (SOCIAL-NF-02):
+//   - Guard via db.Migrator().HasTable("reviews"). Dialect-aware (works on
+//     both Postgres and SQLite, so the unit test can exercise the same code
+//     path without an information_schema.tables probe).
+//   - After the first successful run, the `reviews` table no longer exists,
+//     so every subsequent invocation short-circuits and emits no log line.
+//
+// Failure mode: forward-only. On any step failure the function returns an
+// error and the caller (main) escalates to log.Fatalw so the service
+// crash-loops until ops intervenes (data integrity > availability for a
+// one-shot data migration).
+//
+// Takes `*gorm.DB` directly (not the project's `*database.DB` wrapper) so
+// the test in main_test.go can pass an in-memory SQLite DB.
+func runSocialMigration(db *gorm.DB, log *logger.Logger) error {
+	if !db.Migrator().HasTable("reviews") {
+		// Already migrated on a previous boot — short-circuit silently.
+		return nil
+	}
+
+	log.Infow("social migration: merging reviews into anime_list")
+
+	// Dialect probe: Postgres uses gen_random_uuid() + NOW(); SQLite uses
+	// a hex(randomblob(...)) expression + CURRENT_TIMESTAMP. Both support
+	// `INSERT ... ON CONFLICT (cols) DO UPDATE SET ... = EXCLUDED.x` so
+	// the upsert shape itself is portable.
+	dialect := db.Dialector.Name()
+	var newUUID, now string
+	switch dialect {
+	case "postgres":
+		newUUID = "gen_random_uuid()"
+		now = "NOW()"
+	case "sqlite":
+		// SQLite has no native UUID — fabricate a v4-shaped hex string.
+		newUUID = "lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(6)))"
+		now = "CURRENT_TIMESTAMP"
+	default:
+		newUUID = "gen_random_uuid()"
+		now = "NOW()"
+	}
+
+	// Step A — upsert reviews into anime_list.
+	//   * New row: status='completed', score=reviews.score, review_text +
+	//     username copied verbatim.
+	//   * Existing row: preserve non-zero score (user already chose one in
+	//     their watchlist); overwrite review_text; only fill username when
+	//     the existing row's username is empty (NULLIF guard).
+	upsertSQL := `
+		INSERT INTO anime_list (
+			id, user_id, anime_id, status, score, episodes,
+			review_text, username, created_at, updated_at
+		)
+		SELECT ` + newUUID + `, r.user_id, r.anime_id, 'completed',
+		       r.score, 0,
+		       r.review_text, r.username,
+		       ` + now + `, ` + now + `
+		FROM reviews r
+		ON CONFLICT (user_id, anime_id) DO UPDATE SET
+			score        = CASE WHEN anime_list.score = 0 THEN EXCLUDED.score ELSE anime_list.score END,
+			review_text  = EXCLUDED.review_text,
+			username     = COALESCE(NULLIF(EXCLUDED.username, ''), anime_list.username),
+			updated_at   = ` + now
+	if err := db.Exec(upsertSQL).Error; err != nil {
+		return err
+	}
+
+	// Step B — backfill empty anime_list.username by JOINing users.
+	// The JOIN syntax differs between Postgres (UPDATE ... FROM) and
+	// SQLite (UPDATE ... FROM, supported since 3.33). Both are accepted
+	// here. If the `users` table does not exist (legacy test fixture
+	// might not provision it), skip step B rather than fail the whole
+	// migration — the username is best-effort denormalization.
+	if db.Migrator().HasTable("users") {
+		backfillSQL := `
+			UPDATE anime_list SET username = u.username, updated_at = ` + now + `
+			FROM users u
+			WHERE anime_list.user_id = u.id
+			  AND (anime_list.username IS NULL OR anime_list.username = '')`
+		if err := db.Exec(backfillSQL).Error; err != nil {
+			return err
+		}
+	}
+
+	// Step C — drop the now-redundant `reviews` table.
+	if err := db.Exec("DROP TABLE reviews").Error; err != nil {
+		return err
+	}
+
+	log.Infow("social migration complete")
+	return nil
 }
