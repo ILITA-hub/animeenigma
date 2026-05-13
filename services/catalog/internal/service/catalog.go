@@ -1473,6 +1473,17 @@ func (s *CatalogService) GetKodikTranslations(ctx context.Context, animeID strin
 		}
 	}
 
+	// Phase 15 (UX-31): lazily backfill animes.has_kodik. Reaching this
+	// point means Kodik returned >=1 translation, so the anime IS available
+	// on Kodik. Best-effort; idempotent guard against noisy UPDATEs.
+	if len(translations) > 0 && !anime.HasKodik {
+		if updateErr := s.animeRepo.SetHasKodik(ctx, anime.ID, true); updateErr != nil {
+			s.log.Warnw("failed to persist anime.has_kodik",
+				"anime_id", anime.ID,
+				"error", updateErr)
+		}
+	}
+
 	// Cache for 1 hour
 	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
 
@@ -1961,6 +1972,16 @@ func (s *CatalogService) doHiAnimeSearch(ctx context.Context, anime *domain.Anim
 	if found, ok := <-ch; ok {
 		cancel() // stop remaining goroutines from starting new work
 		_ = s.cache.Set(ctx, cacheKey, found.id, 6*time.Hour)
+		// Phase 15 (UX-31): lazily backfill animes.has_hianime when the
+		// anime resolves to a real HiAnime ID. Best-effort; idempotent
+		// guard against noisy UPDATEs.
+		if !anime.HasHiAnime {
+			if updateErr := s.animeRepo.SetHasHiAnime(ctx, anime.ID, true); updateErr != nil {
+				s.log.Warnw("failed to persist anime.has_hianime",
+					"anime_id", anime.ID,
+					"error", updateErr)
+			}
+		}
 		return found.id, nil
 	}
 
@@ -2060,6 +2081,17 @@ func (s *CatalogService) GetConsumetEpisodes(ctx context.Context, animeID string
 			Number:   ep.Number,
 			Title:    ep.Title,
 			IsFiller: ep.IsFiller,
+		}
+	}
+
+	// Phase 15 (UX-31): lazily backfill animes.has_consumet when the
+	// catalog resolves >=1 episode on any Consumet provider. Best-effort;
+	// idempotent guard against noisy UPDATEs.
+	if len(result) > 0 && !anime.HasConsumet {
+		if updateErr := s.animeRepo.SetHasConsumet(ctx, anime.ID, true); updateErr != nil {
+			s.log.Warnw("failed to persist anime.has_consumet",
+				"anime_id", anime.ID,
+				"error", updateErr)
 		}
 	}
 
@@ -2486,6 +2518,21 @@ func (s *CatalogService) GetAnimeLibTranslations(ctx context.Context, animeID st
 
 	if result == nil {
 		result = []domain.AnimeLibTranslation{}
+	}
+
+	// Phase 15 (UX-31): lazily backfill animes.has_animelib whenever the
+	// catalog reaches at least one non-Kodik translation on the AnimeLib
+	// path. The Kodik-iframe-fallback path inside AnimeLib does NOT count
+	// (per feedback_animelib_no_kodik_fallback.md — AnimeLib treats
+	// Kodik-only translations as empty). Best-effort; idempotent guard.
+	if len(result) > 0 {
+		if anime, err := s.animeRepo.GetByID(ctx, animeID); err == nil && anime != nil && !anime.HasAnimeLib {
+			if updateErr := s.animeRepo.SetHasAnimeLib(ctx, animeID, true); updateErr != nil {
+				s.log.Warnw("failed to persist anime.has_animelib",
+					"anime_id", animeID,
+					"error", updateErr)
+			}
+		}
 	}
 
 	// Cache for 1 hour
