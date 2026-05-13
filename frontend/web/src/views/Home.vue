@@ -395,6 +395,11 @@
          airing window stays close to the user's in-progress queue. -->
     <ThisWeekRow />
 
+    <!-- Phase 17 (UX-33) — admin-curated editorial collections. Self-gated
+         on items.length === 0 so the row hides entirely when no
+         collections have been published yet. -->
+    <CollectionsRow />
+
     <!-- Continue-Watching row (Phase 8 / UX-15 / UA-061). Hidden when
          anonymous OR when the logged-in user has no in-progress
          watch_progress rows. The component owns its own v-if gate so
@@ -444,6 +449,8 @@ import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
 import ContinueWatchingRow from '@/components/home/ContinueWatchingRow.vue'
 import ThisWeekRow from '@/components/home/ThisWeekRow.vue'
+// Phase 17 (UX-33) — admin-curated editorial collections home row.
+import CollectionsRow from '@/components/home/CollectionsRow.vue'
 import SystemStatusBanner from '@/components/home/SystemStatusBanner.vue'
 
 interface HomeAnime {

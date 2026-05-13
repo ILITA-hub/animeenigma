@@ -108,6 +108,28 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'admin.recs.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // Phase 17 (UX-33) — editorial collections admin list.
+    path: '/admin/collections',
+    name: 'admin-collections',
+    component: () => import('@/views/admin/AdminCollections.vue'),
+    meta: { titleKey: 'admin.collections.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    // Phase 17 (UX-33) — editorial collections edit form.
+    // :id === 'new' triggers the create flow.
+    path: '/admin/collections/:id',
+    name: 'admin-collection-edit',
+    component: () => import('@/views/admin/AdminCollectionEdit.vue'),
+    meta: { titleKey: 'admin.collections.editTitle', requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    // Phase 17 (UX-33) — public editorial collection detail page.
+    path: '/collections/:slug',
+    name: 'collection-detail',
+    component: () => import('@/views/Collections.vue'),
+    meta: { titleKey: 'collections.title' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),
