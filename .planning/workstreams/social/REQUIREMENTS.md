@@ -11,26 +11,26 @@ Each requirement maps 1:1 to a numbered requirement in the SPEC.md of Phase 01. 
 
 ### Schema (storage layer)
 
-- [ ] **SOCIAL-01**: Drop the `reviews` table. Add `review_text text NOT NULL DEFAULT ''` and `username varchar(32) NOT NULL DEFAULT ''` columns to `anime_list`. One row per `(user_id, anime_id)` carries both score and (optional) review text.
-- [ ] **SOCIAL-02**: One-shot migration copies `reviews.review_text` + `reviews.username` into matching `anime_list` rows, creates missing rows where a review existed without a list entry, then drops the `reviews` table. Idempotent on re-run.
+- [x] **SOCIAL-01**: Drop the `reviews` table. Add `review_text text NOT NULL DEFAULT ''` and `username varchar(32) NOT NULL DEFAULT ''` columns to `anime_list`. One row per `(user_id, anime_id)` carries both score and (optional) review text.
+- [x] **SOCIAL-02**: One-shot migration copies `reviews.review_text` + `reviews.username` into matching `anime_list` rows, creates missing rows where a review existed without a list entry, then drops the `reviews` table. Idempotent on re-run.
 
 ### API (player service)
 
-- [ ] **SOCIAL-03**: All six reviews endpoints (`GET /api/anime/:id/reviews`, `GET /api/anime/:id/rating`, `GET /api/anime/:id/reviews/me`, `POST /api/anime/:id/reviews`, `DELETE /api/anime/:id/reviews`, `POST /api/anime/ratings/batch`) read/write `anime_list` instead of `reviews`. JSON response shape preserved — frontend `reviewApi` continues to work without changes.
+- [x] **SOCIAL-03**: All six reviews endpoints (`GET /api/anime/:id/reviews`, `GET /api/anime/:id/rating`, `GET /api/anime/:id/reviews/me`, `POST /api/anime/:id/reviews`, `DELETE /api/anime/:id/reviews`, `POST /api/anime/ratings/batch`) read/write `anime_list` instead of `reviews`. JSON response shape preserved — frontend `reviewApi` continues to work without changes.
 
 ### Comments (new feature)
 
-- [ ] **SOCIAL-04**: New `comments` table + four CRUD endpoints (`GET`/`POST`/`PATCH`/`DELETE` on `/api/anime/:id/comments[/:cid]`) with body 1–2000 chars, 10/hour/user/anime rate limit, soft-delete, cursor pagination 50/page newest-first.
-- [ ] **SOCIAL-05**: Posting a comment emits an `activity_events` row with `type='comment'` (no per-day dedup, unlike reviews).
+- [x] **SOCIAL-04**: New `comments` table + four CRUD endpoints (`GET`/`POST`/`PATCH`/`DELETE` on `/api/anime/:id/comments[/:cid]`) with body 1–2000 chars, 10/hour/user/anime rate limit, soft-delete, cursor pagination 50/page newest-first.
+- [x] **SOCIAL-05**: Posting a comment emits an `activity_events` row with `type='comment'` (no per-day dedup, unlike reviews).
 
 ### Frontend (anime detail page)
 
-- [ ] **SOCIAL-06**: The current single Reviews section in `frontend/web/src/views/Anime.vue` becomes a two-tab strip: `Reviews ({count})` and `Comments ({count})`. Tab state URL-persisted via `?ugc=reviews|comments`. Auth-gated textarea on the Comments tab; login prompt for anonymous users.
+- [x] **SOCIAL-06**: The current single Reviews section in `frontend/web/src/views/Anime.vue` becomes a two-tab strip: `Reviews ({count})` and `Comments ({count})`. Tab state URL-persisted via `?ugc=reviews|comments`. Auth-gated textarea on the Comments tab; login prompt for anonymous users.
 
 ### Non-functional
 
-- [ ] **SOCIAL-NF-01**: No frontend changes required for the reviews schema swap — only the new Comments tab + provenance-aware rendering for imported rating-only entries. Verified by golden-file diff of the six reviews-endpoint responses pre- and post-migration.
-- [ ] **SOCIAL-NF-02**: GORM AutoMigrate handles the schema changes on player service startup. Migration step (data copy + table drop) is gated by an idempotency check so it runs at most once per environment.
+- [x] **SOCIAL-NF-01**: No frontend changes required for the reviews schema swap — only the new Comments tab + provenance-aware rendering for imported rating-only entries. Verified by golden-file diff of the six reviews-endpoint responses pre- and post-migration.
+- [x] **SOCIAL-NF-02**: GORM AutoMigrate handles the schema changes on player service startup. Migration step (data copy + table drop) is gated by an idempotency check so it runs at most once per environment.
 
 ## Out of Scope
 
@@ -53,14 +53,14 @@ Each requirement maps 1:1 to a numbered requirement in the SPEC.md of Phase 01. 
 
 | Requirement   | Phase    | Status   |
 |---------------|----------|----------|
-| SOCIAL-01     | Phase 01 | Pending  |
-| SOCIAL-02     | Phase 01 | Pending  |
-| SOCIAL-03     | Phase 01 | Pending  |
-| SOCIAL-04     | Phase 01 | Pending  |
-| SOCIAL-05     | Phase 01 | Pending  |
-| SOCIAL-06     | Phase 01 | Pending  |
-| SOCIAL-NF-01  | Phase 01 | Pending  |
-| SOCIAL-NF-02  | Phase 01 | Pending  |
+| SOCIAL-01     | Phase 01 | Done     |
+| SOCIAL-02     | Phase 01 | Done     |
+| SOCIAL-03     | Phase 01 | Done     |
+| SOCIAL-04     | Phase 01 | Done     |
+| SOCIAL-05     | Phase 01 | Done     |
+| SOCIAL-06     | Phase 01 | Done     |
+| SOCIAL-NF-01  | Phase 01 | Done     |
+| SOCIAL-NF-02  | Phase 01 | Done     |
 
 **Coverage:**
 - v0.1 requirements: 8 total
