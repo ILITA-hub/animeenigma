@@ -111,6 +111,32 @@
       "announced": "Announced",
       "completed": "Completed",
       "upcoming": "Upcoming"
+    },
+    "ugc": {
+      "reviewsTab": "Reviews",
+      "commentsTab": "Comments",
+      "commentsCount": "{count, plural, one {# comment} other {# comments}}",
+      "commentPlaceholder": "Add a comment…",
+      "postComment": "Post comment",
+      "posting": "Posting…",
+      "editComment": "Edit comment",
+      "deleteComment": "Delete comment",
+      "deleteCommentConfirm": "Delete this comment? This cannot be undone.",
+      "editPlaceholder": "Edit your comment…",
+      "saveEdit": "Save edit",
+      "cancelEdit": "Cancel edit",
+      "loadMore": "Load more comments",
+      "loading": "Loading…",
+      "loginToComment": "Sign in to join the conversation",
+      "emptyComments": "No comments yet. Start the conversation.",
+      "charCount": "{count}/2000",
+      "rateLimitError": "You've posted a lot recently. Try again in a few minutes.",
+      "bodyEmpty": "Comment can't be empty.",
+      "bodyTooLong": "Comment can't be longer than 2000 characters.",
+      "editFailed": "Could not save your edit. Try again.",
+      "deleteFailed": "Could not delete the comment. Try again.",
+      "loadFailed": "Could not load comments.",
+      "loadMoreFailed": "Could not load more. Tap to retry."
     }
   },
   "player": {
@@ -451,6 +477,9 @@
     "review": {
       "wrote": "wrote a review ({score}/10) —",
       "updated": "updated review ({score}/10) —"
+    },
+    "comment": {
+      "posted": "commented on"
     },
     "status": {
       "watching": "started watching",

@@ -111,6 +111,32 @@
       "announced": "放送予定",
       "completed": "完結",
       "upcoming": "放送予定"
+    },
+    "ugc": {
+      "reviewsTab": "レビュー",
+      "commentsTab": "コメント",
+      "commentsCount": "{count, plural, one {# 件のコメント} other {# 件のコメント}}",
+      "commentPlaceholder": "コメントを追加…",
+      "postComment": "コメントを投稿",
+      "posting": "投稿中…",
+      "editComment": "コメントを編集",
+      "deleteComment": "コメントを削除",
+      "deleteCommentConfirm": "このコメントを削除しますか？この操作は元に戻せません。",
+      "editPlaceholder": "コメントを編集…",
+      "saveEdit": "編集を保存",
+      "cancelEdit": "編集をキャンセル",
+      "loadMore": "さらにコメントを読み込む",
+      "loading": "読み込み中…",
+      "loginToComment": "会話に参加するにはログインしてください",
+      "emptyComments": "まだコメントがありません。最初のコメントを投稿しましょう。",
+      "charCount": "{count}/2000",
+      "rateLimitError": "最近の投稿が多すぎます。数分後にもう一度お試しください。",
+      "bodyEmpty": "コメントを空にすることはできません。",
+      "bodyTooLong": "コメントは2000文字以内で入力してください。",
+      "editFailed": "編集を保存できませんでした。もう一度お試しください。",
+      "deleteFailed": "コメントを削除できませんでした。もう一度お試しください。",
+      "loadFailed": "コメントを読み込めませんでした。",
+      "loadMoreFailed": "これ以上読み込めませんでした。タップして再試行してください。"
     }
   },
   "player": {
@@ -451,6 +477,9 @@
     "review": {
       "wrote": "レビューを投稿 ({score}/10) —",
       "updated": "レビューを更新 ({score}/10) —"
+    },
+    "comment": {
+      "posted": "がコメントしました"
     },
     "status": {
       "watching": "視聴開始",
