@@ -58,9 +58,16 @@ func (b *rateBucket) allow(userID, animeID string) bool {
 	now := time.Now()
 	cutoff := now.Add(-rateLimitWindow)
 
-	// Prune in-place using a single forward pass.
+	// Prune by allocating a fresh slice — REVIEW.md CR-01. The previous
+	// `keep := existing[:0]` pattern aliased the underlying array of
+	// b.entries[key]; a fresh slice each call guarantees no backing-array
+	// aliasing across concurrent allow() invocations on the same key.
+	//
+	// Deferred follow-up: persist counters in Redis so a service restart
+	// (rolling redeploy, crash, OOM) does not silently reset all per-user
+	// per-anime buckets. Out of scope for v0.1 single-replica.
 	existing := b.entries[key]
-	keep := existing[:0]
+	keep := make([]time.Time, 0, len(existing))
 	for _, t := range existing {
 		if t.After(cutoff) {
 			keep = append(keep, t)

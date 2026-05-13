@@ -28,6 +28,23 @@ function makeLink(type: string, id: string, text: string): string {
   return `<a href="${SHIKIMORI_BASE}/${urlPath}/${id}" target="_blank" rel="noopener" class="shiki-link">${text}</a>`
 }
 
+// parseDescription converts Shikimori BBCode-style markup into safe HTML.
+//
+// XSS-safety invariant — REVIEW.md CR-05:
+//   1. The first step ALWAYS calls escapeHtml() on the raw input. After
+//      this step, the string contains zero unescaped `<`, `>`, `"`, `'`
+//      or `&` characters, so no attacker-controlled HTML tags or
+//      attributes can survive into the output.
+//   2. Subsequent regex replacements ONLY interpolate already-escaped
+//      capture groups (or numeric ids matched by \d+) into HARDCODED
+//      HTML templates (<a>, <span>, <br>). The href base is a constant
+//      and the URL path comes from a whitelist (TYPE_URL_MAP).
+//   3. No raw user content is ever placed in an attribute value or in a
+//      javascript: URL context.
+// Result: the output is safe to bind via v-html. DOMPurify is therefore
+// NOT required at the call site. Any future edit that bypasses
+// escapeHtml() or interpolates non-numeric capture groups into href
+// attributes MUST re-evaluate this invariant.
 export function parseDescription(raw: string): string {
   let text = escapeHtml(raw)
 

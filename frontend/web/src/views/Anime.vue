@@ -1362,7 +1362,13 @@ const isHentai = computed(() =>
 
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('ru-RU', {
+  // REVIEW.md WR-05: respect the i18n locale instead of hardcoding ru-RU.
+  // English / Japanese users previously saw review and comment dates
+  // formatted as Russian (e.g. "13 мая 2026 г."). Map the active vue-i18n
+  // locale to a BCP-47 tag accepted by Intl. The pattern mirrors the
+  // existing formatNextEpisode helper a few lines below.
+  const loc = locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US'
+  return date.toLocaleDateString(loc, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -1614,11 +1620,19 @@ const postComment = async () => {
   posting.value = true
   postError.value = ''
   try {
-    await commentApi.createComment(anime.value.id, trimmed)
+    const resp = await commentApi.createComment(anime.value.id, trimmed)
+    // REVIEW.md WR-03: prepend the newly-created comment to the list
+    // instead of refetching page 1. Refetching destroys commentsNextCursor /
+    // commentsHasMore and snaps users who had paginated through several
+    // pages of comments back to the top. Prepending preserves cursor
+    // state and lets infinite scroll continue working below the newly
+    // posted card.
+    const created: Comment | undefined = resp.data?.data || resp.data
+    if (created?.id) {
+      comments.value.unshift(created)
+      commentsFetched.value = true
+    }
     newCommentBody.value = ''
-    // Refetch the first page so the new comment appears at the top with
-    // canonical server data (created_at, id, etc.).
-    await fetchComments()
   } catch (err) {
     const e = err as ApiError
     const status = e.response?.status
@@ -1698,8 +1712,26 @@ const deleteCommentItem = async (c: Comment) => {
     await commentApi.deleteComment(anime.value.id, c.id)
   } catch (err) {
     console.error('Failed to delete comment:', err)
-    // Restore the card at its original index.
-    comments.value.splice(originalIdx, 0, snapshot)
+    // REVIEW.md WR-04: restore via id-keyed re-insertion rather than
+    // splicing at the captured originalIdx. Between the optimistic
+    // removal and the error path, the user may have triggered
+    // loadMoreComments() (appends new entries) or saveEditComment()
+    // (mutates in place), which would make originalIdx stale and put
+    // the restored card at the wrong position. Find a stable anchor by
+    // walking the current array and inserting before the first comment
+    // strictly older than the snapshot, falling back to the front if
+    // it's the newest or the array is empty. Newest-first ordering is
+    // preserved without depending on a captured index.
+    const insertAt = comments.value.findIndex((x) => {
+      const a = new Date(snapshot.created_at).getTime()
+      const b = new Date(x.created_at).getTime()
+      return a > b || (a === b && snapshot.id > x.id)
+    })
+    if (insertAt === -1) {
+      comments.value.push(snapshot)
+    } else {
+      comments.value.splice(insertAt, 0, snapshot)
+    }
     deleteError.value = t('anime.ugc.deleteFailed')
     // Auto-clear after 5 seconds (mirrors the SPEC's "auto-dismiss 5s").
     setTimeout(() => {

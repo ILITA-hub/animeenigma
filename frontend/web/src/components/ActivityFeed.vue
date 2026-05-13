@@ -43,7 +43,7 @@
         <!-- Event info -->
         <div class="flex-1 min-w-0">
           <router-link
-            :to="`/user/${event.user_id}`"
+            :to="`/user/${event.public_id || event.user_id}`"
             class="text-xs text-gray-400 hover:text-purple-400 transition-colors"
           >
             {{ event.username }}
@@ -93,6 +93,13 @@ import { getLocalizedTitle } from '@/utils/title'
 interface ActivityEvent {
   id: string
   user_id: string
+  // REVIEW.md WR-06: optional `public_id` (the user-chosen slug used by
+  // the /user/:publicId route). When present, the username link routes
+  // directly to the public profile URL; when absent, we fall back to
+  // user_id which the auth service's GetUserByPublicID handler resolves
+  // (UUID lookup → silent redirect). The backend may start populating
+  // this field by joining activity_events with users.
+  public_id?: string
   username: string
   anime_id: string
   anime?: {
