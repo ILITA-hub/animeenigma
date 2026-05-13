@@ -1007,6 +1007,8 @@ import { useWatchlistStore } from '@/stores/watchlist'
 import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'
+import { useToast } from '@/composables/useToast'
+import { useDebounceFn } from '@vueuse/core'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 import { useContextMenu } from '@/composables/useContextMenu'
@@ -1070,6 +1072,7 @@ const route = useRoute()
 const { t, te, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
+const toast = useToast()
 
 const siteOrigin = window.location.origin
 
@@ -1747,17 +1750,17 @@ const formatDateDisplay = (dateStr: string | null | undefined): string => {
 }
 
 const updateAnimeStatus = async (animeId: string, newStatus: string) => {
+  const animeRow = watchlist.value.find(a => a.anime_id === animeId)
+  const priorStatus = animeRow?.status ?? null
+  // Optimistic: flip the visible row status immediately.
+  if (animeRow) animeRow.status = newStatus
+  clearPageCache()
   try {
-    await userApi.updateWatchlistStatus(animeId, newStatus)
-    const anime = watchlist.value.find(a => a.anime_id === animeId)
-    if (anime) {
-      anime.status = newStatus
-    }
-    clearPageCache()
-    watchlistStore.invalidate()
-    await watchlistStore.fetchStatuses(true)
+    await watchlistStore.setStatusOptimistic(animeId, newStatus)
   } catch (err) {
     console.error('Failed to update status:', err)
+    if (animeRow && priorStatus !== null) animeRow.status = priorStatus
+    toast.push(t('watchlist.errors.updateFailed'))
   }
 }
 
@@ -1782,24 +1785,31 @@ const updateAnimeDate = async (animeId: string, field: 'started_at' | 'completed
   }
 }
 
+// Phase 13 / UX-27 — debounced score commit: rapid blur/re-edit cycles
+// collapse to a single PUT 500 ms after the last edit settles.
+const debouncedCommitScore = useDebounceFn(async (animeId: string, score: number, priorScore: number) => {
+  try {
+    await watchlistStore.setScoreOptimistic(animeId, score)
+  } catch (err) {
+    console.error('Failed to update score:', err)
+    const row = watchlist.value.find(a => a.anime_id === animeId)
+    if (row) row.score = priorScore
+    toast.push(t('watchlist.errors.updateFailed'))
+  }
+}, 500)
+
 const finishEditScore = async (animeId: string, rawValue: string) => {
   editingScore.value = null
   const score = Math.max(0, Math.min(10, parseInt(rawValue) || 0))
   const anime = watchlist.value.find(a => a.anime_id === animeId)
   if (!anime) return
 
-  try {
-    await userApi.updateWatchlistEntry({
-      anime_id: animeId,
-      status: anime.status,
-      score,
-    })
-    anime.score = score
-    clearPageCache()
-    watchlistStore.invalidate()
-  } catch (err) {
-    console.error('Failed to update score:', err)
-  }
+  const priorScore = anime.score ?? 0
+  // Optimistic: flip the visible score immediately.
+  anime.score = score
+  clearPageCache()
+  // API fires on debounced settle.
+  void debouncedCommitScore(animeId, score, priorScore)
 }
 
 const updateAnimeEpisodes = async (animeId: string, episodes: number) => {
@@ -1824,14 +1834,21 @@ const updateAnimeEpisodes = async (animeId: string, episodes: number) => {
 }
 
 const removeFromWatchlist = async (animeId: string) => {
+  const priorRow = watchlist.value.find(a => a.anime_id === animeId)
+  const priorIdx = priorRow ? watchlist.value.indexOf(priorRow) : -1
+  // Optimistic: drop the row from the visible list immediately.
+  watchlist.value = watchlist.value.filter(a => a.anime_id !== animeId)
+  clearPageCache()
   try {
-    await userApi.removeFromWatchlist(animeId)
-    watchlist.value = watchlist.value.filter(a => a.anime_id !== animeId)
-    clearPageCache()
-    watchlistStore.invalidate()
-    await watchlistStore.fetchStatuses(true)
+    await watchlistStore.removeEntryOptimistic(animeId)
   } catch (err) {
     console.error('Failed to remove from watchlist:', err)
+    // Re-insert at original position on failure.
+    if (priorRow) {
+      const restoreAt = Math.min(priorIdx, watchlist.value.length)
+      watchlist.value.splice(restoreAt >= 0 ? restoreAt : 0, 0, priorRow)
+    }
+    toast.push(t('watchlist.errors.removeFailed'))
   }
 }
 
