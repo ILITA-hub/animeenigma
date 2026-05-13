@@ -31,11 +31,18 @@
 
         <!-- Top Badges -->
         <div class="absolute top-2 left-2 right-2 flex justify-between items-start">
-          <!-- Quality Badge -->
-          <Badge v-if="anime.quality" variant="default" size="sm">
-            {{ anime.quality }}
-          </Badge>
-          <span v-else />
+          <!-- Top-left column: Quality + DUB stack (Phase 9 / UX-18) -->
+          <div class="flex flex-col items-start gap-1">
+            <Badge v-if="anime.quality" variant="default" size="sm">
+              {{ anime.quality }}
+            </Badge>
+            <span
+              v-if="anime.hasDub"
+              class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500/90 text-white"
+            >
+              {{ $t('card.dubBadge') }}
+            </span>
+          </div>
 
           <!-- Rating Badges (stacked vertically). Faded on hover so the kebab owns the corner. -->
           <div class="flex flex-col gap-1 items-end transition-opacity duration-200 group-hover:opacity-0">
@@ -67,10 +74,21 @@
           </div>
         </div>
 
-        <!-- Watchlist Status Badge -->
-        <div v-if="listStatus" class="absolute bottom-2 left-2">
-          <span :class="listBadgeClasses">
+        <!-- Bottom-left: watchlist status + progress (Phase 9 / UX-16).
+             Progress stacks BELOW the watchlist badge so the watchlist
+             status remains the primary signal at a glance. -->
+        <div
+          v-if="listStatus || progressBadgeText"
+          class="absolute bottom-2 left-2 flex flex-col gap-1 items-start"
+        >
+          <span v-if="listStatus" :class="listBadgeClasses">
             {{ listStatusLabel }}
+          </span>
+          <span
+            v-if="progressBadgeText"
+            class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/80 text-white"
+          >
+            {{ progressBadgeText }}
           </span>
         </div>
 
@@ -128,6 +146,20 @@ interface Anime {
   genres?: string[]
   rawGenres?: { name?: string; nameRu?: string }[]
   quality?: string
+  hasDub?: boolean // Phase 9 (UX-18) — backed by animes.has_dub on the catalog model
+}
+
+// Phase 9 (UX-16): optional per-card progress entry shape, mirrored from
+// the backend BulkAnimeProgressEntry. Parents (Browse / Search / Home
+// trending row) wire this in via useAnimeProgress; cards rendered for
+// anonymous users or animes without progress get `progress = null` and
+// skip the badge entirely.
+interface ProgressEntry {
+  latest_episode: number
+  episodes_count: number
+  episodes_aired: number
+  completed: boolean
+  dropped: boolean
 }
 
 const props = defineProps<{
@@ -135,6 +167,7 @@ const props = defineProps<{
   listStatus?: string | null
   siteRating?: { average_score: number; total_reviews: number } | null
   menuOpen?: boolean
+  progress?: ProgressEntry | null
 }>()
 
 const emit = defineEmits<{
@@ -195,5 +228,23 @@ const listStatusLabel = computed(() => {
 const listBadgeClasses = computed(() => {
   const color = statusColors[props.listStatus || ''] || 'bg-white/20 text-white/90'
   return `inline-flex items-center px-2 py-0.5 text-xs font-medium rounded ${color}`
+})
+
+// Phase 9 (UX-16): renders "Серия N / Y" / "Episode N / Y" / "第N話 / Y"
+// when the user is in progress. Hidden when the anime is fully complete
+// (the existing watchlist "completed" badge already signals that) or
+// when no progress entry is supplied (anonymous user / no rows in
+// watch_progress for this anime).
+const progressBadgeText = computed(() => {
+  const p = props.progress
+  if (!p) return ''
+  if (p.completed) return ''
+  if (p.latest_episode > 0) {
+    return t('card.episodeProgress', {
+      n: p.latest_episode,
+      total: p.episodes_count || p.episodes_aired || '?',
+    })
+  }
+  return ''
 })
 </script>
