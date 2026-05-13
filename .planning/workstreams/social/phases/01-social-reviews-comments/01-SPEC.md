@@ -1,21 +1,22 @@
 ---
 id: SOCIAL-reviews-ratings-comments
 title: Merge reviews into anime_list (drop sync) + add separate Comments feature + tabbed UI
-captured_at: 2026-05-13
-captured_during: standalone spec request
-target_milestone: TBD (post-v3.0 candidate — not yet on ROADMAP.md)
-status: backlog (SPEC-ready, awaiting milestone slot)
+workstream: social
+phase: 01
+created_at: 2026-05-13
+status: SPEC-ready (workstream phases ROADMAP not yet generated)
 ---
 
-# SOCIAL-reviews-ratings-comments — Specification
+# Phase 01 (workstream `social`): Reviews + Ratings + Comments — Specification
 
+**Workstream:** `social` (parallel to v3.0 Universal Anime Scraper)
 **Created:** 2026-05-13 (v2 — simplified per user feedback "sync усложнит систему, хотелось бы упростить")
 **Ambiguity score:** 0.15 (gate: ≤ 0.20)
 **Requirements:** 6 locked
-**Mode:** `--auto` (Socratic interview skipped per user instruction "work without stopping for clarifying questions"; key decisions logged below as auto-selected — review and override before promoting to a phase)
+**Mode:** `--auto` (Socratic interview skipped per user instruction "work without stopping for clarifying questions"; key decisions logged below as auto-selected — review and override before planning)
 
-> **Phase status:** This is a backlog SPEC, not yet bound to a milestone or phase number.
-> To promote: `/gsd-phase add` to slot into a milestone, then move this file to `.planning/phases/<N>-social-reviews-comments/<NN>-SPEC.md` and run `/gsd-discuss-phase <N>`.
+> **Phase status:** Lives in workstream `social`. The workstream's ROADMAP.md is not yet generated.
+> To activate: `/gsd-new-milestone --ws social` to create the workstream's first milestone, then `/gsd-phase add --ws social` to register this phase officially in its ROADMAP, then `/gsd-discuss-phase 1 --ws social` to start the implementation-decision phase.
 
 ## Goal
 
@@ -170,6 +171,7 @@ Status: ✓ = met minimum, ⚠ = below minimum (planner treats as assumption)
 
 ---
 
-*Backlog item — not yet on ROADMAP.md.*
-*Spec created: 2026-05-13 (auto mode, v2 simplified)*
-*Next step when promoted:* `/gsd-phase add` to slot into a milestone → move this file to `.planning/phases/<N>-social-reviews-comments/<NN>-SPEC.md` → `/gsd-discuss-phase <N>`.
+*Workstream:* `social` — parallel to v3.0 Universal Anime Scraper
+*Phase directory:* `.planning/workstreams/social/phases/01-social-reviews-comments/`
+*Spec created:* 2026-05-13 (auto mode, v2 simplified)
+*Next step:* `/gsd-new-milestone --ws social` to create the workstream's first milestone → `/gsd-phase add --ws social` to register this phase → `/gsd-discuss-phase 1 --ws social` for implementation decisions.
