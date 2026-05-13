@@ -161,6 +161,95 @@ func TestLoad_GogoanimeConfig_DefaultsAndOverride(t *testing.T) {
 	})
 }
 
+// TestLoad_ServerPriorityDefault — SCRAPER-HEAL-03: with no env set,
+// Gogoanime.ServerPriority defaults to ["streamhg", "earnvids", "vibeplayer"]
+// (the canonical safe order from CONTEXT.md D3).
+func TestLoad_ServerPriorityDefault(t *testing.T) {
+	unsetEnv(t, "SCRAPER_SERVER_PRIORITY",
+		"REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB",
+		"ANIMEPAHE_BASE_URL", "SCRAPER_GOGOANIME_BASE_URL",
+		"SCRAPER_ANIMEKAI_BASE_URL",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"streamhg", "earnvids", "vibeplayer"}
+	if got := cfg.Gogoanime.ServerPriority; !equalStringSlices(got, want) {
+		t.Fatalf("ServerPriority = %v; want %v", got, want)
+	}
+}
+
+// TestLoad_ServerPriorityOverride — env override changes the order, lowercases
+// + trims, and drops empties.
+func TestLoad_ServerPriorityOverride(t *testing.T) {
+	setEnv(t, "SCRAPER_SERVER_PRIORITY", "earnvids,streamhg,vibeplayer")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"earnvids", "streamhg", "vibeplayer"}
+	if got := cfg.Gogoanime.ServerPriority; !equalStringSlices(got, want) {
+		t.Fatalf("ServerPriority = %v; want %v", got, want)
+	}
+}
+
+// TestLoad_ServerPriorityWhitespace — whitespace + mixed case + empty entries
+// are normalized.
+func TestLoad_ServerPriorityWhitespace(t *testing.T) {
+	setEnv(t, "SCRAPER_SERVER_PRIORITY", "  StreamHG , , VibePlayer ,")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"streamhg", "vibeplayer"}
+	if got := cfg.Gogoanime.ServerPriority; !equalStringSlices(got, want) {
+		t.Fatalf("ServerPriority = %v; want %v", got, want)
+	}
+}
+
+// TestLoad_ServerPriorityEmptyFallsBackToDefault — explicit empty env string
+// returns the canonical default rather than an empty slice. Matches the
+// "unset env" path.
+func TestLoad_ServerPriorityEmptyFallsBackToDefault(t *testing.T) {
+	setEnv(t, "SCRAPER_SERVER_PRIORITY", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"streamhg", "earnvids", "vibeplayer"}
+	if got := cfg.Gogoanime.ServerPriority; !equalStringSlices(got, want) {
+		t.Fatalf("ServerPriority = %v; want %v", got, want)
+	}
+}
+
+// TestLoad_ServerPriorityAllEmpty — input consisting only of commas/whitespace
+// collapses to the canonical default rather than an empty slice (so the
+// orchestrator never silently disables priority sorting).
+func TestLoad_ServerPriorityAllEmpty(t *testing.T) {
+	setEnv(t, "SCRAPER_SERVER_PRIORITY", " , , ,")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"streamhg", "earnvids", "vibeplayer"}
+	if got := cfg.Gogoanime.ServerPriority; !equalStringSlices(got, want) {
+		t.Fatalf("ServerPriority = %v; want %v (empty input must fall back to default)", got, want)
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // TestLoad_AnimeKaiDefaults — with NO env vars set, AnimeKai is disabled
 // and BaseURL defaults to https://anikai.to (the canonical mirror as of
 // 2026-05-12; animekai.to 301s here).

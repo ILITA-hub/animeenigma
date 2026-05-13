@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -68,8 +69,16 @@ type AnimePaheConfig struct {
 // (Phase 18 — pivots to Anitaku at anitaku.to). BaseURL defaults to
 // https://anitaku.to; override via SCRAPER_GOGOANIME_BASE_URL when the mirror
 // rotates. Invalid URL fails service boot.
+//
+// Phase 21 (SCRAPER-HEAL-03): ServerPriority is the CSV-driven priority list
+// for gogoanime.ListServers — entries with extractor names appearing here
+// are sorted to the front. Default: streamhg, earnvids, vibeplayer. Override
+// via SCRAPER_SERVER_PRIORITY. Validation against the embeds registry
+// happens at boot (main.go), not in config.Load — config stays
+// registry-agnostic.
 type GogoanimeConfig struct {
-	BaseURL string
+	BaseURL        string
+	ServerPriority []string
 }
 
 // AnimeKaiConfig is the per-provider override surface for animekai.Provider
@@ -112,7 +121,8 @@ func Load() (*Config, error) {
 			BaseURL: getEnv("ANIMEPAHE_BASE_URL", "https://animepahe.ru"),
 		},
 		Gogoanime: GogoanimeConfig{
-			BaseURL: getEnv("SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.to"),
+			BaseURL:        getEnv("SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.to"),
+			ServerPriority: parseServerPriority(getEnv("SCRAPER_SERVER_PRIORITY", "streamhg,earnvids,vibeplayer")),
 		},
 		AnimeKai: AnimeKaiConfig{
 			Enabled: getEnvBool("SCRAPER_ANIMEKAI_ENABLED", false),
@@ -156,6 +166,34 @@ func Load() (*Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// parseServerPriority splits a CSV priority spec into a normalized slice.
+// Whitespace is trimmed, case is lowered, and empty entries (from leading
+// commas / consecutive commas / trailing commas) are dropped. Empty input
+// returns the canonical default ["streamhg","earnvids","vibeplayer"].
+//
+// Phase 21 SCRAPER-HEAL-03. Validation against the embeds registry's
+// known extractor names happens in services/scraper/cmd/scraper-api/main.go
+// — config.Load stays registry-agnostic so unit tests don't need to wire
+// the full extractor set.
+func parseServerPriority(csv string) []string {
+	if strings.TrimSpace(csv) == "" {
+		return []string{"streamhg", "earnvids", "vibeplayer"}
+	}
+	parts := strings.Split(csv, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	if len(out) == 0 {
+		return []string{"streamhg", "earnvids", "vibeplayer"}
+	}
+	return out
 }
 
 func getEnv(key, defaultVal string) string {
