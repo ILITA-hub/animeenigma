@@ -2,38 +2,38 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: UX Reassessment Remediation
-current_phase: None (Phase 11 next)
+current_phase: None (Phase 14 next)
 current_plan: N/A
 status: completed
-last_updated: "2026-05-13T04:45:00.000Z"
+last_updated: "2026-05-13T08:00:00.000Z"
 last_activity: 2026-05-13
 progress:
   total_phases: 20
-  completed_phases: 10
-  total_plans: 26
-  completed_plans: 23
-  percent: 50
+  completed_phases: 13
+  total_plans: 29
+  completed_plans: 26
+  percent: 65
 ---
 
 # Project State
 
 ## Current Position
 
-**Status:** Phase 10 (Recommendations polish — reasoning chip + Top-10 visual) complete; Phase 11 next.
-**Current Phase:** None (Phase 11 next)
+**Status:** Phase 13 (Optimistic UI on watchlist) complete; Phase 14 next.
+**Current Phase:** None (Phase 14 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 10 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Two visual polish items on Home.vue plus 15 i18n entries. Reasoning chip (UX-19) renders one localized reason category below the trending row label, derived from the modal `top_contributor` across non-pinned items — first frontend consumer of `RecItem.top_contributor` (verifies UA-060). Top-10 numeral (UX-20) lifts the "Топ аниме" column with a giant cyan-400/10 numeral behind each of the first 10 posters à la Netflix; small accessible rank badge is preserved alongside. Three atomic commits: `6841d7e` chip, `c7c7a36` numeral, `0fda35b` i18n.
+**Last Activity Description:** Phase 13 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Closes UX-27. Watchlist actions (status, score, remove) now feel instant via 3 new Pinia store actions (`setStatusOptimistic`, `setScoreOptimistic`, `removeEntryOptimistic`) that mutate `statusEntries` in place, call the API, and roll back on failure. New `useToast` composable + `<Toaster />` component (mounted in App.vue) surface rollback errors. Three consumers migrated: `AnimeContextMenu.vue` (Home/Browse/Search cards), `Anime.vue` (detail page status dropdown), `Profile.vue` (watchlist tab status pill + debounced 500ms score editor). 6 new i18n entries (`watchlist.errors.{updateFailed,removeFailed}` × en/ru/ja). 7 atomic commits + 1 docs commit. Zero backend changes, zero new deps.
 
 ## Progress
 
-**Phases Complete:** 10 / 20
+**Phases Complete:** 13 / 20
 **Current Plan:** N/A
 
 ## Next steps
 
-1. `/gsd-spec-phase 11 --ws ui-ux-audit` — Catalog browse + detail polish (sort, Quick-Nav, Theater, status banner)
-2. `/gsd-plan-phase 11 --ws ui-ux-audit` — break Phase 11 into plans
-3. `/gsd-execute-phase 11 --ws ui-ux-audit` — ship Phase 11
+1. `/gsd-spec-phase 14 --ws ui-ux-audit` — Marketing-surface polish (follower count, search hint, FAQ)
+2. `/gsd-plan-phase 14 --ws ui-ux-audit` — break Phase 14 into plans
+3. `/gsd-execute-phase 14 --ws ui-ux-audit` — ship Phase 14
 4. Continue via `/gsd-autonomous --ws ui-ux-audit` for remaining queue.
 
 ## Phase queue (from ROADMAP.md)
