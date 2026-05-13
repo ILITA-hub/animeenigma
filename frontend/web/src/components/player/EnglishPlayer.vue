@@ -19,18 +19,33 @@
       <!-- Left: Video Player -->
       <div class="flex-1 min-w-0">
         <div ref="playerContainer" class="relative aspect-video bg-black rounded-xl overflow-hidden">
-          <!-- Loading overlay — covers both server-fetch and stream-fetch
-               so the "Select episode" placeholder never flashes after the
-               user has already picked one. Without `loadingServers` here
-               the gap between click and fetchStream() shows the empty
-               placeholder for ~200-500ms. -->
+          <!-- Three-phase loader overlay (SCRAPER-HEAL-08).
+               Phase 1 — "Looking up sources…"        (loadingServers + episode picked)
+               Phase 2 — "Connecting to remote stream…" (loadingStream)
+               Phase 3 — "Verifying playback…"          (validatingStream, only when
+                          scraper response carried meta.gated === true)
+               Precedence: validatingStream (3) > loadingStream (2) > loadingServers (1).
+               Locale switch is hardcoded inline per .planning/phases/21-playability-foundation/21-CONTEXT.md D6
+               (intentional — three strings don't warrant i18n keys; a future
+               i18n adoption is a ~6-line migration). Phase 3 stays false on the
+               warm cache-hit path (meta.gated absent → undefined → false). -->
           <div
-            v-if="loadingStream || (loadingServers && selectedEpisode)"
+            v-if="validatingStream || loadingStream || (loadingServers && selectedEpisode)"
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
               <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}</p>
+              <p class="text-white/60 text-sm">
+                <template v-if="validatingStream">
+                  {{ locale === 'ru' ? 'Проверка воспроизведения…' : 'Verifying playback…' }}
+                </template>
+                <template v-else-if="loadingStream">
+                  {{ locale === 'ru' ? 'Подключение к удалённому потоку…' : 'Connecting to remote stream…' }}
+                </template>
+                <template v-else>
+                  {{ locale === 'ru' ? 'Поиск источников…' : 'Looking up sources…' }}
+                </template>
+              </p>
             </div>
           </div>
 
@@ -590,7 +605,9 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
-const { t } = useI18n()
+// SCRAPER-HEAL-08 — `locale` drives the inline RU/EN switch in the three-phase
+// loader template (see template comment near the loader overlay).
+const { t, locale } = useI18n()
 
 // Player type (persisted)
 const playerType = ref<PlayerType>(
@@ -611,6 +628,11 @@ const streamReferer = ref('')
 const loadingEpisodes = ref(false)
 const loadingServers = ref(false)
 const loadingStream = ref(false)
+// SCRAPER-HEAL-08 — Phase 3 ("Verifying playback…") of the three-phase loader.
+// True only while fetchStream is awaiting initPlayer AND the scraper response
+// for this call carried `meta.gated: true` (i.e. the playability gate ran).
+// Cleared in fetchStream's `finally` regardless of success/error path.
+const validatingStream = ref(false)
 const error = ref<string | null>(null)
 const serverLoadWarning = ref<string | null>(null)
 
@@ -1097,9 +1119,23 @@ const fetchStream = async () => {
       selectedProvider.value || undefined,
     )
     updateTriedChain(response.data)
-    // Scraper handler envelope: { success, data: { stream: {...}, meta: { tried } } }
-    const env = response.data as { data?: { stream?: ScraperStream } } | undefined
+    // Scraper handler envelope: { success, data: { stream: {...}, meta: { tried, gated? } } }.
+    // SCRAPER-HEAL-08 — widen the cast to include `meta.gated`; the field is
+    // OMITTED on the warm cache-hit path (Phase 16 / 21-02 behaviour), so the
+    // defensive optional-chain treats undefined === false (skip Phase 3).
+    const env = response.data as {
+      data?: {
+        stream?: ScraperStream
+        meta?: { tried?: string[]; gated?: boolean }
+      }
+    } | undefined
     const data: ScraperStream | undefined = env?.data?.stream
+    const gated = env?.data?.meta?.gated === true
+    if (gated) {
+      // Phase 3 of the loader. Cleared in the `finally` below regardless of
+      // whether initPlayer succeeds or throws (T-21-16 mitigation).
+      validatingStream.value = true
+    }
     if (!data || !Array.isArray(data.sources) || data.sources.length === 0) {
       throw new Error('scraper stream response missing data.stream.sources')
     }
@@ -1161,6 +1197,8 @@ const fetchStream = async () => {
     streamUrl.value = null
   } finally {
     loadingStream.value = false
+    // SCRAPER-HEAL-08 T-21-16 — always clear Phase 3, including the error path.
+    validatingStream.value = false
   }
 }
 
@@ -1822,6 +1860,22 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onWindowClickClosePanel)
   saveProgress()
   disposeCurrentPlayer()
+})
+
+// SCRAPER-HEAL-08 test-only surface — `<script setup>` defaults to a closed
+// public API, but the Vitest spec in __tests__/EnglishPlayer.spec.ts drives
+// the loader-phase refs + fetchStream directly to assert phase-precedence,
+// EN/RU copy, and the meta.gated:true / absent toggle. Exposing the refs
+// (not their values) keeps reactivity intact in the test. No production
+// callsite reads these — kept narrow.
+defineExpose({
+  loadingServers,
+  loadingStream,
+  validatingStream,
+  selectedEpisode,
+  selectedServer,
+  episodes,
+  fetchStream,
 })
 </script>
 
