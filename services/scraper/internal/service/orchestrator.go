@@ -309,6 +309,118 @@ func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, ser
 		})
 }
 
+// gatedProvider is the optional interface a provider implements when it
+// can run a playability gate (Phase 21 SCRAPER-HEAL-04). Only
+// gogoanime.Provider satisfies this today; animepahe + animekai do not
+// (they're treated as gated=false fallback by GetStreamGated).
+type gatedProvider interface {
+	domain.Provider
+	GetStreamWithGate(
+		ctx context.Context,
+		providerID, episodeID, serverID string,
+		category domain.Category,
+		servers []domain.Server,
+	) (*domain.Stream, bool, error)
+}
+
+// GetStreamGated runs the failover chain and returns a Stream plus a gated
+// bool indicating whether the playability gate ran on this call.
+//
+// Per-provider semantics:
+//   - Providers implementing gatedProvider (gogoanime today): call
+//     ListServers + GetStreamWithGate; surface the gated bool the provider
+//     returned (true on cold path, false on warm-cache hit / caller pin).
+//   - Plain providers (animepahe, animekai): fall back to GetStream with
+//     gated=false. Phase 21 only wires the gate into gogoanime; the other
+//     providers stay unchanged.
+//
+// Failover semantics mirror Orchestrator.GetStream — health-cache-DOWN
+// providers are skipped with a parser_fallback_total emit; ErrProviderDown
+// / ErrExtractFailed / ErrNotFound are all retryable; ctx errors terminal.
+//
+// SCRAPER-HEAL-04.
+func (o *Orchestrator) GetStreamGated(
+	ctx context.Context,
+	providerID, episodeID, serverID string,
+	cat domain.Category, prefer string,
+) (*domain.Stream, bool, error) {
+	providers := o.orderedProviders(prefer)
+	if len(providers) == 0 {
+		return nil, false, domain.ErrNotFound
+	}
+
+	errs := make([]error, 0, len(providers))
+	for i, p := range providers {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		// Health-cache gate (matches runFailover semantics so the failover
+		// metric stays consistent between gated and non-gated paths).
+		if o.cache != nil && !o.cache.IsHealthy(p.Name()) {
+			next := ""
+			if i+1 < len(providers) {
+				next = providers[i+1].Name()
+			}
+			metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
+			errs = append(errs, fmt.Errorf("provider %s skipped: health gauge 0: %w", p.Name(), domain.ErrProviderDown))
+			continue
+		}
+
+		if gp, ok := p.(gatedProvider); ok {
+			// Gated path: list servers first so the provider can iterate
+			// priority + probe internally.
+			servers, err := gp.ListServers(ctx, providerID, episodeID)
+			if err != nil {
+				retry, _ := failoverDecision(err)
+				if !retry {
+					return nil, false, err
+				}
+				next := ""
+				if i+1 < len(providers) {
+					next = providers[i+1].Name()
+				}
+				metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
+				errs = append(errs, err)
+				continue
+			}
+			stream, gated, err := gp.GetStreamWithGate(ctx, providerID, episodeID, serverID, cat, servers)
+			if err == nil {
+				return stream, gated, nil
+			}
+			retry, _ := failoverDecision(err)
+			if !retry {
+				return nil, false, err
+			}
+			next := ""
+			if i+1 < len(providers) {
+				next = providers[i+1].Name()
+			}
+			metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
+			errs = append(errs, err)
+			continue
+		}
+
+		// Non-gated provider fallback (animepahe / animekai).
+		stream, err := p.GetStream(ctx, providerID, episodeID, serverID, cat)
+		if err == nil {
+			return stream, false, nil
+		}
+		retry, _ := failoverDecision(err)
+		if !retry {
+			return nil, false, err
+		}
+		next := ""
+		if i+1 < len(providers) {
+			next = providers[i+1].Name()
+		}
+		metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
+		errs = append(errs, err)
+	}
+
+	return nil, false, summarizeFailover(errs)
+}
+
 // HealthSnapshot calls HealthCheck on every registered provider and returns
 // a name→Health map. Phase 15 does not cache (the snapshot is cheap and the
 // failure modes are well-understood); Phase 17 introduces a 60s in-memory

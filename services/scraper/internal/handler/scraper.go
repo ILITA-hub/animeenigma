@@ -256,16 +256,17 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stream, err := h.svc.GetStream(r.Context(), providerID, qp.episode, qp.server, cat, qp.prefer)
+	stream, gated, err := h.svc.GetStreamGated(r.Context(), providerID, qp.episode, qp.server, cat, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
 	}
-	// gated=false in Wave 1: Plan 21-03 will replace this literal with a
-	// value sourced from a new (*Stream, gated bool, error) orchestrator
-	// return signature. For now we ship gated=false so the build is green
-	// and the FE behaves as Phase 16 (no Phase 3 loader). SCRAPER-HEAL-07.
-	h.writeSuccess(w, map[string]any{"stream": stream}, tried, false)
+	// Phase 21 SCRAPER-HEAL-04 / HEAL-07: gated is true on the cold path
+	// (cache miss → priority iteration + streamprobe gate ran), false on
+	// the warm path (cached winning serverID re-extracted directly) or
+	// caller-pinned serverID. The FE reads data.meta.gated to decide whether
+	// to render the three-phase loader's Phase 3.
+	h.writeSuccess(w, map[string]any{"stream": stream}, tried, gated)
 }
 
 // GetHealth handles GET /scraper/health. Returns the orchestrator's live

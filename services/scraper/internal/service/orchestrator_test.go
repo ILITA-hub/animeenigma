@@ -735,6 +735,168 @@ func TestOrchestrator_AllProvidersDown_ReturnsAggregateError(t *testing.T) {
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Phase 21 Plan 21-03 Task 4 — Orchestrator.GetStreamGated tests
+// (SCRAPER-HEAL-04: propagate the gated bool through the failover chain).
+// -----------------------------------------------------------------------------
+
+// fakeGatedProvider satisfies BOTH domain.Provider and the gatedProvider
+// optional interface. Used to drive GetStreamGated tests where we want to
+// observe the gated bool the provider returns.
+type fakeGatedProvider struct {
+	fakeProvider
+	getStreamWithGateFn func(ctx context.Context, providerID, episodeID, serverID string, cat domain.Category, servers []domain.Server) (*domain.Stream, bool, error)
+}
+
+func (f *fakeGatedProvider) GetStreamWithGate(
+	ctx context.Context, providerID, episodeID, serverID string,
+	cat domain.Category, servers []domain.Server,
+) (*domain.Stream, bool, error) {
+	if f.getStreamWithGateFn != nil {
+		return f.getStreamWithGateFn(ctx, providerID, episodeID, serverID, cat, servers)
+	}
+	return nil, false, nil
+}
+
+// TestOrchestrator_GetStreamGated_GatedProvider — a gogoanime-shape provider
+// (satisfies gatedProvider) returns gated=true from its GetStreamWithGate;
+// the orchestrator surfaces it verbatim.
+func TestOrchestrator_GetStreamGated_GatedProvider(t *testing.T) {
+	t.Parallel()
+	gp := &fakeGatedProvider{
+		fakeProvider: fakeProvider{
+			nameVal: "gogo_gated_" + t.Name(),
+			listServersFn: func(_ context.Context, _, _ string) ([]domain.Server, error) {
+				return []domain.Server{{ID: "https://otakuhg.site/e/x"}}, nil
+			},
+		},
+		getStreamWithGateFn: func(_ context.Context, _, _, _ string, _ domain.Category, _ []domain.Server) (*domain.Stream, bool, error) {
+			return &domain.Stream{Sources: []domain.Source{{URL: "winner.m3u8"}}}, true, nil
+		},
+	}
+	o := newTestOrchestrator(t, gp)
+	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	if err != nil {
+		t.Fatalf("GetStreamGated: %v", err)
+	}
+	if !gated {
+		t.Errorf("gated = false; want true (provider returned gated=true)")
+	}
+	if stream == nil || stream.Sources[0].URL != "winner.m3u8" {
+		t.Errorf("stream = %+v; want winner.m3u8", stream)
+	}
+}
+
+// TestOrchestrator_GetStreamGated_NonGatedFallback — a plain provider
+// (animepahe-shape, no GetStreamWithGate method) falls through to plain
+// GetStream and the orchestrator returns gated=false.
+func TestOrchestrator_GetStreamGated_NonGatedFallback(t *testing.T) {
+	t.Parallel()
+	plain := &fakeProvider{
+		nameVal: "animepahe_plain_" + t.Name(),
+		getStreamFn: func(_ context.Context, _, _, _ string, _ domain.Category) (*domain.Stream, error) {
+			return &domain.Stream{Sources: []domain.Source{{URL: "plain.m3u8"}}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, plain)
+	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	if err != nil {
+		t.Fatalf("GetStreamGated: %v", err)
+	}
+	if gated {
+		t.Errorf("gated = true; want false (non-gated provider)")
+	}
+	if stream == nil || stream.Sources[0].URL != "plain.m3u8" {
+		t.Errorf("stream = %+v; want plain.m3u8", stream)
+	}
+}
+
+// TestOrchestrator_GetStreamGated_AllProvidersFail — gated provider errors,
+// non-gated fallback also errors; orchestrator returns (nil, false, err).
+func TestOrchestrator_GetStreamGated_AllProvidersFail(t *testing.T) {
+	t.Parallel()
+	gp := &fakeGatedProvider{
+		fakeProvider: fakeProvider{
+			nameVal: "gogo_fail_" + t.Name(),
+			listServersFn: func(_ context.Context, _, _ string) ([]domain.Server, error) {
+				return []domain.Server{{ID: "https://otakuhg.site/e/x"}}, nil
+			},
+		},
+		getStreamWithGateFn: func(_ context.Context, _, _, _ string, _ domain.Category, _ []domain.Server) (*domain.Stream, bool, error) {
+			return nil, true, domain.WrapProviderDown(errors.New("all servers gated"), "gogo: no playable")
+		},
+	}
+	plain := &fakeProvider{
+		nameVal: "animepahe_fail_" + t.Name(),
+		getStreamFn: func(_ context.Context, _, _, _ string, _ domain.Category) (*domain.Stream, error) {
+			return nil, domain.WrapProviderDown(errors.New("animepahe down"), "ap")
+		},
+	}
+	o := newTestOrchestrator(t, gp, plain)
+	stream, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	if err == nil {
+		t.Fatal("err = nil; want non-nil after exhaustion")
+	}
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Errorf("err = %v; want ErrProviderDown chain", err)
+	}
+	if gated {
+		t.Errorf("gated = true; want false on exhaustion")
+	}
+	if stream != nil {
+		t.Errorf("stream = %v; want nil on exhaustion", stream)
+	}
+}
+
+// TestOrchestrator_GetStreamGated_ZeroProviders — empty registry returns
+// ErrNotFound + gated=false.
+func TestOrchestrator_GetStreamGated_ZeroProviders(t *testing.T) {
+	t.Parallel()
+	o := newTestOrchestrator(t)
+	_, gated, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "")
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("err = %v; want ErrNotFound", err)
+	}
+	if gated {
+		t.Errorf("gated = true; want false")
+	}
+}
+
+// TestOrchestrator_GetStreamGated_CallerPin_StillGated — when the caller
+// passes a non-empty serverID, the orchestrator still routes through the
+// gated provider; the provider itself decides to bypass the gate and return
+// gated=false. (This locks the "caller pin = gated=false" semantic at the
+// orchestrator level too.)
+func TestOrchestrator_GetStreamGated_CallerPin_StillGated(t *testing.T) {
+	t.Parallel()
+	gp := &fakeGatedProvider{
+		fakeProvider: fakeProvider{
+			nameVal: "gogo_pin_" + t.Name(),
+			listServersFn: func(_ context.Context, _, _ string) ([]domain.Server, error) {
+				return []domain.Server{{ID: "https://otakuhg.site/e/x"}}, nil
+			},
+		},
+		getStreamWithGateFn: func(_ context.Context, _, _, serverID string, _ domain.Category, _ []domain.Server) (*domain.Stream, bool, error) {
+			if serverID == "" {
+				t.Errorf("orchestrator stripped the caller pin; serverID arrived empty")
+			}
+			return &domain.Stream{Sources: []domain.Source{{URL: "pinned.m3u8"}}}, false, nil
+		},
+	}
+	o := newTestOrchestrator(t, gp)
+	stream, gated, err := o.GetStreamGated(context.Background(),
+		"anime", "ep1", "https://otakuhg.site/e/CALLER-PIN", domain.CategorySub, "")
+	if err != nil {
+		t.Fatalf("GetStreamGated: %v", err)
+	}
+	if gated {
+		t.Errorf("gated = true; want false on caller pin (provider returned gated=false)")
+	}
+	if stream.Sources[0].URL != "pinned.m3u8" {
+		t.Errorf("stream URL = %q; want pinned.m3u8", stream.Sources[0].URL)
+	}
+}
+
 // TestOrchestrator_StaleCache_DoesNotSkip — stale (>60s) DOWN entries are
 // treated as unknown and the orchestrator dispatches normally (fail-open).
 // This guards against a probe outage silently shutting off all providers.

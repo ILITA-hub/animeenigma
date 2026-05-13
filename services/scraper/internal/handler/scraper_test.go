@@ -327,13 +327,47 @@ func TestScraperHandler_GetEpisodes_NoProviders(t *testing.T) {
 	}
 }
 
+// fakeGatedHandlerProvider satisfies both domain.Provider and the
+// service.gatedProvider optional interface. Used by Plan 21-03 Task 4
+// regression tests that verify data.meta.gated propagates end-to-end
+// when the orchestrator routes a request through a gated-capable
+// provider.
+type fakeGatedHandlerProvider struct {
+	fakeProvider
+	gatedStream *domain.Stream
+	gatedFlag   bool
+	gatedErr    error
+}
+
+func (f *fakeGatedHandlerProvider) ListServers(_ context.Context, _, _ string) ([]domain.Server, error) {
+	if f.listServersErr != nil {
+		return nil, f.listServersErr
+	}
+	if len(f.listServersResult) > 0 {
+		return f.listServersResult, nil
+	}
+	return []domain.Server{{ID: "https://otakuhg.site/e/x"}}, nil
+}
+
+func (f *fakeGatedHandlerProvider) GetStreamWithGate(
+	_ context.Context,
+	_, _, _ string,
+	_ domain.Category,
+	_ []domain.Server,
+) (*domain.Stream, bool, error) {
+	return f.gatedStream, f.gatedFlag, f.gatedErr
+}
+
 // TestGetStream_MetaGatedAbsentByDefault — Phase 21 / SCRAPER-HEAL-07
-// regression: a normal /scraper/stream success response (no gate ran on
-// this call — handler currently always passes gated=false; Plan 21-03
-// will source the real bool from the orchestrator) MUST emit
-// data.meta.tried but MUST NOT include the data.meta.gated key. The FE
-// (Plan 21-04) treats missing-or-false meta.gated as "skip Phase 3 of
-// the loader".
+// regression: a /scraper/stream success response from a NON-gated
+// provider (animepahe-shape — does not implement GetStreamWithGate)
+// MUST emit data.meta.tried but MUST NOT include the data.meta.gated
+// key. The FE (Plan 21-04) treats missing-or-false meta.gated as
+// "skip Phase 3 of the loader".
+//
+// After Plan 21-03 Task 4 the handler calls orchestrator.GetStreamGated,
+// which falls back to plain GetStream + gated=false on providers that
+// don't satisfy the gatedProvider optional interface.
 func TestGetStream_MetaGatedAbsentByDefault(t *testing.T) {
 	t.Parallel()
 	fp := &fakeProvider{
@@ -406,6 +440,94 @@ func TestWriteSuccess_GatedTrueEmitsField(t *testing.T) {
 	}
 	if _, ok := meta["tried"].([]any); !ok {
 		t.Errorf("data.meta.tried missing; Phase 16 envelope regression: %v", meta)
+	}
+}
+
+// TestGetStream_MetaGatedTrue_FromGatedProvider — Plan 21-03 Task 4
+// end-to-end wiring proof: when the orchestrator routes through a
+// gated-capable provider (gogoanime-shape) and the provider returns
+// gated=true, the handler MUST emit data.meta.gated=true in the JSON
+// envelope. This is the SCRAPER-HEAL-07 cold-path signal the FE uses
+// to render Phase 3 of the loader.
+func TestGetStream_MetaGatedTrue_FromGatedProvider(t *testing.T) {
+	t.Parallel()
+	gp := &fakeGatedHandlerProvider{
+		fakeProvider: fakeProvider{name: "gogoanime"},
+		gatedStream: &domain.Stream{
+			Sources: []domain.Source{{URL: "https://otakuhg.site/e/x/master.m3u8", Type: "hls"}},
+		},
+		gatedFlag: true,
+	}
+	h := newTestHandler(t, gp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/scraper/stream?mal_id=52991&episode=ep1&server=https://otakuhg.site/e/x&category=sub", nil)
+	h.GetStream(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.meta missing: %v", data)
+	}
+	gated, ok := meta["gated"].(bool)
+	if !ok {
+		t.Fatalf("data.meta.gated missing or wrong type; meta=%v", meta)
+	}
+	if !gated {
+		t.Errorf("data.meta.gated = false; want true (gated provider returned true)")
+	}
+	tried, ok := meta["tried"].([]any)
+	if !ok || len(tried) != 1 {
+		t.Errorf("data.meta.tried missing or wrong length: %v", meta["tried"])
+	}
+}
+
+// TestGetStream_MetaGatedAbsent_FromGatedProvider_WarmPath — when the
+// gated provider returns gated=false (warm-cache hit / caller pin),
+// data.meta.gated MUST be absent so cache-hit responses stay
+// byte-identical to Phase 16's shape.
+func TestGetStream_MetaGatedAbsent_FromGatedProvider_WarmPath(t *testing.T) {
+	t.Parallel()
+	gp := &fakeGatedHandlerProvider{
+		fakeProvider: fakeProvider{name: "gogoanime"},
+		gatedStream: &domain.Stream{
+			Sources: []domain.Source{{URL: "https://otakuhg.site/e/x/master.m3u8", Type: "hls"}},
+		},
+		gatedFlag: false, // warm-cache hit — gate did NOT run on this call
+	}
+	h := newTestHandler(t, gp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/scraper/stream?mal_id=52991&episode=ep1&server=https://otakuhg.site/e/x&category=sub", nil)
+	h.GetStream(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.meta missing: %v", data)
+	}
+	if _, has := meta["gated"]; has {
+		t.Errorf("data.meta.gated key present when provider returned gated=false; want OMITTED. meta=%v", meta)
+	}
+	if _, ok := meta["tried"].([]any); !ok {
+		t.Errorf("data.meta.tried missing on warm-path: %v", meta)
 	}
 }
 
