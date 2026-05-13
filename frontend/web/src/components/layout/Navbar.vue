@@ -1,4 +1,9 @@
 <template>
+  <!-- Phase 11 / UX-23 — `navbar-root` class hook lets the global CSS rule
+       in Anime.vue (`body.theater-mode .navbar-root { display: none }`)
+       hide this header when Theater Mode is active on the anime detail
+       view. Navbar itself stays stateless w.r.t. theater-mode; the body
+       class is the contract. -->
   <header
     :class="[
       'fixed top-0 left-0 right-0 z-50 transition-all duration-300 navbar-root',
