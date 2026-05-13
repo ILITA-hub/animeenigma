@@ -260,6 +260,10 @@ export const animeApi = {
   getGenres: () => apiClient.get('/genres'),
   getNews: () => apiClient.get('/anime/news'),
   getRelated: (animeId: string) => apiClient.get(`/anime/${animeId}/related`),
+  // Phase 14 / UX-28 — soft social-proof: how many users have this anime
+  // in their list with status='watching'. Public, no auth.
+  getWatchersCount: (animeId: string) =>
+    apiClient.get<{ count: number } | { data: { count: number } }>(`/anime/${animeId}/watchers-count`),
 }
 
 export const episodeApi = {

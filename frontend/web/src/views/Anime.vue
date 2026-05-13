@@ -98,6 +98,13 @@
               </div>
               <span class="text-white/60 text-sm">AnimeEnigma ({{ siteRating.total_reviews }})</span>
             </div>
+
+            <!-- Phase 14 / UX-28 — soft social-proof: hide below 5 to avoid
+                 empty signals on niche/new titles. Public endpoint, no auth. -->
+            <Badge v-if="watchersCount >= 5" variant="default" class="flex items-center gap-1">
+              <span aria-hidden="true">👥</span>
+              <span>{{ $t('anime.watchersCount', { count: formatCount(watchersCount) }) }}</span>
+            </Badge>
           </div>
 
           <!-- Primary Watch CTA (visible above the fold, for everyone) -->
@@ -1378,6 +1385,10 @@ const handleAvailableTranslations = (combos: WatchCombo[]) => {
 const reviews = ref<Review[]>([])
 const myReview = ref<Review | null>(null)
 const siteRating = ref<AnimeRating | null>(null)
+// Phase 14 / UX-28 — soft social-proof watchers count. Public endpoint,
+// no auth. Render badge only when count >= 5 (avoids embarrassingly empty
+// signals on niche or fresh titles).
+const watchersCount = ref(0)
 const reviewSubmitting = ref(false)
 const reviewForm = reactive({
   score: 0,
@@ -1491,6 +1502,34 @@ const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: num
   }
   // Nothing known
   return t('anime.episodeUnknown')
+}
+
+// Phase 14 / UX-28 — render compact watchers count ("1.2K", "12K") via the
+// platform's Intl.NumberFormat. Locale-aware: passes the active i18n locale
+// so the grouping/notation matches the user's language settings.
+const formatCount = (n: number): string => {
+  try {
+    return new Intl.NumberFormat(locale.value, { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+  } catch {
+    // Old browser / unknown locale — graceful degradation.
+    return n.toString()
+  }
+}
+
+// Phase 14 / UX-28 — soft social-proof fetch. Public endpoint, no auth.
+// Errors are swallowed: missing badge is preferable to a noisy console for
+// a non-critical UI signal. Endpoint returns { count: number } (or wrapped
+// in { data: ... } depending on httputil response shape).
+const fetchWatchersCount = async () => {
+  if (!anime.value) return
+  try {
+    const response = await animeApi.getWatchersCount(anime.value.id)
+    const payload = (response.data as { data?: { count?: number }; count?: number } | undefined) ?? {}
+    const raw = payload.data ? payload.data.count : payload.count
+    watchersCount.value = typeof raw === 'number' && raw >= 0 ? raw : 0
+  } catch {
+    watchersCount.value = 0
+  }
 }
 
 const fetchWatchlistStatus = async () => {
@@ -1946,6 +1985,7 @@ const loadAnimeData = async (animeId: string) => {
   reviews.value = []
   myReview.value = null
   siteRating.value = null
+  watchersCount.value = 0
   // Comments — reset cache for new anime so a stale list doesn't leak across
   // navigations. Per-anime fetch is gated on tab activation (or deep-link
   // ugc=comments path below).
@@ -2041,6 +2081,8 @@ const loadAnimeData = async (animeId: string) => {
   await fetchHiddenStatus()
   if (gen !== loadGeneration) return
   await fetchReviews()
+  // Phase 14 / UX-28 — non-blocking; failure leaves the badge hidden.
+  void fetchWatchersCount()
 
   // Deep-link path: if the URL already has ?ugc=comments on first paint,
   // kick off the initial comments fetch (the watch(ugcTab) lazy-fetch only
