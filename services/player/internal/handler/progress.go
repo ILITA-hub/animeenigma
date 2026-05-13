@@ -122,20 +122,40 @@ func (h *ProgressHandler) MarkDropOff(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListContinueWatching returns the Continue-Watching row for the
-// authenticated user — at most `limit` (default 10, max 20) anime, one
+// authenticated user — at most `limit` (default 10, max 50) anime, one
 // row per anime, ordered by last_watched_at DESC. Phase 8 (UX-15 / UA-061).
+//
+// WR-01 (Phase 8): handler enforces an upper bound on `limit` and rejects
+// values that exceed it with 400 BadRequest. The repo also clamps to
+// [1, 20] as defense-in-depth — a future refactor that inlines the repo
+// logic, or a new caller, won't accidentally pass unbounded pagination
+// straight through to LIMIT ?. The handler is the canonical API boundary
+// for input validation in this codebase (see domain/watch.go
+// PaginationParams.Validate).
 func (h *ProgressHandler) ListContinueWatching(w http.ResponseWriter, r *http.Request) {
+	const (
+		defaultLimit = 10
+		maxLimit     = 50
+	)
+
 	claims, ok := authz.ClaimsFromContext(r.Context())
 	if !ok || claims == nil {
 		httputil.Unauthorized(w)
 		return
 	}
 
-	limit := 10
+	limit := defaultLimit
 	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			httputil.BadRequest(w, "limit must be a positive integer")
+			return
 		}
+		if n > maxLimit {
+			httputil.BadRequest(w, "limit must be <= 50")
+			return
+		}
+		limit = n
 	}
 
 	items, err := h.progressService.ListContinueWatching(r.Context(), claims.UserID, limit)
