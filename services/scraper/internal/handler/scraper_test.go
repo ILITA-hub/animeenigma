@@ -327,6 +327,211 @@ func TestScraperHandler_GetEpisodes_NoProviders(t *testing.T) {
 	}
 }
 
+// TestGetStream_MetaGatedAbsentByDefault — Phase 21 / SCRAPER-HEAL-07
+// regression: a normal /scraper/stream success response (no gate ran on
+// this call — handler currently always passes gated=false; Plan 21-03
+// will source the real bool from the orchestrator) MUST emit
+// data.meta.tried but MUST NOT include the data.meta.gated key. The FE
+// (Plan 21-04) treats missing-or-false meta.gated as "skip Phase 3 of
+// the loader".
+func TestGetStream_MetaGatedAbsentByDefault(t *testing.T) {
+	t.Parallel()
+	fp := &fakeProvider{
+		name: "fakeprov",
+		getStreamResult: &domain.Stream{
+			Sources: []domain.Source{{URL: "https://kwik.cx/x.m3u8", Type: "hls"}},
+		},
+	}
+	h := newTestHandler(t, fp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/scraper/stream?mal_id=1&episode=ep1&server=srv1&category=sub", nil)
+	h.GetStream(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.meta missing: %v", data)
+	}
+	if _, ok := meta["tried"].([]any); !ok {
+		t.Errorf("data.meta.tried missing or wrong type; Phase 16 regression: %v", meta)
+	}
+	if _, has := meta["gated"]; has {
+		t.Errorf("data.meta.gated key present on default (gated=false) call; want OMITTED. meta=%v", meta)
+	}
+}
+
+// TestWriteSuccess_GatedTrueEmitsField — SCRAPER-HEAL-07 direct unit test
+// on writeSuccess: when gated=true, the response envelope MUST contain
+// data.meta.gated == true AND data.meta.tried as a non-nil array.
+func TestWriteSuccess_GatedTrueEmitsField(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+
+	rec := httptest.NewRecorder()
+	// Drive writeSuccess directly so we don't depend on plumbing the bool
+	// through GetStream's call chain (that lands in Plan 21-03).
+	h.writeSuccess(rec, map[string]any{"stream": map[string]any{"sources": []any{}}}, []string{"fakeprov"}, true)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.meta missing: %v", data)
+	}
+	gated, ok := meta["gated"].(bool)
+	if !ok {
+		t.Fatalf("data.meta.gated missing or wrong type; meta=%v", meta)
+	}
+	if !gated {
+		t.Errorf("data.meta.gated = false; want true")
+	}
+	if _, ok := meta["tried"].([]any); !ok {
+		t.Errorf("data.meta.tried missing; Phase 16 envelope regression: %v", meta)
+	}
+}
+
+// TestWriteSuccess_GatedFalseOmitsField — SCRAPER-HEAL-07 direct unit
+// test: when gated=false, data.meta.gated MUST be absent (not "gated":
+// false) so cache-hit responses stay byte-identical to Phase 16's shape
+// and don't churn the FE diffs.
+func TestWriteSuccess_GatedFalseOmitsField(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+
+	rec := httptest.NewRecorder()
+	h.writeSuccess(rec, map[string]any{"stream": map[string]any{"sources": []any{}}}, []string{"fakeprov"}, false)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.meta missing: %v", data)
+	}
+	if _, has := meta["gated"]; has {
+		t.Errorf("data.meta.gated key present when gated=false; want OMITTED. meta=%v", meta)
+	}
+	if _, ok := meta["tried"].([]any); !ok {
+		t.Errorf("data.meta.tried missing on gated=false: %v", meta)
+	}
+}
+
+// TestGetEpisodes_NoGatedField — /scraper/episodes is NOT a stream-resolution
+// path; its responses MUST NOT include meta.gated regardless of the
+// orchestrator state.
+func TestGetEpisodes_NoGatedField(t *testing.T) {
+	t.Parallel()
+	fp := &fakeProvider{
+		name:               "fakeprov",
+		listEpisodesResult: []domain.Episode{{ID: "ep1", Number: 1, Title: "Pilot"}},
+	}
+	h := newTestHandler(t, fp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?mal_id=1234", nil)
+	h.GetEpisodes(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.meta missing: %v", data)
+	}
+	if _, has := meta["gated"]; has {
+		t.Errorf("data.meta.gated unexpectedly present on /scraper/episodes: %v", meta)
+	}
+}
+
+// TestGetServers_NoGatedField — /scraper/servers is NOT a stream-resolution
+// path; its responses MUST NOT include meta.gated.
+func TestGetServers_NoGatedField(t *testing.T) {
+	t.Parallel()
+	fp := &fakeProvider{
+		name:              "fakeprov",
+		listServersResult: []domain.Server{{ID: "srv1", Name: "kwik", Type: domain.CategorySub}},
+	}
+	h := newTestHandler(t, fp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/servers?mal_id=1&episode=ep1", nil)
+	h.GetServers(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	body := requireJSON(t, resp)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data missing: %v", body)
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.meta missing: %v", data)
+	}
+	if _, has := meta["gated"]; has {
+		t.Errorf("data.meta.gated unexpectedly present on /scraper/servers: %v", meta)
+	}
+}
+
+// TestErrorEnvelope_NoGatedField — error responses (NotFound / ProviderDown)
+// MUST include meta.tried but MUST NOT include meta.gated.
+func TestErrorEnvelope_NoGatedField(t *testing.T) {
+	t.Parallel()
+	fp := &fakeProvider{
+		name:            "fakeprov",
+		listEpisodesErr: domain.WrapNotFound(errors.New("nope"), "fake: not found"),
+	}
+	h := newTestHandler(t, fp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?mal_id=1", nil)
+	h.GetEpisodes(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	body := requireJSON(t, resp)
+	meta, ok := body["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("top-level meta missing on error envelope: %v", body)
+	}
+	if _, ok := meta["tried"].([]any); !ok {
+		t.Errorf("meta.tried missing on error envelope: %v", meta)
+	}
+	if _, has := meta["gated"]; has {
+		t.Errorf("meta.gated unexpectedly present on error envelope: %v", meta)
+	}
+}
+
 // TestScraperHandler_GetStream_RespectsPrefer — with two providers
 // (first/second registered in that order), prefer=second moves "second"
 // to position 0 in meta.tried.
