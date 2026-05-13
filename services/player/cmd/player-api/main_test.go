@@ -54,8 +54,11 @@ func fakeUUID(t *testing.T) string {
 // Tables are created via raw SQL rather than AutoMigrate because the
 // production GORM tags contain Postgres-specific defaults (gen_random_uuid(),
 // now()) that SQLite refuses to parse. The shapes here mirror what
-// `&domain.AnimeListEntry{}` and `&domain.Review{}` produce on Postgres, with
-// the unique index `(user_id, anime_id)` that ON CONFLICT relies on.
+// `&domain.AnimeListEntry{}` and the legacy `reviews` table produce on
+// Postgres, with the unique index `(user_id, anime_id)` that ON CONFLICT
+// relies on. (Plan 02 deleted the legacy review Go type — the legacy
+// `reviews` shape is now hand-rolled here in raw SQL for the migration
+// test that exercises runSocialMigration against the legacy table.)
 func setupSocialMigrationTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -83,7 +86,7 @@ func setupSocialMigrationTestDB(t *testing.T) *gorm.DB {
 			updated_at DATETIME,
 			UNIQUE (user_id, anime_id)
 		)`,
-		// reviews — legacy shape (matches domain.Review).
+		// reviews — legacy shape (matches the pre-Plan-02 Review struct).
 		`CREATE TABLE reviews (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
@@ -163,26 +166,20 @@ func TestSocialMigration_Idempotent(t *testing.T) {
 
 	// Two reviews: one overlap (userA / animeA) and one fresh
 	// (userB / animeB) that has no matching anime_list row.
-	require.NoError(t, db.Create(&domain.Review{
-		ID:         fakeUUID(t),
-		UserID:     userA,
-		AnimeID:    animeA,
-		Username:   "userA_review",
-		Score:      9,
-		ReviewText: "great show",
-		CreatedAt:  now,
-		UpdatedAt:  now,
-	}).Error, "seed reviews.userA")
-	require.NoError(t, db.Create(&domain.Review{
-		ID:         fakeUUID(t),
-		UserID:     userB,
-		AnimeID:    animeB,
-		Username:   "userB_review",
-		Score:      5,
-		ReviewText: "meh",
-		CreatedAt:  now,
-		UpdatedAt:  now,
-	}).Error, "seed reviews.userB")
+	//
+	// Plan 02 deleted the legacy review Go type — seed via raw SQL since
+	// there's no longer a struct to gorm.Create. The legacy `reviews`
+	// table shape is still preserved in the migration test fixture above.
+	require.NoError(t, db.Exec(
+		`INSERT INTO reviews (id, user_id, anime_id, username, score, review_text, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		fakeUUID(t), userA, animeA, "userA_review", 9, "great show", now, now,
+	).Error, "seed reviews.userA")
+	require.NoError(t, db.Exec(
+		`INSERT INTO reviews (id, user_id, anime_id, username, score, review_text, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		fakeUUID(t), userB, animeB, "userB_review", 5, "meh", now, now,
+	).Error, "seed reviews.userB")
 
 	// ---------- First invocation ----------
 	require.NoError(t, runSocialMigration(db, log), "first runSocialMigration")

@@ -212,9 +212,9 @@ func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID strin
 }
 
 // --- Phase 1 (workstream: social) plan 02 — review-shaped queries -------
-// These six methods absorb the deleted ReviewRepository's surface. They
-// operate on the same anime_list table that powers the watchlist, filtered
-// by `(score > 0 OR review_text != '')` so MAL-imported score=8 rows and
+// These methods power the six review endpoints by operating on the same
+// anime_list table that powers the watchlist, filtered by
+// `(score > 0 OR review_text != '')` so MAL-imported score=8 rows and
 // written-review rows both qualify as "reviews".
 
 // GetReviewsByAnime returns every anime_list row for `animeID` that has
@@ -325,8 +325,9 @@ func (r *ListRepository) GetAnimeRating(ctx context.Context, animeID string) (*d
 		     FROM anime_list WHERE anime_id = ? AND score > 0`, animeID).
 		Scan(&result).Error
 	if err != nil {
-		// On query failure, return a zero rating rather than propagating —
-		// matches the deleted ReviewRepository's GetAnimeRating semantics.
+		// On query failure, return a zero rating rather than propagating
+		// (preserves the pre-refactor behavior — a failed rating lookup
+		// should not blow up the anime detail page).
 		return &domain.AnimeRating{AnimeID: animeID}, nil
 	}
 	return &domain.AnimeRating{

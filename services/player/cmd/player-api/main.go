@@ -54,22 +54,12 @@ func main() {
 		&domain.WatchHistory{},
 		&domain.UserAnimePreference{},
 		&domain.UserPrefsVersion{},
-		// Phase 1 (workstream: social) — &domain.Review{} is INTENTIONALLY
-		// omitted from AutoMigrate. The plan-01 instructions originally
-		// asked to keep it (plan 02 was supposed to remove it after the
-		// migration drops the table), but that creates a real-world
-		// idempotency hole: GORM's AutoMigrate re-creates an empty
-		// `reviews` table on every boot, which then makes
-		// db.Migrator().HasTable("reviews") return true on the SECOND
-		// redeploy → the social migration block runs again (copying 0
-		// rows, dropping the empty table) and emits its log lines on every
-		// boot, violating SOCIAL-NF-02. The Go domain type still exists
-		// (used by ReviewRepository / ReviewService until plan 02
-		// refactors them), so the build stays green; only its presence in
-		// the AutoMigrate list is dropped early. See plan-01 SUMMARY
-		// "Deviations" section for the discovery trace.
+		// Phase 1 (workstream: social) — the legacy `reviews` table was
+		// merged into anime_list by runSocialMigration (Plan 01) and the
+		// associated Go type was deleted entirely by Plan 02. The six
+		// review endpoints now run through ListRepository.
 		//
-		// AutoMigrate the new `comments` table. Domain struct:
+		// New `comments` table for the comments feature; domain struct in
 		// services/player/internal/domain/comment.go.
 		&domain.Comment{},
 		&domain.SyncJob{},
@@ -246,7 +236,9 @@ func main() {
 	progressRepo := repo.NewProgressRepository(db.DB)
 	listRepo := repo.NewListRepository(db.DB)
 	historyRepo := repo.NewHistoryRepository(db.DB)
-	reviewRepo := repo.NewReviewRepository(db.DB)
+	// Phase 1 (workstream: social) plan 02 — the legacy review repository
+	// is gone. The six review endpoints now run through ListRepository via
+	// ReviewService.
 	syncRepo := repo.NewSyncRepository(db.DB)
 	activityRepo := repo.NewActivityRepository(db.DB)
 
@@ -275,7 +267,7 @@ func main() {
 	// completion qualifies (status='completed' AND score>=7).
 	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, recsRepo, redisCache, log)
 	historyService := service.NewHistoryService(historyRepo, log)
-	reviewService := service.NewReviewService(reviewRepo, listRepo, activityRepo, log)
+	reviewService := service.NewReviewService(listRepo, activityRepo, log)
 
 	// Initialize MAL export service
 	malExportService := service.NewMALExportService(log)

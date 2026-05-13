@@ -1,10 +1,10 @@
 package repo
 
 // Tests for Phase 1 (workstream: social) plan 02 — the review-shaped queries
-// that ListRepository absorbs from the deleted ReviewRepository. Each test
-// pre-creates an `anime_list` row via raw SQL (matching the production
-// SQLite-portable schema used in the migration test) and exercises the new
-// methods against an in-memory database.
+// that power the six review endpoints (now backed by the unified
+// anime_list table). Each test pre-creates an `anime_list` row via raw SQL
+// (matching the production SQLite-portable schema used in the migration
+// test) and exercises the new methods against an in-memory database.
 
 import (
 	"context"
@@ -266,8 +266,8 @@ func TestListRepo_GetUserReview_ReturnsRow(t *testing.T) {
 }
 
 // TestListRepo_GetUserReview_NotFoundWhenEmpty — score=0 AND review_text=''
-// must surface as a NotFound (matches the deleted ReviewRepository's
-// "row exists but has no review content" semantics).
+// must surface as a NotFound (an existing row with no review content is
+// treated the same as "no review yet" from the API perspective).
 func TestListRepo_GetUserReview_NotFoundWhenEmpty(t *testing.T) {
 	db := setupListReviewTestDB(t)
 	r := NewListRepository(db)

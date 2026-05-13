@@ -11,22 +11,19 @@ import (
 )
 
 // ReviewService is the business-logic layer for the six reviews endpoints.
-// Phase 1 (workstream: social) plan 02: refactored to consume
-// `*repo.ListRepository` exclusively — the legacy `*repo.ReviewRepository`
-// has been deleted. The public method signatures still match what the
-// handler layer calls; only the return types change from `*domain.Review`
-// to `*domain.AnimeListEntry` (consumers project to the 7-field
-// `reviewResponse` struct in handler/review.go to keep the wire shape
-// byte-identical).
+// Phase 1 (workstream: social) plan 02: refactored to consume the unified
+// ListRepository exclusively. The public method signatures still match what
+// the handler layer calls; only the return types change from the legacy
+// review type to AnimeListEntry — consumers project to the 7-field
+// reviewResponse struct in handler/review.go to keep the wire shape
+// byte-identical.
 type ReviewService struct {
 	listRepo     *repo.ListRepository
 	activityRepo *repo.ActivityRepository
 	log          *logger.Logger
 }
 
-// NewReviewService wires the refactored review service. NOTE: the legacy
-// `*repo.ReviewRepository` parameter has been dropped — callers in
-// cmd/player-api/main.go are updated accordingly.
+// NewReviewService wires the refactored review service.
 func NewReviewService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, log *logger.Logger) *ReviewService {
 	return &ReviewService{
 		listRepo:     listRepo,
@@ -45,14 +42,10 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 		return nil, errors.InvalidInput("score must be between 1 and 10")
 	}
 
-	// Detect new-vs-update for the activity event's OldValue marker. We use
-	// GetUserReview which surfaces "exists with content" only — a row with
-	// score=0 + review_text='' counts as "new review" from the activity-
-	// feed's perspective, which matches the deleted ReviewRepository's
-	// GetByUserAndAnime semantics (it returned the row regardless of empty
-	// content, but the only caller used isNewReview = existing == nil and
-	// here a row that exists with no content is functionally equivalent to
-	// "no review yet").
+	// Detect new-vs-update for the activity event's OldValue marker. A row
+	// with score=0 + review_text='' counts as "new review" from the
+	// activity-feed's perspective — functionally equivalent to "no review
+	// yet" since the row has no review content.
 	existing, _ := s.listRepo.GetUserReview(ctx, userID, req.AnimeID)
 
 	entry, err := s.listRepo.UpsertReview(ctx, userID, req.AnimeID, username, req.Score, req.ReviewText)

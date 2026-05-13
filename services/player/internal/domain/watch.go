@@ -109,21 +109,12 @@ func (WatchHistory) TableName() string {
 	return "watch_history"
 }
 
-type Review struct {
-	ID         string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID     string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime_review" json:"user_id"`
-	AnimeID    string     `gorm:"type:uuid;index;uniqueIndex:idx_user_anime_review" json:"anime_id"`
-	Anime      *AnimeInfo `gorm:"foreignKey:AnimeID" json:"anime,omitempty"`
-	Username   string     `gorm:"size:32" json:"username"`
-	Score      int        `json:"score"`
-	ReviewText string     `gorm:"type:text" json:"review_text"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-}
-
-func (Review) TableName() string {
-	return "reviews"
-}
+// Phase 1 (workstream: social) plan 02 — the legacy `Review` struct + its
+// `TableName()` method are GONE. The `reviews` table was merged into
+// `anime_list` by Plan 01's runSocialMigration; Plan 02 finished the
+// cleanup by removing the Go type and the repository that owned it. The
+// CreateReviewRequest DTO below STAYS — it's still the POST body shape
+// consumed by handler/review.go (CreateOrUpdateReview).
 
 // Request/Response types (not database tables)
 type UpdateProgressRequest struct {

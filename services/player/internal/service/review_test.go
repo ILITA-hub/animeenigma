@@ -1,9 +1,8 @@
 package service
 
 // Tests for Phase 1 (workstream: social) plan 02 — the refactored
-// ReviewService that consumes ListRepository instead of the deleted
-// ReviewRepository. Validates the activity-event dedup contract and the
-// DELETE -> "clear without removing" semantics.
+// ReviewService that consumes ListRepository. Validates the activity-event
+// dedup contract and the DELETE -> "clear without removing" semantics.
 
 import (
 	"context"
