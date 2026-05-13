@@ -94,10 +94,17 @@ func (r *CommentRepository) ListByAnime(ctx context.Context, animeID, cursor str
 
 // Update mutates the body of an existing comment. Returns errors.NotFound
 // when no live (non-soft-deleted) row matches.
+//
+// REVIEW.md WR-01: GORM's automatic `WHERE deleted_at IS NULL` filter is
+// NOT applied to `Model(...).Where(...).Update(...)` the way it is to
+// First/Find/Delete. Explicitly add the soft-delete predicate so a
+// soft-deleted comment row cannot have its body silently mutated by a
+// caller that still holds its UUID. Defence-in-depth — service layer
+// already gates on GetByID which respects soft-delete.
 func (r *CommentRepository) Update(ctx context.Context, id, body string) error {
 	res := r.db.WithContext(ctx).
 		Model(&domain.Comment{}).
-		Where("id = ?", id).
+		Where("id = ? AND deleted_at IS NULL", id).
 		Update("body", body)
 	if res.Error != nil {
 		return errors.Wrap(res.Error, errors.CodeInternal, "failed to update comment")
