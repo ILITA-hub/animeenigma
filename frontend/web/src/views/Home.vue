@@ -80,9 +80,9 @@
               {{ item.anime.score?.toFixed(1) }}
             </div>
           </div>
-          <p class="text-sm text-white truncate group-hover:text-cyan-400 transition-colors">
+          <h3 class="text-sm font-medium text-white truncate group-hover:text-cyan-400 transition-colors">
             {{ getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp) }}
-          </p>
+          </h3>
         </router-link>
       </div>
     </div>
