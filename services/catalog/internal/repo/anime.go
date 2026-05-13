@@ -93,6 +93,33 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 	if filters.Status != "" {
 		query = query.Where("status = ?", filters.Status)
 	}
+	// Phase 15 (UX-31) — Kind is a simple equality match against the
+	// Shikimori-source enum. Whitelisted at the handler so unknown values
+	// never reach the SQL.
+	if filters.Kind != "" {
+		query = query.Where("kind = ?", filters.Kind)
+	}
+	// Phase 15 (UX-31) — Providers is an OR-set across the 4 has_{provider}
+	// boolean columns. A row passes when ANY of the selected providers is
+	// true. Unknown keys are dropped silently; the handler-level whitelist
+	// mirrors this, so the inner branch is defence-in-depth.
+	if len(filters.Providers) > 0 {
+		colsByKey := map[string]string{
+			"kodik":    "has_kodik",
+			"animelib": "has_animelib",
+			"hianime":  "has_hianime",
+			"consumet": "has_consumet",
+		}
+		var orParts []string
+		for _, p := range filters.Providers {
+			if col, ok := colsByKey[p]; ok {
+				orParts = append(orParts, col+" = true")
+			}
+		}
+		if len(orParts) > 0 {
+			query = query.Where("(" + strings.Join(orParts, " OR ") + ")")
+		}
+	}
 	if len(filters.GenreIDs) > 0 {
 		query = query.Where("id IN (SELECT anime_id FROM anime_genres WHERE genre_id IN ?)", filters.GenreIDs)
 	}
@@ -153,6 +180,40 @@ func (r *AnimeRepository) SetHasVideo(ctx context.Context, animeID string, hasVi
 func (r *AnimeRepository) SetHasDub(ctx context.Context, animeID string, hasDub bool) error {
 	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
 		Update("has_dub", hasDub).Error
+}
+
+// SetHasKodik flips the animes.has_kodik column for one anime. Called
+// lazily by GetKodikTranslations whenever the catalog touches Kodik for
+// the anime — best-effort. Phase 15 (UX-31).
+func (r *AnimeRepository) SetHasKodik(ctx context.Context, animeID string, has bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("has_kodik", has).Error
+}
+
+// SetHasAnimeLib flips the animes.has_animelib column for one anime.
+// Called lazily by GetAnimeLibTranslations whenever AnimeLib's hapi
+// returns at least one non-Kodik translation — best-effort. The
+// Kodik-iframe-fallback path inside AnimeLib does NOT count (per
+// feedback_animelib_no_kodik_fallback.md). Phase 15 (UX-31).
+func (r *AnimeRepository) SetHasAnimeLib(ctx context.Context, animeID string, has bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("has_animelib", has).Error
+}
+
+// SetHasHiAnime flips the animes.has_hianime column for one anime.
+// Called lazily by doHiAnimeSearch when a match resolves to a real
+// HiAnime ID — best-effort. Phase 15 (UX-31).
+func (r *AnimeRepository) SetHasHiAnime(ctx context.Context, animeID string, has bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("has_hianime", has).Error
+}
+
+// SetHasConsumet flips the animes.has_consumet column for one anime.
+// Called lazily by GetConsumetEpisodes when at least one episode is
+// resolved on any Consumet provider — best-effort. Phase 15 (UX-31).
+func (r *AnimeRepository) SetHasConsumet(ctx context.Context, animeID string, has bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("has_consumet", has).Error
 }
 
 func (r *AnimeRepository) SetHidden(ctx context.Context, animeID string, hidden bool) error {

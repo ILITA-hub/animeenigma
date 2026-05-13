@@ -38,6 +38,14 @@ type Anime struct {
 	// Kodik on behalf of this anime. Default false; existing rows remain
 	// valid until search-driven re-ingest backfills them. Phase 9 (UX-18).
 	HasDub          bool           `gorm:"default:false;index" json:"has_dub"`
+	// Phase 15 (UX-31) — per-provider availability booleans. Each parser
+	// (kodik / animelib / hianime / consumet) lazily sets its corresponding
+	// flag the first time the catalog touches that provider for the anime.
+	// Mirrors HasDub. Default false; existing rows backfill over time.
+	HasKodik    bool `gorm:"default:false;index" json:"has_kodik"`
+	HasAnimeLib bool `gorm:"default:false;index" json:"has_animelib"`
+	HasHiAnime  bool `gorm:"default:false;index" json:"has_hianime"`
+	HasConsumet bool `gorm:"default:false;index" json:"has_consumet"`
 	Hidden          bool           `gorm:"default:false" json:"hidden"`
 	SortPriority    int            `gorm:"default:0" json:"sort_priority,omitempty"`
 	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`
@@ -285,6 +293,14 @@ type SearchFilters struct {
 	Page     int
 	PageSize int
 	Source   string
+	// Phase 15 (UX-31) — multi-axis browse sidebar filters.
+	// Kind matches the Shikimori-source enum: "tv" / "movie" / "ova" /
+	// "ona" / "special". Empty = no filter.
+	// Providers is the OR-set of {"kodik","animelib","hianime","consumet"}
+	// — a row passes when ANY of the selected has_{provider} columns is
+	// true. Empty = no filter. Unknown values are dropped at the handler.
+	Kind      string
+	Providers []string
 }
 
 // CreateAnimeRequest for admin anime creation
