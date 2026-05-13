@@ -13,7 +13,8 @@
     "closeSearch": "Close search",
     "scheduleLink": "View schedule",
     "langToggleLabel": "Interface language",
-    "drawerTitle": "Navigation menu"
+    "drawerTitle": "Navigation menu",
+    "about": "About"
   },
   "hero": {
     "tagline": "Stream anime, your way",
@@ -93,6 +94,7 @@
     "episode": "Episode",
     "reviews": "Reviews",
     "reviewsCount": "{count} reviews",
+    "watchersCount": "{count} watching",
     "writeReview": "Write a review",
     "editReview": "Edit review",
     "yourRating": "Your rating",
@@ -705,6 +707,44 @@
       "forbidden": "You don't have permission",
       "serverError": "Server error, try again",
       "timeout": "Request timed out"
+    }
+  },
+  "about": {
+    "title": "About AnimeEnigma",
+    "subtitle": "A self-hosted anime streaming platform",
+    "faqs": {
+      "q1": {
+        "q": "What is AnimeEnigma?",
+        "a": "AnimeEnigma is a self-hosted anime streaming platform with Shikimori and MAL integration. It combines metadata from Shikimori with video from multiple sources, plus tools like recommendations, OP/ED ratings, watch parties, and personal lists — all in one place."
+      },
+      "q2": {
+        "q": "Is it free? Are there ads?",
+        "a": "Yes, free and ad-free. The platform is self-hosted by a small group, not a commercial service. There's no advertising, no tracking pixels, and no subscription tier — everyone gets the same access."
+      },
+      "q3": {
+        "q": "Where do the videos come from?",
+        "a": "AnimeEnigma streams videos from four sources: Kodik and AnimeLib (Russian audio/subs), HiAnime and Consumet (English subs). The backend proxies the streams so your IP never hits the external CDN directly. Subtitles for HiAnime and Consumet can be augmented with Japanese tracks from Jimaku.cc."
+      },
+      "q4": {
+        "q": "How do recommendations work?",
+        "a": "We combine five signals: top-list similarity (S1), genre affinity (S2), global trending (S3), rating boost (S4), and seasonal freshness (S5). Each signal contributes a weighted score and the final list is mixed. No personal data leaves the server — recommendations are computed locally from your activity."
+      },
+      "q5": {
+        "q": "Can I import my MAL list?",
+        "a": "Yes. Go to Profile → Settings → MAL Import and enter your MAL username. The importer pulls your full list (statuses, scores, episodes watched, dates) and resolves each title to the AnimeEnigma catalog. Re-running the import updates entries that changed on MAL."
+      },
+      "q6": {
+        "q": "Is there a mobile app?",
+        "a": "Not yet — the web app is fully mobile-responsive and works offline-ish via the browser cache. A native app may come later, but for now installing the site as a PWA (Add to Home Screen) is the closest thing."
+      },
+      "q7": {
+        "q": "How do I report a broken player?",
+        "a": "Each of the four players has a Report button in the controls. Tap it, optionally describe what broke, and submit — the report is saved to disk on the server and an admin gets a Telegram notification. Console logs and network requests are auto-attached to help debugging."
+      },
+      "q8": {
+        "q": "Who runs this site?",
+        "a": "A small self-hosted group of anime fans. The code is open and contributions are welcome via the project repository. No company, no shareholders, no roadmap pressure — just folks who wanted a better way to watch anime."
+      }
     }
   },
   "system": {
