@@ -32,6 +32,12 @@ type Anime struct {
 	MALID           string         `gorm:"size:50" json:"mal_id,omitempty"`
 	AniListID       string         `gorm:"size:50" json:"anilist_id,omitempty"`
 	HasVideo        bool           `gorm:"default:false;index" json:"has_video"`
+	// HasDub indicates the anime has at least one Kodik translation with
+	// type=="voice" (a dubbed track, as opposed to subtitled-only). Populated
+	// lazily by GetKodikTranslations whenever the catalog service touches
+	// Kodik on behalf of this anime. Default false; existing rows remain
+	// valid until search-driven re-ingest backfills them. Phase 9 (UX-18).
+	HasDub          bool           `gorm:"default:false;index" json:"has_dub"`
 	Hidden          bool           `gorm:"default:false" json:"hidden"`
 	SortPriority    int            `gorm:"default:0" json:"sort_priority,omitempty"`
 	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`

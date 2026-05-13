@@ -142,6 +142,14 @@ func (r *AnimeRepository) SetHasVideo(ctx context.Context, animeID string, hasVi
 		Update("has_video", hasVideo).Error
 }
 
+// SetHasDub flips the animes.has_dub column for one anime. Called by
+// GetKodikTranslations whenever the catalog touches Kodik for the anime —
+// best-effort, the dub badge is decorative. Phase 9 (UX-18).
+func (r *AnimeRepository) SetHasDub(ctx context.Context, animeID string, hasDub bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("has_dub", hasDub).Error
+}
+
 func (r *AnimeRepository) SetHidden(ctx context.Context, animeID string, hidden bool) error {
 	result := r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
 		Update("hidden", hidden)
