@@ -11,7 +11,8 @@
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "closeSearch": "Close search",
-    "scheduleLink": "View schedule"
+    "scheduleLink": "View schedule",
+    "langToggleLabel": "Interface language"
   },
   "hero": {
     "tagline": "Stream anime, your way",
@@ -48,6 +49,8 @@
     "detailsTitle": "Anime Details",
     "watch": "Watch",
     "watchNow": "Watch",
+    "languageSwitchLabel": "Audio language",
+    "providerSwitchLabel": "Video provider",
     "continueEp": "Continue ep. {n}",
     "resume": {
       "justFinished": "You finished episode {n}.",
@@ -381,6 +384,7 @@
   },
   "rooms": {
     "title": "Game Rooms",
+    "answerGroupLabel": "Answer options",
     "create": "Create Room",
     "players": "players",
     "host": "Host",
@@ -534,6 +538,7 @@
   },
   "themes": {
     "title": "Openings & Endings",
+    "typeFilterLabel": "Theme type filter",
     "syncButton": "Sync Season",
     "syncing": "Syncing {progress}",
     "sortRating": "By Rating",

@@ -1,5 +1,6 @@
 export { default as Badge } from './Badge.vue'
 export { default as Button } from './Button.vue'
+export { default as ButtonGroup } from './ButtonGroup.vue'
 export { default as Card } from './Card.vue'
 export { default as GenreFilterPopup } from './GenreFilterPopup.vue'
 export { default as Input } from './Input.vue'

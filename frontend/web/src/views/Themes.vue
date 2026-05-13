@@ -34,7 +34,11 @@
       <!-- Filters -->
       <div class="flex flex-wrap items-center gap-3 mb-6">
         <!-- Type filter -->
-        <div class="flex rounded-lg overflow-hidden border border-white/10">
+        <!-- UA-075 (UX-12 Phase 5): ButtonGroup wraps the type-filter row. -->
+        <ButtonGroup
+          :label="$t('themes.typeFilterLabel')"
+          container-class="flex rounded-lg overflow-hidden border border-white/10"
+        >
           <button
             v-for="opt in typeOptions"
             :key="opt.value"
@@ -42,11 +46,12 @@
             :class="typeFilter === opt.value
               ? 'bg-cyan-500/20 text-cyan-400'
               : 'text-white/50 hover:text-white hover:bg-white/5'"
+            :aria-pressed="typeFilter === opt.value"
             @click="typeFilter = opt.value"
           >
             {{ opt.label }}
           </button>
-        </div>
+        </ButtonGroup>
 
         <!-- Sort -->
         <select
@@ -111,6 +116,7 @@ import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount } from 'v
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { themesApi, adminThemesApi } from '@/api/client'
+import { ButtonGroup } from '@/components/ui'
 import ThemeCard from '@/components/themes/ThemeCard.vue'
 
 const { t } = useI18n()

@@ -149,7 +149,13 @@
                   </h3>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- UA-078 (UX-12 Phase 5): ButtonGroup wraps the quiz
+                     answer-options row with role="group" + aria-label; each
+                     option binds aria-pressed to its selected state. -->
+                <ButtonGroup
+                  :label="$t('rooms.answerGroupLabel')"
+                  container-class="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                >
                   <button
                     v-for="(answer, index) in currentRoom.currentQuestion?.options"
                     :key="index"
@@ -159,12 +165,13 @@
                         ? 'bg-cyan-500/20 border-2 border-cyan-500'
                         : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-cyan-500/30'
                     ]"
+                    :aria-pressed="selectedAnswer === index"
                     :disabled="hasAnswered"
                     @click="submitAnswer(index)"
                   >
                     <span class="text-white">{{ answer }}</span>
                   </button>
-                </div>
+                </ButtonGroup>
               </div>
             </div>
           </div>
@@ -246,7 +253,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { gameApi } from '@/api/client'
 import { io, Socket } from 'socket.io-client'
-import { Button, Badge, Input, Modal, Select } from '@/components/ui'
+import { Button, Badge, ButtonGroup, Input, Modal, Select } from '@/components/ui'
 
 const { t } = useI18n()
 

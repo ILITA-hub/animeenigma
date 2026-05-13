@@ -1,11 +1,17 @@
 <template>
+  <!-- UA-069 (UX-12 Phase 5 bonus): each tab now binds `aria-controls` to a
+       stable panel id derived from the tab value, and the slot's panel
+       carries the matching `id` + `aria-labelledby`. This closes the
+       Profile-tabs a11y gap without changing any Tabs.vue caller signature. -->
   <div class="w-full">
     <div :class="tabListClasses" role="tablist">
       <button
         v-for="tab in tabs"
         :key="tab.value"
         role="tab"
+        :id="`tab-${tab.value}`"
         :aria-selected="modelValue === tab.value"
+        :aria-controls="`tabpanel-${tab.value}`"
         :class="getTabClasses(tab.value)"
         @click="$emit('update:modelValue', tab.value)"
       >
@@ -18,7 +24,12 @@
         </span>
       </button>
     </div>
-    <div class="mt-4" role="tabpanel">
+    <div
+      class="mt-4"
+      role="tabpanel"
+      :id="`tabpanel-${modelValue}`"
+      :aria-labelledby="`tab-${modelValue}`"
+    >
       <slot :name="modelValue" />
     </div>
   </div>

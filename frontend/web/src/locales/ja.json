@@ -11,7 +11,8 @@
     "openMenu": "メニューを開く",
     "closeMenu": "メニューを閉じる",
     "closeSearch": "検索を閉じる",
-    "scheduleLink": "スケジュールを開く"
+    "scheduleLink": "スケジュールを開く",
+    "langToggleLabel": "インターフェース言語"
   },
   "hero": {
     "tagline": "あなただけのアニメ体験",
@@ -48,6 +49,8 @@
     "detailsTitle": "アニメ詳細",
     "watch": "視聴する",
     "watchNow": "視聴する",
+    "languageSwitchLabel": "音声言語",
+    "providerSwitchLabel": "動画プロバイダー",
     "continueEp": "第{n}話から続ける",
     "resume": {
       "justFinished": "第{n}話を視聴しました。",
@@ -381,6 +384,7 @@
   },
   "rooms": {
     "title": "ゲームルーム",
+    "answerGroupLabel": "解答の選択肢",
     "create": "ルーム作成",
     "players": "人",
     "host": "ホスト",
@@ -534,6 +538,7 @@
   },
   "themes": {
     "title": "オープニング＆エンディング",
+    "typeFilterLabel": "テーマタイプ",
     "syncButton": "シーズン同期",
     "syncing": "同期中 {progress}",
     "sortRating": "評価順",

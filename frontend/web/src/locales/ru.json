@@ -11,7 +11,8 @@
     "openMenu": "Открыть меню",
     "closeMenu": "Закрыть меню",
     "closeSearch": "Закрыть поиск",
-    "scheduleLink": "Открыть расписание"
+    "scheduleLink": "Открыть расписание",
+    "langToggleLabel": "Язык интерфейса"
   },
   "hero": {
     "tagline": "Смотри аниме по-своему",
@@ -48,6 +49,8 @@
     "detailsTitle": "Детали аниме",
     "watch": "Смотреть",
     "watchNow": "Смотреть",
+    "languageSwitchLabel": "Язык озвучки",
+    "providerSwitchLabel": "Видеоплеер",
     "continueEp": "Продолжить с эп. {n}",
     "resume": {
       "justFinished": "Вы закончили {n}-й эпизод.",
@@ -381,6 +384,7 @@
   },
   "rooms": {
     "title": "Игровые комнаты",
+    "answerGroupLabel": "Варианты ответа",
     "create": "Создать комнату",
     "players": "игроков",
     "host": "Хост",
@@ -534,6 +538,7 @@
   },
   "themes": {
     "title": "Опенинги и Эндинги",
+    "typeFilterLabel": "Тип темы",
     "syncButton": "Синхронизировать",
     "syncing": "Синхронизация {progress}",
     "sortRating": "По рейтингу",

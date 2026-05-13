@@ -299,10 +299,17 @@
             </span>
           </h2>
           <!-- Language tabs + Provider sub-tabs -->
+          <!-- UA-062 (UX-12 Phase 5): ButtonGroup wraps the RU/EN/18+ toggle
+               with role="group" + aria-label; each child button binds
+               aria-pressed to its selected state. -->
           <div class="flex flex-wrap gap-2">
-            <div class="flex gap-1 bg-white/5 rounded-lg p-1">
+            <ButtonGroup
+              :label="$t('anime.languageSwitchLabel')"
+              container-class="flex gap-1 bg-white/5 rounded-lg p-1"
+            >
               <button
                 @click="switchLanguage('ru')"
+                :aria-pressed="videoLanguage === 'ru'"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
                 :class="videoLanguage === 'ru'
                   ? 'bg-white/15 text-white'
@@ -312,6 +319,7 @@
               </button>
               <button
                 @click="switchLanguage('en')"
+                :aria-pressed="videoLanguage === 'en'"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
                 :class="videoLanguage === 'en'
                   ? 'bg-white/15 text-white'
@@ -322,6 +330,7 @@
               <button
                 v-if="isHentai"
                 @click="switchLanguage('18+')"
+                :aria-pressed="videoLanguage === '18+'"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
                 :class="videoLanguage === '18+'
                   ? 'bg-white/15 text-white'
@@ -329,12 +338,18 @@
               >
                 18+
               </button>
-            </div>
+            </ButtonGroup>
 
             <!-- Provider sub-tabs -->
-            <template v-if="videoLanguage === 'ru'">
+            <!-- UA-063 (UX-12 Phase 5): ButtonGroup wraps provider chips. -->
+            <ButtonGroup
+              v-if="videoLanguage === 'ru'"
+              :label="$t('anime.providerSwitchLabel')"
+              container-class="contents"
+            >
               <button
                 @click="onUserPickedProvider('kodik')"
+                :aria-pressed="videoProvider === 'kodik'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 :class="videoProvider === 'kodik'
                   ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
@@ -344,6 +359,7 @@
               </button>
               <button
                 @click="onUserPickedProvider('animelib')"
+                :aria-pressed="videoProvider === 'animelib'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 :class="videoProvider === 'animelib'
                   ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50'
@@ -351,7 +367,7 @@
               >
                 AniLib
               </button>
-            </template>
+            </ButtonGroup>
             <template v-else-if="videoLanguage === 'en'">
               <!-- Phase 16 — unified English tab (default for EN-language users).
                    Render only when the user opens the page with ?legacy=1 so
@@ -772,7 +788,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button } from '@/components/ui'
+import { Badge, Button, ButtonGroup } from '@/components/ui'
 import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'

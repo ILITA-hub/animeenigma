@@ -6,13 +6,13 @@ created: 2026-05-13
 # Project State
 
 ## Current Position
-**Status:** Phase 4 (contrast + Browse sweep) complete; Phase 5 next.
-**Current Phase:** None (Phase 5 next)
+**Status:** Phase 5 (ButtonGroup unification) complete; Phase 6 next.
+**Current Phase:** None (Phase 6 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 4 shipped under `/gsd-autonomous --ws ui-ux-audit`. Global `text-white/40` → `/60` sweep across 7 audit-cited views (Anime, Themes, Schedule, Game, Navbar, Auth, Profile — 37 occurrences total). GenreFilterPopup gained `aria-haspopup="listbox"` + `aria-expanded` + placeholder /30→/60. Browse.vue gained sr-only h2 between h1 and grid h3 (heading-order). 11 audit findings closed.
+**Last Activity Description:** Phase 5 shipped under `/gsd-autonomous --ws ui-ux-audit`. New shared `<ButtonGroup>` component (role=group + aria-label slot wrapper). Migrated 5 toggle surfaces: Anime language switch (UA-062), Anime RU provider chips (UA-063), Themes type-filter (UA-075), Game answer-options (UA-078), Navbar mobile-lang (UA-082). Each button got `aria-pressed`. Bonus UA-069 closed via Tabs.vue gaining id/aria-controls/aria-labelledby linkage — cascades to all consumers including Profile tabs.
 
 ## Progress
-**Phases Complete:** 4 / 20
+**Phases Complete:** 5 / 20
 **Current Plan:** N/A
 
 ## Next steps

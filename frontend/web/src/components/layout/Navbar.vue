@@ -233,17 +233,24 @@
             </template>
 
             <!-- Language -->
-            <div class="flex items-center gap-2 px-4 py-3">
+            <!-- UA-082 (UX-12 Phase 5): ButtonGroup wraps the mobile-drawer
+                 language toggle with role="group" + aria-label; each lang
+                 button binds aria-pressed to the active-locale state. -->
+            <ButtonGroup
+              :label="$t('nav.langToggleLabel')"
+              container-class="flex items-center gap-2 px-4 py-3"
+            >
               <button
                 v-for="lang in languages"
                 :key="lang.code"
                 class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
                 :class="locale === lang.code ? 'bg-cyan-500/20 text-cyan-400' : 'text-white/50 hover:text-white hover:bg-white/10'"
+                :aria-pressed="locale === lang.code"
                 @click="setLocale(lang.code)"
               >
                 {{ lang.name }}
               </button>
-            </div>
+            </ButtonGroup>
           </div>
         </div>
       </Transition>
@@ -261,6 +268,7 @@ import { animeApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import Button from '@/components/ui/Button.vue'
+import ButtonGroup from '@/components/ui/ButtonGroup.vue'
 
 const router = useRouter()
 const { locale } = useI18n()
