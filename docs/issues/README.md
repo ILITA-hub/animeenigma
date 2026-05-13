@@ -170,6 +170,34 @@ Track issues discovered during development. Each entry should include root cause
   - `docker/grafana/provisioning/alerting/rules.yml` — `player-unavailable` alert rule
 - **Status:** Fixed (2026-03-23)
 
+### ISS-011: VibePlayer Ad-Decoy Poisoning
+- **Date:** 2026-05-13 (PoC) — production impact 2026-05-11 → 2026-05-13 (Phase 21 ship)
+- **Severity:** Critical (EnglishPlayer played NO real video for ~2 days post-v3.0 ship)
+- **Affected:** EnglishPlayer (services/scraper + gogoanime provider), all anime where VibePlayer was the first server returned by gogoanime ListServers (was the default first per source-HTML order before Phase 21)
+- **Symptom:** EnglishPlayer loaded the master m3u8 successfully and reported duration, but no video frame ever rendered (`readyState=0` forever). HLS.js issued no error events. The manifest parsed cleanly because it WAS a valid m3u8 — just one whose every variant playlist pointed exclusively at TikTok's ad CDN.
+- **Root cause (PoC 2026-05-13):** IP-level poisoning. VibePlayer's upstream backend at `vibeplayer.site` serves master m3u8 manifests where the entire variant playlist is composed of segments at `p16-ad-sg.ibyteimg.com` (TikTok ad CDN). Real headless Chromium gets the same poison — confirmed not a fingerprint / TLS / User-Agent artifact. The poison is keyed off the request source IP (the production server's egress IP); Cloudflare WARP or other egress rotation would defeat it. See `docs/plans/2026-05-13-scraper-self-healing-spec.md §2` for the PoC findings table.
+- **Why Grafana didn't catch it:** Phase 17's `provider_health_up` gauge only checked that ListServers + GetStream returned 200. Both endpoints returned valid 200s — VibePlayer's manifest IS technically valid HLS, just video-less. The probe stage's gate did not parse segments; it only checked HTTP status + content type. Pattern mirror of ISS-009 (HiAnime health check tested wrong path).
+- **Bonus discovery:** PoC unpack of StreamHG/Earnvids packed-JS revealed BOTH providers expose a secondary `hls3` URL family at rotated CDNs (`managementadvisory.sbs`, `exoplanethunting.space`) for use when the `hls2` signed-URL TTL expires. Currently the extractor only captures `hls2`. Plan 22-01 ships multi-URL extraction; Plan 22-02 allowlists the hls3 hosts.
+- **Fix applied (mitigation, NOT resolution):**
+  1. Phase 21 Plan 03 — `SCRAPER_SERVER_PRIORITY` config (default `streamhg,earnvids,vibeplayer`) demotes VibePlayer to LAST in the server priority list. Production cold-path now hits StreamHG / Earnvids first and never reaches VibePlayer for healthy anime.
+  2. Phase 21 Plan 01 — `libs/streamprobe` playability gate with hardcoded ad-CDN blocklist (`ibyteimg.com`, `p16-ad-sg`, `ad-site-i18n`, `tiktokcdn.com`) catches any VibePlayer manifest that still leaks through (e.g. future server-list rotations) and fails the gate with `Reason=ad_decoy` BEFORE the URL reaches the user. `parser_ad_decoy_total{provider, server}` metric emits per drop.
+  3. Production smoke 2026-05-13 (Phase 21 Plan 03 SUMMARY): Frieren ep1 cold-path now returns a real `*.cdn-centaurus.com/hls2/.../master.m3u8` — NOT `p16-ad-sg.ibyteimg.com` — with `meta.gated=true`. Counter `parser_unplayable_total{provider="gogoanime",reason="cdn_unreachable",server="streamhg"} = 1` evidences the gate caught one failed StreamHG candidate and the orchestrator successfully iterated to a second StreamHG URL.
+  4. Phase 22 (this milestone) — multi-URL extraction so when StreamHG's hls2 signed URL expires, the hls3 secondary URL kicks in before the orchestrator gives up on the server. Plan 22-01 adds the multi-source Stream; Plan 22-02 allowlists the hls3 hosts.
+- **Remaining work (path to Resolved status):**
+  - **Cloudflare WARP egress sidecar** — separate future phase (`.planning/ROADMAP.md` reserves Phase 24 for this work). Routing scraper egress through WARP would land the requests on Cloudflare IPs that VibePlayer's backend does not poison, restoring VibePlayer as a working server. Until this lands, VibePlayer stays deprioritized AND the streamprobe blocklist is the defense-in-depth backstop.
+  - Phase 23 canary (the v3.1 self-maintenance loop) will catch any new ad-CDN family that appears in production by failing the playability gate and firing `ScraperAdDecoySurge` to the maintenance bot.
+  - When WARP ships and VibePlayer's ad-decoy rate drops to zero for 30 consecutive days (verified via `parser_ad_decoy_total{server="vibeplayer"}` flat-line), move this entry to `## Resolved Issues` and flip status to `Fixed`.
+- **Key files:**
+  - `libs/streamprobe/probe.go` — playability gate
+  - `libs/streamprobe/blocklist.go` — hardcoded ad-CDN host blocklist (hls3 of `ibyteimg.com`, `p16-ad-sg`, etc.)
+  - `services/scraper/internal/providers/gogoanime/client.go` — `coldPathGated` + `SortByPriority`
+  - `services/scraper/internal/config/config.go` — `SCRAPER_SERVER_PRIORITY` env var
+  - `services/scraper/cmd/scraper-api/main.go` — `ValidatePriorityList` fail-fast at boot
+  - `services/scraper/internal/embeds/streamhg.go` / `earnvids.go` — Phase 22 multi-URL extraction (this phase)
+  - `libs/videoutils/proxy.go` — HLSProxyAllowedDomains (Phase 22 adds hls3 hosts)
+- **Lesson learned:** Health checks that test only HTTP-status + content-type miss content-level poisoning. The streamprobe playability gate (Phase 21) walks the manifest to first-segment HEAD and inspects segment hostnames — this is the correct depth of validation for a streaming-aware health check. Pattern echoed in ISS-009 (HiAnime). The reusable rule: **health-check the same code path the user takes, AND test that the bytes the user receives are actually the right TYPE of bytes (not just HTTP-200).**
+- **Status:** Mitigated (2026-05-13) — root cause (IP-level poisoning) persists; symptom resolved via server-priority deprioritization + ad-CDN blocklist. Will flip to `Fixed` after WARP egress ships in a future phase.
+
 ## Resolved Issues
 
 ### ISS-010: Search returns empty / single result for any anime not in local DB (Shikimori .one → .io migration)
