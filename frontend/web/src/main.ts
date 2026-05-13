@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import router from './router'
 import i18n from './i18n'
 import App from './App.vue'
+import { tryReloadOnChunkError } from './utils/chunk-reload'
 
 // Styles
 import './styles/main.css'
@@ -15,6 +16,13 @@ app.use(i18n)
 app.mount('#app')
 
 window.addEventListener('unhandledrejection', (event) => {
+  // defineAsyncComponent failures after a deploy surface here as
+  // "Unable to preload CSS for ..." or "Failed to fetch dynamically imported
+  // module" — reload to pick up the new hashed asset names.
+  if (tryReloadOnChunkError(event.reason)) {
+    event.preventDefault()
+    return
+  }
   console.error('[Unhandled Promise Rejection]', event.reason)
 })
 

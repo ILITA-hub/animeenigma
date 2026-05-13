@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-05-13",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "🛠️ Починили рандомные ошибки «Something went wrong / Unable to preload CSS for ...» после деплоев! Старый авто-reload ловил только Webpack-style сообщения и срабатывал только при переходе по роутам — а наш HiAnime/Consumet/AnimeLib плеер грузится через `defineAsyncComponent` уже внутри страницы аниме, и его ошибка пролетала мимо. Теперь общий обработчик ловит и Vite-сообщение `Unable to preload CSS`, и `Failed to fetch dynamically imported module`, висит и на `router.onError`, и на `window.unhandledrejection`, плюс есть защита от бесконечного reload-loop'а через sessionStorage cooldown — после первой неудачи в течение 10 секунд не пытается перезагрузиться снова. Открываете аниме сразу после деплоя — страница тихо перезагрузится и подтянет свежие хешированные ассеты ⚡"
+      }
+    ]
+  },
+  {
     "date": "2026-05-12",
     "entries": [
       {

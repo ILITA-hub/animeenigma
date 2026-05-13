@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import i18n from '@/i18n'
+import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -153,12 +154,11 @@ router.beforeEach((to, _from, next) => {
 })
 
 // Auto-reload when lazy-loaded chunks fail after a deploy
-// (old JS/CSS files are replaced with new hashed versions)
-router.onError((error, to) => {
-  const chunkFailed = /Loading (CSS )?chunk [\w-]+ failed|Failed to fetch dynamically imported module|error loading dynamically imported module/i.test(error.message)
-  if (chunkFailed) {
-    window.location.assign(to.fullPath)
-  }
+// (old JS/CSS files are replaced with new hashed versions).
+// Only catches errors during route navigation; defineAsyncComponent failures
+// inside views surface as unhandledrejection — see main.ts.
+router.onError((error) => {
+  tryReloadOnChunkError(error)
 })
 
 export default router
