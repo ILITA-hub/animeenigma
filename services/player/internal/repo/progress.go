@@ -290,3 +290,88 @@ func (r *ProgressRepository) ListContinueWatching(
 	}
 	return items, nil
 }
+
+// GetBulkProgress returns the per-anime progress map for the given user and
+// anime IDs. One entry per anime — the row with the highest episode_number
+// (breaking ties on last_watched_at DESC) joined against the animes table
+// for episodes_count + episodes_aired. Animes the user has no progress on
+// are omitted from the map; callers treat absence as "no badge".
+//
+// Empty-input fast-path: returns an empty map without hitting the DB.
+//
+// Phase 9 (UX-16).
+func (r *ProgressRepository) GetBulkProgress(
+	ctx context.Context, userID string, animeIDs []string,
+) (domain.BulkAnimeProgressMap, error) {
+	if len(animeIDs) == 0 {
+		return domain.BulkAnimeProgressMap{}, nil
+	}
+
+	type scanRow struct {
+		AnimeID       string `gorm:"column:anime_id"`
+		LatestEpisode int    `gorm:"column:latest_episode"`
+		Completed     bool   `gorm:"column:completed"`
+		DroppedOffAt  *int   `gorm:"column:dropped_off_at"`
+		EpisodesCount int    `gorm:"column:episodes_count"`
+		EpisodesAired int    `gorm:"column:episodes_aired"`
+	}
+
+	sqlStr := `
+        WITH ranked AS (
+            SELECT
+                wp.anime_id,
+                wp.episode_number,
+                wp.completed,
+                wp.dropped_off_at,
+                wp.last_watched_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY wp.anime_id
+                    ORDER BY wp.episode_number DESC, wp.last_watched_at DESC
+                ) AS rn
+            FROM watch_progress wp
+            WHERE wp.user_id = ?
+              AND wp.anime_id IN (?)
+        )
+        SELECT
+            r.anime_id              AS anime_id,
+            r.episode_number        AS latest_episode,
+            r.completed             AS completed,
+            r.dropped_off_at        AS dropped_off_at,
+            a.episodes_count        AS episodes_count,
+            COALESCE(a.episodes_aired, 0) AS episodes_aired
+        FROM ranked r
+        JOIN animes a ON a.id = r.anime_id
+        WHERE r.rn = 1
+          AND a.deleted_at IS NULL`
+
+	var rows []scanRow
+	if err := r.db.WithContext(ctx).
+		Raw(sqlStr, userID, animeIDs).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	out := make(domain.BulkAnimeProgressMap, len(rows))
+	for _, row := range rows {
+		// "Completed" for badge purposes is stricter than just row.completed=true.
+		// A user who marked only E1 of a 12-episode show as completed is still
+		// "in progress" — the badge should still show. The Completed flag
+		// flips true only when the user marked their FURTHEST episode completed
+		// AND that furthest episode is at least episodes_count (or episodes_aired
+		// when count is unknown / not-yet-finished show).
+		reachedAll := false
+		if row.EpisodesCount > 0 && row.LatestEpisode >= row.EpisodesCount {
+			reachedAll = true
+		} else if row.EpisodesCount == 0 && row.EpisodesAired > 0 && row.LatestEpisode >= row.EpisodesAired {
+			reachedAll = true
+		}
+		out[row.AnimeID] = domain.BulkAnimeProgressEntry{
+			LatestEpisode: row.LatestEpisode,
+			EpisodesCount: row.EpisodesCount,
+			EpisodesAired: row.EpisodesAired,
+			Completed:     row.Completed && reachedAll,
+			Dropped:       row.DroppedOffAt != nil && !row.Completed,
+		}
+	}
+	return out, nil
+}

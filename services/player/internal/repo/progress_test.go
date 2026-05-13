@@ -419,3 +419,83 @@ func TestProgressRepository_ListContinueWatching(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, itemsHuge, 2)
 }
+
+// TestProgressRepository_GetBulkProgress covers the happy path (mixed in-progress
+// + completed across multiple anime, one entry per anime keyed by the highest
+// episode_number), empty IDs slice, missing anime omission, cross-user
+// isolation, and the strict Completed gating (latest_episode row.completed=true
+// AND >= episodes_count). Phase 9 (UX-16).
+func TestProgressRepository_GetBulkProgress(t *testing.T) {
+	r, db := setupProgressTestDB(t)
+	ctx := context.Background()
+
+	require.NoError(t, db.Exec(`CREATE TABLE animes (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        episodes_count INTEGER DEFAULT 0,
+        episodes_aired INTEGER DEFAULT 0,
+        deleted_at DATETIME
+    )`).Error)
+
+	require.NoError(t, db.Exec(
+		`INSERT INTO animes (id, name, episodes_count, episodes_aired) VALUES (?, ?, ?, ?)`,
+		"anime-A", "Anime A", 12, 12).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO animes (id, name, episodes_count, episodes_aired) VALUES (?, ?, ?, ?)`,
+		"anime-B", "Anime B", 24, 12).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO animes (id, name, episodes_count, episodes_aired) VALUES (?, ?, ?, ?)`,
+		"anime-C", "Anime C", 12, 12).Error)
+
+	// Anime A: E1 completed, E3 completed. Latest = E3 (highest episode_number)
+	// — completed=true on the latest row but 3 < 12, so badge "Completed" is
+	// false (still in progress).
+	seedProgressRow(t, db, "user-1", "anime-A", 1, 600, 1400, true)
+	seedProgressRow(t, db, "user-1", "anime-A", 3, 1400, 1400, true)
+
+	// Anime B: E5 in-progress only. Latest = E5, completed=false.
+	seedProgressRow(t, db, "user-1", "anime-B", 5, 800, 1500, false)
+
+	// Anime C: every episode completed (E1..E12). Latest = E12, completed=true
+	// AND reached EpisodesCount — Completed flips true.
+	for ep := 1; ep <= 12; ep++ {
+		seedProgressRow(t, db, "user-1", "anime-C", ep, 1400, 1400, true)
+	}
+
+	// Different user — must NOT leak into user-1's map.
+	seedProgressRow(t, db, "user-2", "anime-A", 9, 100, 1400, false)
+
+	// --- Happy path ---
+	m, err := r.GetBulkProgress(ctx, "user-1",
+		[]string{"anime-A", "anime-B", "anime-C", "anime-missing"})
+	require.NoError(t, err)
+	require.Len(t, m, 3, "missing anime omitted from map")
+
+	entryA, ok := m["anime-A"]
+	require.True(t, ok)
+	assert.Equal(t, 3, entryA.LatestEpisode, "highest episode_number wins (E3, not E1)")
+	assert.False(t, entryA.Completed,
+		"row.completed=true but 3 < 12 — badge Completed must be false (still in progress)")
+
+	entryB, ok := m["anime-B"]
+	require.True(t, ok)
+	assert.Equal(t, 5, entryB.LatestEpisode)
+	assert.False(t, entryB.Completed)
+
+	entryC, ok := m["anime-C"]
+	require.True(t, ok)
+	assert.Equal(t, 12, entryC.LatestEpisode)
+	assert.True(t, entryC.Completed,
+		"row.completed=true AND 12 >= episodes_count(12) — Completed flips true")
+
+	// --- Empty IDs slice ---
+	empty, err := r.GetBulkProgress(ctx, "user-1", []string{})
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+
+	// --- Cross-user isolation ---
+	otherUser, err := r.GetBulkProgress(ctx, "user-no-rows",
+		[]string{"anime-A", "anime-B", "anime-C"})
+	require.NoError(t, err)
+	assert.Empty(t, otherUser)
+}

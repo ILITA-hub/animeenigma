@@ -238,6 +238,23 @@ type ContinueWatchingItem struct {
 	DroppedOffAt  *int      `json:"dropped_off_at,omitempty"`
 }
 
+// BulkAnimeProgressEntry is the per-anime payload of GET
+// /users/anime-progress. Aggregates the user's watch state for one anime so
+// the frontend can render a single progress badge per card. Phase 9 (UX-16).
+type BulkAnimeProgressEntry struct {
+	LatestEpisode int  `json:"latest_episode"` // highest episode_number with any row for this user+anime
+	EpisodesCount int  `json:"episodes_count"` // from animes.episodes_count
+	EpisodesAired int  `json:"episodes_aired"` // from animes.episodes_aired
+	Completed     bool `json:"completed"`      // true when latest_episode row.completed=true AND user reached at least episodes_count (or episodes_aired when count unknown)
+	Dropped       bool `json:"dropped"`        // true when the latest row has dropped_off_at != NULL and is not completed
+}
+
+// BulkAnimeProgressMap is the response shape — a JSON object keyed by
+// anime_id (string) -> BulkAnimeProgressEntry. Animes the user has no
+// progress on are omitted from the map; the frontend treats absence as
+// "no badge". Phase 9 (UX-16).
+type BulkAnimeProgressMap map[string]BulkAnimeProgressEntry
+
 // AnimeStatusEntry is a lightweight entry for the status map and stats
 type AnimeStatusEntry struct {
 	AnimeID  string `json:"anime_id" gorm:"column:anime_id"`

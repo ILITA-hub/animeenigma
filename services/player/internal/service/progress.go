@@ -66,3 +66,14 @@ func (s *ProgressService) ListContinueWatching(
 ) ([]*domain.ContinueWatchingItem, error) {
 	return s.progressRepo.ListContinueWatching(ctx, userID, limit)
 }
+
+// GetBulkProgress returns a map keyed by anime_id with the user's furthest
+// episode reached + completion flags. Used by AnimeCardNew (via the
+// /users/anime-progress endpoint) to render a per-card progress badge.
+// Pure read-through delegate; the repo enforces the empty-input fast-path
+// and the JOIN semantics. Phase 9 (UX-16).
+func (s *ProgressService) GetBulkProgress(
+	ctx context.Context, userID string, animeIDs []string,
+) (domain.BulkAnimeProgressMap, error) {
+	return s.progressRepo.GetBulkProgress(ctx, userID, animeIDs)
+}
