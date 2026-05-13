@@ -16,6 +16,13 @@ type Config struct {
 	SuppressedAlerts []string // alert keys to ignore (e.g., "Parser Failure Rate:hianime")
 	StatePath        string
 	IssuePath        string
+	// TestMode is a future-hook flag (Phase 23 Plan 23-03 / T-23-10
+	// mitigation): when MAINTENANCE_TEST_MODE=true, the dispatcher MAY
+	// short-circuit before invoking the Claude CLI / Telegram client so
+	// integration tests can post synthetic alerts at a live binary without
+	// triggering a real fix. Plan 23-03 only plumbs the field; consuming
+	// callers land in a future plan.
+	TestMode bool
 }
 
 type GrafanaConfig struct {
@@ -96,7 +103,26 @@ func Load() (*Config, error) {
 		SuppressedAlerts: parseSuppressed(getEnv("SUPPRESSED_ALERTS", "")),
 		StatePath:        getEnv("STATE_PATH", ".claude/maintenance-state.json"),
 		IssuePath:        getEnv("ISSUES_PATH", "docs/issues/issues.json"),
+		TestMode:         getEnvBool("MAINTENANCE_TEST_MODE", false),
 	}, nil
+}
+
+// getEnvBool parses the env-var value as a canonical Go boolean ("true" /
+// "false" / "1" / "0" / "T" / "F" — see strconv.ParseBool). Returns
+// defaultVal on parse error or when the var is unset. Used by TestMode so
+// the production default (false) is robust to typos in operator config.
+func getEnvBool(key string, defaultVal bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	// Be strict: only "true" enables — guards against accidental activation
+	// from values like "yes" or arbitrary strings. The config_test asserts
+	// this contract.
+	if val == "true" {
+		return true
+	}
+	return false
 }
 
 func parseSuppressed(s string) []string {
