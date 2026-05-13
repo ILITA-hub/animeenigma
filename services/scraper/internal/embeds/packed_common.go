@@ -107,6 +107,98 @@ type packedExtractor struct {
 // inside a comment would be rare and would still fail downstream validation.
 var hls2Regex = regexp.MustCompile(`"hls2"\s*:\s*"(https?://[^"]+\.m3u8[^"]*)"`)
 
+// hls3Regex matches `"hls3":"<url ending in .m3u8 or .txt>"` inside the
+// unpacked packer body. Plan 22-01: the `hls3` JSON key is a SECOND playable
+// URL family that streamhg/earnvids expose alongside the signed `hls2` m3u8
+// — typically an unsigned `.txt` HLS master playlist on a rotating CDN
+// (e.g. professionalimage.cyou, enterpriseconsulting.sbs,
+// managementadvisory.sbs, exoplanethunting.space depending on capture
+// generation). The `.txt` extension is a CDN obfuscation, not a different
+// format — content-type negotiation downstream treats it as HLS.
+var hls3Regex = regexp.MustCompile(`"hls3"\s*:\s*"(https?://[^"]+\.(?:m3u8|txt)[^"]*)"`)
+
+// genericPlayableRegex is the fallback pass for KEY ROTATION resilience —
+// when the upstream renames `hls2`/`hls3` to `streamA`/`streamB`/etc. The
+// pass is case-insensitive and bounded by the caller (capped at 5 hits in
+// extractAllPlayableURLs to satisfy T-22-02). Any URL ending in `.m3u8` or
+// `.txt` qualifies; querystring is preserved verbatim because signed-URL
+// nonces live there.
+var genericPlayableRegex = regexp.MustCompile(`(?i)https?://[^"\s<>]+\.(?:m3u8|txt)(?:\?[^"\s<>]*)?`)
+
+// maxFallbackURLs caps the fallback regex pass. Plan 22-01 / T-22-02 DoS
+// guard — a hostile unpacked body cannot stuff arbitrarily many fake URLs
+// into Sources. Real packed-JS bodies have <5 keys; 5 is comfortable
+// headroom.
+const maxFallbackURLs = 5
+
+// extractAllPlayableURLs returns every playable URL embedded in the unpacked
+// Dean-Edwards packer output. Plan 22-01.
+//
+// Extraction order (deterministic):
+//
+//  1. All `"hls2":"<m3u8 url>"` matches (signed primary URL family).
+//  2. All `"hls3":"<m3u8|txt url>"` matches (unsigned secondary URL family).
+//  3. Up to maxFallbackURLs additional URLs picked up by the generic
+//     `.m3u8|.txt` regex (fallback for key rotation — e.g. streamA/streamB).
+//
+// All entries Type=="hls". Both `.m3u8` and `.txt` ride the same Video.js
+// codepath after the HLS proxy (T-22-01 mitigation: proxy allowlist gates).
+//
+// Dedupe is exact-match case-sensitive — query strings carry signed nonces
+// where casing matters.
+//
+// Returns nil when zero URLs found so the caller's `len(...) == 0` check
+// stays simple.
+//
+// Threat model alignment:
+//
+//   - T-22-01 (hostile URL injection): every returned URL is gated by the
+//     streamprobe.Probe inside coldPathGated AND the HLS proxy allowlist
+//     before reaching the user.
+//   - T-22-02 (DoS via huge Sources slice): fallback pass capped; the
+//     primary hls2/hls3 named-key passes are unbounded but practical packed
+//     bodies have <5 keys.
+func extractAllPlayableURLs(unpacked string) []domain.Source {
+	seen := make(map[string]struct{}, 4)
+	var out []domain.Source
+
+	add := func(rawURL string) {
+		if rawURL == "" {
+			return
+		}
+		if _, dup := seen[rawURL]; dup {
+			return
+		}
+		seen[rawURL] = struct{}{}
+		out = append(out, domain.Source{URL: rawURL, Type: "hls"})
+	}
+
+	// Pass 1: literal "hls2" key — signed .m3u8 entries first.
+	for _, m := range hls2Regex.FindAllStringSubmatch(unpacked, -1) {
+		add(m[1])
+	}
+	// Pass 2: literal "hls3" key — unsigned .txt (or .m3u8) entries.
+	for _, m := range hls3Regex.FindAllStringSubmatch(unpacked, -1) {
+		add(m[1])
+	}
+	// Pass 3: belt-and-suspenders fallback for KEY ROTATION (streamA / streamB
+	// / etc.). Bounded by maxFallbackURLs to keep the Sources slice short under
+	// a hostile body (T-22-02). The named-key passes already populated `seen`
+	// so URLs they captured won't be re-added here.
+	fallbackAdded := 0
+	for _, m := range genericPlayableRegex.FindAllString(unpacked, -1) {
+		if fallbackAdded >= maxFallbackURLs {
+			break
+		}
+		if _, dup := seen[m]; dup {
+			continue
+		}
+		add(m)
+		fallbackAdded++
+	}
+	return out
+}
+
 // Name implements domain.EmbedExtractor.
 func (e *packedExtractor) Name() string { return e.name }
 
@@ -226,17 +318,20 @@ func (e *packedExtractor) Extract(ctx context.Context, embedURL string, headers 
 		return nil, domain.WrapExtractFailed(err, e.name+": goja unpack")
 	}
 
-	m := hls2Regex.FindStringSubmatch(unpacked)
-	if m == nil {
+	// Plan 22-01: extract ALL playable URLs (hls2 signed m3u8 + hls3 unsigned
+	// txt + fallback for key rotation). When upstream only has one URL the
+	// helper returns a 1-source slice — single-URL contract preserved.
+	sources := extractAllPlayableURLs(unpacked)
+	if len(sources) == 0 {
 		metrics.ParserZeroMatchTotal.WithLabelValues(e.name, e.selectorRegexFail).Inc()
 		return nil, domain.WrapExtractFailed(
-			errors.New("no hls2 URL in unpacked body"),
-			e.name+": hls2 regex",
+			errors.New("no playable URL in unpacked body"),
+			e.name+": hls2/hls3 regex",
 		)
 	}
 
 	return &domain.Stream{
-		Sources: []domain.Source{{URL: m[1], Type: "hls"}},
+		Sources: sources,
 		Headers: map[string]string{"Referer": e.referer},
 	}, nil
 }

@@ -878,16 +878,40 @@ func (p *Provider) coldPathGated(
 		if ref := s.Headers["Referer"]; ref != "" {
 			hdrs.Set("Referer", ref)
 		}
-		res := probe(attemptCtx, s.Sources[0].URL, hdrs)
-		if !res.Playable {
-			extName := p.serverLabel(srv.ID)
+		extName := p.serverLabel(srv.ID)
+		// Plan 22-01: iterate ALL Sources for this server before declaring
+		// the server failed. Phase 21's coldPathGated probed only Sources[0]
+		// — multi-URL extraction (hls2 + hls3 in streamhg/earnvids) would be
+		// dead code without this iteration. Each per-source failure emits one
+		// parser_unplayable_total increment so the dashboard sees the full
+		// attempted set; the LAST source's reason rides up to gateAttempt for
+		// upstream lastReason tracking.
+		var lastReason streamprobe.Reason
+		for _, src := range s.Sources {
+			if attemptCtx.Err() != nil {
+				return gateAttempt{serverID: srv.ID, err: attemptCtx.Err(), reason: streamprobe.ReasonCDNUnreachable}
+			}
+			res := probe(attemptCtx, src.URL, hdrs)
+			if res.Playable {
+				// Return a trimmed Stream containing ONLY the playable
+				// Source — downstream FE never sees the failed URL. Preserve
+				// Tracks/Intro/Outro/Headers from the original extraction.
+				trimmed := &domain.Stream{
+					Sources: []domain.Source{src},
+					Tracks:  s.Tracks,
+					Intro:   s.Intro,
+					Outro:   s.Outro,
+					Headers: s.Headers,
+				}
+				return gateAttempt{serverID: srv.ID, stream: trimmed, reason: streamprobe.ReasonPlayable}
+			}
 			metrics.ParserUnplayableTotal.WithLabelValues(providerName, extName, string(res.Reason)).Inc()
 			if res.Reason == streamprobe.ReasonAdDecoy {
 				metrics.ParserAdDecoyTotal.WithLabelValues(providerName, extName).Inc()
 			}
-			return gateAttempt{serverID: srv.ID, err: fmt.Errorf("gate failed: %s", res.Reason), reason: res.Reason}
+			lastReason = res.Reason
 		}
-		return gateAttempt{serverID: srv.ID, stream: s, reason: streamprobe.ReasonPlayable}
+		return gateAttempt{serverID: srv.ID, err: fmt.Errorf("all %d sources failed: %s", len(s.Sources), lastReason), reason: lastReason}
 	}
 
 	// Parallel top-2 — probe both concurrently so a slow server doesn't
