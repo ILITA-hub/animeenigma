@@ -225,6 +225,19 @@ type WatchlistStats struct {
 	Completed     int     `json:"completed"`
 }
 
+// ContinueWatchingItem is the per-row payload of GET /users/continue-watching.
+// One item per anime — the user's most-recent in-progress episode for that
+// anime, with the AnimeInfo projection inlined for poster/title rendering.
+// Phase 8 (UX-15 / UA-061).
+type ContinueWatchingItem struct {
+	Anime         AnimeInfo `json:"anime"`
+	EpisodeNumber int       `json:"episode_number"`
+	Progress      int       `json:"progress"`
+	Duration      int       `json:"duration"`
+	LastWatchedAt time.Time `json:"last_watched_at"`
+	DroppedOffAt  *int      `json:"dropped_off_at,omitempty"`
+}
+
 // AnimeStatusEntry is a lightweight entry for the status map and stats
 type AnimeStatusEntry struct {
 	AnimeID  string `json:"anime_id" gorm:"column:anime_id"`
