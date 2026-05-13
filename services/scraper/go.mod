@@ -7,6 +7,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/streamprobe v0.0.0-00010101000000-000000000000
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/go-chi/chi/v5 v5.0.12

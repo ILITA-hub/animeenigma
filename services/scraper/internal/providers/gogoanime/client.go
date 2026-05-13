@@ -52,10 +52,25 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/streamprobe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/fuzzy"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 )
+
+// probeFunc is the streamprobe.Probe signature, exposed for test injection.
+// Production callers leave Deps.Probe nil — New() defaults to
+// streamprobe.Probe.
+type probeFunc func(ctx context.Context, masterURL string, headers http.Header) streamprobe.Result
+
+// streamGateBudget is the total in-call wall-clock budget for the
+// cold-path playability gate iteration (top-2 parallel + sequential
+// remainder). 8s per CONTEXT.md D2.
+const streamGateBudget = 8 * time.Second
+
+// winningServerTTL is the Redis cache TTL for the (anime, episode) →
+// winning serverID mapping. 5 min per CONTEXT.md D4 + SCRAPER-HEAL-05.
+const winningServerTTL = 5 * time.Minute
 
 // providerName is the stable identifier returned by Name() and used as the
 // orchestrator's registry key. STABLE across mirror rebrands — even though
@@ -122,6 +137,10 @@ type malSyncClient interface {
 // EXPORTED struct — field names + ordering MUST match animepahe's Deps so
 // main.go (Plan 18-04 Task 1) wires both providers with identical literal
 // patterns.
+//
+// Phase 21 (SCRAPER-HEAL-03..05): ServerPriority + HostExtractor + Probe
+// extend the surface so the cold-path gate iterates servers in priority
+// order, runs the playability probe, and caches the winner.
 type Deps struct {
 	// BaseURL is the Gogoanime base URL (default https://anitaku.to per
 	// CONTEXT.md). Plan 18-04 wires this from SCRAPER_GOGOANIME_BASE_URL.
@@ -131,6 +150,19 @@ type Deps struct {
 	MalSync malSyncClient
 	Cache   cache.Cache
 	Log     *logger.Logger
+	// ServerPriority is the lower-cased extractor-name priority list
+	// from config.GogoanimeConfig.ServerPriority. nil → no priority sort
+	// (Phase 16 behaviour). Validated against the embeds registry by
+	// main.go before this struct is passed to New.
+	ServerPriority []string
+	// HostExtractor is the pre-built host→extractor-name map built by
+	// main.go from the embeds registry. Used by SortByPriority +
+	// coldPathGated metric labels.
+	HostExtractor map[string]string
+	// Probe is the streamprobe.Probe function — injectable so tests can
+	// drive deterministic gate outcomes. nil → defaults to
+	// streamprobe.Probe inside New().
+	Probe probeFunc
 }
 
 // Provider implements domain.Provider for the Gogoanime/Anitaku upstream.
@@ -141,6 +173,12 @@ type Provider struct {
 	malsync malSyncClient
 	cache   cache.Cache
 	log     *logger.Logger
+
+	// Phase 21 SCRAPER-HEAL-03..05: server-priority + probe injection +
+	// host→extractor-name map for metric label resolution.
+	serverPriority []string
+	hostExtractor  map[string]string
+	probe          probeFunc
 
 	// stages is the in-memory health snapshot, updated on each method call.
 	stagesMu sync.Mutex
@@ -173,14 +211,21 @@ func New(d Deps) (*Provider, error) {
 	if base == "" {
 		base = "https://anitaku.to"
 	}
+	probe := d.Probe
+	if probe == nil {
+		probe = streamprobe.Probe
+	}
 	p := &Provider{
-		baseURL: strings.TrimRight(base, "/"),
-		http:    d.HTTP,
-		embeds:  d.Embeds,
-		malsync: d.MalSync,
-		cache:   d.Cache,
-		log:     d.Log,
-		stages:  make(map[string]domain.StageHealth, len(stageNames)),
+		baseURL:        strings.TrimRight(base, "/"),
+		http:           d.HTTP,
+		embeds:         d.Embeds,
+		malsync:        d.MalSync,
+		cache:          d.Cache,
+		log:            d.Log,
+		serverPriority: d.ServerPriority,
+		hostExtractor:  d.HostExtractor,
+		probe:          probe,
+		stages:         make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Pre-seed all four stages so HealthCheck always returns the canonical
 	// shape even before any traffic.
@@ -712,6 +757,209 @@ func classifyStreamErr(err error) string {
 	default:
 		return "unknown"
 	}
+}
+
+// GetStreamWithGate is the priority-aware + gated entry point for the
+// EnglishPlayer cold path.
+//
+// serverID semantics:
+//
+//   - non-empty (caller pin): bypass priority + gate, delegate to plain
+//     GetStream, return gated=false. Matches Phase 16's per-server pin
+//     contract.
+//   - empty: cold path. First check Redis at
+//     scraper:winning_server:gogoanime:<anime>:<ep>. On hit, validate the
+//     cached serverID is still present in `servers`; if yes, delegate to
+//     GetStream and return gated=false. If the cache hit but the cached
+//     serverID is no longer present OR the extract failed, DELETE the
+//     stale entry and fall through to the cold-path iteration.
+//   - empty + cache miss: iterate `servers` in priority order (sorted
+//     internally by SortByPriority — callers do NOT pre-sort), running
+//     streamprobe.Probe on each. Top-2 probed in parallel (CONTEXT.md
+//     risks: probe budget overshoot mitigation); positions 3+ sequential.
+//     First playable result is cached at the winning_server key for
+//     winningServerTTL (5 min) and returned with gated=true.
+//
+// On exhaustion: returns ErrProviderDown wrapping the last failure reason,
+// gated=true (the gate DID run on this call, it just didn't find a winner).
+//
+// Total wall-clock budget: streamGateBudget (8s).
+//
+// SCRAPER-HEAL-04 + SCRAPER-HEAL-05.
+func (p *Provider) GetStreamWithGate(
+	ctx context.Context, providerID, episodeID, serverID string,
+	category domain.Category, servers []domain.Server,
+) (*domain.Stream, bool, error) {
+	// Caller-pinned path: no priority, no gate.
+	if serverID != "" {
+		s, err := p.GetStream(ctx, providerID, episodeID, serverID, category)
+		return s, false, err
+	}
+	if len(servers) == 0 {
+		return nil, false, domain.WrapNotFound(nil, "gogoanime: no servers for gated stream")
+	}
+
+	winnerKey := fmt.Sprintf("scraper:winning_server:%s:%s:%s", providerName, providerID, episodeID)
+
+	// Warm path: cached winner.
+	var cachedServerID string
+	if err := p.cache.Get(ctx, winnerKey, &cachedServerID); err == nil && cachedServerID != "" {
+		// Validate the cached serverID is still in the supplied list — the
+		// upstream HTML may have rotated servers since we cached, in which
+		// case we DO NOT trust the stale entry.
+		if hasServer(servers, cachedServerID) {
+			s, err := p.GetStream(ctx, providerID, episodeID, cachedServerID, category)
+			if err == nil {
+				return s, false, nil
+			}
+			// Cached winner errored on extract — fall through to cold path
+			// AND delete the stale cache entry.
+		}
+		_ = p.cache.Delete(ctx, winnerKey)
+	}
+
+	// Cold path: priority iteration + gate.
+	return p.coldPathGated(ctx, providerID, episodeID, category, servers, winnerKey)
+}
+
+// gateAttempt is the result of one server's extract+probe attempt.
+type gateAttempt struct {
+	serverID string
+	stream   *domain.Stream
+	reason   streamprobe.Reason
+	err      error
+}
+
+// coldPathGated runs the priority + gate iteration. Probes top-2 candidates
+// in parallel (CONTEXT.md risks: probe budget overshoot mitigation),
+// iterates positions 3+ sequentially.
+//
+// Priority sorting happens HERE (the first statement) so callers never
+// need to know about priority — they pass the raw ListServers output
+// and we apply our configured SCRAPER_SERVER_PRIORITY internally. This
+// supersedes the earlier draft that put sorting in the orchestrator/handler.
+//
+// Total in-call budget: streamGateBudget (8s) via ctx with timeout.
+func (p *Provider) coldPathGated(
+	ctx context.Context, providerID, episodeID string,
+	category domain.Category, servers []domain.Server,
+	winnerKey string,
+) (*domain.Stream, bool, error) {
+	// Priority sort internal to the provider — callers pass unsorted
+	// ListServers output. SCRAPER-HEAL-03.
+	servers = SortByPriority(servers, p.serverPriority, p.hostExtractor)
+
+	callCtx, cancel := context.WithTimeout(ctx, streamGateBudget)
+	defer cancel()
+
+	probe := p.probe
+	if probe == nil {
+		probe = streamprobe.Probe
+	}
+
+	// attemptOne: extract URL via the embed registry, then probe master
+	// m3u8 via streamprobe. Returns stream+ReasonPlayable on success or
+	// err+reason on failure. Increments the unplayable / ad-decoy counters
+	// on failure (server label = extractor.Name(), NOT the visible HTML
+	// label — closed cardinality per T-21-10).
+	attemptOne := func(attemptCtx context.Context, srv domain.Server) gateAttempt {
+		s, err := p.GetStream(attemptCtx, providerID, episodeID, srv.ID, category)
+		if err != nil {
+			extName := p.serverLabel(srv.ID)
+			metrics.ParserUnplayableTotal.WithLabelValues(providerName, extName, string(streamprobe.ReasonZeroMatch)).Inc()
+			return gateAttempt{serverID: srv.ID, err: err, reason: streamprobe.ReasonZeroMatch}
+		}
+		if s == nil || len(s.Sources) == 0 {
+			extName := p.serverLabel(srv.ID)
+			metrics.ParserUnplayableTotal.WithLabelValues(providerName, extName, string(streamprobe.ReasonEmptyResponse)).Inc()
+			return gateAttempt{serverID: srv.ID, err: errors.New("empty sources"), reason: streamprobe.ReasonEmptyResponse}
+		}
+		hdrs := http.Header{}
+		if ref := s.Headers["Referer"]; ref != "" {
+			hdrs.Set("Referer", ref)
+		}
+		res := probe(attemptCtx, s.Sources[0].URL, hdrs)
+		if !res.Playable {
+			extName := p.serverLabel(srv.ID)
+			metrics.ParserUnplayableTotal.WithLabelValues(providerName, extName, string(res.Reason)).Inc()
+			if res.Reason == streamprobe.ReasonAdDecoy {
+				metrics.ParserAdDecoyTotal.WithLabelValues(providerName, extName).Inc()
+			}
+			return gateAttempt{serverID: srv.ID, err: fmt.Errorf("gate failed: %s", res.Reason), reason: res.Reason}
+		}
+		return gateAttempt{serverID: srv.ID, stream: s, reason: streamprobe.ReasonPlayable}
+	}
+
+	// Parallel top-2 — probe both concurrently so a slow server doesn't
+	// serialize the budget.
+	topN := 2
+	if len(servers) < topN {
+		topN = len(servers)
+	}
+	parallelResults := make(chan gateAttempt, topN)
+	parCtx, parCancel := context.WithCancel(callCtx)
+	for i := 0; i < topN; i++ {
+		go func(srv domain.Server) {
+			parallelResults <- attemptOne(parCtx, srv)
+		}(servers[i])
+	}
+	var lastReason streamprobe.Reason
+	for i := 0; i < topN; i++ {
+		select {
+		case <-callCtx.Done():
+			parCancel()
+			return nil, true, domain.WrapProviderDown(callCtx.Err(), "gogoanime: gated stream budget exceeded")
+		case r := <-parallelResults:
+			if r.stream != nil {
+				parCancel() // cancel the other in-flight probe
+				_ = p.cache.Set(ctx, winnerKey, r.serverID, winningServerTTL)
+				return r.stream, true, nil
+			}
+			lastReason = r.reason
+		}
+	}
+	parCancel()
+
+	// Sequential positions 3+ — typical anitaku.to episode page has 3-4
+	// servers so this loop runs 1-2 times max.
+	for i := topN; i < len(servers); i++ {
+		if callCtx.Err() != nil {
+			return nil, true, domain.WrapProviderDown(callCtx.Err(), "gogoanime: gated stream budget exceeded")
+		}
+		r := attemptOne(callCtx, servers[i])
+		if r.stream != nil {
+			_ = p.cache.Set(ctx, winnerKey, r.serverID, winningServerTTL)
+			return r.stream, true, nil
+		}
+		lastReason = r.reason
+	}
+
+	return nil, true, domain.WrapProviderDown(
+		fmt.Errorf("all %d servers gate-failed; last reason=%s", len(servers), lastReason),
+		"gogoanime: no playable server",
+	)
+}
+
+// serverLabel resolves a server URL to the extractor-name label used by the
+// parser_unplayable_total / parser_ad_decoy_total metrics. Falls back to
+// the literal "unknown" so a future host-list drift never produces an
+// empty label (which would render as `server=""` in Prometheus).
+func (p *Provider) serverLabel(serverID string) string {
+	if name := hostnameToExtractorName(serverID, p.hostExtractor); name != "" {
+		return name
+	}
+	return "unknown"
+}
+
+// hasServer reports whether servers contains an entry whose ID == id.
+// Used by the warm-path cache validation in GetStreamWithGate.
+func hasServer(servers []domain.Server, id string) bool {
+	for _, s := range servers {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Compile-time assertion: *Provider satisfies domain.Provider.
