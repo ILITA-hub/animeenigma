@@ -168,9 +168,13 @@
 
         <!-- Mobile Menu Button -->
         <button
-          class="md:hidden p-2 text-white/70 hover:text-white"
+          id="navbar-mobile-toggle"
+          ref="hamburgerButtonRef"
+          class="md:hidden p-3 min-w-[44px] min-h-[44px] flex items-center justify-center text-white/70 hover:text-white"
           @click="mobileMenuOpen = !mobileMenuOpen"
           :aria-label="mobileMenuOpen ? $t('nav.closeMenu') : $t('nav.openMenu')"
+          :aria-expanded="mobileMenuOpen"
+          aria-controls="mobile-drawer"
         >
           <svg v-if="!mobileMenuOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -183,7 +187,17 @@
 
       <!-- Mobile Menu -->
       <Transition name="mobile-menu">
-        <div v-if="mobileMenuOpen" class="md:hidden py-4 border-t border-white/10 glass-nav rounded-b-2xl">
+        <div
+          v-if="mobileMenuOpen"
+          id="mobile-drawer"
+          ref="drawerRef"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mobile-drawer-title"
+          class="md:hidden py-4 border-t border-white/10 glass-nav rounded-b-2xl"
+          @keydown.escape="mobileMenuOpen = false"
+        >
+          <h2 id="mobile-drawer-title" class="sr-only">{{ $t('nav.drawerTitle') }}</h2>
           <div class="flex flex-col gap-1">
             <router-link
               v-for="link in navLinks"
@@ -259,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -267,6 +281,7 @@ import { onClickOutside, useDebounceFn } from '@vueuse/core'
 import { animeApi } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
 
@@ -294,6 +309,20 @@ const lastScrollY = ref(0)
 const mobileMenuOpen = ref(false)
 const langDropdownOpen = ref(false)
 const langDropdownRef = ref<HTMLElement | null>(null)
+const drawerRef = ref<HTMLElement | null>(null)
+const hamburgerButtonRef = ref<HTMLButtonElement | null>(null)
+
+// Focus-trap inside the mobile drawer; restores focus to the hamburger on close.
+useFocusTrap({
+  active: mobileMenuOpen,
+  container: drawerRef,
+  returnFocusTo: hamburgerButtonRef,
+})
+
+// Body scroll lock while drawer is open (standard dialog UX).
+watch(mobileMenuOpen, (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+})
 
 const userInitials = computed(() => {
   const user = authStore.user
@@ -405,6 +434,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  // Clear any residual body scroll lock if Navbar is torn down while drawer was open.
+  document.body.style.overflow = ''
 })
 </script>
 
