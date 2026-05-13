@@ -1706,8 +1706,26 @@ const deleteCommentItem = async (c: Comment) => {
     await commentApi.deleteComment(anime.value.id, c.id)
   } catch (err) {
     console.error('Failed to delete comment:', err)
-    // Restore the card at its original index.
-    comments.value.splice(originalIdx, 0, snapshot)
+    // REVIEW.md WR-04: restore via id-keyed re-insertion rather than
+    // splicing at the captured originalIdx. Between the optimistic
+    // removal and the error path, the user may have triggered
+    // loadMoreComments() (appends new entries) or saveEditComment()
+    // (mutates in place), which would make originalIdx stale and put
+    // the restored card at the wrong position. Find a stable anchor by
+    // walking the current array and inserting before the first comment
+    // strictly older than the snapshot, falling back to the front if
+    // it's the newest or the array is empty. Newest-first ordering is
+    // preserved without depending on a captured index.
+    const insertAt = comments.value.findIndex((x) => {
+      const a = new Date(snapshot.created_at).getTime()
+      const b = new Date(x.created_at).getTime()
+      return a > b || (a === b && snapshot.id > x.id)
+    })
+    if (insertAt === -1) {
+      comments.value.push(snapshot)
+    } else {
+      comments.value.splice(insertAt, 0, snapshot)
+    }
     deleteError.value = t('anime.ugc.deleteFailed')
     // Auto-clear after 5 seconds (mirrors the SPEC's "auto-dismiss 5s").
     setTimeout(() => {
