@@ -12,7 +12,8 @@
     "closeMenu": "メニューを閉じる",
     "closeSearch": "検索を閉じる",
     "scheduleLink": "スケジュールを開く",
-    "langToggleLabel": "インターフェース言語"
+    "langToggleLabel": "インターフェース言語",
+    "drawerTitle": "ナビゲーションメニュー"
   },
   "hero": {
     "tagline": "あなただけのアニメ体験",

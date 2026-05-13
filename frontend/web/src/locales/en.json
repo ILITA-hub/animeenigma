@@ -12,7 +12,8 @@
     "closeMenu": "Close menu",
     "closeSearch": "Close search",
     "scheduleLink": "View schedule",
-    "langToggleLabel": "Interface language"
+    "langToggleLabel": "Interface language",
+    "drawerTitle": "Navigation menu"
   },
   "hero": {
     "tagline": "Stream anime, your way",

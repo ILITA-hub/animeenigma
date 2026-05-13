@@ -12,7 +12,8 @@
     "closeMenu": "Закрыть меню",
     "closeSearch": "Закрыть поиск",
     "scheduleLink": "Открыть расписание",
-    "langToggleLabel": "Язык интерфейса"
+    "langToggleLabel": "Язык интерфейса",
+    "drawerTitle": "Меню навигации"
   },
   "hero": {
     "tagline": "Смотри аниме по-своему",
