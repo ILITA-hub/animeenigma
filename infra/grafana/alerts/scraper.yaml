@@ -1,0 +1,218 @@
+apiVersion: 1
+
+# Grafana unified-alerting rules for the v3.1 Scraper Self-Healing milestone.
+#
+# All three rules route to the existing `maintenance-webhook` contact point
+# (declared in docker/grafana/provisioning/alerting/contactpoints.yml) which
+# forwards to the host-side services/maintenance webhook at
+# http://host-gateway:8087/api/grafana-webhook.
+#
+# Label contract (CRITICAL — Phase 23 CONTEXT.md §domain bullet #7):
+# Every rule carries `provider`, `server`, and `reason` annotations (rendered
+# from $labels.* templates) so the maintenance bot's reason-enum dispatch
+# table in .claude/maintenance-prompt.md Pattern 6/7 + the Scraper
+# Playability Regression section can match on them.
+#
+# Cardinality bound (CONTEXT.md §risks): 5 providers × 4 servers × 7 reasons
+# × 5 anime_slots = 700 max combinations; current shipping shape 1 × 3 × 7
+# × 5 = 105 series. Well within Prometheus comfort.
+#
+# Source-of-truth: this file. Provisioning wiring lives in
+# docker/grafana/provisioning/alerting/rules.yml — the same three rules are
+# appended inline there with a "// keep in sync" pointer comment.
+
+groups:
+  - orgId: 1
+    name: Scraper Self-Healing
+    folder: AnimeEnigma
+    interval: 1m
+    rules:
+      # ----------------------------------------------------------------------
+      # ScraperPlayabilityRegression (warning) — any canary fail in last 25h
+      # ----------------------------------------------------------------------
+      # Window: 25h covers one missed nightly + tolerates a 1h-late start.
+      # Source counter: playability_canary_runs_total (services/scheduler/
+      # internal/jobs/scraper_playability_canary.go, Plan 23-01).
+      # Maintenance dispatch: matches `Scraper Playability Regression` section
+      # in .claude/maintenance-prompt.md; the bot picks Pattern 6 or 7 from
+      # the `reason` label.
+      - uid: scraper-playability-regression
+        title: ScraperPlayabilityRegression
+        noDataState: OK
+        execErrState: Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: 'sum by (provider, server, reason) (increase(playability_canary_runs_total{result="fail"}[25h]))'
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 0s
+        labels:
+          severity: warning
+          component: scraper
+        annotations:
+          summary: 'Scraper canary fail: {{ $labels.provider }} / {{ $labels.server }} ({{ $labels.reason }})'
+          description: 'playability_canary_runs_total recorded a fail in the last 25h for provider={{ $labels.provider }}, server={{ $labels.server }}, reason={{ $labels.reason }}. Maintenance bot dispatch: Pattern 6 (ad_decoy) or Pattern 7 (zero_match / cdn_unreachable) per .claude/maintenance-prompt.md.'
+          provider: '{{ $labels.provider }}'
+          server: '{{ $labels.server }}'
+          reason: '{{ $labels.reason }}'
+
+      # ----------------------------------------------------------------------
+      # ScraperAdDecoySurge (warning) — sustained non-zero ad-decoy rate
+      # ----------------------------------------------------------------------
+      # Source counter: parser_ad_decoy_total (libs/metrics/provider.go;
+      # incremented inside the gogoanime/animepahe GetStream path when
+      # streamprobe.Probe returns ReasonAdDecoy).
+      # 5m sustain catches in-prod regressions inside a single TV-watching
+      # window — short enough to be actionable, long enough to ignore a
+      # single one-off ad-poisoned segment.
+      - uid: scraper-ad-decoy-surge
+        title: ScraperAdDecoySurge
+        noDataState: OK
+        execErrState: Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: 'sum by (provider, server) (rate(parser_ad_decoy_total[5m]))'
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 5m
+        labels:
+          severity: warning
+          component: scraper
+          reason: ad_decoy
+        annotations:
+          summary: 'Scraper ad-decoy surge: {{ $labels.provider }} / {{ $labels.server }}'
+          description: 'parser_ad_decoy_total rate has been > 0 for 5m on provider={{ $labels.provider }}, server={{ $labels.server }}. Maintenance bot dispatch: Pattern 6 (VibePlayer ad-decoy poisoning) — server-priority reorder, WARP toggle, or mark-degraded.'
+          provider: '{{ $labels.provider }}'
+          server: '{{ $labels.server }}'
+          reason: ad_decoy
+
+      # ----------------------------------------------------------------------
+      # ScraperUnplayableSpike (critical) — unplayable ratio >5% sustained 5m
+      # ----------------------------------------------------------------------
+      # Ratio: rate(parser_unplayable_total) / rate(parser_requests_total{
+      #   operation="get_stream", status="success"
+      # })
+      #
+      # parser_requests_total has labels {provider, operation, status} but NO
+      # `server` label — so the denominator is summed across servers at the
+      # provider level. The numerator preserves server/reason for routing
+      # context; we group_left to broadcast the denominator across rows.
+      #
+      # Threshold 0.05 (>5%): tight enough to ignore single-user transient
+      # failures during ~10rps; loose enough to never fire on the canary's
+      # 1-failure-per-5min cadence.
+      - uid: scraper-unplayable-spike
+        title: ScraperUnplayableSpike
+        noDataState: OK
+        execErrState: Error
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: |
+                sum by (provider, server, reason) (rate(parser_unplayable_total[5m]))
+                / on (provider) group_left
+                sum by (provider) (rate(parser_requests_total{operation="get_stream", status="success"}[5m]) > 0)
+              instant: true
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.05]
+                    type: gt
+                  operator:
+                    type: and
+              refId: C
+              type: threshold
+              expression: B
+        for: 5m
+        labels:
+          severity: critical
+          component: scraper
+        annotations:
+          summary: 'Scraper unplayable spike: {{ $labels.provider }} / {{ $labels.server }} ({{ $labels.reason }}) >5%'
+          description: 'rate(parser_unplayable_total{provider={{ $labels.provider }}, server={{ $labels.server }}, reason={{ $labels.reason }}}) is >5% of rate(parser_requests_total{operation="get_stream"}) sustained 5m. Maintenance bot dispatch: match `reason` to Pattern 6 (ad_decoy) or Pattern 7 (zero_match / cdn_unreachable / signed_url_expired).'
+          provider: '{{ $labels.provider }}'
+          server: '{{ $labels.server }}'
+          reason: '{{ $labels.reason }}'

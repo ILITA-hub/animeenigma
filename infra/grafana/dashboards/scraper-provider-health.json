@@ -259,7 +259,7 @@
   "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Scraper Provider Health (Canary)",
+  "title": "Scraper / Provider Health",
   "uid": "scraper-provider-health-canary",
   "version": 1,
   "weekStart": "",

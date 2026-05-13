@@ -246,7 +246,7 @@
   "time": { "from": "now-7d", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Content Preferences",
+  "title": "Recs / Content Preferences",
   "uid": "content-preferences-v1",
   "version": 1
 }

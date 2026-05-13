@@ -272,6 +272,12 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning-tpl:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ../infra/grafana/dashboards:/var/lib/grafana/dashboards-infra:ro
+      # v3.1 Phase 23 Plan 23-03 — alert rule source-of-truth (read-only).
+      # The same rules are also inlined into ./grafana/provisioning/
+      # alerting/rules.yml (Option A wiring); this mount lets future plans
+      # switch to a second alerting provisioning provider that points at
+      # /var/lib/grafana/alerts/infra/ without a docker-compose change.
+      - ../infra/grafana/alerts:/var/lib/grafana/alerts/infra:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       prometheus:

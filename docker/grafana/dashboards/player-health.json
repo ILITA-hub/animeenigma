@@ -328,7 +328,7 @@
   "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "Player Health",
+  "title": "Player / Health",
   "uid": "player-health",
   "version": 1,
   "weekStart": ""

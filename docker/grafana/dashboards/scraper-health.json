@@ -304,7 +304,7 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "Scraper — Provider Health (per stage)",
+  "title": "Scraper / Health",
   "uid": "scraper-health",
   "version": 1,
   "weekStart": "",

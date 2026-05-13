@@ -406,7 +406,7 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Image Proxy",
+  "title": "Services / Image Proxy",
   "uid": "image-proxy",
   "version": 1,
   "weekStart": ""
