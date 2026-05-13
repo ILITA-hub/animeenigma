@@ -1040,6 +1040,7 @@ const EnglishPlayer = defineAsyncComponent(() => import('@/components/player/Eng
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
+import { useToast } from '@/composables/useToast'
 import { parseDescription } from '@/utils/description-parser'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
@@ -1097,6 +1098,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
+const toast = useToast()
 const { anime, loading, error, fetchAnime } = useAnime()
 const { contextMenu, openAtElement: openContextMenuAt } = useContextMenu()
 
@@ -1840,30 +1842,34 @@ watch(ugcTab, (v) => {
 
 const setListStatus = async (status: string) => {
   if (!anime.value) return
-
+  const animeId = anime.value.id
+  const prior = currentListStatus.value
+  // Optimistic: flip the visible status + close the dropdown immediately.
+  currentListStatus.value = status
+  showStatusDropdown.value = false
   try {
-    await userApi.updateWatchlistStatus(
-      anime.value.id,
-      status
-    )
-    currentListStatus.value = status
-    showStatusDropdown.value = false
-    watchlistStore.invalidate()
+    await watchlistStore.setStatusOptimistic(animeId, status)
   } catch (err) {
     console.error('Failed to update list status:', err)
+    // Rollback the view-local mirror (store action already rolled back its map).
+    currentListStatus.value = prior
+    toast.push(t('watchlist.errors.updateFailed'))
   }
 }
 
 const removeFromList = async () => {
   if (!anime.value) return
-
+  const animeId = anime.value.id
+  const prior = currentListStatus.value
+  // Optimistic: clear the visible status + close the dropdown immediately.
+  currentListStatus.value = null
+  showStatusDropdown.value = false
   try {
-    await userApi.removeFromWatchlist(anime.value.id)
-    currentListStatus.value = null
-    showStatusDropdown.value = false
-    watchlistStore.invalidate()
+    await watchlistStore.removeEntryOptimistic(animeId)
   } catch (err) {
     console.error('Failed to remove from list:', err)
+    currentListStatus.value = prior
+    toast.push(t('watchlist.errors.removeFailed'))
   }
 }
 
