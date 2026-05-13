@@ -260,19 +260,17 @@
               v-for="(anime, index) in topAnime"
               :key="anime.id"
               :to="`/anime/${anime.id}`"
-              class="relative flex gap-3 p-2 pl-12 md:pl-16 rounded-xl hover:bg-white/5 transition-colors group overflow-hidden"
+              class="relative flex gap-3 p-2 pr-4 rounded-xl hover:bg-white/5 transition-colors group overflow-hidden"
               @touchstart="(e) => onHomeTouchstart(e, anime)"
               @touchmove="onHomeTouchmove"
               @touchend="onHomeTouchend"
             >
-              <!-- Phase 10 (UX-20): giant numeral behind the poster, à la Netflix Top-10.
-                   Only items 1-10 get the numeral; items 11+ render the row without it
-                   (the row is capped at 10 today, but the guard keeps this honest if the
-                   store ever returns more). The numeral sits at z-0 with reduced opacity
-                   so it reads as decorative depth, not the primary affordance. -->
+              <!-- Phase 10 (UX-20): subtle card-background rank numeral, right-aligned.
+                   Only items 1-10 get the numeral. Sits inside the row at z-0 with very
+                   low opacity, behind content — reads as decorative depth, not primary. -->
               <span
                 v-if="index < 10"
-                class="absolute -left-2 md:-left-4 top-1/2 -translate-y-1/2 text-[80px] md:text-[120px] lg:text-[160px] font-black leading-none text-cyan-400/10 z-0 pointer-events-none select-none"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-4xl md:text-5xl font-black leading-none text-white/[0.04] z-0 pointer-events-none select-none"
                 aria-hidden="true"
               >{{ index + 1 }}</span>
               <AnimeKebab
