@@ -9,3 +9,12 @@ providers:
     editable: true
     options:
       path: /var/lib/grafana/dashboards
+
+  - name: 'infra-self-healing'
+    orgId: 1
+    folder: 'Self-Healing'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards/infra
