@@ -148,6 +148,12 @@ func NewRouterWithCleanup(
 		r.Delete("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
 		r.Get("/anime/{animeId}/rating", proxyHandler.ProxyToPlayer)
 
+		// Player service routes - comments (must be before /anime/* catch-all)
+		r.Get("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
+		r.Post("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
+		r.Patch("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
+		r.Delete("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
+
 		// Catalog service routes (public)
 		r.HandleFunc("/anime", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/anime/*", proxyHandler.ProxyToCatalog)
