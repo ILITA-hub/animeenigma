@@ -104,6 +104,7 @@
               </div>
               <button
                 class="p-1.5 text-white/40 hover:text-white transition-colors"
+                :aria-label="$t('nav.closeSearch')"
                 @click="closeSearch"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -169,7 +170,7 @@
         <button
           class="md:hidden p-2 text-white/70 hover:text-white"
           @click="mobileMenuOpen = !mobileMenuOpen"
-          :aria-label="mobileMenuOpen ? 'Close menu' : 'Open menu'"
+          :aria-label="mobileMenuOpen ? $t('nav.closeMenu') : $t('nav.openMenu')"
         >
           <svg v-if="!mobileMenuOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -268,6 +269,7 @@ const authStore = useAuthStore()
 const navLinks = [
   { to: '/', label: 'nav.home' },
   { to: '/browse', label: 'nav.catalog' },
+  { to: '/schedule', label: 'nav.schedule' },
   { to: '/themes', label: 'nav.themes' },
   { to: '/game', label: 'nav.rooms' },
 ]

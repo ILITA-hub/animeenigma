@@ -13,6 +13,7 @@
         </div>
         <router-link
           to="/schedule"
+          :aria-label="$t('nav.scheduleLink')"
           class="flex items-center gap-2 px-4 py-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,7 +62,7 @@
             </span>
             <img
               :src="item.anime.poster_url || '/placeholder.svg'"
-              :alt="getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp)"
+              alt=""
               class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
             />

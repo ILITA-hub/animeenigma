@@ -1478,6 +1478,16 @@ watch(() => route.params.id, (newId) => {
   }
 })
 
+// UA-051 (UX-04 Phase 2): inject the anime title into <title> once data has
+// loaded, so /anime/:id renders e.g. "Chainsaw Man — AnimeEnigma" instead of
+// the static "Детали аниме - AnimeEnigma" fallback set by the router guard.
+// `anime.title` is already locale-resolved by the transform in useAnime.ts.
+watch(() => anime.value?.title, (newTitle) => {
+  if (newTitle) {
+    document.title = `${newTitle} — AnimeEnigma`
+  }
+})
+
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
   loadAnimeData(route.params.id as string)

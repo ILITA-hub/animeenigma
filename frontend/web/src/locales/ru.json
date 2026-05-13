@@ -7,7 +7,11 @@
     "search": "Поиск",
     "profile": "Профиль",
     "login": "Войти",
-    "schedule": "Расписание"
+    "schedule": "Расписание",
+    "openMenu": "Открыть меню",
+    "closeMenu": "Закрыть меню",
+    "closeSearch": "Закрыть поиск",
+    "scheduleLink": "Открыть расписание"
   },
   "hero": {
     "tagline": "Смотри аниме по-своему",
@@ -274,14 +278,14 @@
     },
     "import": {
       "title": "Импорт списка",
-      "malPlaceholder": "Введите имя пользователя MAL",
-      "malDescription": "Импортирует ваш список аниме с MyAnimeList. Ваш профиль должен быть публичным. Введите ник, а не ссылку.",
+      "malPlaceholder": "Введите имя пользователя или ссылку на профиль MAL",
+      "malDescription": "Импортирует ваш список аниме с MyAnimeList. Ваш профиль должен быть публичным. Принимается как ник, так и ссылка на профиль.",
       "importing": "Импорт...",
       "import": "Импорт",
       "imported": "Импортировано",
       "skipped": "Пропущено",
-      "shikimoriPlaceholder": "Введите никнейм Shikimori",
-      "shikimoriDescription": "Импортирует ваш список аниме с Shikimori. Ваш профиль должен быть публичным. Введите ник, а не ссылку.",
+      "shikimoriPlaceholder": "Введите никнейм или ссылку на профиль Shikimori",
+      "shikimoriDescription": "Импортирует ваш список аниме с Shikimori. Ваш профиль должен быть публичным. Принимается как никнейм, так и ссылка на профиль.",
       "lastSynced": "Синхр. {time}: импортировано {imported}, пропущено {skipped}",
       "justNow": "только что",
       "minutesAgo": "{n} мин назад",
@@ -414,6 +418,10 @@
     "yesterday": "Вчера",
     "close": "Закрыть"
   },
+  "errors": {
+    "fetchAnime": "Не удалось загрузить аниме",
+    "fetchAnimeList": "Не удалось загрузить список аниме"
+  },
   "updates": {
     "title": "Обновления и новости",
     "changelog": "Изменения",
@@ -470,6 +478,8 @@
     }
   },
   "auth": {
+    "heading": "Войти в AnimeEnigma",
+    "qrAlt": "QR-код входа через Telegram",
     "telegramLogin": "Войти через Telegram",
     "loading": "Загрузка...",
     "backHome": "Вернуться на главную",

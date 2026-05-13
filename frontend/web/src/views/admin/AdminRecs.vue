@@ -22,6 +22,7 @@
             type="button"
             class="px-4 py-2 rounded-md bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium text-sm transition disabled:opacity-50"
             :disabled="isRecomputing || !userId"
+            :aria-label="$t('admin.recs.forceRecompute')"
             @click="recompute"
           >
             {{ isRecomputing ? $t('admin.recs.recomputing') : $t('admin.recs.forceRecompute') }}

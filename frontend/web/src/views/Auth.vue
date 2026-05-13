@@ -18,6 +18,7 @@
 
       <!-- Auth Card -->
       <div class="glass-card p-6 md:p-8">
+        <h1 class="sr-only">{{ $t('auth.heading') }}</h1>
         <h2 class="text-center text-white text-lg font-medium mb-6">{{ $t('auth.telegramLogin') }}</h2>
 
         <!-- Error -->
@@ -40,7 +41,7 @@
         <div v-else class="flex flex-col items-center gap-5">
           <!-- QR Code (renders empty placeholder + spinner until token arrives) -->
           <div class="bg-white rounded-xl p-3 relative w-[216px] h-[216px] flex items-center justify-center">
-            <canvas ref="qrCanvas" :class="['transition-opacity duration-200', tokenReady ? 'opacity-100' : 'opacity-0']" />
+            <canvas ref="qrCanvas" role="img" :aria-label="$t('auth.qrAlt')" :class="['transition-opacity duration-200', tokenReady ? 'opacity-100' : 'opacity-0']" />
             <div
               v-if="!tokenReady"
               class="absolute inset-0 flex items-center justify-center"

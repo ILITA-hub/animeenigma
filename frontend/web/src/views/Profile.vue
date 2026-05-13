@@ -2222,6 +2222,16 @@ watch(() => route.params.publicId, (newId) => {
   }
 })
 
+// UA-068 (UX-04 Phase 2): inject the username into <title> once the profile
+// is loaded, so /user/:public_id renders e.g. "ui_audit_bot — AnimeEnigma"
+// instead of the static "Профиль - AnimeEnigma" fallback set by the router
+// guard.
+watch(() => profileUser.value?.username, (newUsername) => {
+  if (newUsername) {
+    document.title = `${newUsername} — AnimeEnigma`
+  }
+})
+
 // Focus score input when editing starts
 watch(editingScore, (id) => {
   if (id) {

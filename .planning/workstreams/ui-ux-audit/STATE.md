@@ -6,13 +6,13 @@ created: 2026-05-13
 # Project State
 
 ## Current Position
-**Status:** Phase 1 (Tier A catastrophic) complete; Phase 2 next.
-**Current Phase:** None (Phase 2 next)
+**Status:** Phase 2 (Tier B quick-wins) complete; Phase 3 next.
+**Current Phase:** None (Phase 3 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 1 shipped under `/gsd-autonomous --ws ui-ux-audit`. UA-115 closed by disabling Grafana anonymous Admin (env var + redeploy + verified 401). UA-065 closed by adding `:aria-label="$t('profile.settings.apiKeyCopy')"` to Profile.vue copy button + i18n keys in en/ru/ja. 30-day Grafana access log review documented limitation (container-rebuild rotation) in followup-session.md.
+**Last Activity Description:** Phase 2 shipped under `/gsd-autonomous --ws ui-ux-audit`. ~13 Tier B findings closed across 4 sub-batches: B1 (i18n leaks — Open/Close menu, Failed to fetch literals), B2 (dynamic page titles on Anime + Profile), B3 (aria-label batch — 5 surfaces), B4 (drawer Schedule entry, RecItem alt="", import URL hints in 3 locales). 10 source files touched; type-check passes; redeployed.
 
 ## Progress
-**Phases Complete:** 1 / 20
+**Phases Complete:** 2 / 20
 **Current Plan:** N/A
 
 ## Next steps

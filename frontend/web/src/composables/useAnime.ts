@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { animeApi, episodeApi, userApi } from '@/api/client'
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
@@ -96,6 +97,7 @@ interface PaginationMeta {
 }
 
 export function useAnime() {
+  const { t } = useI18n()
   const anime = ref<Anime | null>(null)
   const animeList = ref<Anime[]>([])
   const episodes = ref<Episode[]>([])
@@ -113,7 +115,7 @@ export function useAnime() {
       return anime.value
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
-      error.value = e.response?.data?.message || 'Failed to fetch anime'
+      error.value = e.response?.data?.message || t('errors.fetchAnime')
       throw err
     } finally {
       loading.value = false
@@ -130,7 +132,7 @@ export function useAnime() {
       return animeList.value
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
-      error.value = e.response?.data?.message || 'Failed to fetch anime list'
+      error.value = e.response?.data?.message || t('errors.fetchAnimeList')
       throw err
     } finally {
       loading.value = false

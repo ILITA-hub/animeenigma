@@ -7,7 +7,11 @@
     "search": "Search",
     "profile": "Profile",
     "login": "Sign In",
-    "schedule": "Schedule"
+    "schedule": "Schedule",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "closeSearch": "Close search",
+    "scheduleLink": "View schedule"
   },
   "hero": {
     "tagline": "Stream anime, your way",
@@ -274,14 +278,14 @@
     },
     "import": {
       "title": "Import List",
-      "malPlaceholder": "Enter MAL username",
-      "malDescription": "Imports your anime list from MyAnimeList. Your profile must be public. Enter your username, not a URL.",
+      "malPlaceholder": "Enter MAL username or profile URL",
+      "malDescription": "Imports your anime list from MyAnimeList. Your profile must be public. Username or profile URL both work.",
       "importing": "Importing...",
       "import": "Import",
       "imported": "Imported",
       "skipped": "Skipped",
-      "shikimoriPlaceholder": "Enter Shikimori nickname",
-      "shikimoriDescription": "Imports your anime list from Shikimori. Your profile must be public. Enter your nickname, not a URL.",
+      "shikimoriPlaceholder": "Enter Shikimori nickname or profile URL",
+      "shikimoriDescription": "Imports your anime list from Shikimori. Your profile must be public. Nickname or profile URL both work.",
       "lastSynced": "Synced {time}: imported {imported}, skipped {skipped}",
       "justNow": "just now",
       "minutesAgo": "{n} min ago",
@@ -414,6 +418,10 @@
     "yesterday": "Yesterday",
     "close": "Close"
   },
+  "errors": {
+    "fetchAnime": "Failed to load anime",
+    "fetchAnimeList": "Failed to load anime list"
+  },
   "updates": {
     "title": "Updates & News",
     "changelog": "Changelog",
@@ -470,6 +478,8 @@
     }
   },
   "auth": {
+    "heading": "Sign in to AnimeEnigma",
+    "qrAlt": "Telegram login QR code",
     "telegramLogin": "Login via Telegram",
     "loading": "Loading...",
     "backHome": "Back to Home",

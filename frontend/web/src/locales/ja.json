@@ -7,7 +7,11 @@
     "search": "検索",
     "profile": "プロフィール",
     "login": "ログイン",
-    "schedule": "スケジュール"
+    "schedule": "スケジュール",
+    "openMenu": "メニューを開く",
+    "closeMenu": "メニューを閉じる",
+    "closeSearch": "検索を閉じる",
+    "scheduleLink": "スケジュールを開く"
   },
   "hero": {
     "tagline": "あなただけのアニメ体験",
@@ -274,14 +278,14 @@
     },
     "import": {
       "title": "リストをインポート",
-      "malPlaceholder": "MALユーザー名を入力",
-      "malDescription": "MyAnimeListからアニメリストをインポートします。プロフィールは公開されている必要があります。URLではなくユーザー名を入力してください。",
+      "malPlaceholder": "MALユーザー名またはプロフィールURLを入力",
+      "malDescription": "MyAnimeListからアニメリストをインポートします。プロフィールは公開されている必要があります。ユーザー名でもプロフィールURLでも受け付けます。",
       "importing": "インポート中...",
       "import": "インポート",
       "imported": "インポート済み",
       "skipped": "スキップ",
-      "shikimoriPlaceholder": "Shikimoriのニックネームを入力",
-      "shikimoriDescription": "Shikimoriからアニメリストをインポートします。プロフィールは公開されている必要があります。URLではなくニックネームを入力してください。",
+      "shikimoriPlaceholder": "Shikimoriのニックネームまたはプロフィールリンクを入力",
+      "shikimoriDescription": "Shikimoriからアニメリストをインポートします。プロフィールは公開されている必要があります。ニックネームでもプロフィールURLでも受け付けます。",
       "lastSynced": "同期 {time}: インポート {imported}、スキップ {skipped}",
       "justNow": "たった今",
       "minutesAgo": "{n}分前",
@@ -414,6 +418,10 @@
     "yesterday": "昨日",
     "close": "閉じる"
   },
+  "errors": {
+    "fetchAnime": "アニメの読み込みに失敗しました",
+    "fetchAnimeList": "アニメリストの読み込みに失敗しました"
+  },
   "updates": {
     "title": "更新とニュース",
     "changelog": "変更履歴",
@@ -470,6 +478,8 @@
     }
   },
   "auth": {
+    "heading": "AnimeEnigmaにサインイン",
+    "qrAlt": "TelegramログインのQRコード",
     "telegramLogin": "Telegramでログイン",
     "loading": "読み込み中...",
     "backHome": "ホームに戻る",
