@@ -242,6 +242,66 @@ apiClient.interceptors.response.use(
 // Hook diagnostics capture for network logs
 hookAxiosDiagnostics(apiClient)
 
+// Phase 17 (UX-33) — editorial collections. Mirror the backend
+// services/catalog/internal/domain/collection.go shape.
+export interface CollectionItem {
+  id: string
+  collection_id: string
+  anime_id: string
+  // The backend preloads Anime on detail views; list views omit it.
+  anime?: {
+    id: string
+    name?: string
+    name_ru?: string
+    name_jp?: string
+    poster_url?: string
+    episodes_count?: number
+    episodes_aired?: number
+    score?: number
+    year?: number
+    status?: string
+  }
+  sort_order: number
+  created_at: string
+}
+
+export interface Collection {
+  id: string
+  slug: string
+  title: string
+  title_ru?: string
+  title_jp?: string
+  description?: string
+  description_ru?: string
+  description_jp?: string
+  cover_image_url?: string
+  published: boolean
+  created_by?: string
+  items?: CollectionItem[]
+  item_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCollectionRequest {
+  slug?: string
+  title: string
+  title_ru?: string
+  title_jp?: string
+  description?: string
+  description_ru?: string
+  description_jp?: string
+  cover_image_url?: string
+  published?: boolean
+}
+
+export type UpdateCollectionRequest = Partial<CreateCollectionRequest>
+
+export interface AddCollectionItemRequest {
+  anime_id: string
+  sort_order?: number
+}
+
 // API endpoints
 export const animeApi = {
   getAll: (params?: Record<string, unknown>) => apiClient.get('/anime', { params }),
@@ -264,6 +324,11 @@ export const animeApi = {
   // in their list with status='watching'. Public, no auth.
   getWatchersCount: (animeId: string) =>
     apiClient.get<{ count: number } | { data: { count: number } }>(`/anime/${animeId}/watchers-count`),
+  // Phase 17 (UX-33) — editorial collections.
+  listCollections: (limit = 12) =>
+    apiClient.get<Collection[] | { data: Collection[] }>('/collections', { params: { limit } }),
+  getCollection: (slug: string) =>
+    apiClient.get<Collection | { data: Collection }>(`/collections/${encodeURIComponent(slug)}`),
 }
 
 export const episodeApi = {
@@ -401,6 +466,21 @@ export const adminApi = {
   // Update shikimori_id
   updateShikimoriId: (animeId: string, shikimoriId: string) =>
     apiClient.patch(`/admin/anime/${animeId}/shikimori`, { shikimori_id: shikimoriId }),
+  // Phase 17 (UX-33) — editorial collections admin CRUD + item picker.
+  listCollections: () =>
+    apiClient.get<Collection[] | { data: Collection[] }>('/admin/collections'),
+  getCollection: (id: string) =>
+    apiClient.get<Collection | { data: Collection }>(`/admin/collections/${id}`),
+  createCollection: (body: CreateCollectionRequest) =>
+    apiClient.post<Collection | { data: Collection }>('/admin/collections', body),
+  updateCollection: (id: string, body: UpdateCollectionRequest) =>
+    apiClient.put<Collection | { data: Collection }>(`/admin/collections/${id}`, body),
+  deleteCollection: (id: string) =>
+    apiClient.delete<void>(`/admin/collections/${id}`),
+  addCollectionItem: (id: string, body: AddCollectionItemRequest) =>
+    apiClient.post<CollectionItem | { data: CollectionItem }>(`/admin/collections/${id}/items`, body),
+  removeCollectionItem: (id: string, animeId: string) =>
+    apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
 }
 
 export const reviewApi = {
