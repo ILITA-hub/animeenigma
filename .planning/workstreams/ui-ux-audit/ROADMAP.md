@@ -377,7 +377,7 @@
 
 ---
 
-### Phase 20: Tier D — polish batch
+### Phase 20: Tier D — polish batch ✅ shipped 2026-05-13
 
 **Goal:** Mop up every remaining severity-1 cosmetic finding from the audit. Last on purpose — pair with design-review checkpoint to avoid slop.
 

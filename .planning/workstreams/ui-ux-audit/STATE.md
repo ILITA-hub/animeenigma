@@ -1,40 +1,38 @@
 ---
-gsd_state_version: 1.0
+gsd-state-version: 1.0
 milestone: v0.1
 milestone_name: UX Reassessment Remediation
-current_phase: None (Phase 20 next)
+current_phase: None (milestone complete)
 current_plan: N/A
 status: completed
-last_updated: "2026-05-13T07:35:00.000Z"
+last_updated: "2026-05-13T07:42:25Z"
 last_activity: 2026-05-13
 progress:
   total_phases: 20
-  completed_phases: 19
-  total_plans: 35
-  completed_plans: 34
-  percent: 95
+  completed_phases: 20
+  total_plans: 20
+  completed_plans: 20
+  percent: 100
 ---
 
 # Project State
 
 ## Current Position
 
-**Status:** Phase 19 (Grafana dashboard rebuild — Kraken) complete; Phase 20 next.
-**Current Phase:** None (Phase 20 next)
+**Status:** Phase 20 (Tier D polish batch — milestone v0.1 final) complete. All 20 phases of the UX Reassessment Remediation milestone are done.
+**Current Phase:** None (milestone complete)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 19 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Closes UA-116, UA-117, UA-118, UA-119, UA-120. Hygiene-only refactor of 9 Grafana dashboards: standardized `Area / Scope` titles across Services / Player / Recs / Scraper groups (UA-116); stripped numbered prefix `"6. "` from `animeenigma-services` row + 4 redundant time-window suffixes (`(Last 7 Days)`, `(Phase 1 Baseline)`) from `content-preferences` / `preference-resolution` rows (UA-117 / UA-118); panel-type appropriateness audit completed with 0 conversions (all ambiguous candidates left as-is per plan rule, UA-119); time-range + refresh defaults aligned per dashboard purpose — live-ops 1h/30s, service-overview 6h/1m, recs 24h/5m, aggregates 7d/5m (UA-120). `player-health` gained a `refresh` field for the first time (30s). 3 atomic commits (c745568, 7f16373, 661ecdd); Pass 3 produced no commit (0 conversions documented in SUMMARY). Grafana restarted clean, 8/9 dashboards visible via API with new titles (image-proxy is k8s-only). No panels added, no queries changed.
+**Last Activity Description:** Phase 20 shipped under `/gsd-execute-phase 20 --ws ui-ux-audit`. Closes UX-36 + 5 polish items (UA-085 drawer Schedule entry, AnimeKebab focus-visible reveal, Skip-Intro CTA auto-dismiss, About.vue FAQ accordion transitions, AnimeQuickNav section-ID drift check). 2 atomic commits (`f1767e7` skip-intro feature, `5858268` FAQ CSS); 3 of the 5 polish items were verified already-fixed by prior phases — documented in 20-SUMMARY.md "Plan deviations" table. New: `useSkipIntroSettings()` localStorage-backed composable wired into HiAnimePlayer + ConsumetPlayer + Profile Settings, with 3 new i18n key paths × 3 locales. `make redeploy-web` succeeded. vue-tsc clean. Workstream complete: 20 / 20 phases shipped.
 
 ## Progress
 
-**Phases Complete:** 19 / 20
+**Phases Complete:** 20 / 20
 **Current Plan:** N/A
 
 ## Next steps
 
-1. `/gsd-spec-phase 20 --ws ui-ux-audit` — Tier D polish batch (final phase)
-2. `/gsd-plan-phase 20 --ws ui-ux-audit` — break Phase 20 into plans
-3. `/gsd-execute-phase 20 --ws ui-ux-audit` — ship Phase 20
-4. Workstream completion gate after Phase 20.
+1. Workstream `ui-ux-audit` v0.1 milestone is complete — no further phases scheduled.
+2. Deferred items (per 20-CONTEXT.md): theater-mode T shortcut, drag-and-drop collection reorder, provider-boolean backfill scheduler, true "Because you watched X" rec chips, post-v0.1 comprehensive a11y re-audit. These should be scoped into a v0.2 milestone or a separate audit workstream.
 
 ## Phase queue (from ROADMAP.md)
 
