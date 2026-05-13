@@ -246,7 +246,9 @@
       "mediaError": "Media error: {details}",
       "playbackError": "Playback error: {details}",
       "videojsError": "Video.js error (code {code}): {message}"
-    }
+    },
+    "skipIntro": "Skip Intro",
+    "skipOutro": "Skip Ending"
   },
   "search": {
     "placeholder": "Search: title or genre",

@@ -246,7 +246,9 @@
       "mediaError": "Ошибка медиа: {details}",
       "playbackError": "Ошибка воспроизведения: {details}",
       "videojsError": "Ошибка Video.js (код {code}): {message}"
-    }
+    },
+    "skipIntro": "Пропустить опенинг",
+    "skipOutro": "Пропустить эндинг"
   },
   "search": {
     "placeholder": "Поиск: название или жанр",

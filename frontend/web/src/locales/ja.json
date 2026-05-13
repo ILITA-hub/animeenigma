@@ -246,7 +246,9 @@
       "mediaError": "メディアエラー: {details}",
       "playbackError": "再生エラー: {details}",
       "videojsError": "Video.jsエラー (コード {code}): {message}"
-    }
+    },
+    "skipIntro": "オープニングをスキップ",
+    "skipOutro": "エンディングをスキップ"
   },
   "search": {
     "placeholder": "検索: タイトルまたはジャンル",
