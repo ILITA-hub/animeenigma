@@ -75,13 +75,21 @@ func main() {
 	topAnimeJob := jobs.NewTopAnimeSyncJob(&cfg.Jobs, log)
 	calendarJob := jobs.NewCalendarSyncJob(&cfg.Jobs, log)
 	animeLoaderJob := jobs.NewAnimeLoaderJob(taskRepo, exportJobRepo, taskProcessor, log)
+	// Phase 23 — daily scraper playability canary (SCRAPER-HEAL-12/-13).
+	scraperPlayabilityCanaryJob := jobs.NewScraperPlayabilityCanaryJob(db.DB, &cfg.Jobs, log)
 
 	// Initialize services
-	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, log)
+	jobService := service.NewJobService(shikimoriJob, cleanupJob, topAnimeJob, calendarJob, scraperPlayabilityCanaryJob, log)
 	exportService := service.NewExportService(exportJobRepo, taskRepo, log)
 
 	// Start job scheduler
-	if err := jobService.Start(cfg.Jobs.ShikimoriSyncCron, cfg.Jobs.CleanupCron, cfg.Jobs.TopAnimeSyncCron, cfg.Jobs.CalendarSyncCron); err != nil {
+	if err := jobService.Start(
+		cfg.Jobs.ShikimoriSyncCron,
+		cfg.Jobs.CleanupCron,
+		cfg.Jobs.TopAnimeSyncCron,
+		cfg.Jobs.CalendarSyncCron,
+		cfg.Jobs.ScraperPlayabilityCanaryCron,
+	); err != nil {
 		log.Fatalw("failed to start job scheduler", "error", err)
 	}
 	defer jobService.Stop()

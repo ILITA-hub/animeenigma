@@ -11,16 +11,18 @@ import (
 )
 
 type JobService struct {
-	cron              *cron.Cron
-	shikimoriJob      *jobs.ShikimoriSyncJob
-	cleanupJob        *jobs.CleanupJob
-	topAnimeJob       *jobs.TopAnimeSyncJob
-	calendarJob       *jobs.CalendarSyncJob
-	log               *logger.Logger
-	lastShikimoriRun  time.Time
-	lastCleanupRun    time.Time
-	lastTopAnimeRun   time.Time
-	lastCalendarRun   time.Time
+	cron                        *cron.Cron
+	shikimoriJob                *jobs.ShikimoriSyncJob
+	cleanupJob                  *jobs.CleanupJob
+	topAnimeJob                 *jobs.TopAnimeSyncJob
+	calendarJob                 *jobs.CalendarSyncJob
+	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob
+	log                         *logger.Logger
+	lastShikimoriRun            time.Time
+	lastCleanupRun              time.Time
+	lastTopAnimeRun             time.Time
+	lastCalendarRun             time.Time
+	lastCanaryRun               time.Time
 }
 
 func NewJobService(
@@ -28,20 +30,22 @@ func NewJobService(
 	cleanupJob *jobs.CleanupJob,
 	topAnimeJob *jobs.TopAnimeSyncJob,
 	calendarJob *jobs.CalendarSyncJob,
+	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
-		cron:         cron.New(),
-		shikimoriJob: shikimoriJob,
-		cleanupJob:   cleanupJob,
-		topAnimeJob:  topAnimeJob,
-		calendarJob:  calendarJob,
-		log:          log,
+		cron:                        cron.New(),
+		shikimoriJob:                shikimoriJob,
+		cleanupJob:                  cleanupJob,
+		topAnimeJob:                 topAnimeJob,
+		calendarJob:                 calendarJob,
+		scraperPlayabilityCanaryJob: scraperPlayabilityCanaryJob,
+		log:                         log,
 	}
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -126,6 +130,31 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 		return err
 	}
 
+	// Schedule scraper playability canary (Phase 23 — SCRAPER-HEAL-12/-13).
+	// Canary itself applies ±5min jitter inside Run, so the cron tick fires
+	// at the configured time and the canary self-delays before any upstream
+	// HTTP calls land.
+	_, err = s.cron.AddFunc(scraperPlayabilityCanaryCron, func() {
+		ctx := context.Background()
+		s.log.Info("starting scheduled scraper playability canary")
+		start := time.Now()
+		if err := s.scraperPlayabilityCanaryJob.Run(ctx); err != nil {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("scraper_playability_canary", "error").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("scraper_playability_canary").Observe(time.Since(start).Seconds())
+			s.log.Errorw("scraper playability canary failed", "error", err)
+		} else {
+			metrics.SchedulerJobExecutionsTotal.WithLabelValues("scraper_playability_canary", "success").Inc()
+			metrics.SchedulerJobDuration.WithLabelValues("scraper_playability_canary").Observe(time.Since(start).Seconds())
+			metrics.SchedulerJobLastSuccess.WithLabelValues("scraper_playability_canary").SetToCurrentTime()
+			s.lastCanaryRun = time.Now()
+			s.log.Info("scraper playability canary completed successfully")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	s.log.Info("registered job: scraper_playability_canary")
+
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -185,6 +214,20 @@ func (s *JobService) TriggerCalendarSync(ctx context.Context) {
 	}
 }
 
+// TriggerScraperPlayabilityCanary manually triggers the canary job. Used by
+// the manual-trigger HTTP handler (POST /api/v1/jobs/scraper_playability_canary)
+// and by the synthetic Pattern 6 test in Plan 23-03.
+func (s *JobService) TriggerScraperPlayabilityCanary(ctx context.Context) {
+	s.log.Info("manually triggering scraper playability canary")
+	if err := s.scraperPlayabilityCanaryJob.Run(ctx); err != nil {
+		s.log.Errorw("scraper playability canary failed", "error", err)
+	} else {
+		metrics.SchedulerJobLastSuccess.WithLabelValues("scraper_playability_canary").SetToCurrentTime()
+		s.lastCanaryRun = time.Now()
+		s.log.Info("scraper playability canary completed successfully")
+	}
+}
+
 // GetStatus returns the status of all jobs
 func (s *JobService) GetStatus() map[string]interface{} {
 	return map[string]interface{}{
@@ -200,6 +243,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"calendar_sync": map[string]interface{}{
 			"last_run": s.lastCalendarRun,
+		},
+		"scraper_playability_canary": map[string]interface{}{
+			"last_run": s.lastCanaryRun,
 		},
 	}
 }
