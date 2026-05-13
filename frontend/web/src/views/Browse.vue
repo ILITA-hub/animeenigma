@@ -155,6 +155,7 @@
           :anime="anime"
           :list-status="getListStatus(anime.id)"
           :site-rating="siteRatings[String(anime.id)]"
+          :progress="browseProgress.get(String(anime.id)) ?? null"
           :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
           @open-menu="(el: HTMLElement) => openContextMenuAt(el, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
           @touchstart="onTouchstart($event, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
@@ -198,6 +199,7 @@ import { useI18n } from 'vue-i18n'
 import { getLocalizedGenre } from '@/utils/title'
 import { useSiteRatings } from '@/composables/useSiteRatings'
 import { useContextMenu } from '@/composables/useContextMenu'
+import { useAnimeProgress } from '@/composables/useAnimeProgress'
 
 const { t } = useI18n()
 
@@ -211,6 +213,11 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { animeList, loading, error, fetchAnimeList, searchAnime, paginationMeta } = useAnime()
+
+// Phase 9 (UX-16): bulk per-card progress for the Browse grid. Auto-skips
+// when anonymous. Re-fetches when the visible page's anime list changes.
+const browseIds = computed(() => animeList.value.map((a: { id: string | number }) => String(a.id)))
+const { progressMap: browseProgress } = useAnimeProgress(browseIds)
 
 // Watchlist status map via shared store
 const watchlistStore = useWatchlistStore()
