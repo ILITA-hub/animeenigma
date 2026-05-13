@@ -190,6 +190,15 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/hianime/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/consumet/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/animelib/*", proxyHandler.ProxyToCatalog)
+		// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTA timestamps.
+		// Public, no auth. Proxied to catalog which fronts api.aniskip.com
+		// with a 7d cache. Registered alongside the other public catalog
+		// passthrough routes; ordering matters less here because the URL
+		// prefix /skip-times/* doesn't collide with any /admin/* path —
+		// but we keep it BEFORE the /admin/* admin-gated group below for
+		// the same "specific-before-general" convention used throughout
+		// this file (admin proxies catch /api/admin/* unconditionally).
+		r.HandleFunc("/skip-times/*", proxyHandler.ProxyToCatalog)
 		// Phase 17 (UX-33) — public editorial collections. /api/admin/collections/*
 		// is covered by the existing /admin/* admin-gated group below.
 		r.HandleFunc("/collections", proxyHandler.ProxyToCatalog)
