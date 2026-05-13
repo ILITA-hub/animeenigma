@@ -596,7 +596,45 @@
     },
     "searchShikimori": "Shikimoriで検索",
     "refreshShikimori": "Shikimoriから更新",
-    "resultsHeading": "結果"
+    "resultsHeading": "結果",
+    "filters": {
+      "title": "フィルター",
+      "reset": "すべてのフィルターをリセット",
+      "mobileToggle": "フィルター",
+      "activeCount": "{count} 件",
+      "section": {
+        "genres": "ジャンル",
+        "format": "種別",
+        "status": "状態",
+        "year": "年",
+        "provider": "配信元",
+        "sort": "並び替え"
+      },
+      "format": {
+        "any": "すべての種別",
+        "tv": "TVシリーズ",
+        "movie": "映画",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "スペシャル"
+      },
+      "status": {
+        "any": "すべての状態",
+        "released": "完結",
+        "ongoing": "放送中",
+        "anons": "予定"
+      },
+      "year": {
+        "from": "から",
+        "to": "まで"
+      },
+      "provider": {
+        "kodik": "Kodik (RU)",
+        "animelib": "AnimeLib (RU)",
+        "hianime": "HiAnime (EN)",
+        "consumet": "Consumet (EN)"
+      }
+    }
   },
   "themes": {
     "title": "オープニング＆エンディング",

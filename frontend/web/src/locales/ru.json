@@ -596,7 +596,45 @@
     },
     "searchShikimori": "Поиск на Shikimori",
     "refreshShikimori": "Обновить с Shikimori",
-    "resultsHeading": "Результаты"
+    "resultsHeading": "Результаты",
+    "filters": {
+      "title": "Фильтры",
+      "reset": "Сбросить все фильтры",
+      "mobileToggle": "Фильтры",
+      "activeCount": "{count} активных",
+      "section": {
+        "genres": "Жанры",
+        "format": "Формат",
+        "status": "Статус",
+        "year": "Год",
+        "provider": "Доступно на",
+        "sort": "Сортировка"
+      },
+      "format": {
+        "any": "Любой формат",
+        "tv": "ТВ-сериал",
+        "movie": "Фильм",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "Спешл"
+      },
+      "status": {
+        "any": "Любой статус",
+        "released": "Вышло",
+        "ongoing": "Онгоинг",
+        "anons": "Анонс"
+      },
+      "year": {
+        "from": "С",
+        "to": "По"
+      },
+      "provider": {
+        "kodik": "Kodik (RU)",
+        "animelib": "AnimeLib (RU)",
+        "hianime": "HiAnime (EN)",
+        "consumet": "Consumet (EN)"
+      }
+    }
   },
   "themes": {
     "title": "Опенинги и Эндинги",

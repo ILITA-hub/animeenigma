@@ -596,7 +596,45 @@
     },
     "searchShikimori": "Search on Shikimori",
     "refreshShikimori": "Refresh from Shikimori",
-    "resultsHeading": "Results"
+    "resultsHeading": "Results",
+    "filters": {
+      "title": "Filters",
+      "reset": "Reset all filters",
+      "mobileToggle": "Filters",
+      "activeCount": "{count} active",
+      "section": {
+        "genres": "Genres",
+        "format": "Format",
+        "status": "Status",
+        "year": "Year",
+        "provider": "Available on",
+        "sort": "Sort"
+      },
+      "format": {
+        "any": "Any format",
+        "tv": "TV series",
+        "movie": "Movie",
+        "ova": "OVA",
+        "ona": "ONA",
+        "special": "Special"
+      },
+      "status": {
+        "any": "Any status",
+        "released": "Released",
+        "ongoing": "Ongoing",
+        "anons": "Announced"
+      },
+      "year": {
+        "from": "From",
+        "to": "To"
+      },
+      "provider": {
+        "kodik": "Kodik (RU)",
+        "animelib": "AnimeLib (RU)",
+        "hianime": "HiAnime (EN)",
+        "consumet": "Consumet (EN)"
+      }
+    }
   },
   "themes": {
     "title": "Openings & Endings",
