@@ -606,6 +606,35 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		}
 	}
 
+	// Phase 15 (UX-31) — Kind filter. Whitelist matches the Shikimori-source
+	// enum and the frontend radio set. Unknown values silently drop to
+	// no-filter so a malicious value can't reach the SQL.
+	if kind := query.Get("kind"); kind != "" {
+		switch kind {
+		case "tv", "movie", "ova", "ona", "special":
+			filters.Kind = kind
+		}
+	}
+
+	// Phase 15 (UX-31) — Providers filter (comma-separated, e.g.
+	// "kodik,hianime"). Whitelisted at the handler — repo treats unknown
+	// keys as drop-silent, but we still strip them here so the SQL
+	// builder only sees vetted values. Duplicates collapse via `seen`.
+	if providers := query.Get("providers"); providers != "" {
+		raw := strings.Split(providers, ",")
+		seen := map[string]bool{}
+		for _, p := range raw {
+			p = strings.TrimSpace(strings.ToLower(p))
+			switch p {
+			case "kodik", "animelib", "hianime", "consumet":
+				if !seen[p] {
+					filters.Providers = append(filters.Providers, p)
+					seen[p] = true
+				}
+			}
+		}
+	}
+
 	if genres := query["genre"]; len(genres) > 0 {
 		filters.GenreIDs = genres
 	}
