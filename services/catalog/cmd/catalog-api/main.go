@@ -55,6 +55,9 @@ func main() {
 		&domain.Studio{},
 		&domain.Tag{},
 		&domain.AnimeTag{},
+		// Phase 17 (UX-33) — admin-curated editorial collections.
+		&domain.Collection{},
+		&domain.CollectionItem{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
