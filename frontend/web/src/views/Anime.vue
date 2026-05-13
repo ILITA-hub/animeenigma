@@ -603,7 +603,7 @@
         </div>
       </section>
 
-      <!-- Reviews Section -->
+      <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
       <section class="mt-8">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">
@@ -611,12 +611,21 @@
               <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
-              {{ $t('anime.reviews') }}
+              {{ ugcTab === 'comments' ? $t('anime.ugc.commentsTab') : $t('anime.reviews') }}
             </span>
           </h2>
-          <span v-if="reviews.length > 0" class="text-white/60 text-sm">{{ $t('anime.reviewsCount', { count: reviews.length }) }}</span>
+          <span v-if="ugcTab === 'reviews' && reviews.length > 0" class="text-white/60 text-sm">{{ $t('anime.reviewsCount', { count: reviews.length }) }}</span>
         </div>
 
+        <Tabs
+          v-model="ugcTab"
+          :tabs="[
+            { value: 'reviews', label: $t('anime.ugc.reviewsTab'), count: reviews.length },
+            { value: 'comments', label: $t('anime.ugc.commentsTab'), count: comments.length },
+          ]"
+          variant="underline"
+        >
+          <template #reviews>
         <!-- Write Review Form -->
         <div v-if="authStore.isAuthenticated" class="glass-card p-4 md:p-6 mb-6">
           <h3 class="text-lg font-medium text-white mb-4">
@@ -728,6 +737,185 @@
         <div v-else class="glass-card p-8 text-center">
           <p class="text-white/50">{{ $t('anime.noReviews') }}</p>
         </div>
+          </template>
+
+          <template #comments>
+            <!-- Write Comment Form (logged in) -->
+            <div v-if="authStore.isAuthenticated" class="glass-card p-4 md:p-6 mb-6">
+              <textarea
+                v-model="newCommentBody"
+                rows="3"
+                :placeholder="$t('anime.ugc.commentPlaceholder')"
+                :disabled="posting"
+                class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+                :class="posting ? 'opacity-50 pointer-events-none' : ''"
+              ></textarea>
+              <div
+                class="text-sm text-right mt-1"
+                :class="runeLen(newCommentBody) > 2000 ? 'text-pink-400' : 'text-white/40'"
+                :aria-live="runeLen(newCommentBody) > 2000 ? 'assertive' : 'polite'"
+              >
+                {{ $t('anime.ugc.charCount', { count: runeLen(newCommentBody) }) }}
+              </div>
+              <div class="flex items-center gap-3 mt-2">
+                <button
+                  type="button"
+                  @click="postComment"
+                  :disabled="posting || newCommentBody.trim().length === 0 || runeLen(newCommentBody.trim()) > 2000"
+                  class="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg px-6 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {{ posting ? $t('anime.ugc.posting') : $t('anime.ugc.postComment') }}
+                </button>
+              </div>
+              <p v-if="postError" class="text-pink-400 text-sm mt-2">{{ postError }}</p>
+            </div>
+
+            <!-- Login prompt (anonymous) -->
+            <div v-else class="glass-card p-6 mb-6 text-center">
+              <p class="text-white/60 mb-3">{{ $t('anime.ugc.loginToComment') }}</p>
+              <router-link
+                to="/auth"
+                class="inline-block px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors"
+              >
+                {{ $t('nav.login') }}
+              </router-link>
+            </div>
+
+            <!-- Delete error toast (auto-clear via setTimeout in deleteCommentItem) -->
+            <p v-if="deleteError" class="text-pink-400 text-sm mb-4">{{ deleteError }}</p>
+
+            <!-- Load error -->
+            <div v-if="commentsError && comments.length === 0" class="glass-card p-8 text-center">
+              <p class="text-pink-400 text-sm mb-3">{{ commentsError }}</p>
+              <button
+                type="button"
+                @click="fetchComments"
+                class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors"
+              >
+                {{ $t('common.retry') }}
+              </button>
+            </div>
+
+            <!-- Empty state -->
+            <div
+              v-else-if="commentsFetched && comments.length === 0 && !commentsLoading"
+              class="glass-card p-8 text-center"
+            >
+              <p class="text-white/50">{{ $t('anime.ugc.emptyComments') }}</p>
+            </div>
+
+            <!-- Comment list -->
+            <div v-else-if="comments.length > 0" class="space-y-4">
+              <article
+                v-for="c in comments"
+                :key="c.id"
+                class="glass-card p-4 space-y-2"
+              >
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-semibold">
+                      {{ c.username?.slice(0, 2).toUpperCase() || '??' }}
+                    </div>
+                    <div>
+                      <router-link
+                        :to="`/user/${c.user_id}`"
+                        class="font-semibold text-white hover:text-purple-400 transition-colors"
+                      >
+                        {{ c.username || $t('anime.user') }}
+                      </router-link>
+                      <p class="text-white/40 text-sm">{{ formatDate(c.created_at) }}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <!-- Edit: own comment only (admins do NOT edit others) -->
+                    <button
+                      v-if="c.user_id === authStore.user?.id && editingCommentId !== c.id"
+                      type="button"
+                      :aria-label="$t('anime.ugc.editComment')"
+                      :title="$t('anime.ugc.editComment')"
+                      @click="startEditComment(c)"
+                      class="text-white/40 hover:text-cyan-400 p-2 rounded-lg transition-colors"
+                    >
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                    <!-- Delete: own comment OR admin -->
+                    <button
+                      v-if="c.user_id === authStore.user?.id || authStore.isAdmin"
+                      type="button"
+                      :aria-label="$t('anime.ugc.deleteComment')"
+                      :title="$t('anime.ugc.deleteComment')"
+                      @click="deleteCommentItem(c)"
+                      class="text-white/40 hover:text-pink-400 hover:bg-pink-500/10 p-2 rounded-lg transition-colors"
+                    >
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Body / edit mode -->
+                <template v-if="editingCommentId === c.id">
+                  <textarea
+                    v-model="editingBody"
+                    rows="3"
+                    :placeholder="$t('anime.ugc.editPlaceholder')"
+                    :disabled="editSaving"
+                    class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+                  ></textarea>
+                  <div class="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      @click="saveEditComment"
+                      :disabled="editSaving || editingBody.trim().length === 0 || runeLen(editingBody.trim()) > 2000"
+                      class="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {{ editSaving ? $t('anime.ugc.posting') : $t('anime.ugc.saveEdit') }}
+                    </button>
+                    <button
+                      type="button"
+                      @click="cancelEditComment"
+                      :disabled="editSaving"
+                      class="bg-pink-500/20 hover:bg-pink-500/30 text-pink-400 font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-50"
+                    >
+                      {{ $t('anime.ugc.cancelEdit') }}
+                    </button>
+                  </div>
+                  <p v-if="editError" class="text-pink-400 text-sm mt-2">{{ editError }}</p>
+                </template>
+                <p v-else class="whitespace-pre-wrap text-white/70">{{ c.body }}</p>
+              </article>
+            </div>
+
+            <!-- Skeleton (first load) -->
+            <div v-else-if="commentsLoading" class="space-y-4">
+              <div v-for="n in 3" :key="n" class="glass-card p-4 space-y-2 animate-pulse">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full bg-white/5"></div>
+                  <div class="space-y-2 flex-1">
+                    <div class="h-3 w-32 bg-white/10 rounded"></div>
+                    <div class="h-2 w-20 bg-white/5 rounded"></div>
+                  </div>
+                </div>
+                <div class="h-3 w-3/4 bg-white/5 rounded"></div>
+              </div>
+            </div>
+
+            <!-- Load more -->
+            <div v-if="commentsHasMore" class="mt-4 flex justify-center">
+              <button
+                type="button"
+                @click="loadMoreComments"
+                :disabled="commentsLoadingMore"
+                class="text-white/70 hover:text-white px-4 py-2 rounded-lg glass-card transition-colors disabled:opacity-50"
+              >
+                {{ commentsLoadingMore ? $t('anime.ugc.loading') : $t('anime.ugc.loadMore') }}
+              </button>
+            </div>
+          </template>
+        </Tabs>
       </section>
 
       <!-- Related Anime -->
@@ -804,7 +992,8 @@ const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/An
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
 // Phase 16 — unified English-source player atop the scraper orchestrator (replaces HiAnime + Consumet for non-debug users).
 const EnglishPlayer = defineAsyncComponent(() => import('@/components/player/EnglishPlayer.vue'))
-import { animeApi, userApi, reviewApi, adminApi } from '@/api/client'
+import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
+import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { parseDescription } from '@/utils/description-parser'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
@@ -838,6 +1027,19 @@ interface Review {
   review_text: string
   created_at: string
 }
+
+interface Comment {
+  id: string
+  user_id: string
+  anime_id: string
+  username: string
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+const UGC_ALLOWED = ['reviews', 'comments'] as const
+type UgcTab = typeof UGC_ALLOWED[number]
 
 interface AnimeRating {
   anime_id: string
@@ -1103,6 +1305,38 @@ const reviewForm = reactive({
   text: '',
 })
 
+// Comments (Plan 1-6, SOCIAL-06)
+// UGC tab state, URL-persisted via ?ugc=reviews|comments via two watchers.
+// Default = 'reviews'. Unknown values fall back to 'reviews' synchronously
+// (initial state set BEFORE first render, no flicker on deep links).
+const _initialUgc = (route.query.ugc as string | undefined)
+const ugcTab = ref<UgcTab>(
+  _initialUgc && (UGC_ALLOWED as readonly string[]).includes(_initialUgc)
+    ? (_initialUgc as UgcTab)
+    : 'reviews'
+)
+const comments = ref<Comment[]>([])
+const commentsHasMore = ref(false)
+const commentsNextCursor = ref<string>('')
+const commentsLoading = ref(false)
+const commentsLoadingMore = ref(false)
+const commentsError = ref('')
+const commentsFetched = ref(false)
+
+const newCommentBody = ref('')
+const posting = ref(false)
+const postError = ref('')
+
+const editingCommentId = ref<string | null>(null)
+const editingBody = ref('')
+const editError = ref('')
+const editSaving = ref(false)
+const deleteError = ref('')
+
+// Rune-count helper (UTF-8 code points; matches the backend's 1–2000 rune
+// validation rather than UTF-16 length).
+const runeLen = (s: string) => [...s].length
+
 const statusLabels = computed((): Record<string, string> => ({
   watching: t('profile.watchlist.watching'),
   plan_to_watch: t('profile.watchlist.planToWatch'),
@@ -1315,6 +1549,186 @@ const deleteMyReview = async () => {
   }
 }
 
+// --- Comments (SOCIAL-06) ---
+
+const fetchComments = async () => {
+  if (!anime.value) return
+  commentsLoading.value = true
+  commentsError.value = ''
+  try {
+    const resp = await commentApi.getAnimeComments(anime.value.id, { limit: 50 })
+    const data = resp.data?.data || resp.data || {}
+    comments.value = data.comments || []
+    commentsHasMore.value = !!data.has_more
+    commentsNextCursor.value = data.next_cursor || ''
+    commentsFetched.value = true
+  } catch (err) {
+    console.error('Failed to fetch comments:', err)
+    commentsError.value = t('anime.ugc.loadFailed')
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+const loadMoreComments = async () => {
+  if (!anime.value || !commentsHasMore.value || commentsLoadingMore.value) return
+  commentsLoadingMore.value = true
+  commentsError.value = ''
+  try {
+    const resp = await commentApi.getAnimeComments(anime.value.id, {
+      limit: 50,
+      cursor: commentsNextCursor.value,
+    })
+    const data = resp.data?.data || resp.data || {}
+    const newPage: Comment[] = data.comments || []
+    // Dedup by id in case the cursor reaches an already-loaded boundary.
+    const known = new Set(comments.value.map((c) => c.id))
+    for (const c of newPage) {
+      if (!known.has(c.id)) comments.value.push(c)
+    }
+    commentsHasMore.value = !!data.has_more
+    commentsNextCursor.value = data.next_cursor || ''
+  } catch (err) {
+    console.error('Failed to load more comments:', err)
+    commentsError.value = t('anime.ugc.loadMoreFailed')
+  } finally {
+    commentsLoadingMore.value = false
+  }
+}
+
+interface ApiError {
+  response?: { status?: number; data?: { error?: string; message?: string } }
+}
+
+const postComment = async () => {
+  if (!anime.value) return
+  const trimmed = newCommentBody.value.trim()
+  if (!trimmed) {
+    postError.value = t('anime.ugc.bodyEmpty')
+    return
+  }
+  if (runeLen(trimmed) > 2000) {
+    postError.value = t('anime.ugc.bodyTooLong')
+    return
+  }
+  posting.value = true
+  postError.value = ''
+  try {
+    await commentApi.createComment(anime.value.id, trimmed)
+    newCommentBody.value = ''
+    // Refetch the first page so the new comment appears at the top with
+    // canonical server data (created_at, id, etc.).
+    await fetchComments()
+  } catch (err) {
+    const e = err as ApiError
+    const status = e.response?.status
+    if (status === 429) {
+      postError.value = t('anime.ugc.rateLimitError')
+    } else if (status === 400) {
+      const body = (e.response?.data?.error || e.response?.data?.message || '').toString().toLowerCase()
+      if (body.includes('long') || body.includes('2000')) {
+        postError.value = t('anime.ugc.bodyTooLong')
+      } else {
+        postError.value = t('anime.ugc.bodyEmpty')
+      }
+    } else {
+      postError.value = t('anime.ugc.loadFailed')
+    }
+    console.error('Failed to post comment:', err)
+  } finally {
+    posting.value = false
+  }
+}
+
+const startEditComment = (c: Comment) => {
+  editingCommentId.value = c.id
+  editingBody.value = c.body
+  editError.value = ''
+}
+
+const cancelEditComment = () => {
+  editingCommentId.value = null
+  editingBody.value = ''
+  editError.value = ''
+}
+
+const saveEditComment = async () => {
+  if (!anime.value || !editingCommentId.value) return
+  const trimmed = editingBody.value.trim()
+  if (!trimmed) {
+    editError.value = t('anime.ugc.bodyEmpty')
+    return
+  }
+  if (runeLen(trimmed) > 2000) {
+    editError.value = t('anime.ugc.bodyTooLong')
+    return
+  }
+  const id = editingCommentId.value
+  editSaving.value = true
+  editError.value = ''
+  try {
+    const resp = await commentApi.updateComment(anime.value.id, id, trimmed)
+    const updated: Comment = resp.data?.data || resp.data
+    const idx = comments.value.findIndex((c) => c.id === id)
+    if (idx !== -1 && updated && updated.id) {
+      comments.value.splice(idx, 1, updated)
+    } else if (idx !== -1) {
+      // Server returned no body — patch the local copy with the new text.
+      comments.value[idx] = { ...comments.value[idx], body: trimmed, updated_at: new Date().toISOString() }
+    }
+    cancelEditComment()
+  } catch (err) {
+    console.error('Failed to update comment:', err)
+    editError.value = t('anime.ugc.editFailed')
+  } finally {
+    editSaving.value = false
+  }
+}
+
+const deleteCommentItem = async (c: Comment) => {
+  if (!anime.value) return
+  if (!window.confirm(t('anime.ugc.deleteCommentConfirm'))) return
+  const originalIdx = comments.value.findIndex((x) => x.id === c.id)
+  if (originalIdx === -1) return
+  const snapshot = comments.value[originalIdx]
+  // Optimistic remove.
+  comments.value.splice(originalIdx, 1)
+  deleteError.value = ''
+  try {
+    await commentApi.deleteComment(anime.value.id, c.id)
+  } catch (err) {
+    console.error('Failed to delete comment:', err)
+    // Restore the card at its original index.
+    comments.value.splice(originalIdx, 0, snapshot)
+    deleteError.value = t('anime.ugc.deleteFailed')
+    // Auto-clear after 5 seconds (mirrors the SPEC's "auto-dismiss 5s").
+    setTimeout(() => {
+      if (deleteError.value === t('anime.ugc.deleteFailed')) deleteError.value = ''
+    }, 5000)
+  }
+}
+
+// Watchers — Vue+Router URL-persistence pattern (RESEARCH.md Pattern 6).
+// Two-way: route.query.ugc → ugcTab handles deep links + back/forward;
+// ugcTab → router.replace + lazy fetch on first activation.
+watch(
+  () => route.query.ugc,
+  (v) => {
+    const val = (typeof v === 'string' ? v : 'reviews') as UgcTab
+    const normalized: UgcTab = (UGC_ALLOWED as readonly string[]).includes(val) ? val : 'reviews'
+    if (normalized !== ugcTab.value) ugcTab.value = normalized
+  }
+)
+
+watch(ugcTab, (v) => {
+  if (route.query.ugc !== v) {
+    router.replace({ query: { ...route.query, ugc: v } })
+  }
+  if (v === 'comments' && !commentsFetched.value && !commentsLoading.value) {
+    void fetchComments()
+  }
+})
+
 const setListStatus = async (status: string) => {
   if (!anime.value) return
 
@@ -1417,6 +1831,20 @@ const loadAnimeData = async (animeId: string) => {
   reviews.value = []
   myReview.value = null
   siteRating.value = null
+  // Comments — reset cache for new anime so a stale list doesn't leak across
+  // navigations. Per-anime fetch is gated on tab activation (or deep-link
+  // ugc=comments path below).
+  comments.value = []
+  commentsHasMore.value = false
+  commentsNextCursor.value = ''
+  commentsError.value = ''
+  commentsFetched.value = false
+  newCommentBody.value = ''
+  postError.value = ''
+  editingCommentId.value = null
+  editingBody.value = ''
+  editError.value = ''
+  deleteError.value = ''
   synopsisExpanded.value = false
   showStatusDropdown.value = false
   reviewForm.score = 0
@@ -1498,6 +1926,13 @@ const loadAnimeData = async (animeId: string) => {
   await fetchHiddenStatus()
   if (gen !== loadGeneration) return
   await fetchReviews()
+
+  // Deep-link path: if the URL already has ?ugc=comments on first paint,
+  // kick off the initial comments fetch (the watch(ugcTab) lazy-fetch only
+  // fires on subsequent changes, not on initial value).
+  if (ugcTab.value === 'comments' && !commentsFetched.value) {
+    void fetchComments()
+  }
 
   // Fetch related anime (non-blocking)
   fetchRelatedAnime()
