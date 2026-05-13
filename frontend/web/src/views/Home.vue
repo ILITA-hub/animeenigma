@@ -86,6 +86,22 @@
               </svg>
               {{ item.anime.score?.toFixed(1) }}
             </div>
+            <!-- Phase 9 (UX-16): per-card progress badge over the poster. Hidden
+                 when the user has no progress on this anime, or when they have
+                 completed it (the watchlist completed state covers that). -->
+            <span
+              v-if="trendingProgress.get(String(item.anime.id))
+                && !trendingProgress.get(String(item.anime.id))!.completed
+                && trendingProgress.get(String(item.anime.id))!.latest_episode > 0"
+              class="absolute bottom-2 left-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/80 text-white"
+            >
+              {{ t('card.episodeProgress', {
+                n: trendingProgress.get(String(item.anime.id))!.latest_episode,
+                total: trendingProgress.get(String(item.anime.id))!.episodes_count
+                  || trendingProgress.get(String(item.anime.id))!.episodes_aired
+                  || '?',
+              }) }}
+            </span>
           </div>
           <h3 class="text-sm font-medium text-white truncate group-hover:text-cyan-400 transition-colors">
             {{ getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp) }}
@@ -147,7 +163,9 @@
             <router-link
               v-for="anime in ongoingAnime"
               :key="anime.id"
-              :to="`/anime/${anime.id}`"
+              :to="anime.next_episode_at && anime.episodes_aired
+                ? `/anime/${anime.id}?episode=${(anime.episodes_aired || 0) + 1}`
+                : `/anime/${anime.id}`"
               class="relative flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
               @touchstart="(e) => onHomeTouchstart(e, anime)"
               @touchmove="onHomeTouchmove"
@@ -384,6 +402,7 @@ import { useHomeStore } from '@/stores/home'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useRecs, type RecItem } from '@/composables/useRecs'
+import { useAnimeProgress } from '@/composables/useAnimeProgress'
 import { emitRecClick, type PinSource } from '@/utils/recsAnalytics'
 import { SearchAutocomplete } from '@/components/ui'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
@@ -399,6 +418,8 @@ interface HomeAnime {
   poster_url?: string
   score?: number
   episodes_count?: number
+  episodes_aired?: number // Phase 9 (UX-17) — used to construct ?episode={N+1}
+  next_episode_at?: string // Phase 9 (UX-17) — gates the episode-aware URL
   year?: number
   status?: string
 }
@@ -432,6 +453,12 @@ const searchQuery = ref('')
 // recs.upNext when Phase 11 lands and the backend branches on auth state).
 const { recs: rawRecs, isLoading: trendingLoading, rowLabelKey } = useRecs()
 const trendingRecs = computed(() => rawRecs.value.slice(0, 20))
+
+// Phase 9 (UX-16): bulk per-card progress for the trending row. The
+// composable auto-skips when anonymous (no token), so this is a no-op
+// for logged-out visitors. Keyed by the visible trendingRecs anime IDs.
+const trendingIds = computed(() => trendingRecs.value.map((r) => String(r.anime.id)))
+const { progressMap: trendingProgress } = useAnimeProgress(trendingIds)
 
 const {
   announcedAnime,
