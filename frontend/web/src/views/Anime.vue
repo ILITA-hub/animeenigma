@@ -1614,11 +1614,19 @@ const postComment = async () => {
   posting.value = true
   postError.value = ''
   try {
-    await commentApi.createComment(anime.value.id, trimmed)
+    const resp = await commentApi.createComment(anime.value.id, trimmed)
+    // REVIEW.md WR-03: prepend the newly-created comment to the list
+    // instead of refetching page 1. Refetching destroys commentsNextCursor /
+    // commentsHasMore and snaps users who had paginated through several
+    // pages of comments back to the top. Prepending preserves cursor
+    // state and lets infinite scroll continue working below the newly
+    // posted card.
+    const created: Comment | undefined = resp.data?.data || resp.data
+    if (created?.id) {
+      comments.value.unshift(created)
+      commentsFetched.value = true
+    }
     newCommentBody.value = ''
-    // Refetch the first page so the new comment appears at the top with
-    // canonical server data (created_at, id, etc.).
-    await fetchComments()
   } catch (err) {
     const e = err as ApiError
     const status = e.response?.status
