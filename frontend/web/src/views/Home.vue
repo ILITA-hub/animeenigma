@@ -40,6 +40,17 @@
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl md:text-2xl font-bold text-white">{{ t(rowLabelKey) }}</h2>
       </div>
+      <!-- Phase 10 (UX-19 / verifies UA-060): per-row dominant-signal chip.
+           Computes the modal `top_contributor` across non-pinned items and
+           renders one localized reason category below the row label. Hidden
+           when the first item is pinned (the existing pin_reason line below
+           handles that case). -->
+      <p
+        v-if="reasonI18nKey && !trendingRecs[0]?.pinned"
+        class="text-xs text-cyan-400/80 mb-2"
+      >
+        {{ t(reasonI18nKey) }}
+      </p>
       <!-- Phase 13 (REC-UX-03) + UX-09 (Phase 3): pin reason rendered above
            the row when the first item is pinned. Prefer the i18n key path
            (pin_reason_key + pin_reason_data) so the line localizes; fall back
@@ -459,6 +470,26 @@ const trendingRecs = computed(() => rawRecs.value.slice(0, 20))
 // for logged-out visitors. Keyed by the visible trendingRecs anime IDs.
 const trendingIds = computed(() => trendingRecs.value.map((r) => String(r.anime.id)))
 const { progressMap: trendingProgress } = useAnimeProgress(trendingIds)
+
+// Phase 10 (UX-19 / verifies UA-060): compute the dominant `top_contributor`
+// signal across non-pinned trending items. Renders one localized reason chip
+// per row. Pinned items are excluded (they have a dedicated pin_reason line).
+// `s6_pin` would otherwise win in pinned rows; the chip itself is also hidden
+// when the first item is pinned so we never double-render reason copy.
+const dominantSignalKey = computed(() => {
+  const counts = trendingRecs.value
+    .filter((r) => !r.pinned && r.top_contributor)
+    .reduce<Record<string, number>>((acc, r) => {
+      const k = r.top_contributor!
+      acc[k] = (acc[k] || 0) + 1
+      return acc
+    }, {})
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
+  return top ? top[0] : null
+})
+const reasonI18nKey = computed(() =>
+  dominantSignalKey.value ? `recs.reason.${dominantSignalKey.value}` : null,
+)
 
 const {
   announcedAnime,
