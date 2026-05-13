@@ -113,3 +113,93 @@ func TestEarnvids_Extract_FromGolden(t *testing.T) {
 		t.Errorf("source URL = %q; want substring 'e=' (signed-expiry param)", stream.Sources[0].URL)
 	}
 }
+
+// TestEarnvids_MultiURL_FromGolden — Plan 22-01 Task 1. Mirror of the
+// streamhg multi-URL test against the earnvids golden. hls3 host here is
+// enterpriseconsulting.sbs (different from the spec's
+// exoplanethunting.space — the committed golden was captured 2026-05-12
+// and uses a different rotation of the hls3 CDN).
+func TestEarnvids_MultiURL_FromGolden(t *testing.T) {
+	t.Parallel()
+	body, err := os.ReadFile(earnvidsGolden(t))
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	e := NewEarnvidsExtractor()
+	e.http = &http.Client{
+		Transport: &rewriteToSrv{srvURL: srv.URL},
+		Timeout:   10 * time.Second,
+	}
+	stream, err := e.Extract(
+		context.Background(),
+		"https://otakuvid.online/d/tqcjvlkmh41z",
+		http.Header{},
+	)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if stream == nil || len(stream.Sources) < 2 {
+		t.Fatalf("len(Sources) < 2; got %d sources; full=%+v", len(stream.Sources), stream)
+	}
+	if !strings.Contains(stream.Sources[0].URL, ".m3u8") {
+		t.Errorf("Sources[0].URL = %q; want substring .m3u8 (hls2 first)", stream.Sources[0].URL)
+	}
+	if stream.Sources[0].Type != "hls" {
+		t.Errorf("Sources[0].Type = %q; want hls", stream.Sources[0].Type)
+	}
+	foundHls3 := false
+	for _, s := range stream.Sources {
+		if strings.Contains(s.URL, "enterpriseconsulting.sbs") && strings.HasSuffix(s.URL, ".txt") {
+			foundHls3 = true
+			if s.Type != "hls" {
+				t.Errorf("hls3 Source Type = %q; want hls", s.Type)
+			}
+			break
+		}
+	}
+	if !foundHls3 {
+		t.Errorf("no Source contains enterpriseconsulting.sbs *.txt URL; sources=%+v", stream.Sources)
+	}
+	if stream.Headers["Referer"] != "https://otakuvid.online/" {
+		t.Errorf("Referer header = %q; want https://otakuvid.online/", stream.Headers["Referer"])
+	}
+}
+
+// TestEarnvids_MultiURL_Order — hls2 (.m3u8) precedes hls3 (.txt) in Sources.
+func TestEarnvids_MultiURL_Order(t *testing.T) {
+	t.Parallel()
+	body, err := os.ReadFile(earnvidsGolden(t))
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	e := NewEarnvidsExtractor()
+	e.http = &http.Client{
+		Transport: &rewriteToSrv{srvURL: srv.URL},
+		Timeout:   10 * time.Second,
+	}
+	stream, err := e.Extract(context.Background(), "https://otakuvid.online/d/tqcjvlkmh41z", http.Header{})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if len(stream.Sources) < 2 {
+		t.Fatalf("len(Sources) = %d; want >= 2", len(stream.Sources))
+	}
+	if !strings.Contains(stream.Sources[0].URL, ".m3u8") {
+		t.Errorf("Sources[0].URL = %q; want hls2 (.m3u8) first", stream.Sources[0].URL)
+	}
+	if !strings.Contains(stream.Sources[1].URL, ".txt") && !strings.Contains(stream.Sources[1].URL, "enterpriseconsulting.sbs") {
+		t.Errorf("Sources[1].URL = %q; want hls3 (.txt or enterpriseconsulting.sbs) second", stream.Sources[1].URL)
+	}
+}

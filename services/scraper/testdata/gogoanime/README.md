@@ -15,8 +15,8 @@ response. These goldens drive offline tests for the Gogoanime provider
 | `category_one_piece_dub.html` | `https://anitaku.to/category/one-piece-dub` | Single-anime detail page → episode list scrape (dub variant: `/one-piece-dub-episode-N`) — verifies sub/dub merge behaviour | 2026-05-12 |
 | `one_piece_episode_1.html` | `https://anitaku.to/one-piece-episode-1` | Episode page with `<ul class="anime_muti_link">` → `<li><a data-video="...">` server-list parse | 2026-05-12 |
 | `vibeplayer_embed.html` | the HD-1 `data-video` URL extracted from `one_piece_episode_1.html` (Referer: `https://anitaku.to/`) | `const src = "https://...m3u8"` regex extraction | 2026-05-12 |
-| `streamhg_packed.html` | the StreamHG `data-video` URL extracted from `one_piece_episode_1.html` (Referer: `https://otakuhg.site/`) | `eval(function(p,a,c,k,e,d))` Dean-Edwards packer body with `hls2` payload + `&e=<ttl>&s=<unix>&t=<token>` | 2026-05-12 |
-| `earnvids_packed.html` | the Earnvids `data-video` URL extracted from `one_piece_episode_1.html` (Referer: `https://otakuvid.online/`) | Same packer shape as StreamHG, different host allowlist (`dramiyos-cdn.com` vs `premilkyway.com`) | 2026-05-12 |
+| `streamhg_packed.html` | the StreamHG `data-video` URL extracted from `one_piece_episode_1.html` (Referer: `https://otakuhg.site/`) | `eval(function(p,a,c,k,e,d))` Dean-Edwards packer body with `hls2` payload + `&e=<ttl>&s=<unix>&t=<token>`. Unpacked dictionary ALSO contains `hls3` URL at `professionalimage.cyou/.../master.txt` (Plan 22-01 multi-URL extraction). | 2026-05-12 |
+| `earnvids_packed.html` | the Earnvids `data-video` URL extracted from `one_piece_episode_1.html` (Referer: `https://otakuvid.online/`) | Same packer shape as StreamHG, different host allowlist (`dramiyos-cdn.com` vs `premilkyway.com`). Unpacked dictionary ALSO contains `hls3` URL at `enterpriseconsulting.sbs/.../master.txt` (Plan 22-01 multi-URL extraction). | 2026-05-12 |
 | `malsync_no_gogo.json` | `https://api.malsync.moe/mal/anime/21` (One Piece) | Negative-cache exemplar — response's `Sites` map MUST NOT contain a `Gogoanime` or `Anitaku` key. Verifies that the gogoanime provider's malsync path will return `("", false, nil)` for every MAL ID until malsync.moe ships a Gogoanime entry. | 2026-05-12 |
 
 Rationale for the chosen anime: **One Piece** and **Attack on Titan** are
@@ -105,3 +105,23 @@ enforcement boundary.
 Phase 18 STRIDE register (T-18-01): Information Disclosure via captured
 HTML — mitigated by `--cookie-jar /dev/null --no-keepalive` curl flags +
 post-capture sed strip + CI grep gate.
+
+## Plan 22-01 multi-URL notes (2026-05-13)
+
+The existing `streamhg_packed.html` and `earnvids_packed.html` goldens
+(captured 2026-05-12) ALREADY contain both `hls2` and `hls3` keys inside
+their Dean-Edwards packer body. Decoding the packer via `goja` yields the
+following URL dictionary entries:
+
+- streamhg: `"hls2":"https://....premilkyway.com/hls2/.../master.m3u8?e=<ttl>&..."` + `"hls3":"https://....professionalimage.cyou/.../hls3/.../master.txt"`
+- earnvids: `"hls2":"https://....dramiyos-cdn.com/hls2/.../master.m3u8?e=<ttl>&..."` + `"hls3":"https://....enterpriseconsulting.sbs/.../hls3/.../master.txt"`
+
+Plan 22-01 does NOT modify the captured HTML — the multi-URL extraction
+tests assert that both URLs come out of the unpacked body via
+`extractAllPlayableURLs` in `packed_common.go`. If a future re-capture
+loses one of the keys, the Plan 22-01 unit tests fail loudly. The
+`hls3` host names differ from those in
+`docs/plans/2026-05-13-scraper-self-healing-spec.md` (which references
+`managementadvisory.sbs` / `exoplanethunting.space`) because the spec was
+written against a different mid-2026 capture and these are the hosts in
+the committed goldens.

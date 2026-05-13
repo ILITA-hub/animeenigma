@@ -8,6 +8,7 @@ package embeds
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -68,6 +69,115 @@ func TestPackedExtractor_Matches_RejectsSubdomainImposters(t *testing.T) {
 				t.Errorf("Matches(%q) = %v; want %v", c.url, got, c.want)
 			}
 		})
+	}
+}
+
+// TestExtractAllPlayableURLs_MultiURL — Plan 22-01 Task 1 RED.
+// Asserts the helper extracts BOTH hls2 (signed m3u8) and hls3 (unsigned txt)
+// URLs from a synthetic unpacked dictionary, ordered hls2-first.
+func TestExtractAllPlayableURLs_MultiURL(t *testing.T) {
+	t.Parallel()
+	unpacked := `{"hls2":"https://x.premilkyway.com/a/master.m3u8?e=123","hls3":"https://managementadvisory.sbs/u/hls3/m/master.txt"}`
+	got := extractAllPlayableURLs(unpacked)
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d; want 2; got=%#v", len(got), got)
+	}
+	if !strings.HasSuffix(strings.Split(got[0].URL, "?")[0], ".m3u8") {
+		t.Errorf("got[0].URL = %q; want suffix .m3u8 (before query)", got[0].URL)
+	}
+	if !strings.HasSuffix(got[1].URL, ".txt") {
+		t.Errorf("got[1].URL = %q; want suffix .txt", got[1].URL)
+	}
+	for i, s := range got {
+		if s.Type != "hls" {
+			t.Errorf("got[%d].Type = %q; want hls", i, s.Type)
+		}
+	}
+}
+
+// TestExtractAllPlayableURLs_Hls2Only — only hls2 present → length 1.
+func TestExtractAllPlayableURLs_Hls2Only(t *testing.T) {
+	t.Parallel()
+	unpacked := `{"hls2":"https://x.premilkyway.com/a/master.m3u8?e=123"}`
+	got := extractAllPlayableURLs(unpacked)
+	if len(got) != 1 {
+		t.Fatalf("len(got) = %d; want 1; got=%#v", len(got), got)
+	}
+	if !strings.HasSuffix(strings.Split(got[0].URL, "?")[0], ".m3u8") {
+		t.Errorf("got[0].URL = %q; want suffix .m3u8 (before query)", got[0].URL)
+	}
+}
+
+// TestExtractAllPlayableURLs_Empty — no URLs → nil.
+func TestExtractAllPlayableURLs_Empty(t *testing.T) {
+	t.Parallel()
+	if got := extractAllPlayableURLs(`{"foo":"bar"}`); got != nil {
+		t.Errorf("got = %#v; want nil", got)
+	}
+}
+
+// TestExtractAllPlayableURLs_Dedupe — duplicate URLs collapse to one entry.
+func TestExtractAllPlayableURLs_Dedupe(t *testing.T) {
+	t.Parallel()
+	unpacked := `{"hls2":"https://x.premilkyway.com/master.m3u8?e=1","hls3":"https://x.premilkyway.com/master.m3u8?e=1"}`
+	got := extractAllPlayableURLs(unpacked)
+	if len(got) != 1 {
+		t.Fatalf("len(got) = %d; want 1 (dedup); got=%#v", len(got), got)
+	}
+}
+
+// TestExtractAllPlayableURLs_KeyRotation — packed JS rotates the literal
+// "hls2"/"hls3" keys to "streamA"/"streamB"; the fallback regex still
+// extracts the playable URL.
+func TestExtractAllPlayableURLs_KeyRotation(t *testing.T) {
+	t.Parallel()
+	unpacked := `{"streamA":"https://x.premilkyway.com/master.m3u8?e=1"}`
+	got := extractAllPlayableURLs(unpacked)
+	if len(got) != 1 {
+		t.Fatalf("len(got) = %d; want 1 (fallback regex); got=%#v", len(got), got)
+	}
+	if !strings.HasSuffix(strings.Split(got[0].URL, "?")[0], ".m3u8") {
+		t.Errorf("got[0].URL = %q; want suffix .m3u8 (before query)", got[0].URL)
+	}
+}
+
+// TestExtractAllPlayableURLs_OrderingHls2First — when both keys present,
+// hls2 always precedes hls3 regardless of textual order in the input.
+func TestExtractAllPlayableURLs_OrderingHls2First(t *testing.T) {
+	t.Parallel()
+	unpacked := `{"hls3":"https://h3.example/master.txt","hls2":"https://h2.example/master.m3u8?e=1"}`
+	got := extractAllPlayableURLs(unpacked)
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d; want 2; got=%#v", len(got), got)
+	}
+	if !strings.Contains(got[0].URL, ".m3u8") {
+		t.Errorf("got[0].URL = %q; want hls2 (m3u8) first regardless of source order", got[0].URL)
+	}
+	if !strings.HasSuffix(got[1].URL, ".txt") {
+		t.Errorf("got[1].URL = %q; want hls3 (txt) second", got[1].URL)
+	}
+}
+
+// TestExtractAllPlayableURLs_FallbackCapped — hostile body stuffs 50 URLs;
+// the fallback regex pass is capped at 5 entries (T-22-02 DoS guard).
+func TestExtractAllPlayableURLs_FallbackCapped(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	b.WriteString("{")
+	for i := 0; i < 50; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(`"rotKey`)
+		b.WriteString(fmt.Sprintf("%d", i))
+		b.WriteString(`":"https://h.example/x`)
+		b.WriteString(fmt.Sprintf("%d", i))
+		b.WriteString(`.m3u8"`)
+	}
+	b.WriteString("}")
+	got := extractAllPlayableURLs(b.String())
+	if len(got) > 5 {
+		t.Errorf("len(got) = %d; want ≤ 5 (T-22-02 DoS guard cap)", len(got))
 	}
 }
 
