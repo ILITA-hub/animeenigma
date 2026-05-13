@@ -936,13 +936,40 @@ watch(() => resume.lastWatched.value, (n) => {
 // user clicks "Rewatch from ep. 1" on the finished banner; otherwise null.
 const resumeOverrideEpisode = ref<number | null>(null)
 
+// Phase 8 (CR-01) — explicit deep-link hint from the Continue-Watching row.
+// `/anime/{id}?episode=N` is the contract used by ContinueWatchingRow.vue;
+// without this read, the link silently falls back to the resume-state-machine
+// startEpisode (which usually matches, but diverges whenever the server-side
+// resume state has advanced past the row's episode_number — e.g. when the
+// user just finished E5 but is being shown an older "in-progress" E4 row).
+//
+// The query is a HINT, not a hard override: the manual "Rewatch from ep. 1"
+// button (resumeOverrideEpisode) still wins above this. The episode is
+// clamped to [1, totalEpisodes] when totalEpisodes is known; otherwise the
+// raw value is accepted (the player components defend their own bounds).
+const queryEpisode = computed<number | undefined>(() => {
+  const v = route.query.episode
+  const s = Array.isArray(v) ? v[0] : v
+  if (typeof s !== 'string' || s === '') return undefined
+  const n = parseInt(s, 10)
+  if (!Number.isFinite(n) || n <= 0) return undefined
+  const total = anime.value?.totalEpisodes ?? 0
+  if (total > 0 && n > total) return total
+  return n
+})
+
 // What episode the player should mount on. Authenticated + state machine
 // loaded → use the state machine's startEpisode. Otherwise fall back to the
 // existing lastEpisode (localStorage path) so anonymous users keep the
 // pre-Phase-4 behavior. Manual override (rewatch click) wins over both.
+// Deep-link query param wins over the state-machine resume (explicit user
+// selection), but still loses to the in-page "Rewatch" override.
 const resumeStartEpisode = computed<number | undefined>(() => {
   if (resumeOverrideEpisode.value && resumeOverrideEpisode.value > 0) {
     return resumeOverrideEpisode.value
+  }
+  if (queryEpisode.value !== undefined) {
+    return queryEpisode.value
   }
   if (resumeAuth.value && resume.loaded.value) {
     const s = resume.startEpisode.value
@@ -950,6 +977,24 @@ const resumeStartEpisode = computed<number | undefined>(() => {
   }
   return lastEpisode.value
 })
+
+// Phase 8 (CR-01) — auto-activate the player when arriving with ?episode=N.
+// The deep link's intent is "land me on episode N ready to watch", so we
+// expand the click-to-load placeholder automatically. Also re-mount when the
+// query flips between values without a full route change (e.g. user clicks
+// two different Continue-Watching cards for the same anime in succession).
+watch(
+  () => queryEpisode.value,
+  (n) => {
+    if (n !== undefined && !playerActivated.value) {
+      // Defer to onMounted's anime-load path so the player has its data.
+      // activatePlayer() is idempotent; calling it here is safe even before
+      // the anime resolves because the template gates on `v-if="anime"`.
+      activatePlayer()
+    }
+  },
+  { immediate: true },
+)
 
 // Episode number the "not yet available" / "currently airing" banners refer
 // to. Always lastWatched + 1 in those states (the state machine has already
