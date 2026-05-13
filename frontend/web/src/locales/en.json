@@ -38,7 +38,10 @@
     "announced": "Announced",
     "episodeCount": "{count} ep.",
     "continueWatching": "Continue Watching",
-    "continueWatchingEpisode": "Episode {n}"
+    "continueWatchingEpisode": "Episode {n}",
+    "thisWeek": "This Week",
+    "thisWeekToday": "Today",
+    "thisWeekTomorrow": "Tomorrow"
   },
   "recs": {
     "trending": "Trending now",

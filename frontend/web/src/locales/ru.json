@@ -38,7 +38,10 @@
     "announced": "Анонс",
     "episodeCount": "{count} эп.",
     "continueWatching": "Продолжить просмотр",
-    "continueWatchingEpisode": "Серия {n}"
+    "continueWatchingEpisode": "Серия {n}",
+    "thisWeek": "На этой неделе",
+    "thisWeekToday": "Сегодня",
+    "thisWeekTomorrow": "Завтра"
   },
   "recs": {
     "trending": "Тренды сейчас",

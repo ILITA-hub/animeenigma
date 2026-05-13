@@ -38,7 +38,10 @@
     "announced": "放送予定",
     "episodeCount": "{count}話",
     "continueWatching": "続きから見る",
-    "continueWatchingEpisode": "第{n}話"
+    "continueWatchingEpisode": "第{n}話",
+    "thisWeek": "今週",
+    "thisWeekToday": "今日",
+    "thisWeekTomorrow": "明日"
   },
   "recs": {
     "trending": "Trending now",
