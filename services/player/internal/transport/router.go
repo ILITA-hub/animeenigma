@@ -74,6 +74,13 @@ func NewRouter(
 			r.Get("/progress/{animeId}", progressHandler.GetProgress)
 			r.Post("/progress/{animeId}/dropoff", progressHandler.MarkDropOff)
 
+			// Continue-Watching row (Phase 8 / UX-15 / UA-061). One row per anime,
+			// most recent in-progress episode, ordered by last_watched_at DESC.
+			// Mounted as a leaf inside /users (not under /progress) so the
+			// gateway's existing /users/* JWT proxy catches it without a new
+			// gateway route.
+			r.Get("/continue-watching", progressHandler.ListContinueWatching)
+
 			// History routes
 			r.Get("/history", historyHandler.GetWatchHistory)
 
