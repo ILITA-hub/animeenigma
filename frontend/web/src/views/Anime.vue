@@ -353,18 +353,22 @@
               </button>
             </template>
             <template v-else-if="videoLanguage === 'en'">
-              <!-- Phase 16 — unified English tab (default for EN-language users). -->
-              <button
-                @click="onUserPickedProvider('english')"
-                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                :class="videoProvider === 'english'
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
-              >
-                {{ $t('player.tabEnglish') }}
-              </button>
-              <!-- Legacy debug tabs — only when ?legacy=1 (SCRAPER-UI-04) -->
+              <!-- Phase 16 — unified English tab (default for EN-language users).
+                   Render only when the user opens the page with ?legacy=1 so
+                   the debug HiAnime / Consumet siblings are visible — without
+                   them the "Английский" pill is a one-tab tab strip and adds
+                   no value. The source-picker dropdown inside EnglishPlayer
+                   already shows the live provider (Anitaku / AnimePahe). -->
               <template v-if="$route.query.legacy === '1'">
+                <button
+                  @click="onUserPickedProvider('english')"
+                  class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  :class="videoProvider === 'english'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                    : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+                >
+                  {{ $t('player.tabEnglish') }}
+                </button>
                 <button
                   @click="onUserPickedProvider('hianime')"
                   class="px-4 py-2 rounded-lg text-sm font-medium transition-all"

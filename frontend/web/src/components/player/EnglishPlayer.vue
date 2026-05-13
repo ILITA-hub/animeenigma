@@ -19,9 +19,13 @@
       <!-- Left: Video Player -->
       <div class="flex-1 min-w-0">
         <div ref="playerContainer" class="relative aspect-video bg-black rounded-xl overflow-hidden">
-          <!-- Loading overlay -->
+          <!-- Loading overlay — covers both server-fetch and stream-fetch
+               so the "Select episode" placeholder never flashes after the
+               user has already picked one. Without `loadingServers` here
+               the gap between click and fetchStream() shows the empty
+               placeholder for ~200-500ms. -->
           <div
-            v-if="loadingStream"
+            v-if="loadingStream || (loadingServers && selectedEpisode)"
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
@@ -58,9 +62,13 @@
             allow="autoplay; fullscreen; encrypted-media"
           />
 
-          <!-- Placeholder when no video loaded -->
+          <!-- Placeholder when no video AND no episode picked yet. Once the
+               user has selected an episode the loading overlay above takes
+               over until streamUrl is set (or fetchStream fails — in which
+               case the error banner elsewhere in the template surfaces the
+               failure, not this stale "Select an episode" copy). -->
           <div
-            v-else-if="!loadingStream"
+            v-else-if="!loadingStream && !loadingServers && !selectedEpisode"
             class="absolute inset-0 flex items-center justify-center"
           >
             <div class="text-center text-white/40">
