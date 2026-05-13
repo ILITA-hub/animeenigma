@@ -71,9 +71,9 @@ Each requirement is a phase-level outcome. UA-NNN codes are the original audit f
 
 ### Marketing-surface polish (Phase 14)
 
-- [ ] **UX-28** — Soft social proof: follower count on detail page derived from `anime_list` rows with status='watching'. Tier E #18.
-- [ ] **UX-29** — Search-scope clarity: placeholder text disambiguates ("Поиск: название или жанр"). Tier E #19.
-- [ ] **UX-30** — FAQ accordion on a public marketing surface (`/о-сервисе` or similar) with curated content. Tier E #20.
+- [x] **UX-28** — Soft social proof: follower count on detail page derived from `anime_list` rows with status='watching'. Tier E #18.
+- [x] **UX-29** — Search-scope clarity: placeholder text disambiguates ("Поиск: название или жанр"). Tier E #19.
+- [x] **UX-30** — FAQ accordion on a public marketing surface (`/о-сервисе` or similar) with curated content. Tier E #20.
 
 ### Multi-axis catalog filter (Phase 15 — Dragon)
 

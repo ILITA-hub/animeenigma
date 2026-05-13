@@ -2,38 +2,38 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: UX Reassessment Remediation
-current_phase: None (Phase 14 next)
+current_phase: None (Phase 15 next)
 current_plan: N/A
 status: completed
-last_updated: "2026-05-13T08:00:00.000Z"
+last_updated: "2026-05-13T10:30:00.000Z"
 last_activity: 2026-05-13
 progress:
   total_phases: 20
-  completed_phases: 13
-  total_plans: 29
-  completed_plans: 26
-  percent: 65
+  completed_phases: 14
+  total_plans: 30
+  completed_plans: 27
+  percent: 70
 ---
 
 # Project State
 
 ## Current Position
 
-**Status:** Phase 13 (Optimistic UI on watchlist) complete; Phase 14 next.
-**Current Phase:** None (Phase 14 next)
+**Status:** Phase 14 (Marketing-surface polish) complete; Phase 15 next.
+**Current Phase:** None (Phase 15 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 13 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Closes UX-27. Watchlist actions (status, score, remove) now feel instant via 3 new Pinia store actions (`setStatusOptimistic`, `setScoreOptimistic`, `removeEntryOptimistic`) that mutate `statusEntries` in place, call the API, and roll back on failure. New `useToast` composable + `<Toaster />` component (mounted in App.vue) surface rollback errors. Three consumers migrated: `AnimeContextMenu.vue` (Home/Browse/Search cards), `Anime.vue` (detail page status dropdown), `Profile.vue` (watchlist tab status pill + debounced 500ms score editor). 6 new i18n entries (`watchlist.errors.{updateFailed,removeFailed}` × en/ru/ja). 7 atomic commits + 1 docs commit. Zero backend changes, zero new deps.
+**Last Activity Description:** Phase 14 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Closes UX-28, UX-29, UX-30. New public endpoint `GET /api/anime/{animeId}/watchers-count` (player service: CountWatchers repo + service wrapper + handler; gateway proxy registered before /anime/* catch-all). `Anime.vue` renders a `<Badge>` near the score rail showing 👥 watchers-count via `Intl.NumberFormat` compact notation (hidden below 5 to avoid empty signals). Search placeholder clarified across en/ru/ja ("Search: title or genre"). New public route `/about` with `views/About.vue` — 8 FAQ items via native `<details>` accordion (zero-JS, keyboard-accessible, SEO-friendly). Navbar drawer carries the About link (no Footer.vue exists). 54 new i18n entries (18 keys × 3 locales). 5 atomic feature commits + 1 Rule 3 fix commit for a pre-existing Dockerfile gap (`libs/streamprobe` COPY missing in player + gateway). All redeploys healthy.
 
 ## Progress
 
-**Phases Complete:** 13 / 20
+**Phases Complete:** 14 / 20
 **Current Plan:** N/A
 
 ## Next steps
 
-1. `/gsd-spec-phase 14 --ws ui-ux-audit` — Marketing-surface polish (follower count, search hint, FAQ)
-2. `/gsd-plan-phase 14 --ws ui-ux-audit` — break Phase 14 into plans
-3. `/gsd-execute-phase 14 --ws ui-ux-audit` — ship Phase 14
+1. `/gsd-spec-phase 15 --ws ui-ux-audit` — Multi-axis catalog filter sidebar (Dragon)
+2. `/gsd-plan-phase 15 --ws ui-ux-audit` — break Phase 15 into plans
+3. `/gsd-execute-phase 15 --ws ui-ux-audit` — ship Phase 15
 4. Continue via `/gsd-autonomous --ws ui-ux-audit` for remaining queue.
 
 ## Phase queue (from ROADMAP.md)
