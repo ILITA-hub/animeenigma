@@ -686,7 +686,25 @@
       "pickerLabel": "User identifier",
       "pickerPlaceholder": "username, public_id, or UUID",
       "pickerSubmit": "Open",
-      "pickerSelf": "Use my account"
+      "pickerSelf": "Use my account",
+      "tableCaption": "ユーザーに対する推薦候補（最終スコア順）",
+      "s1Title": "トップリスト類似度",
+      "s2Title": "ジャンル親和性",
+      "s3Title": "グローバルトレンド",
+      "s4Title": "評価ブースト",
+      "s5Title": "季節の新鮮さ",
+      "picker": {
+        "listboxLabel": "ユーザー検索結果",
+        "empty": "ユーザーが見つかりません",
+        "youBadge": "あなた"
+      }
+    },
+    "errors": {
+      "notAdmin": "管理者権限が必要です",
+      "unauthorized": "サインインしてください",
+      "forbidden": "アクセス権限がありません",
+      "serverError": "サーバーエラー、再試行してください",
+      "timeout": "リクエストがタイムアウトしました"
     }
   },
   "system": {

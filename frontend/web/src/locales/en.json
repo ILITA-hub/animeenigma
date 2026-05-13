@@ -686,7 +686,25 @@
       "pickerLabel": "User identifier",
       "pickerPlaceholder": "username, public_id, or UUID",
       "pickerSubmit": "Open",
-      "pickerSelf": "Use my account"
+      "pickerSelf": "Use my account",
+      "tableCaption": "Recommendation candidates for user, ranked by final score",
+      "s1Title": "Top-list similarity",
+      "s2Title": "Genre affinity",
+      "s3Title": "Global trending",
+      "s4Title": "Rating boost",
+      "s5Title": "Seasonal freshness",
+      "picker": {
+        "listboxLabel": "User search results",
+        "empty": "No users found",
+        "youBadge": "You"
+      }
+    },
+    "errors": {
+      "notAdmin": "Admin access required",
+      "unauthorized": "Please sign in",
+      "forbidden": "You don't have permission",
+      "serverError": "Server error, try again",
+      "timeout": "Request timed out"
     }
   },
   "system": {
