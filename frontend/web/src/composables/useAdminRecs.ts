@@ -62,6 +62,34 @@ export function useAdminRecs(userId: Ref<string>) {
   const error = ref<string | null>(null)
   const lastRecomputeLatencyMs = ref<number | null>(null)
 
+  // Phase 12 / UA-096: map HTTP errors → friendly i18n keys.
+  // The view templates can `$t(error)` directly when the value is a key
+  // starting with `admin.errors.`; legacy `'403'` is preserved for
+  // backwards compat with the existing red banner in AdminRecs.vue.
+  function mapHttpError(e: unknown, fallback: string): string {
+    const errObj = e as {
+      response?: { status?: number }
+      message?: string
+      code?: string
+    }
+    const status = errObj?.response?.status
+    const code = errObj?.code
+    const msg = errObj?.message ?? ''
+    // axios timeout: code 'ECONNABORTED', or message 'timeout of 0ms exceeded'
+    if (
+      code === 'ECONNABORTED' ||
+      code === 'ETIMEDOUT' ||
+      /timeout/i.test(msg) ||
+      msg.toLowerCase().includes('aborted')
+    ) {
+      return 'admin.errors.timeout'
+    }
+    if (status === 401) return 'admin.errors.unauthorized'
+    if (status === 403) return 'admin.errors.forbidden'
+    if (status && status >= 500) return 'admin.errors.serverError'
+    return msg || fallback
+  }
+
   async function fetchRows(): Promise<void> {
     if (!userId.value) return
     isLoading.value = true
@@ -75,11 +103,12 @@ export function useAdminRecs(userId: Ref<string>) {
       computedAt.value = env.computed_at ?? ''
       signalVersions.value = env.signal_versions ?? {}
     } catch (e: unknown) {
-      const errObj = e as { response?: { status?: number }; message?: string }
-      if (errObj?.response?.status === 403) {
+      // Preserve legacy '403' for the existing red-banner template path.
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 403) {
         error.value = '403'
       } else {
-        error.value = errObj?.message ?? 'failed to load admin recs'
+        error.value = mapHttpError(e, 'failed to load admin recs')
       }
       rows.value = []
       filteredOut.value = []
@@ -98,11 +127,11 @@ export function useAdminRecs(userId: Ref<string>) {
       lastRecomputeLatencyMs.value = env?.latency_ms ?? null
       await fetchRows()
     } catch (e: unknown) {
-      const errObj = e as { response?: { status?: number }; message?: string }
-      if (errObj?.response?.status === 403) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 403) {
         error.value = '403'
       } else {
-        error.value = errObj?.message ?? 'recompute failed'
+        error.value = mapHttpError(e, 'recompute failed')
       }
     } finally {
       isRecomputing.value = false
