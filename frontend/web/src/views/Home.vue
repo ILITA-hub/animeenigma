@@ -10,7 +10,7 @@
     <!-- Search Bar -->
     <h1 class="sr-only">AnimeEnigma</h1>
     <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-      <div class="flex items-center gap-3 relative z-[60]">
+      <div class="flex items-center gap-3 relative z-40">
         <div class="flex-1">
           <SearchAutocomplete
             v-model="searchQuery"

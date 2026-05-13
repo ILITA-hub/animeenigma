@@ -8,7 +8,7 @@
         </h1>
 
         <!-- Search Input -->
-        <div class="mb-4 relative z-[60]">
+        <div class="mb-4 relative z-40">
           <SearchAutocomplete
             v-model="searchQuery"
             listbox-id="browse-search"
