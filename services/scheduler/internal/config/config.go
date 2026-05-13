@@ -37,6 +37,21 @@ type JobsConfig struct {
 	OngoingStaleHours   int
 	AnnouncedStaleHours int
 	ReleasedStaleHours  int
+
+	// Phase 23 — scraper playability canary (SCRAPER-HEAL-12 / -13).
+	// ScraperPlayabilityCanaryCron: cron expression for the daily canary
+	//   run. Default `0 3 * * *` (03:00 local time, off-peak). The canary
+	//   itself applies ±5min jitter on top of the cron tick to avoid
+	//   03:00:00 fingerprinting upstream.
+	// ScraperBaseURL: base URL of the in-cluster scraper service the canary
+	//   calls (/scraper/servers, /scraper/stream). Default matches the
+	//   docker-compose service name.
+	// CanaryReportDir: directory the canary writes per-run JSON logs into.
+	//   Must live under a mounted volume (player_reports) for persistence
+	//   across container restarts. See CONTEXT.md D5.
+	ScraperPlayabilityCanaryCron string
+	ScraperBaseURL               string
+	CanaryReportDir              string
 }
 
 func Load() (*Config, error) {
@@ -71,6 +86,10 @@ func Load() (*Config, error) {
 			OngoingStaleHours:   getEnvInt("ONGOING_STALE_HOURS", 12),
 			AnnouncedStaleHours: getEnvInt("ANNOUNCED_STALE_HOURS", 72),
 			ReleasedStaleHours:  getEnvInt("RELEASED_STALE_HOURS", 168),
+			// Phase 23 — canary.
+			ScraperPlayabilityCanaryCron: getEnv("SCRAPER_PLAYABILITY_CANARY_CRON", "0 3 * * *"),
+			ScraperBaseURL:               getEnv("SCRAPER_BASE_URL", "http://scraper:8088"),
+			CanaryReportDir:              getEnv("CANARY_REPORT_DIR", "/data/reports/canary-runs"),
 		},
 	}, nil
 }
