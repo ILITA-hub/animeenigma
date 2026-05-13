@@ -260,6 +260,13 @@ var HLSProxyAllowedDomains = []string{
 	"premilkyway.com",   // StreamHG primary CDN (rotating subdomain on this eTLD+1)
 	"dramiyos-cdn.com",  // Earnvids primary CDN (rotating subdomain on this eTLD+1)
 	"cdn.cimovix.store", // subtitle .vtt host (shared by vibeplayer + streamhg + earnvids)
+	// Phase 22 — Provider Robustness (SCRAPER-HEAL-10).
+	// hls3 CDN hosts captured in PoC 2026-05-13 (docs/plans/2026-05-13-scraper-self-healing-spec.md §2,§3.2).
+	// Used as the secondary URL family when hls2's signed m3u8 expires / 403s / geo-blocks.
+	// Allowed by Plan 22-01's multi-URL extractor; without this allowlist, the streaming
+	// service rejects the URL with 403 and the multi-URL fallback is dead code.
+	"managementadvisory.sbs", // StreamHG hls3 CDN (rotating subdomain on eTLD+1)
+	"exoplanethunting.space", // Earnvids hls3 CDN (rotating subdomain on eTLD+1)
 }
 
 // UpstreamError represents an error from the upstream CDN.
