@@ -528,10 +528,24 @@ interface ScraperSubtitle {
   default: boolean
 }
 
-interface ScraperStream {
+// Backend wire shape — mirrors services/scraper/internal/domain/provider.go:
+// type Stream { Sources []Source; Tracks []Track; ... }. The previous flat
+// {url, type, subtitles} shape never matched the backend; selectEpisode
+// always assigned `undefined` to streamUrl and the canvas rendered nothing.
+interface ScraperSource {
   url: string
-  type: string // hls, mp4, iframe
-  subtitles?: ScraperSubtitle[]
+  type: string // "hls" / "mp4"
+  quality?: string
+}
+interface ScraperTrack {
+  file: string
+  label?: string
+  kind: string // "captions" / "subtitles"
+  default?: boolean
+}
+interface ScraperStream {
+  sources: ScraperSource[]
+  tracks?: ScraperTrack[]
   headers?: Record<string, string>
   intro?: { start: number; end: number }
   outro?: { start: number; end: number }
@@ -1084,27 +1098,36 @@ const fetchStream = async () => {
     )
     updateTriedChain(response.data)
     // Scraper handler envelope: { success, data: { stream: {...}, meta: { tried } } }
-    const env = response.data as { data?: { stream?: ScraperStream } | ScraperStream } | undefined
-    let data: ScraperStream
-    if (env && (env as { data?: { stream?: ScraperStream } }).data && (env as { data: { stream?: ScraperStream } }).data.stream) {
-      data = (env as { data: { stream: ScraperStream } }).data.stream
-    } else if (env && (env as { data?: ScraperStream }).data && (env as { data: ScraperStream }).data.url) {
-      // Tolerate non-nested data.url envelope (legacy / fallthrough).
-      data = (env as { data: ScraperStream }).data
-    } else {
-      throw new Error('scraper stream response missing data.stream')
+    const env = response.data as { data?: { stream?: ScraperStream } } | undefined
+    const data: ScraperStream | undefined = env?.data?.stream
+    if (!data || !Array.isArray(data.sources) || data.sources.length === 0) {
+      throw new Error('scraper stream response missing data.stream.sources')
     }
 
-    streamUrl.value = data.url
-    streamType.value = data.type as 'hls' | 'mp4' | 'iframe'
-    subtitles.value = data.subtitles || []
+    // Pick the highest-quality source; HLS master playlists carry their own
+    // variant ladder so prefer hls over mp4 when both are present.
+    const preferred =
+      data.sources.find(s => s.type === 'hls') ?? data.sources[0]
+
+    streamUrl.value = preferred.url
+    streamType.value = preferred.type as 'hls' | 'mp4' | 'iframe'
+
+    // Backend Tracks → frontend Subtitles. The Track DTO is captions/subtitles
+    // shape ({file, label, kind, default}); map to ScraperSubtitle ({url, lang,
+    // label, default}) so SubtitleOverlay + the language picker keep working.
+    subtitles.value = (data.tracks ?? []).map(tr => ({
+      url: tr.file,
+      lang: (tr.label || '').toLowerCase().slice(0, 3) || 'eng',
+      label: tr.label || 'Default',
+      default: !!tr.default,
+    }))
 
     const headers = data.headers || {}
     const referer = headers['Referer'] || headers['referer'] || ''
     streamReferer.value = referer
 
     // Initialize player if HLS
-    if (data.type === 'hls' && data.url) {
+    if (preferred.type === 'hls' && preferred.url) {
       // Wait for Vue to render the video element
       await nextTick()
 
@@ -1121,7 +1144,7 @@ const fetchStream = async () => {
         return
       }
 
-      initPlayer(data.url, referer)
+      initPlayer(preferred.url, referer)
     }
   } catch (err: unknown) {
     // Show detailed error from backend
