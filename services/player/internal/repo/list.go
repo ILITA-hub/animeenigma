@@ -136,6 +136,20 @@ func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID 
 	return result.RowsAffected > 0, result.Error
 }
 
+// CountWatchers returns the number of anime_list rows where the given anime is
+// being actively watched (status='watching'). Used by Phase 14 / UX-28 to
+// render a soft social-proof badge on the anime detail view. Soft-deleted
+// rows are excluded automatically by GORM's gorm.DeletedAt handling on the
+// model.
+func (r *ListRepository) CountWatchers(ctx context.Context, animeID string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.AnimeListEntry{}).
+		Where("anime_id = ? AND status = ?", animeID, "watching").
+		Count(&count).Error
+	return count, err
+}
+
 func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
 	var entries []*domain.AnimeListEntry
 	err := r.db.WithContext(ctx).

@@ -410,6 +410,13 @@ func (s *ListService) GetPublicWatchlistStats(ctx context.Context, userID string
 	return s.listRepo.GetUserWatchlistStats(ctx, userID, statuses)
 }
 
+// GetWatchersCount returns how many users have the given anime in their list
+// with status='watching'. Powers the Phase 14 / UX-28 social-proof badge on
+// the anime detail view. Public endpoint, no auth required.
+func (s *ListService) GetWatchersCount(ctx context.Context, animeID string) (int64, error) {
+	return s.listRepo.CountWatchers(ctx, animeID)
+}
+
 // GetPublicWatchlist returns user's public watchlist filtered by allowed statuses
 func (s *ListService) GetPublicWatchlist(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
 	if len(statuses) == 0 {

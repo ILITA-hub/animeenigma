@@ -185,6 +185,11 @@ func NewRouter(
 			// MUST live outside the AuthMiddleware-protected group below so
 			// anonymous readers can fetch the comments feed.
 			r.Get("/comments", commentHandler.ListComments)
+			// Phase 14 (ui-ux-audit / UX-28) — soft social-proof follower
+			// count. Public, no auth: returns { count: int } of users with
+			// status='watching' for this anime. Hidden in the UI when
+			// count < 5 to avoid empty signals on niche titles.
+			r.Get("/watchers-count", listHandler.GetWatchersCount)
 
 			// Protected routes
 			r.Group(func(r chi.Router) {

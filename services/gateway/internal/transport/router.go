@@ -155,6 +155,12 @@ func NewRouterWithCleanup(
 		r.Delete("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
 		r.Get("/anime/{animeId}/rating", proxyHandler.ProxyToPlayer)
 
+		// Phase 14 (ui-ux-audit / UX-28) — soft social-proof follower count
+		// proxied to player. Public, no JWT required. Must be registered BEFORE
+		// the generic /anime/* → catalog catch-all below; otherwise chi would
+		// route this path to the catalog service.
+		r.Get("/anime/{animeId}/watchers-count", proxyHandler.ProxyToPlayer)
+
 		// Player service routes - comments (must be before /anime/* catch-all)
 		// GET is public; mutations (POST/PATCH/DELETE) gate at the gateway
 		// for defense-in-depth — REVIEW.md CR-04. The player still runs

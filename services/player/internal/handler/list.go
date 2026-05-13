@@ -314,6 +314,25 @@ func (h *ListHandler) GetPublicWatchlistStats(w http.ResponseWriter, r *http.Req
 	httputil.OK(w, stats)
 }
 
+// GetWatchersCount returns a soft social-proof number — how many users have
+// this anime in their list with status='watching'. Public endpoint, no auth
+// required. Returns { count: int }. Phase 14 / UX-28.
+func (h *ListHandler) GetWatchersCount(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	count, err := h.listService.GetWatchersCount(r.Context(), animeID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]int64{"count": count})
+}
+
 func parsePaginationParams(r *http.Request) *domain.PaginationParams {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
