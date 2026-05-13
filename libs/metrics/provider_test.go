@@ -113,6 +113,74 @@ func TestParserAdDecoyTotal_IncrementsCorrectly(t *testing.T) {
 	}
 }
 
+// TestPlayabilityCanaryRunsTotal_IncrementsCorrectly verifies the SCRAPER-HEAL-13
+// counter: name `playability_canary_runs_total`, labels `{provider, server,
+// result, reason, anime_slot}`, and that .Inc() bumps the value by exactly 1.0.
+func TestPlayabilityCanaryRunsTotal_IncrementsCorrectly(t *testing.T) {
+	PlayabilityCanaryRunsTotal.Reset()
+	before := testutil.ToFloat64(PlayabilityCanaryRunsTotal.WithLabelValues("gogoanime", "streamhg", "pass", "playable", "anchor_frieren"))
+	PlayabilityCanaryRunsTotal.WithLabelValues("gogoanime", "streamhg", "pass", "playable", "anchor_frieren").Inc()
+	after := testutil.ToFloat64(PlayabilityCanaryRunsTotal.WithLabelValues("gogoanime", "streamhg", "pass", "playable", "anchor_frieren"))
+	if d := after - before; d != 1.0 {
+		t.Fatalf("PlayabilityCanaryRunsTotal delta = %v; want 1.0", d)
+	}
+
+	name, labels := descMeta(t, PlayabilityCanaryRunsTotal)
+	if name != "playability_canary_runs_total" {
+		t.Errorf("metric name = %q; want %q", name, "playability_canary_runs_total")
+	}
+	wantLabels := map[string]bool{"provider": true, "server": true, "result": true, "reason": true, "anime_slot": true}
+	if !labelSetEqual(labels, wantLabels) {
+		t.Errorf("labels = %v; want %v", labels, wantLabels)
+	}
+}
+
+// TestPlayabilityCanaryRunsTotal_AllReasonsAccepted exercises every streamprobe
+// Reason string value as a `reason` label value — guarantees the canary can
+// emit every possible Probe outcome without panicking. Same string-identity
+// dance as TestParserUnplayableTotal_AllReasonsAccepted (no streamprobe import
+// to keep the metrics package dependency-free).
+func TestPlayabilityCanaryRunsTotal_AllReasonsAccepted(t *testing.T) {
+	PlayabilityCanaryRunsTotal.Reset()
+	reasons := []string{
+		"playable",
+		"ad_decoy",
+		"zero_match",
+		"status_403",
+		"signed_url_expired",
+		"cdn_unreachable",
+		"empty_response",
+	}
+	for _, reason := range reasons {
+		reason := reason
+		t.Run(reason, func(t *testing.T) {
+			c := PlayabilityCanaryRunsTotal.WithLabelValues("gogoanime", "streamhg", "pass", reason, "anchor_frieren")
+			if c == nil {
+				t.Fatalf("WithLabelValues(reason=%q) returned nil", reason)
+			}
+			c.Inc()
+		})
+	}
+}
+
+// TestAnimeSlots_ExactlyFive verifies the canonical anime_slot literal values
+// used as the canary metric's `anime_slot` label domain. Single source of
+// truth — Grafana panels, the canary job, and the alert rules in Plan 23-03
+// all key off these strings (per CONTEXT.md D4: literal strings, not numeric
+// indexes).
+func TestAnimeSlots_ExactlyFive(t *testing.T) {
+	slots := AnimeSlots()
+	if len(slots) != 5 {
+		t.Fatalf("AnimeSlots length = %d; want 5", len(slots))
+	}
+	want := []string{"anchor_frieren", "anchor_one_piece", "recent_1", "recent_2", "recent_3"}
+	for i, w := range want {
+		if slots[i] != w {
+			t.Errorf("AnimeSlots()[%d] = %q; want %q", i, slots[i], w)
+		}
+	}
+}
+
 // TestParserUnplayableTotal_AllReasonsAccepted exercises every value of the
 // libs/streamprobe.ReasonEnum as a `reason` label value. The metrics package
 // does NOT import libs/streamprobe (to keep the package dependency-free and
