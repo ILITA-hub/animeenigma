@@ -267,6 +267,13 @@ var HLSProxyAllowedDomains = []string{
 	// service rejects the URL with 403 and the multi-URL fallback is dead code.
 	"managementadvisory.sbs", // StreamHG hls3 CDN (rotating subdomain on eTLD+1)
 	"exoplanethunting.space", // Earnvids hls3 CDN (rotating subdomain on eTLD+1)
+	// v3.1 milestone audit hotfix 2026-05-13 (closes BLK-INT-01).
+	// Live observation: hls3 CDN families have rotated post-Phase-22 to these eTLD+1s.
+	// Adding them keeps the cold-path winners in the allowlist while v3.1's Phase 23
+	// canary + maintenance bot (Pattern 7 button_fix) handle future rotations on-demand.
+	"cdn-centaurus.com",          // observed StreamHG/Earnvids primary CDN (post-Phase-22 rotation)
+	"meadowlarkdesignstudio.cfd", // observed hls3 CDN (post-Phase-22 rotation)
+	"goldenridgeproduction.shop", // observed hls3 CDN (DEF-22-01)
 }
 
 // UpstreamError represents an error from the upstream CDN.
