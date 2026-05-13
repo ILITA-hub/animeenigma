@@ -2,39 +2,39 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: UX Reassessment Remediation
-current_phase: None (Phase 15 next)
+current_phase: None (Phase 20 next)
 current_plan: N/A
 status: completed
-last_updated: "2026-05-13T10:30:00.000Z"
+last_updated: "2026-05-13T07:35:00.000Z"
 last_activity: 2026-05-13
 progress:
   total_phases: 20
-  completed_phases: 14
-  total_plans: 30
-  completed_plans: 27
-  percent: 70
+  completed_phases: 19
+  total_plans: 35
+  completed_plans: 34
+  percent: 95
 ---
 
 # Project State
 
 ## Current Position
 
-**Status:** Phase 14 (Marketing-surface polish) complete; Phase 15 next.
-**Current Phase:** None (Phase 15 next)
+**Status:** Phase 19 (Grafana dashboard rebuild — Kraken) complete; Phase 20 next.
+**Current Phase:** None (Phase 20 next)
 **Last Activity:** 2026-05-13
-**Last Activity Description:** Phase 14 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Closes UX-28, UX-29, UX-30. New public endpoint `GET /api/anime/{animeId}/watchers-count` (player service: CountWatchers repo + service wrapper + handler; gateway proxy registered before /anime/* catch-all). `Anime.vue` renders a `<Badge>` near the score rail showing 👥 watchers-count via `Intl.NumberFormat` compact notation (hidden below 5 to avoid empty signals). Search placeholder clarified across en/ru/ja ("Search: title or genre"). New public route `/about` with `views/About.vue` — 8 FAQ items via native `<details>` accordion (zero-JS, keyboard-accessible, SEO-friendly). Navbar drawer carries the About link (no Footer.vue exists). 54 new i18n entries (18 keys × 3 locales). 5 atomic feature commits + 1 Rule 3 fix commit for a pre-existing Dockerfile gap (`libs/streamprobe` COPY missing in player + gateway). All redeploys healthy.
+**Last Activity Description:** Phase 19 shipped under `/gsd-execute-phase --ws ui-ux-audit`. Closes UA-116, UA-117, UA-118, UA-119, UA-120. Hygiene-only refactor of 9 Grafana dashboards: standardized `Area / Scope` titles across Services / Player / Recs / Scraper groups (UA-116); stripped numbered prefix `"6. "` from `animeenigma-services` row + 4 redundant time-window suffixes (`(Last 7 Days)`, `(Phase 1 Baseline)`) from `content-preferences` / `preference-resolution` rows (UA-117 / UA-118); panel-type appropriateness audit completed with 0 conversions (all ambiguous candidates left as-is per plan rule, UA-119); time-range + refresh defaults aligned per dashboard purpose — live-ops 1h/30s, service-overview 6h/1m, recs 24h/5m, aggregates 7d/5m (UA-120). `player-health` gained a `refresh` field for the first time (30s). 3 atomic commits (c745568, 7f16373, 661ecdd); Pass 3 produced no commit (0 conversions documented in SUMMARY). Grafana restarted clean, 8/9 dashboards visible via API with new titles (image-proxy is k8s-only). No panels added, no queries changed.
 
 ## Progress
 
-**Phases Complete:** 14 / 20
+**Phases Complete:** 19 / 20
 **Current Plan:** N/A
 
 ## Next steps
 
-1. `/gsd-spec-phase 15 --ws ui-ux-audit` — Multi-axis catalog filter sidebar (Dragon)
-2. `/gsd-plan-phase 15 --ws ui-ux-audit` — break Phase 15 into plans
-3. `/gsd-execute-phase 15 --ws ui-ux-audit` — ship Phase 15
-4. Continue via `/gsd-autonomous --ws ui-ux-audit` for remaining queue.
+1. `/gsd-spec-phase 20 --ws ui-ux-audit` — Tier D polish batch (final phase)
+2. `/gsd-plan-phase 20 --ws ui-ux-audit` — break Phase 20 into plans
+3. `/gsd-execute-phase 20 --ws ui-ux-audit` — ship Phase 20
+4. Workstream completion gate after Phase 20.
 
 ## Phase queue (from ROADMAP.md)
 
