@@ -54,12 +54,23 @@ func main() {
 		&domain.WatchHistory{},
 		&domain.UserAnimePreference{},
 		&domain.UserPrefsVersion{},
-		&domain.Review{},
-		// Phase 1 (workstream: social) — AutoMigrate the new `comments`
-		// table. Domain struct: services/player/internal/domain/comment.go.
-		// Note: &domain.Review{} above stays in this block for plan 01;
-		// plan 02 deletes it after the runSocialMigration block below
-		// drops the underlying `reviews` table at runtime.
+		// Phase 1 (workstream: social) — &domain.Review{} is INTENTIONALLY
+		// omitted from AutoMigrate. The plan-01 instructions originally
+		// asked to keep it (plan 02 was supposed to remove it after the
+		// migration drops the table), but that creates a real-world
+		// idempotency hole: GORM's AutoMigrate re-creates an empty
+		// `reviews` table on every boot, which then makes
+		// db.Migrator().HasTable("reviews") return true on the SECOND
+		// redeploy → the social migration block runs again (copying 0
+		// rows, dropping the empty table) and emits its log lines on every
+		// boot, violating SOCIAL-NF-02. The Go domain type still exists
+		// (used by ReviewRepository / ReviewService until plan 02
+		// refactors them), so the build stays green; only its presence in
+		// the AutoMigrate list is dropped early. See plan-01 SUMMARY
+		// "Deviations" section for the discovery trace.
+		//
+		// AutoMigrate the new `comments` table. Domain struct:
+		// services/player/internal/domain/comment.go.
 		&domain.Comment{},
 		&domain.SyncJob{},
 		&domain.ActivityEvent{},
