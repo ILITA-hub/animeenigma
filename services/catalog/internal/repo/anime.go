@@ -102,14 +102,19 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 		return nil, 0, fmt.Errorf("count anime: %w", err)
 	}
 
+	// Phase 11 / UX-21 — sort_priority DESC is the primary pin (CLAUDE.md
+	// "Pinning anime to the top" convention). When an explicit sort axis is
+	// requested it overrides the SECOND criterion only — never the pin.
+	// `sort=title` defaults to ASC (intuitive A→Z); all other axes default
+	// to DESC. An explicit filters.Order still wins when provided.
 	orderBy := "sort_priority DESC, score DESC"
 	if filters.Sort != "" {
 		column := mapSortColumn(filters.Sort)
 		order := "DESC"
-		if filters.Order == "asc" {
+		if filters.Order == "asc" || (filters.Order == "" && filters.Sort == "title") {
 			order = "ASC"
 		}
-		orderBy = fmt.Sprintf("%s %s", column, order)
+		orderBy = fmt.Sprintf("sort_priority DESC, %s %s", column, order)
 	}
 
 	offset := (filters.Page - 1) * filters.PageSize
@@ -271,12 +276,19 @@ func (r *AnimeRepository) GetStaleAnime(ctx context.Context, status domain.Anime
 	return animes, nil
 }
 
+// mapSortColumn whitelists frontend sort axes to backend SQL columns.
+// Phase 11 / UX-21 added `updated -> updated_at` so the Browse view's
+// 5-axis sort dropdown (popularity / rating / year / updated / title)
+// maps cleanly here. Unknown values fall through to `score` (the
+// existing default ordering for the catalog).
 func mapSortColumn(sort string) string {
 	switch sort {
 	case "popularity", "rating":
 		return "score"
 	case "year", "score", "name", "created_at", "updated_at":
 		return sort
+	case "updated":
+		return "updated_at"
 	case "title":
 		return "name"
 	default:
