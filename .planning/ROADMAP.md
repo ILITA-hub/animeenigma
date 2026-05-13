@@ -206,7 +206,7 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
   6. `.claude/maintenance-prompt.md` Patterns 6/7 + Scraper Playability Regression section verified still present and parseable (SCRAPER-HEAL-16 — pre-shipped 2026-05-13).
 **Plans**: 3 plans across 3 waves (serialized because all three plans append to docker/docker-compose.yml — different service blocks but same file. Wave 1: 23-01 canary cron + metric; Wave 2: 23-02 Grafana dashboard + provisioning; Wave 3: 23-03 alert rules + synthetic Pattern 6/7 webhook verification + maintenance-prompt symbol stability + /animeenigma-after-update)
 - [x] 23-01-canary-cron-PLAN.md — Wave 1: services/scheduler/internal/jobs/scraper_playability_canary.go (cron 0 3 * * * + ±5min jitter, anchors Frieren + One Piece + 3 dynamic from watch_history with anime_list fallback) + playability_canary_runs_total{provider, server, result, reason, anime_slot} counter in libs/metrics + per-run JSON log to player_reports volume + scheduler boot wiring + manual-trigger handler (SCRAPER-HEAL-12, SCRAPER-HEAL-13)
-- [ ] 23-02-grafana-dashboard-PLAN.md — Wave 1: infra/grafana/dashboards/scraper-provider-health.json (4 panels: pass/fail per provider/server 24h, reason breakdown, last canary run, top failing tuples) + provisioning wiring + docker-compose mount (SCRAPER-HEAL-14)
+- [x] 23-02-grafana-dashboard-PLAN.md — Wave 1: infra/grafana/dashboards/scraper-provider-health.json (4 panels: pass/fail per provider/server 24h, reason breakdown, last canary run, top failing tuples) + provisioning wiring + docker-compose mount (SCRAPER-HEAL-14)
 - [ ] 23-03-alerts-and-maintenance-verify-PLAN.md — Wave 2: infra/grafana/alerts/scraper.yaml (ScraperPlayabilityRegression warning, ScraperAdDecoySurge warning, ScraperUnplayableSpike critical — all with provider/server/reason labels routing to existing /api/grafana-webhook) + synthetic Pattern 6/7 webhook tests + maintenance-prompt symbol-stability tests (cacheStream + computeStreamTTL + all 7 Reason values) + /animeenigma-after-update final step (SCRAPER-HEAL-15, SCRAPER-HEAL-16)
 
 ### Next Milestone (TBD)
@@ -227,3 +227,4 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 | 18 | v3.0 | 4/4 | Complete    | 2026-05-12 |
 | 19 | v3.0 | 1/1 | Complete    | 2026-05-12 |
 | 20 | v3.0 | 1/5 | In Progress|  |
+| 23 | v3.1 | 2/3 | In Progress | 2026-05-13 (23-01, 23-02 shipped) |

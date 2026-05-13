@@ -4,14 +4,14 @@ milestone: v3.1
 milestone_name: Scraper Self-Healing
 status: executing
 stopped_at: v3.1 milestone artifacts complete — `.planning/milestones/v3.1-REQUIREMENTS.md`, `v3.1-ROADMAP.md`, `phases/21..23-*/CONTEXT.md`, ROADMAP.md Phase Details blocks for Phase 21/22/23, `.claude/maintenance-prompt.md` Patterns 6/7. PoC artifacts at `/tmp/extractor-poc/` (ephemeral, not committed).
-last_updated: "2026-05-13T07:13:33.963Z"
+last_updated: "2026-05-13T07:20:48.932Z"
 last_activity: 2026-05-13
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 33
-  completed_plans: 27
-  percent: 82
+  completed_plans: 29
+  percent: 88
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 ## Current Position
 
 Phase: 23 (Self-Maintenance Loop) — EXECUTING
-Plan: 2 of 3
-Status: Ready to execute
+Plan: 3 of 3
+Status: Plans 23-01 + 23-02 SHIPPED; Plan 23-03 next
 Last activity: 2026-05-13
 
 ## Shipped Milestones
@@ -72,6 +72,6 @@ Last activity: 2026-05-13
 
 ## Session Continuity
 
-Last session: 2026-05-13T07:13:29.790Z
-Stopped at: v3.1 milestone artifacts complete — `.planning/milestones/v3.1-REQUIREMENTS.md`, `v3.1-ROADMAP.md`, `phases/21..23-*/CONTEXT.md`, ROADMAP.md Phase Details blocks for Phase 21/22/23, `.claude/maintenance-prompt.md` Patterns 6/7. PoC artifacts at `/tmp/extractor-poc/` (ephemeral, not committed).
-Resume from: `/gsd-plan-phase --phase 21` to draft Phase 21's 4 plans across 2 waves, then `/gsd-execute-phase --phase 21`. After Phase 21 production deploy, monitor canary signals (none yet — Phase 23 ships them) by hand for 24-48h, then proceed to Phase 22. Phase 23 last. v3.0 Phase 20 resumes only after v3.1 ships AND 7-day clean soak completes.
+Last session: 2026-05-13T07:20:30.849Z
+Stopped at: Phase 23 Plan 23-02 (Grafana dashboard for scraper provider health) SHIPPED 2026-05-13. New dashboard `scraper-provider-health-canary` live in Grafana under folder `Self-Healing` with 4 panels driven by `playability_canary_runs_total` + `scheduler_job_last_success_timestamp{job="scraper_playability_canary"}`. Plan 23-03 (alerts + maintenance verify) is next.
+Resume from: `/gsd-execute-phase --phase 23` (Plan 23-03 Wave 3 — three Prometheus alert rules in `infra/grafana/alerts/scraper.yaml` routing to maintenance webhook; synthetic Pattern 6 dispatch verification).
