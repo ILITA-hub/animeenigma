@@ -306,14 +306,37 @@
         ref="playerSectionRef"
       >
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h2 class="text-xl font-semibold text-white">
-            <span class="flex items-center gap-2">
-              <svg class="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
+          <div class="flex items-center justify-between gap-3 sm:gap-4">
+            <h2 class="text-xl font-semibold text-white">
+              <span class="flex items-center gap-2">
+                <svg class="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                {{ $t('anime.watch') || 'Смотреть онлайн' }}
+              </span>
+            </h2>
+            <!-- Phase 11 / UX-23 — Theater Mode toggle. Stays inside the
+                 player section header so it remains visible after the
+                 hide-non-player-content CSS rule kicks in. -->
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-white/5 border border-white/10 text-white/70 hover:text-white text-xs transition-colors"
+              :aria-pressed="theaterMode"
+              @click="toggleTheater"
+            >
+              <svg v-if="!theaterMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
               </svg>
-              {{ $t('anime.watch') || 'Смотреть онлайн' }}
-            </span>
-          </h2>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 9V4H4M20 4h-5v5M15 20v-5h5M4 15h5v5" />
+              </svg>
+              <span class="hidden sm:inline">
+                {{ theaterMode ? $t('player.theaterModeExit') : $t('player.theaterModeEnter') }}
+              </span>
+            </button>
+          </div>
           <!-- Language tabs + Provider sub-tabs -->
           <!-- UA-062 (UX-12 Phase 5): ButtonGroup wraps the RU/EN/18+ toggle
                with role="group" + aria-label; each child button binds
@@ -993,7 +1016,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
@@ -1089,6 +1112,38 @@ async function activatePlayer() {
   playerActivated.value = true
   await nextTick()
   playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// Phase 11 / UX-23 — Theater Mode.
+// State persists via localStorage so a reload keeps the user's choice.
+// `body.theater-mode` drives the CSS rules at the bottom of this file that
+// hide .navbar-root + .non-player-content and widen the player wrapper.
+// MANDATORY cleanup: onBeforeUnmount removes the body class so leaving
+// /anime/:id never strands the rest of the app with a hidden navbar.
+const theaterMode = ref<boolean>(
+  typeof localStorage !== 'undefined' && localStorage.getItem('theaterMode') === '1',
+)
+
+function setTheater(on: boolean) {
+  theaterMode.value = on
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('theaterMode', on ? '1' : '0')
+  }
+}
+
+function toggleTheater() {
+  setTheater(!theaterMode.value)
+}
+
+function applyBodyTheaterClass(on: boolean) {
+  if (typeof document === 'undefined') return
+  document.body.classList.toggle('theater-mode', on)
+}
+
+function onTheaterEscape(e: KeyboardEvent) {
+  if (e.key === 'Escape' && theaterMode.value) {
+    setTheater(false)
+  }
 }
 const relatedAnime = ref<RelatedAnime[]>([])
 const refreshing = ref(false)
@@ -2041,7 +2096,21 @@ watch(() => anime.value?.title, (newTitle) => {
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
   loadAnimeData(route.params.id as string)
+  // Phase 11 / UX-23 — apply persisted theater-mode state + bind ESC.
+  applyBodyTheaterClass(theaterMode.value)
+  document.addEventListener('keydown', onTheaterEscape)
 })
+
+// Phase 11 / UX-23 — MANDATORY theater-mode cleanup. onBeforeUnmount
+// strips the body class so navigating away from /anime/:id never leaves
+// the global navbar / non-player sections hidden everywhere else.
+onBeforeUnmount(() => {
+  applyBodyTheaterClass(false)
+  document.removeEventListener('keydown', onTheaterEscape)
+})
+
+// React to programmatic state changes (toggle button click, ESC).
+watch(theaterMode, (on) => applyBodyTheaterClass(on))
 
 onUnmounted(() => {
   loadGeneration++ // cancel any in-flight loadAnimeData
@@ -2061,5 +2130,26 @@ onUnmounted(() => {
 :deep(.shiki-footnote) {
   font-size: 0.75rem;
   color: rgb(255 255 255 / 0.4);
+}
+</style>
+
+<!-- Phase 11 / UX-23 — Theater Mode global rules.
+     Unscoped because the selectors target body.theater-mode and the
+     global .navbar-root class from <Navbar />, which a scoped block
+     could not reach. Anime.vue is the only mount site for theater mode
+     so co-locating the CSS here keeps it discoverable. -->
+<style>
+body.theater-mode .navbar-root {
+  display: none !important;
+}
+body.theater-mode .non-player-content {
+  display: none;
+}
+body.theater-mode [data-anime-player-wrapper="true"] {
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 </style>

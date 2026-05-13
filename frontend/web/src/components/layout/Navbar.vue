@@ -1,7 +1,7 @@
 <template>
   <header
     :class="[
-      'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+      'fixed top-0 left-0 right-0 z-50 transition-all duration-300 navbar-root',
       isVisible ? 'translate-y-0' : '-translate-y-full',
       'glass-nav'
     ]"
