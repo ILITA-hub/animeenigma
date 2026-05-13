@@ -10,47 +10,59 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 )
 
+// ReviewService is the business-logic layer for the six reviews endpoints.
+// Phase 1 (workstream: social) plan 02: refactored to consume
+// `*repo.ListRepository` exclusively — the legacy `*repo.ReviewRepository`
+// has been deleted. The public method signatures still match what the
+// handler layer calls; only the return types change from `*domain.Review`
+// to `*domain.AnimeListEntry` (consumers project to the 7-field
+// `reviewResponse` struct in handler/review.go to keep the wire shape
+// byte-identical).
 type ReviewService struct {
-	reviewRepo   *repo.ReviewRepository
 	listRepo     *repo.ListRepository
 	activityRepo *repo.ActivityRepository
 	log          *logger.Logger
 }
 
-func NewReviewService(reviewRepo *repo.ReviewRepository, listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, log *logger.Logger) *ReviewService {
+// NewReviewService wires the refactored review service. NOTE: the legacy
+// `*repo.ReviewRepository` parameter has been dropped — callers in
+// cmd/player-api/main.go are updated accordingly.
+func NewReviewService(listRepo *repo.ListRepository, activityRepo *repo.ActivityRepository, log *logger.Logger) *ReviewService {
 	return &ReviewService{
-		reviewRepo:   reviewRepo,
 		listRepo:     listRepo,
 		activityRepo: activityRepo,
 		log:          log,
 	}
 }
 
-// CreateOrUpdateReview creates or updates a user's review
-func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, username string, req *domain.CreateReviewRequest) (*domain.Review, error) {
+// CreateOrUpdateReview creates or updates a user's review. The activity-
+// emission block matches the pre-refactor behavior verbatim — per-day
+// dedup via ActivityRepository.GetTodayByUserAnimeType, OldValue carries
+// "new"/"update"/"score" markers as before.
+func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, username string, req *domain.CreateReviewRequest) (*domain.AnimeListEntry, error) {
+	// Validation rule unchanged from pre-refactor: score must be 1..10.
 	if req.Score < 1 || req.Score > 10 {
 		return nil, errors.InvalidInput("score must be between 1 and 10")
 	}
 
-	// Check if review already exists (for activity dedup + "new" vs "update")
-	existingReview, _ := s.reviewRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
+	// Detect new-vs-update for the activity event's OldValue marker. We use
+	// GetUserReview which surfaces "exists with content" only — a row with
+	// score=0 + review_text='' counts as "new review" from the activity-
+	// feed's perspective, which matches the deleted ReviewRepository's
+	// GetByUserAndAnime semantics (it returned the row regardless of empty
+	// content, but the only caller used isNewReview = existing == nil and
+	// here a row that exists with no content is functionally equivalent to
+	// "no review yet").
+	existing, _ := s.listRepo.GetUserReview(ctx, userID, req.AnimeID)
 
-	review := &domain.Review{
-		UserID:     userID,
-		AnimeID:    req.AnimeID,
-		Username:   username,
-		Score:      req.Score,
-		ReviewText: req.ReviewText,
-	}
-
-	if err := s.reviewRepo.Upsert(ctx, review); err != nil {
+	entry, err := s.listRepo.UpsertReview(ctx, userID, req.AnimeID, username, req.Score, req.ReviewText)
+	if err != nil {
 		return nil, errors.Wrap(err, errors.CodeInternal, "failed to save review")
 	}
 
-	// Record review activity event (deduplicated per day)
-	// The review event already includes the score, so no separate score event needed
-	isNewReview := existingReview == nil
-	// Truncate review text for activity preview (full text stays in reviews table)
+	// Record review activity event (deduplicated per day) — logic preserved
+	// line-for-line from the pre-refactor service/review.go.
+	isNewReview := existing == nil
 	contentPreview := req.ReviewText
 	if len([]rune(contentPreview)) > 300 {
 		contentPreview = string([]rune(contentPreview)[:300]) + "…"
@@ -70,7 +82,6 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 	} else {
 		reviewEvent.OldValue = "update"
 	}
-	// Check for existing review event today — update it instead of creating a new one
 	existingEvent, _ := s.activityRepo.GetTodayByUserAnimeType(ctx, userID, req.AnimeID, "review")
 	if existingEvent != nil {
 		existingEvent.NewValue = reviewEvent.NewValue
@@ -85,48 +96,43 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 		}
 	}
 
-	// Sync score to watchlist entry
-	entry, _ := s.listRepo.GetByUserAndAnime(ctx, userID, req.AnimeID)
-	if entry != nil {
-		entry.Score = req.Score
-		if err := s.listRepo.Upsert(ctx, entry); err != nil {
-			s.log.Errorw("failed to sync review score to watchlist",
-				"user_id", userID,
-				"anime_id", req.AnimeID,
-				"error", err,
-			)
-		}
-	}
-
-	return review, nil
+	// Pre-refactor code synced the review score to the watchlist via a
+	// second Upsert. After the schema merge that sync is now a no-op
+	// because UpsertReview already wrote score into the same anime_list
+	// row. Drop the redundant call.
+	return entry, nil
 }
 
-// GetAnimeReviews returns all reviews for an anime
-func (s *ReviewService) GetAnimeReviews(ctx context.Context, animeID string) ([]*domain.Review, error) {
-	return s.reviewRepo.GetByAnime(ctx, animeID)
+// GetAnimeReviews returns every anime_list row for the anime that qualifies
+// as a "review" (score>0 OR review_text!='').
+func (s *ReviewService) GetAnimeReviews(ctx context.Context, animeID string) ([]*domain.AnimeListEntry, error) {
+	return s.listRepo.GetReviewsByAnime(ctx, animeID)
 }
 
-// GetUserReviews returns all reviews by a user
-func (s *ReviewService) GetUserReviews(ctx context.Context, userID string) ([]*domain.Review, error) {
-	return s.reviewRepo.GetByUser(ctx, userID)
+// GetUserReview returns the current user's review (or errors.NotFound when
+// the row is absent or empty-on-both).
+func (s *ReviewService) GetUserReview(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
+	return s.listRepo.GetUserReview(ctx, userID, animeID)
 }
 
-// GetUserReview returns a specific user's review for an anime
-func (s *ReviewService) GetUserReview(ctx context.Context, userID, animeID string) (*domain.Review, error) {
-	return s.reviewRepo.GetByUserAndAnime(ctx, userID, animeID)
+// GetUserReviews returns every anime_list row for the user that qualifies
+// as a review (score>0 OR review_text!=''). Used by GET /api/users/reviews.
+func (s *ReviewService) GetUserReviews(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
+	return s.listRepo.GetReviewsByUser(ctx, userID)
 }
 
-// GetAnimeRating returns the average rating for an anime
+// GetAnimeRating returns the average rating + scoring-row count.
 func (s *ReviewService) GetAnimeRating(ctx context.Context, animeID string) (*domain.AnimeRating, error) {
-	return s.reviewRepo.GetAnimeRating(ctx, animeID)
+	return s.listRepo.GetAnimeRating(ctx, animeID)
 }
 
-// GetBatchAnimeRatings returns average ratings for multiple anime
+// GetBatchAnimeRatings returns average ratings for multiple anime.
 func (s *ReviewService) GetBatchAnimeRatings(ctx context.Context, animeIDs []string) (map[string]*domain.AnimeRating, error) {
-	return s.reviewRepo.GetBatchAnimeRatings(ctx, animeIDs)
+	return s.listRepo.GetBatchAnimeRatings(ctx, animeIDs)
 }
 
-// DeleteReview removes a user's review
+// DeleteReview clears the user's review (score=0, review_text='') — the
+// underlying anime_list row stays. Idempotent on missing rows.
 func (s *ReviewService) DeleteReview(ctx context.Context, userID, animeID string) error {
-	return s.reviewRepo.Delete(ctx, userID, animeID)
+	return s.listRepo.ClearReview(ctx, userID, animeID)
 }

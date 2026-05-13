@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -208,6 +209,161 @@ func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID strin
 	).Scan(&stats).Error
 
 	return &stats, err
+}
+
+// --- Phase 1 (workstream: social) plan 02 — review-shaped queries -------
+// These six methods absorb the deleted ReviewRepository's surface. They
+// operate on the same anime_list table that powers the watchlist, filtered
+// by `(score > 0 OR review_text != '')` so MAL-imported score=8 rows and
+// written-review rows both qualify as "reviews".
+
+// GetReviewsByAnime returns every anime_list row for `animeID` that has
+// either a non-zero score OR a non-empty review_text. Preloads Anime so the
+// handler can include the existing JSON `anime` field unchanged.
+func (r *ListRepository) GetReviewsByAnime(ctx context.Context, animeID string) ([]*domain.AnimeListEntry, error) {
+	var entries []*domain.AnimeListEntry
+	err := r.db.WithContext(ctx).
+		Preload("Anime").
+		Where("anime_id = ? AND (score > 0 OR review_text <> '')", animeID).
+		Order("created_at DESC").
+		Find(&entries).Error
+	return entries, err
+}
+
+// GetReviewsByUser returns every anime_list row for `userID` that qualifies
+// as a review (score>0 OR review_text!=''). Newest-first, preloads Anime.
+func (r *ListRepository) GetReviewsByUser(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
+	var entries []*domain.AnimeListEntry
+	err := r.db.WithContext(ctx).
+		Preload("Anime").
+		Where("user_id = ? AND (score > 0 OR review_text <> '')", userID).
+		Order("created_at DESC").
+		Find(&entries).Error
+	return entries, err
+}
+
+// GetUserReview returns the single anime_list row for the given (user, anime)
+// pair if it carries a review (score>0 OR review_text!=''). Returns
+// errors.NotFound when the row is absent OR exists with empty review.
+func (r *ListRepository) GetUserReview(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
+	var entry domain.AnimeListEntry
+	err := r.db.WithContext(ctx).
+		Preload("Anime").
+		Where("user_id = ? AND anime_id = ? AND (score > 0 OR review_text <> '')", userID, animeID).
+		First(&entry).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, apperrors.NotFound("review")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+// UpsertReview writes the (score, review_text, username) triple onto an
+// existing anime_list row OR creates a fresh row with status='completed' when
+// none exists. On the update path it ONLY assigns score, review_text,
+// username, updated_at — status / episodes / notes / tags / etc. on the
+// pre-existing watchlist row are preserved. Returns the resulting entry.
+func (r *ListRepository) UpsertReview(ctx context.Context, userID, animeID, username string, score int, reviewText string) (*domain.AnimeListEntry, error) {
+	now := time.Now()
+	entry := &domain.AnimeListEntry{
+		UserID:     userID,
+		AnimeID:    animeID,
+		Status:     "completed", // only takes effect on INSERT path
+		Score:      score,
+		ReviewText: reviewText,
+		Username:   username,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "anime_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"score":       score,
+			"review_text": reviewText,
+			"username":    username,
+			"updated_at":  now,
+		}),
+	}).Create(entry).Error
+	if err != nil {
+		return nil, err
+	}
+	// Reload to capture any preserved fields (status, episodes, etc.).
+	var fresh domain.AnimeListEntry
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		First(&fresh).Error; err != nil {
+		return entry, nil // fall back to the constructed entry if reload fails
+	}
+	return &fresh, nil
+}
+
+// ClearReview sets score=0 + review_text='' on the matching row (the row
+// stays in anime_list — it just drops out of the reviews filter). Idempotent
+// — no error when no row matches.
+func (r *ListRepository) ClearReview(ctx context.Context, userID, animeID string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.AnimeListEntry{}).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		Updates(map[string]interface{}{
+			"score":       0,
+			"review_text": "",
+			"updated_at":  time.Now(),
+		}).Error
+}
+
+// GetAnimeRating returns the average score and total scoring-row count for an
+// anime, only considering anime_list rows where score>0.
+func (r *ListRepository) GetAnimeRating(ctx context.Context, animeID string) (*domain.AnimeRating, error) {
+	var result struct {
+		AverageScore float64 `gorm:"column:average_score"`
+		TotalReviews int64   `gorm:"column:total_reviews"`
+	}
+	err := r.db.WithContext(ctx).
+		Raw(`SELECT COALESCE(AVG(score), 0) AS average_score, COUNT(*) AS total_reviews
+		     FROM anime_list WHERE anime_id = ? AND score > 0`, animeID).
+		Scan(&result).Error
+	if err != nil {
+		// On query failure, return a zero rating rather than propagating —
+		// matches the deleted ReviewRepository's GetAnimeRating semantics.
+		return &domain.AnimeRating{AnimeID: animeID}, nil
+	}
+	return &domain.AnimeRating{
+		AnimeID:      animeID,
+		AverageScore: result.AverageScore,
+		TotalReviews: int(result.TotalReviews),
+	}, nil
+}
+
+// GetBatchAnimeRatings returns a map keyed by anime_id, only for anime that
+// have at least one anime_list row with score>0.
+func (r *ListRepository) GetBatchAnimeRatings(ctx context.Context, animeIDs []string) (map[string]*domain.AnimeRating, error) {
+	var rows []struct {
+		AnimeID      string  `gorm:"column:anime_id"`
+		AverageScore float64 `gorm:"column:average_score"`
+		TotalReviews int64   `gorm:"column:total_reviews"`
+	}
+	err := r.db.WithContext(ctx).
+		Raw(`SELECT anime_id,
+		            COALESCE(AVG(score), 0) AS average_score,
+		            COUNT(*) AS total_reviews
+		     FROM anime_list
+		     WHERE anime_id IN ? AND score > 0
+		     GROUP BY anime_id`, animeIDs).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*domain.AnimeRating, len(rows))
+	for _, row := range rows {
+		out[row.AnimeID] = &domain.AnimeRating{
+			AnimeID:      row.AnimeID,
+			AverageScore: row.AverageScore,
+			TotalReviews: int(row.TotalReviews),
+		}
+	}
+	return out, nil
 }
 
 func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
