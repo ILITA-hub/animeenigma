@@ -191,6 +191,7 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 **Plans**: 2 plans in 1 wave (parallel — file scopes do not overlap)
 - [x] 22-01-PLAN.md — Wave 1: Multi-URL extraction in streamhg/earnvids (hls2 + hls3) + cold-path Sources iteration in gogoanime.coldPathGated (SCRAPER-HEAL-09)
 - [x] 22-02-hls-proxy-allowlist-and-iss011-PLAN.md — Wave 1: HLS proxy allowlist (managementadvisory.sbs + exoplanethunting.space) + handler-level integration smoke + ISS-011 inline doc entry + /animeenigma-after-update (SCRAPER-HEAL-10, SCRAPER-HEAL-11)
+**Status**: SHIPPED 2026-05-13 — VERIFICATION.md `passed`, 14/14 must-haves met. Production /scraper/stream returns sources_count: 2 (hls2+hls3) per server; cold-path iteration over Sources verified live (Phase 21 follow-up incidentally landed here). Live observation: hls3 host has already rotated to `strategicplanning.sbs` — exactly the failure mode Phase 23 canary is designed to catch via Pattern 7.
 
 ### Phase 23: Self-Maintenance Loop
 **Goal**: A regression at any upstream site is detected within 24 hours by a daily canary that exercises real production code paths, surfaces a labeled alert into the existing `services/maintenance` bot, and gets dispatched per `.claude/maintenance-prompt.md` Patterns 6/7 — without a human needing to notice.
