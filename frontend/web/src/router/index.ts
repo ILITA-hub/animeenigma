@@ -137,6 +137,10 @@ const routes: RouteRecordRaw[] = [
   }
 ]
 
+if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+  window.history.scrollRestoration = 'manual'
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes,

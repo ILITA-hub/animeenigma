@@ -165,11 +165,7 @@ export const useWatchlistStore = defineStore('watchlist', () => {
     const idx = findIndex(animeId)
     if (idx < 0) {
       // Nothing to remove locally; still issue API call in case server has it.
-      try {
-        await userApi.removeFromWatchlist(animeId)
-      } catch (err) {
-        throw err
-      }
+      await userApi.removeFromWatchlist(animeId)
       return
     }
 
