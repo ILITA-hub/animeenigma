@@ -277,10 +277,6 @@
                 :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
                 @open="(el) => openHomeMenuAt(el, anime)"
               />
-              <div class="relative z-10 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
-                   :class="getRankClass(index)">
-                {{ index + 1 }}
-              </div>
               <img
                 :src="anime.poster_url || '/placeholder.svg'"
                 :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
@@ -552,13 +548,6 @@ const goToSearch = () => {
   if (searchQuery.value.trim()) {
     router.push({ path: '/browse', query: { q: searchQuery.value.trim() } })
   }
-}
-
-const getRankClass = (index: number) => {
-  if (index === 0) return 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-black'
-  if (index === 1) return 'bg-gradient-to-br from-gray-300 to-gray-500 text-black'
-  if (index === 2) return 'bg-gradient-to-br from-amber-600 to-amber-800 text-white'
-  return 'bg-white/10 text-gray-400'
 }
 
 const formatNextEpisode = (dateStr: string) => {
