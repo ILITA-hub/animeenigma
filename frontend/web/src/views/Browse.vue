@@ -272,11 +272,14 @@ const yearOptions = computed(() => [
   })
 ])
 
+// Phase 11 / UX-21 — 5-axis sort dropdown. The 'updated' axis maps to
+// updated_at DESC on the backend (catalog/internal/repo/anime.go).
 const sortOptions = computed(() => [
-  { value: 'popularity', label: t('browse.sortPopular') },
-  { value: 'rating', label: t('browse.sortRating') },
-  { value: 'year', label: t('browse.sortYear') },
-  { value: 'title', label: t('browse.sortTitle') },
+  { value: 'popularity', label: t('browse.sort.popularity') },
+  { value: 'rating',     label: t('browse.sort.rating') },
+  { value: 'year',       label: t('browse.sort.year') },
+  { value: 'updated',    label: t('browse.sort.updated') },
+  { value: 'title',      label: t('browse.sort.title') },
 ])
 
 const clearFilters = () => {
@@ -323,7 +326,13 @@ const searchOnShikimori = async () => {
 
 const handleFilter = async () => {
   currentPage.value = 1
-  const query = { ...route.query, page: undefined }
+  // Phase 11 / UX-21 — persist sort axis in ?sort= URL state. Omit
+  // ?sort=popularity (the default) so the most common case keeps a clean URL.
+  const query: Record<string, string | undefined> = {
+    ...route.query,
+    page: undefined,
+    sort: sortBy.value !== 'popularity' ? sortBy.value : undefined,
+  }
   router.replace({ query })
   await loadAnime()
 }
@@ -389,6 +398,16 @@ onMounted(async () => {
     selectedGenre.value = route.query.genre as string
   }
 
+  // Phase 11 / UX-21 — restore sort axis from ?sort= URL state. Whitelist
+  // matches the backend whitelist; unknown values fall through to the
+  // default 'popularity' already set on the ref.
+  if (route.query.sort && typeof route.query.sort === 'string') {
+    const validSorts = ['popularity', 'rating', 'year', 'updated', 'title']
+    if (validSorts.includes(route.query.sort)) {
+      sortBy.value = route.query.sort
+    }
+  }
+
   if (route.query.q) {
     searchQuery.value = route.query.q as string
     await searchAnime(searchQuery.value)
@@ -417,6 +436,16 @@ watch(() => route.query.genre, (newGenre) => {
   const val = (newGenre as string) || ''
   if (val !== selectedGenre.value) {
     selectedGenre.value = val
+    handleFilter()
+  }
+})
+
+// Phase 11 / UX-21 — keep sortBy in sync with ?sort= URL state when the
+// user uses browser back/forward navigation.
+watch(() => route.query.sort, (newSort) => {
+  const val = (newSort as string) || 'popularity'
+  if (val !== sortBy.value) {
+    sortBy.value = val
     handleFilter()
   }
 })

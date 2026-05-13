@@ -65,6 +65,13 @@
     "watchNow": "Watch",
     "languageSwitchLabel": "Audio language",
     "providerSwitchLabel": "Video provider",
+    "nav": {
+      "heading": "On this page",
+      "overview": "Overview",
+      "episodes": "Episodes",
+      "similar": "Similar",
+      "comments": "Comments"
+    },
     "continueEp": "Continue ep. {n}",
     "resume": {
       "justFinished": "You finished episode {n}.",
@@ -151,6 +158,8 @@
     }
   },
   "player": {
+    "theaterModeEnter": "Theater mode",
+    "theaterModeExit": "Exit theater mode",
     "quality": "Quality",
     "subtitles": "Subtitles",
     "noTranslations": "No translations available",
@@ -575,6 +584,14 @@
     "sortRating": "By Rating",
     "sortYear": "By Year",
     "sortTitle": "By Title",
+    "sortLabel": "Sort",
+    "sort": {
+      "popularity": "Popularity",
+      "rating": "Rating",
+      "year": "Year",
+      "updated": "Recently updated",
+      "title": "A → Z"
+    },
     "searchShikimori": "Search on Shikimori",
     "refreshShikimori": "Refresh from Shikimori",
     "resultsHeading": "Results"
@@ -670,6 +687,12 @@
       "pickerPlaceholder": "username, public_id, or UUID",
       "pickerSubmit": "Open",
       "pickerSelf": "Use my account"
+    }
+  },
+  "system": {
+    "statusBanner": {
+      "defaultTitle": "Service status update",
+      "dismiss": "Dismiss"
     }
   }
 }

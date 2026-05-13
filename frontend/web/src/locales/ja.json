@@ -65,6 +65,13 @@
     "watchNow": "視聴する",
     "languageSwitchLabel": "音声言語",
     "providerSwitchLabel": "動画プロバイダー",
+    "nav": {
+      "heading": "このページの内容",
+      "overview": "概要",
+      "episodes": "エピソード",
+      "similar": "関連作品",
+      "comments": "コメント"
+    },
     "continueEp": "第{n}話から続ける",
     "resume": {
       "justFinished": "第{n}話を視聴しました。",
@@ -151,6 +158,8 @@
     }
   },
   "player": {
+    "theaterModeEnter": "シアターモード",
+    "theaterModeExit": "シアターモード終了",
     "quality": "画質",
     "subtitles": "字幕",
     "noTranslations": "利用可能な翻訳がありません",
@@ -575,6 +584,14 @@
     "sortRating": "評価順",
     "sortYear": "年順",
     "sortTitle": "タイトル順",
+    "sortLabel": "並び替え",
+    "sort": {
+      "popularity": "人気順",
+      "rating": "評価順",
+      "year": "年順",
+      "updated": "最近更新",
+      "title": "A → Z"
+    },
     "searchShikimori": "Shikimoriで検索",
     "refreshShikimori": "Shikimoriから更新",
     "resultsHeading": "結果"
@@ -670,6 +687,12 @@
       "pickerPlaceholder": "username, public_id, or UUID",
       "pickerSubmit": "Open",
       "pickerSelf": "Use my account"
+    }
+  },
+  "system": {
+    "statusBanner": {
+      "defaultTitle": "サービス状況のお知らせ",
+      "dismiss": "閉じる"
     }
   }
 }

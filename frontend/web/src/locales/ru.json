@@ -65,6 +65,13 @@
     "watchNow": "Смотреть",
     "languageSwitchLabel": "Язык озвучки",
     "providerSwitchLabel": "Видеоплеер",
+    "nav": {
+      "heading": "На этой странице",
+      "overview": "Описание",
+      "episodes": "Серии",
+      "similar": "Похожее",
+      "comments": "Комментарии"
+    },
     "continueEp": "Продолжить с эп. {n}",
     "resume": {
       "justFinished": "Вы закончили {n}-й эпизод.",
@@ -151,6 +158,8 @@
     }
   },
   "player": {
+    "theaterModeEnter": "Режим кинотеатра",
+    "theaterModeExit": "Выйти из режима кинотеатра",
     "quality": "Качество",
     "subtitles": "Субтитры",
     "noTranslations": "Нет доступных озвучек",
@@ -575,6 +584,14 @@
     "sortRating": "По оценке",
     "sortYear": "По году",
     "sortTitle": "По названию",
+    "sortLabel": "Сортировка",
+    "sort": {
+      "popularity": "По популярности",
+      "rating": "По рейтингу",
+      "year": "По году",
+      "updated": "Недавно обновлённые",
+      "title": "А → Я"
+    },
     "searchShikimori": "Поиск на Shikimori",
     "refreshShikimori": "Обновить с Shikimori",
     "resultsHeading": "Результаты"
@@ -670,6 +687,12 @@
       "pickerPlaceholder": "username, public_id или UUID",
       "pickerSubmit": "Открыть",
       "pickerSelf": "Открыть мой аккаунт"
+    }
+  },
+  "system": {
+    "statusBanner": {
+      "defaultTitle": "Сообщение о работе сервиса",
+      "dismiss": "Закрыть"
     }
   }
 }
