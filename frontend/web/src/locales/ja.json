@@ -48,6 +48,10 @@
       "becauseYouFinished": "{name}を観終わったので"
     }
   },
+  "card": {
+    "dubBadge": "DUB",
+    "episodeProgress": "第{n}話 / {total}"
+  },
   "anime": {
     "detailsTitle": "アニメ詳細",
     "watch": "視聴する",

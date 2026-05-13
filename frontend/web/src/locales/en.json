@@ -48,6 +48,10 @@
       "becauseYouFinished": "Because you finished {name}"
     }
   },
+  "card": {
+    "dubBadge": "DUB",
+    "episodeProgress": "Episode {n} / {total}"
+  },
   "anime": {
     "detailsTitle": "Anime Details",
     "watch": "Watch",
