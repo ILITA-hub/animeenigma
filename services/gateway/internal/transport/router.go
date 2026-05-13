@@ -149,10 +149,18 @@ func NewRouterWithCleanup(
 		r.Get("/anime/{animeId}/rating", proxyHandler.ProxyToPlayer)
 
 		// Player service routes - comments (must be before /anime/* catch-all)
+		// GET is public; mutations (POST/PATCH/DELETE) gate at the gateway
+		// for defense-in-depth — REVIEW.md CR-04. The player still runs
+		// AuthMiddleware downstream, but enforcing JWT at the gateway
+		// keeps unauthenticated traffic from reaching the player at all
+		// and preserves the rate-limit-before-auth ordering.
 		r.Get("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
-		r.Post("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
-		r.Patch("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
-		r.Delete("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Post("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
+			r.Patch("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
+			r.Delete("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
+		})
 
 		// Catalog service routes (public)
 		r.HandleFunc("/anime", proxyHandler.ProxyToCatalog)
