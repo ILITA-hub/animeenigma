@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
@@ -10,6 +11,50 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
 	"github.com/go-chi/chi/v5"
 )
+
+// reviewResponse is the EXACT wire shape every review endpoint returns. It
+// has 7 JSON-tagged scalar fields plus the optional `anime` preload — and
+// nothing else, even though the underlying `*domain.AnimeListEntry` carries
+// additional fields (status, episodes, notes, tags, mal_id,
+// is_rewatching, priority, started_at, completed_at, updated_at) that MUST
+// NOT leak. SOCIAL-NF-01 contract. Tests in review_shape_test.go assert this
+// projection is in place on every method.
+type reviewResponse struct {
+	ID         string            `json:"id"`
+	UserID     string            `json:"user_id"`
+	AnimeID    string            `json:"anime_id"`
+	Username   string            `json:"username"`
+	Score      int               `json:"score"`
+	ReviewText string            `json:"review_text"`
+	CreatedAt  time.Time         `json:"created_at"`
+	Anime      *domain.AnimeInfo `json:"anime,omitempty"`
+}
+
+// toReviewResponse projects an AnimeListEntry into the wire-stable
+// reviewResponse shape. Used by every review endpoint that returns JSON.
+func toReviewResponse(e *domain.AnimeListEntry) reviewResponse {
+	return reviewResponse{
+		ID:         e.ID,
+		UserID:     e.UserID,
+		AnimeID:    e.AnimeID,
+		Username:   e.Username,
+		Score:      e.Score,
+		ReviewText: e.ReviewText,
+		CreatedAt:  e.CreatedAt,
+		Anime:      e.Anime,
+	}
+}
+
+// toReviewResponses projects a slice of entries; returns a non-nil empty
+// slice when input is nil so JSON encodes as `[]` not `null` (matches the
+// pre-refactor behavior — frontend never sees `null` for list endpoints).
+func toReviewResponses(entries []*domain.AnimeListEntry) []reviewResponse {
+	out := make([]reviewResponse, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, toReviewResponse(e))
+	}
+	return out
+}
 
 type ReviewHandler struct {
 	reviewService *service.ReviewService
@@ -37,13 +82,13 @@ func (h *ReviewHandler) CreateOrUpdateReview(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	review, err := h.reviewService.CreateOrUpdateReview(r.Context(), claims.UserID, claims.Username, &req)
+	entry, err := h.reviewService.CreateOrUpdateReview(r.Context(), claims.UserID, claims.Username, &req)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
-	httputil.OK(w, review)
+	httputil.OK(w, toReviewResponse(entry))
 }
 
 // GetBatchAnimeRatings returns average ratings for multiple anime
@@ -82,13 +127,13 @@ func (h *ReviewHandler) GetAnimeReviews(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	reviews, err := h.reviewService.GetAnimeReviews(r.Context(), animeID)
+	entries, err := h.reviewService.GetAnimeReviews(r.Context(), animeID)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
-	httputil.OK(w, reviews)
+	httputil.OK(w, toReviewResponses(entries))
 }
 
 // GetAnimeRating returns the average rating for an anime
@@ -122,14 +167,15 @@ func (h *ReviewHandler) GetUserReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	review, err := h.reviewService.GetUserReview(r.Context(), claims.UserID, animeID)
+	entry, err := h.reviewService.GetUserReview(r.Context(), claims.UserID, animeID)
 	if err != nil {
-		// Return null if not found
+		// Return null if not found (preserves the pre-refactor behavior —
+		// frontend treats null as "user has no review yet").
 		httputil.OK(w, nil)
 		return
 	}
 
-	httputil.OK(w, review)
+	httputil.OK(w, toReviewResponse(entry))
 }
 
 // GetUserReviews returns all reviews by the current user
@@ -140,13 +186,13 @@ func (h *ReviewHandler) GetUserReviews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reviews, err := h.reviewService.GetUserReviews(r.Context(), claims.UserID)
+	entries, err := h.reviewService.GetUserReviews(r.Context(), claims.UserID)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
-	httputil.OK(w, reviews)
+	httputil.OK(w, toReviewResponses(entries))
 }
 
 // DeleteReview deletes the current user's review
