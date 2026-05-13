@@ -45,28 +45,37 @@
 
       <!-- Main table -->
       <template v-else>
-        <div class="glass-card overflow-x-auto mb-6">
-          <table class="w-full text-sm text-white">
+        <!-- Phase 12 (UA-098): wrapper is `relative` so the mobile scroll-fade
+             affordance can pin to the right edge. -->
+        <div class="glass-card overflow-x-auto mb-6 relative">
+          <table class="w-full text-sm text-white" :aria-label="$t('admin.recs.tableCaption')">
+            <caption class="sr-only">{{ $t('admin.recs.tableCaption') }}</caption>
             <thead class="sticky top-0 bg-black/40 backdrop-blur z-10">
               <tr class="text-white/70 text-xs uppercase">
-                <th class="px-3 py-2 text-left">{{ $t('admin.recs.columnRank') }}</th>
-                <th class="px-3 py-2 text-left">{{ $t('admin.recs.columnAnime') }}</th>
-                <th class="px-3 py-2 text-right">{{ $t('admin.recs.columnFinal') }}</th>
-                <th class="px-3 py-2 text-right">S1</th>
-                <th class="px-3 py-2 text-right">S2</th>
-                <th class="px-3 py-2 text-right">S3</th>
-                <th class="px-3 py-2 text-right">S4</th>
-                <th class="px-3 py-2 text-right">S5</th>
-                <th class="px-3 py-2 text-left">{{ $t('admin.recs.columnTopContributor') }}</th>
-                <th class="px-3 py-2 w-8"></th>
+                <th scope="col" class="px-3 py-2 text-left">{{ $t('admin.recs.columnRank') }}</th>
+                <th scope="col" class="px-3 py-2 text-left">{{ $t('admin.recs.columnAnime') }}</th>
+                <th scope="col" class="px-3 py-2 text-right">{{ $t('admin.recs.columnFinal') }}</th>
+                <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s1Title')">S1</th>
+                <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s2Title')">S2</th>
+                <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s3Title')">S3</th>
+                <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s4Title')">S4</th>
+                <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s5Title')">S5</th>
+                <th scope="col" class="px-3 py-2 text-left">{{ $t('admin.recs.columnTopContributor') }}</th>
+                <th scope="col" class="px-3 py-2 w-8"></th>
               </tr>
             </thead>
             <tbody>
               <template v-for="row in rows" :key="row.rank">
                 <tr
-                  class="border-t border-white/10 hover:bg-white/5 cursor-pointer transition"
+                  class="border-t border-white/10 hover:bg-white/5 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-inset"
                   :class="{ 'ring-2 ring-cyan-400/40': row.pinned }"
+                  tabindex="0"
+                  role="button"
+                  :aria-expanded="expandedRowIds.has(row.rank)"
+                  :aria-controls="`detail-${row.rank}`"
                   @click="toggleRow(row.rank)"
+                  @keydown.enter.prevent="toggleRow(row.rank)"
+                  @keydown.space.prevent="toggleRow(row.rank)"
                 >
                   <td class="px-3 py-2 font-mono">{{ row.rank }}</td>
                   <td class="px-3 py-2">
@@ -103,7 +112,11 @@
                   </td>
                 </tr>
                 <!-- Expanded contributor detail -->
-                <tr v-if="expandedRowIds.has(row.rank)" class="border-t border-white/5 bg-white/5">
+                <tr
+                  v-if="expandedRowIds.has(row.rank)"
+                  :id="`detail-${row.rank}`"
+                  class="border-t border-white/5 bg-white/5"
+                >
                   <td colspan="10" class="px-6 py-3">
                     <div v-if="row.pinned" class="space-y-1 text-sm">
                       <p class="text-cyan-300 font-medium">
@@ -153,6 +166,14 @@
               </tr>
             </tbody>
           </table>
+          <!-- Phase 12 / UA-098: mobile horizontal-scroll affordance.
+               Fixed gradient at right edge hints to mobile users that the
+               table extends beyond the viewport. Pointer-events-none so it
+               never blocks taps; hidden at md+ where the table fits. -->
+          <div
+            aria-hidden="true"
+            class="md:hidden absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black/40 to-transparent pointer-events-none"
+          ></div>
         </div>
 
         <!-- Filter audit panel -->
