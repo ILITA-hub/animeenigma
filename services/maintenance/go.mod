@@ -4,6 +4,7 @@ go 1.23.0
 
 require (
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/streamprobe v0.0.0
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/prometheus/client_golang v1.19.0
 )
@@ -23,4 +24,5 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/httputil => ../../libs/httputil
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
+	github.com/ILITA-hub/animeenigma/libs/streamprobe => ../../libs/streamprobe
 )
