@@ -221,6 +221,47 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Cross-tab + soft-logout sync. Two reasons this exists:
+  //   1. The backend single-uses refresh tokens (rotates + blacklists on every
+  //      /auth/refresh). With multiple tabs open, both tabs POSTing the same
+  //      refresh cookie would race — one wins, the other gets a real 401 from
+  //      the blacklist and forces logout. api/client.ts now serialises
+  //      refreshes cross-tab via navigator.locks, but tabs that DIDN'T do the
+  //      refresh still need to adopt the new token; the 'storage' event is how.
+  //   2. On a confirmed 401 from /auth/refresh, client.ts dispatches
+  //      'auth:expired' instead of window.location='/' redirecting. We listen
+  //      here to clear in-memory refs without the abrupt page reload.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'token') {
+        token.value = e.newValue
+        if (e.newValue === null) {
+          user.value = null
+        }
+      } else if (e.key === 'user') {
+        if (e.newValue === null) {
+          user.value = null
+        } else {
+          try {
+            user.value = JSON.parse(e.newValue)
+          } catch {
+            user.value = null
+          }
+        }
+      } else if (e.key === null) {
+        // localStorage.clear() from another tab
+        token.value = null
+        user.value = null
+      }
+    })
+    window.addEventListener('auth:expired', () => {
+      // localStorage was already wiped by the dispatcher (api/client.ts);
+      // sync the in-memory refs so reactive components see the change.
+      token.value = null
+      user.value = null
+    })
+  }
+
   return {
     user,
     token,

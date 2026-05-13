@@ -43,31 +43,82 @@ function isTokenExpired(token: string): boolean {
   }
 }
 
-// Shared token refresh logic — deduplicates concurrent refresh calls
+// Wipes auth-related localStorage on a confirmed logout (refresh 401/403).
+// Mirrors what stores/auth.ts logout() does to the same keys.
+function clearAuthLocalStorage() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i)
+    if (key && (key.startsWith('pref:') || key === 'prefs_version')) {
+      localStorage.removeItem(key)
+    }
+  }
+}
+
+// Fires after localStorage is cleared so the Pinia auth store can drop its
+// in-memory refs without a hard navigation. Same-tab notification only;
+// other tabs observe the localStorage delta via the 'storage' event.
+function dispatchAuthExpired() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('auth:expired'))
+  }
+}
+
+// Actually performs the /auth/refresh POST. Kept separate so the
+// cross-tab lock wrapper in doTokenRefresh can short-circuit when another
+// tab already minted a fresh token while we were waiting on the lock.
+async function performRefresh(): Promise<string | null> {
+  try {
+    const response = await axios.post(`${BASE_URL}/auth/refresh`, {}, {
+      withCredentials: true,
+    })
+    const data = response.data?.data || response.data
+    const newAccessToken = data.access_token
+    localStorage.setItem('token', newAccessToken)
+    processQueue(null, newAccessToken)
+    return newAccessToken as string
+  } catch (refreshError) {
+    processQueue(refreshError as AxiosError, null)
+    // Only treat 401/403 as a real auth failure. Network/5xx errors
+    // (VPN reconnect, transient backend hiccup) leave the session intact.
+    const status = (refreshError as AxiosError)?.response?.status
+    if (status === 401 || status === 403) {
+      // Soft logout: clear storage + notify the Pinia store. No
+      // window.location redirect — that interrupts mid-action recovery
+      // and races with the cross-tab listener.
+      clearAuthLocalStorage()
+      dispatchAuthExpired()
+    }
+    return null
+  }
+}
+
+// Shared token refresh — single-flight both within a tab (module-level
+// refreshPromise) and across tabs (Web Locks). The cross-tab guard is the
+// fix for the rotation race: the backend single-uses each refresh token,
+// so two tabs both POSTing /auth/refresh would have the second tab's RT1
+// blacklisted by the first → spurious 401 → logout.
 async function doTokenRefresh(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
 
   isRefreshing = true
   refreshPromise = (async () => {
     try {
-      const response = await axios.post(`${BASE_URL}/auth/refresh`, {}, {
-        withCredentials: true,
-      })
-      const data = response.data?.data || response.data
-      const newAccessToken = data.access_token
-      localStorage.setItem('token', newAccessToken)
-      processQueue(null, newAccessToken)
-      return newAccessToken as string
-    } catch (refreshError) {
-      processQueue(refreshError as AxiosError, null)
-      // Only force-logout when the server explicitly rejects the refresh token.
-      // Network/5xx errors are often transient (e.g. VPN reconnect) — keep the session.
-      const status = (refreshError as AxiosError)?.response?.status
-      if (status === 401 || status === 403) {
-        localStorage.removeItem('token')
-        window.location.href = '/'
+      if (typeof navigator !== 'undefined' && 'locks' in navigator) {
+        return await navigator.locks.request('auth-refresh', async () => {
+          // Another tab may have refreshed while we waited on the lock.
+          // If localStorage now holds a still-valid token, use it instead
+          // of burning our refresh-token round-trip.
+          const stored = localStorage.getItem('token')
+          if (stored && !isTokenExpired(stored)) {
+            processQueue(null, stored)
+            return stored
+          }
+          return await performRefresh()
+        })
       }
-      return null
+      return await performRefresh()
     } finally {
       isRefreshing = false
       refreshPromise = null
