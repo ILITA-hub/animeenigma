@@ -1,17 +1,18 @@
 ---
 gsd_state_version: 1.0
 workstream: social
-milestone: v0.1
-milestone_name: "Social: Reviews + Comments"
-status: phase-complete
+milestone: shipped
+last_shipped: v0.1
+last_shipped_name: "Social: Reviews + Comments"
+status: awaiting-next-milestone
 last_updated: "2026-05-13"
-last_activity: 2026-05-13
+last_activity: 2026-05-13 — Milestone v0.1 shipped and archived
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State — `social` workstream
@@ -26,12 +27,10 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 ## Current Position
 
-**Phase:** 1 (Reviews + Ratings + Comments) — COMPLETE
-**Plans:** 7/7 (Wave 0 scaffolding → Wave 5 Anime.vue tabs UI + e2e)
-**Verification:** 01-VERIFICATION.md — 8/8 must_haves verified, status: passed
-**Code review:** 01-REVIEW.md — 5 critical + 6 warnings + 3 info; fix pass applied 10/11 (WR-02 deferred to Redis-backed bucket follow-up)
-**UI review:** 01-UI-REVIEW.md — 18/24, 2 blockers + 9 warnings (advisory — non-blocking)
-**Last activity:** 2026-05-13
+Phase: Milestone v0.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-13 — Milestone v0.1 completed and archived
 
 ## Resume / Continuity
 
@@ -43,3 +42,7 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 | Phase | Name                          | Requirements                                                       | Status   |
 |-------|-------------------------------|--------------------------------------------------------------------|----------|
 | 1     | Reviews + Ratings + Comments  | SOCIAL-01..06, SOCIAL-NF-01, SOCIAL-NF-02                          | complete |
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
