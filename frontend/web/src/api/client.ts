@@ -362,6 +362,21 @@ export const reviewApi = {
     apiClient.post('/anime/ratings/batch', { anime_ids: animeIds }),
 }
 
+export const commentApi = {
+  // Get paginated comments for an anime (public, newest-first; cursor is opaque)
+  getAnimeComments: (animeId: string, params?: { cursor?: string; limit?: number }) =>
+    apiClient.get(`/anime/${animeId}/comments`, { params }),
+  // Create a new comment on an anime (auth required, 1–2000 chars, 10/hr/(user,anime))
+  createComment: (animeId: string, body: string) =>
+    apiClient.post(`/anime/${animeId}/comments`, { body }),
+  // Update an existing comment (owner only)
+  updateComment: (animeId: string, commentId: string, body: string) =>
+    apiClient.patch(`/anime/${animeId}/comments/${commentId}`, { body }),
+  // Soft-delete a comment (owner or admin)
+  deleteComment: (animeId: string, commentId: string) =>
+    apiClient.delete(`/anime/${animeId}/comments/${commentId}`),
+}
+
 export const activityApi = {
   getFeed: (limit: number = 10, before?: string) =>
     apiClient.get('/activity/feed', {
