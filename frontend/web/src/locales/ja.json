@@ -398,7 +398,23 @@
       "apiKeyHasKey": "有効なAPIキーがあります。",
       "apiKeyNone": "APIキーは設定されていません。",
       "apiKeyRevokeConfirm": "よろしいですか？このキーを使用しているスクリプトは動作しなくなります。",
-      "apiKeyRevoked": "APIキーを取り消しました。"
+      "apiKeyRevoked": "APIキーを取り消しました。",
+      "sessions": {
+        "title": "Active Sessions",
+        "description": "Devices currently signed in to your account. Revoke any you don't recognize.",
+        "refresh": "Refresh",
+        "loading": "Loading…",
+        "thisDevice": "this device",
+        "lastSeen": "last seen",
+        "unknownIp": "unknown IP",
+        "justNow": "just now",
+        "minutesAgo": "{n}m ago",
+        "hoursAgo": "{n}h ago",
+        "daysAgo": "{n}d ago",
+        "revoke": "Revoke",
+        "revokeAllOthers": "Sign out everywhere else",
+        "confirmRevokeOthers": "Sign out of all other devices?"
+      }
     },
     "publicProfile": "公開プロフィール",
     "profileLink": "プロフィールリンク",

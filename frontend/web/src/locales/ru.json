@@ -398,7 +398,23 @@
       "apiKeyHasKey": "У вас есть активный API-ключ.",
       "apiKeyNone": "API-ключ не настроен.",
       "apiKeyRevokeConfirm": "Вы уверены? Скрипты, использующие этот ключ, перестанут работать.",
-      "apiKeyRevoked": "API-ключ отозван."
+      "apiKeyRevoked": "API-ключ отозван.",
+      "sessions": {
+        "title": "Активные сессии",
+        "description": "Устройства, на которых сейчас выполнен вход. Отзывайте те, которые не узнаёте.",
+        "refresh": "Обновить",
+        "loading": "Загрузка…",
+        "thisDevice": "это устройство",
+        "lastSeen": "был(а)",
+        "unknownIp": "IP неизвестен",
+        "justNow": "только что",
+        "minutesAgo": "{n} мин назад",
+        "hoursAgo": "{n} ч назад",
+        "daysAgo": "{n} дн назад",
+        "revoke": "Отозвать",
+        "revokeAllOthers": "Выйти на всех других устройствах",
+        "confirmRevokeOthers": "Выйти со всех остальных устройств?"
+      }
     },
     "publicProfile": "Публичный профиль",
     "profileLink": "Ссылка на профиль",

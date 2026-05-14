@@ -812,6 +812,9 @@
                 </template>
               </div>
 
+              <!-- Active Sessions -->
+              <ActiveSessionsCard />
+
               <!-- Account -->
               <div class="glass-card p-6">
                 <h2 class="text-lg font-semibold text-white mb-4">{{ $t('profile.settings.account') }}</h2>
@@ -1032,6 +1035,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
+import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
