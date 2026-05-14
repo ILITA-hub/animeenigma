@@ -125,7 +125,11 @@ func (s *AuthService) RefreshToken(
 
 		result, err := s.sessionRepo.Rotate(ctx, session.ID, hash, newHash, sc.IP, time.Now().Add(SessionTTL))
 		if err != nil {
-			return nil, false, err
+			// Either CAS missed AND grace window expired, or session was
+			// revoked between FindAliveByHash and Rotate. Either way, treat
+			// as a generic auth failure — don't leak that the token was
+			// once valid.
+			return nil, false, errors.Unauthorized("invalid refresh token")
 		}
 
 		// Re-load user (cheap; could cache later)

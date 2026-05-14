@@ -17,8 +17,10 @@ import (
 
 const (
 	refreshTokenCookieName = "refresh_token"
-	refreshTokenMaxAge     = 7 * 24 * time.Hour
-	accessTokenCookieName  = "access_token"
+	// refreshTokenMaxAge MUST match service.SessionTTL — the cookie expiring
+	// before the DB session leaves an orphaned row that the user can't reclaim.
+	refreshTokenMaxAge    = 30 * 24 * time.Hour
+	accessTokenCookieName = "access_token"
 )
 
 // clientIP returns the best-effort client IP without the port.
