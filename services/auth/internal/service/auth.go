@@ -14,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/repo"
 	"golang.org/x/crypto/bcrypt"
@@ -21,6 +22,7 @@ import (
 
 type AuthService struct {
 	userRepo         *repo.UserRepository
+	sessionRepo      *repo.SessionRepository
 	cache            *cache.RedisCache
 	jwtManager       *authz.JWTManager
 	telegramBotToken string
@@ -29,6 +31,7 @@ type AuthService struct {
 
 func NewAuthService(
 	userRepo *repo.UserRepository,
+	sessionRepo *repo.SessionRepository,
 	cache *cache.RedisCache,
 	jwtConfig authz.JWTConfig,
 	telegramBotToken string,
@@ -36,6 +39,7 @@ func NewAuthService(
 ) *AuthService {
 	return &AuthService{
 		userRepo:         userRepo,
+		sessionRepo:      sessionRepo,
 		cache:            cache,
 		jwtManager:       authz.NewJWTManager(jwtConfig),
 		telegramBotToken: telegramBotToken,
@@ -43,7 +47,19 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest) (*domain.AuthResponse, error) {
+// SessionContext carries per-request context the service needs to create a
+// session row. Login/Register/Telegram-confirm all populate this from
+// the HTTP layer.
+type SessionContext struct {
+	UserAgent string
+	IP        string
+}
+
+// SessionTTL is the sliding-window length. Every refresh extends a session
+// to now+SessionTTL. 30 days = "user opens the site at least once a month".
+const SessionTTL = 30 * 24 * time.Hour
+
+func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest, sc SessionContext) (*domain.AuthResponse, error) {
 	// Check if username exists
 	exists, err := s.userRepo.ExistsByUsername(ctx, req.Username)
 	if err != nil {
@@ -70,11 +86,10 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest)
 		return nil, err
 	}
 
-	// Generate tokens
-	return s.generateAuthResponse(user)
+	return s.createSessionAndAuthResponse(ctx, user, sc)
 }
 
-func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest) (*domain.AuthResponse, error) {
+func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest, sc SessionContext) (*domain.AuthResponse, error) {
 	user, err := s.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
 		if appErr, ok := errors.IsAppError(err); ok && appErr.Code == errors.CodeNotFound {
@@ -88,40 +103,102 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest) (*dom
 		return nil, errors.Unauthorized("invalid credentials")
 	}
 
-	return s.generateAuthResponse(user)
+	return s.createSessionAndAuthResponse(ctx, user, sc)
 }
 
-func (s *AuthService) RefreshToken(ctx context.Context, req *domain.RefreshRequest) (*domain.AuthResponse, error) {
-	// Validate refresh token
-	userID, err := s.jwtManager.ValidateRefreshToken(req.RefreshToken)
-	if err != nil {
-		if err == authz.ErrTokenExpired {
-			return nil, errors.Unauthorized("refresh token expired")
+func (s *AuthService) RefreshToken(
+	ctx context.Context,
+	req *domain.RefreshRequest,
+	sc SessionContext,
+) (*domain.AuthResponse, bool, error) {
+	rt := req.RefreshToken
+	hash := hashRefreshToken(rt)
+
+	// 1) Try persistent-session path.
+	session, err := s.sessionRepo.FindAliveByHash(ctx, hash)
+	if err == nil {
+		newRT, err := generateRefreshToken()
+		if err != nil {
+			return nil, false, err
 		}
-		return nil, errors.Unauthorized("invalid refresh token")
+		newHash := hashRefreshToken(newRT)
+
+		result, err := s.sessionRepo.Rotate(ctx, session.ID, hash, newHash, sc.IP, time.Now().Add(SessionTTL))
+		if err != nil {
+			return nil, false, err
+		}
+
+		// Re-load user (cheap; could cache later)
+		user, err := s.userRepo.GetByID(ctx, result.Session.UserID)
+		if err != nil {
+			return nil, false, err
+		}
+
+		pair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role, result.Session.ID)
+		if err != nil {
+			return nil, false, fmt.Errorf("generate tokens: %w", err)
+		}
+
+		resp := &domain.AuthResponse{
+			AccessToken: pair.AccessToken,
+			ExpiresAt:   pair.ExpiresAt,
+			User:        user,
+		}
+		if result.Rotated {
+			resp.RefreshToken = newRT
+			metrics.AuthEventsTotal.WithLabelValues("refresh_token", "success").Inc()
+		} else {
+			// Grace path — caller must NOT issue a Set-Cookie for refresh.
+			metrics.AuthEventsTotal.WithLabelValues("refresh_cas_miss", "grace_hit").Inc()
+		}
+		return resp, result.Rotated, nil
 	}
 
-	// Check if token is blacklisted
-	blacklistKey := cache.PrefixSession + "blacklist:" + req.RefreshToken
-	exists, _ := s.cache.Exists(ctx, blacklistKey)
-	if exists {
-		return nil, errors.Unauthorized("token has been revoked")
+	// 2) Legacy JWT path (transition window).
+	userID, jwtErr := s.jwtManager.ValidateRefreshToken(rt)
+	if jwtErr == nil {
+		// Check legacy blacklist
+		blacklistKey := cache.PrefixSession + "blacklist:" + rt
+		if exists, _ := s.cache.Exists(ctx, blacklistKey); exists {
+			return nil, false, errors.Unauthorized("token has been revoked")
+		}
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, false, err
+		}
+		// Blacklist the legacy RT so it can't be reused.
+		_ = s.cache.Set(ctx, blacklistKey, true, 7*24*time.Hour)
+
+		// Upgrade — mint a real session.
+		resp, err := s.createSessionAndAuthResponse(ctx, user, sc)
+		if err != nil {
+			return nil, false, err
+		}
+		metrics.AuthEventsTotal.WithLabelValues("session_legacy_upgraded", "success").Inc()
+		s.log.Infow("upgraded legacy refresh JWT to persistent session", "user_id", user.ID)
+		return resp, true, nil
 	}
 
-	// Get user
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Blacklist old refresh token
-	_ = s.cache.Set(ctx, blacklistKey, true, 7*24*time.Hour)
-
-	return s.generateAuthResponse(user)
+	// 3) Both paths failed.
+	return nil, false, errors.Unauthorized("invalid refresh token")
 }
 
+// Logout revokes the session that owns this refresh token. If the cookie
+// is a legacy JWT, fall back to the old blacklist behavior.
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
-	// Blacklist the refresh token
+	if refreshToken == "" {
+		return nil
+	}
+	hash := hashRefreshToken(refreshToken)
+	session, err := s.sessionRepo.FindAliveByHash(ctx, hash)
+	if err == nil {
+		if rerr := s.sessionRepo.Revoke(ctx, session.ID, session.UserID); rerr != nil {
+			return rerr
+		}
+		metrics.AuthEventsTotal.WithLabelValues("session_revoked", "logout").Inc()
+		return nil
+	}
+	// Legacy: blacklist the JWT.
 	blacklistKey := cache.PrefixSession + "blacklist:" + refreshToken
 	return s.cache.Set(ctx, blacklistKey, true, 7*24*time.Hour)
 }
@@ -130,7 +207,7 @@ func (s *AuthService) ValidateToken(ctx context.Context, token string) (*authz.C
 	return s.jwtManager.ValidateAccessToken(token)
 }
 
-func (s *AuthService) LoginWithTelegram(ctx context.Context, tgUser *domain.TelegramWebhookUser) (*domain.AuthResponse, error) {
+func (s *AuthService) LoginWithTelegram(ctx context.Context, tgUser *domain.TelegramWebhookUser, sc SessionContext) (*domain.AuthResponse, error) {
 	// Try to find existing user by Telegram ID
 	user, err := s.userRepo.GetByTelegramID(ctx, tgUser.ID)
 	if err != nil {
@@ -176,7 +253,7 @@ func (s *AuthService) LoginWithTelegram(ctx context.Context, tgUser *domain.Tele
 		)
 	}
 
-	return s.generateAuthResponse(user)
+	return s.createSessionAndAuthResponse(ctx, user, sc)
 }
 
 // CreateDeepLinkToken generates a unique token and stores an empty auth session in Redis.
@@ -203,7 +280,7 @@ func (s *AuthService) CreateDeepLinkToken(ctx context.Context, botName string) (
 
 // CheckDeepLinkToken polls the status of a deep link auth session.
 // Returns the session status and, if confirmed, completes login and returns auth tokens.
-func (s *AuthService) CheckDeepLinkToken(ctx context.Context, token string) (*domain.DeepLinkCheckResponse, *domain.AuthResponse, error) {
+func (s *AuthService) CheckDeepLinkToken(ctx context.Context, token string, sc SessionContext) (*domain.DeepLinkCheckResponse, *domain.AuthResponse, error) {
 	var session domain.TelegramAuthSession
 	err := s.cache.Get(ctx, cache.KeyTelegramAuth(token), &session)
 	if err != nil {
@@ -224,7 +301,7 @@ func (s *AuthService) CheckDeepLinkToken(ctx context.Context, token string) (*do
 		Username:  session.Username,
 	}
 
-	authResp, err := s.LoginWithTelegram(ctx, tgUser)
+	authResp, err := s.LoginWithTelegram(ctx, tgUser, sc)
 	if err != nil {
 		return nil, nil, fmt.Errorf("telegram login: %w", err)
 	}
@@ -351,16 +428,132 @@ func (s *AuthService) HasApiKey(ctx context.Context, userID string) (bool, error
 	return user.ApiKeyHash != nil, nil
 }
 
-func (s *AuthService) generateAuthResponse(user *domain.User) (*domain.AuthResponse, error) {
-	tokenPair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role, "")
+// SessionListItem is the public-facing shape returned to /api/auth/sessions.
+type SessionListItem struct {
+	ID         string    `json:"id"`
+	UserAgent  string    `json:"user_agent"`
+	IP         string    `json:"ip"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastSeenAt time.Time `json:"last_seen_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	IsCurrent  bool      `json:"is_current"`
+}
+
+func (s *AuthService) ListSessions(ctx context.Context, userID, currentSessionID string) ([]SessionListItem, error) {
+	rows, err := s.sessionRepo.ListAlive(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SessionListItem, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, SessionListItem{
+			ID:         r.ID,
+			UserAgent:  r.UserAgent,
+			IP:         r.IP,
+			CreatedAt:  r.CreatedAt,
+			LastSeenAt: r.LastSeenAt,
+			ExpiresAt:  r.ExpiresAt,
+			IsCurrent:  r.ID == currentSessionID,
+		})
+	}
+	return out, nil
+}
+
+func (s *AuthService) RevokeSession(ctx context.Context, userID, sessionID string) error {
+	if err := s.sessionRepo.Revoke(ctx, sessionID, userID); err != nil {
+		return err
+	}
+	metrics.AuthEventsTotal.WithLabelValues("session_revoked", "user_action").Inc()
+	return nil
+}
+
+func (s *AuthService) RevokeOtherSessions(ctx context.Context, userID, currentSessionID string) (int64, error) {
+	n, err := s.sessionRepo.RevokeOthers(ctx, userID, currentSessionID)
+	if err != nil {
+		return 0, err
+	}
+	metrics.AuthEventsTotal.WithLabelValues("session_revoked", "revoke_others").Add(float64(n))
+	return n, nil
+}
+
+// CleanupExpiredSessions is called from a goroutine in main.go.
+func (s *AuthService) CleanupExpiredSessions(ctx context.Context) (int64, error) {
+	n, err := s.sessionRepo.Cleanup(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if n > 0 {
+		metrics.AuthEventsTotal.WithLabelValues("session_expired", "cleanup").Add(float64(n))
+	}
+	return n, nil
+}
+
+// --- helpers ---
+
+const refreshTokenPrefix = "rt_"
+
+// generateRefreshToken returns a fresh opaque refresh token like "rt_<64-hex>".
+func generateRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("rand: %w", err)
+	}
+	return refreshTokenPrefix + hex.EncodeToString(b), nil
+}
+
+// hashRefreshToken returns the sha256-hex of a refresh token. Used as the
+// row's refresh_token_hash. Never store the raw token.
+func hashRefreshToken(rt string) string {
+	sum := sha256.Sum256([]byte(rt))
+	return hex.EncodeToString(sum[:])
+}
+
+// createSessionAndAuthResponse mints a fresh session row + tokens.
+// Used by Login, Register, telegram-confirm — anywhere that's NOT a refresh.
+func (s *AuthService) createSessionAndAuthResponse(
+	ctx context.Context,
+	user *domain.User,
+	sc SessionContext,
+) (*domain.AuthResponse, error) {
+	rt, err := generateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	session := &domain.UserSession{
+		UserID:           user.ID,
+		RefreshTokenHash: hashRefreshToken(rt),
+		UserAgent:        truncateUA(sc.UserAgent),
+		IP:               sc.IP,
+		LastSeenAt:       now,
+		ExpiresAt:        now.Add(SessionTTL),
+	}
+	if err := s.sessionRepo.Create(ctx, session); err != nil {
+		return nil, err
+	}
+
+	pair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role, session.ID)
 	if err != nil {
 		return nil, fmt.Errorf("generate tokens: %w", err)
 	}
 
+	s.log.Infow("session created", "user_id", user.ID, "session_id", session.ID)
+	metrics.AuthEventsTotal.WithLabelValues("session_created", "success").Inc()
+
 	return &domain.AuthResponse{
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresAt:    tokenPair.ExpiresAt,
+		AccessToken:  pair.AccessToken,
+		RefreshToken: rt,
+		ExpiresAt:    pair.ExpiresAt,
 		User:         user,
 	}, nil
+}
+
+// truncateUA caps user-agent length at 1024 to avoid pathological headers
+// blowing up DB rows.
+func truncateUA(ua string) string {
+	const maxUA = 1024
+	if len(ua) > maxUA {
+		return ua[:maxUA]
+	}
+	return ua
 }

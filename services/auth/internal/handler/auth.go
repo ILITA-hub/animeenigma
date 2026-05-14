@@ -126,7 +126,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.authService.Register(r.Context(), &req)
+	sc := service.SessionContext{
+		UserAgent: r.Header.Get("User-Agent"),
+		IP:        r.RemoteAddr,
+	}
+	resp, err := h.authService.Register(r.Context(), &req, sc)
 	if err != nil {
 		metrics.AuthEventsTotal.WithLabelValues("register", "error").Inc()
 		httputil.Error(w, err)
@@ -153,7 +157,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.authService.Login(r.Context(), &req)
+	sc := service.SessionContext{
+		UserAgent: r.Header.Get("User-Agent"),
+		IP:        r.RemoteAddr,
+	}
+	resp, err := h.authService.Login(r.Context(), &req, sc)
 	if err != nil {
 		metrics.AuthEventsTotal.WithLabelValues("login", "error").Inc()
 		httputil.Error(w, err)
@@ -181,8 +189,12 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sc := service.SessionContext{
+		UserAgent: r.Header.Get("User-Agent"),
+		IP:        r.RemoteAddr,
+	}
 	req := &domain.RefreshRequest{RefreshToken: cookie.Value}
-	resp, err := h.authService.RefreshToken(r.Context(), req)
+	resp, rotated, err := h.authService.RefreshToken(r.Context(), req, sc)
 	if err != nil {
 		metrics.AuthEventsTotal.WithLabelValues("refresh_token", "error").Inc()
 		// Clear invalid cookie
@@ -191,10 +203,11 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metrics.AuthEventsTotal.WithLabelValues("refresh_token", "success").Inc()
-
-	// Set new refresh token cookie
-	h.setRefreshTokenCookie(w, resp.RefreshToken)
+	// Only set a new refresh-token cookie when the token was actually rotated.
+	// On the grace path (rotated=false), the existing cookie remains valid.
+	if rotated {
+		h.setRefreshTokenCookie(w, resp.RefreshToken)
+	}
 
 	// Set access token as httpOnly cookie for direct browser navigation
 	h.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
@@ -235,7 +248,11 @@ func (h *AuthHandler) CheckDeepLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	checkResp, authResp, err := h.authService.CheckDeepLinkToken(r.Context(), token)
+	sc := service.SessionContext{
+		UserAgent: r.Header.Get("User-Agent"),
+		IP:        r.RemoteAddr,
+	}
+	checkResp, authResp, err := h.authService.CheckDeepLinkToken(r.Context(), token, sc)
 	if err != nil {
 		httputil.Error(w, err)
 		return

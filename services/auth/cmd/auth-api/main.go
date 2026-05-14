@@ -45,7 +45,7 @@ func main() {
 	}
 
 	// Auto-migrate schema
-	if err := db.AutoMigrate(&domain.User{}); err != nil {
+	if err := db.AutoMigrate(&domain.User{}, &domain.UserSession{}); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
@@ -58,9 +58,10 @@ func main() {
 
 	// Initialize repositories
 	userRepo := repo.NewUserRepository(db.DB)
+	sessionRepo := repo.NewSessionRepository(db.DB)
 
 	// Initialize services
-	authService := service.NewAuthService(userRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, log)
+	authService := service.NewAuthService(userRepo, sessionRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, log)
 	userService := service.NewUserService(userRepo, log)
 
 	// Initialize handlers
