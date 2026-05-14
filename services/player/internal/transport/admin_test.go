@@ -67,7 +67,7 @@ func TestAdminRoleMiddleware_InvalidTokenReturns401(t *testing.T) {
 func TestAdminRoleMiddleware_UserRoleReturns403(t *testing.T) {
 	cfg := adminTestJWTConfig()
 	jwtMgr := authz.NewJWTManager(cfg)
-	pair, err := jwtMgr.GenerateTokenPair("user-uuid", "user", authz.RoleUser)
+	pair, err := jwtMgr.GenerateTokenPair("user-uuid", "user", authz.RoleUser, "")
 	require.NoError(t, err)
 
 	r := chainAdminRouter(cfg)
@@ -83,7 +83,7 @@ func TestAdminRoleMiddleware_UserRoleReturns403(t *testing.T) {
 func TestAdminRoleMiddleware_AdminRoleReturns200(t *testing.T) {
 	cfg := adminTestJWTConfig()
 	jwtMgr := authz.NewJWTManager(cfg)
-	pair, err := jwtMgr.GenerateTokenPair("admin-uuid", "admin", authz.RoleAdmin)
+	pair, err := jwtMgr.GenerateTokenPair("admin-uuid", "admin", authz.RoleAdmin, "")
 	require.NoError(t, err)
 
 	r := chainAdminRouter(cfg)

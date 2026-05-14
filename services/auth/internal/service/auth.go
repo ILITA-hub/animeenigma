@@ -352,7 +352,7 @@ func (s *AuthService) HasApiKey(ctx context.Context, userID string) (bool, error
 }
 
 func (s *AuthService) generateAuthResponse(user *domain.User) (*domain.AuthResponse, error) {
-	tokenPair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role)
+	tokenPair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role, "")
 	if err != nil {
 		return nil, fmt.Errorf("generate tokens: %w", err)
 	}

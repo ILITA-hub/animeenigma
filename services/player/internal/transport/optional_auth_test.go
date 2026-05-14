@@ -76,7 +76,7 @@ func TestOptionalAuth_ValidJWT_AttachesClaims(t *testing.T) {
 
 	// Mint a valid token using the same JWTConfig the middleware will validate against.
 	jm := authz.NewJWTManager(cfg)
-	pair, err := jm.GenerateTokenPair("test-user", "tester", authz.RoleUser)
+	pair, err := jm.GenerateTokenPair("test-user", "tester", authz.RoleUser, "")
 	require.NoError(t, err)
 
 	next, called, capturedClaims, hadClaims := captureNextHandler()

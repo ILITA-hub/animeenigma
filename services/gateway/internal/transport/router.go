@@ -377,7 +377,7 @@ func JWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL string) f
 					return
 				}
 				// Mint a short-lived JWT for downstream services
-				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role)
+				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role, "")
 				if mintErr != nil {
 					httputil.Unauthorized(w)
 					return
@@ -433,7 +433,7 @@ func OptionalJWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL s
 					next.ServeHTTP(w, r)
 					return
 				}
-				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role)
+				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role, "")
 				if mintErr != nil {
 					r.Header.Del("Authorization")
 					next.ServeHTTP(w, r)

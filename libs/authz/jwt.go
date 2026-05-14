@@ -20,9 +20,10 @@ const (
 // Claims represents JWT claims
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID   string `json:"uid"`
-	Username string `json:"username"`
-	Role     Role   `json:"role"`
+	UserID    string `json:"uid"`
+	Username  string `json:"username"`
+	Role      Role   `json:"role"`
+	SessionID string `json:"sid,omitempty"` // empty for legacy tokens minted before persistent sessions
 }
 
 // JWTConfig holds JWT configuration
@@ -60,7 +61,7 @@ type TokenPair struct {
 }
 
 // GenerateTokenPair generates a new access and refresh token pair
-func (m *JWTManager) GenerateTokenPair(userID, username string, role Role) (*TokenPair, error) {
+func (m *JWTManager) GenerateTokenPair(userID, username string, role Role, sessionID string) (*TokenPair, error) {
 	now := time.Now()
 
 	// Access token
@@ -71,9 +72,10 @@ func (m *JWTManager) GenerateTokenPair(userID, username string, role Role) (*Tok
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.config.AccessTokenTTL)),
 		},
-		UserID:   userID,
-		Username: username,
-		Role:     role,
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
+		SessionID: sessionID,
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)

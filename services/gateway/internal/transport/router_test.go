@@ -50,7 +50,7 @@ func gatewayTestJWTConfig() authz.JWTConfig {
 func signTestJWT(t *testing.T, role authz.Role) string {
 	t.Helper()
 	mgr := authz.NewJWTManager(gatewayTestJWTConfig())
-	pair, err := mgr.GenerateTokenPair("user-1", "tester", role)
+	pair, err := mgr.GenerateTokenPair("user-1", "tester", role, "")
 	if err != nil {
 		t.Fatalf("GenerateTokenPair: %v", err)
 	}
