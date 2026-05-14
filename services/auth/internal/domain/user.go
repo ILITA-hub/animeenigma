@@ -24,17 +24,6 @@ type User struct {
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// Session represents a user session
-type Session struct {
-	ID           string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID       string    `gorm:"type:uuid;index" json:"user_id"`
-	RefreshToken string    `json:"-"`
-	UserAgent    string    `json:"user_agent"`
-	IP           string    `json:"ip"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	CreatedAt    time.Time `json:"created_at"`
-}
-
 // RegisterRequest represents a registration request
 type RegisterRequest struct {
 	Username string `json:"username" validate:"required,min=3,max=32,alphanum"`
