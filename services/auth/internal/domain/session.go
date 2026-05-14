@@ -13,11 +13,11 @@ type UserSession struct {
 	UserID                   string     `gorm:"type:uuid;not null;index:idx_user_sessions_user_id" json:"user_id"`
 	RefreshTokenHash         string     `gorm:"type:char(64);not null;uniqueIndex:idx_user_sessions_rt_hash" json:"-"`
 	PreviousRefreshTokenHash *string    `gorm:"type:char(64);index:idx_user_sessions_prev_rt_hash" json:"-"`
-	GraceUntil               *time.Time `json:"-"`
+	GraceUntil               *time.Time `json:"-"` // nil = no grace window active; set on rotation, cleared when window expires
 	UserAgent                string     `gorm:"type:text;not null;default:''" json:"user_agent"`
-	IP                       string     `gorm:"type:text;default:''" json:"ip"` // text not inet — keeps GORM portable; valid IPv4/IPv6 strings only
+	IP                       string     `gorm:"type:text;not null;default:''" json:"ip"` // text not inet — keeps GORM portable; valid IPv4/IPv6 strings only
 	CreatedAt                time.Time  `json:"created_at"`
-	LastSeenAt               time.Time  `json:"last_seen_at"`
+	LastSeenAt               time.Time  `gorm:"not null;default:now()" json:"last_seen_at"`
 	ExpiresAt                time.Time  `gorm:"not null;index:idx_user_sessions_expires_at" json:"expires_at"`
 	RevokedAt                *time.Time `json:"revoked_at,omitempty"`
 }
