@@ -171,6 +171,15 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 	// client Authorization so the backend never sees two values.
 	copyForwardHeaders(req.Header, r.Header)
 
+	// For auth service only: selectively re-forward the refresh_token
+	// cookie so that /api/auth/refresh and /api/auth/logout can read it.
+	// Other services MUST NOT receive browser cookies (REVIEW.md BLK-02).
+	if service == "auth" {
+		if c, err := r.Cookie("refresh_token"); err == nil {
+			req.AddCookie(c)
+		}
+	}
+
 	// Forward request
 	resp, err := s.client.Do(req)
 	if err != nil {

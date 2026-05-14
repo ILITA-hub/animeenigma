@@ -68,12 +68,13 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, cfg.Telegram, log)
 	telegramBotHandler := handler.NewTelegramBotHandler(authService, cfg.Telegram.BotToken, cfg.Telegram.WebhookSecret, log)
 	userHandler := handler.NewUserHandler(userService, log)
+	sessionsHandler := handler.NewSessionsHandler(authService, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("auth")
 
 	// Initialize router
-	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, sessionsHandler, cfg.JWT, log, metricsCollector)
 
 	// Register Telegram webhook (warn on failure, don't block startup)
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.WebhookURL != "" {
@@ -93,6 +94,36 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Graceful shutdown channel — registered before starting goroutines so
+	// they can listen for the same signal.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// shutdown is closed when SIGINT is received — long-lived goroutines
+	// (session cleanup) listen for it.
+	shutdown := make(chan struct{})
+
+	// Periodic session cleanup — drops rows revoked or expired >7 days ago.
+	go func() {
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-shutdown:
+				return
+			case <-t.C:
+				n, err := authService.CleanupExpiredSessions(context.Background())
+				if err != nil {
+					log.Warnw("session cleanup failed", "error", err)
+					continue
+				}
+				if n > 0 {
+					log.Infow("session cleanup", "deleted", n)
+				}
+			}
+		}
+	}()
+
 	// Start server
 	go func() {
 		log.Infow("starting auth service", "address", cfg.Server.Address())
@@ -101,10 +132,8 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	close(shutdown)
 
 	log.Info("shutting down server...")
 
