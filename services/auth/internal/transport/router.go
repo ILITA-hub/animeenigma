@@ -16,6 +16,7 @@ func NewRouter(
 	authHandler *handler.AuthHandler,
 	telegramBotHandler *handler.TelegramBotHandler,
 	userHandler *handler.UserHandler,
+	sessionsHandler *handler.SessionsHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -70,6 +71,9 @@ func NewRouter(
 			r.Post("/auth/api-key", authHandler.GenerateApiKey)
 			r.Delete("/auth/api-key", authHandler.RevokeApiKey)
 			r.Get("/auth/api-key", authHandler.HasApiKey)
+			r.Get("/auth/sessions", sessionsHandler.List)
+			r.Delete("/auth/sessions/{id}", sessionsHandler.Revoke)
+			r.Post("/auth/sessions/revoke-others", sessionsHandler.RevokeOthers)
 		})
 
 		// Public profile by public_id
