@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -19,6 +20,25 @@ const (
 	refreshTokenMaxAge     = 7 * 24 * time.Hour
 	accessTokenCookieName  = "access_token"
 )
+
+// clientIP returns the best-effort client IP without the port.
+// chi's middleware.RealIP rewrites RemoteAddr based on X-Real-IP /
+// X-Forwarded-For when present, but the result still includes the
+// trailing :port from net.JoinHostPort.
+func clientIP(r *http.Request) string {
+	host := r.RemoteAddr
+	if i := strings.LastIndex(host, ":"); i != -1 {
+		host = host[:i]
+	}
+	return host
+}
+
+func sessionContextFromReq(r *http.Request) service.SessionContext {
+	return service.SessionContext{
+		UserAgent: r.UserAgent(),
+		IP:        clientIP(r),
+	}
+}
 
 type AuthHandler struct {
 	authService    *service.AuthService
@@ -126,10 +146,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sc := service.SessionContext{
-		UserAgent: r.Header.Get("User-Agent"),
-		IP:        r.RemoteAddr,
-	}
+	sc := sessionContextFromReq(r)
 	resp, err := h.authService.Register(r.Context(), &req, sc)
 	if err != nil {
 		metrics.AuthEventsTotal.WithLabelValues("register", "error").Inc()
@@ -157,10 +174,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sc := service.SessionContext{
-		UserAgent: r.Header.Get("User-Agent"),
-		IP:        r.RemoteAddr,
-	}
+	sc := sessionContextFromReq(r)
 	resp, err := h.authService.Login(r.Context(), &req, sc)
 	if err != nil {
 		metrics.AuthEventsTotal.WithLabelValues("login", "error").Inc()
@@ -189,10 +203,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sc := service.SessionContext{
-		UserAgent: r.Header.Get("User-Agent"),
-		IP:        r.RemoteAddr,
-	}
+	sc := sessionContextFromReq(r)
 	req := &domain.RefreshRequest{RefreshToken: cookie.Value}
 	resp, rotated, err := h.authService.RefreshToken(r.Context(), req, sc)
 	if err != nil {
@@ -248,10 +259,7 @@ func (h *AuthHandler) CheckDeepLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sc := service.SessionContext{
-		UserAgent: r.Header.Get("User-Agent"),
-		IP:        r.RemoteAddr,
-	}
+	sc := sessionContextFromReq(r)
 	checkResp, authResp, err := h.authService.CheckDeepLinkToken(r.Context(), token, sc)
 	if err != nil {
 		httputil.Error(w, err)
