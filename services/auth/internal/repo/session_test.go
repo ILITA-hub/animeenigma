@@ -154,3 +154,87 @@ func TestSessionRepo_RevokeAndRevokeOthers(t *testing.T) {
 	require.Len(t, alive, 1)
 	require.Equal(t, c.ID, alive[0].ID)
 }
+
+func TestSessionRepo_Rotate_GraceExpired_ThirdReplayFails(t *testing.T) {
+	db := dbForTest(t)
+	r := repo.NewSessionRepository(db)
+	userID := seedUser(t, db)
+
+	hashLen64 := func(prefix string) string {
+		raw := prefix + uuid.NewString()
+		for len(raw) < 64 {
+			raw += "0"
+		}
+		return raw[:64]
+	}
+
+	oldHash := hashLen64("old")
+	newHash := hashLen64("new")
+	pastGrace := time.Now().Add(-1 * time.Second)
+
+	// Hand-build a session that already has previous_hash=oldHash and an
+	// EXPIRED grace_until — simulates "rotation happened >30s ago".
+	s := &domain.UserSession{
+		UserID:                   userID,
+		RefreshTokenHash:         newHash,
+		PreviousRefreshTokenHash: &oldHash,
+		GraceUntil:               &pastGrace,
+		ExpiresAt:                time.Now().Add(time.Hour),
+		LastSeenAt:               time.Now(),
+	}
+	require.NoError(t, r.Create(context.Background(), s))
+
+	// Replaying the now-stale oldHash must fail (grace lapsed).
+	_, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("late"), "9.9.9.9", time.Now().Add(30*24*time.Hour))
+	require.Error(t, err, "rotate with stale oldHash after grace expiry must fail")
+}
+
+func TestSessionRepo_Cleanup_DeletesStaleRowsOnly(t *testing.T) {
+	db := dbForTest(t)
+	r := repo.NewSessionRepository(db)
+	userID := seedUser(t, db)
+
+	hashLen64 := func(prefix string) string {
+		raw := prefix + uuid.NewString()
+		for len(raw) < 64 {
+			raw += "0"
+		}
+		return raw[:64]
+	}
+
+	oldRevoked := time.Now().Add(-8 * 24 * time.Hour)
+	oldExpires := time.Now().Add(-8 * 24 * time.Hour)
+	recentRevoked := time.Now().Add(-1 * 24 * time.Hour)
+
+	mk := func(tag string, expiresAt time.Time, revokedAt *time.Time) *domain.UserSession {
+		s := &domain.UserSession{
+			UserID:           userID,
+			RefreshTokenHash: hashLen64(tag),
+			ExpiresAt:        expiresAt,
+			LastSeenAt:       time.Now(),
+			RevokedAt:        revokedAt,
+		}
+		require.NoError(t, r.Create(context.Background(), s))
+		return s
+	}
+
+	staleRevoked := mk("stale_revoked", time.Now().Add(time.Hour), &oldRevoked) // should DELETE
+	staleExpired := mk("stale_expired", oldExpires, nil)                         // should DELETE
+	freshAlive := mk("fresh_alive", time.Now().Add(time.Hour), nil)              // should KEEP
+	freshRevoked := mk("fresh_revoked", time.Now().Add(time.Hour), &recentRevoked) // should KEEP
+
+	n, err := r.Cleanup(context.Background())
+	require.NoError(t, err)
+	require.EqualValues(t, 2, n, "expected exactly 2 deletions")
+
+	// Verify by direct lookup.
+	var count int64
+	for _, id := range []string{staleRevoked.ID, staleExpired.ID} {
+		require.NoError(t, db.Model(&domain.UserSession{}).Where("id = ?", id).Count(&count).Error)
+		require.EqualValues(t, 0, count, "stale row %s should have been deleted", id)
+	}
+	for _, id := range []string{freshAlive.ID, freshRevoked.ID} {
+		require.NoError(t, db.Model(&domain.UserSession{}).Where("id = ?", id).Count(&count).Error)
+		require.EqualValues(t, 1, count, "fresh row %s should have survived", id)
+	}
+}

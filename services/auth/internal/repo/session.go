@@ -90,7 +90,12 @@ func (r *SessionRepository) Rotate(
 	}
 
 	if res.RowsAffected == 1 {
-		// Re-read to return current state.
+		// Re-read to return current state. Note: under heavy concurrency,
+		// a third rotation could already have swapped refresh_token_hash
+		// again before this SELECT lands. The caller MUST use its own
+		// locally-generated newRT for the Set-Cookie value, not
+		// result.Session.RefreshTokenHash, since that field reflects
+		// whatever the latest rotation wrote — possibly newer than newHash.
 		var s domain.UserSession
 		if err := r.db.WithContext(ctx).First(&s, "id = ?", sessionID).Error; err != nil {
 			return RotateResult{}, fmt.Errorf("re-read rotated session: %w", err)
@@ -128,7 +133,7 @@ func (r *SessionRepository) Revoke(ctx context.Context, sessionID, userID string
 	now := time.Now()
 	res := r.db.WithContext(ctx).
 		Model(&domain.UserSession{}).
-		Where("id = ? AND user_id = ? AND revoked_at IS NULL", sessionID, userID).
+		Where("id = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > ?", sessionID, userID, now).
 		Update("revoked_at", now)
 	if res.Error != nil {
 		return fmt.Errorf("revoke session: %w", res.Error)
