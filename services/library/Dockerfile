@@ -44,7 +44,12 @@ RUN cd services/library && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o
 # Runtime stage
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates tzdata
+# Phase 04 (raw-jp / v0.2): ffmpeg + ffprobe baked into the runtime so
+# the encoder worker (services/library/internal/service/encoder_worker.go)
+# can shell out via os/exec at the SPEC-locked paths
+# /usr/bin/ffmpeg + /usr/bin/ffprobe. Alpine 3.19's `ffmpeg` package
+# ships both binaries; image bloat (~80 MB) is acceptable per SPEC.
+RUN apk add --no-cache ca-certificates tzdata ffmpeg
 
 WORKDIR /app
 

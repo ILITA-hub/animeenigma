@@ -13,10 +13,13 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/handler"
 	libmetrics "github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
+	lminio "github.com/ILITA-hub/animeenigma/services/library/internal/minio"
 	"github.com/ILITA-hub/animeenigma/services/library/migrations"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/animetosho"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/filename"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/nyaa"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/service"
@@ -90,6 +93,15 @@ func main() {
 	if err := db.DB.Exec(migrations.LibraryJobsSQL).Error; err != nil {
 		log.Fatalw("failed to apply library_jobs migration", "error", err)
 	}
+	// Phase 4 migrations: library_episodes (FK → library_jobs) and
+	// library_filename_patterns (seeded). Order matters — 002 must
+	// follow 001 for the FK to resolve.
+	if err := db.DB.Exec(migrations.LibraryEpisodesSQL).Error; err != nil {
+		log.Fatalw("failed to apply library_episodes migration", "error", err)
+	}
+	if err := db.DB.Exec(migrations.LibraryFilenamePatternsSQL).Error; err != nil {
+		log.Fatalw("failed to apply library_filename_patterns migration", "error", err)
+	}
 
 	// Start DB pool metrics collector.
 	if sqlDB, err := db.DB.DB(); err == nil {
@@ -105,6 +117,15 @@ func main() {
 	} else if resumed > 0 {
 		log.Infow("resumed interrupted downloads", "count", resumed)
 	}
+	if resumed, err := jobRepo.ResumeInterruptedEncodes(rootCtx); err != nil {
+		log.Warnw("resume interrupted encodes failed", "error", err)
+	} else if resumed > 0 {
+		log.Infow("resumed interrupted encodes", "count", resumed)
+	}
+
+	// Phase 4: episode + filename-pattern repos.
+	episodeRepo := repo.NewEpisodeRepository(db.DB)
+	patternRepo := repo.NewFilenamePatternRepository(db.DB)
 
 	// Library-specific Prometheus collectors registered against the
 	// default registry so the existing /metrics endpoint exposes them.
@@ -152,6 +173,62 @@ func main() {
 		"progress_tick", cfg.Worker.ProgressTick,
 	)
 
+	// Phase 4: MinIO writer — idempotent bucket bootstrap at startup.
+	writer, err := lminio.New(lminio.Config{
+		Endpoint:          cfg.Minio.Endpoint,
+		AccessKey:         cfg.Minio.AccessKey,
+		SecretKey:         cfg.Minio.SecretKey,
+		Bucket:            cfg.Minio.Bucket,
+		UseSSL:            cfg.Minio.UseSSL,
+		UploadConcurrency: cfg.Minio.UploadConcurrency,
+	}, log)
+	if err != nil {
+		log.Fatalw("minio client init", "error", err)
+	}
+	if err := writer.EnsureBucket(rootCtx); err != nil {
+		log.Fatalw("minio bucket bootstrap", "error", err)
+	}
+	log.Infow("minio writer ready",
+		"endpoint", cfg.Minio.Endpoint, "bucket", cfg.Minio.Bucket, "ssl", cfg.Minio.UseSSL)
+
+	// Phase 4: ffmpeg transcoder.
+	transcoder := ffmpeg.NewTranscoder(ffmpeg.Config{
+		BinaryPath:     cfg.Encode.FfmpegBin,
+		FfprobePath:    cfg.Encode.FfprobeBin,
+		Tmpdir:         cfg.Encode.Tmpdir,
+		MaxBitrateKbps: cfg.Encode.MaxBitrateKbps,
+	}, log)
+
+	// Phase 4: filename detector — patterns loaded once at startup.
+	detector, err := filename.NewDetectorFromDB(rootCtx, patternRepo, libMetrics)
+	if err != nil {
+		log.Fatalw("filename detector init (bad seed?)", "error", err)
+	}
+	log.Infow("filename detector ready")
+
+	// Phase 4: source path resolver (walks {downloadDir}/{infohash}/).
+	sourceResolver := service.NewDefaultSourceResolver(cfg.Torrent.DownloadDir)
+
+	// Phase 4: encoder worker pool.
+	encoderPool := service.NewEncoderPool(
+		cfg.Encode.Workers,
+		jobRepo,
+		episodeRepo,
+		transcoder,
+		writer,
+		detector,
+		sourceResolver,
+		libMetrics,
+		log,
+	)
+	encoderPool.Start(rootCtx)
+	log.Infow("encoder pool started",
+		"workers", cfg.Encode.Workers,
+		"tmpdir", cfg.Encode.Tmpdir,
+		"ffmpeg_bin", cfg.Encode.FfmpegBin,
+		"max_bitrate_kbps", cfg.Encode.MaxBitrateKbps,
+	)
+
 	// Initialize parser clients.
 	nyaaClient := nyaa.NewClient(nyaa.Config{
 		BaseURL:     cfg.Nyaa.BaseURL,
@@ -179,6 +256,9 @@ func main() {
 		log,
 	)
 
+	// Phase 4: episodes handler (read-only).
+	episodesHandler := handler.NewEpisodesHandler(episodeRepo, writer, log)
+
 	// Initialize metrics collector (HTTP middleware).
 	metricsCollector := metrics.NewCollector("library")
 
@@ -187,6 +267,7 @@ func main() {
 		healthHandler,
 		searchHandler,
 		jobsHandler,
+		episodesHandler,
 		cfg.JWT,
 		log,
 		metricsCollector,
@@ -224,7 +305,14 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Drain the worker pool first so any in-flight 'downloading' rows
+	// Phase 4: stop the encoder pool FIRST so no new uploads kick off
+	// after MinIO is being torn down. Encoder workers respond to
+	// rootCtx cancellation (already issued above).
+	if err := encoderPool.Stop(15 * time.Second); err != nil {
+		log.Warnw("encoder pool stop", "error", err)
+	}
+
+	// Drain the worker pool next so any in-flight 'downloading' rows
 	// get rewritten back to 'queued' before the DB connection closes.
 	if err := pool.Stop(shutdownCtx, 20*time.Second); err != nil {
 		log.Warnw("worker pool stop", "error", err)

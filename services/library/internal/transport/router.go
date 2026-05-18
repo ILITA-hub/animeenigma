@@ -26,6 +26,7 @@ func NewRouter(
 	healthHandler *handler.HealthHandler,
 	searchHandler *handler.SearchHandler,
 	jobsHandler *handler.JobsHandler,
+	episodesHandler *handler.EpisodesHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -62,6 +63,12 @@ func NewRouter(
 			r.Get("/jobs", jobsHandler.List)
 			r.Get("/jobs/{id}", jobsHandler.Get)
 			r.Delete("/jobs/{id}", jobsHandler.Delete)
+		}
+		// Phase 04: read-only episodes endpoint consumed by the Phase 5
+		// admin UI and the Phase 6 hybrid resolver. Admin-gated via the
+		// gateway prefix; no additional server-side enforcement needed.
+		if episodesHandler != nil {
+			r.Get("/episodes/{shikimori_id}/{episode}", episodesHandler.Get)
 		}
 	})
 

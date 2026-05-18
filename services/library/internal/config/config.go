@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -13,8 +14,8 @@ import (
 // Config is the library service top-level config. Phase 2 adds the
 // Nyaa + AnimeTosho + LibrarySearch sub-configs that drive the
 // search endpoint. Phase 3 adds the Torrent / Worker / Disk knobs
-// (workstream raw-jp / v0.2). Phase 4 will extend with ffmpeg +
-// MinIO config.
+// (workstream raw-jp / v0.2). Phase 4 adds Encode + Minio for the
+// ffmpeg/HLS transcoder + MinIO writer.
 type Config struct {
 	Server        ServerConfig
 	Database      database.Config
@@ -25,6 +26,28 @@ type Config struct {
 	Torrent       TorrentConfig
 	Worker        WorkerConfig
 	Disk          DiskConfig
+	Encode        EncodeConfig
+	Minio         MinioConfig
+}
+
+// EncodeConfig drives services/library/internal/ffmpeg + the encoder
+// worker pool (internal/service/encoder_worker.go).
+type EncodeConfig struct {
+	Workers        int
+	Tmpdir         string
+	FfmpegBin      string
+	FfprobeBin     string
+	MaxBitrateKbps int
+}
+
+// MinioConfig drives services/library/internal/minio.Writer.
+type MinioConfig struct {
+	Endpoint          string
+	AccessKey         string
+	SecretKey         string
+	Bucket            string
+	UseSSL            bool
+	UploadConcurrency int
 }
 
 // TorrentConfig drives services/library/internal/torrent. All values
@@ -145,7 +168,39 @@ func Load() (*Config, error) {
 			MinFreePct:   getEnvInt("LIBRARY_DISK_FREE_MIN_PCT", 20),
 			PollInterval: getEnvDuration("LIBRARY_DISK_POLL_INTERVAL", 30*time.Second),
 		},
+		Encode: EncodeConfig{
+			Workers:        getEnvInt("LIBRARY_ENCODE_WORKERS", 2),
+			Tmpdir:         getEnv("LIBRARY_ENCODE_TMPDIR", "/tmp/encode"),
+			FfmpegBin:      getEnv("LIBRARY_FFMPEG_BIN", "/usr/bin/ffmpeg"),
+			FfprobeBin:     getEnv("LIBRARY_FFPROBE_BIN", "/usr/bin/ffprobe"),
+			MaxBitrateKbps: getEnvInt("LIBRARY_ENCODE_MAX_BITRATE_KBPS", 5000),
+		},
+		Minio: MinioConfig{
+			Endpoint:          getEnv("LIBRARY_MINIO_ENDPOINT", "minio:9000"),
+			AccessKey:         getEnv("LIBRARY_MINIO_ACCESS_KEY", "minioadmin"),
+			SecretKey:         getEnv("LIBRARY_MINIO_SECRET_KEY", "minioadmin"),
+			Bucket:            getEnv("LIBRARY_MINIO_BUCKET", "raw-library"),
+			UseSSL:            getEnvBool("LIBRARY_MINIO_USE_SSL", false),
+			UploadConcurrency: getEnvInt("LIBRARY_MINIO_UPLOAD_CONCURRENCY", 8),
+		},
 	}, nil
+}
+
+// getEnvBool returns the boolean value of an env var, parsing common
+// truthy/falsy strings. Defaults to defaultVal on parse failure or
+// empty. Recognised true: "true", "1", "yes", "on" (case-insensitive).
+func getEnvBool(key string, defaultVal bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	switch strings.ToLower(val) {
+	case "true", "1", "yes", "on":
+		return true
+	case "false", "0", "no", "off":
+		return false
+	}
+	return defaultVal
 }
 
 func getEnv(key, defaultVal string) string {
