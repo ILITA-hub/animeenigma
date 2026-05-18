@@ -305,6 +305,7 @@ import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
+import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
@@ -370,6 +371,11 @@ const loadingEpisodes = ref(false)
 const loadingTranslations = ref(false)
 const loadingStream = ref(false)
 const error = ref<string | null>(null)
+// Match Kodik's late-combo discipline: freeze the player out of late-arriving
+// preferredCombo once the user has explicitly clicked something, and skip
+// re-selection when the initial auto-pick already used preferredCombo.
+const userHasOverridden = ref(false)
+const usedPreferredCombo = ref(false)
 
 const translationFilter = ref<'all' | 'voice' | 'subtitles'>('all')
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -452,6 +458,8 @@ const setTranslationFilter = (filter: 'all' | 'voice' | 'subtitles') => {
   // 'all' is just a UI filter — only emit when toggling between voice/subtitles.
   if (filter === 'voice' || filter === 'subtitles') {
     tracker.recordPickerEvent('language', { watch_type: filter === 'voice' ? 'dub' : 'sub' })
+    userHasOverridden.value = true
+    setPreferredWatchType(filter === 'voice' ? 'dub' : 'sub')
   }
   translationFilter.value = filter
 }
@@ -513,12 +521,28 @@ const fetchTranslations = async () => {
         )
         if (match) {
           autoSelected = true
+          usedPreferredCombo.value = true
           await _selectTranslation(match)
         }
       }
 
       if (!autoSelected) {
-        await _selectTranslation(translations.value[0])
+        // Default fallback honors the user's last-used watch_type from
+        // localStorage. The API doesn't sort translations by sub-vs-dub, so
+        // without this a sub viewer can land on a dub pick by chance.
+        const preferSubs = getPreferredWatchType() === 'sub'
+        const voiceTr = translations.value.find(tr => tr.type === 'voice')
+        const subTr = translations.value.find(tr => tr.type !== 'voice')
+        const picked = preferSubs
+          ? (subTr ?? voiceTr ?? translations.value[0])
+          : (voiceTr ?? subTr ?? translations.value[0])
+        await _selectTranslation(picked)
+      }
+
+      // Persist the chosen watch_type so future fresh-anime loads honor it
+      // before the server-side resolve returns.
+      if (selectedTranslation.value) {
+        setPreferredWatchType(selectedTranslation.value.type === 'voice' ? 'dub' : 'sub')
       }
     }
   } catch (err: unknown) {
@@ -564,6 +588,8 @@ const _selectTranslation = async (tr: AnimeLibTranslation) => {
 // User-click translation selector — fires combo_override ('team') BEFORE the work.
 const selectTranslation = async (tr: AnimeLibTranslation) => {
   tracker.recordPickerEvent('team', { translation_title: tr.team_name, player: 'animelib' })
+  userHasOverridden.value = true
+  setPreferredWatchType(tr.type === 'voice' ? 'dub' : 'sub')
   await _selectTranslation(tr)
 }
 
@@ -765,7 +791,29 @@ watch(() => props.animeId, () => {
   lastSaveTime.value = 0
   watchedEpisodes.value = 0
   episodeMarkedWatched.value = false
+  userHasOverridden.value = false
+  usedPreferredCombo.value = false
   fetchEpisodes()
+})
+
+// Late-arriving preferredCombo. When /api/preferences/resolve returns after
+// fetchTranslations already defaulted, re-select the matching translation so
+// the user's preferred sub/dub axis wins. Same gates as KodikPlayer.
+watch(() => props.preferredCombo, async (newCombo) => {
+  if (!newCombo || newCombo.player !== 'animelib') return
+  if (userHasOverridden.value) return
+  if (usedPreferredCombo.value) return
+  if (translations.value.length === 0) return
+
+  const match = translations.value.find(
+    tr => String(tr.id) === newCombo.translation_id || tr.team_name === newCombo.translation_title,
+  )
+  if (!match) return
+  if (selectedTranslation.value?.id === match.id) return
+
+  usedPreferredCombo.value = true
+  setPreferredWatchType(match.type === 'voice' ? 'dub' : 'sub')
+  await _selectTranslation(match)
 })
 
 // Lifecycle

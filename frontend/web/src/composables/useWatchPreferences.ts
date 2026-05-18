@@ -5,6 +5,7 @@ import type { WatchCombo, ResolvedCombo } from '@/types/preference'
 
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
 const ANON_LAST_COMBO_KEY = 'anon_last_combo'
+const PREFERRED_WATCH_TYPE_KEY = 'preferred_watch_type'
 
 // Phase 7 SC2 — anonymous users get a localStorage-backed Tier 2 substitute:
 // "language + watch_type + last-used team" from the most recent combo they
@@ -25,6 +26,22 @@ export function getAnonLastCombo(): WatchCombo | null {
   } catch {
     return null
   }
+}
+
+// Last-used sub/dub axis for the browser, persisted across all users.
+// Used by player default-fallbacks to avoid the race where the server-side
+// resolve has not returned yet and the player would otherwise hardcode dub.
+// Written on every successful pick (auto or manual). Read by player
+// default-fallback blocks when props.preferredCombo is null at mount.
+export function setPreferredWatchType(type: 'sub' | 'dub') {
+  try {
+    localStorage.setItem(PREFERRED_WATCH_TYPE_KEY, type)
+  } catch { /* quota errors swallowed — non-essential */ }
+}
+
+export function getPreferredWatchType(): 'sub' | 'dub' | null {
+  const raw = localStorage.getItem(PREFERRED_WATCH_TYPE_KEY)
+  return raw === 'sub' || raw === 'dub' ? raw : null
 }
 
 // pickAnonLockMatch implements the same boundary discipline as the backend

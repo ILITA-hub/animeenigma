@@ -235,6 +235,7 @@ import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
+import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
@@ -370,6 +371,14 @@ const loadingVideo = ref(false)
 const error = ref<string | null>(null)
 const isInitialized = ref(false)
 const translationType = ref<'voice' | 'subtitles'>('voice')
+// userHasOverridden flips true once the user explicitly clicks a translation
+// or language toggle, freezing out any late-arriving preferredCombo. Without
+// this, a slow resolve could undo the user's explicit pick.
+const userHasOverridden = ref(false)
+// usedPreferredCombo is true when fetchTranslations matched the props prop on
+// the initial auto-pick. When false, the late-combo watcher is allowed to
+// re-select once preferredCombo arrives from the parent's async resolve().
+const usedPreferredCombo = ref(false)
 
 // Filtered and sorted translations by type (pinned first)
 const voiceTranslations = computed(() => {
@@ -467,30 +476,58 @@ const fetchTranslations = async () => {
           translationType.value = match.type === 'voice' ? 'voice' : 'subtitles'
           selectedTranslation.value = match.id
           autoSelected = true
+          usedPreferredCombo.value = true
         }
       }
 
       if (!autoSelected) {
-        // Prefer pinned voice translations, then any voice, then subtitles
+        // Default fallback. Honor the user's last-used watch_type from
+        // localStorage so the very first pick on a fresh anime doesn't force
+        // dub on a sub viewer (and vice-versa). The late-combo watcher below
+        // will still correct the pick once /api/preferences/resolve returns.
         const voices = translations.value.filter(t => t.type === 'voice')
         const subs = translations.value.filter(t => t.type !== 'voice')
         const pinnedVoice = voices.find(t => t.pinned)
         const pinnedSub = subs.find(t => t.pinned)
+        const preferSubs = getPreferredWatchType() === 'sub'
 
-        if (pinnedVoice) {
-          translationType.value = 'voice'
-          selectedTranslation.value = pinnedVoice.id
-        } else if (voices.length > 0) {
-          translationType.value = 'voice'
-          selectedTranslation.value = voices[0].id
-        } else if (pinnedSub) {
-          translationType.value = 'subtitles'
-          selectedTranslation.value = pinnedSub.id
-        } else if (subs.length > 0) {
-          translationType.value = 'subtitles'
-          selectedTranslation.value = subs[0].id
+        const pickVoice = () => {
+          if (pinnedVoice) {
+            translationType.value = 'voice'
+            selectedTranslation.value = pinnedVoice.id
+            return true
+          }
+          if (voices.length > 0) {
+            translationType.value = 'voice'
+            selectedTranslation.value = voices[0].id
+            return true
+          }
+          return false
+        }
+        const pickSub = () => {
+          if (pinnedSub) {
+            translationType.value = 'subtitles'
+            selectedTranslation.value = pinnedSub.id
+            return true
+          }
+          if (subs.length > 0) {
+            translationType.value = 'subtitles'
+            selectedTranslation.value = subs[0].id
+            return true
+          }
+          return false
+        }
+
+        if (preferSubs) {
+          if (!pickSub()) pickVoice()
+        } else {
+          if (!pickVoice()) pickSub()
         }
       }
+
+      // Persist the chosen watch_type so future fresh-anime loads honor it
+      // before the server-side resolve returns. Cheap localStorage write.
+      setPreferredWatchType(translationType.value === 'voice' ? 'dub' : 'sub')
 
       // Auto-load first video after setting translation
       isInitialized.value = true
@@ -557,6 +594,8 @@ const setTranslationType = (type: 'voice' | 'subtitles') => {
   // 'language' dimension is the sub-vs-dub axis here (D-07 enumerates the set).
   tracker.recordPickerEvent('language', { watch_type: type === 'voice' ? 'dub' : 'sub' })
   translationType.value = type
+  userHasOverridden.value = true
+  setPreferredWatchType(type === 'voice' ? 'dub' : 'sub')
 }
 
 const selectTranslation = (translationId: number) => {
@@ -570,6 +609,10 @@ const selectTranslation = (translationId: number) => {
   })
 
   selectedTranslation.value = translationId
+  userHasOverridden.value = true
+  if (tr) {
+    setPreferredWatchType(tr.type === 'voice' ? 'dub' : 'sub')
+  }
 
   // Check if current episode exceeds available episodes for this translation
   const trans = translations.value.find(t => t.id === translationId)
@@ -728,8 +771,35 @@ watch(() => props.animeId, () => {
   lastSaveTime.value = 0
   watchedEpisodes.value = 0
   episodeMarkedWatched.value = false
+  userHasOverridden.value = false
+  usedPreferredCombo.value = false
   fetchTranslations()
   fetchWatchedEpisodes()
+})
+
+// Late-arriving preferredCombo. When /api/preferences/resolve returns after
+// fetchTranslations already defaulted, this watcher re-selects the matching
+// translation so the user sees their preferred sub/dub axis instead of the
+// hardcoded default. Gated on: same player, no user override yet, no prior
+// preferredCombo apply, translations already loaded.
+watch(() => props.preferredCombo, async (newCombo) => {
+  if (!newCombo || newCombo.player !== 'kodik') return
+  if (userHasOverridden.value) return
+  if (usedPreferredCombo.value) return
+  if (!isInitialized.value) return
+  if (translations.value.length === 0) return
+
+  const match = translations.value.find(
+    t => String(t.id) === newCombo.translation_id || t.title === newCombo.translation_title,
+  )
+  if (!match) return
+  if (selectedTranslation.value === match.id) return
+
+  translationType.value = match.type === 'voice' ? 'voice' : 'subtitles'
+  selectedTranslation.value = match.id
+  usedPreferredCombo.value = true
+  setPreferredWatchType(match.type === 'voice' ? 'dub' : 'sub')
+  await loadVideo()
 })
 
 onMounted(() => {

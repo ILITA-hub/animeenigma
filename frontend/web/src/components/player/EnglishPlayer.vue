@@ -514,7 +514,7 @@ import { scraperApi, jimakuApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
-import { useWatchPreferences } from '@/composables/useWatchPreferences'
+import { useWatchPreferences, setPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import ReportButton from './ReportButton.vue'
@@ -620,6 +620,11 @@ const servers = ref<ScraperServer[]>([])
 const selectedEpisode = ref<ScraperEpisode | null>(null)
 const selectedServer = ref<ScraperServer | null>(null)
 const selectedCategory = ref<'sub' | 'dub'>('sub')
+// Match Kodik/AnimeLib late-combo discipline: freeze out late-arriving
+// preferredCombo once the user has explicitly clicked, and skip re-selection
+// once the initial fetchServers auto-pick already used preferredCombo.
+const userHasOverridden = ref(false)
+const usedPreferredCombo = ref(false)
 const streamUrl = ref<string | null>(null)
 const streamType = ref<'hls' | 'mp4' | 'iframe'>('hls')
 const subtitles = ref<ScraperSubtitle[]>([])
@@ -941,6 +946,7 @@ const fetchServers = async (episodeId: string) => {
       if (match) {
         selectedCategory.value = match.type as 'sub' | 'dub'
         autoSelected = true
+        usedPreferredCombo.value = true
         await _advanceServer(match)
       }
     }
@@ -955,6 +961,12 @@ const fetchServers = async (episodeId: string) => {
         selectedCategory.value = servers.value[0].type as 'sub' | 'dub'
         await _advanceServer(servers.value[0])
       }
+    }
+
+    // Persist the chosen watch_type so future fresh-anime loads honor it
+    // before the server-side resolve returns.
+    if (selectedServer.value) {
+      setPreferredWatchType(selectedServer.value.type === 'dub' ? 'dub' : 'sub')
     }
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
@@ -1510,6 +1522,8 @@ const selectServer = async (server: ScraperServer) => {
     translation_title: server.name,
     player: 'english',
   })
+  userHasOverridden.value = true
+  setPreferredWatchType(server.type === 'dub' ? 'dub' : 'sub')
   await _advanceServer(server)
 }
 
@@ -1522,6 +1536,8 @@ const setSelectedCategory = (category: 'sub' | 'dub') => {
   tracker.recordPickerEvent('language', {
     watch_type: category,
   })
+  userHasOverridden.value = true
+  setPreferredWatchType(category)
   selectedCategory.value = category
 }
 
@@ -1766,8 +1782,39 @@ watch(() => props.animeId, () => {
   episodeMarkedWatched.value = false
   activeJimakuSub.value = null
   jpSubtitleOffset.value = 0
+  userHasOverridden.value = false
+  usedPreferredCombo.value = false
   fetchEpisodes()
   fetchWatchedEpisodes()
+})
+
+// Late-arriving preferredCombo. When /api/preferences/resolve returns after
+// fetchServers already defaulted, re-select the matching server so the user
+// sees their preferred sub/dub axis. Same gates as the other players.
+//
+// Order matters: _advanceServer(match) is awaited BEFORE selectedCategory is
+// mutated, so the watch(selectedCategory) sibling doesn't race ahead and
+// pick `newServers[0]` (the first sub/dub server in catalog order) before
+// our intended match lands in selectedServer.
+watch(() => props.preferredCombo, async (newCombo) => {
+  if (!newCombo || newCombo.player !== 'english') return
+  if (userHasOverridden.value) return
+  if (usedPreferredCombo.value) return
+  if (servers.value.length === 0) return
+
+  const match = servers.value.find(
+    s => s.id === newCombo.translation_id || s.name === newCombo.translation_title,
+  )
+  if (!match) return
+  if (selectedServer.value?.id === match.id) return
+
+  usedPreferredCombo.value = true
+  setPreferredWatchType(match.type === 'dub' ? 'dub' : 'sub')
+  await _advanceServer(match)
+  // After the server is in place, sync the category — selectedServer.type now
+  // equals match.type, so the selectedCategory watcher's mismatch guard
+  // short-circuits and no second _advanceServer call fires.
+  selectedCategory.value = match.type as 'sub' | 'dub'
 })
 
 // Sync Video.js fullscreen class when outer container is the fullscreen target.
