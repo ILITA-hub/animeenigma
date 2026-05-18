@@ -223,6 +223,41 @@
     "sourceOfflineSuffix": "（オフライン）",
     "reportProvider": "プロバイダー",
     "reportTried": "試行",
+    "raw": {
+      "tab": "RAW JP",
+      "unavailable": "このアニメはまだ生の日本語ソースで利用できません。Kodik、AnimeLib、または英語プロバイダーをお試しください。"
+    },
+    "subtitlePicker": {
+      "label": "字幕",
+      "none": "オフ"
+    },
+    "otherSubs": {
+      "title": "その他の字幕",
+      "openButton": "他の字幕",
+      "empty": "このエピソードの代替字幕トラックはまだありません。",
+      "select": "選択",
+      "selected": "選択済み",
+      "unknownFormat": "形式不明",
+      "loadError": "字幕を読み込めませんでした: {error}",
+      "providersDown": "一部のソースが応答しませんでした: {providers}",
+      "providerChip": {
+        "jimaku": "Jimaku",
+        "opensubtitles": "OpenSubtitles"
+      },
+      "lang": {
+        "ja": "日本語",
+        "en": "English",
+        "ru": "Русский",
+        "zh": "中文",
+        "ko": "한국어",
+        "es": "Español",
+        "fr": "Français",
+        "de": "Deutsch",
+        "pt": "Português",
+        "it": "Italiano",
+        "ar": "العربية"
+      }
+    },
     "error": {
       "loadEpisodes": "エピソードリストの読み込みに失敗しました",
       "loadTranslations": "吹替リストの読み込みに失敗しました",

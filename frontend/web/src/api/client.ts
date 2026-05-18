@@ -615,6 +615,34 @@ export const jimakuApi = {
     }),
 }
 
+/**
+ * workstream raw-jp / Phase 01 — AllAnime raw-JP provider.
+ * Returns Japanese-audio HLS streams.
+ */
+export const rawApi = {
+  getEpisodes: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/raw/episodes`),
+  getStream: (animeId: string, episode: number, quality?: string) =>
+    apiClient.get(`/anime/${animeId}/raw/stream`, {
+      params: { episode, ...(quality && { quality }) },
+    }),
+}
+
+/**
+ * workstream raw-jp / Phase 02 — aggregated subtitle sources.
+ * `byLang` filters to a CSV of ISO 639-1 codes. `all` returns every track.
+ */
+export const subtitlesApi = {
+  byLang: (animeId: string, episode: number, langs: string[]) =>
+    apiClient.get(`/anime/${animeId}/subtitles`, {
+      params: { episode, lang: langs.join(',') },
+    }),
+  all: (animeId: string, episode: number) =>
+    apiClient.get(`/anime/${animeId}/subtitles/all`, {
+      params: { episode },
+    }),
+}
+
 export const consumetApi = {
   getEpisodes: (animeId: string) =>
     apiClient.get(`/anime/${animeId}/consumet/episodes`),

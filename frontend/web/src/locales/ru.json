@@ -223,6 +223,41 @@
     "sourceOfflineSuffix": " (недоступно)",
     "reportProvider": "Провайдер",
     "reportTried": "Пробовали",
+    "raw": {
+      "tab": "RAW JP",
+      "unavailable": "Это аниме пока недоступно через сырой японский источник. Попробуйте Kodik, AnimeLib или English-провайдер."
+    },
+    "subtitlePicker": {
+      "label": "Субтитры",
+      "none": "Выключить"
+    },
+    "otherSubs": {
+      "title": "Другие субтитры",
+      "openButton": "Другие сабы",
+      "empty": "Для этого эпизода пока нет альтернативных дорожек субтитров.",
+      "select": "Выбрать",
+      "selected": "Выбрано",
+      "unknownFormat": "Неизвестный формат",
+      "loadError": "Не удалось загрузить субтитры: {error}",
+      "providersDown": "Некоторые источники не ответили: {providers}",
+      "providerChip": {
+        "jimaku": "Jimaku",
+        "opensubtitles": "OpenSubtitles"
+      },
+      "lang": {
+        "ja": "日本語",
+        "en": "English",
+        "ru": "Русский",
+        "zh": "中文",
+        "ko": "한국어",
+        "es": "Español",
+        "fr": "Français",
+        "de": "Deutsch",
+        "pt": "Português",
+        "it": "Italiano",
+        "ar": "العربية"
+      }
+    },
     "error": {
       "loadEpisodes": "Не удалось загрузить список серий",
       "loadTranslations": "Не удалось загрузить список озвучек",

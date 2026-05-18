@@ -223,6 +223,41 @@
     "sourceOfflineSuffix": " (offline)",
     "reportProvider": "Provider",
     "reportTried": "Tried",
+    "raw": {
+      "tab": "RAW JP",
+      "unavailable": "This anime isn't yet available via the raw Japanese provider. Try Kodik, AnimeLib, or the English source."
+    },
+    "subtitlePicker": {
+      "label": "Subtitles",
+      "none": "Off"
+    },
+    "otherSubs": {
+      "title": "Other subtitles",
+      "openButton": "Other subs",
+      "empty": "No alternative subtitle tracks were found for this episode yet.",
+      "select": "Select",
+      "selected": "Selected",
+      "unknownFormat": "Unknown format",
+      "loadError": "Couldn't load subtitles: {error}",
+      "providersDown": "Some sources didn't respond: {providers}",
+      "providerChip": {
+        "jimaku": "Jimaku",
+        "opensubtitles": "OpenSubtitles"
+      },
+      "lang": {
+        "ja": "日本語",
+        "en": "English",
+        "ru": "Русский",
+        "zh": "中文",
+        "ko": "한국어",
+        "es": "Español",
+        "fr": "Français",
+        "de": "Deutsch",
+        "pt": "Português",
+        "it": "Italiano",
+        "ar": "العربية"
+      }
+    },
     "error": {
       "loadEpisodes": "Failed to load episode list",
       "loadTranslations": "Failed to load translations",

@@ -274,6 +274,18 @@ var HLSProxyAllowedDomains = []string{
 	"cdn-centaurus.com",          // observed StreamHG/Earnvids primary CDN (post-Phase-22 rotation)
 	"meadowlarkdesignstudio.cfd", // observed hls3 CDN (post-Phase-22 rotation)
 	"goldenridgeproduction.shop", // observed hls3 CDN (DEF-22-01)
+	// workstream raw-jp / Phase 01 — AllAnime raw-JP CDN families. AllAnime
+	// returns mixed source hosts depending on per-anime upstream. wixmp +
+	// blogger are the common YT-fed mirrors; allanime.day exposes its own
+	// edge hosts.
+	"allanime.day",
+	"allanime.to",
+	"allmanga.to",
+	"wixmp.com",          // common AllAnime upstream CDN
+	"wixmp-ed30a86b8c4858749c87952r.akamaized.net", // wixmp signed edges
+	"blogger.com",        // YouTube-fed mirror used by some AllAnime sources
+	"googlevideo.com",    // direct YouTube CDN (some AllAnime sources resolve here)
+	"sharepoint.com",     // observed OneDrive-backed source variant
 }
 
 // UpstreamError represents an error from the upstream CDN.
