@@ -722,7 +722,7 @@ func TestRecsHandler_PersonalizedBranchS5_RegistryHasFiveSignals(t *testing.T) {
 	seedPhase12Anime(t, db, "cand-similar", "released", false, 7.5, "tv", "pg_13", "manga")
 	seedPhase12Studio(t, db, "cand-similar", "Madhouse")
 	seedPhase12Anime(t, db, "cand-different", "released", false, 7.5, "movie", "g", "original")
-	seedPhase12History(t, db, "wh-1", "user-1", "watched-1", "hianime", 1500)
+	seedPhase12History(t, db, "wh-1", "user-1", "watched-1", "kodik", 1500)
 
 	recsRepo := repo.NewRecsRepository(db)
 	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
@@ -775,14 +775,14 @@ func TestRecsHandler_PersonalizedBranchS5_ContributesAfterPrecompute(t *testing.
 
 	seedPhase12Anime(t, db, "cand-different", "released", false, 7.0, "movie", "g", "original")
 
-	seedPhase12History(t, db, "wh-1", "user-1", "history-1", "hianime", 1500)
+	seedPhase12History(t, db, "wh-1", "user-1", "history-1", "kodik", 1500)
 
 	// Population: 4 other users touching disjoint attributes so user-1's
 	// shounen / action / Madhouse / tv / pg_13 / manga become rare.
 	for i, u := range []string{"user-2", "user-3", "user-4", "user-5"} {
 		fillerID := "filler-c-" + sliceTestID(i)
 		seedPhase12Anime(t, db, fillerID, "released", false, 7.0, "movie", "g", "original")
-		seedPhase12History(t, db, "wh-other-c-"+sliceTestID(i), u, fillerID, "hianime", 1500)
+		seedPhase12History(t, db, "wh-other-c-"+sliceTestID(i), u, fillerID, "kodik", 1500)
 	}
 
 	recsRepo := repo.NewRecsRepository(db)
@@ -827,7 +827,7 @@ func TestRecsHandler_PersonalizedBranchS5_NoNaN(t *testing.T) {
 		userID := "u" + sliceTestID(u)
 		for k := 0; k < 5; k++ {
 			animeID := "anime-" + sliceTestID((u*5+k)%50)
-			seedPhase12History(t, db, "wh-u"+sliceTestID(u)+"-"+sliceTestID(k), userID, animeID, "hianime", 60+(k*30))
+			seedPhase12History(t, db, "wh-u"+sliceTestID(u)+"-"+sliceTestID(k), userID, animeID, "kodik", 60+(k*30))
 		}
 	}
 
@@ -921,14 +921,14 @@ func TestRecsHandler_PersonalizedBranchS5_TopOrderingDiffersFromPhase11Baseline(
 	// cand-None: shares 0 attributes.
 	seedPhase12Anime(t, db, "cand-None", "released", false, 7.0, "movie", "r", "novel")
 
-	seedPhase12History(t, db, "wh-1", "user-1", "history-1", "hianime", 1500)
+	seedPhase12History(t, db, "wh-1", "user-1", "history-1", "kodik", 1500)
 
 	// Population: 4 other users touch DIFFERENT attributes from user-1 so
 	// the IDFs for the user's attributes become discriminative.
 	for i, u := range []string{"user-2", "user-3", "user-4", "user-5"} {
 		fillerID := "filler-tod-" + sliceTestID(i)
 		seedPhase12Anime(t, db, fillerID, "released", false, 7.0, "movie", "r", "novel")
-		seedPhase12History(t, db, "wh-other-tod-"+sliceTestID(i), u, fillerID, "hianime", 1500)
+		seedPhase12History(t, db, "wh-other-tod-"+sliceTestID(i), u, fillerID, "kodik", 1500)
 	}
 
 	recsRepo := repo.NewRecsRepository(db)

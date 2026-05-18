@@ -122,7 +122,7 @@ func (s *S5Attribute) Precompute(ctx context.Context, userID recs.UserID) error 
 	}
 
 	// 2. Per-anime units. One anime can appear in multiple history rows
-	//    (Kodik writes one row per episode, HiAnime can write multiple
+	//    (Kodik writes one row per episode, some providers can write multiple
 	//    if the user re-opened the same episode). We sum the per-row
 	//    units before computing TF.
 	unitsByAnime := make(map[string]float64)

@@ -16,11 +16,11 @@ The platform has 4 video players, each targeting different source APIs:
 |--------|------|-----------|-----------|----------|---------|---------|
 | **Kodik** | RU | `KodikPlayer.vue` | Kodik iframe | No | No | No (iframe) |
 | **AnimeLib** | RU | `AnimeLibPlayer.vue` | HTML5 `<video>` (MP4) or Kodik iframe fallback | Yes | No | Yes (MP4) |
-| **HiAnime** | EN | `HiAnimePlayer.vue` | Video.js / HLS.js (switchable) | Yes | Yes | Yes (HLS) |
-| **Consumet** | EN | `ConsumetPlayer.vue` | Video.js / HLS.js (switchable) | Yes | Yes | Yes (HLS) |
 
-**Shared components:**
-- `SubtitleOverlay.vue` — Custom selectable-text JP subtitle renderer (ASS/SRT/VTT). Used by HiAnime + Consumet. Teleports to fullscreen element, time-synced via `requestAnimationFrame`.
+> EN players (HiAnime + Consumet) were removed in May 2026 after upstream shutdowns made them non-functional. Replacements are being planned. The English-language tab is intentionally hidden from the UI until new providers ship; the subtitle, skip-intro, and HLS-proxy infrastructure was preserved for reuse.
+
+**Shared components (reused by future EN players):**
+- `SubtitleOverlay.vue` — Custom selectable-text JP subtitle renderer (ASS/SRT/VTT). Teleports to fullscreen element, time-synced via `requestAnimationFrame`.
 - `subtitle-parser.ts` — Parses ASS (via `ass-compiler`), SRT, VTT into `SubtitleCue[]`
 - `libs/videoutils/proxy.go` — Backend HLS proxy for CORS. Allowed domains include streaming CDNs, `jimaku.cc`, `cdnlibs.org` (AnimeLib).
 
@@ -30,7 +30,7 @@ The platform has 4 video players, each targeting different source APIs:
 
 Videos are sourced in three ways:
 1. **Kodik iframe** — Frontend embeds Kodik's player iframe (no direct video control)
-2. **Backend proxy/restream** — Backend proxies HLS/MP4 streams from external APIs (HiAnime, Consumet, AnimeLib) for CORS
+2. **Backend proxy/restream** — Backend proxies MP4 streams from AnimeLib for CORS
 3. **Self-hosted storage** — Admin-uploaded videos stored in MinIO
 
 ### On-Demand Catalog Population
@@ -48,9 +48,7 @@ Primary data sources:
 - **Shikimori** — Anime metadata (titles, descriptions, posters, genres)
 - **Kodik** — RU video streaming (iframe embed). Parser: `services/catalog/internal/parser/kodik/`
 - **AnimeLib** — RU video streaming (direct MP4 + Kodik fallback). Parser: `services/catalog/internal/parser/animelib/`
-- **HiAnime** — EN video streaming (HLS). Parser: `services/catalog/internal/parser/hianime/`
-- **Consumet** — EN video streaming (HLS). Parser: `services/catalog/internal/parser/consumet/`
-- **Jimaku.cc** — Japanese subtitle files (ASS/SRT/VTT). Used by HiAnime + Consumet players.
+- **Jimaku.cc** — Japanese subtitle files (ASS/SRT/VTT). Infrastructure preserved for future EN players.
 - **ARM** (`arm.haglund.dev`) — Anime ID mapping (Shikimori/MAL → AniList). Library: `libs/idmapping/`
 - **MAL** (optional) — Additional metadata, ratings sync
 
@@ -192,17 +190,6 @@ User -> Frontend -> AnimeLibPlayer.vue -> Backend proxy -> MP4 stream
 User -> Frontend -> AnimeLibPlayer.vue [Kodik iframe fallback]
 ```
 
-**HiAnime / Consumet (HLS proxy):**
-```
-User -> Frontend -> Catalog (HiAnime/Consumet parser) -> External API
-                          |
-        [Return HLS m3u8 URLs + VTT subtitle URLs]
-                          |
-User -> Frontend -> Player.vue -> Backend HLS proxy -> m3u8 stream
-                          |
-        [Optional: Jimaku.cc JP subs via ARM AniList ID lookup]
-```
-
 ### Anime Parser Flow
 
 ```
@@ -242,8 +229,6 @@ Each provider has a parser in `services/catalog/internal/parser/{name}/`:
 
 - **Kodik** — RU iframe embed. Returns embed URLs with translation/episode params. No direct video control.
 - **AnimeLib** — RU direct MP4. Uses AnimeLib's hapi API for episode data, MP4 URLs at multiple qualities, and translation info. Falls back to Kodik iframe when direct URLs unavailable.
-- **HiAnime** — EN HLS streaming. Returns m3u8 URLs and VTT subtitle tracks. Proxied through backend for CORS.
-- **Consumet** — EN HLS streaming. Returns m3u8 URLs and VTT subtitle tracks. Proxied through backend for CORS.
 
 ## Testing
 
@@ -491,7 +476,7 @@ bun run test:e2e     # Run e2e tests
 
 # For Playwright, use bunx (not npx):
 bunx playwright test                           # Run all e2e tests
-bunx playwright test hianime-integration       # Run specific test file
+bunx playwright test player                    # Run a specific spec by name
 bunx playwright test --reporter=list           # With list reporter
 
 # For all CLI tools, use bunx (not npx):

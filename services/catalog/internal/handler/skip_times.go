@@ -1,5 +1,5 @@
-// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTA in HiAnime + Consumet
-// players. Backend proxy of the community-maintained aniskip.com API.
+// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTA. Backend proxy of the
+// community-maintained aniskip.com API.
 //
 // We proxy (rather than call from the browser) for three reasons:
 //   1. CORS — aniskip's endpoints are not browser-CORS-enabled.

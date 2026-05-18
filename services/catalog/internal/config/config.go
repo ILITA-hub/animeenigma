@@ -18,8 +18,6 @@ type Config struct {
 	Redis     cache.Config
 	JWT       authz.JWTConfig
 	Shikimori ShikimoriConfig
-	HiAnime   HiAnimeConfig
-	Consumet  ConsumetConfig
 	Jimaku    JimakuConfig
 	AnimeLib    AnimeLibConfig
 	Hanime      HanimeConfig
@@ -49,15 +47,6 @@ type ShikimoriConfig struct {
 	UserAgent   string
 	RateLimit   int
 	Timeout     time.Duration
-}
-
-type HiAnimeConfig struct {
-	AniwatchAPIURL string
-}
-
-type ConsumetConfig struct {
-	APIURL   string
-	Provider string
 }
 
 type JimakuConfig struct {
@@ -143,13 +132,6 @@ func Load() (*Config, error) {
 			UserAgent:  getEnv("SHIKIMORI_USER_AGENT", "AnimeEnigma/1.0"),
 			RateLimit:  getEnvInt("SHIKIMORI_RATE_LIMIT", 5), // requests per second
 			Timeout:    getEnvDuration("SHIKIMORI_TIMEOUT", 30*time.Second),
-		},
-		HiAnime: HiAnimeConfig{
-			AniwatchAPIURL: getEnv("ANIWATCH_API_URL", "http://aniwatch:4000"),
-		},
-		Consumet: ConsumetConfig{
-			APIURL:   getEnv("CONSUMET_API_URL", "http://consumet:3000"),
-			Provider: getEnv("CONSUMET_PROVIDER", ""),
 		},
 		Jimaku: JimakuConfig{
 			APIKey: getEnv("JIMAKU_API_KEY", ""),

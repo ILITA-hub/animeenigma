@@ -18,7 +18,7 @@ import (
 var _ domain.EmbedExtractor = (*MegacloudClient)(nil)
 
 // TestMegacloudClient_MatchesKnownHosts asserts that every host the Aniyomi
-// extension and HiAnime upstream rotate through is recognized as a megacloud
+// extension and some upstreams rotate through is recognized as a megacloud
 // embed, and that unrelated hosts (kwik, animepahe, generic example.com with
 // "megacloud" in the path) are NOT mistaken for one.
 func TestMegacloudClient_MatchesKnownHosts(t *testing.T) {

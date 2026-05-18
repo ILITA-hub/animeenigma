@@ -13,7 +13,7 @@ type Config struct {
 	Grafana          GrafanaConfig
 	Claude           ClaudeConfig
 	Admins           []string
-	SuppressedAlerts []string // alert keys to ignore (e.g., "Parser Failure Rate:hianime")
+	SuppressedAlerts []string // alert keys to ignore (e.g., "Parser Failure Rate:kodik")
 	StatePath        string
 	IssuePath        string
 	// TestMode is a future-hook flag (Phase 23 Plan 23-03 / T-23-10

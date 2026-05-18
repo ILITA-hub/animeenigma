@@ -3,7 +3,7 @@
  *
  * Detects user-initiated combo changes within 30s of player load and POSTs them to
  * /api/preferences/override. The composable is consumed by KodikPlayer, AnimeLibPlayer,
- * HiAnimePlayer, ConsumetPlayer (per-player instance for episode/team/language) plus
+ * EnglishPlayer (per-player instance for episode/team/language) plus
  * a separate instance in Anime.vue (for player-dimension switches).
  *
  * Key invariants enforced here:
@@ -25,7 +25,7 @@ import type { WatchCombo, ResolvedCombo } from '@/types/preference'
 
 export type OverrideDimension = 'language' | 'player' | 'team' | 'episode'
 
-export type PlayerName = 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'english'
+export type PlayerName = 'kodik' | 'animelib' | 'english'
 
 // We accept WatchCombo (the prop shape players hold) rather than the stricter
 // ResolvedCombo. The tier/tier_number fields are optional — the composable

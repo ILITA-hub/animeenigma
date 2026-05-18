@@ -91,7 +91,7 @@ func (h *ScraperEndpointsHandler) GetScraperServers(w http.ResponseWriter, r *ht
 }
 
 // GetScraperStream handles GET /api/anime/{animeId}/scraper/stream?episode=...&server=...&category=...
-// category defaults to "sub" (mirrors GetHiAnimeStream).
+// category defaults to "sub".
 func (h *ScraperEndpointsHandler) GetScraperStream(w http.ResponseWriter, r *http.Request) {
 	animeID := chi.URLParam(r, "animeId")
 	if animeID == "" {

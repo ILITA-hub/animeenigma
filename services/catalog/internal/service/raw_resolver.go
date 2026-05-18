@@ -30,7 +30,7 @@ type RawResolver struct {
 	cache     *cache.RedisCache
 	log       *logger.Logger
 
-	// Per-anime lookup deduplication, mirroring CatalogService.hianimeLookups.
+	// Per-anime lookup deduplication for in-flight AllAnime queries.
 	lookups sync.Map // map[string]*rawLookup
 }
 
@@ -52,7 +52,7 @@ func NewRawResolver(client *allanime.Client, animeRepo *repo.AnimeRepository, re
 }
 
 // RawEpisode is what the handler returns to the frontend. Mirrors the shape
-// of domain.HiAnimeEpisode for client-side parity.
+// of domain.RawEpisode for client-side parity.
 type RawEpisode struct {
 	ID     string `json:"id"`
 	Number int    `json:"number"`

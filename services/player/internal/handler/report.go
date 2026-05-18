@@ -21,7 +21,7 @@ const maxReportBodySize = 2 * 1024 * 1024 // 2MB
 
 // allowedPlayerTypes is a whitelist of valid player types for report filenames.
 var allowedPlayerTypes = map[string]bool{
-	"hianime": true, "consumet": true, "kodik": true, "animelib": true,
+	"kodik": true, "animelib": true,
 }
 
 type ReportHandler struct {

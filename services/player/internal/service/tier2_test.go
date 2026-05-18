@@ -83,7 +83,7 @@ func TestAggregateTier2_TwoSignalsAggregateIndependently(t *testing.T) {
 		histRow("kodik", "ru", "dub", "610", "AniLibria", 1000, 0),
 		histRow("kodik", "ru", "dub", "609", "AniDUB", 800, 0),
 		// Plus an EN dub from a different combo
-		histRow("hianime", "en", "dub", "hd-1", "HD-1", 600, 0),
+		histRow("kodik", "en", "dub", "hd-1", "HD-1", 600, 0),
 	}
 	coarse, fine, total := AggregateTier2(rows, 30, fixedNow, 60)
 

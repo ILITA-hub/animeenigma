@@ -83,7 +83,7 @@ func AnimeSlots() []string {
 
 // ObserveParser records parser request metrics. Call with defer:
 //
-//	defer metrics.ObserveParser("hianime", "get_episodes", time.Now(), &err)
+//	defer metrics.ObserveParser("animelib", "get_episodes", time.Now(), &err)
 func ObserveParser(provider, operation string, start time.Time, errp *error) {
 	duration := time.Since(start).Seconds()
 	status := "success"

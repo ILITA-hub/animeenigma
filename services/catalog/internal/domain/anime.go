@@ -44,13 +44,11 @@ type Anime struct {
 	// valid until search-driven re-ingest backfills them. Phase 9 (UX-18).
 	HasDub          bool           `gorm:"default:false;index" json:"has_dub"`
 	// Phase 15 (UX-31) — per-provider availability booleans. Each parser
-	// (kodik / animelib / hianime / consumet) lazily sets its corresponding
-	// flag the first time the catalog touches that provider for the anime.
-	// Mirrors HasDub. Default false; existing rows backfill over time.
+	// (kodik / animelib) lazily sets its corresponding flag the first time
+	// the catalog touches that provider for the anime. Mirrors HasDub.
+	// Default false; existing rows backfill over time.
 	HasKodik    bool `gorm:"default:false;index;column:has_kodik" json:"has_kodik"`
 	HasAnimeLib bool `gorm:"default:false;index;column:has_animelib" json:"has_animelib"`
-	HasHiAnime  bool `gorm:"default:false;index;column:has_hianime" json:"has_hianime"`
-	HasConsumet bool `gorm:"default:false;index;column:has_consumet" json:"has_consumet"`
 	// HasRaw — raw Japanese audio available via the AllAnime parser
 	// (workstream raw-jp, Phase 01). Lazily backfilled when the catalog
 	// service first resolves a raw stream for the anime.
@@ -308,7 +306,7 @@ type SearchFilters struct {
 	// Phase 15 (UX-31) — multi-axis browse sidebar filters.
 	// Kind matches the Shikimori-source enum: "tv" / "movie" / "ova" /
 	// "ona" / "special". Empty = no filter.
-	// Providers is the OR-set of {"kodik","animelib","hianime","consumet"}
+	// Providers is the OR-set of {"kodik","animelib"}
 	// — a row passes when ANY of the selected has_{provider} columns is
 	// true. Empty = no filter. Unknown values are dropped at the handler.
 	Kind      string
@@ -339,99 +337,6 @@ type AddVideoRequest struct {
 	Quality       string     `json:"quality"`
 	Language      string     `json:"language"`
 	Subtitles     []string   `json:"subtitles"`
-}
-
-// HiAnimeEpisode represents an episode from HiAnime
-type HiAnimeEpisode struct {
-	ID       string `json:"id"`       // e.g., "death-note-60?ep=1234"
-	Number   int    `json:"number"`
-	Title    string `json:"title"`
-	IsFiller bool   `json:"is_filler"`
-}
-
-// HiAnimeServer represents a streaming server from HiAnime
-type HiAnimeServer struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"` // "sub", "dub", "raw"
-}
-
-// HiAnimeSubtitle represents a subtitle track
-type HiAnimeSubtitle struct {
-	URL     string `json:"url"`
-	Lang    string `json:"lang"`
-	Label   string `json:"label"`
-	Default bool   `json:"default"`
-}
-
-// HiAnimeTimeRange for intro/outro markers
-type HiAnimeTimeRange struct {
-	Start int `json:"start"`
-	End   int `json:"end"`
-}
-
-// HiAnimeStream represents stream source data from HiAnime
-type HiAnimeStream struct {
-	URL       string              `json:"url"`
-	Type      string              `json:"type"` // "hls", "mp4", or "iframe"
-	Subtitles []HiAnimeSubtitle   `json:"subtitles,omitempty"`
-	Headers   map[string]string   `json:"headers,omitempty"`
-	Intro     *HiAnimeTimeRange   `json:"intro,omitempty"`
-	Outro     *HiAnimeTimeRange   `json:"outro,omitempty"`
-}
-
-// HiAnimeSearchResult represents a search result from HiAnime
-type HiAnimeSearchResult struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Poster   string `json:"poster"`
-	Type     string `json:"type"`
-	Duration string `json:"duration"`
-}
-
-// ConsumetEpisode represents an episode from Consumet
-type ConsumetEpisode struct {
-	ID       string `json:"id"`
-	Number   int    `json:"number"`
-	Title    string `json:"title"`
-	IsFiller bool   `json:"is_filler"`
-}
-
-// ConsumetServer represents a streaming server from Consumet
-type ConsumetServer struct {
-	Name string `json:"name"`
-}
-
-// ConsumetSubtitle represents a subtitle track
-type ConsumetSubtitle struct {
-	URL  string `json:"url"`
-	Lang string `json:"lang"`
-}
-
-// ConsumetSource represents a single video quality source from Consumet
-type ConsumetSource struct {
-	URL     string `json:"url"`
-	Quality string `json:"quality"`
-	IsM3U8  bool   `json:"isM3U8"`
-}
-
-// ConsumetStream represents stream source data from Consumet
-type ConsumetStream struct {
-	URL       string             `json:"url"`
-	IsM3U8    bool               `json:"isM3U8"`
-	Quality   string             `json:"quality"`
-	Sources   []ConsumetSource   `json:"sources,omitempty"`
-	Headers   map[string]string  `json:"headers,omitempty"`
-	Subtitles []ConsumetSubtitle `json:"subtitles,omitempty"`
-}
-
-// ConsumetSearchResult represents a search result from Consumet
-type ConsumetSearchResult struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Image    string `json:"image"`
-	Type     string `json:"type"`
-	SubOrDub string `json:"subOrDub"`
 }
 
 // JimakuSubtitle represents a Japanese subtitle file from Jimaku

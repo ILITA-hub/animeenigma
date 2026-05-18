@@ -1,7 +1,7 @@
 // Phase 20 — Skip-Intro CTA auto-dismiss setting.
 //
-// The Skip-Intro / Skip-Outro CTAs (Phase 18 / UX-34) in HiAnimePlayer.vue +
-// ConsumetPlayer.vue stay visible for the entire OP/ED window (typically
+// The Skip-Intro / Skip-Outro CTAs (Phase 18 / UX-34) in the English player
+// stay visible for the entire OP/ED window (typically
 // ~90 s). Users who deliberately want to watch the OP find the CTA visually
 // noisy. This composable exposes a localStorage-backed reactive `seconds`
 // value (default 8) that the players use to auto-dismiss the CTA after a

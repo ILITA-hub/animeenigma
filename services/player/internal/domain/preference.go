@@ -4,7 +4,7 @@ import "time"
 
 // WatchCombo describes a normalized player+translation selection
 type WatchCombo struct {
-	Player           string `json:"player"`           // kodik, animelib, hianime, consumet
+	Player           string `json:"player"`           // kodik, animelib
 	Language         string `json:"language"`          // ru, en
 	WatchType        string `json:"watch_type"`        // dub, sub
 	TranslationID    string `json:"translation_id"`    // provider-specific, always string
@@ -13,7 +13,7 @@ type WatchCombo struct {
 
 // ValidPlayers is the set of allowed player values
 var ValidPlayers = map[string]bool{
-	"kodik": true, "animelib": true, "hianime": true, "consumet": true,
+	"kodik": true, "animelib": true,
 }
 
 // ValidLanguages is the set of allowed language values

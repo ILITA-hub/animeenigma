@@ -20,7 +20,7 @@ func TestSaveReportToDisk_ValidPlayerType(t *testing.T) {
 
 	claims := &authz.Claims{UserID: "user-1", Username: "testuser"}
 	report := &domain.ErrorReport{
-		PlayerType:  "hianime",
+		PlayerType:  "kodik",
 		AnimeID:     "anime-123",
 		AnimeName:   "Test Anime",
 		ConsoleLogs: "[]",
@@ -35,7 +35,7 @@ func TestSaveReportToDisk_ValidPlayerType(t *testing.T) {
 	// Verify the file contains valid JSON
 	data, err := os.ReadFile(filename)
 	require.NoError(t, err)
-	assert.Contains(t, string(data), `"player_type": "hianime"`)
+	assert.Contains(t, string(data), `"player_type": "kodik"`)
 }
 
 func TestSaveReportToDisk_InvalidPlayerType(t *testing.T) {
@@ -81,7 +81,7 @@ func TestSaveReportToDisk_FilePermissions(t *testing.T) {
 
 	claims := &authz.Claims{UserID: "user-1", Username: "testuser"}
 	report := &domain.ErrorReport{
-		PlayerType:  "consumet",
+		PlayerType:  "animelib",
 		AnimeID:     "anime-456",
 		ConsoleLogs: "[]",
 		NetworkLogs: "[]",
@@ -145,7 +145,7 @@ func TestSaveReportToDisk_EmptyReportsDir(t *testing.T) {
 
 	claims := &authz.Claims{UserID: "user-1", Username: "testuser"}
 	report := &domain.ErrorReport{
-		PlayerType:  "hianime",
+		PlayerType:  "kodik",
 		AnimeID:     "anime-123",
 		ConsoleLogs: "[]",
 		NetworkLogs: "[]",

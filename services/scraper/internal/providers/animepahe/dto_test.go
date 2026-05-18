@@ -78,7 +78,7 @@ func TestSearchResponse_Unmarshal_GoldenFixture(t *testing.T) {
 // as `any` and the Lookup() code stringifies via fmt.Sprintf.
 func TestMalSyncResponse_Unmarshal(t *testing.T) {
 	t.Parallel()
-	body := `{"id":21,"title":"One Piece","Sites":{"animepahe":{"1":{"identifier":"1","url":"https://animepahe.ru/anime/1"}},"hianime":{"alt":{"identifier":42,"url":"https://hianime.to/watch/one-piece-100"}}}}`
+	body := `{"id":21,"title":"One Piece","Sites":{"animepahe":{"1":{"identifier":"1","url":"https://animepahe.ru/anime/1"}},"gogoanime":{"alt":{"identifier":42,"url":"https://gogoanime.to/watch/one-piece-100"}}}}`
 	var msr malSyncResponse
 	if err := json.Unmarshal([]byte(body), &msr); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -93,11 +93,11 @@ func TestMalSyncResponse_Unmarshal(t *testing.T) {
 	if len(animepahe) != 1 {
 		t.Errorf("animepahe has %d entries; want 1", len(animepahe))
 	}
-	hianime, ok := msr.Sites["hianime"]
+	gogoanime, ok := msr.Sites["gogoanime"]
 	if !ok {
-		t.Fatal("Sites.hianime missing — needed to verify identifier-as-int round-trip")
+		t.Fatal("Sites.gogoanime missing — needed to verify identifier-as-int round-trip")
 	}
-	for _, e := range hianime {
+	for _, e := range gogoanime {
 		// identifier=42 (int) must round-trip through `any` cleanly.
 		_ = e.Identifier
 	}

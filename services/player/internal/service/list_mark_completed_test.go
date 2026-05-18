@@ -263,7 +263,7 @@ func TestListService_MarkEpisodeWatched_FlipsWatchProgressCompleted(t *testing.T
 
 		req := &domain.MarkEpisodeWatchedRequest{
 			Episode:   3,
-			Player:    "hianime",
+			Player:    "kodik",
 			Language:  "en",
 			WatchType: "sub",
 			SessionID: "11111111-2222-3333-4444-555555555555",

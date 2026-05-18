@@ -1034,7 +1034,7 @@ func TestParseQuery_PreferRejectsInvalidChars(t *testing.T) {
 // provider-name shapes pass through unchanged.
 func TestParseQuery_PreferAcceptsValid(t *testing.T) {
 	t.Parallel()
-	cases := []string{"animepahe", "hianime", "9anime_alt", "kodik-ru", "abc123"}
+	cases := []string{"animepahe", "gogoanime", "9anime_alt", "kodik-ru", "abc123"}
 	for _, in := range cases {
 		req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?prefer="+in, nil)
 		qp := parseQuery(req)

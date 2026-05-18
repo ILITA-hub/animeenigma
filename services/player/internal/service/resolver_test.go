@@ -31,13 +31,13 @@ var (
 	animelibAniLibria = combo("animelib", "ru", "dub", "610", "AniLibria")
 	animelibAniDUB    = combo("animelib", "ru", "dub", "609", "AniDUB")
 	animelibAniRise   = combo("animelib", "ru", "dub", "1", "AniRise")
-	// EN dubs (hianime)
-	hianimeHD1 = combo("hianime", "en", "dub", "hd-1", "HD-1")
-	hianimeHD2 = combo("hianime", "en", "dub", "hd-2", "HD-2")
-	// EN subs (hianime)
-	hianimeSubDefault = combo("hianime", "en", "sub", "default", "Default")
-	// EN dubs (consumet)
-	consumetHD1 = combo("consumet", "en", "dub", "hd-1", "HD-1")
+	// EN dubs (english)
+	englishHD1 = combo("english", "en", "dub", "hd-1", "HD-1")
+	englishHD2 = combo("english", "en", "dub", "hd-2", "HD-2")
+	// EN subs (english)
+	englishSubDefault = combo("english", "en", "sub", "default", "Default")
+	// EN dubs (english2)
+	english2HD1 = combo("english2", "en", "dub", "hd-1", "HD-1")
 )
 
 func TestResolve(t *testing.T) {
@@ -62,7 +62,7 @@ func TestResolve(t *testing.T) {
 				Player: "kodik", Language: "ru", WatchType: "dub",
 				TranslationID: "610", TranslationTitle: "AniLibria",
 			},
-			available: []domain.WatchCombo{kodikAniLibria, kodikAniDUB, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniLibria, kodikAniDUB, englishHD1},
 			wantTier:  "per_anime", wantTierN: 1,
 			wantCombo: kodikAniLibria,
 		},
@@ -73,7 +73,7 @@ func TestResolve(t *testing.T) {
 				TranslationID: "610", TranslationTitle: "AniLibria",
 			},
 			// kodik AniLibria not available, but animelib AniLibria is
-			available: []domain.WatchCombo{animelibAniLibria, animelibAniDUB, hianimeHD1},
+			available: []domain.WatchCombo{animelibAniLibria, animelibAniDUB, englishHD1},
 			wantTier:  "per_anime", wantTierN: 1,
 			wantCombo: animelibAniLibria,
 		},
@@ -88,7 +88,7 @@ func TestResolve(t *testing.T) {
 				{Player: "kodik", Language: "ru", WatchType: "dub",
 					TranslationID: "609", TranslationTitle: "AniDUB", Viewers: 50},
 			},
-			available: []domain.WatchCombo{kodikAniDUB, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniDUB, englishHD1},
 			wantTier:  "community", wantTierN: 3,
 			wantCombo: kodikAniDUB,
 		},
@@ -102,7 +102,7 @@ func TestResolve(t *testing.T) {
 				Language: "ru", WatchType: "dub",
 				TopTranslationTitle: "AniLibria", Confidence: 5000,
 			},
-			available: []domain.WatchCombo{kodikAniLibria, kodikAniDUB, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniLibria, kodikAniDUB, englishHD1},
 			wantTier:  "user_global", wantTierN: 2,
 			wantCombo: kodikAniLibria,
 		},
@@ -117,7 +117,7 @@ func TestResolve(t *testing.T) {
 				{Player: "kodik", Language: "ru", WatchType: "dub",
 					TranslationID: "609", TranslationTitle: "AniDUB", Viewers: 30},
 			},
-			available: []domain.WatchCombo{kodikAniDUB, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniDUB, englishHD1},
 			wantTier:  "community", wantTierN: 3,
 			wantCombo: kodikAniDUB,
 		},
@@ -129,7 +129,7 @@ func TestResolve(t *testing.T) {
 				{Player: "kodik", Language: "ru", WatchType: "dub",
 					TranslationID: "610", TranslationTitle: "AniLibria", Viewers: 50},
 			},
-			available: []domain.WatchCombo{kodikAniLibria, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniLibria, englishHD1},
 			wantTier:  "community", wantTierN: 3,
 			wantCombo: kodikAniLibria,
 		},
@@ -144,29 +144,29 @@ func TestResolve(t *testing.T) {
 					TranslationID: "610", TranslationTitle: "AniLibria", Viewers: 100},
 				{Player: "kodik", Language: "ru", WatchType: "dub",
 					TranslationID: "609", TranslationTitle: "AniDUB", Viewers: 40},
-				{Player: "hianime", Language: "en", WatchType: "dub",
+				{Player: "english", Language: "en", WatchType: "dub",
 					TranslationID: "hd-1", TranslationTitle: "HD-1", Viewers: 80},
 			},
-			available: []domain.WatchCombo{kodikAniLibria, kodikAniDUB, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniLibria, kodikAniDUB, englishHD1},
 			wantTier:  "community", wantTierN: 3,
 			wantCombo: kodikAniLibria,
 		},
 		{
 			name: "T3: filtered by lock from Tier 1 pref",
 			userPref: &domain.UserAnimePreference{
-				Player: "hianime", Language: "en", WatchType: "dub",
+				Player: "english", Language: "en", WatchType: "dub",
 				TranslationID: "hd-1", TranslationTitle: "HD-1",
 			},
 			// HD-1 not in available, but lock is en+dub
 			community: []domain.CommunityCombo{
 				{Player: "kodik", Language: "ru", WatchType: "dub",
 					TranslationID: "610", TranslationTitle: "AniLibria", Viewers: 200},
-				{Player: "hianime", Language: "en", WatchType: "dub",
+				{Player: "english", Language: "en", WatchType: "dub",
 					TranslationID: "hd-2", TranslationTitle: "HD-2", Viewers: 50},
 			},
-			available: []domain.WatchCombo{kodikAniLibria, hianimeHD2},
+			available: []domain.WatchCombo{kodikAniLibria, englishHD2},
 			wantTier:  "community", wantTierN: 3,
-			wantCombo: hianimeHD2, // must respect en+dub lock, not pick ru AniLibria
+			wantCombo: englishHD2, // must respect en+dub lock, not pick ru AniLibria
 		},
 		{
 			name: "T3: no community data → fall to Tier 4",
@@ -178,21 +178,21 @@ func TestResolve(t *testing.T) {
 			pinned: []domain.PinnedTranslation{
 				{AnimeID: "123", TranslationID: 610, TranslationTitle: "AniLibria", TranslationType: "voice"},
 			},
-			available: []domain.WatchCombo{kodikAniLibria, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniLibria, englishHD1},
 			wantTier:  "pinned", wantTierN: 4,
 			wantCombo: kodikAniLibria,
 		},
 		{
 			name: "T3: new user no lock → most popular sets lock",
 			community: []domain.CommunityCombo{
-				{Player: "hianime", Language: "en", WatchType: "dub",
+				{Player: "english", Language: "en", WatchType: "dub",
 					TranslationID: "hd-1", TranslationTitle: "HD-1", Viewers: 90},
 				{Player: "kodik", Language: "ru", WatchType: "dub",
 					TranslationID: "610", TranslationTitle: "AniLibria", Viewers: 60},
 			},
-			available: []domain.WatchCombo{hianimeHD1, kodikAniLibria},
+			available: []domain.WatchCombo{englishHD1, kodikAniLibria},
 			wantTier:  "community", wantTierN: 3,
-			wantCombo: hianimeHD1, // most popular is en+dub HD-1
+			wantCombo: englishHD1, // most popular is en+dub HD-1
 		},
 
 		// ──────────────────────────────────────────────
@@ -208,7 +208,7 @@ func TestResolve(t *testing.T) {
 			pinned: []domain.PinnedTranslation{
 				{AnimeID: "123", TranslationID: 610, TranslationTitle: "AniLibria", TranslationType: "voice"},
 			},
-			available: []domain.WatchCombo{kodikAniLibria, kodikCrunchyroll, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniLibria, kodikCrunchyroll, englishHD1},
 			wantTier:  "pinned", wantTierN: 4,
 			wantCombo: kodikAniLibria,
 		},
@@ -243,13 +243,13 @@ func TestResolve(t *testing.T) {
 		// ──────────────────────────────────────────────
 		{
 			name: "T5: kodik sub exists → return it",
-			available: []domain.WatchCombo{kodikCrunchyroll, kodikAniLibria, hianimeHD1},
+			available: []domain.WatchCombo{kodikCrunchyroll, kodikAniLibria, englishHD1},
 			wantTier:  "default", wantTierN: 5,
 			wantCombo: kodikCrunchyroll,
 		},
 		{
 			name: "T5: kodik sub not available → nil",
-			available: []domain.WatchCombo{kodikAniLibria, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniLibria, englishHD1},
 			wantNil:   true,
 		},
 
@@ -264,12 +264,12 @@ func TestResolve(t *testing.T) {
 			},
 			// AniLibria gone; community has en HD-1 (200 viewers) and ru AniDUB (10)
 			community: []domain.CommunityCombo{
-				{Player: "hianime", Language: "en", WatchType: "dub",
+				{Player: "english", Language: "en", WatchType: "dub",
 					TranslationID: "hd-1", TranslationTitle: "HD-1", Viewers: 200},
 				{Player: "kodik", Language: "ru", WatchType: "dub",
 					TranslationID: "609", TranslationTitle: "AniDUB", Viewers: 10},
 			},
-			available: []domain.WatchCombo{kodikAniDUB, hianimeHD1},
+			available: []domain.WatchCombo{kodikAniDUB, englishHD1},
 			wantTier:  "community", wantTierN: 3,
 			wantCombo: kodikAniDUB, // must pick ru AniDUB despite lower popularity
 		},
@@ -320,7 +320,7 @@ func TestResolve(t *testing.T) {
 		{
 			name: "V: no data at all → kodik sub default",
 			available: []domain.WatchCombo{
-				kodikCrunchyroll, kodikAniLibria, hianimeHD1,
+				kodikCrunchyroll, kodikAniLibria, englishHD1,
 			},
 			// No userPref, no globalFav, no community, no pinned
 			wantTier:  "default", wantTierN: 5,

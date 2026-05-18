@@ -11,7 +11,7 @@ import (
 
 var (
 	issueKeywords = regexp.MustCompile(`(?i)(not working|broken|error|bug|can't watch|loading|lag|down|crash|stuck|не работает|сломал|ошибка|баг|лагает|не грузит|не воспроизвод)`)
-	serviceNames  = regexp.MustCompile(`(?i)\b(gateway|auth|catalog|streaming|player|rooms|scheduler|themes|kodik|animelib|hianime|consumet|aniwatch)\b`)
+	serviceNames  = regexp.MustCompile(`(?i)\b(gateway|auth|catalog|streaming|player|rooms|scheduler|themes|kodik|animelib)\b`)
 )
 
 // Classify determines the type and priority of a Telegram update.

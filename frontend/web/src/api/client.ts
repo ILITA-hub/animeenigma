@@ -420,7 +420,7 @@ export const userApi = {
     ms_since_load: number
     tier: string | null
     tier_number: number | null
-    player: 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'english'
+    player: 'kodik' | 'animelib' | 'english'
   }) => apiClient.post('/preferences/override', data),
   getAnimePreference: (animeId: string) =>
     apiClient.get<WatchCombo & { updated_at: string }>(`/users/preferences/${animeId}`),
@@ -558,29 +558,13 @@ export const kodikApi = {
     apiClient.delete(`/anime/${animeId}/pin-translation/${translationId}`)
 }
 
-export const hiAnimeApi = {
-  getEpisodes: (animeId: string) =>
-    apiClient.get(`/anime/${animeId}/hianime/episodes`),
-  getServers: (animeId: string, episodeId: string) =>
-    apiClient.get(`/anime/${animeId}/hianime/servers`, {
-      params: { episode: episodeId }
-    }),
-  getStream: (animeId: string, episodeId: string, serverId: string, category: string) =>
-    apiClient.get(`/anime/${animeId}/hianime/stream`, {
-      params: { episode: episodeId, server: serverId, category }
-    }),
-  search: (query: string) => apiClient.get('/hianime/search', { params: { q: query } }),
-}
-
 /**
- * Phase 16 — scraperApi targets the new /api/anime/{id}/scraper/* routes
- * served by the catalog→scraper pipeline. Replaces hiAnimeApi + consumetApi
- * end-to-end; those two remain in place (and reachable via ?legacy=1) until
- * Phase 20 cutover.
+ * Phase 16 — scraperApi targets the /api/anime/{id}/scraper/* routes served
+ * by the catalog→scraper pipeline. The single English-source entry point now
+ * that the legacy direct clients are gone.
  *
- * The `prefer` parameter is the per-anime user override from the Source
- * dropdown inside EnglishPlayer; when omitted, the orchestrator picks its
- * default (currently AnimePahe — Phase 18 will add 9anime).
+ * The `prefer` parameter is a per-anime user override; when omitted, the
+ * orchestrator picks its default.
  */
 export const scraperApi = {
   getEpisodes: (animeId: string, prefer?: string) =>
@@ -641,18 +625,6 @@ export const subtitlesApi = {
     apiClient.get(`/anime/${animeId}/subtitles/all`, {
       params: { episode },
     }),
-}
-
-export const consumetApi = {
-  getEpisodes: (animeId: string) =>
-    apiClient.get(`/anime/${animeId}/consumet/episodes`),
-  getServers: (animeId: string) =>
-    apiClient.get(`/anime/${animeId}/consumet/servers`),
-  getStream: (animeId: string, episodeId: string, serverName?: string) =>
-    apiClient.get(`/anime/${animeId}/consumet/stream`, {
-      params: { episode: episodeId, ...(serverName && { server: serverName }) }
-    }),
-  search: (query: string) => apiClient.get('/consumet/search', { params: { q: query } }),
 }
 
 export const animeLibApi = {

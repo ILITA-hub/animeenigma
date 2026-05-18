@@ -158,6 +158,14 @@
 </template>
 
 <script setup lang="ts">
+// The "filters" prop is a useBrowseFilters() instance shared with the
+// parent view by design — the sidebar mutates the composable's
+// reactive refs (e.g. filters.genres.value = ...) and the parent
+// re-runs its apiParams watcher. This is the standard pattern for
+// passing a composable down; eslint's `vue/no-mutating-props` mis-
+// flags it because the rule can't tell the prop value from a deeply
+// reactive object.
+/* eslint-disable vue/no-mutating-props */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -219,16 +227,6 @@ const providerOptions = computed<{ value: Provider; label: string; accent: strin
     value: 'animelib',
     label: t('browse.filters.provider.animelib'),
     accent: 'text-orange-500 focus:ring-orange-500',
-  },
-  {
-    value: 'hianime',
-    label: t('browse.filters.provider.hianime'),
-    accent: 'text-purple-500 focus:ring-purple-500',
-  },
-  {
-    value: 'consumet',
-    label: t('browse.filters.provider.consumet'),
-    accent: 'text-emerald-500 focus:ring-emerald-500',
   },
 ])
 

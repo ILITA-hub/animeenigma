@@ -13,11 +13,11 @@ import { useRoute, useRouter } from 'vue-router'
 // composable untouched.
 
 export type Kind = '' | 'tv' | 'movie' | 'ova' | 'ona' | 'special'
-export type Provider = 'kodik' | 'animelib' | 'hianime' | 'consumet'
+export type Provider = 'kodik' | 'animelib'
 export type Sort = 'popularity' | 'rating' | 'year' | 'updated' | 'title'
 
 const KIND_VALUES: Kind[] = ['', 'tv', 'movie', 'ova', 'ona', 'special']
-const PROVIDER_VALUES: Provider[] = ['kodik', 'animelib', 'hianime', 'consumet']
+const PROVIDER_VALUES: Provider[] = ['kodik', 'animelib']
 const SORT_VALUES: Sort[] = ['popularity', 'rating', 'year', 'updated', 'title']
 const STATUS_VALUES = ['', 'ongoing', 'released', 'announced'] as const
 type Status = (typeof STATUS_VALUES)[number]

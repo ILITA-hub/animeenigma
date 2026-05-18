@@ -106,44 +106,6 @@ services:
       retries: 3
       start_period: 30s
 
-  aniwatch:
-    image: ghcr.io/ghoshritesh12/aniwatch:v2.19.0
-    container_name: animeenigma-aniwatch
-    ports:
-      - "127.0.0.1:3100:4000"
-    environment:
-      - PORT=4000
-      - ANIWATCH_API_HOSTNAME=0.0.0.0
-      - MEGACLOUD_EXTRACTOR_URL=http://megacloud-extractor:3200
-    volumes:
-      - ./megacloud-extractor/patch-aniwatch.sh:/app/patch-aniwatch.sh:ro
-    entrypoint: ["/bin/sh", "/app/patch-aniwatch.sh"]
-    depends_on:
-      megacloud-extractor:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
-  consumet:
-    image: riimuru/consumet-api:latest
-    container_name: animeenigma-consumet
-    ports:
-      - "127.0.0.1:3101:3000"
-    environment:
-      - PORT=3000
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
   scraper:
     build:
       context: ..
@@ -412,8 +374,6 @@ services:
       REDIS_HOST: redis
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
-      ANIWATCH_API_URL: http://aniwatch:4000
-      CONSUMET_API_URL: http://consumet:3000
       SCRAPER_API_URL: http://scraper:8088
       JIMAKU_API_KEY: ${JIMAKU_API_KEY:-}
       ANIMELIB_TOKEN: ${ANIMELIB_TOKEN:-}
@@ -426,10 +386,6 @@ services:
       redis:
         condition: service_healthy
       postgres:
-        condition: service_healthy
-      aniwatch:
-        condition: service_healthy
-      consumet:
         condition: service_healthy
       scraper:
         condition: service_started

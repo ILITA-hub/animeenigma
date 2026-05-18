@@ -158,8 +158,8 @@ func TestS5Attribute_KodikFallback(t *testing.T) {
 	db := setupS5TestDB(t)
 
 	// 2 anime, both Madhouse. anime-A watched 3x via Kodik (duration_watched=0
-	// because Kodik writes 0). anime-B watched once via HiAnime, 1500s = 25min.
-	// Expected: total_units = 3 (Kodik integer-episode) + 25 (HiAnime min) = 28.
+	// because Kodik writes 0). anime-B watched once via Kodik, 1500s = 25min.
+	// Expected: total_units = 3 (Kodik integer-episode) + 25 (Kodik min) = 28.
 	// studio:Madhouse contributes from BOTH anime → tf = 28/28 = 1.0.
 	seedS5Anime(t, db, "anime-A", "tv", "pg_13", "manga")
 	seedS5Anime(t, db, "anime-B", "tv", "pg_13", "manga")
@@ -168,7 +168,7 @@ func TestS5Attribute_KodikFallback(t *testing.T) {
 	seedS5History(t, db, "wh-1", "user-1", "anime-A", "kodik", 0)
 	seedS5History(t, db, "wh-2", "user-1", "anime-A", "kodik", 0)
 	seedS5History(t, db, "wh-3", "user-1", "anime-A", "kodik", 0)
-	seedS5History(t, db, "wh-4", "user-1", "anime-B", "hianime", 1500)
+	seedS5History(t, db, "wh-4", "user-1", "anime-B", "kodik", 1500)
 
 	r := repo.NewRecsRepository(db)
 	s5 := NewS5Attribute(db, r)
@@ -187,7 +187,7 @@ func TestS5Attribute_KodikFallback(t *testing.T) {
 	// negative-raw entries as zero contribution). The test asserts non-zero
 	// magnitude — what matters is that the Kodik branch contributed units.
 	assert.NotZero(t, aff["studio:Madhouse"], "studio:Madhouse must have non-zero affinity")
-	assert.Greater(t, math.Abs(aff["kind:tv"]), 0.0, "kind:tv populated from both Kodik+HiAnime anime")
+	assert.Greater(t, math.Abs(aff["kind:tv"]), 0.0, "kind:tv populated from both Kodik+Kodik anime")
 }
 
 func TestS5Attribute_KodikFallback_DistinguishedFromZero(t *testing.T) {
@@ -224,10 +224,10 @@ func TestS5Attribute_KodikFallback_DistinguishedFromZero(t *testing.T) {
 func TestS5Attribute_DurationFloor(t *testing.T) {
 	db := setupS5TestDB(t)
 
-	// HiAnime with duration_watched=30s = 0.5 min. Floor → 1 min unit.
+	// Kodik with duration_watched=30s = 0.5 min. Floor → 1 min unit.
 	seedS5Anime(t, db, "anime-A", "tv", "pg_13", "manga")
 	seedS5Studio(t, db, "anime-A", "Madhouse")
-	seedS5History(t, db, "wh-1", "user-1", "anime-A", "hianime", 30)
+	seedS5History(t, db, "wh-1", "user-1", "anime-A", "kodik", 30)
 
 	r := repo.NewRecsRepository(db)
 	s5 := NewS5Attribute(db, r)
@@ -244,7 +244,7 @@ func TestS5Attribute_TFNormalization(t *testing.T) {
 	db := setupS5TestDB(t)
 
 	// 3 anime: A, B share studio "Shared"; C has studio "Other".
-	// All HiAnime, 60s = 1 min each → 3 history rows, 3 total units.
+	// All Kodik, 60s = 1 min each → 3 history rows, 3 total units.
 	// tf(studio:Shared) = (1+1)/3 = 0.667
 	// tf(studio:Other)  = 1/3 = 0.333
 	seedS5Anime(t, db, "anime-A", "tv", "pg_13", "manga")
@@ -253,9 +253,9 @@ func TestS5Attribute_TFNormalization(t *testing.T) {
 	seedS5Studio(t, db, "anime-A", "Shared")
 	seedS5Studio(t, db, "anime-B", "Shared")
 	seedS5Studio(t, db, "anime-C", "Other")
-	seedS5History(t, db, "wh-1", "user-1", "anime-A", "hianime", 60)
-	seedS5History(t, db, "wh-2", "user-1", "anime-B", "hianime", 60)
-	seedS5History(t, db, "wh-3", "user-1", "anime-C", "hianime", 60)
+	seedS5History(t, db, "wh-1", "user-1", "anime-A", "kodik", 60)
+	seedS5History(t, db, "wh-2", "user-1", "anime-B", "kodik", 60)
+	seedS5History(t, db, "wh-3", "user-1", "anime-C", "kodik", 60)
 
 	r := repo.NewRecsRepository(db)
 	s5 := NewS5Attribute(db, r)
@@ -290,10 +290,10 @@ func TestS5Attribute_IDFAcrossUsers(t *testing.T) {
 
 	for i, u := range []string{"user-1", "user-2", "user-3", "user-4", "user-5"} {
 		// Everyone watched Madhouse anime
-		seedS5History(t, db, "wh-mad-"+u, u, "anime-Mad", "hianime", 60)
+		seedS5History(t, db, "wh-mad-"+u, u, "anime-Mad", "kodik", 60)
 		// Only user-1 watched the rare studio's anime.
 		if i == 0 {
-			seedS5History(t, db, "wh-rare-"+u, u, "anime-Rare", "hianime", 60)
+			seedS5History(t, db, "wh-rare-"+u, u, "anime-Rare", "kodik", 60)
 		}
 	}
 
@@ -322,7 +322,7 @@ func TestS5Attribute_AllSixDimensions(t *testing.T) {
 	seedS5Genre(t, db, "anime-Full", "action")
 	seedS5Studio(t, db, "anime-Full", "Madhouse")
 	seedS5Tag(t, db, "anime-Full", "shounen")
-	seedS5History(t, db, "wh-1", "user-1", "anime-Full", "hianime", 1500)
+	seedS5History(t, db, "wh-1", "user-1", "anime-Full", "kodik", 1500)
 
 	r := repo.NewRecsRepository(db)
 	s5 := NewS5Attribute(db, r)
@@ -420,7 +420,7 @@ func TestS5Attribute_KeyFormatColonSeparated(t *testing.T) {
 	seedS5Genre(t, db, "anime-A", "g1")
 	seedS5Studio(t, db, "anime-A", "s1")
 	seedS5Tag(t, db, "anime-A", "t1")
-	seedS5History(t, db, "wh-1", "user-1", "anime-A", "hianime", 60)
+	seedS5History(t, db, "wh-1", "user-1", "anime-A", "kodik", 60)
 
 	r := repo.NewRecsRepository(db)
 	s5 := NewS5Attribute(db, r)
@@ -464,7 +464,7 @@ func TestS5Attribute_NoNaN_NoInf_NoNegative(t *testing.T) {
 		userID := s5RandomID("user", u)
 		for k := 0; k < 8; k++ {
 			animeID := s5RandomID("anime", (u*8+k)%50)
-			seedS5History(t, db, s5RandomID("wh", u*100+k), userID, animeID, "hianime", 60+(k*30))
+			seedS5History(t, db, s5RandomID("wh", u*100+k), userID, animeID, "kodik", 60+(k*30))
 		}
 	}
 
@@ -497,7 +497,7 @@ func TestS5Attribute_Idempotent(t *testing.T) {
 	seedS5Studio(t, db, "anime-A", "Madhouse")
 	seedS5Genre(t, db, "anime-A", "action")
 	seedS5Tag(t, db, "anime-A", "shounen")
-	seedS5History(t, db, "wh-1", "user-1", "anime-A", "hianime", 1500)
+	seedS5History(t, db, "wh-1", "user-1", "anime-A", "kodik", 1500)
 
 	r := repo.NewRecsRepository(db)
 	s5 := NewS5Attribute(db, r)
@@ -539,7 +539,7 @@ func TestS5Attribute_PreservesS1AndS6(t *testing.T) {
 
 	seedS5Anime(t, db, "anime-A", "tv", "pg_13", "manga")
 	seedS5Studio(t, db, "anime-A", "Madhouse")
-	seedS5History(t, db, "wh-1", "user-1", "anime-A", "hianime", 1500)
+	seedS5History(t, db, "wh-1", "user-1", "anime-A", "kodik", 1500)
 
 	r := repo.NewRecsRepository(db)
 	s5 := NewS5Attribute(db, r)

@@ -22,7 +22,7 @@ import (
 )
 
 // megacloudKnownHosts lists every embed host the megacloud-extractor sidecar
-// is expected to handle. New hosts are added here as Aniyomi / HiAnime
+// is expected to handle. New hosts are added here as Aniyomi or other
 // upstream rotate.
 //
 // Match policy: case-insensitive equality OR strict subdomain (i.e. a host
@@ -145,7 +145,7 @@ func (c *MegacloudClient) Extract(ctx context.Context, embedURL string, headers 
 	}
 	// Forward caller-supplied headers verbatim. We do NOT inject a default
 	// Referer here — that's the sidecar's responsibility (it hardcodes
-	// "https://aniwatchtv.to/" today for HiAnime-flavor pages).
+	// "https://aniwatchtv.to/" today for some legacy-flavor pages).
 	for k, vs := range headers {
 		for _, v := range vs {
 			req.Header.Add(k, v)

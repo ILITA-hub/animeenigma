@@ -207,25 +207,11 @@
     "native": "Нативный",
     "recommendedVoice": "Рекомендуемая озвучка",
     "episodeShort": "эп.",
-    "tabEnglish": "Английский",
-    "tabDebugSuffix": "(отладка)",
-    "source": "Источник",
-    "sourceSingleTooltip": "Источник: {provider} (единственный доступный)",
-    "sourceMultiTooltip": "Сменить источник видео",
-    "sourceUnhealthy": "Сейчас недоступен — оркестратор пропустил этот источник",
-    "englishNotAvailable": {
-      "heading": "Английская озвучка пока недоступна",
-      "body": "Это аниме отсутствует у отслеживаемых нами английских провайдеров. Попробуйте Kodik или AnimeLib для русской озвучки."
-    },
-    "sourceSwitchFailed": "Не удалось сменить источник — остаёмся на {provider}",
-    "sourceUnavailable": "Источник недоступен. Пробовали: {chain}",
-    "sourceSwitchedAnnouncement": "Переключено на {provider}",
-    "sourceOfflineSuffix": " (недоступно)",
     "reportProvider": "Провайдер",
     "reportTried": "Пробовали",
     "raw": {
       "tab": "RAW JP",
-      "unavailable": "Это аниме пока недоступно через сырой японский источник. Попробуйте Kodik, AnimeLib или English-провайдер."
+      "unavailable": "Это аниме пока недоступно через сырой японский источник. Попробуйте Kodik или AnimeLib."
     },
     "subtitlePicker": {
       "label": "Субтитры",
@@ -691,9 +677,7 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "animelib": "AnimeLib (RU)",
-        "hianime": "HiAnime (EN)",
-        "consumet": "Consumet (EN)"
+        "animelib": "AnimeLib (RU)"
       }
     }
   },
@@ -854,7 +838,7 @@
       },
       "q3": {
         "q": "Откуда берутся видео?",
-        "a": "AnimeEnigma стримит видео из четырёх источников: Kodik и AnimeLib (русская озвучка/субтитры), HiAnime и Consumet (английские субтитры). Бэкенд проксирует стримы, поэтому ваш IP не уходит напрямую к внешним CDN. Для HiAnime и Consumet можно подгрузить японские субтитры с Jimaku.cc."
+        "a": "AnimeEnigma стримит видео из Kodik и AnimeLib (русская озвучка/субтитры). Бэкенд проксирует стримы, поэтому ваш IP не уходит напрямую к внешним CDN. Английские плееры сейчас пересобираются — новые провайдеры скоро."
       },
       "q4": {
         "q": "Как работают рекомендации?",

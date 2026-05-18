@@ -1,4 +1,4 @@
-// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTAs on HiAnime + Consumet
+// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTAs on English players
 // players. Wraps GET /api/skip-times/{malId}/{episode} (catalog proxy of
 // api.aniskip.com) and exposes a reactive { opening, ending } pair so the
 // player overlay can compute showSkipIntro = currentTime in opening window.

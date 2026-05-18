@@ -187,8 +187,6 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/anime/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/genres", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/kodik/*", proxyHandler.ProxyToCatalog)
-		r.HandleFunc("/hianime/*", proxyHandler.ProxyToCatalog)
-		r.HandleFunc("/consumet/*", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/animelib/*", proxyHandler.ProxyToCatalog)
 		// Phase 18 (UX-34) — Skip-Intro / Skip-Outro CTA timestamps.
 		// Public, no auth. Proxied to catalog which fronts api.aniskip.com

@@ -2,11 +2,7 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -18,8 +14,6 @@ import (
 const (
 	playerKodik    = "kodik"
 	playerAnimeLib = "animelib"
-	playerHiAnime  = "hianime"
-	playerConsumet = "consumet"
 )
 
 // PlayerHealthChecker periodically tests each player/parser to verify availability
@@ -27,9 +21,6 @@ const (
 type PlayerHealthChecker struct {
 	kodikClient    *kodik.Client
 	animelibClient *animelib.Client
-	aniwatchURL    string
-	consumetURL    string
-	httpClient     *http.Client
 	interval       time.Duration
 	log            *logger.Logger
 
@@ -41,8 +32,6 @@ type PlayerHealthChecker struct {
 func NewPlayerHealthChecker(
 	kodikClient *kodik.Client,
 	animelibClient *animelib.Client,
-	aniwatchURL string,
-	consumetURL string,
 	interval time.Duration,
 	log *logger.Logger,
 ) *PlayerHealthChecker {
@@ -52,9 +41,6 @@ func NewPlayerHealthChecker(
 	return &PlayerHealthChecker{
 		kodikClient:    kodikClient,
 		animelibClient: animelibClient,
-		aniwatchURL:    aniwatchURL,
-		consumetURL:    consumetURL,
-		httpClient:     &http.Client{Timeout: 15 * time.Second},
 		interval:       interval,
 		log:            log,
 		prevStatus:     make(map[string]bool),
@@ -85,8 +71,6 @@ func (h *PlayerHealthChecker) Start(ctx context.Context) {
 func (h *PlayerHealthChecker) checkAll() {
 	h.checkPlayer(playerKodik, h.checkKodik)
 	h.checkPlayer(playerAnimeLib, h.checkAnimeLib)
-	h.checkPlayer(playerHiAnime, h.checkHiAnime)
-	h.checkPlayer(playerConsumet, h.checkConsumet)
 }
 
 func (h *PlayerHealthChecker) checkPlayer(name string, check func() error) {
@@ -181,163 +165,4 @@ func (h *PlayerHealthChecker) checkAnimeLib() error {
 		}
 	}
 	return fmt.Errorf("episode %d players have no video sources", episodes[0].ID)
-}
-
-// checkHiAnime verifies the full HiAnime playback chain via aniwatch API:
-// search → get episodes → get stream sources.
-func (h *PlayerHealthChecker) checkHiAnime() error {
-	if h.aniwatchURL == "" {
-		return fmt.Errorf("aniwatch API URL not configured")
-	}
-
-	// Step 1: Search
-	body, err := h.httpGet(h.aniwatchURL + "/api/v2/hianime/search?q=naruto&page=1")
-	if err != nil {
-		return fmt.Errorf("search failed: %w", err)
-	}
-
-	var searchResp struct {
-		Data struct {
-			Animes []struct {
-				ID string `json:"id"`
-			} `json:"animes"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return fmt.Errorf("failed to parse search response: %w", err)
-	}
-	if len(searchResp.Data.Animes) == 0 {
-		return fmt.Errorf("search returned 0 results")
-	}
-	animeID := searchResp.Data.Animes[0].ID
-
-	// Step 2: Get episodes
-	body, err = h.httpGet(fmt.Sprintf("%s/api/v2/hianime/anime/%s/episodes", h.aniwatchURL, url.PathEscape(animeID)))
-	if err != nil {
-		return fmt.Errorf("episodes failed: %w", err)
-	}
-
-	var epsResp struct {
-		Data struct {
-			Episodes []struct {
-				EpisodeID string `json:"episodeId"`
-			} `json:"episodes"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &epsResp); err != nil {
-		return fmt.Errorf("failed to parse episodes response: %w", err)
-	}
-	if len(epsResp.Data.Episodes) == 0 {
-		return fmt.Errorf("anime %s has 0 episodes", animeID)
-	}
-	episodeID := epsResp.Data.Episodes[0].EpisodeID
-
-	// Step 3: Get stream sources
-	body, err = h.httpGet(fmt.Sprintf("%s/api/v2/hianime/episode/sources?animeEpisodeId=%s&server=hd-2&category=sub",
-		h.aniwatchURL, url.QueryEscape(episodeID)))
-	if err != nil {
-		return fmt.Errorf("sources failed: %w", err)
-	}
-
-	var srcResp struct {
-		Data struct {
-			Sources []struct {
-				URL string `json:"url"`
-			} `json:"sources"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &srcResp); err != nil {
-		return fmt.Errorf("failed to parse sources response: %w", err)
-	}
-	if len(srcResp.Data.Sources) == 0 || srcResp.Data.Sources[0].URL == "" {
-		return fmt.Errorf("no HLS sources for episode %s", episodeID)
-	}
-
-	return nil
-}
-
-// checkConsumet verifies the full Consumet playback chain:
-// search → get info with episodes → get stream sources.
-func (h *PlayerHealthChecker) checkConsumet() error {
-	if h.consumetURL == "" {
-		return fmt.Errorf("consumet API URL not configured")
-	}
-
-	// Step 1: Search
-	body, err := h.httpGet(h.consumetURL + "/anime/animekai/naruto")
-	if err != nil {
-		return fmt.Errorf("search failed: %w", err)
-	}
-
-	var searchResp struct {
-		Results []struct {
-			ID string `json:"id"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return fmt.Errorf("failed to parse search response: %w", err)
-	}
-	if len(searchResp.Results) == 0 {
-		return fmt.Errorf("search returned 0 results")
-	}
-	animeID := searchResp.Results[0].ID
-
-	// Step 2: Get info with episodes
-	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/info?id=%s", h.consumetURL, url.QueryEscape(animeID)))
-	if err != nil {
-		return fmt.Errorf("info failed: %w", err)
-	}
-
-	var infoResp struct {
-		Episodes []struct {
-			ID string `json:"id"`
-		} `json:"episodes"`
-	}
-	if err := json.Unmarshal(body, &infoResp); err != nil {
-		return fmt.Errorf("failed to parse info response: %w", err)
-	}
-	if len(infoResp.Episodes) == 0 {
-		return fmt.Errorf("anime %s has 0 episodes", animeID)
-	}
-	episodeID := infoResp.Episodes[0].ID
-
-	// Step 3: Get stream (animekai uses path-based watch URL)
-	body, err = h.httpGet(fmt.Sprintf("%s/anime/animekai/watch/%s", h.consumetURL, url.PathEscape(episodeID)))
-	if err != nil {
-		return fmt.Errorf("stream failed: %w", err)
-	}
-
-	var streamResp struct {
-		Sources []struct {
-			URL string `json:"url"`
-		} `json:"sources"`
-	}
-	if err := json.Unmarshal(body, &streamResp); err != nil {
-		return fmt.Errorf("failed to parse stream response: %w", err)
-	}
-	if len(streamResp.Sources) == 0 || streamResp.Sources[0].URL == "" {
-		return fmt.Errorf("no stream sources for episode %s", episodeID)
-	}
-
-	return nil
-}
-
-// httpGet performs a GET request and returns the body. Returns error on non-200 status.
-func (h *PlayerHealthChecker) httpGet(reqURL string) ([]byte, error) {
-	resp, err := h.httpClient.Get(reqURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return body, nil
 }

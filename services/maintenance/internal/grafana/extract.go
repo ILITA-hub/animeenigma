@@ -10,7 +10,7 @@ func ExtractService(labels, annotations map[string]string) string {
 		}
 	}
 	summary := annotations["summary"]
-	serviceNames := []string{"gateway", "auth", "catalog", "streaming", "player", "rooms", "scheduler", "themes", "kodik", "animelib", "hianime", "consumet", "aniwatch"}
+	serviceNames := []string{"gateway", "auth", "catalog", "streaming", "player", "rooms", "scheduler", "themes", "kodik", "animelib"}
 	for _, name := range serviceNames {
 		if strings.Contains(strings.ToLower(summary), name) {
 			return name

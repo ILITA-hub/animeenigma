@@ -77,7 +77,7 @@ type malSyncEntry struct {
 }
 
 // malSyncResponse is the top-level shape of https://api.malsync.moe/mal/anime/{mal_id}.
-// Sites is keyed by lowercase provider slug ("animepahe", "zoro", "hianime", ...).
+// Sites is keyed by lowercase provider slug ("animepahe", "zoro", ...).
 // Each provider can list multiple entries (sub/dub variants) — we pick the
 // first entry for the animepahe key.
 type malSyncResponse struct {

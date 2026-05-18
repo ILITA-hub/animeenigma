@@ -207,25 +207,11 @@
     "native": "ネイティブ",
     "recommendedVoice": "おすすめの吹替",
     "episodeShort": "話",
-    "tabEnglish": "英語",
-    "tabDebugSuffix": "(デバッグ)",
-    "source": "ソース",
-    "sourceSingleTooltip": "ソース: {provider} (利用可能な唯一のプロバイダー)",
-    "sourceMultiTooltip": "動画ソースを変更",
-    "sourceUnhealthy": "現在到達不能 — オーケストレーターがスキップしました",
-    "englishNotAvailable": {
-      "heading": "英語版はまだ利用できません",
-      "body": "この作品は当方が追跡している英語プロバイダーには登録されていません。ロシア語版は Kodik または AnimeLib をお試しください。"
-    },
-    "sourceSwitchFailed": "ソース切替に失敗 — {provider} のままです",
-    "sourceUnavailable": "ソース利用不可。試行: {chain}",
-    "sourceSwitchedAnnouncement": "{provider}に切り替えました",
-    "sourceOfflineSuffix": "（オフライン）",
     "reportProvider": "プロバイダー",
     "reportTried": "試行",
     "raw": {
       "tab": "RAW JP",
-      "unavailable": "このアニメはまだ生の日本語ソースで利用できません。Kodik、AnimeLib、または英語プロバイダーをお試しください。"
+      "unavailable": "このアニメはまだ生の日本語ソースで利用できません。KodikまたはAnimeLibをお試しください。"
     },
     "subtitlePicker": {
       "label": "字幕",
@@ -691,9 +677,7 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "animelib": "AnimeLib (RU)",
-        "hianime": "HiAnime (EN)",
-        "consumet": "Consumet (EN)"
+        "animelib": "AnimeLib (RU)"
       }
     }
   },
@@ -854,7 +838,7 @@
       },
       "q3": {
         "q": "動画はどこから来ているのですか？",
-        "a": "AnimeEnigmaは4つのソースから動画をストリーミングします：KodikとAnimeLib（ロシア語音声・字幕）、HiAnimeとConsumet（英語字幕）。バックエンドがストリームをプロキシするため、外部CDNにあなたのIPが直接届くことはありません。HiAnimeとConsumetでは、Jimaku.ccの日本語字幕を追加で読み込めます。"
+        "a": "AnimeEnigmaはKodikとAnimeLib（ロシア語音声・字幕）から動画をストリーミングします。バックエンドがストリームをプロキシするため、外部CDNにあなたのIPが直接届くことはありません。英語プレーヤーは現在再構築中で、新しいプロバイダーが近日中に追加されます。"
       },
       "q4": {
         "q": "レコメンデーションはどのように動作しますか？",

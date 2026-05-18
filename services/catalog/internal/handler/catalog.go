@@ -21,7 +21,7 @@ type CatalogHandler struct {
 
 	// Phase 15 plan 04 — scraper endpoints. Embedded so chi can route
 	// /api/anime/{animeId}/scraper/* via catalogHandler.GetScraper*
-	// alongside the existing hianime/consumet/animelib handlers.
+	// alongside the existing animelib handler.
 	*ScraperEndpointsHandler
 }
 
@@ -617,7 +617,7 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 	}
 
 	// Phase 15 (UX-31) — Providers filter (comma-separated, e.g.
-	// "kodik,hianime"). Whitelisted at the handler — repo treats unknown
+	// "kodik,animelib"). Whitelisted at the handler — repo treats unknown
 	// keys as drop-silent, but we still strip them here so the SQL
 	// builder only sees vetted values. Duplicates collapse via `seen`.
 	if providers := query.Get("providers"); providers != "" {
@@ -626,7 +626,7 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		for _, p := range raw {
 			p = strings.TrimSpace(strings.ToLower(p))
 			switch p {
-			case "kodik", "animelib", "hianime", "consumet":
+			case "kodik", "animelib":
 				if !seen[p] {
 					filters.Providers = append(filters.Providers, p)
 					seen[p] = true
@@ -719,164 +719,6 @@ func (h *CatalogHandler) UnpinTranslation(w http.ResponseWriter, r *http.Request
 	httputil.OK(w, map[string]string{"status": "unpinned"})
 }
 
-// GetHiAnimeEpisodes gets episodes from HiAnime
-func (h *CatalogHandler) GetHiAnimeEpisodes(w http.ResponseWriter, r *http.Request) {
-	animeID := chi.URLParam(r, "animeId")
-	if animeID == "" {
-		httputil.BadRequest(w, "anime ID is required")
-		return
-	}
-
-	episodes, err := h.catalogService.GetHiAnimeEpisodes(r.Context(), animeID)
-	if err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	httputil.OK(w, episodes)
-}
-
-// GetHiAnimeServers gets available servers for an episode from HiAnime
-func (h *CatalogHandler) GetHiAnimeServers(w http.ResponseWriter, r *http.Request) {
-	animeID := chi.URLParam(r, "animeId")
-	if animeID == "" {
-		httputil.BadRequest(w, "anime ID is required")
-		return
-	}
-
-	episodeID := r.URL.Query().Get("episode")
-	if episodeID == "" {
-		httputil.BadRequest(w, "episode ID is required")
-		return
-	}
-
-	servers, err := h.catalogService.GetHiAnimeServers(r.Context(), animeID, episodeID)
-	if err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	httputil.OK(w, servers)
-}
-
-// GetHiAnimeStream gets the stream URL from HiAnime
-func (h *CatalogHandler) GetHiAnimeStream(w http.ResponseWriter, r *http.Request) {
-	animeID := chi.URLParam(r, "animeId")
-	if animeID == "" {
-		httputil.BadRequest(w, "anime ID is required")
-		return
-	}
-
-	episodeID := r.URL.Query().Get("episode")
-	serverID := r.URL.Query().Get("server")
-	category := r.URL.Query().Get("category")
-
-	if episodeID == "" {
-		httputil.BadRequest(w, "episode ID is required")
-		return
-	}
-	if serverID == "" {
-		httputil.BadRequest(w, "server ID is required")
-		return
-	}
-	if category == "" {
-		category = "sub" // Default to sub
-	}
-
-	stream, err := h.catalogService.GetHiAnimeStream(r.Context(), animeID, episodeID, serverID, category)
-	if err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	httputil.OK(w, stream)
-}
-
-// SearchHiAnime searches for anime on HiAnime
-func (h *CatalogHandler) SearchHiAnime(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	if query == "" || len(query) < 2 {
-		httputil.BadRequest(w, "search query must be at least 2 characters")
-		return
-	}
-
-	results, err := h.catalogService.SearchHiAnime(r.Context(), query)
-	if err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	httputil.OK(w, results)
-}
-
-// ============================================================================
-// Consumet Handlers
-// ============================================================================
-
-// GetConsumetEpisodes gets episodes from Consumet
-func (h *CatalogHandler) GetConsumetEpisodes(w http.ResponseWriter, r *http.Request) {
-	animeID := chi.URLParam(r, "animeId")
-	if animeID == "" {
-		httputil.BadRequest(w, "anime ID is required")
-		return
-	}
-
-	episodes, err := h.catalogService.GetConsumetEpisodes(r.Context(), animeID)
-	if err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	httputil.OK(w, episodes)
-}
-
-// GetConsumetServers gets available servers from Consumet
-func (h *CatalogHandler) GetConsumetServers(w http.ResponseWriter, r *http.Request) {
-	servers := h.catalogService.GetConsumetServers(r.Context())
-	httputil.OK(w, servers)
-}
-
-// GetConsumetStream gets the stream URL from Consumet
-func (h *CatalogHandler) GetConsumetStream(w http.ResponseWriter, r *http.Request) {
-	animeID := chi.URLParam(r, "animeId")
-	if animeID == "" {
-		httputil.BadRequest(w, "anime ID is required")
-		return
-	}
-
-	episodeID := r.URL.Query().Get("episode")
-	serverName := r.URL.Query().Get("server")
-
-	if episodeID == "" {
-		httputil.BadRequest(w, "episode ID is required")
-		return
-	}
-
-	stream, err := h.catalogService.GetConsumetStream(r.Context(), animeID, episodeID, serverName)
-	if err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	httputil.OK(w, stream)
-}
-
-// SearchConsumet searches for anime on Consumet
-func (h *CatalogHandler) SearchConsumet(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	if query == "" || len(query) < 2 {
-		httputil.BadRequest(w, "search query must be at least 2 characters")
-		return
-	}
-
-	results, err := h.catalogService.SearchConsumet(r.Context(), query)
-	if err != nil {
-		httputil.Error(w, err)
-		return
-	}
-
-	httputil.OK(w, results)
-}
 
 // ============================================================================
 // AnimeLib Handlers

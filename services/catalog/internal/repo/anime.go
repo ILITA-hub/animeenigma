@@ -107,8 +107,6 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 		colsByKey := map[string]string{
 			"kodik":    "has_kodik",
 			"animelib": "has_animelib",
-			"hianime":  "has_hianime",
-			"consumet": "has_consumet",
 		}
 		var orParts []string
 		for _, p := range filters.Providers {
@@ -200,21 +198,6 @@ func (r *AnimeRepository) SetHasAnimeLib(ctx context.Context, animeID string, ha
 		Update("has_animelib", has).Error
 }
 
-// SetHasHiAnime flips the animes.has_hianime column for one anime.
-// Called lazily by doHiAnimeSearch when a match resolves to a real
-// HiAnime ID — best-effort. Phase 15 (UX-31).
-func (r *AnimeRepository) SetHasHiAnime(ctx context.Context, animeID string, has bool) error {
-	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
-		Update("has_hianime", has).Error
-}
-
-// SetHasConsumet flips the animes.has_consumet column for one anime.
-// Called lazily by GetConsumetEpisodes when at least one episode is
-// resolved on any Consumet provider — best-effort. Phase 15 (UX-31).
-func (r *AnimeRepository) SetHasConsumet(ctx context.Context, animeID string, has bool) error {
-	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
-		Update("has_consumet", has).Error
-}
 
 // SetHasRaw flips the animes.has_raw column for one anime. Called
 // lazily by the raw resolver when an AllAnime show ID resolves to a
