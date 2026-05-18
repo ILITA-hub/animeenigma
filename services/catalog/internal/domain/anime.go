@@ -46,6 +46,10 @@ type Anime struct {
 	HasAnimeLib bool `gorm:"default:false;index;column:has_animelib" json:"has_animelib"`
 	HasHiAnime  bool `gorm:"default:false;index;column:has_hianime" json:"has_hianime"`
 	HasConsumet bool `gorm:"default:false;index;column:has_consumet" json:"has_consumet"`
+	// HasRaw — raw Japanese audio available via the AllAnime parser
+	// (workstream raw-jp, Phase 01). Lazily backfilled when the catalog
+	// service first resolves a raw stream for the anime.
+	HasRaw bool `gorm:"default:false;index;column:has_raw" json:"has_raw"`
 	Hidden          bool           `gorm:"default:false" json:"hidden"`
 	SortPriority    int            `gorm:"default:0" json:"sort_priority,omitempty"`
 	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`
@@ -207,6 +211,9 @@ const (
 	SourceTypeExternal SourceType = "external"
 	SourceTypeAniboom  SourceType = "aniboom"
 	SourceTypeKodik    SourceType = "kodik"
+	// SourceTypeRaw — raw Japanese audio resolved via the AllAnime parser
+	// (workstream raw-jp). Phase 01: AllAnime Parser.
+	SourceTypeRaw SourceType = "raw"
 )
 
 // AniboomVideoSource represents a video source from Aniboom

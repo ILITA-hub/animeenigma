@@ -15,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -144,11 +145,26 @@ func main() {
 	// Stateless handler with embedded http.Client + shared redis cache.
 	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log)
 
+	// Workstream raw-jp, Phase 01 — AllAnime parser exposes a raw-JP video
+	// provider via a separate resolver service + handler. The handler
+	// mounts /api/anime/{id}/raw/{episodes,stream}.
+	allanimeClient := allanime.NewClient(allanime.Config{
+		Domains:          cfg.AllAnime.Domains,
+		QuerySearchSHA:   cfg.AllAnime.QuerySearchSHA,
+		QueryEpisodesSHA: cfg.AllAnime.QueryEpisodesSHA,
+		QuerySourcesSHA:  cfg.AllAnime.QuerySourcesSHA,
+		HTTPTimeout:      cfg.AllAnime.HTTPTimeout,
+		Referer:          cfg.AllAnime.Referer,
+		UserAgent:        cfg.AllAnime.UserAgent,
+	})
+	rawResolver := service.NewRawResolver(allanimeClient, animeRepo, redisCache, log)
+	rawHandler := handler.NewRawHandler(rawResolver, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

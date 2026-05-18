@@ -19,6 +19,7 @@ func NewRouter(
 	newsHandler *handler.NewsHandler,
 	collectionHandler *handler.CollectionHandler,
 	skipTimesHandler *handler.SkipTimesHandler,
+	rawHandler *handler.RawHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -100,6 +101,11 @@ func NewRouter(
 			r.Get("/{animeId}/scraper/servers", catalogHandler.GetScraperServers)
 			r.Get("/{animeId}/scraper/stream", catalogHandler.GetScraperStream)
 			r.Get("/{animeId}/scraper/health", catalogHandler.GetScraperHealth)
+			// Raw JP video source (workstream raw-jp, Phase 01). AllAnime
+			// GraphQL persisted-query API resolves original Japanese audio
+			// HLS streams. Public, no auth.
+			r.Get("/{animeId}/raw/episodes", rawHandler.GetEpisodes)
+			r.Get("/{animeId}/raw/stream", rawHandler.GetStream)
 			// Hanime video sources
 			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
 			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)

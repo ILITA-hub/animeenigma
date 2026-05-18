@@ -216,6 +216,14 @@ func (r *AnimeRepository) SetHasConsumet(ctx context.Context, animeID string, ha
 		Update("has_consumet", has).Error
 }
 
+// SetHasRaw flips the animes.has_raw column for one anime. Called
+// lazily by the raw resolver when an AllAnime show ID resolves to a
+// playable raw stream — best-effort. Workstream raw-jp, Phase 01.
+func (r *AnimeRepository) SetHasRaw(ctx context.Context, animeID string, has bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("has_raw", has).Error
+}
+
 func (r *AnimeRepository) SetHidden(ctx context.Context, animeID string, hidden bool) error {
 	result := r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
 		Update("hidden", hidden)

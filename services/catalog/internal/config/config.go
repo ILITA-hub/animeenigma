@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -25,6 +26,9 @@ type Config struct {
 	Telegram    TelegramConfig
 	HealthCheck HealthCheckConfig
 	Scraper     ScraperConfig
+	// AllAnime — workstream raw-jp, Phase 01. Raw Japanese audio
+	// provider backed by AllAnime's GraphQL persisted-query API.
+	AllAnime AllAnimeConfig
 }
 
 type ServerConfig struct {
@@ -80,6 +84,19 @@ type TelegramConfig struct {
 type ScraperConfig struct {
 	APIURL  string
 	Timeout time.Duration
+}
+
+// AllAnimeConfig configures the AllAnime raw-JP parser (workstream raw-jp,
+// Phase 01). Persisted-query SHA hashes rotate every few months; expose
+// them as env vars so the operator can update without a code change.
+type AllAnimeConfig struct {
+	Domains          []string
+	QuerySearchSHA   string
+	QueryEpisodesSHA string
+	QuerySourcesSHA  string
+	HTTPTimeout      time.Duration
+	Referer          string
+	UserAgent        string
 }
 
 func Load() (*Config, error) {
@@ -144,7 +161,30 @@ func Load() (*Config, error) {
 			APIURL:  getEnv("SCRAPER_API_URL", "http://scraper:8088"),
 			Timeout: getEnvDuration("SCRAPER_TIMEOUT", 15*time.Second),
 		},
+		AllAnime: AllAnimeConfig{
+			Domains:          splitCSV(getEnv("ALLANIME_DOMAINS", "allanime.day,allmanga.to,allanime.to")),
+			QuerySearchSHA:   getEnv("ALLANIME_QUERY_SEARCH_SHA", ""),
+			QueryEpisodesSHA: getEnv("ALLANIME_QUERY_EPISODES_SHA", ""),
+			QuerySourcesSHA:  getEnv("ALLANIME_QUERY_SOURCES_SHA", ""),
+			HTTPTimeout:      getEnvDuration("ALLANIME_HTTP_TIMEOUT", 10*time.Second),
+			Referer:          getEnv("ALLANIME_REFERER", "https://allmanga.to/"),
+			UserAgent:        getEnv("ALLANIME_USER_AGENT", "AnimeEnigma/1.0"),
+		},
 	}, nil
+}
+
+func splitCSV(v string) []string {
+	if v == "" {
+		return nil
+	}
+	parts := []string{}
+	for _, p := range strings.Split(v, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return parts
 }
 
 func getEnv(key, defaultVal string) string {
