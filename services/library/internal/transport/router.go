@@ -57,12 +57,19 @@ func NewRouter(
 	r.Route("/api/library", func(r chi.Router) {
 		_ = jwtConfig // retained for forward compat (Phase 4+)
 		r.Get("/health", healthHandler.Health)
+		// Phase 5 (LIB-09): extended health probe for the admin UI's
+		// stats strip. Returns disk + active-torrents + per-status
+		// active-jobs counts. Admin-gated by the gateway prefix.
+		r.Get("/health/extended", healthHandler.HealthExtended)
 		r.Get("/search", searchHandler.Search)
 		if jobsHandler != nil {
 			r.Post("/jobs", jobsHandler.Create)
 			r.Get("/jobs", jobsHandler.List)
 			r.Get("/jobs/{id}", jobsHandler.Get)
 			r.Delete("/jobs/{id}", jobsHandler.Delete)
+			// Phase 5 (LIB-09): retroactive shikimori_id link + retry of failed jobs.
+			r.Patch("/jobs/{id}", jobsHandler.Link)
+			r.Post("/jobs/{id}/retry", jobsHandler.Retry)
 		}
 		// Phase 04: read-only episodes endpoint consumed by the Phase 5
 		// admin UI and the Phase 6 hybrid resolver. Admin-gated via the

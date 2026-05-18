@@ -252,6 +252,91 @@ func (r *JobRepository) ResumeInterruptedDownloads(ctx context.Context) (int64, 
 	return res.RowsAffected, nil
 }
 
+// formatRetryErrorText returns the SPEC-locked audit string written
+// into a retried job row's error_text column. Centralized here so the
+// Phase-5 unit test pins the format.
+func formatRetryErrorText(oldID string) string {
+	return "retry of " + oldID
+}
+
+// UpdateShikimoriID flips the shikimori_id column on a row by id and
+// bumps updated_at. The Phase-5 Link handler calls this AFTER the
+// MinIO Move + library_episodes insert have both succeeded; on a
+// missing row we return liberrors.NotFound.
+//
+// Empty id / shikimoriID are rejected so a typo upstream doesn't run
+// an unbounded UPDATE.
+func (r *JobRepository) UpdateShikimoriID(ctx context.Context, id, shikimoriID string) error {
+	if id == "" {
+		return liberrors.InvalidInput("job id required")
+	}
+	if shikimoriID == "" {
+		return liberrors.InvalidInput("shikimori id required")
+	}
+	res := r.db.WithContext(ctx).
+		Model(&domain.Job{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"shikimori_id": shikimoriID,
+			"updated_at":   time.Now(),
+		})
+	if res.Error != nil {
+		return liberrors.Wrap(res.Error, liberrors.CodeInternal, "update shikimori_id")
+	}
+	if res.RowsAffected == 0 {
+		return liberrors.NotFound("job")
+	}
+	return nil
+}
+
+// Retry re-enqueues a failed job. The old row is preserved (still
+// in 'failed') for the audit trail; the returned new row inherits
+// every user-facing field plus the SPEC-locked error_text marker
+// "retry of {old_id}". The whole thing runs in a single transaction so
+// a partial failure can't leave a half-created row.
+//
+// Old row must be in 'failed' (otherwise InvalidInput). Missing old
+// row → NotFound.
+func (r *JobRepository) Retry(ctx context.Context, oldID string) (*domain.Job, error) {
+	if oldID == "" {
+		return nil, liberrors.InvalidInput("job id required")
+	}
+	var newJob *domain.Job
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var old domain.Job
+		if err := tx.Where("id = ?", oldID).First(&old).Error; err != nil {
+			if stderrors.Is(err, gorm.ErrRecordNotFound) {
+				return liberrors.NotFound("job")
+			}
+			return liberrors.Wrap(err, liberrors.CodeInternal, "fetch job for retry")
+		}
+		if old.Status != domain.JobStatusFailed {
+			return liberrors.InvalidInput("only failed jobs can be retried")
+		}
+		fresh := &domain.Job{
+			Source:      old.Source,
+			Magnet:      old.Magnet,
+			Title:       old.Title,
+			Uploader:    old.Uploader,
+			Quality:     old.Quality,
+			SizeBytes:   old.SizeBytes,
+			ShikimoriID: old.ShikimoriID,
+			Status:      domain.JobStatusQueued,
+			ProgressPct: 0,
+			ErrorText:   formatRetryErrorText(oldID),
+		}
+		if err := tx.Create(fresh).Error; err != nil {
+			return liberrors.Wrap(err, liberrors.CodeInternal, "create retry row")
+		}
+		newJob = fresh
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return newJob, nil
+}
+
 // ResumeInterruptedEncodes is the Phase-04 analogue of
 // ResumeInterruptedDownloads. Any row left in status='encoding' or
 // 'uploading' from a previous process with stale updated_at (> 1

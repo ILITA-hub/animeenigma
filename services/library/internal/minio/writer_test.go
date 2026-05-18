@@ -17,20 +17,35 @@ import (
 // fakeUploader records every PutObject + MakeBucket call.
 // `segmentsDone` is an atomic counter the test inspects to assert
 // the playlist PutObject is invoked AFTER every segment finishes.
+//
+// Phase-5 additions: list / copy / remove hooks for Move() tests.
 type fakeUploader struct {
 	mu sync.Mutex
 
-	bucketExists     bool
-	bucketExistsErr  error
-	makeBucketErr    error
-	makeBucketCalls  []string
-	bucketsCreated   int32
+	bucketExists    bool
+	bucketExistsErr error
+	makeBucketErr   error
+	makeBucketCalls []string
+	bucketsCreated  int32
 
 	// PutObject hooks.
 	putErr        map[string]error // by object name
 	putCalls      []putCall
 	segmentsDone  atomic.Int32
 	playlistOrder int32 // captures the segmentsDone value when playlist is PUT
+
+	// Phase-5 hooks for Move().
+	listResults map[string][]minio.ObjectInfo // by prefix
+	listErr     error
+	copyErr     map[string]error // by src object key
+	copyCalls   []copyCall
+	removeErr   map[string]error // by object key
+	removeCalls []string
+}
+
+type copyCall struct {
+	srcBucket, srcObject string
+	dstBucket, dstObject string
 }
 
 type putCall struct {
@@ -73,6 +88,45 @@ func (f *fakeUploader) PutObject(_ context.Context, bucket, object string, r int
 		f.segmentsDone.Add(1)
 	}
 	return minio.UploadInfo{}, nil
+}
+
+func (f *fakeUploader) ListObjects(_ context.Context, _ string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo {
+	ch := make(chan minio.ObjectInfo)
+	go func() {
+		defer close(ch)
+		if f.listErr != nil {
+			ch <- minio.ObjectInfo{Err: f.listErr}
+			return
+		}
+		for _, obj := range f.listResults[opts.Prefix] {
+			ch <- obj
+		}
+	}()
+	return ch
+}
+
+func (f *fakeUploader) CopyObject(_ context.Context, dst minio.CopyDestOptions, src minio.CopySrcOptions) (minio.UploadInfo, error) {
+	f.mu.Lock()
+	if err, ok := f.copyErr[src.Object]; ok && err != nil {
+		f.mu.Unlock()
+		return minio.UploadInfo{}, err
+	}
+	f.copyCalls = append(f.copyCalls, copyCall{
+		srcBucket: src.Bucket, srcObject: src.Object,
+		dstBucket: dst.Bucket, dstObject: dst.Object,
+	})
+	f.mu.Unlock()
+	return minio.UploadInfo{}, nil
+}
+
+func (f *fakeUploader) RemoveObject(_ context.Context, _ string, object string, _ minio.RemoveObjectOptions) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err, ok := f.removeErr[object]; ok && err != nil {
+		return err
+	}
+	f.removeCalls = append(f.removeCalls, object)
+	return nil
 }
 
 // makeTempFile creates a file with content under dir; returns path.
@@ -234,6 +288,164 @@ func TestURLFor_HTTPS(t *testing.T) {
 	want := "https://minio.example.com/raw-library/57466/1/playlist.m3u8"
 	if got != want {
 		t.Errorf("URLFor = %q, want %q", got, want)
+	}
+}
+
+func TestMove_HappyPath_CopiesThenRemoves(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"pending/abc/1/": {
+				{Key: "pending/abc/1/playlist.m3u8"},
+				{Key: "pending/abc/1/segment_000.ts"},
+				{Key: "pending/abc/1/segment_001.ts"},
+			},
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	if err := w.Move(context.Background(), "pending/abc/1/", "57466/1/"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	if len(fake.copyCalls) != 3 {
+		t.Fatalf("copy calls = %d, want 3", len(fake.copyCalls))
+	}
+	wantDst := map[string]string{
+		"pending/abc/1/playlist.m3u8":  "57466/1/playlist.m3u8",
+		"pending/abc/1/segment_000.ts": "57466/1/segment_000.ts",
+		"pending/abc/1/segment_001.ts": "57466/1/segment_001.ts",
+	}
+	for _, c := range fake.copyCalls {
+		want, ok := wantDst[c.srcObject]
+		if !ok {
+			t.Errorf("unexpected src %q", c.srcObject)
+			continue
+		}
+		if c.dstObject != want {
+			t.Errorf("dst for %q = %q, want %q", c.srcObject, c.dstObject, want)
+		}
+	}
+	// All sources should have been removed after copy.
+	if len(fake.removeCalls) != 3 {
+		t.Fatalf("remove calls = %d, want 3 (after all copies succeed)", len(fake.removeCalls))
+	}
+}
+
+func TestMove_EmptySource_Errors(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"pending/abc/1/": nil,
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+	err := w.Move(context.Background(), "pending/abc/1/", "57466/1/")
+	if err == nil {
+		t.Fatalf("Move on empty src must error")
+	}
+	if len(fake.copyCalls) != 0 {
+		t.Errorf("no copies should fire on empty src; got %d", len(fake.copyCalls))
+	}
+	if len(fake.removeCalls) != 0 {
+		t.Errorf("no removes should fire on empty src; got %d", len(fake.removeCalls))
+	}
+}
+
+func TestMove_CopyError_AbortsWithoutRemove(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"pending/abc/1/": {
+				{Key: "pending/abc/1/segment_000.ts"},
+				{Key: "pending/abc/1/segment_001.ts"},
+			},
+		},
+		copyErr: map[string]error{
+			"pending/abc/1/segment_001.ts": errors.New("simulated copy fail"),
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	err := w.Move(context.Background(), "pending/abc/1/", "57466/1/")
+	if err == nil {
+		t.Fatalf("Move should propagate copy error")
+	}
+	// CRITICAL: no source should be removed when any copy fails — data preserved.
+	if len(fake.removeCalls) != 0 {
+		t.Fatalf("RemoveObject must NOT fire on copy failure; got %d removes", len(fake.removeCalls))
+	}
+}
+
+func TestMove_RemoveError_SoftFailsButReturnsNil(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"pending/abc/1/": {
+				{Key: "pending/abc/1/segment_000.ts"},
+			},
+		},
+		removeErr: map[string]error{
+			"pending/abc/1/segment_000.ts": errors.New("simulated remove fail"),
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	// Copy succeeds — data is at destination. Remove failure is a soft
+	// orphan that we log but don't propagate.
+	if err := w.Move(context.Background(), "pending/abc/1/", "57466/1/"); err != nil {
+		t.Fatalf("Move should not propagate remove failures: %v", err)
+	}
+	if len(fake.copyCalls) != 1 {
+		t.Errorf("copy should have fired; got %d", len(fake.copyCalls))
+	}
+}
+
+func TestMove_NormalizesPrefixSlash(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"pending/abc/1/": {
+				{Key: "pending/abc/1/playlist.m3u8"},
+			},
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	// Pass prefixes WITHOUT trailing slash — Move should normalize.
+	if err := w.Move(context.Background(), "pending/abc/1", "57466/1"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	if len(fake.copyCalls) != 1 {
+		t.Fatalf("copy calls = %d, want 1", len(fake.copyCalls))
+	}
+	if fake.copyCalls[0].dstObject != "57466/1/playlist.m3u8" {
+		t.Errorf("dst = %q, want 57466/1/playlist.m3u8", fake.copyCalls[0].dstObject)
+	}
+}
+
+func TestListObjectsByPrefix_SortsDeterministically(t *testing.T) {
+	fake := &fakeUploader{
+		listResults: map[string][]minio.ObjectInfo{
+			"pending/abc/1/": {
+				{Key: "pending/abc/1/segment_010.ts"},
+				{Key: "pending/abc/1/playlist.m3u8"},
+				{Key: "pending/abc/1/segment_001.ts"},
+			},
+		},
+	}
+	w := newWriterWithUploader(Config{Endpoint: "minio:9000", Bucket: "raw-library"}, fake, nil)
+
+	keys, err := w.ListObjectsByPrefix(context.Background(), "pending/abc/1/")
+	if err != nil {
+		t.Fatalf("ListObjectsByPrefix: %v", err)
+	}
+	want := []string{
+		"pending/abc/1/playlist.m3u8",
+		"pending/abc/1/segment_001.ts",
+		"pending/abc/1/segment_010.ts",
+	}
+	if len(keys) != len(want) {
+		t.Fatalf("len = %d, want %d", len(keys), len(want))
+	}
+	for i := range want {
+		if keys[i] != want[i] {
+			t.Errorf("keys[%d] = %q, want %q", i, keys[i], want[i])
+		}
 	}
 }
 

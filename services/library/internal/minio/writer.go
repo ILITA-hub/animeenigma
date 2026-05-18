@@ -41,12 +41,19 @@ type Config struct {
 // so unit tests can swap in a fake without spinning up a real MinIO.
 // PutObject's `size` param is int64 to match the SDK; callers pass
 // the result of os.Stat.Size().
+//
+// Phase 5 adds ListObjects / CopyObject / RemoveObject for the
+// post-hoc shikimori-link Move() helper (server-side copy from
+// pending/{job_id}/{ep}/ to {shikimori_id}/{ep}/).
 type Uploader interface {
 	BucketExists(ctx context.Context, bucket string) (bool, error)
 	MakeBucket(ctx context.Context, bucket string, opts minio.MakeBucketOptions) error
 	PutObject(ctx context.Context, bucket, object string, reader interface {
 		Read(p []byte) (int, error)
 	}, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	ListObjects(ctx context.Context, bucket string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
+	CopyObject(ctx context.Context, dst minio.CopyDestOptions, src minio.CopySrcOptions) (minio.UploadInfo, error)
+	RemoveObject(ctx context.Context, bucket, object string, opts minio.RemoveObjectOptions) error
 }
 
 // minioClientAdapter wraps the real *minio.Client to satisfy
@@ -69,6 +76,18 @@ func (a *minioClientAdapter) PutObject(ctx context.Context, bucket, object strin
 }, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
 	// minio-go expects io.Reader; our type matches it structurally.
 	return a.c.PutObject(ctx, bucket, object, readerAdapter{r: reader}, size, opts)
+}
+
+func (a *minioClientAdapter) ListObjects(ctx context.Context, bucket string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo {
+	return a.c.ListObjects(ctx, bucket, opts)
+}
+
+func (a *minioClientAdapter) CopyObject(ctx context.Context, dst minio.CopyDestOptions, src minio.CopySrcOptions) (minio.UploadInfo, error) {
+	return a.c.CopyObject(ctx, dst, src)
+}
+
+func (a *minioClientAdapter) RemoveObject(ctx context.Context, bucket, object string, opts minio.RemoveObjectOptions) error {
+	return a.c.RemoveObject(ctx, bucket, object, opts)
 }
 
 // readerAdapter promotes an "interface{ Read }" to io.Reader for the SDK.
@@ -273,6 +292,90 @@ func (c *byteCounter) value() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.n
+}
+
+// ListObjectsByPrefix drains the channel returned by ListObjects for
+// every key under prefix (recursive) and returns a sorted []string.
+// Used by the Phase-5 Link handler to parse the existing episode
+// number out of the pending/{job_id}/{ep}/ path before issuing the
+// Move() call.
+func (w *Writer) ListObjectsByPrefix(ctx context.Context, prefix string) ([]string, error) {
+	ch := w.uploader.ListObjects(ctx, w.cfg.Bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+	var keys []string
+	for obj := range ch {
+		if obj.Err != nil {
+			return nil, fmt.Errorf("list %s: %w", prefix, obj.Err)
+		}
+		keys = append(keys, obj.Key)
+	}
+	// Deterministic order — callers may grep for patterns.
+	sortStrings(keys)
+	return keys, nil
+}
+
+// Move performs a server-side copy of every object under srcPrefix to
+// dstPrefix (preserving the relative tail), THEN removes the originals.
+// Semantics:
+//   - srcPrefix and dstPrefix are normalized to end with "/".
+//   - On any CopyObject error: abort, do NOT remove sources → no data loss.
+//   - After all copies succeed: RemoveObject each source. Remove errors
+//     are logged but do NOT propagate (orphan source is recoverable;
+//     data integrity is preserved).
+//   - Empty src → returns an error (no objects to move).
+//
+// Phase-5 Link handler calls this AFTER validating the job row exists
+// + is `done` + has no shikimori_id yet.
+func (w *Writer) Move(ctx context.Context, srcPrefix, dstPrefix string) error {
+	if !strings.HasSuffix(srcPrefix, "/") {
+		srcPrefix = srcPrefix + "/"
+	}
+	if !strings.HasSuffix(dstPrefix, "/") {
+		dstPrefix = dstPrefix + "/"
+	}
+	keys, err := w.ListObjectsByPrefix(ctx, srcPrefix)
+	if err != nil {
+		return fmt.Errorf("move list: %w", err)
+	}
+	if len(keys) == 0 {
+		return fmt.Errorf("move: no objects under %s", srcPrefix)
+	}
+
+	// Step 1 — copy every object. Abort on first error; sources stay intact.
+	for _, srcKey := range keys {
+		tail := strings.TrimPrefix(srcKey, srcPrefix)
+		dstKey := dstPrefix + tail
+		_, copyErr := w.uploader.CopyObject(ctx,
+			minio.CopyDestOptions{Bucket: w.cfg.Bucket, Object: dstKey},
+			minio.CopySrcOptions{Bucket: w.cfg.Bucket, Object: srcKey},
+		)
+		if copyErr != nil {
+			return fmt.Errorf("move copy %s → %s: %w", srcKey, dstKey, copyErr)
+		}
+	}
+
+	// Step 2 — remove sources. Soft-fail: log + continue.
+	for _, srcKey := range keys {
+		if rmErr := w.uploader.RemoveObject(ctx, w.cfg.Bucket, srcKey, minio.RemoveObjectOptions{}); rmErr != nil {
+			if w.log != nil {
+				w.log.Warnw("move: failed to remove source object (data preserved at dst, source orphan)",
+					"src", srcKey, "error", rmErr)
+			}
+		}
+	}
+	return nil
+}
+
+// sortStrings is a tiny in-place ascending sort used by
+// ListObjectsByPrefix. Avoids importing "sort" twice in the file.
+func sortStrings(s []string) {
+	for i := 1; i < len(s); i++ {
+		for j := i; j > 0 && s[j-1] > s[j]; j-- {
+			s[j-1], s[j] = s[j], s[j-1]
+		}
+	}
 }
 
 // URLFor returns the internal MinIO HTTP URL for a bucket-relative

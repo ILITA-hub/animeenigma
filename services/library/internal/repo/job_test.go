@@ -60,3 +60,25 @@ func TestJobTableName(t *testing.T) {
 		t.Fatalf("Job.TableName() = %q, want %q", name, "library_jobs")
 	}
 }
+
+// TestRetryErrorTextFormat pins the Phase-5 SPEC-locked format for
+// the retry row's error_text so a future refactor of Retry() doesn't
+// silently change the audit-trail string admins grep on.
+func TestRetryErrorTextFormat(t *testing.T) {
+	const oldID = "abc-123"
+	got := formatRetryErrorText(oldID)
+	want := "retry of abc-123"
+	if got != want {
+		t.Fatalf("retry error_text = %q, want %q", got, want)
+	}
+}
+
+// TestUpdateShikimoriID_NilRepo defensively asserts UpdateShikimoriID
+// rejects empty input rather than running an unbounded UPDATE.
+func TestUpdateShikimoriID_EmptyID(t *testing.T) {
+	r := &JobRepository{} // nil db; the method must short-circuit before touching it
+	err := r.UpdateShikimoriID(nil, "", "12345")
+	if err == nil {
+		t.Fatalf("UpdateShikimoriID with empty job id must error")
+	}
+}

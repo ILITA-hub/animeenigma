@@ -245,12 +245,20 @@ func main() {
 	aggregator := service.NewAggregator(nyaaClient, animeToshoAdapter{c: atClient}, log)
 
 	// Initialize handlers.
-	healthHandler := handler.NewHealthHandler()
+	// Phase 5 (LIB-09): health handler now exposes /health/extended for
+	// the admin UI stats strip. It needs disk + active-torrent + active-
+	// job-count sources.
+	healthHandler := handler.NewHealthHandlerExtended(diskGuard, pool, jobRepo)
 	searchHandler := handler.NewSearchHandler(aggregator, log)
-	jobsHandler := handler.NewJobsHandler(
+	// Phase 5 (LIB-09): jobs handler now drives Link + Retry as well as
+	// the Phase-3 CRUD. Needs the minio writer (Move + ListObjectsByPrefix)
+	// + the EpisodeRepository.
+	jobsHandler := handler.NewJobsHandlerWithLink(
 		jobRepo,
 		diskGuard,
 		pool,
+		writer,
+		episodeRepo,
 		libMetrics,
 		cfg.Disk.MinFreePct,
 		log,

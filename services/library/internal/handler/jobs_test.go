@@ -70,6 +70,78 @@ func (s *fakeStoreH) List(_ context.Context, f repo.JobFilter) ([]domain.Job, er
 	return s.listResp, nil
 }
 
+func (s *fakeStoreH) UpdateShikimoriID(_ context.Context, id, shikimoriID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j, ok := s.byID[id]
+	if !ok {
+		return liberrors.NotFound("job")
+	}
+	j.ShikimoriID = shikimoriID
+	return nil
+}
+
+func (s *fakeStoreH) Retry(_ context.Context, oldID string) (*domain.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	old, ok := s.byID[oldID]
+	if !ok {
+		return nil, liberrors.NotFound("job")
+	}
+	if old.Status != domain.JobStatusFailed {
+		return nil, liberrors.InvalidInput("only failed jobs can be retried")
+	}
+	fresh := &domain.Job{
+		ID:          "retry-" + oldID,
+		Source:      old.Source,
+		Magnet:      old.Magnet,
+		Title:       old.Title,
+		Uploader:    old.Uploader,
+		Quality:     old.Quality,
+		SizeBytes:   old.SizeBytes,
+		ShikimoriID: old.ShikimoriID,
+		Status:      domain.JobStatusQueued,
+		ErrorText:   "retry of " + oldID,
+	}
+	s.byID[fresh.ID] = fresh
+	return fresh, nil
+}
+
+// fakeMover stubs MinIO Move / ListObjectsByPrefix for the Link
+// handler tests.
+type fakeMover struct {
+	keys      []string
+	listErr   error
+	moveErr   error
+	moveCalls []struct{ src, dst string }
+}
+
+func (m *fakeMover) ListObjectsByPrefix(_ context.Context, _ string) ([]string, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	return m.keys, nil
+}
+
+func (m *fakeMover) Move(_ context.Context, src, dst string) error {
+	m.moveCalls = append(m.moveCalls, struct{ src, dst string }{src, dst})
+	return m.moveErr
+}
+
+// fakeEpisodeStore stubs the EpisodeStore.Create call.
+type fakeEpisodeStore struct {
+	created []*domain.Episode
+	err     error
+}
+
+func (s *fakeEpisodeStore) Create(_ context.Context, ep *domain.Episode) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.created = append(s.created, ep)
+	return nil
+}
+
 type fakeDiskGuard struct {
 	allowed bool
 	freePct int
@@ -302,6 +374,211 @@ func TestJobsHandler_Delete_NotFound(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
+}
+
+// newLinkHandler wires up the Phase-5 constructor with the fakeStore + fakes.
+func newLinkHandler(t *testing.T) (*JobsHandler, *fakeStoreH, *fakeMover, *fakeEpisodeStore, *metrics.LibraryMetrics) {
+	t.Helper()
+	store := newFakeStoreH()
+	dg := &fakeDiskGuard{allowed: true, freePct: 50}
+	cc := &fakeCanceller{}
+	mover := &fakeMover{}
+	eps := &fakeEpisodeStore{}
+	reg := prometheus.NewRegistry()
+	m := metrics.NewLibraryMetricsWithRegisterer(reg)
+	h := NewJobsHandlerWithLink(store, dg, cc, mover, eps, m, 20, nil)
+	return h, store, mover, eps, m
+}
+
+func TestJobsHandler_Link_HappyPath(t *testing.T) {
+	h, store, mover, eps, _ := newLinkHandler(t)
+	// Seed a done job with empty shikimori_id.
+	store.byID["job-1"] = &domain.Job{ID: "job-1", Title: "x", Status: domain.JobStatusDone}
+	mover.keys = []string{"pending/job-1/3/playlist.m3u8", "pending/job-1/3/segment_000.ts"}
+
+	body := map[string]any{"shikimori_id": "57466"}
+	b, _ := json.Marshal(body)
+	r := newChiRequestWithBody(http.MethodPatch, "/api/library/jobs/job-1", "job-1", b)
+	w := httptest.NewRecorder()
+	h.Link(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if len(mover.moveCalls) != 1 {
+		t.Fatalf("expected 1 Move call, got %d", len(mover.moveCalls))
+	}
+	if mover.moveCalls[0].src != "pending/job-1/3/" {
+		t.Errorf("Move src = %q, want pending/job-1/3/", mover.moveCalls[0].src)
+	}
+	if mover.moveCalls[0].dst != "57466/3/" {
+		t.Errorf("Move dst = %q, want 57466/3/", mover.moveCalls[0].dst)
+	}
+	if len(eps.created) != 1 {
+		t.Fatalf("expected 1 episode insert, got %d", len(eps.created))
+	}
+	if eps.created[0].EpisodeNumber != 3 {
+		t.Errorf("episode num = %d, want 3", eps.created[0].EpisodeNumber)
+	}
+	if eps.created[0].MinioPath != "57466/3/" {
+		t.Errorf("episode minio_path = %q, want 57466/3/", eps.created[0].MinioPath)
+	}
+	// Job row's shikimori_id should be flipped.
+	if store.byID["job-1"].ShikimoriID != "57466" {
+		t.Errorf("job shikimori_id = %q, want 57466", store.byID["job-1"].ShikimoriID)
+	}
+}
+
+func TestJobsHandler_Link_NotFound(t *testing.T) {
+	h, _, _, _, _ := newLinkHandler(t)
+	body := map[string]any{"shikimori_id": "57466"}
+	b, _ := json.Marshal(body)
+	r := newChiRequestWithBody(http.MethodPatch, "/api/library/jobs/missing", "missing", b)
+	w := httptest.NewRecorder()
+	h.Link(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestJobsHandler_Link_NotDone(t *testing.T) {
+	h, store, _, _, _ := newLinkHandler(t)
+	store.byID["job-1"] = &domain.Job{ID: "job-1", Status: domain.JobStatusDownloading}
+	body := map[string]any{"shikimori_id": "57466"}
+	b, _ := json.Marshal(body)
+	r := newChiRequestWithBody(http.MethodPatch, "/api/library/jobs/job-1", "job-1", b)
+	w := httptest.NewRecorder()
+	h.Link(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestJobsHandler_Link_AlreadyLinked(t *testing.T) {
+	h, store, _, _, _ := newLinkHandler(t)
+	store.byID["job-1"] = &domain.Job{
+		ID: "job-1", Status: domain.JobStatusDone, ShikimoriID: "999",
+	}
+	body := map[string]any{"shikimori_id": "57466"}
+	b, _ := json.Marshal(body)
+	r := newChiRequestWithBody(http.MethodPatch, "/api/library/jobs/job-1", "job-1", b)
+	w := httptest.NewRecorder()
+	h.Link(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestJobsHandler_Link_NoMinioObjects(t *testing.T) {
+	h, store, mover, _, _ := newLinkHandler(t)
+	store.byID["job-1"] = &domain.Job{ID: "job-1", Status: domain.JobStatusDone}
+	mover.keys = nil
+	body := map[string]any{"shikimori_id": "57466"}
+	b, _ := json.Marshal(body)
+	r := newChiRequestWithBody(http.MethodPatch, "/api/library/jobs/job-1", "job-1", b)
+	w := httptest.NewRecorder()
+	h.Link(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestJobsHandler_Link_EmptyShikimoriID(t *testing.T) {
+	h, store, mover, _, _ := newLinkHandler(t)
+	store.byID["job-1"] = &domain.Job{ID: "job-1", Status: domain.JobStatusDone}
+	mover.keys = []string{"pending/job-1/1/playlist.m3u8"}
+	body := map[string]any{"shikimori_id": "   "}
+	b, _ := json.Marshal(body)
+	r := newChiRequestWithBody(http.MethodPatch, "/api/library/jobs/job-1", "job-1", b)
+	w := httptest.NewRecorder()
+	h.Link(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestJobsHandler_Retry_HappyPath(t *testing.T) {
+	h, store, _, _, m := newLinkHandler(t)
+	store.byID["failed-1"] = &domain.Job{
+		ID: "failed-1", Title: "boom", Status: domain.JobStatusFailed,
+		Magnet: "magnet:?xt=urn:btih:aaaa", Source: domain.JobSourceManual,
+	}
+	r := newChiRequest(http.MethodPost, "/api/library/jobs/failed-1/retry", "failed-1")
+	w := httptest.NewRecorder()
+	h.Retry(w, r)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", w.Code, w.Body.String())
+	}
+	if v := testutil.ToFloat64(m.GetJobsTotalForTest("queued")); v != 1 {
+		t.Fatalf("library_jobs_total{queued} = %v, want 1", v)
+	}
+	// Original row still failed.
+	if store.byID["failed-1"].Status != domain.JobStatusFailed {
+		t.Errorf("original status changed: %q", store.byID["failed-1"].Status)
+	}
+}
+
+func TestJobsHandler_Retry_NotFailed(t *testing.T) {
+	h, store, _, _, _ := newLinkHandler(t)
+	store.byID["q-1"] = &domain.Job{ID: "q-1", Status: domain.JobStatusQueued}
+	r := newChiRequest(http.MethodPost, "/api/library/jobs/q-1/retry", "q-1")
+	w := httptest.NewRecorder()
+	h.Retry(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestJobsHandler_Retry_NotFound(t *testing.T) {
+	h, _, _, _, _ := newLinkHandler(t)
+	r := newChiRequest(http.MethodPost, "/api/library/jobs/missing/retry", "missing")
+	w := httptest.NewRecorder()
+	h.Retry(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestParseEpisodeFromPendingKey(t *testing.T) {
+	cases := []struct {
+		key, prefix string
+		want        int
+		wantErr     bool
+	}{
+		{"pending/abc/3/playlist.m3u8", "pending/abc/", 3, false},
+		{"pending/xyz/1/segment_000.ts", "pending/xyz/", 1, false},
+		{"pending/abc/12/playlist.m3u8", "pending/abc/", 12, false},
+		{"pending/abc/notanumber/foo", "pending/abc/", 0, true},
+		{"otherprefix/3/foo", "pending/abc/", 0, true},
+		{"pending/abc/", "pending/abc/", 0, true},
+		{"pending/abc/0/foo", "pending/abc/", 0, true},
+	}
+	for _, c := range cases {
+		got, err := parseEpisodeFromPendingKey(c.key, c.prefix)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("parseEpisodeFromPendingKey(%q, %q) expected error", c.key, c.prefix)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseEpisodeFromPendingKey(%q, %q) unexpected error: %v", c.key, c.prefix, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("parseEpisodeFromPendingKey(%q, %q) = %d, want %d", c.key, c.prefix, got, c.want)
+		}
+	}
+}
+
+// newChiRequestWithBody is a helper for PATCH/POST requests with a body.
+func newChiRequestWithBody(method, target, id string, body []byte) *http.Request {
+	r := httptest.NewRequest(method, target, bytes.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id)
+	r = r.WithContext(contextWithRouteContext(r.Context(), rctx))
+	return r
 }
 
 // newChiRequest wires up a chi URL param so chi.URLParam(r, "id")

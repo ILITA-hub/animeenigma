@@ -362,6 +362,93 @@ func TestJobRepository_Cancel(t *testing.T) {
 	}
 }
 
+// TestJobRepository_UpdateShikimoriID_Updates pins the column and
+// returns NotFound for missing ids (Phase-5).
+func TestJobRepository_UpdateShikimoriID_Updates(t *testing.T) {
+	db, cleanup := openTestDB(t)
+	defer cleanup()
+	r := NewJobRepository(db)
+
+	j := mustInsertJob(t, r, domain.JobSourceManual, "u", "magnet:?xt=urn:btih:8888888888888888888888888888888888888888&dn=u")
+
+	if err := r.UpdateShikimoriID(context.Background(), j.ID, "57466"); err != nil {
+		t.Fatalf("update shikimori_id: %v", err)
+	}
+	got, _ := r.GetByID(context.Background(), j.ID)
+	if got.ShikimoriID != "57466" {
+		t.Fatalf("shikimori_id = %q, want 57466", got.ShikimoriID)
+	}
+
+	// Missing id → NotFound.
+	if err := r.UpdateShikimoriID(context.Background(), "00000000-0000-0000-0000-000000000000", "1"); err == nil {
+		t.Fatalf("expected NotFound on missing id")
+	}
+}
+
+// TestJobRepository_Retry inherits all fields from the failed row,
+// sets status=queued, error_text='retry of <oldID>'.
+func TestJobRepository_Retry(t *testing.T) {
+	db, cleanup := openTestDB(t)
+	defer cleanup()
+	r := NewJobRepository(db)
+
+	// Create + mark failed.
+	j := &domain.Job{
+		Source:      domain.JobSourceNyaa,
+		Magnet:      "magnet:?xt=urn:btih:9999999999999999999999999999999999999999&dn=r",
+		Title:       "retry-me",
+		Uploader:    "Ohys-Raws",
+		Quality:     "1080p",
+		SizeBytes:   1024,
+		ShikimoriID: "12345",
+	}
+	if err := r.Create(context.Background(), j); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := r.UpdateStatus(context.Background(), j.ID, domain.JobStatusFailed, "boom"); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+
+	fresh, err := r.Retry(context.Background(), j.ID)
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if fresh == nil {
+		t.Fatalf("retry returned nil row")
+	}
+	if fresh.ID == j.ID {
+		t.Fatalf("retry must allocate a NEW id, got same %q", fresh.ID)
+	}
+	if fresh.Status != domain.JobStatusQueued {
+		t.Fatalf("retry status = %q, want queued", fresh.Status)
+	}
+	if fresh.Magnet != j.Magnet || fresh.Title != j.Title || fresh.Uploader != j.Uploader ||
+		fresh.Quality != j.Quality || fresh.SizeBytes != j.SizeBytes || fresh.ShikimoriID != j.ShikimoriID ||
+		fresh.Source != j.Source {
+		t.Fatalf("retry did not inherit fields: %+v", fresh)
+	}
+	wantErr := "retry of " + j.ID
+	if fresh.ErrorText != wantErr {
+		t.Fatalf("retry error_text = %q, want %q", fresh.ErrorText, wantErr)
+	}
+
+	// Old row still failed.
+	old, _ := r.GetByID(context.Background(), j.ID)
+	if old.Status != domain.JobStatusFailed {
+		t.Fatalf("old row status changed: %q, want failed (audit trail)", old.Status)
+	}
+
+	// Retry on a non-failed row → InvalidInput.
+	if _, err := r.Retry(context.Background(), fresh.ID); err == nil {
+		t.Fatalf("retry on queued must error")
+	}
+
+	// Retry on missing id → NotFound.
+	if _, err := r.Retry(context.Background(), "00000000-0000-0000-0000-000000000000"); err == nil {
+		t.Fatalf("retry on missing id must error")
+	}
+}
+
 // TestJobRepository_ResumeInterruptedDownloads rewrites every
 // downloading row back to queued.
 func TestJobRepository_ResumeInterruptedDownloads(t *testing.T) {
