@@ -21,6 +21,7 @@ func NewRouter(
 	skipTimesHandler *handler.SkipTimesHandler,
 	rawHandler *handler.RawHandler,
 	subtitlesHandler *handler.SubtitlesHandler,
+	internalCacheHandler *handler.InternalCacheHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -44,6 +45,16 @@ func NewRouter(
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metrics.Handler().ServeHTTP(w, r)
 	})
+
+	// Internal endpoints (workstream raw-jp / v0.2 / Phase 06).
+	// Mounted OUTSIDE /api with no AuthMiddleware — nginx/gateway
+	// does NOT proxy /internal/*, so the route is reachable only
+	// from within the docker network. Mirrors the precedent set by
+	// services/auth/internal/transport/router.go's
+	// /internal/resolve-api-key.
+	if internalCacheHandler != nil {
+		r.Post("/internal/cache/invalidate/raw/{shikimoriId}", internalCacheHandler.InvalidateRaw)
+	}
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
