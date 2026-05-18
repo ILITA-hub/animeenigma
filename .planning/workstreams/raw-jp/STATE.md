@@ -1,16 +1,16 @@
 ---
 workstream: raw-jp
-milestone: v0.1
+milestone: v0.2
 created: 2026-05-18
-status: milestone-complete
+status: ready-for-autonomous
 last_updated: 2026-05-18
-last_activity: 2026-05-18 — v0.1 autonomous run complete; all 4 phases shipped; ISS-012 documents SHA refresh runbook
+last_activity: 2026-05-18 — v0.2 planning artifacts prepared (ROADMAP, REQUIREMENTS, six per-phase SPECs); v0.1 complete + archived
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State — `raw-jp` workstream
@@ -25,10 +25,29 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 ## Current Position
 
-**Status:** v0.1 milestone complete
-**Active milestone:** v0.1 Raw Provider MVP — done; see `milestones/v0.1-SUMMARY.md`
-**Current phase:** None (v0.2 Self-Hosted Library is the next planned milestone)
-**Last activity:** 2026-05-18 — autonomous run completed all 4 phases; live smoke confirmed graceful degradation pending SHA refresh (ISS-012)
+**Status:** Ready for autonomous execution of v0.2
+**Active milestone:** v0.2 Self-Hosted Library — six phases planned
+**Current phase:** None (next: Phase 1 — Library Service Scaffold)
+**Last activity:** 2026-05-18 — v0.2 planning artifacts written (ROADMAP, REQUIREMENTS, six per-phase SPECs); v0.1 archived as shipped.
+
+## Source artifacts (v0.2)
+
+- **Active milestone roadmap:** `.planning/workstreams/raw-jp/milestones/v0.2-ROADMAP.md`
+- **Requirements:** `.planning/workstreams/raw-jp/milestones/v0.2-REQUIREMENTS.md`
+- **Per-phase SPECs:**
+  - Phase 1: `milestones/v0.2-phases/01-library-scaffold/01-SPEC.md`
+  - Phase 2: `milestones/v0.2-phases/02-nyaa-animetosho-clients/02-SPEC.md`
+  - Phase 3: `milestones/v0.2-phases/03-torrent-client-job-queue/03-SPEC.md`
+  - Phase 4: `milestones/v0.2-phases/04-ffmpeg-minio-transcoder/04-SPEC.md`
+  - Phase 5: `milestones/v0.2-phases/05-rawlibrary-admin-ui/05-SPEC.md`
+  - Phase 6: `milestones/v0.2-phases/06-hybrid-resolver/06-SPEC.md`
+
+## Source artifacts (v0.1, archived)
+
+- **Milestone summary:** `milestones/v0.1-SUMMARY.md`
+- **Roadmap (frozen):** `milestones/v0.1-ROADMAP.md`
+- **Requirements (frozen):** `milestones/v0.1-REQUIREMENTS.md`
+- **Followup:** `docs/issues/README.md` § ISS-012 — operator runbook for AllAnime persisted-query SHA refresh.
 
 ## Source artifacts
 
@@ -42,22 +61,35 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
   - Phase 3: `milestones/v0.1-phases/03-raw-player-frontend/03-SPEC.md`
   - Phase 4: `milestones/v0.1-phases/04-frontend-wiring/04-SPEC.md`
 
-## Progress
+## Progress (v0.2 active)
 
-| Phase | Title                                         | Status      |
-|-------|-----------------------------------------------|-------------|
-| 1     | AllAnime Parser                               | Not started |
-| 2     | Subtitle Aggregator + Extended ID Mapping     | Not started |
-| 3     | RawPlayer.vue + Other Subs Panel              | Not started |
-| 4     | Frontend Wiring + Changelog                   | Not started |
+| Phase | Title                                            | Status      |
+|-------|--------------------------------------------------|-------------|
+| 1     | Library Service Scaffold                         | Not started |
+| 2     | Nyaa + AnimeTosho Search Clients                 | Not started |
+| 3     | Torrent Client + Job Queue + Metrics             | Not started |
+| 4     | ffmpeg HLS Transcoder + MinIO Writer             | Not started |
+| 5     | RawLibrary.vue Admin UI                          | Not started |
+| 6     | Hybrid Resolver                                  | Not started |
 
-## Wave structure (for autonomous execution)
+## v0.1 (shipped)
+
+| Phase | Title                                            | Status |
+|-------|--------------------------------------------------|--------|
+| 1     | AllAnime Parser                                  | Done ✓ |
+| 2     | Subtitle Aggregator + Extended ID Mapping        | Done ✓ |
+| 3     | RawPlayer.vue + Other Subs Panel                 | Done ✓ |
+| 4     | Frontend Wiring + Changelog                      | Done ✓ |
+
+## Wave structure (for v0.2 autonomous execution)
 
 | Wave | Phases | Parallelizable |
 |------|--------|----------------|
-| 1    | 1, 2   | yes — zero file overlap |
-| 2    | 3      | n/a, depends on Wave 1 endpoints |
-| 3    | 4      | n/a, depends on Wave 2 components |
+| 1    | 1      | n/a — scaffold blocks everything |
+| 2    | 2      | could overlap with 3, kept serial for simpler review |
+| 3    | 3      | n/a — depends on scaffold |
+| 4    | 4      | n/a — depends on 3 |
+| 5    | 5, 6   | yes — UI work and hybrid resolver have zero file overlap |
 
 ## Resume / start
 
@@ -65,7 +97,7 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 /gsd-autonomous --ws raw-jp
 ```
 
-The autonomous workflow will discover phases from `milestones/v0.1-ROADMAP.md`, run discuss→plan→execute per phase, and only pause on grey-area decisions, blockers, or validation requests.
+The autonomous workflow discovers phases from `milestones/v0.2-ROADMAP.md`, runs discuss→plan→execute per phase, and only pauses on grey-area decisions, blockers, or validation requests.
 
 Step-by-step alternative:
 
@@ -73,7 +105,7 @@ Step-by-step alternative:
 /gsd-discuss-phase 1 --ws raw-jp
 /gsd-plan-phase 1 --ws raw-jp
 /gsd-execute-phase 1 --ws raw-jp
-# repeat for phases 2, 3, 4
+# repeat for phases 2, 3, 4, 5, 6
 ```
 
 ## Session Continuity

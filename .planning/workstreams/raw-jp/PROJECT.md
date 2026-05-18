@@ -21,27 +21,27 @@ The new provider serves a single audio track — original Japanese, no dub. RU a
 
 ## Active milestone
 
-🟢 **v0.1 Raw Provider MVP** — Streaming-only foundation. AllAnime parser, multi-language subtitle aggregator, new `RawPlayer.vue`, "Other subs" panel, provider chip wiring.
+🟢 **v0.2 Self-Hosted Library** — `services/library/` Go microservice on port 8087: Nyaa.si + AnimeTosho search → embedded BitTorrent (`anacrolix/torrent`) → ffmpeg HLS transcode → MinIO storage → hybrid resolver that prefers the self-hosted copy over AllAnime. Six phases. Planning artifacts ready under `milestones/v0.2-*`.
 
-Run `/gsd-autonomous --ws raw-jp` to drive v0.1 end-to-end.
+Run `/gsd-autonomous --ws raw-jp` to drive v0.2 end-to-end.
 
 ## Planned milestones
 
-- 🟢 **v0.1 Raw Provider MVP** (active) — Streaming. AllAnime + subs + player + wiring.
-- ⏳ **v0.2 Self-Hosted Library** (planned) — `services/library/` with anacrolix/torrent + ffmpeg HLS + MinIO + RawLibrary.vue admin + hybrid resolver.
+- ✅ **v0.1 Raw Provider MVP** (shipped 2026-05-18) — Streaming-only foundation: AllAnime parser, multi-language subtitle aggregator, `RawPlayer.vue` + "Other subs" panel + chip wiring (behind `VITE_RAW_PROVIDER_ENABLED`). Followup ISS-012 for the AllAnime persisted-query SHA refresh runbook. See `milestones/v0.1-SUMMARY.md`.
+- 🟢 **v0.2 Self-Hosted Library** (active) — `services/library/` with `anacrolix/torrent` + ffmpeg HLS + MinIO + `RawLibrary.vue` admin + hybrid resolver. See `milestones/v0.2-ROADMAP.md` + `milestones/v0.2-REQUIREMENTS.md` + per-phase SPECs.
 - ⏳ **v0.3 Auto-Download Watched Ongoings** (planned) — SubsPlease/Ohys-Raws RSS poller, per-anime opt-in, admin oversight gate.
 
-## Active requirements (v0.1)
+## Active requirements (v0.2)
 
-See `milestones/v0.1-REQUIREMENTS.md`.
+See `milestones/v0.2-REQUIREMENTS.md` for LIB-01..10 + LIB-NF-01..04.
 
-## Validated requirements (carried)
+## Shipped requirements (v0.1, carried)
 
-None yet — first milestone.
+- RAW-01..08, RAW-NF-01, RAW-NF-02 — all delivered. Detail: `milestones/v0.1-SUMMARY.md`.
 
 ## Context
 
-Touches: `services/catalog/internal/parser/{allanime,opensubtitles}/`, `services/catalog/internal/service/`, `libs/idmapping/`, `frontend/web/src/components/player/{RawPlayer,OtherSubsPanel}.vue`, `frontend/web/src/views/Anime.vue`, `docker/.env` (new env vars), `frontend/web/public/changelog.json`. Zero overlap with v3.0 scraper microservice.
+Touches in v0.2: a brand-new `services/library/` Go service + Dockerfile, `docker/docker-compose.yml` (library block + new volumes), `services/gateway/internal/router/routes.go` (proxy for `/api/library/*`), `services/catalog/internal/service/raw_resolver.go` (hybrid resolver extension), `services/catalog/internal/parser/library/` (new client), `frontend/web/src/views/admin/RawLibrary.vue`, `frontend/web/src/router/index.ts`, `frontend/web/src/api/client.ts` (`adminLibraryApi`), `frontend/web/src/types/library.ts`, `infra/grafana/dashboards/library.json`, `Makefile`, `CLAUDE.md`. Zero overlap with v3.0 scraper microservice.
 
 ---
 
