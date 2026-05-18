@@ -198,6 +198,31 @@ Track issues discovered during development. Each entry should include root cause
 - **Lesson learned:** Health checks that test only HTTP-status + content-type miss content-level poisoning. The streamprobe playability gate (Phase 21) walks the manifest to first-segment HEAD and inspects segment hostnames — this is the correct depth of validation for a streaming-aware health check. Pattern echoed in ISS-009 (HiAnime). The reusable rule: **health-check the same code path the user takes, AND test that the bytes the user receives are actually the right TYPE of bytes (not just HTTP-200).**
 - **Status:** Mitigated (2026-05-13) — root cause (IP-level poisoning) persists; symptom resolved via server-priority deprioritization + ad-CDN blocklist. Will flip to `Fixed` after WARP egress ships in a future phase.
 
+### ISS-012: AllAnime persisted-query SHA hashes stale at v0.1 ship
+- **Date:** 2026-05-18 (workstream raw-jp Phase 01 deploy)
+- **Severity:** Medium (degrades to `available: false` everywhere — no crash; the chip simply shows the empty-state copy until SHAs refresh)
+- **Affected:** `/api/anime/{id}/raw/episodes` and `/raw/stream` endpoints in the catalog service.
+- **Symptom:** Every raw lookup returns HTTP 200 with `{"episodes":[],"available":false,"source":"allanime"}`. Catalog logs show `allanime: query rejected (likely stale SHA): {"message":"PersistedQueryNotFound","extensions":{"code":"PERSISTED_QUERY_NOT_FOUND"}}` for every anime tried.
+- **Root cause:** The SHA256 hashes shipped as `SHASearchFallback`/`SHAEpisodesFallback`/`SHASourcesFallback` in `services/catalog/internal/parser/allanime/queries.go` were sourced from upstream reference projects (pystardust/ani-cli, justfoolingaround/animdl) but appear to have rotated upstream sometime between the design doc capture and the v0.1 ship date. AllAnime's Apollo persisted-query manifest only honors the active SHA list and returns `PERSISTED_QUERY_NOT_FOUND` for any hash it no longer publishes.
+- **Why this is graceful (not a crash):** The error wrapping in `services/catalog/internal/service/raw_resolver.go` distinguishes upstream-transport failures from per-request rejects. A `PERSISTED_QUERY_NOT_FOUND` is a 4xx (the API IS reachable, it just declined the query) so the resolver does NOT return `errors.Unavailable` (which would 503) — it logs and returns `available: false`. The frontend renders the empty-state copy from the RAW JP locale namespace; no user-visible error.
+- **Fix (operator action):**
+  1. Open the AllAnime web client at `https://allmanga.to/` in a browser with devtools network panel open.
+  2. Reproduce the search / episodes / sources queries; capture the `extensions.persistedQuery.sha256Hash` parameter from each GET to `api.allanime.day/api`.
+  3. Set the three values in `docker/.env`:
+     ```
+     ALLANIME_QUERY_SEARCH_SHA=<hash>
+     ALLANIME_QUERY_EPISODES_SHA=<hash>
+     ALLANIME_QUERY_SOURCES_SHA=<hash>
+     ```
+  4. `make redeploy-catalog`.
+  5. Verify `curl http://localhost:8081/api/anime/{uuid}/raw/episodes` returns `available: true` for a known Bocchi-class title.
+- **Long-term mitigation:** Two options for a future phase: (a) scrape SHAs from the AllAnime web bundle at startup (fragile, banks on bundle layout); (b) maintain a small SHA-refresh cron poller against the upstream reference projects' code. Out of scope for v0.1.
+- **Key files:**
+  - `services/catalog/internal/parser/allanime/queries.go` — SHA constants + env-override resolution.
+  - `services/catalog/internal/config/config.go` — env-var loading.
+  - `docker/.env.example` — operator documentation block.
+- **Status:** Open — awaiting first operator capture of live SHAs. Architecture is correct; only data refresh required.
+
 ## Resolved Issues
 
 ### ISS-010: Search returns empty / single result for any anime not in local DB (Shikimori .one → .io migration)
