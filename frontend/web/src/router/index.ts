@@ -123,6 +123,15 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'admin.collections.editTitle', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // Workstream raw-jp v0.2 Phase 05 (LIB-09): raw-library admin UI.
+    // Operator-only surface for the self-hosted torrent → HLS pipeline:
+    // search Nyaa + AnimeTosho, queue magnets, monitor jobs, link orphans.
+    path: '/admin/raw-library',
+    name: 'admin-raw-library',
+    component: () => import('@/views/admin/RawLibrary.vue'),
+    meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     // Phase 17 (UX-33) — public editorial collection detail page.
     path: '/collections/:slug',
     name: 'collection-detail',
