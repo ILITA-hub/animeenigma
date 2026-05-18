@@ -4,8 +4,14 @@
 // The companion files (001_library_jobs.sql, ...) are the source of
 // truth for the schema; this package is just the embed wrapper that
 // lets main.go apply them at startup without a filesystem dependency.
-// The migration SQL itself is idempotent (DO $$ ... EXCEPTION blocks)
-// so re-running across restarts is safe.
+// The migration SQL itself is idempotent (DO $$ ... EXCEPTION blocks
+// + CREATE TABLE IF NOT EXISTS + ON CONFLICT DO NOTHING) so re-running
+// across restarts is safe.
+//
+// Apply order is FK-driven and must be preserved:
+//   1. LibraryJobsSQL          (Phase 03 — base)
+//   2. LibraryEpisodesSQL      (Phase 04 — references library_jobs(id))
+//   3. LibraryFilenamePatternsSQL (Phase 04 — independent)
 package migrations
 
 import _ "embed"
@@ -16,3 +22,18 @@ import _ "embed"
 //
 //go:embed 001_library_jobs.sql
 var LibraryJobsSQL string
+
+// LibraryEpisodesSQL is migrations/002_library_episodes.sql embedded
+// as a string. Applied AFTER LibraryJobsSQL because the table has a
+// FK to library_jobs(id).
+//
+//go:embed 002_library_episodes.sql
+var LibraryEpisodesSQL string
+
+// LibraryFilenamePatternsSQL is migrations/003_library_filename_patterns.sql
+// embedded as a string. Applied AFTER LibraryEpisodesSQL by convention
+// (no FK dependency). Seeds five uploader patterns idempotently via
+// INSERT ... ON CONFLICT DO NOTHING.
+//
+//go:embed 003_library_filename_patterns.sql
+var LibraryFilenamePatternsSQL string
