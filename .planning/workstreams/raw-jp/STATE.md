@@ -2,15 +2,15 @@
 workstream: raw-jp
 milestone: v0.1
 created: 2026-05-18
-status: ready-for-autonomous
+status: milestone-complete
 last_updated: 2026-05-18
-last_activity: 2026-05-18 — v0.1 prepared for autonomous execution (PROJECT, ROADMAP, MILESTONES, REQUIREMENTS, per-phase SPECs all written)
+last_activity: 2026-05-18 — v0.1 autonomous run complete; all 4 phases shipped; ISS-012 documents SHA refresh runbook
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 4
+  total_plans: 4
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State — `raw-jp` workstream
@@ -25,10 +25,10 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 ## Current Position
 
-**Status:** Ready for autonomous execution
-**Active milestone:** v0.1 Raw Provider MVP
-**Current phase:** None (next: Phase 1 — AllAnime Parser)
-**Last activity:** 2026-05-18 — v0.1 prepared for autonomous execution
+**Status:** v0.1 milestone complete
+**Active milestone:** v0.1 Raw Provider MVP — done; see `milestones/v0.1-SUMMARY.md`
+**Current phase:** None (v0.2 Self-Hosted Library is the next planned milestone)
+**Last activity:** 2026-05-18 — autonomous run completed all 4 phases; live smoke confirmed graceful degradation pending SHA refresh (ISS-012)
 
 ## Source artifacts
 
