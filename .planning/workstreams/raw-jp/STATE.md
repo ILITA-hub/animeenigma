@@ -35,7 +35,7 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 - **Roadmap (frozen):** `milestones/v0.2-ROADMAP.md`
 - **Requirements (frozen):** `milestones/v0.2-REQUIREMENTS.md`
 - **Audit:** `v0.2-MILESTONE-AUDIT.md`
-- **Per-phase SPECs (reference):** `milestones/v0.2-phases/`
+- **Per-phase archives** (SPEC + CONTEXT + PLAN + SUMMARY): `milestones/v0.2-phases/{01-06-*}/`
 
 ## Source artifacts (v0.1, archived)
 
