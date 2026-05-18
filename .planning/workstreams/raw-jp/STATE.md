@@ -4,13 +4,13 @@ milestone: v0.2
 created: 2026-05-18
 status: ready-for-autonomous
 last_updated: 2026-05-18
-last_activity: 2026-05-18 — v0.2 planning artifacts prepared (ROADMAP, REQUIREMENTS, six per-phase SPECs); v0.1 complete + archived
+last_activity: 2026-05-18 — Phase 3 (Torrent Client + Job Queue + Metrics) complete; queue + worker pool + admin REST live, Grafana dashboard auto-loaded
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State — `raw-jp` workstream
@@ -25,10 +25,10 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 ## Current Position
 
-**Status:** Ready for autonomous execution of v0.2
+**Status:** Phases 1-3 shipped; Phase 4 (ffmpeg HLS Transcoder + MinIO Writer) is next.
 **Active milestone:** v0.2 Self-Hosted Library — six phases planned
-**Current phase:** None (next: Phase 1 — Library Service Scaffold)
-**Last activity:** 2026-05-18 — v0.2 planning artifacts written (ROADMAP, REQUIREMENTS, six per-phase SPECs); v0.1 archived as shipped.
+**Current phase:** Phase 4 — ffmpeg HLS Transcoder + MinIO Writer
+**Last activity:** 2026-05-18 — Phase 3 shipped. Library service can now POST a magnet, claim it via FOR UPDATE SKIP LOCKED, drive it queued → downloading via embedded anacrolix/torrent, emit six Prometheus metrics, auto-load the Grafana dashboard at uid="library", and stop at status='encoding'. Phase 4 picks up at the encoding boundary.
 
 ## Source artifacts (v0.2)
 
@@ -65,9 +65,9 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 | Phase | Title                                            | Status      |
 |-------|--------------------------------------------------|-------------|
-| 1     | Library Service Scaffold                         | Not started |
-| 2     | Nyaa + AnimeTosho Search Clients                 | Not started |
-| 3     | Torrent Client + Job Queue + Metrics             | Not started |
+| 1     | Library Service Scaffold                         | Done ✓      |
+| 2     | Nyaa + AnimeTosho Search Clients                 | Done ✓      |
+| 3     | Torrent Client + Job Queue + Metrics             | Done ✓      |
 | 4     | ffmpeg HLS Transcoder + MinIO Writer             | Not started |
 | 5     | RawLibrary.vue Admin UI                          | Not started |
 | 6     | Hybrid Resolver                                  | Not started |
