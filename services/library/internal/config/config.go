@@ -28,6 +28,21 @@ type Config struct {
 	Disk          DiskConfig
 	Encode        EncodeConfig
 	Minio         MinioConfig
+	// CatalogInternal — workstream raw-jp, Phase 06 (v0.2). After
+	// every successful encode the library service POSTs to
+	// {CATALOG_INTERNAL_API_URL}/internal/cache/invalidate/raw/{id}
+	// to bust the catalog's source-decision cache.
+	CatalogInternal CatalogInternalConfig
+}
+
+// CatalogInternalConfig drives the best-effort cache-bust webhook the
+// library encoder fires after a successful job. APIURL defaults to
+// the docker-network address of the catalog service. An empty value
+// switches the invalidator to a no-op (the catalog 1h TTL covers
+// correctness, only the fast-path is skipped).
+type CatalogInternalConfig struct {
+	APIURL  string
+	Timeout time.Duration
 }
 
 // EncodeConfig drives services/library/internal/ffmpeg + the encoder
@@ -182,6 +197,10 @@ func Load() (*Config, error) {
 			Bucket:            getEnv("LIBRARY_MINIO_BUCKET", "raw-library"),
 			UseSSL:            getEnvBool("LIBRARY_MINIO_USE_SSL", false),
 			UploadConcurrency: getEnvInt("LIBRARY_MINIO_UPLOAD_CONCURRENCY", 8),
+		},
+		CatalogInternal: CatalogInternalConfig{
+			APIURL:  getEnv("CATALOG_INTERNAL_API_URL", "http://catalog:8081"),
+			Timeout: getEnvDuration("CATALOG_INTERNAL_API_TIMEOUT", 3*time.Second),
 		},
 	}, nil
 }

@@ -209,6 +209,20 @@ func main() {
 	// Phase 4: source path resolver (walks {downloadDir}/{infohash}/).
 	sourceResolver := service.NewDefaultSourceResolver(cfg.Torrent.DownloadDir)
 
+	// Phase 06 (workstream raw-jp / v0.2): best-effort cache-bust
+	// webhook fired from the encoder worker after every successful
+	// status=done. nil-safe — the encoder worker handles a nil
+	// invalidator gracefully (the catalog's 1h TTL covers
+	// correctness if the webhook is disabled).
+	catalogInvalidator := service.NewCatalogInvalidator(
+		service.InvalidatorConfig{
+			CatalogInternalAPIURL: cfg.CatalogInternal.APIURL,
+			Timeout:               cfg.CatalogInternal.Timeout,
+		},
+		libMetrics,
+		log,
+	)
+
 	// Phase 4: encoder worker pool.
 	encoderPool := service.NewEncoderPool(
 		cfg.Encode.Workers,
@@ -220,6 +234,7 @@ func main() {
 		sourceResolver,
 		libMetrics,
 		log,
+		catalogInvalidator,
 	)
 	encoderPool.Start(rootCtx)
 	log.Infow("encoder pool started",

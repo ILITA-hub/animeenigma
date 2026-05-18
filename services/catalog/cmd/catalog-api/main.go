@@ -18,6 +18,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
@@ -155,8 +156,23 @@ func main() {
 		Referer:          cfg.AllAnime.Referer,
 		UserAgent:        cfg.AllAnime.UserAgent,
 	})
-	rawResolver := service.NewRawResolver(allanimeClient, animeRepo, redisCache, log)
+	// Workstream raw-jp, Phase 06 (v0.2) — hybrid resolver consults
+	// the self-hosted library service (MinIO HLS ladder) first, then
+	// falls back to AllAnime. nil-safe: an unreachable / unconfigured
+	// library client makes the resolver behave identically to v0.1.
+	libraryClient := library.NewClient(library.Config{
+		APIURL:  cfg.Library.APIURL,
+		Timeout: cfg.Library.Timeout,
+	})
+	rawResolver := service.NewRawResolver(allanimeClient, libraryClient, animeRepo, redisCache, log)
 	rawHandler := handler.NewRawHandler(rawResolver, log)
+
+	// Workstream raw-jp, Phase 06 — internal cache-invalidation
+	// endpoint POSTed by the library encoder after every successful
+	// encode. Mounted OUTSIDE /api (no AuthMiddleware) — reachable
+	// only from within the docker network because nginx/gateway
+	// does not proxy /internal/*.
+	internalCacheHandler := handler.NewInternalCacheHandler(redisCache, animeRepo, log)
 
 	// Workstream raw-jp, Phase 02 — multi-provider subtitle aggregator.
 	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by
@@ -175,7 +191,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

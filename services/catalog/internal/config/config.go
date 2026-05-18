@@ -30,6 +30,9 @@ type Config struct {
 	// OpenSubtitles — workstream raw-jp, Phase 02. Multi-language
 	// subtitle source merged with Jimaku by the subs aggregator.
 	OpenSubtitles OpenSubtitlesConfig
+	// Library — workstream raw-jp, Phase 06 (v0.2). Hybrid resolver
+	// consults this service first before falling back to AllAnime.
+	Library LibraryConfig
 }
 
 type ServerConfig struct {
@@ -96,6 +99,17 @@ type OpenSubtitlesConfig struct {
 	APIKey    string
 	UserAgent string
 	Timeout   time.Duration
+}
+
+// LibraryConfig configures the catalog → library HTTP client used by
+// the hybrid raw resolver (workstream raw-jp, Phase 06 / v0.2).
+// APIURL defaults to http://library:8089 (Phase 1 port deviation —
+// SPEC originally said 8087, actual deployment is 8089). Per-request
+// Timeout defaults to 2s because the library is on the same docker
+// network; any longer wait means it's actually down.
+type LibraryConfig struct {
+	APIURL  string
+	Timeout time.Duration
 }
 
 func Load() (*Config, error) {
@@ -166,6 +180,10 @@ func Load() (*Config, error) {
 			APIKey:    getEnv("OPENSUBTITLES_API_KEY", ""),
 			UserAgent: getEnv("OPENSUBTITLES_USER_AGENT", "AnimeEnigma/1.0"),
 			Timeout:   getEnvDuration("OPENSUBTITLES_TIMEOUT", 10*time.Second),
+		},
+		Library: LibraryConfig{
+			APIURL:  getEnv("LIBRARY_API_URL", "http://library:8089"),
+			Timeout: getEnvDuration("LIBRARY_API_TIMEOUT", 2*time.Second),
 		},
 	}, nil
 }
