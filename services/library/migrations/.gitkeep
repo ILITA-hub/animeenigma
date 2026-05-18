@@ -1,0 +1,3 @@
+# Placeholder for Phase 3 / 4 SQL migrations.
+# GORM AutoMigrate handles schema creation today; raw SQL migrations land
+# when destructive changes (column drops, index renames) are needed.

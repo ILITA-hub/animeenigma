@@ -38,6 +38,7 @@ COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 COPY services/themes/go.mod services/themes/go.sum* ./services/themes/
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
 COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
+COPY services/library/go.mod services/library/go.sum* ./services/library/
 
 RUN cd services/scraper && go mod download
 

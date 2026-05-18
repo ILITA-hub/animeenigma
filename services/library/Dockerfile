@@ -3,7 +3,6 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
 RUN apk add --no-cache git
 
 # Copy go.work and all module files
@@ -33,15 +32,14 @@ COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/mainten
 COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 
-# Download dependencies
-RUN cd services/gateway && go mod download
+RUN cd services/library && go mod download
 
-# Copy source code
+# Copy source
 COPY libs/ ./libs/
-COPY services/gateway/ ./services/gateway/
+COPY services/library/ ./services/library/
 
 # Build
-RUN cd services/gateway && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /gateway-api ./cmd/gateway-api
+RUN cd services/library && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /library-api ./cmd/library-api
 
 # Runtime stage
 FROM alpine:3.19
@@ -50,8 +48,8 @@ RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
-COPY --from=builder /gateway-api .
+COPY --from=builder /library-api .
 
-EXPOSE 8000
+EXPOSE 8087
 
-CMD ["./gateway-api"]
+CMD ["./library-api"]
