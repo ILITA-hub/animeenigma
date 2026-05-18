@@ -17,11 +17,13 @@
 
 ---
 
-## v0.2 Self-Hosted Library (active)
+## v0.2 Self-Hosted Library (shipped)
 
-**Status:** 🟢 Active — 0/6 phases complete; planning artifacts ready
+**Status:** ✅ Complete — 6/6 phases shipped
 **Started planning:** 2026-05-18 (after v0.1 ship)
-**Trigger:** v0.1 shipped; ready for autonomous execution.
+**Shipped:** 2026-05-18
+**Audit:** `v0.2-MILESTONE-AUDIT.md` — passed (15/15 LIB-* requirements)
+**Summary:** `milestones/v0.2-SUMMARY.md`
 
 **Scope:** A new `services/library/` Go microservice on port 8087. Admin-only library manager that finds Nyaa.si / AnimeTosho releases, downloads via embedded BitTorrent (`anacrolix/torrent`), transcodes to HLS via ffmpeg (H.264/AAC, 6s segments), stores in a new MinIO bucket `raw-library`, and exposes a hybrid resolver path that prefers the self-hosted copy over AllAnime when both exist for an anime episode. Library service runs independently of the catalog hot path — its outage degrades gracefully back to AllAnime-only behavior.
 
