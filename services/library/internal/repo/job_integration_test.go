@@ -6,34 +6,22 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/library/migrations"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-// integrationSchemaSQL is the contents of
-// migrations/001_library_jobs.sql, read at test setup time. We don't
-// use //go:embed because the migration file lives outside the package
-// directory and embed forbids ".." paths.
+// loadSchemaSQL pulls the migration via the embed-backed migrations
+// package so we exercise the same code path main.go takes — a typo
+// in the embed directive surfaces here too.
 func loadSchemaSQL(t *testing.T) string {
 	t.Helper()
-	// services/library/internal/repo/job_integration_test.go →
-	// services/library/migrations/001_library_jobs.sql
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	path := filepath.Join(wd, "..", "..", "migrations", "001_library_jobs.sql")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	return string(b)
+	return migrations.LibraryJobsSQL
 }
 
 // openTestDB opens a fresh schema against the local Postgres for the

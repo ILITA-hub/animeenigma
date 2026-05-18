@@ -125,3 +125,17 @@ func (m *LibraryMetrics) IncEnqueueRejected(reason string) {
 func (m *LibraryMetrics) SetSeedCount(n int) {
 	m.torrentSeedCount.Set(float64(n))
 }
+
+// GetJobsTotalForTest returns the underlying Counter for the given
+// status label so tests can read its value via testutil.ToFloat64
+// without exporting the whole CounterVec. Production code MUST NOT
+// call this — use IncJobsTotal.
+func (m *LibraryMetrics) GetJobsTotalForTest(status string) prometheus.Counter {
+	return m.jobsTotal.WithLabelValues(status)
+}
+
+// GetEnqueueRejectedForTest is the test-seam analogue for
+// library_enqueue_rejected_total.
+func (m *LibraryMetrics) GetEnqueueRejectedForTest(reason string) prometheus.Counter {
+	return m.enqueueRejectedTotal.WithLabelValues(reason)
+}

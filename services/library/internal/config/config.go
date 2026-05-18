@@ -11,9 +11,10 @@ import (
 )
 
 // Config is the library service top-level config. Phase 2 adds the
-// Nyaa + AnimeTosho + LibrarySearch sub-configs that drive the new
-// search endpoint. Phases 3-4 will extend this further with torrent
-// client + ffmpeg + MinIO knobs (workstream raw-jp / v0.2).
+// Nyaa + AnimeTosho + LibrarySearch sub-configs that drive the
+// search endpoint. Phase 3 adds the Torrent / Worker / Disk knobs
+// (workstream raw-jp / v0.2). Phase 4 will extend with ffmpeg +
+// MinIO config.
 type Config struct {
 	Server        ServerConfig
 	Database      database.Config
@@ -21,6 +22,33 @@ type Config struct {
 	Nyaa          NyaaConfig
 	AnimeTosho    AnimeToshoConfig
 	LibrarySearch LibrarySearchConfig
+	Torrent       TorrentConfig
+	Worker        WorkerConfig
+	Disk          DiskConfig
+}
+
+// TorrentConfig drives services/library/internal/torrent. All values
+// are SPEC-locked defaults from 03-CONTEXT.md.
+type TorrentConfig struct {
+	DownloadDir    string
+	MaxPeers       int
+	UploadRateKBPS int
+	SeedDuration   time.Duration
+	StallTimeout   time.Duration
+}
+
+// WorkerConfig drives services/library/internal/service/download_worker.go.
+type WorkerConfig struct {
+	Count        int
+	ProgressTick time.Duration
+}
+
+// DiskConfig drives services/library/internal/service/disk_guard.go.
+// MinFreePct is the threshold the enqueue handler enforces (POST
+// returns 507 when freePct < MinFreePct).
+type DiskConfig struct {
+	MinFreePct   int
+	PollInterval time.Duration
 }
 
 type ServerConfig struct {
@@ -101,6 +129,21 @@ func Load() (*Config, error) {
 		LibrarySearch: LibrarySearchConfig{
 			DefaultLimit: getEnvInt("LIBRARY_SEARCH_DEFAULT_LIMIT", 50),
 			MaxLimit:     getEnvInt("LIBRARY_SEARCH_MAX_LIMIT", 200),
+		},
+		Torrent: TorrentConfig{
+			DownloadDir:    getEnv("LIBRARY_TORRENT_DOWNLOAD_DIR", "/data/torrents"),
+			MaxPeers:       getEnvInt("LIBRARY_TORRENT_MAX_PEERS", 80),
+			UploadRateKBPS: getEnvInt("LIBRARY_TORRENT_MAX_UPLOAD_RATE_KBPS", 1024),
+			SeedDuration:   getEnvDuration("LIBRARY_TORRENT_SEED_DURATION", 24*time.Hour),
+			StallTimeout:   getEnvDuration("LIBRARY_TORRENT_STALL_TIMEOUT", 30*time.Minute),
+		},
+		Worker: WorkerConfig{
+			Count:        getEnvInt("LIBRARY_DOWNLOAD_WORKERS", 2),
+			ProgressTick: getEnvDuration("LIBRARY_DOWNLOAD_PROGRESS_TICK", 5*time.Second),
+		},
+		Disk: DiskConfig{
+			MinFreePct:   getEnvInt("LIBRARY_DISK_FREE_MIN_PCT", 20),
+			PollInterval: getEnvDuration("LIBRARY_DISK_POLL_INTERVAL", 30*time.Second),
 		},
 	}, nil
 }

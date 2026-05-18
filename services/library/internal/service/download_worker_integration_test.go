@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/library/internal/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/repo"
 	libtorrent "github.com/ILITA-hub/animeenigma/services/library/internal/torrent"
+	"github.com/ILITA-hub/animeenigma/services/library/migrations"
 	"github.com/prometheus/client_golang/prometheus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -143,14 +143,7 @@ func openIntegrationDB(t *testing.T) (*gorm.DB, func()) {
 		t.Fatalf("test db connect: %v", err)
 	}
 
-	// Resolve path from this test file → migrations/.
-	wd, _ := os.Getwd()
-	migPath := filepath.Join(wd, "..", "..", "migrations", "001_library_jobs.sql")
-	b, err := os.ReadFile(migPath)
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	if err := db.Exec(string(b)).Error; err != nil {
+	if err := db.Exec(migrations.LibraryJobsSQL).Error; err != nil {
 		t.Fatalf("apply migration: %v", err)
 	}
 

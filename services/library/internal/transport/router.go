@@ -12,19 +12,20 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// NewRouter wires the chi router used by the library service. Phase 2
-// adds GET /api/library/search under the existing /api/library route
-// group; auth is enforced at the gateway (see
+// NewRouter wires the chi router used by the library service. Phase
+// 2 adds GET /api/library/search and Phase 3 adds the /api/library/
+// jobs group (POST/GET/GET-by-id/DELETE) under the existing
+// /api/library route group; auth is enforced at the gateway (see
 // services/gateway/internal/transport/router.go — the /api/library/*
-// prefix has JWTValidationMiddleware + AdminRoleMiddleware applied for
-// all routes except /health).
+// prefix has JWTValidationMiddleware + AdminRoleMiddleware applied
+// for all routes except /health).
 //
-// The jwtConfig argument is retained even though no authenticated
-// routes exist at the library service layer — Phase 3 (LIB-09 extended
-// health, etc.) reintroduces server-side auth middleware groups.
+// The jwtConfig argument is retained for forward compat — Phase 4+
+// may want server-side enforcement on a subset of routes.
 func NewRouter(
 	healthHandler *handler.HealthHandler,
 	searchHandler *handler.SearchHandler,
+	jobsHandler *handler.JobsHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -49,13 +50,19 @@ func NewRouter(
 		metrics.Handler().ServeHTTP(w, r)
 	})
 
-	// API routes. Phase 2 adds /search; Phase 3 will add the job-control
-	// group (POST /jobs, etc.) with server-side AuthMiddleware +
-	// AdminRoleMiddleware.
+	// API routes. Phase 2 adds /search; Phase 3 adds the job-control
+	// group. Gateway-side admin gate covers all /api/library/*
+	// non-/health routes (services/gateway/internal/transport/router.go).
 	r.Route("/api/library", func(r chi.Router) {
-		_ = jwtConfig // silence unused-parameter lint until Phase 3
+		_ = jwtConfig // retained for forward compat (Phase 4+)
 		r.Get("/health", healthHandler.Health)
 		r.Get("/search", searchHandler.Search)
+		if jobsHandler != nil {
+			r.Post("/jobs", jobsHandler.Create)
+			r.Get("/jobs", jobsHandler.List)
+			r.Get("/jobs/{id}", jobsHandler.Get)
+			r.Delete("/jobs/{id}", jobsHandler.Delete)
+		}
 	})
 
 	return r
