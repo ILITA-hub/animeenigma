@@ -12,15 +12,38 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/animetosho"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/parser/nyaa"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/transport"
 )
 
+// animeToshoAdapter bridges between service.AnimeToshoSearcher (which
+// the merger consumes) and *animetosho.Client (which the parser
+// exposes). The two have identical SearchParams shapes but live in
+// different packages — the adapter keeps the service package free of
+// any parser-package import so the dependency arrow points the
+// expected direction (transport → handler → service ← parser, with
+// parser owned by main.go wiring).
+type animeToshoAdapter struct {
+	c *animetosho.Client
+}
+
+func (a animeToshoAdapter) Search(ctx context.Context, p service.AnimeToshoParams) ([]domain.Release, error) {
+	return a.c.Search(ctx, animetosho.SearchParams{
+		MALID: p.MALID,
+		Query: p.Query,
+		Limit: p.Limit,
+	})
+}
+
 // main is the entry point for the library service (workstream raw-jp / v0.2).
-// Phase 1 is pure scaffolding: load config, connect to Postgres (auto-create
-// the `library` DB if absent), start the DB pool metrics collector, and run
-// the chi router with /health + /metrics. No domain models, no AutoMigrate,
-// no handlers — those land in Phase 3 (job queue) and Phase 4 (encoder).
+// Phase 2 wires the Nyaa + AnimeTosho parser clients, the merger, and
+// the search HTTP handler into the chi router. Auth is enforced at the
+// gateway (services/gateway/internal/transport/router.go) — the library
+// service trusts what the gateway forwards.
 func main() {
 	// Initialize logger.
 	log := logger.Default()
@@ -45,12 +68,27 @@ func main() {
 		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
 	}
 
-	// Phase 1: no AutoMigrate — there are no domain types yet. Phase 3
-	// reintroduces AutoMigrate for library_jobs / library_episodes /
-	// library_filename_patterns.
+	// Phase 2: no AutoMigrate — search is stateless. Phase 3 reintroduces
+	// AutoMigrate for library_jobs / library_episodes / library_filename_patterns.
+
+	// Initialize parser clients.
+	nyaaClient := nyaa.NewClient(nyaa.Config{
+		BaseURL:     cfg.Nyaa.BaseURL,
+		HTTPTimeout: cfg.Nyaa.HTTPTimeout,
+		UserAgent:   cfg.Nyaa.UserAgent,
+	})
+	atClient := animetosho.NewClient(animetosho.Config{
+		BaseURL:     cfg.AnimeTosho.BaseURL,
+		HTTPTimeout: cfg.AnimeTosho.HTTPTimeout,
+		UserAgent:   cfg.AnimeTosho.UserAgent,
+	})
+
+	// Aggregator + handler.
+	aggregator := service.NewAggregator(nyaaClient, animeToshoAdapter{c: atClient}, log)
 
 	// Initialize handlers.
 	healthHandler := handler.NewHealthHandler()
+	searchHandler := handler.NewSearchHandler(aggregator, log)
 
 	// Initialize metrics collector.
 	metricsCollector := metrics.NewCollector("library")
@@ -58,6 +96,7 @@ func main() {
 	// Initialize router.
 	router := transport.NewRouter(
 		healthHandler,
+		searchHandler,
 		cfg.JWT,
 		log,
 		metricsCollector,

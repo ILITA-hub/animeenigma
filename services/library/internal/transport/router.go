@@ -12,13 +12,19 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// NewRouter wires the chi router used by the library service. Phase 1 is
-// scaffold-only: /health, /metrics, and an empty /api/library subroute. The
-// jwtConfig argument is retained even though no authenticated routes exist
-// yet — Phase 3 (LIB-03/04) reintroduces auth middleware when it adds the
-// protected job-control endpoints (POST /api/library/jobs, etc.).
+// NewRouter wires the chi router used by the library service. Phase 2
+// adds GET /api/library/search under the existing /api/library route
+// group; auth is enforced at the gateway (see
+// services/gateway/internal/transport/router.go — the /api/library/*
+// prefix has JWTValidationMiddleware + AdminRoleMiddleware applied for
+// all routes except /health).
+//
+// The jwtConfig argument is retained even though no authenticated
+// routes exist at the library service layer — Phase 3 (LIB-09 extended
+// health, etc.) reintroduces server-side auth middleware groups.
 func NewRouter(
 	healthHandler *handler.HealthHandler,
+	searchHandler *handler.SearchHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -36,7 +42,6 @@ func NewRouter(
 	// Health check — exposed at /health for direct probes (make health,
 	// docker healthcheck) and at /api/library/health so the gateway can
 	// forward `/api/library/health` verbatim without path rewriting.
-	// Mirrors the themes service convention of accepting both prefixes.
 	r.Get("/health", healthHandler.Health)
 
 	// Prometheus metrics endpoint.
@@ -44,15 +49,13 @@ func NewRouter(
 		metrics.Handler().ServeHTTP(w, r)
 	})
 
-	// API routes. Phase 1 only exposes /health passthrough so the gateway's
-	// /api/library/health route works without path rewriting. Phase 2 adds
-	// search + ingest endpoints; Phase 3 adds the job-control group with
-	// AuthMiddleware + AdminRoleMiddleware (the jwtConfig parameter is kept
-	// on the constructor signature so those phases don't need to rewire
-	// main.go).
+	// API routes. Phase 2 adds /search; Phase 3 will add the job-control
+	// group (POST /jobs, etc.) with server-side AuthMiddleware +
+	// AdminRoleMiddleware.
 	r.Route("/api/library", func(r chi.Router) {
 		_ = jwtConfig // silence unused-parameter lint until Phase 3
 		r.Get("/health", healthHandler.Health)
+		r.Get("/search", searchHandler.Search)
 	})
 
 	return r

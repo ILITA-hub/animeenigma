@@ -10,13 +10,17 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/database"
 )
 
-// Config is the library service top-level config. Phase 1 is pure scaffold:
-// only Server, Database, and JWT are populated. Phases 3-4 will extend this
-// with torrent client + ffmpeg + MinIO knobs (workstream raw-jp / v0.2).
+// Config is the library service top-level config. Phase 2 adds the
+// Nyaa + AnimeTosho + LibrarySearch sub-configs that drive the new
+// search endpoint. Phases 3-4 will extend this further with torrent
+// client + ffmpeg + MinIO knobs (workstream raw-jp / v0.2).
 type Config struct {
-	Server   ServerConfig
-	Database database.Config
-	JWT      authz.JWTConfig
+	Server        ServerConfig
+	Database      database.Config
+	JWT           authz.JWTConfig
+	Nyaa          NyaaConfig
+	AnimeTosho    AnimeToshoConfig
+	LibrarySearch LibrarySearchConfig
 }
 
 type ServerConfig struct {
@@ -28,10 +32,42 @@ func (s ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
+// NyaaConfig and AnimeToshoConfig are the per-client knobs. The default
+// timeout + UA are shared (both providers tolerate the same User-Agent
+// and 15s is appropriate for torrent indexers — slower and more
+// variable than streaming APIs).
+type NyaaConfig struct {
+	BaseURL     string
+	HTTPTimeout time.Duration
+	UserAgent   string
+}
+
+type AnimeToshoConfig struct {
+	BaseURL     string
+	HTTPTimeout time.Duration
+	UserAgent   string
+}
+
+// LibrarySearchConfig holds limits documented for the operator; the
+// aggregator currently enforces these via package-level constants in
+// internal/service/search.go. The struct is informational — Phase 3+
+// may promote these to runtime config.
+type LibrarySearchConfig struct {
+	DefaultLimit int
+	MaxLimit     int
+}
+
 func Load() (*Config, error) {
 	if getEnv("JWT_SECRET", "") == "" {
 		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
 	}
+
+	// Phase 2: shared timeout + UA flow into both clients via env
+	// (LIBRARY_SEARCH_TIMEOUT / LIBRARY_SEARCH_UA). Per-provider
+	// overrides aren't useful in practice — both upstreams behave the
+	// same on these knobs — so we keep one env var per concept.
+	searchTimeout := getEnvDuration("LIBRARY_SEARCH_TIMEOUT", 15*time.Second)
+	searchUA := getEnv("LIBRARY_SEARCH_UA", "AnimeEnigma/1.0 (library service)")
 
 	return &Config{
 		Server: ServerConfig{
@@ -51,6 +87,20 @@ func Load() (*Config, error) {
 			Issuer:          getEnv("JWT_ISSUER", "animeenigma"),
 			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		},
+		Nyaa: NyaaConfig{
+			BaseURL:     getEnv("NYAA_BASE_URL", "https://nyaa.si"),
+			HTTPTimeout: searchTimeout,
+			UserAgent:   searchUA,
+		},
+		AnimeTosho: AnimeToshoConfig{
+			BaseURL:     getEnv("ANIMETOSHO_BASE_URL", "https://feed.animetosho.org"),
+			HTTPTimeout: searchTimeout,
+			UserAgent:   searchUA,
+		},
+		LibrarySearch: LibrarySearchConfig{
+			DefaultLimit: getEnvInt("LIBRARY_SEARCH_DEFAULT_LIMIT", 50),
+			MaxLimit:     getEnvInt("LIBRARY_SEARCH_MAX_LIMIT", 200),
 		},
 	}, nil
 }
