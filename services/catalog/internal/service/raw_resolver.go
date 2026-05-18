@@ -13,7 +13,24 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
+)
+
+// Cache key prefixes. Kept as exported constants so the
+// invalidation endpoint (handler/internal_cache.go) can build the
+// SCAN patterns from a single source of truth.
+const (
+	// CacheKeySourceDecision is the per-(animeID, episode) memo of
+	// which backend served the last stream resolve — "library" or
+	// "allanime". 1h TTL; busted by the library service's
+	// post-encode webhook.
+	CacheKeySourceDecision = "raw:source-decision"
+	// CacheKeyStream is the per-(animeID, episode, quality) cached
+	// RawStream for the AllAnime path. 1h TTL.
+	CacheKeyStream = "raw:stream"
+	// CacheKeyEpisodes is the per-animeID cached raw-episode list.
+	CacheKeyEpisodes = "raw:episodes"
 )
 
 // RawResolver resolves "raw JP" provider video sources via the AllAnime
@@ -26,6 +43,9 @@ import (
 //     rather than 500 on upstream/transport failures.
 type RawResolver struct {
 	client    *allanime.Client
+	library   *library.Client // optional — when nil, the library-first
+	// branch is skipped entirely (defensive for environments without
+	// LIBRARY_API_URL). Phase 06 (workstream raw-jp / v0.2).
 	animeRepo *repo.AnimeRepository
 	cache     *cache.RedisCache
 	log       *logger.Logger
@@ -40,11 +60,15 @@ type rawLookup struct {
 	err  error
 }
 
-// NewRawResolver constructs the resolver. Pass a configured AllAnime client
-// from the main entry point.
-func NewRawResolver(client *allanime.Client, animeRepo *repo.AnimeRepository, redisCache *cache.RedisCache, log *logger.Logger) *RawResolver {
+// NewRawResolver constructs the resolver. Pass a configured AllAnime
+// client from the main entry point. libraryClient is optional — when
+// nil, the Phase-06 library-first branch is skipped entirely and the
+// resolver behaves identically to v0.1 (AllAnime only). This is the
+// defensive path for deployments without LIBRARY_API_URL set.
+func NewRawResolver(client *allanime.Client, libraryClient *library.Client, animeRepo *repo.AnimeRepository, redisCache *cache.RedisCache, log *logger.Logger) *RawResolver {
 	return &RawResolver{
 		client:    client,
+		library:   libraryClient,
 		animeRepo: animeRepo,
 		cache:     redisCache,
 		log:       log,
@@ -60,12 +84,20 @@ type RawEpisode struct {
 }
 
 // RawStream is the resolved playable stream + subtitle tracks.
+//
+// Phase 06 (workstream raw-jp / v0.2) added the Source field — its
+// value is "library" when served from the self-hosted MinIO HLS
+// ladder, or "allanime" when served from the v0.1 AllAnime path.
+// Existing cached entries from before the field existed deserialize
+// with Source == "" — the resolver normalizes that to "allanime" on
+// read for backward compatibility.
 type RawStream struct {
-	URL       string         `json:"url"`
-	Type      string         `json:"type"`
-	Quality   string         `json:"quality,omitempty"`
-	Subtitles []RawSubtitle  `json:"subtitles,omitempty"`
-	ExpiresAt time.Time      `json:"expires_at"`
+	URL       string        `json:"url"`
+	Type      string        `json:"type"`
+	Quality   string        `json:"quality,omitempty"`
+	Subtitles []RawSubtitle `json:"subtitles,omitempty"`
+	ExpiresAt time.Time     `json:"expires_at"`
+	Source    string        `json:"source"`
 }
 
 // RawSubtitle is an embedded subtitle track from the AllAnime source.
@@ -90,7 +122,7 @@ func (r *RawResolver) GetEpisodes(ctx context.Context, animeID string) (_ *Episo
 	start := time.Now()
 	defer metrics.ObserveParser("allanime", "get_episodes", start, &retErr)
 
-	cacheKey := fmt.Sprintf("raw:episodes:%s", animeID)
+	cacheKey := fmt.Sprintf("%s:%s", CacheKeyEpisodes, animeID)
 	var cached EpisodesResponse
 	if err := r.cache.Get(ctx, cacheKey, &cached); err == nil {
 		return &cached, nil
@@ -144,15 +176,39 @@ func (r *RawResolver) GetEpisodes(ctx context.Context, animeID string) (_ *Episo
 	return resp, nil
 }
 
-// GetStream resolves a playable HLS stream for an episode number on an anime.
+// GetStream resolves a playable HLS stream for an episode number on
+// an anime.
+//
+// Phase 06 (workstream raw-jp / v0.2) inserts a library-first branch
+// in front of the existing AllAnime path:
+//
+//  1. Read the per-(animeID, episode) source-decision cache. If
+//     "allanime", skip the library lookup entirely.
+//  2. Otherwise (cache empty or "library") and when r.library is
+//     non-nil and anime.ShikimoriID is set, call library.GetEpisode.
+//     200 → cache "library", return MinIO URL with Source="library".
+//     404 → cache "allanime" for 1h, fall through to AllAnime.
+//     5xx / timeout / transport error → do NOT cache (transient),
+//     fall through to AllAnime.
+//  3. AllAnime path runs unchanged; the returned RawStream now sets
+//     Source="allanime".
+//
+// Existing raw:stream:* cache entries from before the Source field
+// existed deserialize with Source == "" — we normalize that to
+// "allanime" on read.
 func (r *RawResolver) GetStream(ctx context.Context, animeID string, episodeNumber int, quality string) (_ *RawStream, retErr error) {
 	start := time.Now()
 	defer metrics.ObserveParser("allanime", "get_stream", start, &retErr)
 	metrics.EpisodeStreamRequestsTotal.WithLabelValues("raw").Inc()
 
-	cacheKey := fmt.Sprintf("raw:stream:%s:%d:%s", animeID, episodeNumber, quality)
+	cacheKey := fmt.Sprintf("%s:%s:%d:%s", CacheKeyStream, animeID, episodeNumber, quality)
 	var cached RawStream
 	if err := r.cache.Get(ctx, cacheKey, &cached); err == nil {
+		// Backward-compat: older cached entries lack the Source
+		// field — they all came from the AllAnime path.
+		if cached.Source == "" {
+			cached.Source = "allanime"
+		}
 		return &cached, nil
 	}
 
@@ -164,6 +220,50 @@ func (r *RawResolver) GetStream(ctx context.Context, animeID string, episodeNumb
 		return nil, errors.NotFound("anime")
 	}
 
+	// Library-first branch (Phase 06).
+	sourceCacheKey := fmt.Sprintf("%s:%s:%d", CacheKeySourceDecision, animeID, episodeNumber)
+	var sourceDecision string
+	_ = r.cache.Get(ctx, sourceCacheKey, &sourceDecision)
+
+	if r.library != nil && anime.ShikimoriID != "" && sourceDecision != "allanime" {
+		resp, lerr := r.library.GetEpisode(ctx, anime.ShikimoriID, episodeNumber)
+		switch {
+		case lerr == nil && resp != nil:
+			// Library hit. Cache the decision (1h) and return the
+			// MinIO URL. We do NOT write raw:stream:* on the library
+			// path — MinIO URLs derive from a stable path and the
+			// webhook invalidation handles structural changes.
+			_ = r.cache.Set(ctx, sourceCacheKey, "library", time.Hour)
+			out := &RawStream{
+				URL:       resp.MinIOURL,
+				Type:      "hls",
+				Quality:   quality,
+				Subtitles: nil,
+				ExpiresAt: time.Now().Add(time.Hour),
+				Source:    "library",
+			}
+			if !anime.HasRaw {
+				_ = r.animeRepo.SetHasRaw(ctx, anime.ID, true)
+			}
+			return out, nil
+		case lerr == nil && resp == nil:
+			// Library 404. Cache "allanime" for 1h and fall through.
+			_ = r.cache.Set(ctx, sourceCacheKey, "allanime", time.Hour)
+		default:
+			// Library 5xx / timeout / transport error. Do NOT cache
+			// (transient). Fall through to AllAnime.
+			if r.log != nil {
+				r.log.Warnw("raw: library lookup failed; falling back to allanime",
+					"anime_id", animeID,
+					"shikimori_id", anime.ShikimoriID,
+					"episode", episodeNumber,
+					"error", lerr,
+				)
+			}
+		}
+	}
+
+	// AllAnime path (v0.1 — unchanged behavior; Source field added).
 	showID, err := r.resolveShowID(ctx, anime)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.CodeUnavailable, "raw provider unavailable")
@@ -188,6 +288,7 @@ func (r *RawResolver) GetStream(ctx context.Context, animeID string, episodeNumb
 		Quality:   stream.Quality,
 		Subtitles: subs,
 		ExpiresAt: time.Now().Add(time.Hour),
+		Source:    "allanime",
 	}
 
 	// 1-hour cache — stream URLs typically expire upstream.
