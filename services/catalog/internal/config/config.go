@@ -29,6 +29,9 @@ type Config struct {
 	// AllAnime — workstream raw-jp, Phase 01. Raw Japanese audio
 	// provider backed by AllAnime's GraphQL persisted-query API.
 	AllAnime AllAnimeConfig
+	// OpenSubtitles — workstream raw-jp, Phase 02. Multi-language
+	// subtitle source merged with Jimaku by the subs aggregator.
+	OpenSubtitles OpenSubtitlesConfig
 }
 
 type ServerConfig struct {
@@ -97,6 +100,13 @@ type AllAnimeConfig struct {
 	HTTPTimeout      time.Duration
 	Referer          string
 	UserAgent        string
+}
+
+// OpenSubtitlesConfig — workstream raw-jp, Phase 02. Subtitle source.
+type OpenSubtitlesConfig struct {
+	APIKey    string
+	UserAgent string
+	Timeout   time.Duration
 }
 
 func Load() (*Config, error) {
@@ -169,6 +179,11 @@ func Load() (*Config, error) {
 			HTTPTimeout:      getEnvDuration("ALLANIME_HTTP_TIMEOUT", 10*time.Second),
 			Referer:          getEnv("ALLANIME_REFERER", "https://allmanga.to/"),
 			UserAgent:        getEnv("ALLANIME_USER_AGENT", "AnimeEnigma/1.0"),
+		},
+		OpenSubtitles: OpenSubtitlesConfig{
+			APIKey:    getEnv("OPENSUBTITLES_API_KEY", ""),
+			UserAgent: getEnv("OPENSUBTITLES_USER_AGENT", "AnimeEnigma/1.0"),
+			Timeout:   getEnvDuration("OPENSUBTITLES_TIMEOUT", 10*time.Second),
 		},
 	}, nil
 }

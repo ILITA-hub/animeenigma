@@ -1,0 +1,337 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/idmapping"
+	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
+)
+
+// SubsAggregator merges subtitle tracks from Jimaku (JP-only) and
+// OpenSubtitles (everything else, keyed by IMDb/TMDB). Workstream raw-jp,
+// Phase 02.
+//
+// The aggregator fails soft: a provider's outage or revoked key reduces
+// the result set but does not abort the request. The handler surfaces
+// `X-Subtitle-Providers-Down: <csv>` so the UI / monitoring can see what
+// was missing.
+type SubsAggregator struct {
+	jimaku    *jimaku.Client
+	opensubs  *opensubtitles.Client
+	idmap     *idmapping.Client
+	animeRepo *repo.AnimeRepository
+	cache     *cache.RedisCache
+	log       *logger.Logger
+}
+
+// NewSubsAggregator wires the dependencies.
+func NewSubsAggregator(
+	jimakuClient *jimaku.Client,
+	openSubsClient *opensubtitles.Client,
+	idMapClient *idmapping.Client,
+	animeRepo *repo.AnimeRepository,
+	redisCache *cache.RedisCache,
+	log *logger.Logger,
+) *SubsAggregator {
+	return &SubsAggregator{
+		jimaku:    jimakuClient,
+		opensubs:  openSubsClient,
+		idmap:     idMapClient,
+		animeRepo: animeRepo,
+		cache:     redisCache,
+		log:       log,
+	}
+}
+
+// SubtitleTrack is one subtitle file in the aggregated response.
+type SubtitleTrack struct {
+	URL      string `json:"url"`
+	Lang     string `json:"lang"`
+	Label    string `json:"label"`
+	Format   string `json:"format,omitempty"`
+	Provider string `json:"provider"` // "jimaku" or "opensubtitles"
+	Release  string `json:"release,omitempty"`
+}
+
+// AggregateResponse is the handler payload.
+type AggregateResponse struct {
+	Languages     map[string][]SubtitleTrack `json:"languages"`
+	Episode       int                        `json:"episode"`
+	ProvidersDown []string                   `json:"providers_down,omitempty"`
+}
+
+// FetchAll runs both providers in parallel and returns the merged result.
+// langs filters the response; pass nil/empty for "everything".
+//
+// Errors returned here are caller-fatal (DB lookup failed, etc). Per-provider
+// failures are absorbed into ProvidersDown.
+func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode int, langs []string) (*AggregateResponse, error) {
+	cacheKey := s.cacheKey(animeID, episode, langs)
+	var cached AggregateResponse
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return &cached, nil
+	}
+
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+	if anime == nil {
+		return nil, fmt.Errorf("anime not found: %s", animeID)
+	}
+
+	// Lazy IMDb/TMDB backfill — required before OpenSubtitles can do
+	// anything useful. Failures are non-fatal.
+	if (anime.IMDbID == nil || anime.TMDBID == nil) && anime.ShikimoriID != "" {
+		s.ensureExternalIDs(ctx, anime)
+	}
+
+	type providerResult struct {
+		name   string
+		tracks []SubtitleTrack
+		err    error
+	}
+	resultsCh := make(chan providerResult, 2)
+	var wg sync.WaitGroup
+
+	// Jimaku — JP only, keyed by AniList ID.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tracks, err := s.fetchJimaku(ctx, anime, episode)
+		resultsCh <- providerResult{name: "jimaku", tracks: tracks, err: err}
+	}()
+
+	// OpenSubtitles — multi-language, keyed by IMDb/TMDB.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tracks, err := s.fetchOpenSubtitles(ctx, anime, episode, langs)
+		resultsCh <- providerResult{name: "opensubtitles", tracks: tracks, err: err}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	resp := &AggregateResponse{
+		Languages: map[string][]SubtitleTrack{},
+		Episode:   episode,
+	}
+
+	for r := range resultsCh {
+		if r.err != nil {
+			s.log.Warnw("subs aggregator: provider failed",
+				"provider", r.name, "anime_id", animeID, "episode", episode, "error", r.err)
+			resp.ProvidersDown = append(resp.ProvidersDown, r.name)
+			continue
+		}
+		for _, t := range r.tracks {
+			if len(langs) > 0 && !containsLang(langs, t.Lang) {
+				continue
+			}
+			resp.Languages[t.Lang] = append(resp.Languages[t.Lang], t)
+		}
+	}
+
+	dedupe(resp.Languages)
+	_ = s.cache.Set(ctx, cacheKey, resp, 6*time.Hour)
+	return resp, nil
+}
+
+func (s *SubsAggregator) fetchJimaku(ctx context.Context, anime *domain.Anime, episode int) ([]SubtitleTrack, error) {
+	if s.jimaku == nil || !s.jimaku.IsConfigured() {
+		return nil, errors.New("jimaku not configured")
+	}
+	if anime.AniListID == "" {
+		// No AniList ID → Jimaku can't search.
+		return nil, nil
+	}
+	anilistID, err := strconv.Atoi(anime.AniListID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid anilist id %q: %w", anime.AniListID, err)
+	}
+
+	_ = ctx // jimaku client doesn't take ctx today
+	entries, err := s.jimaku.SearchByAnilistID(anilistID)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	tracks := []SubtitleTrack{}
+	ep := episode
+	files, err := s.jimaku.GetFiles(entries[0].ID, &ep)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range files {
+		tracks = append(tracks, SubtitleTrack{
+			URL:      f.URL,
+			Lang:     "ja",
+			Label:    f.Name,
+			Format:   formatFromName(f.Name),
+			Provider: "jimaku",
+		})
+	}
+	return tracks, nil
+}
+
+func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.Anime, episode int, langs []string) ([]SubtitleTrack, error) {
+	if s.opensubs == nil || !s.opensubs.IsConfigured() {
+		return nil, errors.New("opensubtitles not configured")
+	}
+
+	params := opensubtitles.SearchParams{
+		Languages: canonicalLangs(langs),
+	}
+	if anime.IMDbID != nil {
+		params.IMDbID = *anime.IMDbID
+	}
+	if anime.TMDBID != nil {
+		params.TMDBID = *anime.TMDBID
+	}
+	if params.IMDbID == "" && params.TMDBID == "" {
+		// Last resort: query by name.
+		name := anime.Name
+		if anime.NameEN != "" {
+			name = anime.NameEN
+		}
+		params.Query = name
+	}
+	if !strings.EqualFold(anime.Kind, "movie") {
+		params.SeasonNumber = 1
+		params.EpisodeNumber = episode
+	}
+
+	entries, err := s.opensubs.Search(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	tracks := make([]SubtitleTrack, 0, len(entries))
+	for _, e := range entries {
+		if e.DownloadURL == "" {
+			continue
+		}
+		tracks = append(tracks, SubtitleTrack{
+			URL:      e.DownloadURL,
+			Lang:     e.Language,
+			Label:    e.Release,
+			Format:   e.Format,
+			Provider: "opensubtitles",
+			Release:  e.Release,
+		})
+	}
+	return tracks, nil
+}
+
+// ensureExternalIDs runs the Kitsu mapping lookup and persists results.
+// Best-effort: all failures are logged at debug level (these endpoints are
+// expected to miss for newer titles).
+func (s *SubsAggregator) ensureExternalIDs(ctx context.Context, anime *domain.Anime) {
+	if s.idmap == nil {
+		return
+	}
+	mapping, err := s.idmap.ResolveByShikimoriID(anime.ShikimoriID)
+	if err != nil || mapping == nil || mapping.Kitsu == nil {
+		return
+	}
+	extra, err := s.idmap.KitsuMappings(ctx, *mapping.Kitsu)
+	if err != nil {
+		s.log.Debugw("subs aggregator: kitsu mappings lookup failed",
+			"anime_id", anime.ID, "kitsu_id", *mapping.Kitsu, "error", err)
+		return
+	}
+	if extra == nil {
+		return
+	}
+	if updateErr := s.animeRepo.UpdateExternalIDs(ctx, anime.ID, extra.IMDbID, extra.TMDBID); updateErr != nil {
+		s.log.Warnw("subs aggregator: persist external IDs failed",
+			"anime_id", anime.ID, "error", updateErr)
+		return
+	}
+	if extra.IMDbID != nil {
+		anime.IMDbID = extra.IMDbID
+	}
+	if extra.TMDBID != nil {
+		anime.TMDBID = extra.TMDBID
+	}
+}
+
+func (s *SubsAggregator) cacheKey(animeID string, episode int, langs []string) string {
+	c := canonicalLangs(langs)
+	return fmt.Sprintf("subs:%s:%d:%s", animeID, episode, strings.Join(c, ","))
+}
+
+func canonicalLangs(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(in))
+	seen := map[string]bool{}
+	for _, l := range in {
+		l = strings.ToLower(strings.TrimSpace(l))
+		if l == "" || seen[l] {
+			continue
+		}
+		seen[l] = true
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func containsLang(set []string, l string) bool {
+	for _, x := range set {
+		if strings.EqualFold(x, l) {
+			return true
+		}
+	}
+	return false
+}
+
+func dedupe(groups map[string][]SubtitleTrack) {
+	for lang, tracks := range groups {
+		seen := map[string]bool{}
+		out := tracks[:0]
+		for _, t := range tracks {
+			key := lang + "|" + t.URL
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, t)
+		}
+		groups[lang] = out
+	}
+}
+
+func formatFromName(name string) string {
+	low := strings.ToLower(name)
+	switch {
+	case strings.HasSuffix(low, ".srt"):
+		return "srt"
+	case strings.HasSuffix(low, ".ass"):
+		return "ass"
+	case strings.HasSuffix(low, ".vtt"):
+		return "vtt"
+	default:
+		return ""
+	}
+}

@@ -20,6 +20,7 @@ func NewRouter(
 	collectionHandler *handler.CollectionHandler,
 	skipTimesHandler *handler.SkipTimesHandler,
 	rawHandler *handler.RawHandler,
+	subtitlesHandler *handler.SubtitlesHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -106,6 +107,10 @@ func NewRouter(
 			// HLS streams. Public, no auth.
 			r.Get("/{animeId}/raw/episodes", rawHandler.GetEpisodes)
 			r.Get("/{animeId}/raw/stream", rawHandler.GetStream)
+			// Multi-provider subtitles (workstream raw-jp, Phase 02). Jimaku
+			// + OpenSubtitles merged via /service/subs_aggregator.go.
+			r.Get("/{animeId}/subtitles", subtitlesHandler.Get)
+			r.Get("/{animeId}/subtitles/all", subtitlesHandler.GetAll)
 			// Hanime video sources
 			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
 			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)

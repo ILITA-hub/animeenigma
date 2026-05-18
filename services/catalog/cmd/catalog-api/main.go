@@ -15,7 +15,10 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
+	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -160,11 +163,24 @@ func main() {
 	rawResolver := service.NewRawResolver(allanimeClient, animeRepo, redisCache, log)
 	rawHandler := handler.NewRawHandler(rawResolver, log)
 
+	// Workstream raw-jp, Phase 02 — multi-provider subtitle aggregator.
+	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by
+	// IMDb/TMDB) and merges results. Mounts /api/anime/{id}/subtitles[/all].
+	jimakuClient := jimaku.NewClient(cfg.Jimaku.APIKey)
+	openSubsClient := opensubtitles.NewClient(opensubtitles.Config{
+		APIKey:    cfg.OpenSubtitles.APIKey,
+		UserAgent: cfg.OpenSubtitles.UserAgent,
+		Timeout:   cfg.OpenSubtitles.Timeout,
+	})
+	idMapClient := idmapping.NewClient()
+	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, log)
+	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

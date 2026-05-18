@@ -224,6 +224,25 @@ func (r *AnimeRepository) SetHasRaw(ctx context.Context, animeID string, has boo
 		Update("has_raw", has).Error
 }
 
+// UpdateExternalIDs sets animes.imdb_id and/or animes.tmdb_id when present.
+// Nil values are not written (existing values preserved). Workstream raw-jp,
+// Phase 02 — populated lazily on the first OpenSubtitles query via the
+// Kitsu mappings endpoint.
+func (r *AnimeRepository) UpdateExternalIDs(ctx context.Context, animeID string, imdb, tmdb *string) error {
+	updates := map[string]any{}
+	if imdb != nil {
+		updates["imdb_id"] = *imdb
+	}
+	if tmdb != nil {
+		updates["tmdb_id"] = *tmdb
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Updates(updates).Error
+}
+
 func (r *AnimeRepository) SetHidden(ctx context.Context, animeID string, hidden bool) error {
 	result := r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
 		Update("hidden", hidden)

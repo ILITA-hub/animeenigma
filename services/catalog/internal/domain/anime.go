@@ -31,6 +31,11 @@ type Anime struct {
 	ShikimoriID     string         `gorm:"size:50;index" json:"shikimori_id,omitempty"`
 	MALID           string         `gorm:"size:50" json:"mal_id,omitempty"`
 	AniListID       string         `gorm:"size:50" json:"anilist_id,omitempty"`
+	// IMDbID / TMDBID — workstream raw-jp, Phase 02. Resolved lazily via
+	// Kitsu mappings on the first OpenSubtitles query for this anime.
+	// Nullable: not every title has either mapping.
+	IMDbID *string `gorm:"size:50;index" json:"imdb_id,omitempty"`
+	TMDBID *string `gorm:"size:50;index" json:"tmdb_id,omitempty"`
 	HasVideo        bool           `gorm:"default:false;index" json:"has_video"`
 	// HasDub indicates the anime has at least one Kodik translation with
 	// type=="voice" (a dubbed track, as opposed to subtitled-only). Populated
