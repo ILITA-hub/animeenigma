@@ -547,6 +547,7 @@ After completing any implementation work (features, bug fixes, refactoring), **a
 | rooms      | 8084 | /metrics  | Game rooms, WebSocket          |
 | scheduler  | 8085 | /metrics  | Background jobs                |
 | themes     | 8086 | /metrics  | Anime OP/ED ratings            |
+| library    | 8089 | /metrics  | Library service (BitTorrent → HLS → MinIO, admin-only) |
 | web        | 80   | -         | Vue 3 frontend (nginx)         |
 
 ### Gateway Routing
@@ -563,6 +564,7 @@ All API requests go through the gateway service:
 - `/api/rooms/*` → rooms:8084
 - `/api/game/*` → rooms:8084
 - `/api/themes/*` → themes:8086 (public + protected + admin)
+- `/api/library/*` → library:8089 (admin-only; routes added incrementally in v0.2 Phases 2–5)
 
 ### Monitoring Endpoints
 
