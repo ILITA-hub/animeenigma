@@ -304,6 +304,7 @@ func (r *ProbeRunner) runOneTick(ctx context.Context) {
 	// Stage 1: search (FindID)
 	providerID, err := r.provider.FindID(ctx, ref)
 	if !r.record(stages, StageSearch, now, err) {
+		r.markRemainingStale(stages, StageSearch)
 		r.commit(name, stages, now)
 		return
 	}
@@ -314,6 +315,7 @@ func (r *ProbeRunner) runOneTick(ctx context.Context) {
 		err = fmt.Errorf("list_episodes returned 0 items")
 	}
 	if !r.record(stages, StageEpisodes, now, err) {
+		r.markRemainingStale(stages, StageEpisodes)
 		r.commit(name, stages, now)
 		return
 	}
@@ -324,6 +326,7 @@ func (r *ProbeRunner) runOneTick(ctx context.Context) {
 		err = fmt.Errorf("list_servers returned 0 items")
 	}
 	if !r.record(stages, StageServers, now, err) {
+		r.markRemainingStale(stages, StageServers)
 		r.commit(name, stages, now)
 		return
 	}
@@ -334,6 +337,7 @@ func (r *ProbeRunner) runOneTick(ctx context.Context) {
 		err = fmt.Errorf("get_stream returned no sources")
 	}
 	if !r.record(stages, StageStream, now, err) {
+		r.markRemainingStale(stages, StageStream)
 		r.commit(name, stages, now)
 		return
 	}
@@ -342,6 +346,32 @@ func (r *ProbeRunner) runOneTick(ctx context.Context) {
 	segErr := r.fetchSegment(ctx, stream.Sources[0].URL)
 	r.record(stages, StageStreamSegment, now, segErr)
 	r.commit(name, stages, now)
+}
+
+// markRemainingStale fills the stages map with stale-marker entries for every
+// canonical stage that occurs AFTER `failedStage` in AllStages. Called by
+// runOneTick when a short-circuit prevents downstream stages from being
+// exercised this tick, so the in-cache state stays honest (Up=false +
+// explanatory LastErr) instead of carrying stale UP from a previous tick.
+//
+// Window state is NOT touched — these stages did not fail; they were
+// uncheckable. Treating them as real failures would poison failure-rate
+// dashboards. The Up=false here is purely a presentation concern for the
+// admin health endpoint and the orchestrator's IsHealthy gate (which prefers
+// the cached value over the window when both exist).
+func (r *ProbeRunner) markRemainingStale(stages map[string]StageStatus, failedStage string) {
+	msg := fmt.Sprintf("skipped: upstream stage %q failed this tick", failedStage)
+	past := false
+	for _, s := range AllStages {
+		if s == failedStage {
+			past = true
+			continue
+		}
+		if !past {
+			continue
+		}
+		stages[s] = StageStatus{Up: false, LastErr: msg}
+	}
 }
 
 // record updates the per-stage window + the in-flight stages map. Returns
@@ -375,8 +405,12 @@ func (r *ProbeRunner) record(stages map[string]StageStatus, stage string, now ti
 
 // commit writes the per-stage map to the cache, emits gauges for ALL
 // canonical stages, and bumps the heartbeat. Stages not exercised this
-// tick (due to short-circuit) get their gauge value from the windowSet's
-// persisted state — i.e. they keep their last-known up/down value.
+// tick because runOneTick short-circuited are populated by markRemainingStale
+// with Up=false + an explanatory LastErr, so the cache reflects honest state
+// rather than carrying stale-OK from a previous tick. The windowSet fallback
+// path below is now defensive only — kept so any future probe path that
+// returns a partial stages map without calling markRemainingStale still
+// reports a sane gauge value.
 func (r *ProbeRunner) commit(name string, stages map[string]StageStatus, now time.Time) {
 	r.cache.Update(name, ProviderHealth{
 		Stages:      stages,

@@ -167,6 +167,14 @@ services:
       # Toggle live with: SCRAPER_ANIMEKAI_ENABLED=true docker compose up -d scraper
       SCRAPER_ANIMEKAI_ENABLED: ${SCRAPER_ANIMEKAI_ENABLED:-false}
       SCRAPER_ANIMEKAI_BASE_URL: ${SCRAPER_ANIMEKAI_BASE_URL:-https://anikai.to}
+      # Global kill-switch: comma-separated list of provider names that should
+      # NOT be registered with the orchestrator. Failover skips them with zero
+      # per-request cost. Default disables gogoanime (anitaku.to migrated to
+      # anineko.to — different platform, parser doesn't apply) and animepahe
+      # (animepahe.ru IP-blocked from server, animepahe.io is FingerprintJS-
+      # gated). Flip off by removing names + `docker compose restart scraper`
+      # (no rebuild needed).
+      SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-gogoanime,animepahe}
     ports:
       - "127.0.0.1:8088:8088"
     depends_on:

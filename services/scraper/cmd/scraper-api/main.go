@@ -180,16 +180,28 @@ func main() {
 	if err != nil {
 		log.Fatalw("failed to construct Gogoanime provider", "error", err)
 	}
-	orchestrator.Register(gogoanimeProvider)
-	log.Infow("registered provider", "name", gogoanimeProvider.Name())
+	if cfg.DegradedProviders.IsDegraded(gogoanimeProvider.Name()) {
+		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
+			"name", gogoanimeProvider.Name(),
+			"reason", "global kill-switch — upstream confirmed unreachable or platform-rebranded")
+	} else {
+		orchestrator.Register(gogoanimeProvider)
+		log.Infow("registered provider", "name", gogoanimeProvider.Name())
+	}
 
 	// AnimePahe — SECOND-CHANCE EN provider. Demoted from primary on
 	// 2026-05-13 after gogoanime/Anitaku proved more reliable in real traffic
 	// (AnimePahe upstream observed timing out at ~65s on /api?m=release).
 	// Kept as the failover so a single-provider outage on Anitaku doesn't
 	// blank the English tab.
-	orchestrator.Register(animePaheProvider)
-	log.Infow("registered provider", "name", animePaheProvider.Name())
+	if cfg.DegradedProviders.IsDegraded(animePaheProvider.Name()) {
+		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
+			"name", animePaheProvider.Name(),
+			"reason", "global kill-switch — upstream confirmed unreachable or platform-rebranded")
+	} else {
+		orchestrator.Register(animePaheProvider)
+		log.Infow("registered provider", "name", animePaheProvider.Name())
+	}
 
 	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
 	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
@@ -219,10 +231,16 @@ func main() {
 		if err != nil {
 			log.Fatalw("failed to construct AnimeKai provider", "error", err)
 		}
-		orchestrator.Register(animeKaiProvider)
-		log.Infow("registered provider", "name", animeKaiProvider.Name(),
-			"flag", "SCRAPER_ANIMEKAI_ENABLED=true",
-			"mode", "escape-hatch-stub")
+		if cfg.DegradedProviders.IsDegraded(animeKaiProvider.Name()) {
+			log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
+				"name", animeKaiProvider.Name(),
+				"reason", "global kill-switch")
+		} else {
+			orchestrator.Register(animeKaiProvider)
+			log.Infow("registered provider", "name", animeKaiProvider.Name(),
+				"flag", "SCRAPER_ANIMEKAI_ENABLED=true",
+				"mode", "escape-hatch-stub")
+		}
 	} else {
 		log.Infow("AnimeKai provider SKIPPED (flag off)",
 			"flag", "SCRAPER_ANIMEKAI_ENABLED=false")
@@ -305,14 +323,21 @@ func main() {
 	}
 
 	// Phase 19 wiring invariant — adapts the Phase 18 invariant to the
-	// flag-conditional shape. With flag off (prod default): 2 providers
-	// (animepahe + gogoanime). With flag on (R&D / staging): 3 providers —
-	// animepahe, gogoanime, animekai (escape-hatch stub). A future
-	// maintainer dropping any Register() call surfaces the regression at
-	// boot via this fatal.
-	expectedProviders := 2
+	// flag-conditional shape. Candidates are: gogoanime + animepahe
+	// (unconditional) and animekai (gated by SCRAPER_ANIMEKAI_ENABLED). Each
+	// candidate that is in SCRAPER_DEGRADED_PROVIDERS is intentionally not
+	// Register()-ed, so the expected count subtracts those. A future
+	// maintainer dropping any Register() call surfaces the regression at boot
+	// via this fatal.
+	candidateProviders := []string{"gogoanime", "animepahe"}
 	if cfg.AnimeKai.Enabled {
-		expectedProviders = 3
+		candidateProviders = append(candidateProviders, "animekai")
+	}
+	expectedProviders := 0
+	for _, name := range candidateProviders {
+		if !cfg.DegradedProviders.IsDegraded(name) {
+			expectedProviders++
+		}
 	}
 	registered := orchestrator.RegisteredProviders()
 	if got := len(registered); got != expectedProviders {
@@ -324,9 +349,14 @@ func main() {
 		for _, p := range registered {
 			names = append(names, p.Name())
 		}
+		degradedNames := make([]string, 0, len(cfg.DegradedProviders.Names))
+		for n := range cfg.DegradedProviders.Names {
+			degradedNames = append(degradedNames, n)
+		}
 		log.Fatalw("Phase 19 wiring invariant broken",
 			"got", got, "want", expectedProviders,
 			"flag", cfg.AnimeKai.Enabled,
+			"degraded", degradedNames,
 			"registered", names)
 	}
 

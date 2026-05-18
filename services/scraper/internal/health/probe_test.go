@@ -276,8 +276,11 @@ func TestProbe_PanicInProviderRecovers(t *testing.T) {
 }
 
 // TestProbe_StagesShortCircuitOnFirstFailure — FindID fails → ListEpisodes,
-// ListServers, GetStream are NOT called. Other stages keep their default
-// up=1 because their windows record no events.
+// ListServers, GetStream are NOT called (short-circuit preserves upstream
+// load). The cache and gauges for downstream stages are flipped to Up=false
+// with an explanatory LastErr so the health endpoint reports honest state
+// instead of carrying stale-OK from a previous tick. The window state is
+// NOT touched — these are "uncheckable", not real failures.
 func TestProbe_StagesShortCircuitOnFirstFailure(t *testing.T) {
 	name := "tp-short-circuit"
 	defer resetProviderMetrics(name)
@@ -312,10 +315,32 @@ func TestProbe_StagesShortCircuitOnFirstFailure(t *testing.T) {
 	if got := testutil.ToFloat64(metrics.ProviderHealthUp.WithLabelValues(name, StageSearch)); got != 1 {
 		t.Errorf("provider_health_up{stage=search} after 1 failure = %v; want 1 (under threshold)", got)
 	}
-	// Other stages keep their default = 1 (empty windowSet → IsDown=false).
+	// Downstream stages are explicitly flipped to 0 by markRemainingStale.
+	// Without this, the gauge would carry stale-OK indefinitely after the
+	// upstream stage fails — exactly the silent-decay bug operators noticed
+	// in 2026-05 when gogoanime search broke but episodes/servers/stream
+	// stayed green for days.
 	for _, s := range []string{StageEpisodes, StageServers, StageStream, StageStreamSegment} {
-		if got := testutil.ToFloat64(metrics.ProviderHealthUp.WithLabelValues(name, s)); got != 1 {
-			t.Errorf("provider_health_up{stage=%s} = %v; want 1 (no events recorded)", s, got)
+		if got := testutil.ToFloat64(metrics.ProviderHealthUp.WithLabelValues(name, s)); got != 0 {
+			t.Errorf("provider_health_up{stage=%s} = %v; want 0 (downstream of failed search)", s, got)
+		}
+	}
+	// Cache should carry the stale-marker on downstream stages, with a
+	// LastErr that names the actually-failed upstream stage so the admin
+	// dashboard can render the cause clearly.
+	snap := cache.AdminSnapshot()
+	ph, ok := snap[name]
+	if !ok {
+		t.Fatalf("cache has no entry for %q", name)
+	}
+	wantMsg := `skipped: upstream stage "search" failed this tick`
+	for _, s := range []string{StageEpisodes, StageServers, StageStream, StageStreamSegment} {
+		st := ph.Stages[s]
+		if st.Up {
+			t.Errorf("stage %q has Up=true after short-circuit; want false", s)
+		}
+		if st.LastErr != wantMsg {
+			t.Errorf("stage %q LastErr = %q; want %q", s, st.LastErr, wantMsg)
 		}
 	}
 }

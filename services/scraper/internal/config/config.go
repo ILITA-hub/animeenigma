@@ -23,6 +23,32 @@ type Config struct {
 	AnimePahe          AnimePaheConfig
 	Gogoanime          GogoanimeConfig
 	AnimeKai           AnimeKaiConfig
+	DegradedProviders  DegradedProvidersConfig
+}
+
+// DegradedProvidersConfig is the global kill-switch for providers known to be
+// upstream-dead. Names in the set are NOT Register()-ed with the orchestrator,
+// so failover skips them with zero per-request latency cost. Read from
+// SCRAPER_DEGRADED_PROVIDERS (comma-separated, lowercase names).
+//
+// Use case: animepahe.ru is IP-blocked and animepahe.io is FingerprintJS-gated
+// (2026-05-18); anitaku.to migrated to a different platform (anineko.to) the
+// existing parser can't handle. Until per-provider fixes land, mark them
+// degraded so the orchestrator stops wasting cycles on guaranteed failures.
+//
+// Flipping a provider OFF this list is a config-only restart — no rebuild.
+type DegradedProvidersConfig struct {
+	Names map[string]bool
+}
+
+// IsDegraded reports whether the named provider is in the kill-switch set.
+// Name comparison is case-insensitive to match how providers identify
+// themselves (Provider.Name() returns lowercase by convention).
+func (d DegradedProvidersConfig) IsDegraded(name string) bool {
+	if d.Names == nil {
+		return false
+	}
+	return d.Names[strings.ToLower(name)]
 }
 
 // ServerConfig controls the HTTP listener.
@@ -128,6 +154,7 @@ func Load() (*Config, error) {
 			Enabled: getEnvBool("SCRAPER_ANIMEKAI_ENABLED", false),
 			BaseURL: getEnv("SCRAPER_ANIMEKAI_BASE_URL", "https://anikai.to"),
 		},
+		DegradedProviders: parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", "")),
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
 		parsed, err := url.Parse(u)
@@ -177,6 +204,24 @@ func Load() (*Config, error) {
 // known extractor names happens in services/scraper/cmd/scraper-api/main.go
 // — config.Load stays registry-agnostic so unit tests don't need to wire
 // the full extractor set.
+// parseDegradedProviders splits a CSV list of provider names into a set.
+// Whitespace is trimmed, names are lowercased, empties dropped. Empty input
+// returns an empty set (no providers degraded — the production default).
+//
+// Example: SCRAPER_DEGRADED_PROVIDERS="gogoanime, animepahe" disables both
+// from registration in main.go.
+func parseDegradedProviders(csv string) DegradedProvidersConfig {
+	m := make(map[string]bool)
+	for _, p := range strings.Split(csv, ",") {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" {
+			continue
+		}
+		m[p] = true
+	}
+	return DegradedProvidersConfig{Names: m}
+}
+
 func parseServerPriority(csv string) []string {
 	if strings.TrimSpace(csv) == "" {
 		return []string{"streamhg", "earnvids", "vibeplayer"}
