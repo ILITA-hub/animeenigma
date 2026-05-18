@@ -11,7 +11,7 @@
 import { computed } from 'vue'
 
 interface Props {
-  variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'rating'
+  variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'rating' | 'info' | 'destructive'
   size?: 'sm' | 'md' | 'lg'
 }
 
@@ -30,6 +30,10 @@ const badgeClasses = computed(() => {
     success: 'bg-emerald-500/20 text-emerald-400',
     warning: 'bg-amber-500/20 text-amber-400',
     rating: 'bg-black/60 text-amber-400 backdrop-blur-sm',
+    // Phase 5 (LIB-09): purple for Nyaa provider chip.
+    info: 'bg-purple-500/20 text-purple-400',
+    // Phase 5 (LIB-09): red for failed-job status badges.
+    destructive: 'bg-red-500/20 text-red-400',
   }
 
   const sizes = {
