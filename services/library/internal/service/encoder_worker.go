@@ -1,0 +1,437 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
+	"github.com/anacrolix/torrent/metainfo"
+)
+
+// EncoderJobStore is the slice of *repo.JobRepository the encoder
+// worker needs. Phase 03's WorkerPool uses a similar pattern; we
+// declare a distinct interface here so the worker's tests don't have
+// to provide UpdateProgress / Cancel methods.
+type EncoderJobStore interface {
+	Claim(ctx context.Context, statuses ...domain.JobStatus) (*domain.Job, error)
+	GetByID(ctx context.Context, id string) (*domain.Job, error)
+	UpdateStatus(ctx context.Context, id string, newStatus domain.JobStatus, errorText string) error
+}
+
+// EpisodeStore is the slice of *repo.EpisodeRepository the encoder
+// worker needs.
+type EpisodeStore interface {
+	Create(ctx context.Context, ep *domain.Episode) error
+}
+
+// Transcoder is the surface the worker consumes from
+// internal/ffmpeg.Transcoder.
+type Transcoder interface {
+	Transcode(ctx context.Context, sourcePath string) (*ffmpeg.Result, error)
+}
+
+// Uploader is the surface the worker consumes from
+// internal/minio.Writer.
+type Uploader interface {
+	Upload(ctx context.Context, prefix string, filePaths []string) (int64, error)
+	URLFor(path string) string
+}
+
+// EpisodeDetector is the surface the worker consumes from
+// internal/parser/filename.Detector.
+type EpisodeDetector interface {
+	DetectEpisode(filename, uploader string) (int, bool)
+}
+
+// SourcePathResolver resolves a job's downloaded payload to an
+// on-disk source path. The default implementation walks
+// {downloadDir}/{infohash}/ for the largest video file.
+type SourcePathResolver interface {
+	Resolve(ctx context.Context, job *domain.Job, infohash string) (string, error)
+}
+
+// EncodeMetrics is the encoder-relevant slice of LibraryMetrics.
+type EncodeMetrics interface {
+	IncJobsTotal(status string)
+	ObserveEncodeDuration(seconds float64)
+	AddUploadBytes(n int64)
+	IncEncodeFailures(reason string)
+}
+
+// EncoderPool is N goroutines that race for status='encoding' jobs
+// via JobStore.Claim(...). Each goroutine drives one job at a time:
+//
+//   Claim(encoding) → re-flip status to encoding (Claim's cosmetic
+//     flip to downloading is undone) → resolve source → detect
+//     episode → Transcode → status=uploading → Upload → status=done
+//     (insert library_episodes row when shikimori_id != "").
+//
+// Cancellation: ffmpeg / minio respect ctx.Done() via
+// exec.CommandContext + the SDK's ctx-aware client. Worker exits
+// gracefully on ctx cancellation.
+type EncoderPool struct {
+	workers     int
+	jobRepo     EncoderJobStore
+	episodeRepo EpisodeStore
+	transcoder  Transcoder
+	uploader    Uploader
+	detector    EpisodeDetector
+	resolver    SourcePathResolver
+	metrics     EncodeMetrics
+	log         *logger.Logger
+
+	pollInterval time.Duration
+
+	wg sync.WaitGroup
+}
+
+// NewEncoderPool constructs an EncoderPool. workers >= 1, pollInterval
+// defaults to 2s.
+func NewEncoderPool(
+	workers int,
+	jobRepo EncoderJobStore,
+	episodeRepo EpisodeStore,
+	transcoder Transcoder,
+	uploader Uploader,
+	detector EpisodeDetector,
+	resolver SourcePathResolver,
+	metrics EncodeMetrics,
+	log *logger.Logger,
+) *EncoderPool {
+	if workers < 1 {
+		workers = 1
+	}
+	return &EncoderPool{
+		workers:      workers,
+		jobRepo:      jobRepo,
+		episodeRepo:  episodeRepo,
+		transcoder:   transcoder,
+		uploader:     uploader,
+		detector:     detector,
+		resolver:     resolver,
+		metrics:      metrics,
+		log:          log,
+		pollInterval: 2 * time.Second,
+	}
+}
+
+// Start launches worker goroutines; returns immediately. Goroutines
+// exit on <-ctx.Done().
+func (p *EncoderPool) Start(ctx context.Context) {
+	for i := 0; i < p.workers; i++ {
+		p.wg.Add(1)
+		go p.runWorker(ctx, i)
+	}
+}
+
+// Stop waits up to timeout for goroutines to exit.
+func (p *EncoderPool) Stop(timeout time.Duration) error {
+	doneCh := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(doneCh)
+	}()
+	select {
+	case <-doneCh:
+		return nil
+	case <-time.After(timeout):
+		if p.log != nil {
+			p.log.Warnw("encoder pool stop timed out", "timeout", timeout)
+		}
+		return errors.New("encoder pool stop timed out")
+	}
+}
+
+// runWorker claims an encoding row; on empty queue it sleeps
+// pollInterval and retries.
+func (p *EncoderPool) runWorker(ctx context.Context, idx int) {
+	defer p.wg.Done()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		job, err := p.jobRepo.Claim(ctx, domain.JobStatusEncoding)
+		if err != nil {
+			if p.log != nil {
+				p.log.Warnw("encoder claim failed", "worker", idx, "error", err)
+			}
+			if !p.sleep(ctx, p.pollInterval) {
+				return
+			}
+			continue
+		}
+		if job == nil {
+			if !p.sleep(ctx, p.pollInterval) {
+				return
+			}
+			continue
+		}
+		p.processJob(ctx, job)
+	}
+}
+
+func (p *EncoderPool) sleep(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// failJob writes status=failed with errorText + bumps the
+// per-reason failure counter.
+func (p *EncoderPool) failJob(ctx context.Context, job *domain.Job, reason, errText string) {
+	_ = p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusFailed, errText)
+	if p.metrics != nil {
+		p.metrics.IncJobsTotal(string(domain.JobStatusFailed))
+		p.metrics.IncEncodeFailures(reason)
+	}
+	if p.log != nil {
+		p.log.Errorw("encoder job failed",
+			"job_id", job.ID,
+			"reason", reason,
+			"error", errText,
+		)
+	}
+}
+
+// processJob drives a single claimed job through encoding → uploading
+// → done|failed. The Claim() flips status to 'downloading' cosmetically;
+// we re-flip to 'encoding' immediately so the row never sits at
+// 'downloading' while the encoder owns it.
+func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
+	// 1. Re-flip status to 'encoding' (Claim flipped it to downloading).
+	if err := p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusEncoding, ""); err != nil {
+		if p.log != nil {
+			p.log.Errorw("re-flip encoding failed", "job_id", job.ID, "error", err)
+		}
+		return
+	}
+	if p.metrics != nil {
+		p.metrics.IncJobsTotal(string(domain.JobStatusEncoding))
+	}
+
+	// 2. Derive infohash from the magnet.
+	m, err := metainfo.ParseMagnetUri(job.Magnet)
+	if err != nil {
+		p.failJob(ctx, job, "invalid_magnet", fmt.Sprintf("magnet parse failed at encode time: %v", err))
+		return
+	}
+	infohash := strings.ToLower(m.InfoHash.HexString())
+
+	// 3. Resolve the on-disk source path.
+	source, err := p.resolver.Resolve(ctx, job, infohash)
+	if err != nil {
+		p.failJob(ctx, job, "source_missing", fmt.Sprintf("resolve source: %v", err))
+		return
+	}
+
+	// 4. Detect episode number.
+	episode, ok := p.detector.DetectEpisode(filepath.Base(source), job.Uploader)
+	if !ok {
+		p.failJob(ctx, job, "episode_detect_failed",
+			fmt.Sprintf("could not detect episode number from filename: %s", filepath.Base(source)))
+		return
+	}
+
+	// 5. Transcode.
+	start := time.Now()
+	result, err := p.transcoder.Transcode(ctx, source)
+	if err != nil {
+		p.failJob(ctx, job, "ffmpeg_error", err.Error())
+		return
+	}
+	if p.metrics != nil {
+		p.metrics.ObserveEncodeDuration(time.Since(start).Seconds())
+	}
+
+	// Cancellation observation (post-Transcode).
+	if fresh, err := p.jobRepo.GetByID(ctx, job.ID); err == nil && fresh != nil && fresh.Status == domain.JobStatusCancelled {
+		if p.metrics != nil {
+			p.metrics.IncJobsTotal(string(domain.JobStatusCancelled))
+		}
+		return
+	}
+
+	// 6. Status → uploading.
+	if err := p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusUploading, ""); err != nil {
+		p.failJob(ctx, job, "upload_error", fmt.Sprintf("status uploading: %v", err))
+		return
+	}
+	if p.metrics != nil {
+		p.metrics.IncJobsTotal(string(domain.JobStatusUploading))
+	}
+
+	// 7. Compute MinIO prefix.
+	var prefix string
+	if job.ShikimoriID != "" {
+		prefix = fmt.Sprintf("%s/%d/", job.ShikimoriID, episode)
+	} else {
+		prefix = fmt.Sprintf("pending/%s/%d/", job.ID, episode)
+	}
+
+	// 8. Upload (segments concurrently, playlist last).
+	files := append([]string{}, result.SegmentPaths...)
+	files = append(files, result.PlaylistPath)
+	bytes, err := p.uploader.Upload(ctx, prefix, files)
+	if err != nil {
+		p.failJob(ctx, job, "upload_error", err.Error())
+		return
+	}
+	if p.metrics != nil {
+		p.metrics.AddUploadBytes(bytes)
+	}
+
+	// 9. Persist library_episodes row (only when shikimori_id known).
+	if job.ShikimoriID != "" {
+		jobIDCopy := job.ID
+		duration := result.DurationSec
+		size := result.SizeBytes
+		ep := &domain.Episode{
+			ShikimoriID:   job.ShikimoriID,
+			EpisodeNumber: episode,
+			JobID:         &jobIDCopy,
+			MinioPath:     prefix,
+			DurationSec:   &duration,
+			SizeBytes:     &size,
+		}
+		if err := p.episodeRepo.Create(ctx, ep); err != nil {
+			// Duplicate (re-encode of an existing episode) → log + continue.
+			if strings.Contains(strings.ToLower(err.Error()), "already exists") {
+				if p.log != nil {
+					p.log.Warnw("episode already exists; MinIO files replaced",
+						"shikimori_id", job.ShikimoriID, "episode", episode)
+				}
+			} else {
+				p.failJob(ctx, job, "episode_insert_failed", err.Error())
+				return
+			}
+		}
+	}
+
+	// 10. Clean up local temp dir (best-effort).
+	if result.PlaylistPath != "" {
+		_ = os.RemoveAll(filepath.Dir(result.PlaylistPath))
+	}
+
+	// 11. status=done.
+	if err := p.jobRepo.UpdateStatus(ctx, job.ID, domain.JobStatusDone, ""); err != nil {
+		if p.log != nil {
+			p.log.Errorw("final UpdateStatus(done) failed", "job_id", job.ID, "error", err)
+		}
+		return
+	}
+	if p.metrics != nil {
+		p.metrics.IncJobsTotal(string(domain.JobStatusDone))
+	}
+	if p.log != nil {
+		p.log.Infow("encoder job done",
+			"job_id", job.ID,
+			"shikimori_id", job.ShikimoriID,
+			"episode", episode,
+			"minio_prefix", prefix,
+			"duration_sec", result.DurationSec,
+			"size_bytes", result.SizeBytes,
+			"upload_bytes", bytes,
+		)
+	}
+}
+
+// ---- DefaultSourceResolver ----
+
+// videoExtensions is the recognised set; lowercased.
+var videoExtensions = map[string]bool{
+	".mp4": true,
+	".mkv": true,
+	".avi": true,
+	".mov": true,
+	".m4v": true,
+	".webm": true,
+	".ts":  true,
+}
+
+// DefaultSourceResolver implements SourcePathResolver by walking
+// {downloadDir}/{infohash}/ for the largest video file.
+type DefaultSourceResolver struct {
+	downloadDir string
+	maxDepth    int
+}
+
+// NewDefaultSourceResolver constructs the resolver. maxDepth defaults
+// to 10 to bound walking on pathological torrents.
+func NewDefaultSourceResolver(downloadDir string) *DefaultSourceResolver {
+	return &DefaultSourceResolver{downloadDir: downloadDir, maxDepth: 10}
+}
+
+// Resolve walks the {downloadDir}/{infohash}/ tree for the LARGEST
+// video file (any of .mp4/.mkv/.avi/.mov/.m4v/.webm/.ts case-insensitive).
+// Returns an error if the dir is missing or contains no video files.
+func (r *DefaultSourceResolver) Resolve(ctx context.Context, _ *domain.Job, infohash string) (string, error) {
+	if infohash == "" {
+		return "", errors.New("infohash is empty")
+	}
+	root := filepath.Join(r.downloadDir, infohash)
+	st, err := os.Stat(root)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", root, err)
+	}
+	if !st.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", root)
+	}
+
+	var bestPath string
+	var bestSize int64
+
+	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		// Bound depth.
+		rel, _ := filepath.Rel(root, path)
+		depth := strings.Count(rel, string(filepath.Separator))
+		if depth > r.maxDepth {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(path))
+		if !videoExtensions[ext] {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil // ignore unreadable entries
+		}
+		if info.Size() > bestSize {
+			bestSize = info.Size()
+			bestPath = path
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return "", fmt.Errorf("walk %s: %w", root, walkErr)
+	}
+	if bestPath == "" {
+		return "", fmt.Errorf("no video file under %s", root)
+	}
+	return bestPath, nil
+}

@@ -16,8 +16,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// LibraryMetrics bundles the six library-specific collectors locked
-// by 03-SPEC. Methods are safe to call from any goroutine.
+// LibraryMetrics bundles the SPEC-locked collectors. Phase 03 added
+// six (jobs/download/torrents/disk/enqueue/seed); Phase 04 adds four
+// more for the encoder + uploader lanes:
+//
+//   - encodeDurationSeconds   Histogram — wall time per ffmpeg encode
+//   - uploadBytesTotal        Counter   — bytes PUT to MinIO across jobs
+//   - filenameDetectFallback  CounterVec{uploader} — generic-fallback hits
+//   - encodeFailuresTotal     CounterVec{reason}   — encoder failure attribution
+//
+// Methods are safe to call from any goroutine.
 type LibraryMetrics struct {
 	jobsTotal            *prometheus.CounterVec
 	downloadBytesTotal   prometheus.Counter
@@ -25,6 +33,12 @@ type LibraryMetrics struct {
 	diskFreeBytes        prometheus.Gauge
 	enqueueRejectedTotal *prometheus.CounterVec
 	torrentSeedCount     prometheus.Gauge
+
+	// Phase 04 additions:
+	encodeDurationSeconds   prometheus.Histogram
+	uploadBytesTotal        prometheus.Counter
+	filenameDetectFallback  *prometheus.CounterVec
+	encodeFailuresTotal     *prometheus.CounterVec
 }
 
 // NewLibraryMetrics registers the collectors against the default
@@ -78,6 +92,35 @@ func NewLibraryMetricsWithRegisterer(reg prometheus.Registerer) *LibraryMetrics 
 				Name: "library_torrent_seed_count",
 				Help: "Number of completed torrents currently seeding (post-download, pre-drop).",
 			},
+		),
+
+		// Phase 04 — encoder + uploader lane.
+		encodeDurationSeconds: factory.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "library_encode_duration_seconds",
+				Help:    "Wall time taken by ffmpeg to transcode one source file.",
+				Buckets: prometheus.ExponentialBuckets(10, 2, 8), // 10s .. 1280s
+			},
+		),
+		uploadBytesTotal: factory.NewCounter(
+			prometheus.CounterOpts{
+				Name: "library_upload_bytes_total",
+				Help: "Total bytes uploaded to MinIO across all completed jobs.",
+			},
+		),
+		filenameDetectFallback: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "library_filename_detect_fallback_total",
+				Help: "Generic-fallback regex hits in the filename detector, labeled by uploader (empty → \"unknown\").",
+			},
+			[]string{"uploader"},
+		),
+		encodeFailuresTotal: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "library_encode_failures_total",
+				Help: "Encoder-worker failures, labeled by reason (source_missing, episode_detect_failed, ffmpeg_error, upload_error, episode_insert_failed).",
+			},
+			[]string{"reason"},
 		),
 	}
 }
@@ -138,4 +181,71 @@ func (m *LibraryMetrics) GetJobsTotalForTest(status string) prometheus.Counter {
 // library_enqueue_rejected_total.
 func (m *LibraryMetrics) GetEnqueueRejectedForTest(reason string) prometheus.Counter {
 	return m.enqueueRejectedTotal.WithLabelValues(reason)
+}
+
+// ObserveEncodeDuration records one ffmpeg wall-time sample.
+func (m *LibraryMetrics) ObserveEncodeDuration(seconds float64) {
+	if m == nil {
+		return
+	}
+	m.encodeDurationSeconds.Observe(seconds)
+}
+
+// AddUploadBytes adds n bytes to library_upload_bytes_total. Guards
+// against n <= 0 (mirrors AddDownloadBytes) so a buggy uploader can
+// never make the counter non-monotonic.
+func (m *LibraryMetrics) AddUploadBytes(n int64) {
+	if m == nil || n <= 0 {
+		return
+	}
+	m.uploadBytesTotal.Add(float64(n))
+}
+
+// IncFilenameDetectFallback increments
+// library_filename_detect_fallback_total{uploader}. An empty uploader
+// label is normalised to "unknown" so prometheus never sees an empty
+// label value.
+func (m *LibraryMetrics) IncFilenameDetectFallback(uploader string) {
+	if m == nil {
+		return
+	}
+	if uploader == "" {
+		uploader = "unknown"
+	}
+	m.filenameDetectFallback.WithLabelValues(uploader).Inc()
+}
+
+// IncEncodeFailures increments library_encode_failures_total{reason}.
+// Reasons used by the encoder worker:
+//   - "source_missing"        — SourcePathResolver returned an error
+//   - "episode_detect_failed" — detector returned (0, false)
+//   - "ffmpeg_error"          — Transcode returned non-nil error
+//   - "upload_error"          — MinIO writer returned non-nil error
+//   - "episode_insert_failed" — episode row insertion failed
+//   - "invalid_magnet"        — magnet failed to re-parse at encode time
+func (m *LibraryMetrics) IncEncodeFailures(reason string) {
+	if m == nil {
+		return
+	}
+	m.encodeFailuresTotal.WithLabelValues(reason).Inc()
+}
+
+// GetEncodeFailuresForTest is the test-seam analogue for
+// library_encode_failures_total.
+func (m *LibraryMetrics) GetEncodeFailuresForTest(reason string) prometheus.Counter {
+	return m.encodeFailuresTotal.WithLabelValues(reason)
+}
+
+// GetFilenameDetectFallbackForTest is the test-seam analogue for
+// library_filename_detect_fallback_total.
+func (m *LibraryMetrics) GetFilenameDetectFallbackForTest(uploader string) prometheus.Counter {
+	if uploader == "" {
+		uploader = "unknown"
+	}
+	return m.filenameDetectFallback.WithLabelValues(uploader)
+}
+
+// GetUploadBytesForTest exposes the upload-bytes counter for tests.
+func (m *LibraryMetrics) GetUploadBytesForTest() prometheus.Counter {
+	return m.uploadBytesTotal
 }

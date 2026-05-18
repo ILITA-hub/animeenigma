@@ -251,3 +251,23 @@ func (r *JobRepository) ResumeInterruptedDownloads(ctx context.Context) (int64, 
 	}
 	return res.RowsAffected, nil
 }
+
+// ResumeInterruptedEncodes is the Phase-04 analogue of
+// ResumeInterruptedDownloads. Any row left in status='encoding' or
+// 'uploading' from a previous process with stale updated_at (> 1
+// hour) is rewritten to 'queued' so a worker re-claims it from the
+// top of the pipeline. Note we only rewrite STALE rows because an
+// active encoder worker may legitimately hold a row in 'encoding'
+// for many minutes while ffmpeg crunches. Run once at boot.
+//
+// Returns the number of rows touched.
+func (r *JobRepository) ResumeInterruptedEncodes(ctx context.Context) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(
+		"UPDATE library_jobs SET status = 'queued', updated_at = now() " +
+			"WHERE status IN ('encoding', 'uploading') AND updated_at < now() - interval '1 hour'",
+	)
+	if res.Error != nil {
+		return 0, fmt.Errorf("resume interrupted encodes: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}

@@ -25,6 +25,11 @@ func TestLibraryMetrics_ExposesAllCollectors(t *testing.T) {
 	m.SetDiskFreeBytes(123456)
 	m.IncEnqueueRejected("disk_full")
 	m.SetSeedCount(1)
+	// Phase 04 additions:
+	m.ObserveEncodeDuration(10)
+	m.AddUploadBytes(2048)
+	m.IncFilenameDetectFallback("Ohys-Raws")
+	m.IncEncodeFailures("ffmpeg_error")
 
 	expected := []string{
 		"library_jobs_total",
@@ -33,6 +38,10 @@ func TestLibraryMetrics_ExposesAllCollectors(t *testing.T) {
 		"library_disk_free_bytes",
 		"library_enqueue_rejected_total",
 		"library_torrent_seed_count",
+		"library_encode_duration_seconds",
+		"library_upload_bytes_total",
+		"library_filename_detect_fallback_total",
+		"library_encode_failures_total",
 	}
 
 	families, err := reg.Gather()
@@ -126,5 +135,79 @@ func TestLibraryMetrics_IncEnqueueRejected(t *testing.T) {
 	}
 	if v := testutil.ToFloat64(m.enqueueRejectedTotal.WithLabelValues("disk_full")); v != 2 {
 		t.Fatalf("disk_full count = %v, want 2", v)
+	}
+}
+
+// TestLibraryMetrics_AddUploadBytes — same monotonic guard as
+// AddDownloadBytes (zero / negative are no-ops).
+func TestLibraryMetrics_AddUploadBytes(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+	m.AddUploadBytes(500)
+	m.AddUploadBytes(0)
+	m.AddUploadBytes(-99)
+	m.AddUploadBytes(250)
+	if v := testutil.ToFloat64(m.GetUploadBytesForTest()); v != 750 {
+		t.Fatalf("library_upload_bytes_total = %v, want 750", v)
+	}
+}
+
+// TestLibraryMetrics_IncFilenameDetectFallback — empty uploader is
+// normalised to "unknown" so prometheus rejects nothing.
+func TestLibraryMetrics_IncFilenameDetectFallback(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+	m.IncFilenameDetectFallback("")
+	m.IncFilenameDetectFallback("Ohys-Raws")
+	m.IncFilenameDetectFallback("Ohys-Raws")
+
+	if v := testutil.ToFloat64(m.GetFilenameDetectFallbackForTest("unknown")); v != 1 {
+		t.Fatalf("fallback {unknown} = %v, want 1", v)
+	}
+	if v := testutil.ToFloat64(m.GetFilenameDetectFallbackForTest("Ohys-Raws")); v != 2 {
+		t.Fatalf("fallback {Ohys-Raws} = %v, want 2", v)
+	}
+}
+
+// TestLibraryMetrics_IncEncodeFailures — per-reason labels stay distinct.
+func TestLibraryMetrics_IncEncodeFailures(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+	m.IncEncodeFailures("ffmpeg_error")
+	m.IncEncodeFailures("ffmpeg_error")
+	m.IncEncodeFailures("upload_error")
+	if v := testutil.ToFloat64(m.GetEncodeFailuresForTest("ffmpeg_error")); v != 2 {
+		t.Fatalf("ffmpeg_error = %v, want 2", v)
+	}
+	if v := testutil.ToFloat64(m.GetEncodeFailuresForTest("upload_error")); v != 1 {
+		t.Fatalf("upload_error = %v, want 1", v)
+	}
+}
+
+// TestLibraryMetrics_ObserveEncodeDuration — histogram observes one
+// sample correctly (we only verify count via Gather since
+// testutil.ToFloat64 doesn't work on a Histogram).
+func TestLibraryMetrics_ObserveEncodeDuration(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := NewLibraryMetricsWithRegisterer(reg)
+	m.ObserveEncodeDuration(15.0)
+	m.ObserveEncodeDuration(42.0)
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var sampleCount uint64
+	for _, f := range families {
+		if f.GetName() == "library_encode_duration_seconds" {
+			for _, m := range f.GetMetric() {
+				if h := m.GetHistogram(); h != nil {
+					sampleCount += h.GetSampleCount()
+				}
+			}
+		}
+	}
+	if sampleCount != 2 {
+		t.Fatalf("encode_duration sample count = %d, want 2", sampleCount)
 	}
 }
