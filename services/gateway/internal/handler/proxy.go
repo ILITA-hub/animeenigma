@@ -59,6 +59,15 @@ func (h *ProxyHandler) ProxyToThemes(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "themes")
 }
 
+// ProxyToLibrary proxies requests to the library service (workstream raw-jp / v0.2).
+// Phase 1 only exposes /health passthrough; Phases 2-5 add search + jobs + episodes
+// endpoints. Admin-protected routes (POST /jobs, DELETE /jobs/:id, etc.) are added
+// in later phases with JWTValidationMiddleware + AdminRoleMiddleware at the
+// gateway router level.
+func (h *ProxyHandler) ProxyToLibrary(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "library")
+}
+
 // ProxyToGrafana proxies requests to Grafana
 func (h *ProxyHandler) ProxyToGrafana(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "grafana")

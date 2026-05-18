@@ -309,6 +309,16 @@ func NewRouterWithCleanup(
 			})
 		})
 
+		// Library service routes (workstream raw-jp / v0.2). Phase 1 exposes
+		// only /health passthrough; the wildcard handler is intentional
+		// forward-compat so Phases 2-5 can add handlers without touching the
+		// gateway router. Admin endpoints (POST /jobs, etc.) are gated by
+		// JWTValidationMiddleware + AdminRoleMiddleware when those phases land.
+		r.Route("/library", func(r chi.Router) {
+			r.Get("/health", proxyHandler.ProxyToLibrary)
+			r.HandleFunc("/*", proxyHandler.ProxyToLibrary)
+		})
+
 		// Streaming service routes - most are public, only admin needs auth
 		r.Route("/streaming", func(r chi.Router) {
 			// Public routes (no auth required)

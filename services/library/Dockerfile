@@ -50,6 +50,6 @@ WORKDIR /app
 
 COPY --from=builder /library-api .
 
-EXPOSE 8087
+EXPOSE 8089
 
 CMD ["./library-api"]

@@ -44,6 +44,7 @@ type ServiceURLs struct {
 	ScraperService   string // Phase 17 Plan 03: scraper service URL for /api/admin/scraper/*.
 	StreamingService string
 	ThemesService    string
+	LibraryService   string // workstream raw-jp / v0.2 — library service on port 8087
 	WebService       string
 	// Admin panel services
 	GrafanaService    string
@@ -85,6 +86,7 @@ func Load() (*Config, error) {
 			ScraperService:   getEnv("SCRAPER_SERVICE_URL", "http://scraper:8088"),
 			StreamingService: getEnv("STREAMING_SERVICE_URL", "http://streaming:8082"),
 			ThemesService:    getEnv("THEMES_SERVICE_URL", "http://themes:8086"),
+			LibraryService:   getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
 			WebService:       getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

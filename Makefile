@@ -6,7 +6,7 @@
 	backfill-attributes build-backfill-attributes
 
 # Variables
-SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper
+SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper library
 GO_BUILD_FLAGS := -ldflags="-s -w"
 DOCKER_REGISTRY ?= ghcr.io/ilita-hub/animeenigma
 
@@ -443,6 +443,7 @@ health: ## Check health of all services (docker-compose)
 	@curl -sf http://localhost:8084/health > /dev/null && echo "✓ rooms:8084" || echo "✗ rooms:8084"
 	@curl -sf http://localhost:8085/health > /dev/null && echo "✓ scheduler:8085" || echo "✗ scheduler:8085"
 	@curl -sf http://localhost:8088/health > /dev/null && echo "✓ scraper:8088" || echo "✗ scraper:8088"
+	@curl -sf http://localhost:8089/health > /dev/null && echo "✓ library:8089" || echo "✗ library:8089"
 
 metrics: ## Fetch metrics from all services
 	@echo "=== Gateway Metrics ==="

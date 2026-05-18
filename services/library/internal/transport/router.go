@@ -33,7 +33,10 @@ func NewRouter(
 	r.Use(httputil.CORS([]string{"*"}))
 	r.Use(middleware.RealIP)
 
-	// Health check.
+	// Health check — exposed at /health for direct probes (make health,
+	// docker healthcheck) and at /api/library/health so the gateway can
+	// forward `/api/library/health` verbatim without path rewriting.
+	// Mirrors the themes service convention of accepting both prefixes.
 	r.Get("/health", healthHandler.Health)
 
 	// Prometheus metrics endpoint.
@@ -41,12 +44,15 @@ func NewRouter(
 		metrics.Handler().ServeHTTP(w, r)
 	})
 
-	// API routes. Phase 1 leaves this empty on purpose — Phase 2 (LIB-03/04/04b)
-	// appends search + ingest endpoints; Phase 3 adds the job-control group with
-	// AuthMiddleware + AdminRoleMiddleware. The jwtConfig parameter is kept on
-	// the constructor signature so those phases don't need to rewire main.go.
+	// API routes. Phase 1 only exposes /health passthrough so the gateway's
+	// /api/library/health route works without path rewriting. Phase 2 adds
+	// search + ingest endpoints; Phase 3 adds the job-control group with
+	// AuthMiddleware + AdminRoleMiddleware (the jwtConfig parameter is kept
+	// on the constructor signature so those phases don't need to rewire
+	// main.go).
 	r.Route("/api/library", func(r chi.Router) {
 		_ = jwtConfig // silence unused-parameter lint until Phase 3
+		r.Get("/health", healthHandler.Health)
 	})
 
 	return r

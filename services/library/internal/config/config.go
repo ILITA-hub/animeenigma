@@ -36,7 +36,7 @@ func Load() (*Config, error) {
 	return &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
-			Port: getEnvInt("SERVER_PORT", 8087),
+			Port: getEnvInt("SERVER_PORT", 8089),
 		},
 		Database: database.Config{
 			Host:     getEnv("DB_HOST", "localhost"),
