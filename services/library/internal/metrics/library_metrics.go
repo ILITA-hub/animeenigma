@@ -35,10 +35,16 @@ type LibraryMetrics struct {
 	torrentSeedCount     prometheus.Gauge
 
 	// Phase 04 additions:
-	encodeDurationSeconds   prometheus.Histogram
-	uploadBytesTotal        prometheus.Counter
-	filenameDetectFallback  *prometheus.CounterVec
-	encodeFailuresTotal     *prometheus.CounterVec
+	encodeDurationSeconds  prometheus.Histogram
+	uploadBytesTotal       prometheus.Counter
+	filenameDetectFallback *prometheus.CounterVec
+	encodeFailuresTotal    *prometheus.CounterVec
+
+	// Phase 06 (workstream raw-jp / v0.2) addition:
+	//   cacheInvalidationTotal{result="ok"|"fail"} — incremented
+	//   once per webhook fire from the library encoder to the
+	//   catalog's /internal/cache/invalidate/raw endpoint.
+	cacheInvalidationTotal *prometheus.CounterVec
 }
 
 // NewLibraryMetrics registers the collectors against the default
@@ -121,6 +127,15 @@ func NewLibraryMetricsWithRegisterer(reg prometheus.Registerer) *LibraryMetrics 
 				Help: "Encoder-worker failures, labeled by reason (source_missing, episode_detect_failed, ffmpeg_error, upload_error, episode_insert_failed).",
 			},
 			[]string{"reason"},
+		),
+
+		// Phase 06 (workstream raw-jp / v0.2).
+		cacheInvalidationTotal: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "library_cache_invalidation_total",
+				Help: "Cache-invalidation webhook fires from library to catalog, labeled by result (ok|fail).",
+			},
+			[]string{"result"},
 		),
 	}
 }
@@ -248,4 +263,21 @@ func (m *LibraryMetrics) GetFilenameDetectFallbackForTest(uploader string) prome
 // GetUploadBytesForTest exposes the upload-bytes counter for tests.
 func (m *LibraryMetrics) GetUploadBytesForTest() prometheus.Counter {
 	return m.uploadBytesTotal
+}
+
+// IncCacheInvalidation increments library_cache_invalidation_total
+// with result label "ok" (HTTP 2xx response) or "fail" (everything
+// else — non-2xx, transport error, timeout). Phase 06 (workstream
+// raw-jp / v0.2).
+func (m *LibraryMetrics) IncCacheInvalidation(result string) {
+	if m == nil {
+		return
+	}
+	m.cacheInvalidationTotal.WithLabelValues(result).Inc()
+}
+
+// GetCacheInvalidationForTest is the test-seam analogue for
+// library_cache_invalidation_total.
+func (m *LibraryMetrics) GetCacheInvalidationForTest(result string) prometheus.Counter {
+	return m.cacheInvalidationTotal.WithLabelValues(result)
 }

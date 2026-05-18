@@ -207,6 +207,19 @@ func (s *stubMetrics) IncEncodeFailures(reason string) {
 	s.encodeFailures = append(s.encodeFailures, reason)
 }
 
+// stubInvalidator records every Invalidate call so Phase-06 tests
+// can assert webhook fire behavior.
+type stubInvalidator struct {
+	mu    sync.Mutex
+	calls []string // shikimoriID per call
+}
+
+func (s *stubInvalidator) Invalidate(_ context.Context, shikimoriID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = append(s.calls, shikimoriID)
+}
+
 // ---- Tests ----
 
 // validMagnet is a magnet URI shape anacrolix's parser accepts.
@@ -237,7 +250,7 @@ func newHappyPool(t *testing.T, job *domain.Job) (*EncoderPool, *stubJobStore, *
 	res := &stubResolver{path: filepath.Join(dir, "src.mp4")}
 	mt := &stubMetrics{}
 
-	pool := NewEncoderPool(1, js, es, tr, up, det, res, mt, nil)
+	pool := NewEncoderPool(1, js, es, tr, up, det, res, mt, nil, nil)
 	return pool, js, es, up, mt
 }
 
@@ -327,7 +340,7 @@ func TestEncoder_TranscodeFailure(t *testing.T) {
 	mt := &stubMetrics{}
 	det := &stubDetector{ep: 1, ok: true}
 	res := &stubResolver{path: filepath.Join(dir, "src.mp4")}
-	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, tr, up, det, res, mt, nil)
+	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, tr, up, det, res, mt, nil, nil)
 	pool.processJob(context.Background(), job)
 
 	// Status = failed with error text containing the simulated message.
@@ -365,7 +378,7 @@ func TestEncoder_UploadFailure(t *testing.T) {
 	up := &stubUploader{err: errors.New("minio is angry")}
 	es := &stubEpisodeStore{}
 	mt := &stubMetrics{}
-	pool := NewEncoderPool(1, js, es, tr, up, &stubDetector{ep: 1, ok: true}, &stubResolver{path: filepath.Join(dir, "s.mp4")}, mt, nil)
+	pool := NewEncoderPool(1, js, es, tr, up, &stubDetector{ep: 1, ok: true}, &stubResolver{path: filepath.Join(dir, "s.mp4")}, mt, nil, nil)
 	pool.processJob(context.Background(), job)
 
 	last := js.statusHistory[len(js.statusHistory)-1]
@@ -398,7 +411,7 @@ func TestEncoder_EpisodeDetectFailure(t *testing.T) {
 	det := &stubDetector{ep: 0, ok: false}
 	res := &stubResolver{path: filepath.Join(dir, "weird.mp4")}
 	mt := &stubMetrics{}
-	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, tr, up, det, res, mt, nil)
+	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, tr, up, det, res, mt, nil, nil)
 	pool.processJob(context.Background(), job)
 
 	last := js.statusHistory[len(js.statusHistory)-1]
@@ -427,7 +440,7 @@ func TestEncoder_SourceMissing(t *testing.T) {
 	js.addPending(job)
 	res := &stubResolver{err: errors.New("no video file found")}
 	mt := &stubMetrics{}
-	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, &stubTranscoder{}, &stubUploader{}, &stubDetector{}, res, mt, nil)
+	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, &stubTranscoder{}, &stubUploader{}, &stubDetector{}, res, mt, nil, nil)
 	pool.processJob(context.Background(), job)
 
 	last := js.statusHistory[len(js.statusHistory)-1]
@@ -460,7 +473,7 @@ func TestEncoder_CancelledMidFlight_DoesNotWriteDone(t *testing.T) {
 	}
 	tr := &stubTranscoder{result: &ffmpeg.Result{PlaylistPath: plPath}}
 	up := &stubUploader{}
-	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, tr, up, &stubDetector{ep: 1, ok: true}, &stubResolver{path: filepath.Join(dir, "s.mp4")}, &stubMetrics{}, nil)
+	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, tr, up, &stubDetector{ep: 1, ok: true}, &stubResolver{path: filepath.Join(dir, "s.mp4")}, &stubMetrics{}, nil, nil)
 	pool.processJob(context.Background(), job)
 
 	// Status history should NOT contain JobStatusDone.
@@ -472,6 +485,116 @@ func TestEncoder_CancelledMidFlight_DoesNotWriteDone(t *testing.T) {
 	// Upload should not have been called either.
 	if len(up.uploads) != 0 {
 		t.Fatalf("upload must not run after cancellation observed")
+	}
+}
+
+// ---- Phase 06 (workstream raw-jp / v0.2): invalidator fire ----
+
+// newHappyPoolWithInvalidator mirrors newHappyPool but lets the caller
+// inject a CatalogInvalidator (typically a *stubInvalidator).
+func newHappyPoolWithInvalidator(t *testing.T, job *domain.Job, inv CatalogInvalidator) (*EncoderPool, *stubJobStore, *stubEpisodeStore, *stubUploader, *stubMetrics) {
+	t.Helper()
+	dir := t.TempDir()
+	plPath := filepath.Join(dir, "playlist.m3u8")
+	if err := os.WriteFile(plPath, []byte("#EXTM3U"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	segPath := filepath.Join(dir, "segment_001.ts")
+	if err := os.WriteFile(segPath, []byte("AAAA"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	js := newStubJobStore()
+	js.addPending(job)
+	es := &stubEpisodeStore{}
+	tr := &stubTranscoder{result: &ffmpeg.Result{
+		PlaylistPath: plPath,
+		SegmentPaths: []string{segPath},
+		DurationSec:  1450,
+		SizeBytes:    1024,
+	}}
+	up := &stubUploader{bytes: 9999}
+	det := &stubDetector{ep: 1, ok: true}
+	res := &stubResolver{path: filepath.Join(dir, "src.mp4")}
+	mt := &stubMetrics{}
+
+	pool := NewEncoderPool(1, js, es, tr, up, det, res, mt, nil, inv)
+	return pool, js, es, up, mt
+}
+
+func TestEncoder_InvalidatorFires_OnDoneWithShikimori(t *testing.T) {
+	inv := &stubInvalidator{}
+	job := &domain.Job{
+		ID:          "job-inv-1",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "57466",
+		Status:      domain.JobStatusEncoding,
+	}
+	pool, js, _, _, _ := newHappyPoolWithInvalidator(t, job, inv)
+	pool.processJob(context.Background(), job)
+
+	if js.statusHistory[len(js.statusHistory)-1].status != domain.JobStatusDone {
+		t.Fatalf("status did not reach done: %+v", js.statusHistory)
+	}
+	if len(inv.calls) != 1 {
+		t.Fatalf("invalidator calls = %d, want exactly 1", len(inv.calls))
+	}
+	if inv.calls[0] != "57466" {
+		t.Errorf("invalidator called with %q, want 57466", inv.calls[0])
+	}
+}
+
+func TestEncoder_InvalidatorSkipped_OnEmptyShikimori(t *testing.T) {
+	inv := &stubInvalidator{}
+	job := &domain.Job{
+		ID:       "job-inv-2",
+		Magnet:   validMagnet,
+		Uploader: "Ohys-Raws",
+		Status:   domain.JobStatusEncoding,
+		// ShikimoriID intentionally empty
+	}
+	pool, _, _, _, _ := newHappyPoolWithInvalidator(t, job, inv)
+	pool.processJob(context.Background(), job)
+
+	if len(inv.calls) != 0 {
+		t.Errorf("invalidator called %d times for empty shikimori_id; want 0", len(inv.calls))
+	}
+}
+
+func TestEncoder_InvalidatorSkipped_OnFailure(t *testing.T) {
+	inv := &stubInvalidator{}
+	job := &domain.Job{
+		ID:          "job-inv-3",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "57466",
+		Status:      domain.JobStatusEncoding,
+	}
+	dir := t.TempDir()
+	js := newStubJobStore()
+	js.addPending(job)
+	tr := &stubTranscoder{err: errors.New("ffmpeg boom")}
+	pool := NewEncoderPool(1, js, &stubEpisodeStore{}, tr, &stubUploader{}, &stubDetector{ep: 1, ok: true},
+		&stubResolver{path: filepath.Join(dir, "s.mp4")}, &stubMetrics{}, nil, inv)
+	pool.processJob(context.Background(), job)
+
+	if len(inv.calls) != 0 {
+		t.Errorf("invalidator called %d times on transcode failure; want 0", len(inv.calls))
+	}
+}
+
+func TestEncoder_NilInvalidator_Safe(t *testing.T) {
+	job := &domain.Job{
+		ID:          "job-inv-4",
+		Magnet:      validMagnet,
+		Uploader:    "Ohys-Raws",
+		ShikimoriID: "57466",
+		Status:      domain.JobStatusEncoding,
+	}
+	pool, js, _, _, _ := newHappyPoolWithInvalidator(t, job, nil) // nil invalidator
+	pool.processJob(context.Background(), job)
+	if js.statusHistory[len(js.statusHistory)-1].status != domain.JobStatusDone {
+		t.Fatalf("status did not reach done with nil invalidator: %+v", js.statusHistory)
 	}
 }
 

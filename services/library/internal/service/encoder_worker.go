@@ -88,6 +88,10 @@ type EncoderPool struct {
 	resolver    SourcePathResolver
 	metrics     EncodeMetrics
 	log         *logger.Logger
+	// Phase 06 (workstream raw-jp / v0.2). nil-safe: when nil, the
+	// post-done webhook fire is skipped — the encoder's correctness
+	// is unaffected (catalog 1h TTL handles eventual consistency).
+	invalidator CatalogInvalidator
 
 	pollInterval time.Duration
 
@@ -96,6 +100,12 @@ type EncoderPool struct {
 
 // NewEncoderPool constructs an EncoderPool. workers >= 1, pollInterval
 // defaults to 2s.
+//
+// invalidator is nil-safe (Phase 06, workstream raw-jp / v0.2): pass
+// nil to disable the post-done catalog webhook entirely; production
+// passes a CatalogInvalidator built via NewCatalogInvalidator. The
+// nil case mirrors the no-op invalidator's behavior — the catalog's
+// 1h TTL preserves correctness, only the fast-path is skipped.
 func NewEncoderPool(
 	workers int,
 	jobRepo EncoderJobStore,
@@ -106,6 +116,7 @@ func NewEncoderPool(
 	resolver SourcePathResolver,
 	metrics EncodeMetrics,
 	log *logger.Logger,
+	invalidator CatalogInvalidator,
 ) *EncoderPool {
 	if workers < 1 {
 		workers = 1
@@ -120,6 +131,7 @@ func NewEncoderPool(
 		resolver:     resolver,
 		metrics:      metrics,
 		log:          log,
+		invalidator:  invalidator,
 		pollInterval: 2 * time.Second,
 	}
 }
@@ -346,6 +358,14 @@ func (p *EncoderPool) processJob(ctx context.Context, job *domain.Job) {
 			"size_bytes", result.SizeBytes,
 			"upload_bytes", bytes,
 		)
+	}
+
+	// Phase 06 (workstream raw-jp / v0.2). Best-effort cache-bust
+	// fire. nil-safe + empty-shikimori-safe; never fails the job.
+	// The invalidator owns its own per-request timeout (default 3s)
+	// and never returns an error to this caller.
+	if p.invalidator != nil && job.ShikimoriID != "" {
+		p.invalidator.Invalidate(ctx, job.ShikimoriID)
 	}
 }
 
