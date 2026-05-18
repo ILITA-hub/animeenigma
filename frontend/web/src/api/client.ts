@@ -2,6 +2,7 @@ import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosE
 import { hookAxiosDiagnostics } from '@/utils/diagnostics'
 import { getOrCreateAnonId } from '@/utils/anonId'
 import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/preference'
+import type { CreateJobPayload } from '@/types/library'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -487,6 +488,29 @@ export const adminApi = {
     apiClient.post<CollectionItem | { data: CollectionItem }>(`/admin/collections/${id}/items`, body),
   removeCollectionItem: (id: string, animeId: string) =>
     apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
+}
+
+// Phase 5 (LIB-09) — Raw Library admin API. All routes are admin-gated
+// at the gateway (/api/library/* prefix); the frontend trusts the
+// gateway's 401/403 to surface for non-admins. Responses are wrapped
+// in the standard httputil envelope ({success, data}) — consumers
+// unwrap via response.data.data.
+export const adminLibraryApi = {
+  search: (q: string, malId?: number, limit = 50) =>
+    apiClient.get('/library/search', {
+      params: { q, ...(typeof malId === 'number' ? { mal_id: malId } : {}), limit },
+    }),
+  listJobs: (status?: string, limit = 50) =>
+    apiClient.get('/library/jobs', {
+      params: { ...(status ? { status } : {}), limit },
+    }),
+  getJob: (id: string) => apiClient.get(`/library/jobs/${id}`),
+  createJob: (payload: CreateJobPayload) => apiClient.post('/library/jobs', payload),
+  cancelJob: (id: string) => apiClient.delete(`/library/jobs/${id}`),
+  linkJob: (id: string, shikimoriId: string) =>
+    apiClient.patch(`/library/jobs/${id}`, { shikimori_id: shikimoriId }),
+  retryJob: (id: string) => apiClient.post(`/library/jobs/${id}/retry`),
+  healthExtended: () => apiClient.get('/library/health/extended'),
 }
 
 export const reviewApi = {
