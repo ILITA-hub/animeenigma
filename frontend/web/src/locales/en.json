@@ -269,7 +269,51 @@
       "videojsError": "Video.js error (code {code}): {message}"
     },
     "skipIntro": "Skip Intro",
-    "skipOutro": "Skip Ending"
+    "skipOutro": "Skip Ending",
+    "adminLibrary": {
+      "title": "Raw Library",
+      "stats": {
+        "diskFree": "Disk free",
+        "activeTorrents": "Active torrents",
+        "activeJobs": "Active jobs"
+      },
+      "search": {
+        "title": "Search Nyaa + AnimeTosho",
+        "placeholder": "Anime title...",
+        "submit": "Search",
+        "empty": "Search Nyaa + AnimeTosho to populate the library.",
+        "queue": "Queue",
+        "providers": {
+          "nyaa": "Nyaa",
+          "animetosho": "AnimeTosho"
+        }
+      },
+      "jobs": {
+        "title": "Active jobs",
+        "empty": "No active jobs.",
+        "cancel": "Cancel",
+        "retry": "Retry",
+        "confirmCancel": "Cancel this in-flight job?",
+        "status": {
+          "queued": "Queued",
+          "downloading": "Downloading",
+          "encoding": "Encoding",
+          "uploading": "Uploading",
+          "done": "Done",
+          "failed": "Failed",
+          "cancelled": "Cancelled"
+        },
+        "failed": {
+          "title": "Failed jobs",
+          "errorText": "Error"
+        },
+        "pendingLink": {
+          "title": "Pending link",
+          "linkButton": "Link",
+          "searchPlaceholder": "Search anime..."
+        }
+      }
+    }
   },
   "search": {
     "placeholder": "Search: title or genre",

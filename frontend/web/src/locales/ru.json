@@ -269,7 +269,51 @@
       "videojsError": "Ошибка Video.js (код {code}): {message}"
     },
     "skipIntro": "Пропустить опенинг",
-    "skipOutro": "Пропустить эндинг"
+    "skipOutro": "Пропустить эндинг",
+    "adminLibrary": {
+      "title": "Сырая библиотека",
+      "stats": {
+        "diskFree": "Свободно на диске",
+        "activeTorrents": "Активные торренты",
+        "activeJobs": "Активные задания"
+      },
+      "search": {
+        "title": "Поиск Nyaa + AnimeTosho",
+        "placeholder": "Название аниме...",
+        "submit": "Найти",
+        "empty": "Найдите аниме в Nyaa + AnimeTosho, чтобы пополнить библиотеку.",
+        "queue": "В очередь",
+        "providers": {
+          "nyaa": "Nyaa",
+          "animetosho": "AnimeTosho"
+        }
+      },
+      "jobs": {
+        "title": "Активные задания",
+        "empty": "Нет активных заданий.",
+        "cancel": "Отменить",
+        "retry": "Повторить",
+        "confirmCancel": "Отменить выполняющееся задание?",
+        "status": {
+          "queued": "В очереди",
+          "downloading": "Скачивание",
+          "encoding": "Кодирование",
+          "uploading": "Загрузка",
+          "done": "Готово",
+          "failed": "Ошибка",
+          "cancelled": "Отменено"
+        },
+        "failed": {
+          "title": "Неудачные задания",
+          "errorText": "Ошибка"
+        },
+        "pendingLink": {
+          "title": "Ожидают привязки",
+          "linkButton": "Привязать",
+          "searchPlaceholder": "Поиск аниме..."
+        }
+      }
+    }
   },
   "search": {
     "placeholder": "Поиск: название или жанр",

@@ -269,7 +269,51 @@
       "videojsError": "Video.jsエラー (コード {code}): {message}"
     },
     "skipIntro": "オープニングをスキップ",
-    "skipOutro": "エンディングをスキップ"
+    "skipOutro": "エンディングをスキップ",
+    "adminLibrary": {
+      "title": "生ライブラリ",
+      "stats": {
+        "diskFree": "ディスク空き容量",
+        "activeTorrents": "アクティブなトレント",
+        "activeJobs": "アクティブなジョブ"
+      },
+      "search": {
+        "title": "Nyaa + AnimeTosho 検索",
+        "placeholder": "アニメタイトル...",
+        "submit": "検索",
+        "empty": "Nyaa と AnimeTosho を検索してライブラリに追加してください。",
+        "queue": "キュー追加",
+        "providers": {
+          "nyaa": "Nyaa",
+          "animetosho": "AnimeTosho"
+        }
+      },
+      "jobs": {
+        "title": "アクティブなジョブ",
+        "empty": "アクティブなジョブはありません。",
+        "cancel": "キャンセル",
+        "retry": "再試行",
+        "confirmCancel": "実行中のジョブをキャンセルしますか?",
+        "status": {
+          "queued": "待機中",
+          "downloading": "ダウンロード中",
+          "encoding": "エンコード中",
+          "uploading": "アップロード中",
+          "done": "完了",
+          "failed": "失敗",
+          "cancelled": "キャンセル済み"
+        },
+        "failed": {
+          "title": "失敗したジョブ",
+          "errorText": "エラー"
+        },
+        "pendingLink": {
+          "title": "リンク待ち",
+          "linkButton": "リンク",
+          "searchPlaceholder": "アニメを検索..."
+        }
+      }
+    }
   },
   "search": {
     "placeholder": "検索: タイトルまたはジャンル",
