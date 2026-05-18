@@ -384,6 +384,19 @@
               >
                 18+
               </button>
+              <!-- Workstream raw-jp / Phase 04 — RAW JP language pill behind
+                   VITE_RAW_PROVIDER_ENABLED flag. -->
+              <button
+                v-if="rawProviderEnabled"
+                @click="switchLanguage('raw')"
+                :aria-pressed="videoLanguage === 'raw'"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+                :class="videoLanguage === 'raw'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/50 hover:text-white/70'"
+              >
+                {{ $t('player.raw.tab') }}
+              </button>
             </ButtonGroup>
 
             <!-- Provider sub-tabs -->
@@ -460,6 +473,20 @@
                   : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
               >
                 Hanime
+              </button>
+            </template>
+            <!-- Workstream raw-jp / Phase 04 — single-chip group for v0.1.
+                 v0.2's hybrid resolver adds 'minio' here. -->
+            <template v-else-if="videoLanguage === 'raw' && rawProviderEnabled">
+              <button
+                @click="onUserPickedProvider('raw')"
+                :aria-pressed="videoProvider === 'raw'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'raw'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                AllAnime
               </button>
             </template>
           </div>
@@ -552,6 +579,12 @@
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
               :initial-episode="resumeStartEpisode"
+            />
+            <!-- Workstream raw-jp / Phase 04 — RawPlayer mounts behind the
+                 same VITE_RAW_PROVIDER_ENABLED flag that gates the chip. -->
+            <RawPlayer
+              v-else-if="videoProvider === 'raw' && rawProviderEnabled"
+              :anime-id="anime.id"
             />
           </template>
 
@@ -1046,6 +1079,9 @@ const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/An
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
 // Phase 16 — unified English-source player atop the scraper orchestrator (replaces HiAnime + Consumet for non-debug users).
 const EnglishPlayer = defineAsyncComponent(() => import('@/components/player/EnglishPlayer.vue'))
+// Workstream raw-jp, Phase 04 — lazy-load RawPlayer behind a Vite flag.
+const RawPlayer = defineAsyncComponent(() => import('@/components/player/RawPlayer.vue'))
+const rawProviderEnabled = import.meta.env.VITE_RAW_PROVIDER_ENABLED === 'true'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
@@ -1162,14 +1198,15 @@ const isHidden = ref(false)
 const showShikimoriEdit = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
-const videoLanguage = ref<'ru' | 'en' | '18+'>(
-  (localStorage.getItem('preferred_video_language') as 'ru' | 'en' | '18+') || 'ru'
+const videoLanguage = ref<'ru' | 'en' | '18+' | 'raw'>(
+  (localStorage.getItem('preferred_video_language') as 'ru' | 'en' | '18+' | 'raw') || 'ru'
 )
 // Phase 16 — 'english' joins the union as the unified English-source tab.
 // Legacy 'hianime' / 'consumet' stay in the type so the ?legacy=1 debug
 // tabs continue to compile until Phase 20 cutover.
-const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime' | 'english'>(
-  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime' | 'english') || 'kodik'
+// Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
+const videoProvider = ref<'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime' | 'english' | 'raw'>(
+  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'hanime' | 'english' | 'raw') || 'kodik'
 )
 
 // Last-watched episode. For authenticated users this comes from server-side
@@ -1338,17 +1375,22 @@ const playerSwitchTracker = useOverrideTracker({
   // is not part of the tracked PlayerName set; map it to 'kodik' for the
   // bucket label so the type compiles. (No override fires for hanime anyway —
   // onUserPickedProvider is typed to exclude it.)
-  player: videoProvider.value === 'hanime' ? 'kodik' : videoProvider.value,
+  // Workstream raw-jp / Phase 04 — 'raw' is also outside the tracked
+  // PlayerName set; map to 'kodik' for the bucket label like hanime.
+  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw' ? 'kodik' : videoProvider.value,
   resolvedCombo,
   currentEpisode: currentEpisodeForTracker,
 })
 
-function onUserPickedProvider(newProvider: 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'english') {
+function onUserPickedProvider(newProvider: 'kodik' | 'animelib' | 'hianime' | 'consumet' | 'english' | 'raw') {
   // Only fire override if the user is genuinely SWITCHING. The composable's
   // first-per-(load_session_id, dimension) lock would also catch repeats, but
   // an explicit guard keeps E2E timing predictable.
   if (newProvider !== videoProvider.value) {
-    playerSwitchTracker.recordPickerEvent('player', { player: newProvider })
+    // Workstream raw-jp / Phase 04 — 'raw' is outside the tracked
+    // PlayerName set; map to 'kodik' for the picker event like hanime.
+    const trackedProvider = newProvider === 'raw' ? 'kodik' : newProvider
+    playerSwitchTracker.recordPickerEvent('player', { player: trackedProvider })
   }
   videoProvider.value = newProvider
 }
@@ -1942,7 +1984,7 @@ const retry = () => {
 }
 
 // Language / provider switching
-const switchLanguage = (lang: 'ru' | 'en' | '18+') => {
+const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
   videoLanguage.value = lang
   // Auto-select first provider in the group
   if (lang === 'ru') {
@@ -1955,6 +1997,12 @@ const switchLanguage = (lang: 'ru' | 'en' | '18+') => {
     videoProvider.value = savedEn || 'english'
   } else if (lang === '18+') {
     videoProvider.value = 'hanime'
+  } else if (lang === 'raw') {
+    // Workstream raw-jp, Phase 04 — single-option group for v0.1; the
+    // preferred_raw_provider key exists for v0.2's hybrid resolver
+    // (where 'minio' joins 'raw' as a viable choice).
+    const savedRaw = localStorage.getItem('preferred_raw_provider') as 'raw' | null
+    videoProvider.value = savedRaw || 'raw'
   }
 }
 
@@ -1966,6 +2014,8 @@ watch(videoProvider, (newProvider) => {
   } else if (videoLanguage.value === 'en') {
     // Phase 16: include 'english' alongside legacy 'hianime'/'consumet' in the saved values.
     localStorage.setItem('preferred_en_provider', newProvider)
+  } else if (videoLanguage.value === 'raw') {
+    localStorage.setItem('preferred_raw_provider', newProvider)
   }
 })
 
