@@ -79,10 +79,15 @@ func (c *Client) probeDomain(ctx context.Context, d string) bool {
 
 // endpointURL builds the GraphQL endpoint for a domain. AllAnime serves both
 // the static site and the API from the same `api.` host with a `/api` path.
-// Variables and persisted-query extensions go in the query string for GET
-// requests (which AllAnime supports via Apollo's GET protocol).
-func (c *Client) endpointURL(d string, variables, extensions string) string {
+// Query, variables, and persisted-query extensions go in the query string
+// for GET requests (Apollo's GET protocol + APQ auto-registration). Sending
+// `query` alongside `extensions` makes Apollo register the operation under
+// our SHA on cache miss, so we never need to chase server-side SHA rotations.
+func (c *Client) endpointURL(d, gqlQuery, variables, extensions string) string {
 	v := url.Values{}
+	if gqlQuery != "" {
+		v.Set("query", gqlQuery)
+	}
 	v.Set("variables", variables)
 	v.Set("extensions", extensions)
 	return fmt.Sprintf("https://api.%s/api?%s", d, v.Encode())

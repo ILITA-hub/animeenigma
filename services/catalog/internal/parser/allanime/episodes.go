@@ -29,21 +29,19 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 		Data struct {
 			Shows struct {
 				Edges []struct {
-					ID                string `json:"_id"`
-					Name              string `json:"name"`
-					EnglishName       string `json:"englishName"`
-					NativeName        string `json:"nativeName"`
-					ThumbnailURL      string `json:"thumbnail"`
-					AvailableEpisodes struct {
-						Raw int `json:"raw"`
-					} `json:"availableEpisodes"`
+					ID                string         `json:"_id"`
+					Name              string         `json:"name"`
+					EnglishName       string         `json:"englishName"`
+					NativeName        string         `json:"nativeName"`
+					ThumbnailURL      string         `json:"thumbnail"`
+					AvailableEpisodes map[string]int `json:"availableEpisodes"`
 				} `json:"edges"`
 			} `json:"shows"`
 		} `json:"data"`
 		Errors []json.RawMessage `json:"errors"`
 	}
 
-	if err := c.doGraphQL(ctx, vars, ext, &resp); err != nil {
+	if err := c.doGraphQL(ctx, SearchQuery, vars, ext, &resp); err != nil {
 		return nil, err
 	}
 	if len(resp.Errors) > 0 {
@@ -64,7 +62,7 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 			Name:     name,
 			JName:    e.NativeName,
 			Poster:   e.ThumbnailURL,
-			Episodes: e.AvailableEpisodes.Raw,
+			Episodes: e.AvailableEpisodes["raw"],
 		})
 	}
 	return out, nil
@@ -87,7 +85,7 @@ func (c *Client) EpisodesByID(ctx context.Context, showID string) ([]Episode, er
 	var resp struct {
 		Data struct {
 			Show struct {
-				ID                  string `json:"_id"`
+				ID                      string `json:"_id"`
 				AvailableEpisodesDetail struct {
 					Raw []string `json:"raw"`
 				} `json:"availableEpisodesDetail"`
@@ -96,7 +94,7 @@ func (c *Client) EpisodesByID(ctx context.Context, showID string) ([]Episode, er
 		Errors []json.RawMessage `json:"errors"`
 	}
 
-	if err := c.doGraphQL(ctx, vars, ext, &resp); err != nil {
+	if err := c.doGraphQL(ctx, EpisodesQuery, vars, ext, &resp); err != nil {
 		return nil, err
 	}
 	if len(resp.Errors) > 0 {
@@ -169,7 +167,7 @@ func (c *Client) RawStream(ctx context.Context, episodeID string) (Stream, error
 		Errors []json.RawMessage `json:"errors"`
 	}
 
-	if err := c.doGraphQL(ctx, vars, ext, &resp); err != nil {
+	if err := c.doGraphQL(ctx, SourcesQuery, vars, ext, &resp); err != nil {
 		return Stream{}, err
 	}
 	if len(resp.Errors) > 0 {
@@ -210,16 +208,20 @@ func (c *Client) RawStream(ctx context.Context, episodeID string) (Stream, error
 	return Stream{}, fmt.Errorf("allanime: no playable source URL for episode %s", episodeID)
 }
 
-// doGraphQL POSTs/GETs a single persisted query against the active domain. On
-// transport failure it marks the domain failed and bubbles the error up so the
-// caller can decide whether to wrap as ServiceUnavailable.
-func (c *Client) doGraphQL(ctx context.Context, vars, ext string, out any) error {
+// doGraphQL GETs a single persisted query against the active domain. On
+// transport failure it marks the domain failed and bubbles the error up so
+// the caller can decide whether to wrap as ServiceUnavailable.
+//
+// The gqlQuery argument is the full GraphQL operation string; we always
+// send it alongside the persisted-query extension so Apollo can auto-
+// register the operation under the SHA on cache miss.
+func (c *Client) doGraphQL(ctx context.Context, gqlQuery, vars, ext string, out any) error {
 	domain, err := c.pickDomain(ctx)
 	if err != nil {
 		return err
 	}
 
-	endpoint := c.endpointURL(domain, vars, ext)
+	endpoint := c.endpointURL(domain, gqlQuery, vars, ext)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("allanime: build request: %w", err)

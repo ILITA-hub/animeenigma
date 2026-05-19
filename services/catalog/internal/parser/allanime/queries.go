@@ -1,31 +1,43 @@
 package allanime
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 )
 
-// Persisted-query SHA256 hashes used by the AllAnime web client. These are
-// MIRRORED in the Config struct so the operator can rotate them via env
-// without a code change. The constants below are NOT used at runtime;
-// they're documented here as a paper trail of the SHAs known to work as of
-// 2026-05.
+// GraphQL operations sent to AllAnime's Apollo server.
 //
-// These hashes are the long-standing values used by upstream reference
-// projects (pystardust/ani-cli, justfoolingaround/animdl) — they have been
-// stable for >18 months because Apollo persisted-query manifests rarely
-// invalidate. If AllAnime breaks them, swap via env (`ALLANIME_QUERY_*_SHA`).
+// AllAnime's edge is Cloudflare-fronted and requires the `extensions`
+// Apollo persisted-query parameter to be present on every request (plain
+// GraphQL queries get a JS challenge). We send the query string AND the
+// extensions block — Apollo's Automatic Persisted Queries (APQ) flow lets
+// the server cache new queries under the provided SHA on first hit, so we
+// never have to chase SHA rotations: as long as we control the query
+// strings, the SHAs derive from them.
 const (
-	// SHASearchFallback — search shows by title with translationType filter.
-	SHASearchFallback = "06327bc10dd682e1ee7e07b6db9c16e9ad2fd56c1b769e47513128cd5c9fc77a"
-	// SHAEpisodesFallback — list episodes for a show by translationType.
-	SHAEpisodesFallback = "0ac09728ee9d556967c1a60bbcf55a9f58b4112006d09a258356aeafe1c33889"
-	// SHASourcesFallback — resolve playable source URLs for an episode.
-	SHASourcesFallback = "0ac09728ee9d556967c1a60bbcf55a9f58b4112006d09a258356aeafe1c33889"
+	SearchQuery   = `query SearchShows($search: SearchInput, $limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) { shows(search: $search, limit: $limit, page: $page, translationType: $translationType, countryOrigin: $countryOrigin) { edges { _id name englishName nativeName thumbnail availableEpisodes } } }`
+	EpisodesQuery = `query EpisodesByID($_id: String!) { show(_id: $_id) { _id availableEpisodesDetail } }`
+	SourcesQuery  = `query SourceUrls($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) { episode(showId: $showId, translationType: $translationType, episodeString: $episodeString) { episodeString sourceUrls } }`
 )
 
-// effectiveSearchSHA returns the configured SHA, falling back to the known
-// good value if the env is unset.
+// Computed SHA256 hashes of the operations above. These are the Apollo
+// persisted-query cache keys. If the operator overrides via env they win;
+// otherwise we derive deterministically from the query string itself.
+var (
+	SHASearchFallback   = computeSHA(SearchQuery)
+	SHAEpisodesFallback = computeSHA(EpisodesQuery)
+	SHASourcesFallback  = computeSHA(SourcesQuery)
+)
+
+func computeSHA(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
+}
+
+// effectiveSearchSHA returns the configured SHA, falling back to the
+// SHA derived from the in-code query string.
 func (c *Client) effectiveSearchSHA() string {
 	if c.cfg.QuerySearchSHA != "" {
 		return c.cfg.QuerySearchSHA
@@ -64,31 +76,26 @@ func buildExtensions(sha string) string {
 }
 
 // buildSearchVariables encodes the `variables` payload for a shows search.
-//   - search:  free-text query terms.
-//   - translationType: "raw" — we only want original-audio sources.
+// SearchInput accepts only query/allowAdult/allowUnknown/isManga.
+// translationType and countryOrigin go at the outer level.
 func buildSearchVariables(query string) (string, error) {
-	type searchVars struct {
-		Query           string `json:"query"`
-		AllowAdult      bool   `json:"allowAdult"`
-		AllowUnknown    bool   `json:"allowUnknown"`
-		IsManga         bool   `json:"isManga"`
-		TranslationType string `json:"translationType"`
-		CountryOrigin   string `json:"countryOrigin"`
+	type searchInput struct {
+		Query        string `json:"query"`
+		AllowAdult   bool   `json:"allowAdult"`
+		AllowUnknown bool   `json:"allowUnknown"`
 	}
-	type limitVars struct {
-		Search      searchVars `json:"search"`
-		Limit       int        `json:"limit"`
-		Page        int        `json:"page"`
-		TranslationType string `json:"translationType"`
-		CountryOrigin   string `json:"countryOrigin"`
+	type vars struct {
+		Search          searchInput `json:"search"`
+		Limit           int         `json:"limit"`
+		Page            int         `json:"page"`
+		TranslationType string      `json:"translationType"`
+		CountryOrigin   string      `json:"countryOrigin"`
 	}
-	v := limitVars{
-		Search: searchVars{
-			Query:           query,
-			AllowAdult:      false,
-			AllowUnknown:    false,
-			TranslationType: "raw",
-			CountryOrigin:   "ALL",
+	v := vars{
+		Search: searchInput{
+			Query:        query,
+			AllowAdult:   false,
+			AllowUnknown: false,
 		},
 		Limit:           10,
 		Page:            1,
