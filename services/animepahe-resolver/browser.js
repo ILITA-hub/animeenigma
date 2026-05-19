@@ -156,8 +156,14 @@ async function refreshChallenge() {
 /**
  * Test hook (Node test-runner via node:test). Lets server.test.js + upstream.test.js
  * inject a fake browser/page object without spinning up a real Chromium.
+ *
+ * Guard: throws in production to prevent accidental nullification of the warm page
+ * singletons, which would cause every subsequent request to fail with browser_down.
  */
 function _setTestDoubles(doubles) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('_setTestDoubles must not be called in production');
+  }
   if (!doubles) {
     browser = null;
     page = null;
