@@ -215,15 +215,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// parseServerPriority splits a CSV priority spec into a normalized slice.
-// Whitespace is trimmed, case is lowered, and empty entries (from leading
-// commas / consecutive commas / trailing commas) are dropped. Empty input
-// returns the canonical default ["streamhg","earnvids","vibeplayer"].
-//
-// Phase 21 SCRAPER-HEAL-03. Validation against the embeds registry's
-// known extractor names happens in services/scraper/cmd/scraper-api/main.go
-// — config.Load stays registry-agnostic so unit tests don't need to wire
-// the full extractor set.
 // parseDegradedProviders splits a CSV list of provider names into a set.
 // Whitespace is trimmed, names are lowercased, empties dropped. Empty input
 // returns an empty set (no providers degraded — the production default).
@@ -242,6 +233,15 @@ func parseDegradedProviders(csv string) DegradedProvidersConfig {
 	return DegradedProvidersConfig{Names: m}
 }
 
+// parseServerPriority splits a CSV priority spec into a normalized slice.
+// Whitespace is trimmed, case is lowered, and empty entries (from leading
+// commas / consecutive commas / trailing commas) are dropped. Empty input
+// returns the canonical default ["streamhg","earnvids","vibeplayer"].
+//
+// Phase 21 SCRAPER-HEAL-03. Validation against the embeds registry's
+// known extractor names happens in services/scraper/cmd/scraper-api/main.go
+// — config.Load stays registry-agnostic so unit tests don't need to wire
+// the full extractor set.
 func parseServerPriority(csv string) []string {
 	if strings.TrimSpace(csv) == "" {
 		return []string{"streamhg", "earnvids", "vibeplayer"}
