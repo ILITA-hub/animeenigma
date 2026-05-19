@@ -42,7 +42,7 @@ func main() {
 
 	// Initialize handlers
 	roomHandler := handler.NewRoomHandler(roomService, log)
-	wsHandler := handler.NewWebSocketHandler(wsService, log)
+	wsHandler := handler.NewWebSocketHandler(wsService, log, cfg.AllowedOrigins)
 	leaderboardHandler := handler.NewLeaderboardHandler(leaderboardService, log)
 
 	// Initialize metrics collector

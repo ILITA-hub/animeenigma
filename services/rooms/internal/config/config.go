@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -11,10 +12,11 @@ import (
 )
 
 type Config struct {
-	Server ServerConfig
-	Redis  cache.Config
-	JWT    authz.JWTConfig
-	Game   GameConfig
+	Server         ServerConfig
+	Redis          cache.Config
+	JWT            authz.JWTConfig
+	Game           GameConfig
+	AllowedOrigins []string
 }
 
 type ServerConfig struct {
@@ -35,6 +37,15 @@ type GameConfig struct {
 func Load() (*Config, error) {
 	if getEnv("JWT_SECRET", "") == "" {
 		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
+	}
+
+	rawOrigins := getEnv("ALLOWED_WS_ORIGINS", "")
+	var origins []string
+	for _, o := range strings.Split(rawOrigins, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			origins = append(origins, o)
+		}
 	}
 
 	return &Config{
@@ -59,6 +70,7 @@ func Load() (*Config, error) {
 			RoundDuration:     getEnvDuration("GAME_ROUND_DURATION", 30*time.Second),
 			TotalRounds:       getEnvInt("GAME_TOTAL_ROUNDS", 10),
 		},
+		AllowedOrigins: origins,
 	}, nil
 }
 
