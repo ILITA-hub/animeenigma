@@ -38,3 +38,49 @@ func TestConfig_LoadScraperServiceDefault(t *testing.T) {
 		t.Errorf("cfg.Services.ScraperService = %q; want %q", got, want)
 	}
 }
+
+// TestDevMode_OnlyAllowedInDevEnvironments asserts that DevMode is only
+// permitted when ENVIRONMENT is in the known dev allow-list. The previous
+// deny-list-only guard (production/prod) let empty strings, misspellings,
+// and staging silently slip through — DevMode bypasses admin auth, so this
+// must fail closed. See audit Wave 1 (S9).
+func TestDevMode_OnlyAllowedInDevEnvironments(t *testing.T) {
+	cases := []struct {
+		env     string
+		devReq  bool
+		devWant bool
+	}{
+		{"production", true, false},
+		{"prod", true, false},
+		{"staging", true, false}, // previously slipped through — now denied
+		{"", true, false},        // previously slipped through — now denied
+		{"PRD", true, false},     // misspelling — now denied
+		{"development", true, true},
+		{"dev", true, true},
+		{"local", true, true},
+		{"test", true, true},
+		{"development", false, false}, // not requested → off
+	}
+	for _, c := range cases {
+		t.Run(c.env+"/"+boolStr(c.devReq), func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+			t.Setenv("ENVIRONMENT", c.env)
+			t.Setenv("DEV_MODE", boolStr(c.devReq))
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if cfg.DevMode != c.devWant {
+				t.Errorf("ENVIRONMENT=%q DEV_MODE=%v → DevMode=%v, want %v",
+					c.env, c.devReq, cfg.DevMode, c.devWant)
+			}
+		})
+	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

@@ -111,9 +111,18 @@ func Load() (*Config, error) {
 		SystemBannerMessage: getEnv("SYSTEM_BANNER_MESSAGE", ""),
 	}
 
-	// Production safeguard: refuse to enable DevMode in production
-	if cfg.DevMode && (cfg.Environment == "production" || cfg.Environment == "prod") {
-		fmt.Fprintf(os.Stderr, "FATAL: DEV_MODE=true is forbidden when ENVIRONMENT=%s — forcing DevMode=false\n", cfg.Environment)
+	// DevMode is only permitted in known development environments. Any
+	// other ENVIRONMENT value (including the empty string) fails closed.
+	// See audit Wave 1 (S9): the previous deny-list missed misspellings,
+	// staging, and the empty-string default.
+	devEnvs := map[string]bool{
+		"development": true,
+		"dev":         true,
+		"local":       true,
+		"test":        true,
+	}
+	if cfg.DevMode && !devEnvs[cfg.Environment] {
+		fmt.Fprintf(os.Stderr, "FATAL: DEV_MODE=true is forbidden when ENVIRONMENT=%q — forcing DevMode=false\n", cfg.Environment)
 		cfg.DevMode = false
 	}
 
