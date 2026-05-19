@@ -109,56 +109,80 @@ var qualityLabelRegex = regexp.MustCompile(`label\s*:\s*\\?['"]?(\d{3,4}p)`)
 // (e.g. `\'`) are honored — Dean-Edwards emits escaped single quotes in its
 // packed string argument.
 func extractPacker(body string) (string, bool) {
-	loc := packerStartRegex.FindStringIndex(body)
-	if loc == nil {
+	all := extractAllPackers(body)
+	if len(all) == 0 {
 		return "", false
 	}
-	// Move past the leading `eval(` — we want the IIFE itself, starting at
-	// `function(...)`.
+	return all[0], true
+}
+
+// extractAllPackers returns every Dean-Edwards-packed IIFE found in `body` in
+// document order. Modern Kwik embed pages contain TWO packer blocks: the
+// first wraps a $cookie/localStorage helper, the second wraps the actual
+// `const source='...m3u8...'` Plyr/HLS initializer. Returning just the first
+// (the historical extractPacker behavior) means the regex scan finds no m3u8
+// URL and the extractor fails with "kwik: no m3u8 in unpacked source".
+// Phase 27 SCRAPER-HEAL-32 gate (Plan 27-04) surfaced this on Frieren
+// 2026-05-19; see deviation note in 27-04 SUMMARY.md.
+//
+// The caller (Extract) must try each returned packer until one yields an
+// m3u8 URL — that preserves the "first match wins" semantics for older
+// single-packer pages while also handling the new dual-packer layout.
+func extractAllPackers(body string) []string {
+	locs := packerStartRegex.FindAllStringIndex(body, -1)
+	if len(locs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(locs))
 	const evalPrefix = "eval("
-	iffeStart := loc[0] + len(evalPrefix)
+	for _, loc := range locs {
+		iffeStart := loc[0] + len(evalPrefix)
 
-	// Stage 1: balance the parameter-list `(p,a,c,k,e,d)`. Skip whitespace
-	// to find the opening `(`, then walk to its match.
-	i := iffeStart
-	for i < len(body) && body[i] != '(' {
-		i++
-	}
-	if i >= len(body) {
-		return "", false
-	}
-	end, ok := balanceUntil(body, i, '(', ')')
-	if !ok {
-		return "", false
-	}
+		// Stage 1: balance the parameter-list `(p,a,c,k,e,d)`. Skip
+		// whitespace to find the opening `(`, then walk to its match.
+		i := iffeStart
+		for i < len(body) && body[i] != '(' {
+			i++
+		}
+		if i >= len(body) {
+			continue
+		}
+		end, ok := balanceUntil(body, i, '(', ')')
+		if !ok {
+			continue
+		}
 
-	// Stage 2: balance the function body `{...}`. Skip whitespace to find `{`.
-	j := end + 1
-	for j < len(body) && (body[j] == ' ' || body[j] == '\t' || body[j] == '\n' || body[j] == '\r') {
-		j++
-	}
-	if j >= len(body) || body[j] != '{' {
-		return "", false
-	}
-	end, ok = balanceUntil(body, j, '{', '}')
-	if !ok {
-		return "", false
-	}
+		// Stage 2: balance the function body `{...}`. Skip whitespace to
+		// find `{`.
+		j := end + 1
+		for j < len(body) && (body[j] == ' ' || body[j] == '\t' || body[j] == '\n' || body[j] == '\r') {
+			j++
+		}
+		if j >= len(body) || body[j] != '{' {
+			continue
+		}
+		end, ok = balanceUntil(body, j, '{', '}')
+		if !ok {
+			continue
+		}
 
-	// Stage 3: balance the call-args `(...)`. Skip whitespace to find `(`.
-	j = end + 1
-	for j < len(body) && (body[j] == ' ' || body[j] == '\t' || body[j] == '\n' || body[j] == '\r') {
-		j++
-	}
-	if j >= len(body) || body[j] != '(' {
-		return "", false
-	}
-	end, ok = balanceUntil(body, j, '(', ')')
-	if !ok {
-		return "", false
-	}
+		// Stage 3: balance the call-args `(...)`. Skip whitespace to find
+		// `(`.
+		j = end + 1
+		for j < len(body) && (body[j] == ' ' || body[j] == '\t' || body[j] == '\n' || body[j] == '\r') {
+			j++
+		}
+		if j >= len(body) || body[j] != '(' {
+			continue
+		}
+		end, ok = balanceUntil(body, j, '(', ')')
+		if !ok {
+			continue
+		}
 
-	return body[iffeStart : end+1], true
+		out = append(out, body[iffeStart:end+1])
+	}
+	return out
 }
 
 // balanceUntil walks `body` from index `start` (which MUST point at `open`)
@@ -349,26 +373,44 @@ func (k *KwikExtractor) Extract(ctx context.Context, embedURL string, headers ht
 	// Real Kwik HTML rarely contains comments, but our golden fixture does.
 	stripped := htmlCommentRegex.ReplaceAll(body, []byte(""))
 
-	iife, ok := extractPacker(string(stripped))
-	if !ok {
+	// Phase 27 SCRAPER-HEAL-32 (Plan 27-04): Kwik now emits TWO packer
+	// blocks per embed page (cookie helper + Plyr/HLS initializer); the
+	// m3u8 URL only appears in the second one. Iterate all packers and
+	// keep the first whose unpacked output yields an m3u8 match.
+	packers := extractAllPackers(string(stripped))
+	if len(packers) == 0 {
 		return nil, domain.WrapExtractFailed(
 			errors.New("packed-JS scanner found no eval(function(p,a,c,k,e,d){...}) block"),
 			"kwik: no eval() packer",
 		)
 	}
 
-	// Wrap with leading + trailing parens so RunString returns the IIFE's
-	// return value (the unpacked source) rather than executing it as a
-	// statement and discarding the value.
-	wrapper := "(" + iife + ")"
-
-	unpacked, err := k.runGoja(ctx, wrapper)
-	if err != nil {
-		return nil, domain.WrapExtractFailed(err, "kwik: goja runtime")
+	var (
+		unpacked   string
+		matches    [][]string
+		lastGojaErr error
+	)
+	for _, iife := range packers {
+		// Wrap with leading + trailing parens so RunString returns the
+		// IIFE's return value (the unpacked source) rather than executing
+		// it as a statement and discarding the value.
+		wrapper := "(" + iife + ")"
+		u, err := k.runGoja(ctx, wrapper)
+		if err != nil {
+			lastGojaErr = err
+			continue
+		}
+		m := sourceURLRegex.FindAllStringSubmatch(u, -1)
+		if len(m) > 0 {
+			unpacked = u
+			matches = m
+			break
+		}
 	}
-
-	matches := sourceURLRegex.FindAllStringSubmatch(unpacked, -1)
 	if len(matches) == 0 {
+		if lastGojaErr != nil && unpacked == "" {
+			return nil, domain.WrapExtractFailed(lastGojaErr, "kwik: goja runtime")
+		}
 		return nil, domain.WrapExtractFailed(
 			errors.New("no m3u8 URL captured from unpacked source"),
 			"kwik: no m3u8 in unpacked source",
