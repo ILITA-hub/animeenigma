@@ -253,7 +253,7 @@ make redeploy-scraper
 2. `ad_decoy` → Pattern 6 fix paths.
 3. `zero_match` → Pattern 7 + Auto-Edit Selector Workflow. If preconditions pass: `auto_edit_selectors`. If upstream is dead / platform-rebranded / FingerprintJS-gated: `escalate` (recommend `SCRAPER_DEGRADED_PROVIDERS` env update, do NOT touch code).
 3a. `cdn_unreachable` → Pattern 7 fix paths (packed-JS / allowlist). Tier: `button_fix` (outside auto-edit scope).
-4. `signed_url_expired` → find the stream-cache TTL constant in `services/scraper/internal/providers/<name>/client.go` (search for `cacheStream` / `computeStreamTTL`) and shorten if the upstream signed-URL TTL is now shorter than ours. Tier: `button_fix`.
+4. `signed_url_expired` → find the stream-cache TTL helper in `services/scraper/internal/providers/<name>/cache.go` (search for `computeStreamTTL`) and shorten if the upstream signed-URL TTL is now shorter than ours. Tier: `button_fix`.
 5. `status_403` / `403_upstream` on a CDN we previously accepted → check `libs/videoutils/proxy.go` `HLSProxyAllowedDomains` first; if the host is allowlisted, the upstream itself is the issue → escalate.
 6. If 2+ providers fail simultaneously → likely network-level (DNS, egress IP-blocked, WARP misconfigured) → escalate, do not redeploy.
 **Do NOT** restart the scraper service as a first response to playability alerts — these are content/structure regressions, not crashes. Restarting masks the real issue.
