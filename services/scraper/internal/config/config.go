@@ -23,6 +23,7 @@ type Config struct {
 	AnimePahe          AnimePaheConfig
 	Gogoanime          GogoanimeConfig
 	AnimeKai           AnimeKaiConfig
+	AllAnime           AllAnimeConfig
 	DegradedProviders  DegradedProvidersConfig
 }
 
@@ -119,6 +120,16 @@ type AnimeKaiConfig struct {
 	BaseURL string
 }
 
+// AllAnimeConfig is the per-provider override surface for allanime.Provider
+// (Phase 26 — SCRAPER-HEAL-25). Unlike AnimeKai, AllAnime ships always-on
+// — there is no SCRAPER_ALLANIME_ENABLED gate. Operator can disable via
+// SCRAPER_DEGRADED_PROVIDERS=allanime if the upstream goes hard down.
+// BaseURL defaults to https://api.allanime.day; override via
+// SCRAPER_ALLANIME_BASE_URL when the upstream rotates hostnames.
+type AllAnimeConfig struct {
+	BaseURL string
+}
+
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 //
@@ -153,6 +164,9 @@ func Load() (*Config, error) {
 		AnimeKai: AnimeKaiConfig{
 			Enabled: getEnvBool("SCRAPER_ANIMEKAI_ENABLED", false),
 			BaseURL: getEnv("SCRAPER_ANIMEKAI_BASE_URL", "https://anikai.to"),
+		},
+		AllAnime: AllAnimeConfig{
+			BaseURL: getEnv("SCRAPER_ALLANIME_BASE_URL", "https://api.allanime.day"),
 		},
 		DegradedProviders: parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", "")),
 	}

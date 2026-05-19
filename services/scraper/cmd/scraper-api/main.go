@@ -17,6 +17,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/embeds"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
@@ -203,6 +204,34 @@ func main() {
 		log.Infow("registered provider", "name", animePaheProvider.Name())
 	}
 
+	// Phase 26 (SCRAPER-HEAL-25) — AllAnime as the THIRD live EN provider.
+	// Lifted from services/catalog/internal/parser/allanime/ (copy-with-
+	// adaptation per CONTEXT.md D1). Ships ALWAYS-ON — no SCRAPER_ALLANIME_
+	// ENABLED gate. Operator can disable via SCRAPER_DEGRADED_PROVIDERS=
+	// allanime if upstream goes hard down. Failover chain order:
+	// gogoanime → animepahe → allanime → [animekai gated].
+	allAnimeBaseHTTP := domain.NewBaseHTTPClient(log,
+		domain.WithPerHostRPS("api.allanime.day", 1.0, 2),
+		domain.WithPerHostRPS("allmanga.to", 1.0, 2),
+	)
+	allAnimeProvider, err := allanime.New(allanime.Deps{
+		BaseURL: cfg.AllAnime.BaseURL,
+		HTTP:    allAnimeBaseHTTP,
+		Cache:   redisCache,
+		Log:     log,
+	})
+	if err != nil {
+		log.Fatalw("failed to construct AllAnime provider", "error", err)
+	}
+	if cfg.DegradedProviders.IsDegraded(allAnimeProvider.Name()) {
+		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
+			"name", allAnimeProvider.Name(),
+			"reason", "global kill-switch")
+	} else {
+		orchestrator.Register(allAnimeProvider)
+		log.Infow("registered provider", "name", allAnimeProvider.Name())
+	}
+
 	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
 	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
 	// ErrProviderDown so failover lands on the previous two providers.
@@ -329,7 +358,7 @@ func main() {
 	// Register()-ed, so the expected count subtracts those. A future
 	// maintainer dropping any Register() call surfaces the regression at boot
 	// via this fatal.
-	candidateProviders := []string{"gogoanime", "animepahe"}
+	candidateProviders := []string{"gogoanime", "animepahe", "allanime"}
 	if cfg.AnimeKai.Enabled {
 		candidateProviders = append(candidateProviders, "animekai")
 	}
