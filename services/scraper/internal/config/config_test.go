@@ -125,6 +125,50 @@ func TestConfig_Load_InvalidAnimePaheURL(t *testing.T) {
 	}
 }
 
+// TestConfig_AnimepaheResolverURL — Phase 27 SCRAPER-HEAL-30. Three sub-tests
+// pin the env-var contract for the new resolver-sidecar binding.
+//
+//	(a) default — unset env returns "http://animepahe-resolver:3000" (the
+//	    docker-compose service-name URL).
+//	(b) override — t.Setenv changes the value end-to-end.
+//	(c) invalid — malformed URLs fail Load() with an error message that
+//	    names the env var verbatim so operators can grep logs.
+func TestConfig_AnimepaheResolverURL(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		unsetEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.AnimePahe.ResolverURL != "http://animepahe-resolver:3000" {
+			t.Fatalf("default = %q; want http://animepahe-resolver:3000",
+				cfg.AnimePahe.ResolverURL)
+		}
+	})
+	t.Run("override", func(t *testing.T) {
+		setEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL", "http://custom:3000")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.AnimePahe.ResolverURL != "http://custom:3000" {
+			t.Fatalf("override = %q; want http://custom:3000",
+				cfg.AnimePahe.ResolverURL)
+		}
+	})
+	t.Run("invalid", func(t *testing.T) {
+		setEnv(t, "SCRAPER_ANIMEPAHE_RESOLVER_URL", "notaurl")
+		_, err := Load()
+		if err == nil {
+			t.Fatal("Load: nil error; want non-nil for malformed SCRAPER_ANIMEPAHE_RESOLVER_URL")
+		}
+		if !strings.Contains(err.Error(), "SCRAPER_ANIMEPAHE_RESOLVER_URL") {
+			t.Fatalf("error %q must mention SCRAPER_ANIMEPAHE_RESOLVER_URL so operators can grep",
+				err.Error())
+		}
+	})
+}
+
 // TestLoad_GogoanimeConfig_DefaultsAndOverride pins Phase 18's new env-var
 // surface — Gogoanime.BaseURL reads SCRAPER_GOGOANIME_BASE_URL; defaults to
 // https://anitaku.to; rejects malformed URLs at boot with an error message

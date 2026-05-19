@@ -91,9 +91,9 @@ type RedisConfig struct {
 // (DDoS-Guard, browser-fingerprint, etc.). Defaults to the docker-compose
 // service name `http://animepahe-resolver:3000`. Override via
 // SCRAPER_ANIMEPAHE_RESOLVER_URL when running on a non-default port or
-// rotating the sidecar in place. Pre-Phase-27 field `BaseURL` (paired with
-// env var `ANIMEPAHE_BASE_URL`) is gone — there is no fallback to upstream
-// animepahe.* hosts.
+// rotating the sidecar in place. The pre-Phase-27 BaseURL field (paired
+// with the old upstream-URL env binding) has been removed entirely — there
+// is no fallback to upstream animepahe.* hosts.
 type AnimePaheConfig struct {
 	ResolverURL string
 }
@@ -139,11 +139,11 @@ type AllAnimeConfig struct {
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 //
-// REVIEW.md WR-05: MEGACLOUD_EXTRACTOR_URL and (Phase 16) ANIMEPAHE_BASE_URL
-// are validated at boot so an invalid value (e.g. missing scheme) is rejected
-// immediately rather than surfacing deep inside MegacloudClient.Extract or
-// animepahe.Provider.FindID on the first request. An empty URL is allowed
-// (main.go warns on it).
+// REVIEW.md WR-05: MEGACLOUD_EXTRACTOR_URL and (Phase 27)
+// SCRAPER_ANIMEPAHE_RESOLVER_URL are validated at boot so an invalid value
+// (e.g. missing scheme) is rejected immediately rather than surfacing deep
+// inside MegacloudClient.Extract or animepahe.Provider.FindID on the first
+// request. An empty URL is allowed (main.go warns on it).
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{

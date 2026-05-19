@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 // TestEpDTO_Unmarshal_GoldenFixture loads the on-disk goldie at
@@ -101,4 +104,102 @@ func TestMalSyncResponse_Unmarshal(t *testing.T) {
 		// identifier=42 (int) must round-trip through `any` cleanly.
 		_ = e.Identifier
 	}
+}
+
+// TestDTO_Frieren — Phase 27 D4. Loads the three fresh-from-resolver
+// goldens at testdata/animepahe/frieren-{search,release,play}.{json,html}
+// and asserts the DTO shapes still decode cleanly:
+//
+//   - frieren-search.json → searchResponse with ≥ 1 data[] entry, each
+//     carrying a non-empty session.
+//   - frieren-release.json → releaseResponse with ≥ 1 data[] entry, each
+//     carrying a non-empty session.
+//   - frieren-play.html → ≥ 1 `button[data-src=...kwik...]`.
+//
+// Subscripts to the larger A1/A2 contract: NO struct field changes in
+// dto.go were required when the parser migrated to the resolver transport.
+func TestDTO_Frieren(t *testing.T) {
+	t.Parallel()
+	base := filepath.Join("..", "..", "..", "testdata", "animepahe")
+
+	t.Run("search", func(t *testing.T) {
+		t.Parallel()
+		data, err := os.ReadFile(filepath.Join(base, "frieren-search.json"))
+		if err != nil {
+			t.Fatalf("read frieren-search.json: %v", err)
+		}
+		var sr searchResponse
+		if err := json.Unmarshal(data, &sr); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(sr.Data) == 0 {
+			t.Fatal("search data is empty")
+		}
+		for i, e := range sr.Data {
+			if e.Session == "" {
+				t.Errorf("search data[%d].session is empty", i)
+			}
+			if e.Title == "" {
+				t.Errorf("search data[%d].title is empty", i)
+			}
+		}
+		// Documents the D4 anchor: at least one entry titled with
+		// "Frieren". A blanket-rename of the field by upstream would
+		// cause this assertion to fail.
+		sawFrieren := false
+		for _, e := range sr.Data {
+			if strings.Contains(strings.ToLower(e.Title), "frieren") {
+				sawFrieren = true
+				break
+			}
+		}
+		if !sawFrieren {
+			t.Errorf("expected at least one 'Frieren' titled entry")
+		}
+	})
+
+	t.Run("release", func(t *testing.T) {
+		t.Parallel()
+		data, err := os.ReadFile(filepath.Join(base, "frieren-release.json"))
+		if err != nil {
+			t.Fatalf("read frieren-release.json: %v", err)
+		}
+		var rr releaseResponse
+		if err := json.Unmarshal(data, &rr); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(rr.Data) == 0 {
+			t.Fatal("release data is empty")
+		}
+		for i, ep := range rr.Data {
+			if ep.Session == "" {
+				t.Errorf("release data[%d].session is empty", i)
+			}
+			if ep.EpisodeNumber <= 0 {
+				t.Errorf("release data[%d].episode = %v; want > 0", i, ep.EpisodeNumber)
+			}
+		}
+	})
+
+	t.Run("play", func(t *testing.T) {
+		t.Parallel()
+		data, err := os.ReadFile(filepath.Join(base, "frieren-play.html"))
+		if err != nil {
+			t.Fatalf("read frieren-play.html: %v", err)
+		}
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(data)))
+		if err != nil {
+			t.Fatalf("goquery parse: %v", err)
+		}
+		count := 0
+		doc.Find("button[data-src]").Each(func(_ int, sel *goquery.Selection) {
+			src, _ := sel.Attr("data-src")
+			if strings.Contains(src, "kwik") {
+				count++
+			}
+		})
+		if count == 0 {
+			t.Fatal("expected at least one button[data-src=...kwik...]")
+		}
+	})
 }

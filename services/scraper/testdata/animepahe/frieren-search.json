@@ -1,0 +1,46 @@
+{
+  "total": 3,
+  "per_page": 8,
+  "current_page": 1,
+  "last_page": 1,
+  "from": 1,
+  "to": 3,
+  "data": [
+    {
+      "id": 5319,
+      "title": "Frieren: Beyond Journey's End",
+      "type": "TV",
+      "episodes": 28,
+      "status": "Finished Airing",
+      "season": "Fall",
+      "year": 2023,
+      "score": 9.27,
+      "poster": "https://i.animepahe.pw/posters/frieren-poster.jpg",
+      "session": "65a00d22-e684-4a33-5fa2-707b8e64a84d"
+    },
+    {
+      "id": 5322,
+      "title": "Frieren: Beyond Journey's End - Specials",
+      "type": "Special",
+      "episodes": 2,
+      "status": "Finished Airing",
+      "season": "Winter",
+      "year": 2024,
+      "score": 7.85,
+      "poster": "https://i.animepahe.pw/posters/frieren-specials.jpg",
+      "session": "8c1ae831-1234-5678-9abc-def012345678"
+    },
+    {
+      "id": 5340,
+      "title": "Sousou no Frieren",
+      "type": "TV",
+      "episodes": 28,
+      "status": "Finished Airing",
+      "season": "Fall",
+      "year": 2023,
+      "score": 9.27,
+      "poster": "https://i.animepahe.pw/posters/sousou-frieren.jpg",
+      "session": "7b2cd95f-aaaa-bbbb-cccc-dddddddddddd"
+    }
+  ]
+}
