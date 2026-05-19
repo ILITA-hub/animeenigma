@@ -139,15 +139,21 @@ async function fetchWithRetry(url) {
     metrics.stealthChallengeSolvesTotal.inc();
     lastChallengeSolveAt = new Date().toISOString();
   }
-  requestCount += 1;
-  try {
-    await maybeRecycle();
-  } catch (e) {
-    // A recycle failure should NOT fail the just-completed fetch — the warm
-    // page is still usable; we log and continue. The next request that hits
-    // the recycle window will retry the recycle.
-    // eslint-disable-next-line no-console
-    console.error('animepahe-resolver: maybeRecycle failed', e);
+  // Only count toward the recycle budget on definitively successful responses
+  // (2xx). Non-2xx upstreams (404, 5xx) should not advance the recycle window
+  // — the warm page is still valid and triggering a recycle on an error
+  // response would destroy it unnecessarily.
+  if (result.status >= 200 && result.status < 300) {
+    requestCount += 1;
+    try {
+      await maybeRecycle();
+    } catch (e) {
+      // A recycle failure should NOT fail the just-completed fetch — the warm
+      // page is still usable; we log and continue. The next request that hits
+      // the recycle window will retry the recycle.
+      // eslint-disable-next-line no-console
+      console.error('animepahe-resolver: maybeRecycle failed', e);
+    }
   }
   return result;
 }
