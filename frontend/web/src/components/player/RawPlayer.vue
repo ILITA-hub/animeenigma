@@ -275,10 +275,11 @@ function onOtherSubSelected(track: SubtitleTrack) {
   selectedSubKey.value = key
 }
 
-function buildProxyUrl(url: string, referer: string): string {
+function buildProxyUrl(url: string, referer: string, streamType?: 'hls' | 'mp4'): string {
   const params = new URLSearchParams()
   params.set('url', url)
   if (referer) params.set('referer', referer)
+  if (streamType === 'mp4') params.set('type', 'mp4')
   return `/api/streaming/hls-proxy?${params.toString()}`
 }
 
@@ -301,7 +302,10 @@ function attachStream(url: string, type: 'hls' | 'mp4') {
   disposePlayer()
 
   if (type !== 'hls') {
-    v.src = url
+    // AllAnime's fast4speed.rsvp CDN requires Referer: https://allmanga.to/,
+    // which a direct <video src> won't send. Route MP4 through the proxy so
+    // the backend can inject the right Referer while passing range requests through.
+    v.src = buildProxyUrl(url, 'https://allmanga.to/', 'mp4')
     v.play().catch(() => { /* user-gesture required */ })
     return
   }

@@ -286,6 +286,7 @@ var HLSProxyAllowedDomains = []string{
 	"blogger.com",        // YouTube-fed mirror used by some AllAnime sources
 	"googlevideo.com",    // direct YouTube CDN (some AllAnime sources resolve here)
 	"sharepoint.com",     // observed OneDrive-backed source variant
+	"fast4speed.rsvp",    // AllAnime own CDN — direct MP4 with signed Authorization, requires Referer: https://allmanga.to/
 }
 
 // UpstreamError represents an error from the upstream CDN.
@@ -408,8 +409,17 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 		}
 	}
 
-	// Fix Content-Type — some CDNs return wrong types (like image/jpeg) to obfuscate content
+	// Fix Content-Type — some CDNs return wrong types (like image/jpeg) to obfuscate content.
+	// The caller can also force a specific container via ?type=mp4 when the upstream URL
+	// has no extension in the path (e.g. AllAnime's fast4speed.rsvp CDN), which would
+	// otherwise default to application/octet-stream and trip the HLS-segment rate limiter.
 	correctContentType := getCorrectHLSContentType(parsed.Path, resp.Header.Get("Content-Type"))
+	switch strings.ToLower(r.URL.Query().Get("type")) {
+	case "mp4":
+		correctContentType = "video/mp4"
+	case "webm":
+		correctContentType = "video/webm"
+	}
 	w.Header().Set("Content-Type", correctContentType)
 
 	// For direct video files (MP4), ensure range request headers are set for seeking
