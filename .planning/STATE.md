@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Scraper Self-Healing
-status: REOPENED — Phase 24 ready to plan
-stopped_at: "v3.1 reopened 2026-05-19 after (a) commit fe3b487 (2026-05-18) folded an untracked deletion of EnglishPlayer.vue + e2e specs + parsers into a docs commit, undoing SCRAPER-HEAL-08's user-facing surface; (b) commit 9bb8a85..49b32f2 (2026-05-18 cleanup pass) finished the rip by removing the EN tab from Anime.vue, narrowing type unions to exclude 'english', and stripping i18n keys; (c) original 2026-05-13 milestone audit BLK-INT-01 (rotated hls3 hosts not in allowlist) was never closed; (d) operator scope-expanded with provider-expansion ask (AllAnime lift, fresh 2026 candidates, AnimeKai recovery). Three new phases scoped: 24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion."
-last_updated: "2026-05-19T00:00:00.000Z"
-last_activity: 2026-05-19 — Milestone v3.1 REOPENED — three new phases scoped, planning to begin
+status: executing
+stopped_at: v3.1 reopened with three new phases scoped (24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion). Top-level planning docs (STATE, MILESTONES, ROADMAP) updated; v3.1-REQUIREMENTS.md rewritten from the misnamed v3.0-archive; per-phase CONTEXT.md created for each new phase; v3.1-MILESTONE-AUDIT.md annotated as superseded. No code changes yet — that begins at `/gsd-plan-phase --phase 24`.
+last_updated: "2026-05-19T04:57:59.548Z"
+last_activity: 2026-05-19 -- Phase 24 planning complete
 progress:
   total_phases: 12
-  completed_phases: 8
-  total_plans: 36
-  completed_plans: 29
+  completed_phases: 5
+  total_plans: 30
+  completed_plans: 20
   percent: 67
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 
 Phase: 24 — EN Reconnect (v3.1 reopened, ready to plan)
 Plan: —
-Status: Planning — `/gsd-plan-phase --phase 24` is the next operator action
-Last activity: 2026-05-19 — v3.1 reopened with three new phases (24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion). See `.planning/milestones/v3.1-REOPENING.md` for the rewrite trace.
+Status: Ready to execute
+Last activity: 2026-05-19 -- Phase 24 planning complete
 
 ## Shipped Milestones
 
