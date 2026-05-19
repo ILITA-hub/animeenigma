@@ -63,22 +63,34 @@ async function initBrowser() {
   if (initialized) return;
   if (initPromise) return initPromise;
   initPromise = (async () => {
-    browser = await puppeteer.launch({
-      headless: 'new',
-      // Honor PUPPETEER_EXECUTABLE_PATH if set (e.g. for local dev pointing at
-      // /usr/bin/google-chrome-stable on a host that has one); otherwise let
-      // puppeteer resolve via PUPPETEER_CACHE_DIR (set by the puppeteer:24 base
-      // image to /home/pptruser/.cache/puppeteer).
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: LAUNCH_ARGS.slice(),
-    });
-    page = await browser.newPage();
-    await page.setUserAgent(USER_AGENT);
-    await page.goto(UPSTREAM_BASE_URL + '/', {
-      waitUntil: 'networkidle2',
-      timeout: WARMUP_GOTO_TIMEOUT_MS,
-    });
-    initialized = true;
+    let newBrowser;
+    try {
+      newBrowser = await puppeteer.launch({
+        headless: 'new',
+        // Honor PUPPETEER_EXECUTABLE_PATH if set (e.g. for local dev pointing at
+        // /usr/bin/google-chrome-stable on a host that has one); otherwise let
+        // puppeteer resolve via PUPPETEER_CACHE_DIR (set by the puppeteer:24 base
+        // image to /home/pptruser/.cache/puppeteer).
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: LAUNCH_ARGS.slice(),
+      });
+      const newPage = await newBrowser.newPage();
+      await newPage.setUserAgent(USER_AGENT);
+      await newPage.goto(UPSTREAM_BASE_URL + '/', {
+        waitUntil: 'networkidle2',
+        timeout: WARMUP_GOTO_TIMEOUT_MS,
+      });
+      // Assign to module-level singletons only after all init steps succeed
+      // so a partial failure never leaves a leaked browser instance.
+      browser = newBrowser;
+      page = newPage;
+      initialized = true;
+    } catch (e) {
+      if (newBrowser) {
+        try { await newBrowser.close(); } catch (_) {}
+      }
+      throw e;
+    }
   })();
   try {
     await initPromise;
