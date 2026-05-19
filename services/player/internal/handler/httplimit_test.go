@@ -33,10 +33,11 @@ func TestDecodeJSONLimited_RejectsOverLimit(t *testing.T) {
 }
 
 func TestDecodeJSONLimited_LimitExactBoundary(t *testing.T) {
-	// Exactly limit-sized JSON should also be flagged: we set N = limit+1
-	// on the LimitedReader, so if exactly `limit` bytes are consumed, the
-	// last allowed byte was used and we treat that as "potentially
-	// truncated".
+	// A body of (limit + 1) bytes — one byte past the configured ceiling —
+	// must trip ErrResponseTooLarge. We set N = limit + 1 on the
+	// LimitedReader, so a `limit + 1`-byte body consumes every available
+	// byte and leaves N == 0 after Decode, which is our "potentially
+	// truncated" signal.
 	body := io.NopCloser(strings.NewReader(`{"x":1}`)) // 7 bytes
 	var out map[string]int
 	err := DecodeJSONLimited(body, &out, 6)

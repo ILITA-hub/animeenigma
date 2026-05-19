@@ -20,6 +20,9 @@ var ErrResponseTooLarge = errors.New("external response exceeds size limit")
 // into out. If the body is at or beyond the limit, returns
 // ErrResponseTooLarge.
 func DecodeJSONLimited(r io.Reader, out interface{}, limit int64) error {
+	// We allocate one byte beyond `limit` so we can detect the difference
+	// between "body fit cleanly" (N > 0 after Decode) and "body filled
+	// the bucket — possibly truncated" (N == 0 after Decode).
 	lr := &io.LimitedReader{R: r, N: limit + 1}
 	if err := json.NewDecoder(lr).Decode(out); err != nil {
 		if lr.N <= 0 {
