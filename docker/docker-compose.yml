@@ -165,11 +165,15 @@ services:
       # Global kill-switch: comma-separated list of provider names that should
       # NOT be registered with the orchestrator. Failover skips them with zero
       # per-request cost. Default disables gogoanime (anitaku.to migrated to
-      # anineko.to — different platform, parser doesn't apply) and animepahe
-      # (animepahe.ru IP-blocked from server, animepahe.io is FingerprintJS-
-      # gated). Flip off by removing names + `docker compose restart scraper`
+      # anineko.to — different platform, parser doesn't apply). Phase 27
+      # (2026-05-19) revived animepahe via the stealth-Chromium sidecar at
+      # services/animepahe-resolver/; animepahe is no longer in the default
+      # degraded set. The env-override escape hatch is preserved — set
+      # `SCRAPER_DEGRADED_PROVIDERS=gogoanime,animepahe` in `docker/.env` to
+      # re-disable on outage (e.g. animepahe.pw goes dark or stealth pins
+      # rot). Flip off by removing names + `docker compose restart scraper`
       # (no rebuild needed).
-      SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-gogoanime,animepahe}
+      SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-gogoanime}
     ports:
       - "127.0.0.1:8088:8088"
     depends_on:
