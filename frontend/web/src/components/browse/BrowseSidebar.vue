@@ -254,6 +254,11 @@ const providerOptions = computed<{ value: Provider; label: string; accent: strin
     label: t('browse.filters.provider.animelib'),
     accent: 'text-orange-500 focus:ring-orange-500',
   },
+  {
+    value: 'english',
+    label: t('browse.filters.provider.english'),
+    accent: 'text-emerald-500 focus:ring-emerald-500',
+  },
 ])
 
 const sortOptions = computed<{ value: Sort; label: string }[]>(() => [

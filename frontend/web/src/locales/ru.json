@@ -722,7 +722,8 @@
       },
       "provider": {
         "kodik": "Kodik (RU)",
-        "animelib": "AnimeLib (RU)"
+        "animelib": "AnimeLib (RU)",
+        "english": "Английский"
       },
       "score": {
         "any": "Любая"

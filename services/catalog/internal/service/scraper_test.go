@@ -18,14 +18,22 @@ import (
 // interface that scraper.go is contracted against. It returns whatever
 // (anime, err) tuple the test sets up.
 type fakeAnimeFetcher struct {
-	anime *domain.Anime
-	err   error
-	calls int32
+	anime           *domain.Anime
+	err             error
+	calls           int32
+	hasEnglishCalls int32
+	hasEnglishVal   bool
 }
 
 func (f *fakeAnimeFetcher) GetByID(ctx context.Context, id string) (*domain.Anime, error) {
 	atomic.AddInt32(&f.calls, 1)
 	return f.anime, f.err
+}
+
+func (f *fakeAnimeFetcher) SetHasEnglish(ctx context.Context, animeID string, has bool) error {
+	atomic.AddInt32(&f.hasEnglishCalls, 1)
+	f.hasEnglishVal = has
+	return nil
 }
 
 // fakeScraperForwarder records the args every method was called with so the

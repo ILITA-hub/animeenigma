@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
@@ -20,8 +21,13 @@ var ErrMalIDUnavailable = errors.New("mal_id unavailable for this anime")
 
 // animeFetcher is the minimal interface scraperOps needs from the anime
 // repository. The production wiring satisfies it via *repo.AnimeRepository.
+//
+// Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5): SetHasEnglish added for the
+// lazy backfill from the scraper-episodes resolver. Best-effort; failures
+// are logged at the caller and never propagated.
 type animeFetcher interface {
 	GetByID(ctx context.Context, id string) (*domain.Anime, error)
+	SetHasEnglish(ctx context.Context, animeID string, has bool) error
 }
 
 // scraperForwarder is the minimal interface scraperOps needs from the
@@ -93,12 +99,33 @@ func (o *scraperOps) resolveAnime(ctx context.Context, animeID string) (int, str
 // GetScraperEpisodes resolves animeID -> MAL ID and forwards to the
 // scraper service. Returns the scraper's status + body verbatim so the
 // handler can passthrough 503s (Phase 15 not-yet-implemented contract).
+//
+// Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5): on a 200 response with
+// non-empty episodes payload, opportunistically flips animes.has_english
+// to true via SetHasEnglish. Best-effort — failures are logged but never
+// surface to the caller. Mirrors the SetHasKodik / SetHasAnimeLib lazy-
+// backfill pattern from Phase 15 (UX-31).
 func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
 	malID, title, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetEpisodes(ctx, malID, title, prefer)
+	status, body, gErr := o.scraperClient.GetEpisodes(ctx, malID, title, prefer)
+	// Best-effort backfill on confirmed success. Detect non-empty
+	// episodes by a simple substring scan — the response envelope is
+	// `{"success":true,"data":{"episodes":[...]}}` and an empty
+	// episodes array reads `"episodes":[]`. Use `"episodes":[{` as the
+	// marker for "at least one element".
+	if gErr == nil && status == 200 && len(body) > 0 &&
+		strings.Contains(string(body), `"episodes":[{`) {
+		if uerr := o.animeRepo.SetHasEnglish(ctx, animeID, true); uerr != nil {
+			// Log only — never propagate. The user got their episodes;
+			// the column will backfill on the next hit if this one
+			// transiently failed.
+			_ = uerr
+		}
+	}
+	return status, body, gErr
 }
 
 // GetScraperServers resolves animeID -> MAL ID + title and forwards.

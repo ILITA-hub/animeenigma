@@ -53,6 +53,13 @@ type Anime struct {
 	// (workstream raw-jp, Phase 01). Lazily backfilled when the catalog
 	// service first resolves a raw stream for the anime.
 	HasRaw bool `gorm:"default:false;index;column:has_raw" json:"has_raw"`
+	// HasEnglish — at least one English source resolvable via the scraper
+	// microservice (gogoanime, animepahe, allanime, animekai). Lazily
+	// backfilled by the catalog's scraper-episode resolver whenever any
+	// scraper provider returns >= 1 episode for the anime. Mirrors the
+	// HasKodik / HasAnimeLib / HasRaw lazy-backfill pattern.
+	// Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5).
+	HasEnglish bool `gorm:"default:false;index;column:has_english" json:"has_english"`
 	Hidden          bool           `gorm:"default:false" json:"hidden"`
 	SortPriority    int            `gorm:"default:0" json:"sort_priority,omitempty"`
 	NextEpisodeAt   *time.Time     `json:"next_episode_at,omitempty"`

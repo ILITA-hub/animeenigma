@@ -626,7 +626,7 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		for _, p := range raw {
 			p = strings.TrimSpace(strings.ToLower(p))
 			switch p {
-			case "kodik", "animelib":
+			case "kodik", "animelib", "english":
 				if !seen[p] {
 					filters.Providers = append(filters.Providers, p)
 					seen[p] = true

@@ -107,6 +107,7 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 		colsByKey := map[string]string{
 			"kodik":    "has_kodik",
 			"animelib": "has_animelib",
+			"english":  "has_english",
 		}
 		var orParts []string
 		for _, p := range filters.Providers {
@@ -208,6 +209,16 @@ func (r *AnimeRepository) SetHasAnimeLib(ctx context.Context, animeID string, ha
 func (r *AnimeRepository) SetHasRaw(ctx context.Context, animeID string, has bool) error {
 	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
 		Update("has_raw", has).Error
+}
+
+// SetHasEnglish flips the animes.has_english column for one anime. Called
+// lazily by the catalog's scraper-episodes resolver whenever any scraper
+// provider (gogoanime, animepahe, allanime, animekai) returns >= 1 episode
+// for the anime — best-effort. Failures are logged at the caller, never
+// propagated. Phase 26 (SCRAPER-HEAL-25, CONTEXT.md D5).
+func (r *AnimeRepository) SetHasEnglish(ctx context.Context, animeID string, has bool) error {
+	return r.db.WithContext(ctx).Model(&domain.Anime{}).Where("id = ?", animeID).
+		Update("has_english", has).Error
 }
 
 // UpdateExternalIDs sets animes.imdb_id and/or animes.tmdb_id when present.
