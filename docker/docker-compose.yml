@@ -153,7 +153,10 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
       REDIS_DB: 0
-      ANIMEPAHE_BASE_URL: https://animepahe.ru
+      # Phase 27 / SCRAPER-HEAL-31 — animepahe-resolver is the new transport
+      # for animepahe (replaces direct upstream fetch). See
+      # services/animepahe-resolver/.
+      SCRAPER_ANIMEPAHE_RESOLVER_URL: http://animepahe-resolver:3000
       # Phase 19 — AnimeKai (gated). Flag is default-off in production.
       # See docker/.env.example and .planning/REQUIREMENTS.md SCRAPER-KAI-05.
       # Toggle live with: SCRAPER_ANIMEKAI_ENABLED=true docker compose up -d scraper
@@ -171,6 +174,8 @@ services:
       - "127.0.0.1:8088:8088"
     depends_on:
       megacloud-extractor:
+        condition: service_healthy
+      animepahe-resolver:
         condition: service_healthy
       redis:
         condition: service_healthy
