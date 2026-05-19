@@ -577,6 +577,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: /api
+        VITE_RAW_PROVIDER_ENABLED: "true"
     container_name: animeenigma-web
     restart: unless-stopped
     ports:

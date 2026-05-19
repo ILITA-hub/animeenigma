@@ -7,9 +7,11 @@ WORKDIR /app
 
 # Build arguments for environment variables
 ARG VITE_API_URL="http://localhost:8000/api"
+ARG VITE_RAW_PROVIDER_ENABLED="false"
 
 # Set environment variables for build
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_RAW_PROVIDER_ENABLED=$VITE_RAW_PROVIDER_ENABLED
 
 # Copy package files
 COPY package.json bun.lock ./
