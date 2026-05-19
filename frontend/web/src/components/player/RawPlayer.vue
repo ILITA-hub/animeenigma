@@ -137,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
@@ -333,18 +333,25 @@ function attachStream(url: string, type: 'hls' | 'mp4') {
 
 const fetchEpisodes = async () => {
   loadingEpisodes.value = true
+  let shouldAutoSelect = false
   try {
     const resp = await rawApi.getEpisodes(props.animeId)
     const data: RawEpisodesResponse = resp.data?.data ?? resp.data
     episodes.value = data.episodes ?? []
     available.value = data.available && episodes.value.length > 0
-    if (available.value && episodes.value.length > 0) {
-      await selectEpisode(episodes.value[0])
-    }
+    shouldAutoSelect = available.value && episodes.value.length > 0
   } catch {
     available.value = false
   } finally {
     loadingEpisodes.value = false
+  }
+  // Auto-select must happen AFTER loadingEpisodes flips so the v-if branch
+  // renders the <video> and binds the template ref. Without the nextTick
+  // the inner attachStream sees videoRef.value === null and early-returns,
+  // leaving v.src empty (user sees a blank player and assumes broken).
+  if (shouldAutoSelect) {
+    await nextTick()
+    await selectEpisode(episodes.value[0])
   }
 }
 
