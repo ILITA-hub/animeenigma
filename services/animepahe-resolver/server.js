@@ -156,7 +156,13 @@ function buildApp(opts) {
       `${UPSTREAM_BASE_URL}/play/` +
       `${encodeURIComponent(anime)}/${encodeURIComponent(ep)}`;
     try {
-      const { body } = await upstream.fetchWithRetry(url);
+      const { status, body } = await upstream.fetchWithRetry(url);
+      if (status === 404) {
+        return reply.code(404).send({ error: 'not_found', message: 'upstream returned 404' });
+      }
+      if (status < 200 || status >= 300) {
+        return reply.code(502).send({ error: 'upstream_error', message: `upstream status ${status}` });
+      }
       reply.type('text/html; charset=utf-8').send(body);
     } catch (e) {
       sendResolverError(reply, e);
@@ -187,7 +193,13 @@ function buildApp(opts) {
 
 async function handleJSON(req, reply, url) {
   try {
-    const { body } = await upstream.fetchWithRetry(url);
+    const { status, body } = await upstream.fetchWithRetry(url);
+    if (status === 404) {
+      return reply.code(404).send({ error: 'not_found', message: 'upstream returned 404' });
+    }
+    if (status < 200 || status >= 300) {
+      return reply.code(502).send({ error: 'upstream_error', message: `upstream status ${status}` });
+    }
     let parsed;
     try {
       parsed = JSON.parse(body);

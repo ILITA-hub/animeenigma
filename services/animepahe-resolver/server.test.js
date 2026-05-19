@@ -311,6 +311,58 @@ test('search: non-JSON upstream body surfaces as 502 upstream_bad_json',
 );
 
 // ---------------------------------------------------------------------------
+// CR-01 — upstream 404/5xx must propagate as sidecar error, not HTTP 200
+// ---------------------------------------------------------------------------
+
+test('release: upstream 404 propagates as sidecar 404 not_found',
+  withApp({}, async (app) => {
+    const restore = stubUpstream(async () => ({ status: 404, body: '{"message":""}' }));
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/release?session=65a00d22-e684-4a33-5fa2-707b8e64a84d',
+      });
+      assert.strictEqual(res.statusCode, 404);
+      assert.strictEqual(res.json().error, 'not_found');
+    } finally {
+      restore();
+    }
+  }),
+);
+
+test('release: upstream 5xx propagates as sidecar 502 upstream_error',
+  withApp({}, async (app) => {
+    const restore = stubUpstream(async () => ({ status: 503, body: 'Service Unavailable' }));
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/release?session=65a00d22-e684-4a33-5fa2-707b8e64a84d',
+      });
+      assert.strictEqual(res.statusCode, 502);
+      assert.strictEqual(res.json().error, 'upstream_error');
+    } finally {
+      restore();
+    }
+  }),
+);
+
+test('play: upstream 404 propagates as sidecar 404 not_found',
+  withApp({}, async (app) => {
+    const restore = stubUpstream(async () => ({ status: 404, body: '<html>Not Found</html>' }));
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/play?animeSession=65a00d22-e684-4a33-5fa2-707b8e64a84d&episodeSession=7bf604bac56a6a9269bc0ce04083169abeaa4815c65e2a320e0ad185334c85e7',
+      });
+      assert.strictEqual(res.statusCode, 404);
+      assert.strictEqual(res.json().error, 'not_found');
+    } finally {
+      restore();
+    }
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // /metrics smoke test — registry exposes the four required counter names
 // ---------------------------------------------------------------------------
 
