@@ -235,7 +235,7 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 **Depends on**: v3.1 Phase 23 (canary + alert + maintenance-bot dispatch infrastructure already shipped)
 **Requirements**: SCRAPER-HEAL-21, SCRAPER-HEAL-22, SCRAPER-HEAL-23, SCRAPER-HEAL-24
 **Success Criteria** (what must be TRUE):
-  1. `TestGetStreamWithGate_AdDecoy_Skipped` in `services/scraper/internal/providers/gogoanime/client_gated_test.go` passes 10/10 under `go test -race -count=10` after the test-only rewrite (production code at `client.go:881-887` unchanged).
+  1. `TestGetStreamWithGate_AdDecoy_Skipped` in `services/scraper/internal/providers/gogoanime/client_gated_test.go` passes 10/10 under `go test -race -count=10` after the test-only rewrite (production code at `client.go:829-887` unchanged).
   2. `.claude/maintenance-prompt.md` Pattern 7 references the actual scraper-side function name instead of the non-existent `cacheStream` symbol. Symbol-stability test stays green under the new content.
   3. `services/streaming/internal/handler` HLS-proxy handler returns HTTP 502 with a descriptive JSON body on "domain not allowed for HLS proxy" (replaces the current silent HTTP 200 / Content-Length 0). Unit test asserts the new status code + body shape.
   4. The deferred Task 4 manual smoke of Plan 23-03 runs end-to-end: operator triggers canary → Grafana `ScraperPlayabilityRegression` alert state transitions → maintenance bot Telegram diagnosis arrives with `known_pattern: Pattern 7`, `tier: button_fix`, `affected_files: [libs/videoutils/proxy.go]`. A maintenance-bot-attributed commit adds the live-rotated hls3 hosts (`cdn-centaurus.com`, `meadowlarkdesignstudio.cfd`, or whatever they are at ship time) to `HLSProxyAllowedDomains`.
@@ -269,9 +269,9 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 
 ### Next Milestone (TBD)
 
-After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved future phases (renumbered — original 24/25 reservations absorbed into v3.1's reopening):
-- Phase 27: VibePlayer Recovery via WARP egress (revives VibePlayer as a working server by routing scraper egress through Cloudflare WARP; separate spec when there is appetite)
-- Phase 28: MinIO Hot Archival (rip popular HLS streams to MinIO; serve from there to decouple from upstream availability; separate v3.2 spec)
+After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved future ideas (unnumbered — phase numbers will be assigned when each is committed to a milestone):
+- VibePlayer Recovery via WARP egress (revives VibePlayer as a working server by routing scraper egress through Cloudflare WARP; separate spec when there is appetite)
+- MinIO Hot Archival (rip popular HLS streams to MinIO; serve from there to decouple from upstream availability; separate v3.2 spec)
 
 ## Progress
 
@@ -291,3 +291,13 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 | 24 | v3.1 | 0/5 | Planning    | — |
 | 25 | v3.1 | 0/4 | Planning    | — |
 | 26 | v3.1 | 0/7 | Planning    | — |
+
+### Phase 27: AnimePahe Revival via Stealth-Chromium Sidecar
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 26
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 27 to break down)
