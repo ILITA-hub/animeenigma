@@ -23,9 +23,16 @@ import (
 )
 
 // fakeMalSync is an in-memory MalSyncClient impl for tests.
+//
+// Phase 27 A9: extended with reverse-mapping (providerID → malID) +
+// Invalidate so the parser's /release 404 single-strike path can be
+// exercised without standing up a real Redis. The reverse map is
+// populated automatically when a successful Lookup fires (matches
+// production behavior).
 type fakeMalSync struct {
 	mu       sync.Mutex
-	mappings map[string]string // malID → animepahe id
+	mappings map[string]string // malID → animepahe providerID
+	reverse  map[string]string // providerID → malID (populated on Lookup hit)
 	misses   map[string]bool   // malID → confirmed miss
 	calls    int
 }
@@ -35,6 +42,10 @@ func (f *fakeMalSync) Lookup(ctx context.Context, malID, provider string) (strin
 	defer f.mu.Unlock()
 	f.calls++
 	if id, ok := f.mappings[malID]; ok {
+		if f.reverse == nil {
+			f.reverse = map[string]string{}
+		}
+		f.reverse[id] = malID
 		return id, true, nil
 	}
 	if f.misses[malID] {
@@ -43,14 +54,44 @@ func (f *fakeMalSync) Lookup(ctx context.Context, malID, provider string) (strin
 	return "", false, nil
 }
 
+// LookupMalID is the reverse of Lookup. Returns ("", nil) on unknown
+// providerID — matches production MalSyncClient.LookupMalID semantics.
+func (f *fakeMalSync) LookupMalID(ctx context.Context, providerID, provider string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.reverse == nil {
+		return "", nil
+	}
+	if mal, ok := f.reverse[providerID]; ok {
+		return mal, nil
+	}
+	return "", nil
+}
+
+// Invalidate drops both directions of the mapping (single-strike A9).
+func (f *fakeMalSync) Invalidate(ctx context.Context, malID, provider, providerID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.mappings, malID)
+	if f.reverse != nil {
+		delete(f.reverse, providerID)
+	}
+	return nil
+}
+
 // fakeKwikExtractor pretends to be the Plan 16-02 KwikExtractor. Matches kwik
 // hosts (substring on host suffix for simplicity in tests) and Extract returns
 // a canned Stream so the Provider's GetStream caching path can be tested
 // without standing up a real httptest kwik server.
+//
+// Phase 27: lastReferer captures the Referer header passed by GetStream so
+// TestProvider_GetStream_HappyPath can assert it equals the kwikReferer
+// constant (`https://animepahe.pw/`) — pins the B1 contract.
 type fakeKwikExtractor struct {
-	mu      sync.Mutex
-	streams map[string]*domain.Stream // embedURL → Stream
-	calls   int
+	mu          sync.Mutex
+	streams     map[string]*domain.Stream // embedURL → Stream
+	calls       int
+	lastReferer string
 }
 
 func (f *fakeKwikExtractor) Name() string { return "kwik" }
@@ -68,6 +109,7 @@ func (f *fakeKwikExtractor) Extract(ctx context.Context, embedURL string, header
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
+	f.lastReferer = headers.Get("Referer")
 	if s, ok := f.streams[embedURL]; ok {
 		return s, nil
 	}
@@ -103,14 +145,14 @@ func newTestProvider(t *testing.T, srv *httptest.Server) (*Provider, *fakeCache,
 	reg := domain.NewRegistry()
 	reg.Register(fk)
 
-	baseURL := srv.URL
+	resolverURL := srv.URL
 	p, err := New(Deps{
-		BaseURL: baseURL,
-		HTTP:    hc,
-		Embeds:  reg,
-		MalSync: fm,
-		Cache:   fc,
-		Log:     log,
+		ResolverURL: resolverURL,
+		HTTP:        hc,
+		Embeds:      reg,
+		MalSync:     fm,
+		Cache:       fc,
+		Log:         log,
 	})
 	if err != nil {
 		t.Fatalf("New(Deps{...}) = err %v; want nil", err)
@@ -170,8 +212,8 @@ func TestProvider_FindID_MalSyncHit(t *testing.T) {
 func TestProvider_FindID_FuzzyFallback(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("m") != "search" {
-			t.Errorf("unexpected upstream call %s", r.URL.RawQuery)
+		if r.URL.Path != "/search" {
+			t.Errorf("expected /search; got %s", r.URL.Path)
 		}
 		_, _ = w.Write(loadFixture(t, "search_naruto.json"))
 	}))
@@ -223,8 +265,8 @@ func TestProvider_FindID_FuzzyBelowThreshold(t *testing.T) {
 func TestProvider_ListEpisodes_SinglePage(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("m") != "release" {
-			t.Errorf("expected m=release; got %s", r.URL.RawQuery)
+		if r.URL.Path != "/release" {
+			t.Errorf("expected /release; got %s", r.URL.Path)
 		}
 		_, _ = w.Write(loadFixture(t, "release_4_p1.json"))
 	}))
@@ -383,8 +425,11 @@ func TestProvider_ListEpisodes_Upstream5xx(t *testing.T) {
 func TestProvider_ListServers_HappyPath(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/play/") {
-			t.Errorf("expected /play/{anime}/{ep}; got %s", r.URL.Path)
+		if r.URL.Path != "/play" {
+			t.Errorf("expected /play (resolver shape); got %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("animeSession") == "" || r.URL.Query().Get("episodeSession") == "" {
+			t.Errorf("expected animeSession + episodeSession query params; got %s", r.URL.RawQuery)
 		}
 		_, _ = w.Write(loadFixture(t, "play_session_ep1.html"))
 	}))
@@ -514,6 +559,16 @@ func TestProvider_GetStream_HappyPath(t *testing.T) {
 	}
 	if stream.Sources[0].URL != wantStream.Sources[0].URL {
 		t.Errorf("source url = %q; want %q", stream.Sources[0].URL, wantStream.Sources[0].URL)
+	}
+	// Phase 27 B1: Referer passed to the Kwik extractor MUST be the
+	// `kwikReferer` constant value (https://animepahe.pw/). Pins the
+	// Plan 27-02 Task 1 contract: the Referer source switched from the
+	// deleted Provider.baseURL field to the new package-level constant.
+	if got, want := fk.lastReferer, kwikReferer; got != want {
+		t.Errorf("Kwik extractor Referer = %q; want %q (kwikReferer constant)", got, want)
+	}
+	if got, want := fk.lastReferer, "https://animepahe.pw/"; got != want {
+		t.Errorf("Kwik extractor Referer (literal) = %q; want %q (D2 alignment)", got, want)
 	}
 	// Cache should contain a stream:animepahe:anime-sess:ep-sess:* key.
 	found := false
