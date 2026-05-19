@@ -72,6 +72,19 @@ func main() {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
+	// Compound unique index for ON CONFLICT in progress UPSERTs.
+	// AutoMigrate creates it on fresh boots via struct tags; this
+	// idempotent raw SQL backfills it on databases that pre-date the
+	// tag change. See audit Wave 1 (perf): single-column indexes
+	// can't enforce the (user, anime, episode) uniqueness that
+	// progress.go's ON CONFLICT clause assumes.
+	if err := db.DB.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_progress_user_anime_ep
+		ON watch_progress (user_id, anime_id, episode_number)
+	`).Error; err != nil {
+		log.Fatalw("failed to create watch_progress compound index", "error", err)
+	}
+
 	// Phase 1 (workstream: social) — one-shot idempotent migration that
 	// merges every legacy `reviews` row into `anime_list` then drops the
 	// `reviews` table. Guarded by db.Migrator().HasTable("reviews"); after

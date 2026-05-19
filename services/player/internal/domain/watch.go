@@ -29,9 +29,9 @@ func (AnimeInfo) TableName() string { return "animes" }
 
 type WatchProgress struct {
 	ID            string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID        string    `gorm:"type:uuid;index" json:"user_id"`
-	AnimeID       string    `gorm:"type:uuid;index" json:"anime_id"`
-	EpisodeNumber int       `gorm:"index" json:"episode_number"`
+	UserID        string    `gorm:"type:uuid;uniqueIndex:idx_watch_progress_user_anime_ep,priority:1;index:idx_watch_progress_user_id" json:"user_id"`
+	AnimeID       string    `gorm:"type:uuid;uniqueIndex:idx_watch_progress_user_anime_ep,priority:2" json:"anime_id"`
+	EpisodeNumber int       `gorm:"uniqueIndex:idx_watch_progress_user_anime_ep,priority:3" json:"episode_number"`
 	Progress      int       `json:"progress"`
 	Duration      int       `json:"duration"`
 	Completed     bool      `gorm:"default:false" json:"completed"`
