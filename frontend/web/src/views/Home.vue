@@ -387,14 +387,6 @@
 
     </div>
 
-    <!-- This Week row (Phase 16 / UX-32). Today + tomorrow's airing
-         episodes by hour, sourced from the same fetchSchedule endpoint
-         that powers /schedule. Self-gated on items.length === 0 so the
-         row disappears when nothing is airing in the next 48h. Mounts
-         directly above the Continue-Watching row so the next 48-hour
-         airing window stays close to the user's in-progress queue. -->
-    <ThisWeekRow />
-
     <!-- Phase 17 (UX-33) — admin-curated editorial collections. Self-gated
          on items.length === 0 so the row hides entirely when no
          collections have been published yet. -->
@@ -448,7 +440,6 @@ import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
 import ContinueWatchingRow from '@/components/home/ContinueWatchingRow.vue'
-import ThisWeekRow from '@/components/home/ThisWeekRow.vue'
 // Phase 17 (UX-33) — admin-curated editorial collections home row.
 import CollectionsRow from '@/components/home/CollectionsRow.vue'
 import SystemStatusBanner from '@/components/home/SystemStatusBanner.vue'
