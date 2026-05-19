@@ -1114,12 +1114,21 @@ const isHidden = ref(false)
 const showShikimoriEdit = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
-const videoLanguage = ref<'ru' | '18+' | 'raw'>(
-  (localStorage.getItem('preferred_video_language') as 'ru' | '18+' | 'raw') || 'ru'
+// Runtime-validate localStorage values — users who previously selected an
+// EN player ('english' / 'hianime' / 'consumet') would otherwise hit a value
+// outside the new union, no v-if branch matches, and nothing renders.
+const VALID_LANGUAGES = ['ru', '18+', 'raw'] as const
+type VideoLanguage = (typeof VALID_LANGUAGES)[number]
+const _savedLang = localStorage.getItem('preferred_video_language')
+const videoLanguage = ref<VideoLanguage>(
+  (VALID_LANGUAGES as readonly string[]).includes(_savedLang ?? '') ? (_savedLang as VideoLanguage) : 'ru'
 )
 // Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
-const videoProvider = ref<'kodik' | 'animelib' | 'hanime' | 'raw'>(
-  (localStorage.getItem('preferred_video_provider') as 'kodik' | 'animelib' | 'hanime' | 'raw') || 'kodik'
+const VALID_PROVIDERS = ['kodik', 'animelib', 'hanime', 'raw'] as const
+type VideoProvider = (typeof VALID_PROVIDERS)[number]
+const _savedProv = localStorage.getItem('preferred_video_provider')
+const videoProvider = ref<VideoProvider>(
+  (VALID_PROVIDERS as readonly string[]).includes(_savedProv ?? '') ? (_savedProv as VideoProvider) : 'kodik'
 )
 
 // Last-watched episode. For authenticated users this comes from server-side
