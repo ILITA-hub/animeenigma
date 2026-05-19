@@ -753,26 +753,30 @@ CMD ["node", "server.js"]
 
 **Items needing operator confirmation before execute:** A6, A7, A8 (empirical, measured during Plan 27-01); A9 (cache invalidation strategy — could go either way, default to single-strike unless operator prefers a counter). Plans should NOT lock decisions until the 27-01 memory probe results land.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the Go-side `BaseHTTPClient` for animepahe drop the per-host rate limits (kwik.cx, animepahe.ru, animepahe.com, api.malsync.moe) now that the sidecar owns the upstream rate?**
    - What we know: `main.go:93-98` registers these rate limits on the animepahe `BaseHTTPClient`. Post-rewrite, the only outbound host is `animepahe-resolver:3000` (internal docker network).
    - What's unclear: whether keeping the historical rate limits as documentation of the historical hosts is useful, or if they should be cleaned up.
    - Recommendation: drop animepahe.ru/.com from the rate-limit list; keep kwik.cx and api.malsync.moe (still used by Kwik extractor and MalSync); add `animepahe-resolver` at 5 RPS (sidecar can handle higher than the upstream).
+   - **RESOLVED in Plan 27-02 (Task 3):** `main.go` drops the `animepahe.ru` + `animepahe.com` per-host rate-limit registrations and adds `domain.WithPerHostRPS("animepahe-resolver", 5.0, 5)`; `kwik.cx`, `kwik.si`, `api.malsync.moe` limits are preserved.
 
 2. **Should the play page response be returned as raw HTML, or should the sidecar pre-extract server links?**
    - What we know: CONTEXT.md `/play` shape says "raw HTML of the play page OR pre-extracted server links" (operator's discretion).
    - What's unclear: pre-extraction in the sidecar removes the goquery dependency from the Go parser's play path. But it also means the sidecar becomes opinionated about what to extract; an HTML drift requires editing both sides.
    - Recommendation: return raw HTML. Keep the goquery scraping in the Go parser. Single source of truth for selector logic, and the maintenance-bot's Pattern 7 auto-edit-selectors path stays applicable.
+   - **RESOLVED in Plan 27-01 (Tasks 1 + 2):** `/play` returns the raw upstream HTML verbatim; the Go parser in 27-02 keeps its goquery `button[data-src]` extraction unchanged.
 
 3. **Should `ANIMEPAHE_BASE_URL` env var on the scraper service be removed or repurposed?**
    - What we know: It currently defaults to `https://animepahe.ru` and is consumed by `config.AnimePaheConfig`. Post-rewrite it's vestigial.
    - What's unclear: removing it requires plan-checker awareness (the env-var is referenced in docker-compose.yml + .env.example + RESEARCH for Phase 16).
    - Recommendation: Plan 27-03 removes the env var from compose AND from `config.go::AnimePaheConfig` (it's no longer read by the rewritten parser). Adds `SCRAPER_ANIMEPAHE_RESOLVER_URL` in its place.
+   - **RESOLVED in Plan 27-02 (Task 3) + Plan 27-03:** 27-02 removes `ANIMEPAHE_BASE_URL` from `config.go::AnimePaheConfig` and replaces it with `SCRAPER_ANIMEPAHE_RESOLVER_URL` (default `http://animepahe-resolver:3000`); 27-03 removes the env var from `docker/docker-compose.yml` + `.env.example`.
 
 4. **Does the sidecar need to handle a "warmup race" where the first request arrives before `init()` finishes?**
    - What we know: `init()` is `await`ed before `fastify.listen`, so by the time the HTTP server accepts connections, the browser is up.
    - What's unclear: if Fastify's `listen` is allowed to bind before `init()` resolves (it isn't in the example above — `await` is correct), there's no race. Confirmed in 27-01 by testing cold start.
+   - **RESOLVED in Plan 27-01 (Task 1):** `server.js` `await initBrowser()` BEFORE `fastify.listen({ port: 3000, host: '0.0.0.0' })`; the cold-start ordering is asserted by the `/healthz` test in `server.test.js`.
 
 ## Environment Availability
 
