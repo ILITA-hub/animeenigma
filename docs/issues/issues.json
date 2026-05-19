@@ -1,5 +1,5 @@
 {
-  "last_id": 84,
+  "last_id": 94,
   "issues": [
     {
       "id": "AUTO-001",
@@ -1344,6 +1344,7 @@
     {
       "id": "AUTO-081",
       "created_at": "2026-04-22T04:49:06Z",
+      "resolved_at": "2026-05-18T01:26:42Z",
       "source": "grafana_alert",
       "category": "outage",
       "priority": "P1",
@@ -1353,7 +1354,7 @@
       "telegram_message_id": 1991,
       "affected_service": "catalog",
       "actions": null,
-      "resolution": "Fix applied by @tNeymik"
+      "resolution": "Alert resolved (webhook notification from Grafana)"
     },
     {
       "id": "AUTO-082",
@@ -1395,6 +1396,147 @@
       "title": "Research: animejoy.ru player architecture",
       "reporter": "@tNeymik",
       "telegram_message_id": 2000,
+      "actions": null
+    },
+    {
+      "id": "AUTO-085",
+      "created_at": "2026-05-13T07:20:52Z",
+      "resolved_at": "2026-05-13T07:20:52Z",
+      "source": "grafana_alert",
+      "category": "false_positive",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Scheduler Sync Stale — false positive post-redeploy",
+      "reporter": "grafana",
+      "telegram_message_id": 2003,
+      "affected_service": "scheduler",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-086",
+      "created_at": "2026-05-14T03:06:52Z",
+      "resolved_at": "2026-05-17T04:06:35Z",
+      "source": "grafana_alert",
+      "category": "scraper_regression",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "gogoanime CDN rotation + intermittent CF challenge pages",
+      "reporter": "grafana",
+      "telegram_message_id": 2006,
+      "affected_service": "gogoanime",
+      "actions": [],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-087",
+      "created_at": "2026-05-17T04:11:59Z",
+      "resolved_at": "2026-05-19T04:09:22Z",
+      "source": "grafana_alert",
+      "category": "provider_outage",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "gogoanime provider down: anitaku.to domain migration to anineko.to",
+      "reporter": "grafana",
+      "telegram_message_id": 2012,
+      "affected_service": "gogoanime",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-088",
+      "created_at": "2026-05-18T02:57:01Z",
+      "resolved_at": "2026-05-18T02:58:33Z",
+      "source": "grafana_alert",
+      "category": "parser_failure",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "AllAnime parser: stale persisted-query SHAs (ISS-012)",
+      "reporter": "grafana",
+      "telegram_message_id": 2015,
+      "affected_service": "allanime",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-089",
+      "created_at": "2026-05-18T04:10:13Z",
+      "resolved_at": "2026-05-18T07:34:22Z",
+      "source": "grafana_alert",
+      "category": "parser_failure",
+      "priority": "P1",
+      "status": "escalated",
+      "title": "AllAnime stale persisted-query SHAs — RAW JP player non-functional",
+      "reporter": "grafana",
+      "telegram_message_id": 2017,
+      "affected_service": "allanime",
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour"
+    },
+    {
+      "id": "AUTO-090",
+      "created_at": "2026-05-18T09:56:09Z",
+      "resolved_at": "2026-05-19T04:23:31Z",
+      "source": "grafana_alert",
+      "category": "parser_failure",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "AllAnime parser: stale persisted-query SHA — PERSISTED_QUERY_NOT_FOUND",
+      "reporter": "grafana",
+      "telegram_message_id": 2021,
+      "affected_service": "allanime",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-091",
+      "created_at": "2026-05-18T10:23:58Z",
+      "resolved_at": "2026-05-19T00:00:00Z",
+      "source": "admin_request",
+      "category": "feature_request",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Feature request: score/rating filter in catalog",
+      "reporter": "@NANDIorg_9",
+      "telegram_message_id": 2023,
+      "actions": null,
+      "resolution": "Score filter shipped — backend SearchFilters.ScoreMin (catalog/{domain,handler,repo}), frontend useBrowseFilters scoreMin ref with URL round-trip, BrowseSidebar.vue range slider (0-10 step 0.5) under new browse.filters.section.score key in en/ja/ru. Picked up the maintenance-bot's partial work (Telegram msg 2028, 18-May 12:02 UTC) after it hit the 20-min CLAUDE_TIMEOUT and was killed; finished UI control, fixed trailing-newline in locales."
+    },
+    {
+      "id": "AUTO-092",
+      "created_at": "2026-05-18T10:32:45Z",
+      "source": "admin_request",
+      "category": "parser_failure",
+      "priority": "P1",
+      "status": "blocked_manual_action",
+      "title": "AllAnime SHA rotation — manual browser capture required",
+      "reporter": "@NANDIorg_9",
+      "telegram_message_id": 2025,
+      "actions": null
+    },
+    {
+      "id": "AUTO-093",
+      "created_at": "2026-05-18T12:02:24Z",
+      "source": "admin_request",
+      "category": "status",
+      "priority": "P3",
+      "status": "info_only",
+      "title": "Status query: AUTO-091 feature request",
+      "reporter": "@NANDIorg_9",
+      "telegram_message_id": 2026,
+      "actions": null
+    },
+    {
+      "id": "AUTO-094",
+      "created_at": "2026-05-19T04:15:04Z",
+      "source": "grafana_alert",
+      "category": "false_positive",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Canary alert false-positive: gogoanime in SCRAPER_DEGRADED_PROVIDERS",
+      "reporter": "grafana",
+      "telegram_message_id": 2031,
+      "affected_service": "gogoanime",
       "actions": null
     }
   ]

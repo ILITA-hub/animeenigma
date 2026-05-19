@@ -699,7 +699,8 @@
         "status": "状態",
         "year": "年",
         "provider": "配信元",
-        "sort": "並び替え"
+        "sort": "並び替え",
+        "score": "評価"
       },
       "format": {
         "any": "すべての種別",
@@ -722,6 +723,9 @@
       "provider": {
         "kodik": "Kodik (RU)",
         "animelib": "AnimeLib (RU)"
+      },
+      "score": {
+        "any": "すべて"
       }
     }
   },

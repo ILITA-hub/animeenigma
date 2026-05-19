@@ -311,6 +311,8 @@ type SearchFilters struct {
 	// true. Empty = no filter. Unknown values are dropped at the handler.
 	Kind      string
 	Providers []string
+	// ScoreMin filters to anime with score >= this value. nil = no filter.
+	ScoreMin *float64
 }
 
 // CreateAnimeRequest for admin anime creation

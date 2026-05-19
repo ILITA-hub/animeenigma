@@ -101,6 +101,32 @@
       </div>
     </FilterSection>
 
+    <!-- Minimum score — range slider from 0-10, step 0.5 (AUTO-091) -->
+    <FilterSection
+      :label="$t('browse.filters.section.score')"
+      :count="filters.scoreMin.value ? 1 : 0"
+    >
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between text-xs text-white/50">
+          <span>0</span>
+          <span class="text-white/80 font-medium">
+            {{ filters.scoreMin.value ? `>= ${filters.scoreMin.value}` : $t('browse.filters.score.any') }}
+          </span>
+          <span>10</span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="10"
+          step="0.5"
+          :value="filters.scoreMin.value ?? 0"
+          :aria-label="$t('browse.filters.section.score')"
+          class="w-full h-1.5 rounded-full appearance-none bg-white/10 accent-cyan-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+          @input="onScoreMinChange(($event.target as HTMLInputElement).valueAsNumber)"
+        />
+      </div>
+    </FilterSection>
+
     <!-- Provider — checkbox list with per-provider accent colors -->
     <FilterSection
       :label="$t('browse.filters.section.provider')"
@@ -288,6 +314,11 @@ function onYearChange(which: 'from' | 'to', n: number) {
       props.filters.yearFrom.value = v
     }
   }
+  props.filters.writeUrl()
+}
+
+function onScoreMinChange(n: number) {
+  props.filters.scoreMin.value = n > 0 ? n : null
   props.filters.writeUrl()
 }
 

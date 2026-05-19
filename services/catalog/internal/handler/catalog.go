@@ -639,6 +639,12 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		filters.GenreIDs = genres
 	}
 
+	if scoreMinStr := query.Get("score_min"); scoreMinStr != "" {
+		if v, err := strconv.ParseFloat(scoreMinStr, 64); err == nil && v > 0 && v <= 10 {
+			filters.ScoreMin = &v
+		}
+	}
+
 	// Normalize
 	if filters.PageSize > 100 {
 		filters.PageSize = 100

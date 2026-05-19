@@ -699,7 +699,8 @@
         "status": "Статус",
         "year": "Год",
         "provider": "Доступно на",
-        "sort": "Сортировка"
+        "sort": "Сортировка",
+        "score": "Оценка"
       },
       "format": {
         "any": "Любой формат",
@@ -722,6 +723,9 @@
       "provider": {
         "kodik": "Kodik (RU)",
         "animelib": "AnimeLib (RU)"
+      },
+      "score": {
+        "any": "Любая"
       }
     }
   },

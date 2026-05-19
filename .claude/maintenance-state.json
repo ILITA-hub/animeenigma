@@ -1,17 +1,17 @@
 {
-  "last_update_id": 124398469,
-  "last_poll_at": "2026-05-09T06:20:39Z",
+  "last_update_id": 124398474,
+  "last_poll_at": "2026-05-18T12:02:54Z",
   "session_started": "2026-04-17T00:27:42Z",
   "reactions_supported": true,
   "bot_user_id": 8609426278,
   "active_alerts": {
-    "Player Unavailable (Flaky):catalog": {
-      "alert_uid": "Player Unavailable (Flaky)",
-      "service": "catalog",
-      "first_seen": "2026-04-22T04:49:06Z",
-      "last_seen": "2026-04-22T04:49:06Z",
-      "issue_id": "AUTO-081",
-      "status": "button_fix"
+    "ScraperPlayabilityRegression:gogoanime": {
+      "alert_uid": "ScraperPlayabilityRegression",
+      "service": "gogoanime",
+      "first_seen": "2026-05-19T04:15:04Z",
+      "last_seen": "2026-05-19T04:15:04Z",
+      "issue_id": "AUTO-094",
+      "status": "escalate"
     }
   },
   "cooldowns": {
@@ -21,9 +21,10 @@
     "code_fix:catalog": "2026-04-05T04:28:06+02:00",
     "code_fix:frontend/web/src/components/player/SubtitleOverlay.vue": "2026-04-10T08:24:55+02:00",
     "code_fix:grafana": "2026-04-02T12:14:01+02:00",
+    "code_fix:libs/videoutils/proxy.go + services/scraper/": "2026-05-16T09:41:36+02:00",
     "docker_pull:aniwatch": "2026-04-27T03:29:05+02:00",
     "docker_pull:consumet": "2026-04-03T10:56:33+02:00",
-    "escalate-outage:global": "2026-04-17T13:22:40+02:00",
+    "escalate-outage:global": "2026-05-19T09:06:35+02:00",
     "redeploy:web": "2026-04-06T09:05:52+02:00",
     "restart:catalog": "2026-04-05T05:09:33+02:00",
     "restart:scheduler": "2026-04-08T10:07:19+02:00"
@@ -50,6 +51,10 @@
       "action": "code_fix",
       "at": "2026-04-02T10:04:01Z"
     },
+    "libs/videoutils/proxy.go + services/scraper/": {
+      "action": "code_fix",
+      "at": "2026-05-16T07:31:36Z"
+    },
     "scheduler": {
       "action": "auto_fix",
       "at": "2026-04-08T07:57:19Z"
@@ -59,5 +64,19 @@
       "at": "2026-04-06T06:55:52Z"
     }
   },
-  "pending_fixes": {}
+  "pending_fixes": {
+    "AUTO-090": {
+      "issue_id": "AUTO-090",
+      "proposed_at": "2026-05-18T09:56:09Z",
+      "fix_plan": {
+        "type": "restart",
+        "target": "catalog",
+        "description": "1. Obtain fresh SHA256 hashes — source from ani-cli (pystardust/ani-cli on GitHub, search for 'persistedQuery sha256Hash' in the allanime script) or browser DevTools network capture on allanime.day. You need three values: ALLANIME_QUERY_SEARCH_SHA, ALLANIME_QUERY_EPISODES_SHA, ALLANIME_QUERY_SOURCES_SHA.\n2. Update docker/.env with the three new SHA values.\n3. Run: make restart-catalog (env-var change only — no code rebuild needed, the catalog binary reads SHAs from env at startup).",
+        "context": "The allanime parser in services/catalog/internal/parser/allanime/queries.go is explicitly designed for this scenario — SHAs are read from ALLANIME_QUERY_*_SHA env vars (config.go:171-174) so they can be rotated without a code change. The fallback constants in queries.go are now stale. This is NOT a code bug; it is an operational rotation.",
+        "verification": "After restart, run: curl -s http://localhost:8081/metrics | grep 'parser_requests_total.*allanime'. The error counter should stop incrementing. To confirm a live round-trip: trigger a raw stream request for any anime. Watch catalog logs for absence of 'query rejected (likely stale SHA)' errors."
+      },
+      "telegram_message_id": 2022,
+      "alert_message_id": 2021
+    }
+  }
 }

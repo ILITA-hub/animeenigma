@@ -34,6 +34,7 @@ export function useBrowseFilters() {
   const yearTo = ref<number | null>(null)
   const providers = ref<Provider[]>([])
   const sort = ref<Sort>('popularity')
+  const scoreMin = ref<number | null>(null)
 
   // Internal lock so writeUrl()'s router.replace doesn't trigger our own
   // watcher to re-read and stomp the in-progress write.
@@ -58,6 +59,7 @@ export function useBrowseFilters() {
       .filter((p): p is Provider => PROVIDER_VALUES.includes(p as Provider))
     const rawSort = typeof qry.sort === 'string' ? (qry.sort as Sort) : 'popularity'
     sort.value = SORT_VALUES.includes(rawSort) ? rawSort : 'popularity'
+    scoreMin.value = qry.score_min ? parseFloat(qry.score_min as string) || null : null
   }
 
   function writeUrl() {
@@ -76,6 +78,7 @@ export function useBrowseFilters() {
     next.year_to = yearTo.value ? String(yearTo.value) : undefined
     next.providers = providers.value.length ? providers.value.join(',') : undefined
     next.sort = sort.value !== 'popularity' ? sort.value : undefined
+    next.score_min = scoreMin.value ? String(scoreMin.value) : undefined
     suppressNextWatch = true
     router.replace({ query: next })
   }
@@ -92,6 +95,7 @@ export function useBrowseFilters() {
     if (yearFrom.value) p.year_from = yearFrom.value
     if (yearTo.value) p.year_to = yearTo.value
     if (providers.value.length) p.providers = providers.value.join(',')
+    if (scoreMin.value) p.score_min = scoreMin.value
     return p
   })
 
@@ -106,6 +110,7 @@ export function useBrowseFilters() {
     if (status.value) n++
     if (yearFrom.value || yearTo.value) n++
     if (providers.value.length) n++
+    if (scoreMin.value) n++
     return n
   })
 
@@ -117,6 +122,7 @@ export function useBrowseFilters() {
     yearFrom.value = null
     yearTo.value = null
     providers.value = []
+    scoreMin.value = null
     sort.value = 'popularity'
     writeUrl()
   }
@@ -146,6 +152,7 @@ export function useBrowseFilters() {
     yearTo,
     providers,
     sort,
+    scoreMin,
     apiParams,
     activeCount,
     writeUrl,
