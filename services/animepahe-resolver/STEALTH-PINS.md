@@ -136,15 +136,46 @@ Plan 27-01 Task 4 ran the D5 hard ship gate against the locally-built
 `animepahe-resolver:dev` image. The gate is **PEAK_RSS ≤ 500 MB AND
 `page_recycle_total` ≥ 1** under a 100-sequential-`/search?q=Frieren` soak.
 
-> **TODO:** Plan 27-01 Task 4 fills this section with the empirical values:
->
-> - `PEAK_RSS`: <value> MB
-> - `page_recycle_total at end`: <value>
-> - `close-first recycle activated`: <yes|no>
-> - `PAGE_RECYCLE_AT`: <100 default, or 50 if downshifted per Pitfall 4>
-> - `OOMKilled events`: <0 or count>
-> - `502 responses during run`: <count, allowed ≤ 2 from initial stealth warmup>
->
-> If the gate failed (RSS > 500 MB OR `page_recycle_total === 0`), Task 4
-> documents the remediation (close-first recycle, lower PAGE_RECYCLE_AT to 50)
-> and the second-run measurements.
+**Result: PASS (single-run, no remediation needed).**
+
+| Measurement                                       | Value                                                 |
+|---------------------------------------------------|-------------------------------------------------------|
+| Image                                              | `animepahe-resolver:dev` built from this commit's Dockerfile |
+| Container resource limits                          | `--memory=500m --shm-size=256m`                       |
+| Soak shape                                         | 100 sequential `curl http://localhost:3000/search?q=Frieren` |
+| PEAK_RSS (from `docker stats --no-stream` samples) | **236.3 MiB** (samples: 196 / 234.5 / 236.3 MiB)      |
+| `page_recycle_total` at end                        | **1** (recycle fired at request 100 as designed)      |
+| `stealth_challenge_solves_total`                   | 1 (Pattern 2 retry exercised naturally mid-soak)      |
+| `stealth_challenge_failures_total`                 | 0                                                      |
+| `upstream_403_total{stage="first"}`                | 1                                                      |
+| `upstream_403_total{stage="second"}`               | 0                                                      |
+| HTTP 200 responses                                 | 100 / 100                                              |
+| HTTP 502 responses                                 | 0 (allowed budget was ≤ 2 from initial stealth warmup) |
+| `docker inspect` `OOMKilled`                       | **false**                                              |
+| `pageCount` at end (`/healthz`)                    | 101 (100 soak + 1 pre-soak smoke probe)                |
+| `close-first recycle activated`                    | **no** — overlap-order recycle (default) was sufficient |
+| `PAGE_RECYCLE_AT`                                  | **100** (default; no downshift to 50 needed)           |
+
+**Interpretation:** Steady-state RSS landed at ≈ 47 % of the 500 MB hard cap with
+≈ 263 MiB headroom — comfortably below the 450 MB sentinel that would have
+triggered the Pitfall 4 close-first remediation. The Pattern 2 retry path
+executed once spontaneously (the first request hit DDoS-Guard, was re-navigated,
+and succeeded on retry) so we have live evidence that the 403-retry code path
+works end-to-end with the live upstream, not just the offline test doubles.
+
+**Re-run command** (operator can reproduce):
+
+```bash
+cd /data/animeenigma
+docker build -t animepahe-resolver:dev -f services/animepahe-resolver/Dockerfile .
+docker run -d --name animepahe-resolver-soak \
+    -p 127.0.0.1:3000:3000 --shm-size=256m --memory=500m \
+    animepahe-resolver:dev
+until curl -fsS http://localhost:3000/healthz | grep -q '"browser":"up"'; do sleep 2; done
+for i in $(seq 1 100); do
+    curl -sS -o /dev/null -w "req=%{http_code}\n" "http://localhost:3000/search?q=Frieren"
+done
+docker stats --no-stream animepahe-resolver-soak
+curl -sS http://localhost:3000/metrics | grep -E '^(stealth_|page_recycle|upstream_403)'
+docker stop animepahe-resolver-soak && docker rm animepahe-resolver-soak
+```

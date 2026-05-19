@@ -65,6 +65,10 @@ async function initBrowser() {
   initPromise = (async () => {
     browser = await puppeteer.launch({
       headless: 'new',
+      // Honor PUPPETEER_EXECUTABLE_PATH if set (e.g. for local dev pointing at
+      // /usr/bin/google-chrome-stable on a host that has one); otherwise let
+      // puppeteer resolve via PUPPETEER_CACHE_DIR (set by the puppeteer:24 base
+      // image to /home/pptruser/.cache/puppeteer).
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args: LAUNCH_ARGS.slice(),
     });

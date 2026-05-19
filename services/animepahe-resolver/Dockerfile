@@ -7,10 +7,11 @@
 FROM ghcr.io/puppeteer/puppeteer:24
 
 # PUPPETEER_SKIP_DOWNLOAD prevents the puppeteer package from re-downloading
-# Chrome for Testing at install time — the base image already ships one.
-# PUPPETEER_EXECUTABLE_PATH points puppeteer.launch() at that pre-bundled binary.
+# Chrome for Testing at install time — the base image already ships one in
+# /home/pptruser/.cache/puppeteer/. puppeteer.launch() locates that binary
+# automatically via the cache directory (PUPPETEER_CACHE_DIR is preset by the
+# base image), so we deliberately do NOT pin PUPPETEER_EXECUTABLE_PATH.
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
     NODE_ENV=production \
     PORT=3000
 

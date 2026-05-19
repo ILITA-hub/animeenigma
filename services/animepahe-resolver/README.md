@@ -91,7 +91,7 @@ curl -sS http://localhost:3000/search?q=Frieren | jq '.data[0].title'
 | `PORT`                          | `3000`                             | HTTP listen port. |
 | `HOST`                          | `0.0.0.0`                          | HTTP listen host. |
 | `LOG_LEVEL`                     | `info`                             | Pino logger level. |
-| `PUPPETEER_EXECUTABLE_PATH`     | `/usr/bin/google-chrome-stable`    | Chrome binary path (set by the puppeteer:24 base image). |
+| `PUPPETEER_EXECUTABLE_PATH`     | unset (auto-detect via `PUPPETEER_CACHE_DIR`) | Optional override for the Chrome binary path. The puppeteer:24 base image ships Chrome under `/home/pptruser/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome`; puppeteer's launcher finds it via `PUPPETEER_CACHE_DIR`. Set this only when running outside the official image. |
 | `PUPPETEER_SKIP_DOWNLOAD`       | `true` (in Dockerfile)             | Skip puppeteer's bundled Chromium download. |
 | `PAGE_RECYCLE_AT`               | `100`                              | Pattern 3 recycle cadence (lower → more frequent). |
 
