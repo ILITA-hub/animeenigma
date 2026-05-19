@@ -98,6 +98,14 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 		s.ensureExternalIDs(ctx, anime)
 	}
 
+	// Lazy AniList ID backfill — required before Jimaku can search.
+	// fetchJimaku silently returns nil when AniListID == "", so without
+	// this Jimaku is permanently empty for any anime where the AniList
+	// ID was never resolved (Dorohedoro S2 hit this in prod 2026-05-19).
+	if anime.AniListID == "" && anime.ShikimoriID != "" {
+		s.ensureAniListID(ctx, anime)
+	}
+
 	type providerResult struct {
 		name   string
 		tracks []SubtitleTrack
@@ -272,6 +280,35 @@ func (s *SubsAggregator) ensureExternalIDs(ctx context.Context, anime *domain.An
 	if extra.TMDBID != nil {
 		anime.TMDBID = extra.TMDBID
 	}
+}
+
+// ensureAniListID resolves the anime's AniList ID via ARM and persists it
+// to the database when missing. Mutates the in-memory anime so the same
+// request can use the resolved ID immediately.
+//
+// Best-effort: failures are logged at debug level. Jimaku is a single
+// provider; missing AniList just means an empty result set.
+func (s *SubsAggregator) ensureAniListID(ctx context.Context, anime *domain.Anime) {
+	if s.idmap == nil {
+		return
+	}
+	mapping, err := s.idmap.ResolveByShikimoriID(anime.ShikimoriID)
+	if err != nil || mapping == nil || mapping.AniList == nil {
+		if err != nil {
+			s.log.Debugw("subs aggregator: arm anilist lookup failed",
+				"anime_id", anime.ID, "shikimori_id", anime.ShikimoriID, "error", err)
+		}
+		return
+	}
+	anilistID := strconv.Itoa(*mapping.AniList)
+	if err := s.animeRepo.UpdateAniListID(ctx, anime.ID, anilistID); err != nil {
+		s.log.Warnw("subs aggregator: persist anilist id failed",
+			"anime_id", anime.ID, "anilist_id", anilistID, "error", err)
+		return
+	}
+	anime.AniListID = anilistID
+	s.log.Infow("subs aggregator: backfilled anilist id via ARM",
+		"anime_id", anime.ID, "anilist_id", anilistID)
 }
 
 func (s *SubsAggregator) cacheKey(animeID string, episode int, langs []string) string {

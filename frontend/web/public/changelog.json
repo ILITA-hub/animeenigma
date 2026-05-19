@@ -4,6 +4,10 @@
     "entries": [
       {
         "type": "fix",
+        "message": "📝 Японские сабы Jimaku теперь подтягиваются ДЛЯ ВСЕХ аниме — раньше тихо отдавали пустоту для тайтлов, у которых в нашей БД ещё не был резолвнут AniList ID (а Jimaku ищет ИМЕННО по нему). Дорохедоро S2, Frieren, и десятки других — Jimaku их знает, мы — нет. `SubsAggregator.fetchJimaku` молча возвращал nil при пустом `anime.AniListID` без попытки lazy-резолва, в отличие от соседнего `ensureExternalIDs` для IMDb/TMDB. Добавили зеркальный `ensureAniListID` — ARM маппит shikimori → anilist, бэкенд персистит ID в БД, и Jimaku зовётся уже с корректным ключом. На Дорохедоро S2 сразу вылезли две дорожки (Erai-raws .ass + ABEMA .srt). ВЕЛИКОЛЕПНО 🎌"
+      },
+      {
+        "type": "fix",
         "message": "🎬 RAW JP плеер: первый эпизод теперь сам стартует, БЕЗ дополнительного клика по эпизоду. Был дурацкий race в RawPlayer.vue — `fetchEpisodes` вызывал `selectEpisode(episodes[0])` ВНУТРИ try-блока, ДО того как `loadingEpisodes` переключался в `false`. А `<video>` элемент сидит под `v-if=\"!loadingEpisodes\"` — то есть в DOM его в этот момент ещё НЕТ. `videoRef.value` = null → `attachStream` ранний return → `v.src` так и не выставляется. Юзер видел чёрный квадрат с 0:00 на дефолтном Chrome-плеере и думал, что сломалось. Лечение: ждать `nextTick()` после `loadingEpisodes=false`, и ТОЛЬКО потом авто-селект первого эпизода. Поймали через chrome MCP — `readyState=4`, `paused=false`, эпизод реально играет 🎌"
       },
       {
