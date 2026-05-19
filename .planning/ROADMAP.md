@@ -209,11 +209,69 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 - [x] 23-02-grafana-dashboard-PLAN.md — Wave 1: infra/grafana/dashboards/scraper-provider-health.json (4 panels: pass/fail per provider/server 24h, reason breakdown, last canary run, top failing tuples) + provisioning wiring + docker-compose mount (SCRAPER-HEAL-14)
 - [x] 23-03-alerts-and-maintenance-verify-PLAN.md — Wave 3: infra/grafana/alerts/scraper.yaml (ScraperPlayabilityRegression warning, ScraperAdDecoySurge warning, ScraperUnplayableSpike critical — all with provider/server/reason labels routing through default policy → maintenance-webhook contact point → :8087 host-side maintenance daemon) + provisioning wiring inline in docker/grafana/provisioning/alerting/rules.yml (Option A — keep in sync pointer) + 4 httptest synthetic Pattern 6/7 webhook tests + 4 maintenance-prompt symbol-stability tests (cacheStream OR computeStreamTTL slash-alternative + all 7 Reason values via libs/streamprobe.AllReasons() + Patterns 6/7 + Scraper Playability Regression sections) + 3 MAINTENANCE_TEST_MODE config-plumbing tests + changelog v3.1 closing entry + grafana restart + prometheus reload (SCRAPER-HEAL-15, SCRAPER-HEAL-16). Task 4 human-verify checkpoint pending user post-deploy smoke; pre-deploy automated verification passed.
 
+### Phase 24: EN Reconnect
+**Goal**: A logged-out user opens an anime page, sees an English tab between RU and 18+, clicks it, sees the three-phase loader, then real video plays — restoring the user-facing surface that v3.1 Phase 21 originally shipped (SCRAPER-HEAL-08) and the v3.0 Phase 20 cutover over-rotation deleted on 2026-05-18. Hard "test each provider" gate runs before any frontend file is touched.
+**Depends on**: v3.1 Phase 21 (the regressed surface this restores) + v3.0 Phases 15-19 (scraper microservice operational)
+**Requirements**: SCRAPER-HEAL-17, SCRAPER-HEAL-18, SCRAPER-HEAL-19, SCRAPER-HEAL-20
+**Success Criteria** (what must be TRUE):
+  1. Wave 0 hard gate: `docs/issues/scraper-provider-verification-2026-05-19.md` shows green for gogoanime + animepahe end-to-end against Frieren (MAL 52991); animekai either green or formally disabled via `SCRAPER_DEGRADED_PROVIDERS`.
+  2. `frontend/web/src/components/player/EnglishPlayer.vue` exists, restored from `git show 8424e99:frontend/web/src/components/player/EnglishPlayer.vue`, with all three-phase loader behavior intact and any post-2026-05-18 contract drift reconciled inline (scraperApi, useWatchPreferences, ReportButton, SubtitleOverlay, OtherSubsPanel).
+  3. `frontend/web/src/views/Anime.vue` re-mounts EnglishPlayer behind an EN tab. `VALID_LANGUAGES` whitelist grows `'en'`; `VALID_PROVIDERS` grows `'english'`; `switchLanguage` + `videoProvider` save watcher learn `'en'`; `applyResolvedCombo` filter no longer strips `'en'` / `'english'`. Stale-localStorage sanitization from commit ee4ed56 stays in place.
+  4. i18n keys re-added to all three locales: `videoTab.english`, `player.englishEmpty`, `player.englishUnavailable`, `player.serverPicker`, `player.categorySub`, `player.categoryDub`. `bun run lint:i18n` shows `Missing keys: 0`. Cleanup-removed multi-source-switcher keys stay removed.
+  5. `services/player/internal/handler/report.go::allowedPlayerTypes` and `services/player/internal/domain/preference.go::ValidPlayers` contain `"english": true`.
+  6. End-to-end: a logged-out user on production can open `https://animeenigma.ru/anime/frieren-beyond-journey-s-end`, click EN tab, click episode 1, see video play within 20 seconds.
+  7. Playwright e2e spec `frontend/web/tests/e2e/english-player.spec.ts` passes against the production-equivalent deployment.
+**Plans**: 5 plans across 4 waves (Wave 0: 24-00 provider verification HARD GATE; Wave 1: 24-01 backend allow-list; Wave 2: 24-02 + 24-03 + 24-04 parallel restore + i18n + Anime.vue rewire; Wave 3: 24-05 deploy + e2e + after-update). See `.planning/milestones/v3.1-phases/24-en-reconnect/24-CONTEXT.md` for the full plan sketch.
+- [ ] 24-00-PLAN.md — Wave 0 HARD GATE: provider verification per Frieren (MAL 52991) curl pipeline; verdict log to docs/issues/scraper-provider-verification-2026-05-19.md (SCRAPER-HEAL-20)
+- [ ] 24-01-PLAN.md — Wave 1: backend allow-list `english` in player service ValidPlayers + allowedPlayerTypes
+- [ ] 24-02-PLAN.md — Wave 2: restore EnglishPlayer.vue from commit 8424e99 + reconcile contract drift inline (SCRAPER-HEAL-17)
+- [ ] 24-03-PLAN.md — Wave 2: 6 i18n keys × 3 locales (SCRAPER-HEAL-19)
+- [ ] 24-04-PLAN.md — Wave 2: Anime.vue re-mount + type-union widening + switchLanguage + save watcher + applyResolvedCombo cleanup (SCRAPER-HEAL-18)
+- [ ] 24-05-PLAN.md — Wave 3: redeploy + Playwright spec + manual smoke + /animeenigma-after-update
+**UI hint**: yes
+
+### Phase 25: Audit Findings Resolution
+**Goal**: Close every gap the 2026-05-13 milestone audit surfaced — BLK-INT-01 hls3 host rotation via the maintenance-bot self-heal pipeline (deliberately NOT a direct edit), W-INT-01 parallel-probe race test, W-INT-02 maintenance-prompt stale `cacheStream` symbol reference, W-INT-03 silent-200 in streaming handler "domain not allowed" path.
+**Depends on**: v3.1 Phase 23 (canary + alert + maintenance-bot dispatch infrastructure already shipped)
+**Requirements**: SCRAPER-HEAL-21, SCRAPER-HEAL-22, SCRAPER-HEAL-23, SCRAPER-HEAL-24
+**Success Criteria** (what must be TRUE):
+  1. `TestGetStreamWithGate_AdDecoy_Skipped` in `services/scraper/internal/providers/gogoanime/client_gated_test.go` passes 10/10 under `go test -race -count=10` after the test-only rewrite (production code at `client.go:881-887` unchanged).
+  2. `.claude/maintenance-prompt.md` Pattern 7 references the actual scraper-side function name instead of the non-existent `cacheStream` symbol. Symbol-stability test stays green under the new content.
+  3. `services/streaming/internal/handler` HLS-proxy handler returns HTTP 502 with a descriptive JSON body on "domain not allowed for HLS proxy" (replaces the current silent HTTP 200 / Content-Length 0). Unit test asserts the new status code + body shape.
+  4. The deferred Task 4 manual smoke of Plan 23-03 runs end-to-end: operator triggers canary → Grafana `ScraperPlayabilityRegression` alert state transitions → maintenance bot Telegram diagnosis arrives with `known_pattern: Pattern 7`, `tier: button_fix`, `affected_files: [libs/videoutils/proxy.go]`. A maintenance-bot-attributed commit adds the live-rotated hls3 hosts (`cdn-centaurus.com`, `meadowlarkdesignstudio.cfd`, or whatever they are at ship time) to `HLSProxyAllowedDomains`.
+  5. `docs/issues/README.md` ISS-011 entry updated (or new ISS-012) documenting the runbook for future hls3 rotations: "trigger canary, watch alert, accept maintenance-bot proposal."
+**Plans**: 4 plans across 2 waves (Wave 1: 25-01 + 25-02 + 25-03 parallel — file scopes don't overlap; Wave 2: 25-04 operator-driven self-heal exercise). See `.planning/milestones/v3.1-phases/25-audit-findings-resolution/25-CONTEXT.md`.
+- [ ] 25-01-PLAN.md — Wave 1: fix `TestGetStreamWithGate_AdDecoy_Skipped` parallel-probe race (test-only) (SCRAPER-HEAL-22)
+- [ ] 25-02-PLAN.md — Wave 1: one-line maintenance-prompt Pattern 7 text fix replacing `cacheStream` reference (SCRAPER-HEAL-23)
+- [ ] 25-03-PLAN.md — Wave 1: streaming-handler "domain not allowed" 200→502 + unit test + redeploy + curl smoke (SCRAPER-HEAL-24)
+- [ ] 25-04-PLAN.md — Wave 2: BLK-INT-01 closure via operator-driven canary trigger + maintenance-bot Pattern 7 self-heal end-to-end (SCRAPER-HEAL-21)
+
+### Phase 26: Provider Expansion
+**Goal**: Grow the scraper's failover pool from two live providers (gogoanime, animepahe) to three or four. EnglishPlayer's in-player source dropdown lights up with 2-4 selectable options. Browse filter (`has_english` column) activates and matches meaningful row counts. Optionally resurrect AnimeKai with in-house MegaUp token generator (v3.0 Phase 19 carryover).
+**Depends on**: v3.1 Phase 24 (EnglishPlayer restored with dropdown infrastructure) for SCRAPER-HEAL-28 observability. SCRAPER-HEAL-25/26/27 are backend-only and ship independently.
+**Requirements**: SCRAPER-HEAL-25, SCRAPER-HEAL-26, SCRAPER-HEAL-27, SCRAPER-HEAL-28
+**Success Criteria** (what must be TRUE):
+  1. `services/scraper/internal/providers/allanime/` package implements `domain.Provider` end-to-end against captured `testdata/allanime/*.json` goldens. Registered in main.go after gogoanime in the orchestrator's failover chain. Production smoke confirms allanime returns episodes for at least one test anime.
+  2. `services/catalog/internal/domain/anime.go` grows `HasEnglish bool` GORM field; `services/catalog/internal/repo/anime.go` exposes `SetHasEnglish`; providers filter switch case in `services/catalog/internal/handler/catalog.go` accepts `"english"`; catalog's `GetScraperEpisodes` fire-and-forgets `SetHasEnglish(true)` on non-empty episode response. `useBrowseFilters` Provider union + BrowseSidebar row + i18n key all wired.
+  3. Research artifact `.planning/research/2026-05-19-en-source-survival.md` lists every 2026 EN-source candidate evaluated with a verdict (live | dead | uncertain) and recommendation (worth-implementing | not-worth | needs-deeper-PoC). Operator decision gate at end picks 0-2 survivors.
+  4. (Conditional on Success Criteria 3 + operator pick) Each selected survey-candidate provider implemented as its own `services/scraper/internal/providers/<name>/` package following the AllAnime template.
+  5. AnimeKai recovery either ships (provider methods + sidecar `/animekai-token` handler working end-to-end against `anikai.to` with `SCRAPER_ANIMEKAI_ENABLED=true` verified) OR stays escape-hatched (no implementation drift if R&D doesn't converge inside 7 days of effort — same as v3.0 Phase 19).
+  6. EnglishPlayer in-player source dropdown light-up: `capitalizeProvider` branches for every Phase-26-added provider, i18n labels per provider, dropdown visible whenever `providers.length > 1`. Playwright e2e exercises a logged-in user switching sources mid-episode.
+**Plans**: 7 plans across 5 waves (Wave 1: 26-01 AllAnime lift + 26-02 browse filter parallel; Wave 2: 26-03 survival sweep with operator decision gate; Wave 3a/3b: 26-04 + 26-05 conditional survey-candidate impl; Wave 4: 26-06 AnimeKai recovery; Wave 5: 26-07 dropdown polish + after-update). See `.planning/milestones/v3.1-phases/26-provider-expansion/26-CONTEXT.md`.
+- [ ] 26-01-PLAN.md — Wave 1: AllAnime lift into services/scraper/internal/providers/allanime/ (SCRAPER-HEAL-25)
+- [ ] 26-02-PLAN.md — Wave 1: `has_english` column + browse filter activation
+- [ ] 26-03-PLAN.md — Wave 2: 2026 EN-source survival sweep + operator decision gate (SCRAPER-HEAL-26)
+- [ ] 26-04-PLAN.md — Wave 3a (conditional): survey candidate #1 implementation
+- [ ] 26-05-PLAN.md — Wave 3b (conditional): survey candidate #2 implementation
+- [ ] 26-06-PLAN.md — Wave 4: AnimeKai recovery — fill in v3.0 Phase 19 escape-hatch surface (SCRAPER-HEAL-27)
+- [ ] 26-07-PLAN.md — Wave 5: dropdown polish + Playwright e2e + /animeenigma-after-update (SCRAPER-HEAL-28)
+**UI hint**: yes
+
 ### Next Milestone (TBD)
 
-After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved future phases:
-- Phase 24: VibePlayer Recovery via WARP egress (revives VibePlayer as a working server by routing scraper egress through Cloudflare WARP; separate spec when there is appetite)
-- Phase 25: MinIO Hot Archival (rip popular HLS streams to MinIO; serve from there to decouple from upstream availability; separate v3.2 spec)
+After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved future phases (renumbered — original 24/25 reservations absorbed into v3.1's reopening):
+- Phase 27: VibePlayer Recovery via WARP egress (revives VibePlayer as a working server by routing scraper egress through Cloudflare WARP; separate spec when there is appetite)
+- Phase 28: MinIO Hot Archival (rip popular HLS streams to MinIO; serve from there to decouple from upstream availability; separate v3.2 spec)
 
 ## Progress
 
@@ -226,5 +284,10 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 | 17 | v3.0 | 4/4 | Complete    | 2026-05-12 |
 | 18 | v3.0 | 4/4 | Complete    | 2026-05-12 |
 | 19 | v3.0 | 1/1 | Complete    | 2026-05-12 |
-| 20 | v3.0 | 1/5 | In Progress|  |
-| 23 | v3.1 | 2/3 | In Progress | 2026-05-13 (23-01, 23-02 shipped) |
+| 20 | v3.0 | 5/5 | ✅ Complete | 2026-05-18 (over-rotated — regression repaired in v3.1 Phase 24) |
+| 21 | v3.1 | 4/4 | ✅ Complete | 2026-05-13 (SCRAPER-HEAL-08 regressed 2026-05-18; restored Phase 24) |
+| 22 | v3.1 | 2/2 | ✅ Complete | 2026-05-13 (BLK-INT-01 open; addressed Phase 25) |
+| 23 | v3.1 | 3/3 | ✅ Complete | 2026-05-13 (W-INT-02 open; addressed Phase 25) |
+| 24 | v3.1 | 0/5 | Planning    | — |
+| 25 | v3.1 | 0/4 | Planning    | — |
+| 26 | v3.1 | 0/7 | Planning    | — |
