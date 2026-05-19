@@ -118,6 +118,7 @@ docker exec animeenigma-scraper sh -c 'wget -qO- --user-agent="Mozilla/5.0 ... C
 - Packed-JS key drift → update regex in the relevant `services/scraper/internal/embeds/<provider>.go`. Tier: `button_fix` (more invasive; covers packed-JS unpacking and crypto routines outside auto-edit scope).
 - New CDN host with valid stream → add to `libs/videoutils/proxy.go` `HLSProxyAllowedDomains`. Tier: `button_fix`.
 - Provider completely unreachable, platform-rebranded, or behind FingerprintJS/bot-protection → mark "degraded" via `SCRAPER_DEGRADED_PROVIDERS` env. Tier: `escalate` (recommend env change, do NOT edit code).
+- Stealth plugin defeated on animepahe (sidecar pattern) — **symptom:** `stealth_challenge_failures_total` rises sustained > 1h in `animepahe-resolver`'s `/metrics`, OR `/api/anime/{uuid}/scraper/episodes?prefer=animepahe` returns 502 with body containing `stealth_challenge_failed`. **Fix path:** follow `services/animepahe-resolver/STEALTH-PINS.md` "Refresh procedure" (`cd services/animepahe-resolver && PUPPETEER_SKIP_DOWNLOAD=true npm install puppeteer-extra@latest puppeteer-extra-plugin-stealth@latest && npm test && cd /data/animeenigma && make redeploy-animepahe-resolver`). Tier: `button_fix`. **If the upgrade ALSO fails:** re-add `animepahe` to `SCRAPER_DEGRADED_PROVIDERS` in `docker/.env` and `escalate`.
 
 ## Auto-Edit Selector Workflow
 
