@@ -70,7 +70,7 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest,
 	}
 
 	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashedPassword, err := HashPassword(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
@@ -78,7 +78,7 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest,
 	// Create user
 	user := &domain.User{
 		Username:     req.Username,
-		PasswordHash: string(hashedPassword),
+		PasswordHash: hashedPassword,
 		Role:         authz.RoleUser,
 	}
 
@@ -101,6 +101,19 @@ func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest, sc Se
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, errors.Unauthorized("invalid credentials")
+	}
+
+	// Opportunistic upgrade: if the stored hash uses a weaker cost than
+	// the current policy, re-hash with the new cost and persist. Failures
+	// here MUST NOT block the login.
+	if NeedsRehash(user.PasswordHash) {
+		if newHash, err := HashPassword(req.Password); err == nil {
+			if updateErr := s.userRepo.UpdatePasswordHash(ctx, user.ID, newHash); updateErr != nil {
+				s.log.Warnw("opportunistic rehash failed to persist", "user_id", user.ID, "error", updateErr)
+			} else {
+				user.PasswordHash = newHash
+			}
+		}
 	}
 
 	return s.createSessionAndAuthResponse(ctx, user, sc)

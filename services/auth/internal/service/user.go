@@ -66,11 +66,11 @@ func (s *UserService) Update(ctx context.Context, userID string, req *domain.Upd
 		}
 
 		// Hash new password
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*req.NewPassword), bcrypt.DefaultCost)
+		hashedPassword, err := HashPassword(*req.NewPassword)
 		if err != nil {
 			return nil, fmt.Errorf("hash password: %w", err)
 		}
-		user.PasswordHash = string(hashedPassword)
+		user.PasswordHash = hashedPassword
 	}
 
 	if err := s.userRepo.Update(ctx, user); err != nil {

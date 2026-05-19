@@ -86,6 +86,19 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	return nil
 }
 
+// UpdatePasswordHash writes only the password_hash column for the user.
+// Used by the opportunistic-rehash path on successful login.
+func (r *UserRepository) UpdatePasswordHash(ctx context.Context, userID, hash string) error {
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("password_hash", hash)
+	if result.Error != nil {
+		return fmt.Errorf("update password hash: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return liberrors.NotFound("user")
+	}
+	return nil
+}
+
 func (r *UserRepository) GetByPublicID(ctx context.Context, publicID string) (*domain.User, error) {
 	var user domain.User
 	if err := r.db.WithContext(ctx).First(&user, "public_id = ?", publicID).Error; err != nil {
