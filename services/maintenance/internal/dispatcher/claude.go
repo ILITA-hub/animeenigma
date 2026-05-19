@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/domain"
 )
 
@@ -23,9 +24,10 @@ type Dispatcher struct {
 	model       string
 	codeModel   string
 	timeoutSec  int
+	log         *logger.Logger
 }
 
-func New(claudePath, projectRoot, promptPath, model, codeModel string, timeoutSec int) *Dispatcher {
+func New(claudePath, projectRoot, promptPath, model, codeModel string, timeoutSec int, log *logger.Logger) *Dispatcher {
 	return &Dispatcher{
 		claudePath:  claudePath,
 		projectRoot: projectRoot,
@@ -33,6 +35,7 @@ func New(claudePath, projectRoot, promptPath, model, codeModel string, timeoutSe
 		model:       model,
 		codeModel:   codeModel,
 		timeoutSec:  timeoutSec,
+		log:         log,
 	}
 }
 
@@ -154,7 +157,11 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string, extraAllo
 		args = append(args, strings.Join(extraAllowedTools, " "))
 	}
 
-	fmt.Printf("[dispatcher] invoking claude (model=%s, prompt=%d bytes, timeout=%v)\n", model, len(prompt), timeout)
+	d.log.Infow("invoking claude",
+		"model", model,
+		"prompt_bytes", len(prompt),
+		"timeout", timeout,
+	)
 
 	cmd := exec.Command(d.claudePath, args...)
 	cmd.Dir = d.projectRoot
@@ -174,7 +181,7 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string, extraAllo
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start claude: %w", err)
 	}
-	fmt.Printf("[dispatcher] claude started (pid=%d)\n", cmd.Process.Pid)
+	d.log.Infow("claude started", "pid", cmd.Process.Pid)
 
 	// Read output with 1MB cap
 	outputCh := make(chan []byte, 1)
@@ -195,7 +202,10 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string, extraAllo
 	select {
 	case <-ctx.Done():
 		// Timeout: kill the entire process group
-		fmt.Printf("[dispatcher] claude TIMEOUT (pid=%d) after %v — killing\n", cmd.Process.Pid, timeout)
+		d.log.Errorw("claude timeout — killing",
+			"pid", cmd.Process.Pid,
+			"timeout", timeout,
+		)
 		if cmd.Process != nil {
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
@@ -204,13 +214,17 @@ func (d *Dispatcher) invoke(ctx context.Context, prompt, model string, extraAllo
 		output := <-outputCh
 		stderrOut := <-errCh
 		if err != nil {
-			fmt.Printf("[dispatcher] claude exited with error (output=%d bytes, stderr=%d bytes)\n", len(output), len(stderrOut))
+			d.log.Errorw("claude exited with error",
+				"output_bytes", len(output),
+				"stderr_bytes", len(stderrOut),
+				"error", err,
+			)
 			if len(stderrOut) > 0 {
-				fmt.Printf("[dispatcher] stderr: %s\n", truncate(stderrOut, 1000))
+				d.log.Errorw("claude stderr", "stderr", truncate(stderrOut, 1000))
 			}
 			return nil, fmt.Errorf("claude exited with error: %w, stderr: %s", err, truncate(stderrOut, 500))
 		}
-		fmt.Printf("[dispatcher] claude finished (output=%d bytes)\n", len(output))
+		d.log.Infow("claude finished", "output_bytes", len(output))
 		return parseResponse(output)
 	}
 }

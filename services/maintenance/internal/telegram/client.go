@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
 
 const apiBase = "https://api.telegram.org/bot"
@@ -18,15 +20,17 @@ type Client struct {
 	botUserID          int64
 	reactionsSupported bool
 	http               *http.Client
+	log                *logger.Logger
 }
 
-func NewClient(token string, chatID int64) *Client {
+func NewClient(token string, chatID int64, log *logger.Logger) *Client {
 	return &Client{
 		token:  token,
 		chatID: chatID,
 		http: &http.Client{
 			Timeout: 70 * time.Second, // Must be > long-poll timeout (60s)
 		},
+		log: log,
 	}
 }
 
@@ -186,7 +190,11 @@ func (c *Client) SetReaction(messageID int, emoji string) bool {
 	}
 	_, err := c.post("setMessageReaction", body)
 	if err != nil {
-		fmt.Printf("[telegram] setReaction(%s) on message %d FAILED: %v\n", emoji, messageID, err)
+		c.log.Warnw("set reaction failed",
+			"emoji", emoji,
+			"message_id", messageID,
+			"error", err,
+		)
 	}
 	return err == nil
 }

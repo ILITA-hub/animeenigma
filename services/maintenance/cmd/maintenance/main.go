@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/classifier"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/dispatcher"
@@ -22,44 +23,51 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/transport"
 )
 
+// log is the package-level structured logger, initialized in main().
+var log *logger.Logger
+
 func main() {
+	// Initialize structured logger
+	log = logger.Default()
+	defer func() { _ = log.Sync() }()
+
 	// Load config
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-		os.Exit(1)
+		log.Fatalw("config error", "error", err)
 	}
 
-	fmt.Println("Starting AnimeEnigma Maintenance Service...")
+	log.Infow("starting AnimeEnigma maintenance service")
 
 	// Preflight: verify Claude CLI
 	if err := verifyClaudeCLI(cfg.Claude.Path); err != nil {
-		fmt.Fprintf(os.Stderr, "claude CLI check failed: %v\n", err)
-		os.Exit(1)
+		log.Fatalw("claude CLI check failed", "error", err)
 	}
-	fmt.Println("✓ Claude CLI verified")
+	log.Infow("claude CLI verified")
 
 	// Initialize Telegram client
-	tg := telegram.NewClient(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
+	tg := telegram.NewClient(cfg.Telegram.BotToken, cfg.Telegram.ChatID, log)
 
 	// Preflight: verify Telegram bot
 	webhookInfo, err := tg.GetWebhookInfo()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "telegram webhook check failed: %v\n", err)
-		os.Exit(1)
+		log.Fatalw("telegram webhook check failed", "error", err)
 	}
 	if webhookInfo.URL != "" {
-		fmt.Fprintf(os.Stderr, "FATAL: alerts bot has webhook set (%s). getUpdates will not work. Remove webhook first.\n", webhookInfo.URL)
-		os.Exit(1)
+		log.Fatalw("alerts bot has webhook set — getUpdates will not work, remove webhook first",
+			"webhook_url", webhookInfo.URL,
+		)
 	}
-	fmt.Println("✓ No webhook conflict")
+	log.Infow("no webhook conflict")
 
 	botInfo, err := tg.GetMe()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "telegram getMe failed: %v\n", err)
-		os.Exit(1)
+		log.Fatalw("telegram getMe failed", "error", err)
 	}
-	fmt.Printf("✓ Bot: @%s (ID: %d)\n", botInfo.Username, botInfo.ID)
+	log.Infow("bot identified",
+		"username", botInfo.Username,
+		"bot_id", botInfo.ID,
+	)
 
 	// Check if bot can use reactions (needs admin in supergroup)
 	reactionsSupported := false
@@ -68,7 +76,10 @@ func main() {
 		reactionsSupported = true
 	}
 	tg.SetReactionsSupported(reactionsSupported)
-	fmt.Printf("✓ Reactions: %v (bot status: %s)\n", reactionsSupported, memberStatus(member))
+	log.Infow("reactions support determined",
+		"reactions_supported", reactionsSupported,
+		"bot_status", memberStatus(member),
+	)
 
 	// Initialize state manager
 	stateMgr := state.NewManager(
@@ -76,12 +87,11 @@ func main() {
 		resolveProjectPath(cfg.Claude.ProjectRoot, cfg.IssuePath),
 	)
 	if err := stateMgr.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "state load failed: %v\n", err)
-		os.Exit(1)
+		log.Fatalw("state load failed", "error", err)
 	}
 	stateMgr.SetBotInfo(botInfo.ID, reactionsSupported)
 	stateMgr.SetSessionStarted()
-	fmt.Println("✓ State loaded")
+	log.Infow("state loaded")
 
 	// Initialize Claude dispatcher
 	disp := dispatcher.New(
@@ -91,6 +101,7 @@ func main() {
 		cfg.Claude.Model,
 		cfg.Claude.CodeModel,
 		cfg.Claude.TimeoutSec,
+		log,
 	)
 
 	// Start HTTP server (health + metrics + report intake + Grafana webhook)
@@ -111,9 +122,9 @@ func main() {
 		Handler: router,
 	}
 	go func() {
-		fmt.Printf("✓ HTTP server on %s\n", cfg.Server.Address())
+		log.Infow("HTTP server listening", "address", cfg.Server.Address())
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
+			log.Errorw("HTTP server error", "error", err)
 		}
 	}()
 
@@ -121,14 +132,14 @@ func main() {
 	gf := grafana.NewClient(cfg.Grafana.URL)
 	// Preflight: verify Grafana connectivity
 	if alerts, err := gf.GetFiringAlerts(); err != nil {
-		fmt.Printf("⚠ Grafana check failed (will retry): %v\n", err)
+		log.Warnw("grafana check failed (will retry)", "error", err)
 	} else {
-		fmt.Printf("✓ Grafana connected (%d active alerts)\n", len(alerts))
+		log.Infow("grafana connected", "active_alerts", len(alerts))
 	}
 
 	// Send startup message
 	tg.SendMessage("🤖 <b>Maintenance service started</b>\nMonitoring alerts (Grafana API) + user messages (Telegram).")
-	fmt.Println("✓ Startup message sent")
+	log.Infow("startup message sent")
 
 	// Set up graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,7 +160,7 @@ func main() {
 
 	// Wait for shutdown signal
 	sig := <-sigChan
-	fmt.Printf("\nReceived %s, shutting down...\n", sig)
+	log.Infow("shutdown signal received", "signal", sig.String())
 	cancel()
 
 	// Grace period for in-progress Claude invocations
@@ -159,7 +170,7 @@ func main() {
 
 	tg.SendMessage("🤖 <b>Maintenance service stopping</b>")
 	stateMgr.Save()
-	fmt.Println("Shutdown complete.")
+	log.Infow("shutdown complete")
 }
 
 type service struct {
@@ -195,7 +206,7 @@ func (s *service) run(ctx context.Context) {
 			st := s.state.State()
 			updates, err := s.tg.GetUpdates(st.LastUpdateID+1, 60)
 			if err != nil {
-				fmt.Printf("[telegram] poll error: %v\n", err)
+				log.Warnw("telegram poll error", "error", err)
 				time.Sleep(5 * time.Second)
 				continue
 			}
@@ -239,7 +250,7 @@ func (s *service) run(ctx context.Context) {
 			case <-ticker.C:
 				alerts, err := s.gf.GetFiringAlerts()
 				if err != nil {
-					fmt.Printf("[grafana-reconcile] poll error: %v\n", err)
+					log.Warnw("grafana reconcile poll error", "error", err)
 					continue
 				}
 
@@ -258,7 +269,7 @@ func (s *service) run(ctx context.Context) {
 					}
 				}
 				if len(newAlerts) > 0 {
-					fmt.Printf("[grafana-reconcile] %d missed alerts detected\n", len(newAlerts))
+					log.Infow("grafana reconcile detected missed alerts", "count", len(newAlerts))
 					workChan <- workItem{grafanaAlerts: newAlerts}
 				}
 			}
@@ -389,7 +400,7 @@ func (s *service) checkResolvedAlerts(currentAlerts []domain.ClassifiedMessage) 
 	st := s.state.State()
 	for key, active := range st.ActiveAlerts {
 		if !currentKeys[key] {
-			fmt.Printf("[grafana] Alert resolved: %s\n", key)
+			log.Infow("grafana alert resolved", "alert_key", key)
 			s.state.UpdateIssue(active.IssueID, func(issue *domain.Issue) {
 				issue.Status = domain.StatusResolved
 				issue.ResolvedAt = time.Now().UTC().Format(time.RFC3339)
@@ -420,11 +431,11 @@ func (s *service) resolveAlertFromWebhook(key string, wa domain.GrafanaWebhookAl
 
 	active := s.state.GetActiveAlert(key)
 	if active == nil {
-		fmt.Printf("[webhook] resolve for unknown alert %s — skipping\n", key)
+		log.Warnw("webhook resolve for unknown alert — skipping", "alert_key", key)
 		return
 	}
 
-	fmt.Printf("[webhook] Alert resolved: %s\n", key)
+	log.Infow("webhook alert resolved", "alert_key", key)
 	s.state.UpdateIssue(active.IssueID, func(issue *domain.Issue) {
 		issue.Status = domain.StatusResolved
 		issue.ResolvedAt = time.Now().UTC().Format(time.RFC3339)
@@ -511,40 +522,65 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 			if sentID, err := s.tg.SendMessage(fireHTML); err == nil {
 				msg.MessageID = sentID
 			} else {
-				fmt.Printf("[webhook] failed to send 🔴 Firing message: %v\n", err)
+				log.Errorw("webhook failed to send firing message", "error", err)
 			}
 		}
 
 		// React with eyes
 		if !s.tg.SetReaction(msg.MessageID, "👀") {
-			fmt.Printf("[reaction] failed to set 👀 on message %d\n", msg.MessageID)
+			log.Warnw("failed to set reaction",
+				"emoji", "👀",
+				"message_id", msg.MessageID,
+			)
 		}
 
 		// Invoke Claude
-		fmt.Printf("[claude] analyzing message %d (type: %d, priority: %d)...\n", msg.MessageID, msg.Type, msg.Priority)
+		log.Infow("analyzing message",
+			"message_id", msg.MessageID,
+			"type", msg.Type,
+			"priority", msg.Priority,
+		)
 		analyzeStart := time.Now()
 		result, err := s.disp.Analyze(ctx, msg)
 		elapsed := time.Since(analyzeStart).Round(time.Second)
 
 		if err != nil {
-			fmt.Printf("[claude] FAILED after %s: %v\n", elapsed, err)
+			log.Errorw("claude analysis failed",
+				"duration", elapsed,
+				"error", err,
+			)
 			if !s.tg.SetReaction(msg.MessageID, "💔") {
-				fmt.Printf("[reaction] failed to set 💔 on message %d\n", msg.MessageID)
+				log.Warnw("failed to set reaction",
+					"emoji", "💔",
+					"message_id", msg.MessageID,
+				)
 			}
 			s.tg.SendReply(msg.MessageID, fmt.Sprintf("<b>⚠️ Analysis failed</b>\n%s", truncateForTelegram(err.Error())))
 			continue
 		}
 
-		fmt.Printf("[claude] completed in %s — tier=%s issue=%q category=%s priority=%s\n",
-			elapsed, result.Tier, result.Issue.Title, result.Issue.Category, result.Issue.Priority)
-		fmt.Printf("[claude] diagnosis: %s\n", truncateForTelegram(result.Diagnosis.RootCause))
+		log.Infow("claude analysis completed",
+			"duration", elapsed,
+			"tier", result.Tier,
+			"issue_title", result.Issue.Title,
+			"category", result.Issue.Category,
+			"priority", result.Issue.Priority,
+		)
+		log.Infow("claude diagnosis", "root_cause", truncateForTelegram(result.Diagnosis.RootCause))
 		if result.FixPlan != nil {
-			fmt.Printf("[claude] fix_plan: type=%s target=%s desc=%s\n", result.FixPlan.Type, result.FixPlan.Target, result.FixPlan.Description)
+			log.Infow("claude fix plan",
+				"fix_type", result.FixPlan.Type,
+				"target", result.FixPlan.Target,
+				"description", result.FixPlan.Description,
+			)
 		}
 
 		// React with success
 		if !s.tg.SetReaction(msg.MessageID, "👍") {
-			fmt.Printf("[reaction] failed to set 👍 on message %d\n", msg.MessageID)
+			log.Warnw("failed to set reaction",
+				"emoji", "👍",
+				"message_id", msg.MessageID,
+			)
 		}
 
 		// Handle result based on tier
@@ -603,17 +639,24 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	}
 
 	// Post to Telegram — maintenance bot owns this message
-	fmt.Printf("[report] received from %s (player: %s, anime: %s)\n", report.Username, report.PlayerType, report.AnimeName)
+	log.Infow("report received",
+		"username", report.Username,
+		"player_type", report.PlayerType,
+		"anime_name", report.AnimeName,
+	)
 	msgID, err := s.tg.SendMessage(b.String())
 	if err != nil {
-		fmt.Printf("[report] FAILED to post to Telegram: %v\n", err)
+		log.Errorw("report failed to post to telegram", "error", err)
 		return
 	}
-	fmt.Printf("[report] posted to Telegram as message %d\n", msgID)
+	log.Infow("report posted to telegram", "message_id", msgID)
 
 	// React with 👀
 	if !s.tg.SetReaction(msgID, "👀") {
-		fmt.Printf("[reaction] failed to set 👀 on message %d\n", msgID)
+		log.Warnw("failed to set reaction",
+			"emoji", "👀",
+			"message_id", msgID,
+		)
 	}
 
 	// Build ClassifiedMessage for Claude analysis
@@ -627,33 +670,50 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	}
 
 	// Invoke Claude
-	fmt.Printf("[claude] analyzing report (message %d)...\n", msgID)
+	log.Infow("analyzing report", "message_id", msgID)
 	analyzeStart := time.Now()
 	result, err := s.disp.Analyze(ctx, msg)
 	elapsed := time.Since(analyzeStart).Round(time.Second)
 
 	if err != nil {
-		fmt.Printf("[claude] report analysis FAILED after %s: %v\n", elapsed, err)
+		log.Errorw("claude report analysis failed",
+			"duration", elapsed,
+			"error", err,
+		)
 		if !s.tg.SetReaction(msgID, "💔") {
-			fmt.Printf("[reaction] failed to set 💔 on message %d\n", msgID)
+			log.Warnw("failed to set reaction",
+				"emoji", "💔",
+				"message_id", msgID,
+			)
 		}
 		s.tg.SendReply(msgID, fmt.Sprintf("<b>⚠️ Analysis failed</b>\n%s", truncateForTelegram(err.Error())))
 		return
 	}
 
-	fmt.Printf("[claude] report analysis completed in %s — tier=%s issue=%q category=%s\n",
-		elapsed, result.Tier, result.Issue.Title, result.Issue.Category)
-	fmt.Printf("[claude] diagnosis: %s\n", truncateForTelegram(result.Diagnosis.RootCause))
+	log.Infow("claude report analysis completed",
+		"duration", elapsed,
+		"tier", result.Tier,
+		"issue_title", result.Issue.Title,
+		"category", result.Issue.Category,
+	)
+	log.Infow("claude diagnosis", "root_cause", truncateForTelegram(result.Diagnosis.RootCause))
 	if result.FixPlan != nil {
-		fmt.Printf("[claude] fix_plan: type=%s target=%s desc=%s\n", result.FixPlan.Type, result.FixPlan.Target, result.FixPlan.Description)
+		log.Infow("claude fix plan",
+			"fix_type", result.FixPlan.Type,
+			"target", result.FixPlan.Target,
+			"description", result.FixPlan.Description,
+		)
 	}
 
 	if !s.tg.SetReaction(msgID, "👍") {
-		fmt.Printf("[reaction] failed to set 👍 on message %d\n", msgID)
+		log.Warnw("failed to set reaction",
+			"emoji", "👍",
+			"message_id", msgID,
+		)
 	}
 	s.handleResult(ctx, msg, result)
 	s.state.Save()
-	fmt.Printf("[report] processing complete for message %d\n", msgID)
+	log.Infow("report processing complete", "message_id", msgID)
 }
 
 func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage, result *domain.AnalysisResult) {
@@ -687,7 +747,13 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		AffectedService:   affectedService,
 		Actions:           result.ActionsTaken,
 	})
-	fmt.Printf("[issue] created %s — %q (tier=%s, source=%s, reporter=%s)\n", issueID, result.Issue.Title, result.Tier, source, reporter)
+	log.Infow("issue created",
+		"issue_id", issueID,
+		"title", result.Issue.Title,
+		"tier", result.Tier,
+		"source", source,
+		"reporter", reporter,
+	)
 
 	// Track active alert
 	if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
@@ -725,9 +791,15 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 			replyID, sendErr = s.tg.SendMessage(html)
 		}
 		if sendErr != nil {
-			fmt.Printf("[telegram] FAILED to send reply for %s: %v\n", issueID, sendErr)
+			log.Errorw("telegram failed to send reply",
+				"issue_id", issueID,
+				"error", sendErr,
+			)
 		} else {
-			fmt.Printf("[telegram] reply sent (message %d) for %s\n", replyID, issueID)
+			log.Infow("telegram reply sent",
+				"message_id", replyID,
+				"issue_id", issueID,
+			)
 		}
 		return replyID, sendErr
 	}
@@ -796,24 +868,40 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 
 	switch action {
 	case "fix":
-		fmt.Printf("[button] @%s approved fix for %s (target=%s, type=%s)\n", msg.From.Username, issueID, fix.FixPlan.Target, fix.FixPlan.Type)
+		log.Infow("admin approved fix",
+			"admin", msg.From.Username,
+			"issue_id", issueID,
+			"target", fix.FixPlan.Target,
+			"fix_type", fix.FixPlan.Type,
+		)
 		s.tg.AnswerCallbackQuery(msg.CallbackID, "Applying fix...")
 		s.tg.SetReaction(replyToID, "👀")
 
-		fmt.Printf("[claude] executing fix for %s...\n", issueID)
+		log.Infow("executing fix", "issue_id", issueID)
 		analyzeStart := time.Now()
 		result, err := s.disp.ExecuteFix(ctx, *fix)
 		elapsed := time.Since(analyzeStart).Round(time.Second)
 
 		if err != nil {
-			fmt.Printf("[claude] fix execution FAILED for %s after %s: %v\n", issueID, elapsed, err)
+			log.Errorw("fix execution failed",
+				"issue_id", issueID,
+				"duration", elapsed,
+				"error", err,
+			)
 			s.tg.SetReaction(replyToID, "💔")
 			s.tg.SendReply(replyToID, fmt.Sprintf("<b>❌ Fix failed</b>\n%s", truncateForTelegram(err.Error())))
 		} else {
-			fmt.Printf("[claude] fix executed for %s in %s — tier=%s\n", issueID, elapsed, result.Tier)
+			log.Infow("fix executed",
+				"issue_id", issueID,
+				"duration", elapsed,
+				"tier", result.Tier,
+			)
 			if len(result.ActionsTaken) > 0 {
 				for _, a := range result.ActionsTaken {
-					fmt.Printf("[claude]   action: %s → %s\n", a.Action, a.Result)
+					log.Infow("fix action",
+						"action", a.Action,
+						"result", a.Result,
+					)
 				}
 			}
 			s.tg.SetReaction(replyToID, "👍")
@@ -822,9 +910,12 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 				replyHTML = fmt.Sprintf("<b>🔧 Fix Applied</b> (approved by @%s)\n\n<b>Issue:</b> %s", msg.From.Username, issueID)
 			}
 			if _, err := s.tg.SendReply(replyToID, replyHTML); err != nil {
-				fmt.Printf("[telegram] FAILED to send fix result for %s: %v\n", issueID, err)
+				log.Errorw("telegram failed to send fix result",
+					"issue_id", issueID,
+					"error", err,
+				)
 			} else {
-				fmt.Printf("[telegram] fix result sent for %s\n", issueID)
+				log.Infow("telegram fix result sent", "issue_id", issueID)
 			}
 			s.state.UpdateIssue(issueID, func(issue *domain.Issue) {
 				issue.Status = domain.StatusResolved
@@ -838,10 +929,13 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 		}
 		s.state.RemovePendingFix(issueID)
 		s.state.Save()
-		fmt.Printf("[button] fix processing complete for %s\n", issueID)
+		log.Infow("button fix processing complete", "issue_id", issueID)
 
 	case "dismiss":
-		fmt.Printf("[button] @%s dismissed %s\n", msg.From.Username, issueID)
+		log.Infow("admin dismissed issue",
+			"admin", msg.From.Username,
+			"issue_id", issueID,
+		)
 		s.tg.AnswerCallbackQuery(msg.CallbackID, "Dismissed")
 		s.tg.SetReaction(replyToID, "💔")
 		s.state.RemovePendingFix(issueID)
@@ -887,7 +981,7 @@ func verifyClaudeCLI(path string) error {
 	if err != nil {
 		return fmt.Errorf("claude --version failed: %w (output: %s)", err, string(output))
 	}
-	fmt.Printf("✓ Claude CLI: %s", strings.TrimSpace(string(output)))
+	log.Infow("claude CLI version", "version", strings.TrimSpace(string(output)))
 	return nil
 }
 
