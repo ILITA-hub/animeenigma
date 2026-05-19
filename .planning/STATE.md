@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Scraper Self-Healing
 status: executing
-stopped_at: v3.1 reopened with three new phases scoped (24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion). Top-level planning docs (STATE, MILESTONES, ROADMAP) updated; v3.1-REQUIREMENTS.md rewritten from the misnamed v3.0-archive; per-phase CONTEXT.md created for each new phase; v3.1-MILESTONE-AUDIT.md annotated as superseded. No code changes yet — that begins at `/gsd-plan-phase --phase 24`.
-last_updated: "2026-05-19T18:30:00.000Z"
-last_activity: 2026-05-19 -- Phase 28 (Provider Expansion R2) scoped and CONTEXT.md locked; ready for /gsd-autonomous --only 28
+stopped_at: Phase 28 (Provider Expansion R2) scoped 2026-05-19 — AnimeFever + Miruro + 9anime.me.uk per operator "as many providers as possible." CONTEXT.md locked with D1-D7 decisions; SCRAPER-HEAL-34..39 added to v3.1-REQUIREMENTS.md; ROADMAP.md grew Phase 28 entry. Phase 24 still blocked on upstream provider recovery (`human_needed` from prior autonomous run); Phase 28 can ship independently — its only soft dependency on Phase 24 is the UI dropdown polish in 28-06 which degrades gracefully.
+last_updated: "2026-05-19T10:14:26.200Z"
+last_activity: 2026-05-19 -- Phase 27 execution started
 progress:
-  total_phases: 11
-  completed_phases: 5
-  total_plans: 30
-  completed_plans: 20
-  percent: 67
+  total_phases: 14
+  completed_phases: 6
+  total_plans: 46
+  completed_plans: 29
+  percent: 63
 ---
 
 # Project State
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row. v3.1's contribution: when the user actually presses Play on an English-source anime, the player surfaces real video instead of upstream ad-decoy garbage.
 
-**Current focus:** Phase 28 — Provider Expansion R2 (AnimeFever + Miruro + 9anime.me.uk)
+**Current focus:** Phase 27 — AnimePahe Revival via Stealth-Chromium Sidecar
 
 ## Current Position
 
-Phase: 28 — Provider Expansion R2 (scoped 2026-05-19, ready to plan)
-Plan: 28-00..28-06 (sketched in CONTEXT.md, not yet materialized)
-Status: Ready for `/gsd-autonomous --only 28` (autonomous will plan + execute)
-Last activity: 2026-05-19 -- Phase 28 CONTEXT.md locked with D1-D7 decisions
+Phase: 27 (AnimePahe Revival via Stealth-Chromium Sidecar) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 27
+Last activity: 2026-05-19 -- Phase 27 execution started
 
 ## Shipped Milestones
 
