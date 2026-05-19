@@ -191,3 +191,5 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 | SCRAPER-NF-05 | Phase 16 (woven through 16-19) | Pending |
 
 **Coverage:** 49/49 SCRAPER-* requirements mapped. No orphans. Each NF requirement is anchored to the earliest phase where it must be observable; remaining phases inherit the constraint as an invariant.
+
+**v3.1 self-healing requirements (SCRAPER-HEAL-01..33)** live in `.planning/milestones/v3.1-REQUIREMENTS.md`. The Phase 27 additions (SCRAPER-HEAL-29..33 — stealth-Chromium sidecar + parser rewrite + compose wiring + gate-clear + degraded-providers flip) are registered there. The v3.0 traceability matrix above is not re-stated for v3.1 self-healing work.
