@@ -191,9 +191,36 @@ func TestGetStreamWithGate_HappyPath_FirstServerWins(t *testing.T) {
 	}
 }
 
-// TestGetStreamWithGate_AdDecoy_Skipped — streamhg returns ad_decoy gate
-// failure; earnvids passes. Result comes from earnvids; ad-decoy counter
-// + unplayable counter both increment for streamhg.
+// TestGetStreamWithGate_AdDecoy_Skipped — locks the contract that an
+// AdDecoy probe increments BOTH parser_unplayable_total{reason=ad_decoy}
+// AND parser_ad_decoy_total exactly once per failing server.
+//
+// Phase 25 W-INT-01 / SCRAPER-HEAL-22 rewrite: the AdDecoy server now
+// occupies position 2 (the sequential-remainder branch of
+// coldPathGated, see client.go around the parCancel block) instead of
+// position 0. Rationale:
+//
+//   - Production code at client.go:881-911 is correct — it Incs both
+//     counters synchronously when the probe returns ReasonAdDecoy.
+//   - The previous shape put AdDecoy at position 0 (streamhg) with a
+//     Playable winner at position 1 (earnvids). Under -race the
+//     orchestrator fires parCancel() the moment earnvids returns
+//     Playable, racing the streamhg goroutine's Inc + return path.
+//     The test then read the counter before the Inc had committed,
+//     producing 5/5 reproducible -race failures.
+//   - Putting AdDecoy at position 2 (vibeplayer) routes the failing
+//     probe through the sequential-remainder loop where no parCancel
+//     can race the Inc. The Inc completes before attemptOne returns,
+//     and the test reads the counter only after the all-fail exit
+//     path returns ErrProviderDown.
+//   - All three servers fail in this rewrite (ZeroMatch + ZeroMatch +
+//     AdDecoy) so GetStreamWithGate returns ErrProviderDown / gated=true
+//     / stream=nil; the cache is NOT set. Counter assertions are the
+//     contract being locked, not the winning-source assertion.
+//
+// Do NOT add runtime.Gosched() / time.Sleep to production code to
+// "fix" this; the race lives entirely in test topology. See Phase 25
+// CONTEXT.md D2.
 func TestGetStreamWithGate_AdDecoy_Skipped(t *testing.T) {
 	resetGateMetrics()
 	srv := httptest.NewServer(http.NotFoundHandler())
@@ -203,40 +230,48 @@ func TestGetStreamWithGate_AdDecoy_Skipped(t *testing.T) {
 	for _, s := range servers {
 		fk.streams[s.ID] = extractStreamFor(s.ID)
 	}
-	fp.set(servers[0].ID+"/master.m3u8", streamprobe.ReasonAdDecoy, 0)   // streamhg fails
-	fp.set(servers[1].ID+"/master.m3u8", streamprobe.ReasonPlayable, 0)  // earnvids passes
+	// streamhg (parallel-pair) fails benignly with ZeroMatch.
+	fp.set(servers[0].ID+"/master.m3u8", streamprobe.ReasonZeroMatch, 0)
+	// earnvids (parallel-pair) fails benignly with ZeroMatch.
+	fp.set(servers[1].ID+"/master.m3u8", streamprobe.ReasonZeroMatch, 0)
+	// vibeplayer (sequential remainder, position 2) fails with AdDecoy —
+	// the branch under test; no parCancel can race the Inc here.
+	fp.set(servers[2].ID+"/master.m3u8", streamprobe.ReasonAdDecoy, 0)
 
 	stream, gated, err := p.GetStreamWithGate(context.Background(),
 		"frieren", "frieren-episode-1", "", domain.CategorySub, servers)
-	if err != nil {
-		t.Fatalf("GetStreamWithGate: %v", err)
+	if err == nil {
+		t.Fatal("err = nil; want ErrProviderDown (all 3 servers gate-failed)")
+	}
+	if !errors.Is(err, domain.ErrProviderDown) {
+		t.Errorf("err = %v; want ErrProviderDown chain", err)
 	}
 	if !gated {
-		t.Errorf("gated = false; want true")
+		t.Errorf("gated = false; want true (gate DID run on all 3 servers)")
 	}
-	if stream.Sources[0].URL != servers[1].ID+"/master.m3u8" {
-		t.Errorf("winning source = %q; want %q (earnvids)", stream.Sources[0].URL, servers[1].ID+"/master.m3u8")
+	if stream != nil {
+		t.Errorf("stream = %v; want nil on all-fail exhaustion", stream)
 	}
+	// The AdDecoy contract: BOTH counters increment exactly once for the
+	// vibeplayer server. This is the lock the audit's W-INT-01 finding
+	// flagged as flaking; under the new topology the Inc completes
+	// synchronously before attemptOne returns.
 	if v := testutil.ToFloat64(metrics.ParserUnplayableTotal.WithLabelValues(
-		"gogoanime", "streamhg", string(streamprobe.ReasonAdDecoy))); v != 1 {
-		t.Errorf("parser_unplayable_total{server=streamhg,reason=ad_decoy} = %v; want 1", v)
+		"gogoanime", "vibeplayer", string(streamprobe.ReasonAdDecoy))); v != 1 {
+		t.Errorf("parser_unplayable_total{server=vibeplayer,reason=ad_decoy} = %v; want 1", v)
 	}
 	if v := testutil.ToFloat64(metrics.ParserAdDecoyTotal.WithLabelValues(
-		"gogoanime", "streamhg")); v != 1 {
-		t.Errorf("parser_ad_decoy_total{server=streamhg} = %v; want 1", v)
+		"gogoanime", "vibeplayer")); v != 1 {
+		t.Errorf("parser_ad_decoy_total{server=vibeplayer} = %v; want 1", v)
 	}
-	// Cache set on earnvids.
+	// No winning server → cache MUST NOT be set.
 	setLog := fc.snapshotSetLog()
-	wantKey := "scraper:winning_server:gogoanime:frieren:frieren-episode-1"
-	found := false
+	winnerKey := "scraper:winning_server:gogoanime:frieren:frieren-episode-1"
 	for _, k := range setLog {
-		if k == wantKey {
-			found = true
+		if k == winnerKey {
+			t.Errorf("cache set log %v contains winning_server key on all-fail path; want absent", setLog)
 			break
 		}
-	}
-	if !found {
-		t.Errorf("cache set log %v; want to contain %q", setLog, wantKey)
 	}
 }
 
