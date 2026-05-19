@@ -340,7 +340,7 @@ func (k *KwikExtractor) Extract(ctx context.Context, embedURL string, headers ht
 		}
 	}
 	if req.Header.Get("Referer") == "" {
-		req.Header.Set("Referer", "https://animepahe.ru")
+		req.Header.Set("Referer", "https://animepahe.pw/")
 	}
 
 	resp, err := k.http.Do(req)
