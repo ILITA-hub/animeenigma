@@ -84,12 +84,18 @@ type RedisConfig struct {
 }
 
 // AnimePaheConfig is the per-provider override surface for animepahe.Provider.
-// BaseURL defaults to https://animepahe.ru (the canonical host); Plan 16-01's
-// connectivity note documents https://animepahe.com as a Cloudflare-fronted
-// alias on networks where the direct host is blocked. Setting the env var at
-// deploy time keeps the rotation restart-not-rebuild.
+//
+// Phase 27 SCRAPER-HEAL-30: the Go parser no longer talks to animepahe.*
+// directly. ResolverURL points at the stealth-Chromium sidecar
+// (`services/animepahe-resolver/`) which owns the upstream challenge stack
+// (DDoS-Guard, browser-fingerprint, etc.). Defaults to the docker-compose
+// service name `http://animepahe-resolver:3000`. Override via
+// SCRAPER_ANIMEPAHE_RESOLVER_URL when running on a non-default port or
+// rotating the sidecar in place. Pre-Phase-27 field `BaseURL` (paired with
+// env var `ANIMEPAHE_BASE_URL`) is gone — there is no fallback to upstream
+// animepahe.* hosts.
 type AnimePaheConfig struct {
-	BaseURL string
+	ResolverURL string
 }
 
 // GogoanimeConfig is the per-provider override surface for the gogoanime.Provider
@@ -155,7 +161,7 @@ func Load() (*Config, error) {
 			DB:       getEnvInt("REDIS_DB", 0),
 		},
 		AnimePahe: AnimePaheConfig{
-			BaseURL: getEnv("ANIMEPAHE_BASE_URL", "https://animepahe.ru"),
+			ResolverURL: getEnv("SCRAPER_ANIMEPAHE_RESOLVER_URL", "http://animepahe-resolver:3000"),
 		},
 		Gogoanime: GogoanimeConfig{
 			BaseURL:        getEnv("SCRAPER_GOGOANIME_BASE_URL", "https://anitaku.to"),
@@ -179,13 +185,13 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid MEGACLOUD_EXTRACTOR_URL %q: missing scheme or host", u)
 		}
 	}
-	if u := cfg.AnimePahe.BaseURL; u != "" {
+	if u := cfg.AnimePahe.ResolverURL; u != "" {
 		parsed, err := url.Parse(u)
 		if err != nil {
-			return nil, fmt.Errorf("invalid ANIMEPAHE_BASE_URL %q: %w", u, err)
+			return nil, fmt.Errorf("invalid SCRAPER_ANIMEPAHE_RESOLVER_URL %q: %w", u, err)
 		}
 		if parsed.Scheme == "" || parsed.Host == "" {
-			return nil, fmt.Errorf("invalid ANIMEPAHE_BASE_URL %q: missing scheme or host", u)
+			return nil, fmt.Errorf("invalid SCRAPER_ANIMEPAHE_RESOLVER_URL %q: missing scheme or host", u)
 		}
 	}
 	if u := cfg.Gogoanime.BaseURL; u != "" {

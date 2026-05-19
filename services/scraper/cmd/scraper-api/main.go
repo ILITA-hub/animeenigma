@@ -107,12 +107,12 @@ func main() {
 	// error so a misconfigured Deps surfaces at boot, not via a runtime
 	// 502 (nil pointer dereference) minutes after deploy.
 	animePaheProvider, err := animepahe.New(animepahe.Deps{
-		BaseURL: cfg.AnimePahe.BaseURL,
-		HTTP:    animePaheBaseHTTP,
-		Embeds:  registry,
-		MalSync: malSyncClient,
-		Cache:   redisCache,
-		Log:     log,
+		ResolverURL: cfg.AnimePahe.ResolverURL,
+		HTTP:        animePaheBaseHTTP,
+		Embeds:      registry,
+		MalSync:     malSyncClient,
+		Cache:       redisCache,
+		Log:         log,
 	})
 	if err != nil {
 		log.Fatalw("failed to construct AnimePahe provider", "error", err)
@@ -396,7 +396,7 @@ func main() {
 			"providers", len(orchestrator.HealthSnapshot(context.Background())),
 			"embed_extractors", len(registry.Names()),
 			"megacloud_url", cfg.MegacloudExtractor.URL,
-			"animepahe_base_url", cfg.AnimePahe.BaseURL,
+			"animepahe_base_url", cfg.AnimePahe.ResolverURL,
 			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
 			"animekai_enabled", cfg.AnimeKai.Enabled,
 			"animekai_base_url", cfg.AnimeKai.BaseURL,

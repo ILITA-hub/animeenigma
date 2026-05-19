@@ -182,10 +182,68 @@ func (m *MalSyncClient) Lookup(ctx context.Context, malID, provider string) (str
 		id := fmt.Sprintf("%v", entry.Identifier)
 		if id != "" && id != "<nil>" {
 			_ = m.cache.Set(ctx, hitKey, id, malSyncCacheTTL)
+			// Phase 27 A9: also write the persistent reverse-mapping key
+			// so /release 404 invalidation can find the malID without an
+			// in-memory map (works across process restarts). Best-effort
+			// — log-level error not fatal; the forward cache is still
+			// useful even if the reverse write fails.
+			_ = m.cache.Set(ctx, reverseKey(provider, id), malID, malSyncCacheTTL)
 			return id, true, nil
 		}
 	}
 	// Map present but all entries empty — treat as a miss.
 	_ = m.cache.Set(ctx, missKey, true, malSyncMissTTL)
 	return "", false, nil
+}
+
+// reverseKey builds the persistent reverse-mapping cache key used by
+// LookupMalID + Invalidate. Format: `malsync_reverse:<provider>:<providerID>`.
+//
+// Phase 27 A9 (SCRAPER-HEAL-30): replaces an earlier in-memory reverse map.
+// Persistent storage means /release 404 invalidation works across process
+// restarts and across scraper processes.
+func reverseKey(provider, providerID string) string {
+	return fmt.Sprintf("malsync_reverse:%s:%s", provider, providerID)
+}
+
+// LookupMalID is the inverse of Lookup: given a (provider, providerID),
+// returns the malID that was written by a prior Lookup positive-cache
+// hit. Returns ("", nil) cleanly when no reverse mapping exists — the
+// caller (ListEpisodes /release 404 path) treats that as an acceptable
+// no-op (nothing to invalidate; FindID was never called for this
+// providerID in the past 24h, so the forward MalSync entry is also
+// absent).
+//
+// Non-cache errors are propagated verbatim; the call site logs them but
+// does not fail the user-visible request.
+func (m *MalSyncClient) LookupMalID(ctx context.Context, providerID, provider string) (string, error) {
+	if providerID == "" || provider == "" {
+		return "", nil
+	}
+	var malID string
+	err := m.cache.Get(ctx, reverseKey(provider, providerID), &malID)
+	if err != nil {
+		if errors.Is(err, cache.ErrNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return malID, nil
+}
+
+// Invalidate evicts BOTH the forward and reverse MalSync cache entries
+// for a (malID, provider, providerID) triple in one variadic Delete.
+//
+// Phase 27 A9: single-strike — one /release 404 evicts both directions
+// so the next FindID call re-runs the resolver's /search. The error from
+// cache.Delete is propagated verbatim but is best-effort at the call site
+// (failing to evict a stale mapping is strictly less bad than failing
+// the user-visible 404).
+func (m *MalSyncClient) Invalidate(ctx context.Context, malID, provider, providerID string) error {
+	if malID == "" || provider == "" {
+		return nil
+	}
+	forwardKey := fmt.Sprintf("malsync:%s:%s", malID, provider)
+	revKey := reverseKey(provider, providerID)
+	return m.cache.Delete(ctx, forwardKey, revKey)
 }

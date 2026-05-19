@@ -1,5 +1,9 @@
 package animepahe
 
+// NOTE (Phase 27 / A5): the cache key episodes:animepahe:<providerID> is
+// already animeSession-keyed because FindID returns the UUID session (not
+// the MAL ID). No rekeying needed on the sidecar migration.
+
 import (
 	"net/url"
 	"strconv"
