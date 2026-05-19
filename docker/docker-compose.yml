@@ -128,7 +128,10 @@ services:
     environment:
       NODE_ENV: production
       LOG_LEVEL: info
-      UPSTREAM_BASE_URL: https://animepahe.pw   # hardcoded in code per T-27-01-01; this env is informational/auditable
+      # NOTE: the sidecar HARDCODES https://animepahe.pw in server.js + browser.js
+      # (T-27-01-01 — not overridable via env). The line below is audit documentation
+      # only; changing it does NOT change sidecar behavior.
+      _HARDCODED_UPSTREAM: "https://animepahe.pw (see server.js:37, browser.js:31)"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/healthz"]
       interval: 30s
