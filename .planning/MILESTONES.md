@@ -1,39 +1,40 @@
 # Milestones
 
-## v3.1 Scraper Self-Healing (Shipped: 2026-05-13)
+## v3.1 Scraper Self-Healing — REOPENED 2026-05-19
 
-**Phases completed:** 9 phases, 33 plans, 49 tasks
+**Original ship:** 2026-05-13 — Phases 21, 22, 23 (16 SCRAPER-HEAL requirements, 9 plans across 3 phases). Audit verdict that day: `gaps_found (with strong implementation foundation)` — 1 production blocker (BLK-INT-01: rotated hls3 hosts not in HLS proxy allowlist → silent HTTP 200 / Content-Length 0) and 3 warnings (W-INT-01..03) all logged but not resolved.
 
-**Key accomplishments:**
+**Reopened:** 2026-05-19 — three triggers:
 
-- File existence:
-- File existence:
-- File existence:
-- File existence:
-- Connectivity probe proves AnimePahe is alive behind DDoS-Guard; BaseHTTPClient.Jar() accessor unblocks Plan 16-03; four upstream-shaped fixtures and a CI-enforced regression lock on the HLS allowlist now ship.
-- Found during:
-- First live `domain.Provider` for the v3.0 universal scraper — resolves AnimePahe anime IDs via malsync (24h cache) with Jaro-Winkler 0.85 fuzzy fallback, paginates episode listings with 6h cache, scrapes /play HTML for Kwik servers, delegates stream extraction to the Plan 16-02 KwikExtractor, and transparently handles DDoS-Guard cookies via the Plan 16-01 BaseHTTPClient.Jar() accessor.
-- scraperApi client + 12 new locale keys + ReportButton/diagnostics scraperProvider+triedChain wiring + useWatchPreferences per-anime scraper preference — green floor for Plan 16-06 (EnglishPlayer.vue) with hiAnimeApi/consumetApi untouched.
-- Wave 3 closing plan — converts the assembled Phase 16-02 (Kwik) + 16-03 (AnimePahe) pieces into a live end-to-end pipeline.
-- Unified English-source player (`EnglishPlayer.vue`) live behind the scraperApi orchestrator with cyan accent + single-option Source dropdown; Anime.vue mounts it as the default English-language tab and gates HiAnime + Consumet legacy tabs behind `?legacy=1`; Playwright e2e covers tab visibility, legacy flag, and ReportButton meta.tried thread-through.
-- Prometheus gauge family `provider_health_up{provider, stage}` + 60s fail-open in-memory cache + orchestrator runFailover skip-unhealthy branch wired through with nil-cache backcompat for Phase 16.
-- One-liner:
-- 1. [Rule 3 - Blocking] Updated `services/scraper/internal/transport/router_test.go`
-- Prometheus scrape job for scraper:8088, scraper-health Grafana dashboard with 5 stage stat tiles + heartbeat + fallback panels, and a stream_segment-down Telegram alert — the deploy-side scaffolding for Phase 17 ahead of any Go code emitting the new gauges.
-- Shared fuzzy/ package extracted + 8 anitaku.to goldens captured atomically + GogoanimeConfig env var + 20 RED-state test scaffolds, all on a clean break from the dead 9anime brand.
-- Gogoanime/Anitaku scraper provider implementing domain.Provider end-to-end against the Plan 18-01 anitaku.to goldens — fuzzy /search.html ID resolution (primary path), sub/dub category merge with 6h cache, Cloudflare-Turnstile skip-list at ListServers, and registry-dispatched GetStream with &e=<delta> + &s=<unix> stream TTL.
-- Three new EmbedExtractor implementations (vibeplayer regex-only, streamhg + earnvids Dean-Edwards packers) backed by a shared packedExtractor base in packed_common.go, with the goja-runtime helper lifted from kwik.go's method to a package-level function so kwik + packed both route through one watchdog implementation.
-- Gogoanime/Anitaku wired end-to-end into the running scraper service + EnglishPlayer source dropdown: 3 extractors registered, provider failover-positioned after animepahe, 5 CDN hostnames appended to HLS allowlist, multi-option source dropdown activated with ARIA semantics + rollback-on-fail UX, production deploy verified healthy across all 5 probe stages.
-- AnimeKai shipped as a wired-but-disabled scraper provider behind `SCRAPER_ANIMEKAI_ENABLED=false`: every Provider method returns wrapped `domain.ErrProviderDown`, the sidecar `POST /animekai-token` returns HTTP 501, and the orchestrator continues to serve from AnimePahe → Gogoanime without users seeing the third option. SCRAPER-KAI-01..04 + KAI-07 carried to v3.1 with a body-only fill-in surface.
-- 4-gate hard guardrail Bash script that blocks Phase 20 deletion until EnglishPlayer has served >= 7 days of clean production traffic (earliest legitimate ship: 2026-05-19, since EnglishPlayer first shipped 2026-05-12 via commit 9e9d9a2).
-- 1. [Rule 1 — Bug] UTF-8 BOM literal in source caused `vet: illegal byte order mark` compile error
-- TestOrchestrator_AnimePaheToGogoanimeFailover
-- Found during:
-- streamhg/earnvids extractors now return BOTH hls2 (signed m3u8) AND hls3 (.txt) URLs as separate Stream.Sources entries, and gogoanime.coldPathGated.attemptOne iterates all Sources via the streamprobe gate before declaring a server failed.
-- Closed the architectural loop on Phase 22's multi-URL fallback by adding the two hls3 CDN eTLD+1 hosts to HLSProxyAllowedDomains, locked them with a regression + behavior test pair, proved end-to-end survival via a handler-level integration smoke, and documented ISS-011 (VibePlayer ad-decoy poisoning) inline as the v3.1 motivating incident — status Mitigated pending WARP egress.
-- SHIPPED
-- SHIPPED
-- SHIPPED
+1. **Regression (2026-05-18):** Phase 20 cutover (v3.0) over-rotated. The targeted HiAnime + Consumet deletions swept up EnglishPlayer.vue, the EN tab markup in Anime.vue, the multi-source dropdown infrastructure, and the i18n keys that v3.1 Phase 21's SCRAPER-HEAL-08 delivered. Production EN playback now blocked at the UI layer (no tab to click) — orthogonal to the existing BLK-INT-01 backend block.
+2. **Original audit gaps still open:** BLK-INT-01 + W-INT-01..03 from the 2026-05-13 audit were never closed. The audit predicted the canary would catch BLK-INT-01 via Pattern 7, but the manual smoke test for that pipeline (Task 4 of Plan 23-03) was deferred and never run.
+3. **New scope from operator:** add provider expansion — lift AllAnime catalog parser into a third in-rotation scraper provider, run a fresh 2026 EN-source survival sweep, and pick up the v3.0 Phase 19 AnimeKai escape-hatch carryover.
+
+**New phases (24-26) scoped:**
+
+| Phase | Name | Requirements | Purpose |
+|---|---|---|---|
+| 24 | EN Reconnect | SCRAPER-HEAL-17..20 | Restore EnglishPlayer.vue + EN tab + type unions + i18n keys; gate on "test each provider" end-to-end verification |
+| 25 | Audit Findings Resolution | SCRAPER-HEAL-21..24 | Auto-discover hls3 hosts (BLK-INT-01), fix probe-race test (W-INT-01), sync maintenance prompt cacheStream symbol (W-INT-02), fix silent-200 in streaming handler (W-INT-03) |
+| 26 | Provider Expansion | SCRAPER-HEAL-25..28 | Lift `services/catalog/internal/parser/allanime/` into `services/scraper/internal/providers/allanime/`, fresh 2026 candidate research, resurrect AnimeKai with in-house MegaUp token generator (carried from v3.0 Phase 19) |
+
+**Phase 21-23 deliverables that DID ship and DID NOT regress** (unchanged, no rework needed):
+- `libs/streamprobe/` package + 7-Reason classification + hardcoded ad-CDN blocklist
+- gogoanime server priority + per-server fallback + Redis winning-server cache
+- `parser_unplayable_total` + `parser_ad_decoy_total` metrics
+- `meta.gated` response field in `/scraper/stream`
+- Multi-URL extraction in streamhg + earnvids (hls2 + hls3)
+- HLS proxy allowlist additions (managementadvisory.sbs, exoplanethunting.space — but see Phase 25 BLK-INT-01 for the rotation problem)
+- Daily 03:00 canary cron + 5-label metric
+- Grafana dashboard `scraper-provider-health.json` + 3 alert rules (ScraperPlayabilityRegression / ScraperAdDecoySurge / ScraperUnplayableSpike)
+- Maintenance-prompt Patterns 6/7 + Scraper Playability Regression section
+
+**Phase 21 deliverable that DID ship and DID regress** (Phase 24 restores):
+- `frontend/web/src/components/player/EnglishPlayer.vue` three-phase loader (SCRAPER-HEAL-08) — file deleted 2026-05-18 in commit fe3b487 alongside HiAnime/Consumet. Recoverable from git history (`git show 8424e99:frontend/web/src/components/player/EnglishPlayer.vue` = 1973 lines, last good state).
+
+**Reopening trace:** see `.planning/milestones/v3.1-REOPENING.md` for the full chronology + commit references + decision rationale.
+
+**Original 2026-05-13 ship summary** (preserved for history): 16 SCRAPER-HEAL requirements implemented across 9 plans, production smoke passed on backend (meta.gated true on cold, absent on warm; parser_unplayable_total live increment caught a real streamhg failure → earnvids took over). Multi-URL extraction (hls2+hls3) wired end-to-end. Daily canary running with 5-label metric to Grafana → maintenance-webhook on :8087. See `v3.1-MILESTONE-AUDIT.md` for the audit narrative.
 
 ---
 

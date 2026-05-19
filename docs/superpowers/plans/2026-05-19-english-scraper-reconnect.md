@@ -1,5 +1,7 @@
 # English Scraper Reconnect Implementation Plan
 
+> **SUPERSEDED 2026-05-19** — content absorbed into v3.1 Phase 24/25/26 plan sketches per `.planning/milestones/v3.1-REOPENING.md`. Authoritative planning surface is `.planning/milestones/v3.1-phases/`. Phase 0 (provider verification) maps to v3.1 Phase 24 Wave 0 (SCRAPER-HEAL-20); Phase A.1 (player + tab) maps to v3.1 Phase 24 Waves 1-3 (SCRAPER-HEAL-17..19); Phase A.2 (browse filter + has_english) moved entirely to v3.1 Phase 26 Wave 1 alongside the AllAnime lift per Phase 24 D4 (filter is only useful once 3+ providers are populating has_english). Phase A.3 (health-aware tab hiding) deferred indefinitely per Phase 24 D5. This file remains in `docs/superpowers/plans/` as a historical record. Implementation also pivoted on Phase 24 D1: restore EnglishPlayer.vue from git commit `8424e99` instead of writing from scratch.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Restore an English-source streaming tab in the player by wiring the orphaned `services/scraper` microservice (gogoanime + animepahe live, animekai escape-hatched) to a new `EnglishPlayer.vue` component, plus the small backend additions to make the browse filter usable.

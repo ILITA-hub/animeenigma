@@ -1,7 +1,9 @@
 # English Scraper Reconnect — Design
 
+> **SUPERSEDED 2026-05-19** — content absorbed into v3.1 Phase 24 (EN Reconnect) per `.planning/milestones/v3.1-REOPENING.md`. The authoritative planning surface for this work is now `.planning/milestones/v3.1-phases/24-en-reconnect/24-CONTEXT.md`. Project B from this design moved to v3.1 Phase 26 (Provider Expansion); browse-filter activation moved from this design's Phase A.2 into v3.1 Phase 26 Wave 1 per Phase 24 D4. This file remains in `docs/superpowers/specs/` as a historical record of the brainstorming path that led to v3.1's reopening.
+
 **Date:** 2026-05-19
-**Status:** Draft, pending review
+**Status:** Superseded — see header note
 **Scope:** Project A of the two-part "fix older + add new providers" initiative. Project B (provider expansion) is a separate, later cycle.
 
 ## Problem

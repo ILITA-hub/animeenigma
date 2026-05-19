@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Scraper Self-Healing
-status: Awaiting next milestone
-stopped_at: "Phase 23 Plan 23-03 (alerts + maintenance verify) SHIPPED 2026-05-13. Three Grafana alert rules live (warning/warning/critical), 11 new tests passing under -race, .claude/maintenance-prompt.md unmodified per D6 (verified by git diff --quiet). Pending user smoke: Task 4 checkpoint — trigger canary, watch Grafana state transition, confirm maintenance-bot Telegram diagnosis."
-last_updated: "2026-05-13T07:59:27.618Z"
-last_activity: 2026-05-13 — Milestone v3.1 completed and archived
+status: REOPENED — Phase 24 ready to plan
+stopped_at: "v3.1 reopened 2026-05-19 after (a) commit fe3b487 (2026-05-18) folded an untracked deletion of EnglishPlayer.vue + e2e specs + parsers into a docs commit, undoing SCRAPER-HEAL-08's user-facing surface; (b) commit 9bb8a85..49b32f2 (2026-05-18 cleanup pass) finished the rip by removing the EN tab from Anime.vue, narrowing type unions to exclude 'english', and stripping i18n keys; (c) original 2026-05-13 milestone audit BLK-INT-01 (rotated hls3 hosts not in allowlist) was never closed; (d) operator scope-expanded with provider-expansion ask (AllAnime lift, fresh 2026 candidates, AnimeKai recovery). Three new phases scoped: 24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion."
+last_updated: "2026-05-19T00:00:00.000Z"
+last_activity: 2026-05-19 — Milestone v3.1 REOPENED — three new phases scoped, planning to begin
 progress:
-  total_phases: 9
+  total_phases: 12
   completed_phases: 8
-  total_plans: 33
+  total_plans: 36
   completed_plans: 29
-  percent: 88
+  percent: 67
 ---
 
 # Project State
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row. v3.1's contribution: when the user actually presses Play on an English-source anime, the player surfaces real video instead of upstream ad-decoy garbage.
 
-**Current focus:** Phase 23 — Self-Maintenance Loop
+**Current focus:** Phase 24 — EN Reconnect (v3.1 reopened)
 
 ## Current Position
 
-Phase: Milestone v3.1 complete
+Phase: 24 — EN Reconnect (v3.1 reopened, ready to plan)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-13 — Milestone v3.1 completed and archived
+Status: Planning — `/gsd-plan-phase --phase 24` is the next operator action
+Last activity: 2026-05-19 — v3.1 reopened with three new phases (24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion). See `.planning/milestones/v3.1-REOPENING.md` for the rewrite trace.
 
 ## Shipped Milestones
 
@@ -42,16 +42,19 @@ Last activity: 2026-05-13 — Milestone v3.1 completed and archived
 
 | Milestone | Phases | Status |
 |-----------|--------|--------|
-| v3.0 Universal Anime Scraper | 15-20 | Phase 15-19 SHIPPED 2026-05-11..12; Phase 20 PAUSED 2026-05-13 (1/5 plans done) — resumes after v3.1 Phase 21 + 7-day clean soak |
-| v3.1 Scraper Self-Healing | 21-23 | EXECUTING — Phase 21 ready to plan |
+| v3.0 Universal Anime Scraper | 15-20 | Phases 15-19 SHIPPED 2026-05-11..12; Phase 20 cutover SHIPPED 2026-05-18 (over-rotated — see v3.1 Phase 24) |
+| v3.1 Scraper Self-Healing | 21-26 | REOPENED 2026-05-19 — Phases 21-23 SHIPPED 2026-05-13 but regression undid 21's user-facing surface; Phases 24-26 newly scoped |
 
 ## v3.1 Phase Map
 
-| Phase | Name | Requirements |
-|---|---|---|
-| 21 | Playability Foundation | SCRAPER-HEAL-01..08 |
-| 22 | Provider Robustness | SCRAPER-HEAL-09..11 |
-| 23 | Self-Maintenance Loop | SCRAPER-HEAL-12..16 |
+| Phase | Name | Requirements | Status |
+|---|---|---|---|
+| 21 | Playability Foundation | SCRAPER-HEAL-01..08 | SHIPPED 2026-05-13 — user-facing surface (SCRAPER-HEAL-08 EnglishPlayer.vue) regressed 2026-05-18; restored in Phase 24 |
+| 22 | Provider Robustness | SCRAPER-HEAL-09..11 | SHIPPED 2026-05-13 — hls3 host rotation (BLK-INT-01) still open; addressed in Phase 25 |
+| 23 | Self-Maintenance Loop | SCRAPER-HEAL-12..16 | SHIPPED 2026-05-13 — W-INT-02 (cacheStream symbol), W-INT-03 (silent-200) addressed in Phase 25 |
+| 24 | EN Reconnect | SCRAPER-HEAL-17..20 | PLANNING — restore EnglishPlayer.vue, EN tab, type unions; provider verification per "test each provider" gate |
+| 25 | Audit Findings Resolution | SCRAPER-HEAL-21..24 | PLANNING — BLK-INT-01 hls3 allowlist auto-discovery, W-INT-01 probe race test, W-INT-02 cacheStream symbol, W-INT-03 silent-200 |
+| 26 | Provider Expansion | SCRAPER-HEAL-25..28 | PLANNING — AllAnime parser lift to scraper, fresh 2026 EN-source survival research, AnimeKai recovery (carried from v3.0 Phase 19) |
 
 ## v3.1 Drivers (from PoC 2026-05-13)
 
@@ -62,8 +65,8 @@ Last activity: 2026-05-13 — Milestone v3.1 completed and archived
 
 ## v3.0 Carryover (resumable, not abandoned)
 
-- **v3.0 Phase 20 Cutover** — Plan 20-01 (pre-flight guardrail) complete. Plans 20-02 through 20-05 paused. The Cutover PR's gate ("≥ 7 days clean prod traffic on EnglishPlayer") is structurally unsatisfiable until v3.1 Phase 21 ships. After Phase 21 production deploy, soak clock starts; if 7 days pass cleanly, Phase 20 resumes from 20-02. If new regressions appear (caught by v3.1 Phase 23 canary), soak clock resets.
-- **AnimeKai (Phase 19) gated R&D** carried as `SCRAPER_ANIMEKAI_ENABLED=false`. Independent of v3.1.
+- **v3.0 Phase 20 Cutover** — SHIPPED 2026-05-18 across plans 20-02..20-05 but **over-rotated**: in addition to the targeted HiAnimePlayer.vue + ConsumetPlayer.vue + parser/hianime + parser/consumet deletions, the cutover swept up EnglishPlayer.vue, the EN tab markup in Anime.vue, the i18n keys (`tabEnglish`, `tabDebugSuffix`, `sourceUnhealthy`, etc.), and the multi-source dropdown infrastructure that v3.1 Phase 21 had shipped. The Phase 20 success criteria are met (no HiAnime/Consumet residue) but the *unintended* over-deletion regressed v3.1 Phase 21's user-facing surface. v3.1 Phase 24 (this milestone reopening) restores the regression cleanly.
+- **AnimeKai (Phase 19) gated R&D** carried as `SCRAPER_ANIMEKAI_ENABLED=false`. Picked up by v3.1 Phase 26.
 
 ## v1.0 / v2.0 Carryover (preserved across milestone switches)
 
@@ -72,10 +75,11 @@ Last activity: 2026-05-13 — Milestone v3.1 completed and archived
 
 ## Session Continuity
 
-Last session: 2026-05-13T07:40:00.000Z
-Stopped at: Phase 23 Plan 23-03 (alerts + maintenance verify) SHIPPED 2026-05-13. Three Grafana alert rules live (warning/warning/critical), 11 new tests passing under -race, .claude/maintenance-prompt.md unmodified per D6 (verified by git diff --quiet). Pending user smoke: Task 4 checkpoint — trigger canary, watch Grafana state transition, confirm maintenance-bot Telegram diagnosis.
-Resume from: `/gsd-audit-milestone --milestone v3.1` (full milestone audit — phases 21 + 22 + 23 ready for cleanup + announcement).
+Last session: 2026-05-19T00:00:00.000Z
+Stopped at: v3.1 reopened with three new phases scoped (24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion). Top-level planning docs (STATE, MILESTONES, ROADMAP) updated; v3.1-REQUIREMENTS.md rewritten from the misnamed v3.0-archive; per-phase CONTEXT.md created for each new phase; v3.1-MILESTONE-AUDIT.md annotated as superseded. No code changes yet — that begins at `/gsd-plan-phase --phase 24`.
+Resume from: `/gsd-plan-phase --phase 24` (Phase 24 EN Reconnect — the user-visible regression restore is the lowest-risk fastest-win starting point).
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan Phase 24 with `/gsd-plan-phase --phase 24`. Phase 24 CONTEXT.md is ready at `.planning/milestones/v3.1-phases/24-en-reconnect/24-CONTEXT.md`.
+- Phase 24 has a hard "test each provider" gate (Phase 0 from the standalone plan superseded into this milestone) — gogoanime + animepahe + animekai-fall-through must all be verified end-to-end against Frieren (MAL 52991) before any frontend code touches.

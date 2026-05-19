@@ -4,8 +4,8 @@
 
 - ✅ **v1.0 Smart Watch Picker Overhaul** — Phases 1-8 (shipped 2026-05-03) — see `.planning/milestones/v1.0-ROADMAP.md`
 - ✅ **v2.0 Recommendations Engine** — Phases 9-14 (shipped 2026-05-07) — see `.planning/milestones/v2.0-ROADMAP.md`
-- 🟢 **v3.0 Universal Anime Scraper** — Phases 15-20 (executing; Phase 20 cutover gated on 7-day soak) — see below
-- ✅ **v3.1 Scraper Self-Healing** — Phases 21-23 (shipped 2026-05-13; self-healing infrastructure live, audit gaps_found acknowledged) — see `.planning/milestones/v3.1-ROADMAP.md`
+- ✅ **v3.0 Universal Anime Scraper** — Phases 15-20 (shipped 2026-05-18; Phase 20 cutover landed but over-rotated — regression repaired in v3.1 Phase 24) — see below
+- 🟡 **v3.1 Scraper Self-Healing** — Phases 21-26 (REOPENED 2026-05-19; 21-23 shipped 2026-05-13 with SCRAPER-HEAL-08 regression + audit gaps still open; 24-26 newly scoped) — see `.planning/milestones/v3.1-ROADMAP.md`
 
 ## Phases
 
