@@ -448,15 +448,6 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	return servers, nil
 }
 
-// hostnameOf returns u.Hostname() for a URL string, or "" on parse failure.
-func hostnameOf(s string) string {
-	u, err := url.Parse(s)
-	if err != nil {
-		return ""
-	}
-	return u.Hostname()
-}
-
 // GetStream delegates to the registry's extractor for the kwik URL and
 // caches the result with TTL min(expires-30s, 5min). Already-expired URLs
 // are NOT cached (a cached expired URL would just be a known-bad URL).
