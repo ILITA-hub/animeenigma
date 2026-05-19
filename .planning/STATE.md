@@ -4,8 +4,8 @@ milestone: v3.1
 milestone_name: Scraper Self-Healing
 status: executing
 stopped_at: v3.1 reopened with three new phases scoped (24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion). Top-level planning docs (STATE, MILESTONES, ROADMAP) updated; v3.1-REQUIREMENTS.md rewritten from the misnamed v3.0-archive; per-phase CONTEXT.md created for each new phase; v3.1-MILESTONE-AUDIT.md annotated as superseded. No code changes yet — that begins at `/gsd-plan-phase --phase 24`.
-last_updated: "2026-05-19T04:57:59.548Z"
-last_activity: 2026-05-19 -- Phase 24 planning complete
+last_updated: "2026-05-19T18:30:00.000Z"
+last_activity: 2026-05-19 -- Phase 28 (Provider Expansion R2) scoped and CONTEXT.md locked; ready for /gsd-autonomous --only 28
 progress:
   total_phases: 11
   completed_phases: 5
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row. v3.1's contribution: when the user actually presses Play on an English-source anime, the player surfaces real video instead of upstream ad-decoy garbage.
 
-**Current focus:** Phase 24 — EN Reconnect (v3.1 reopened)
+**Current focus:** Phase 28 — Provider Expansion R2 (AnimeFever + Miruro + 9anime.me.uk)
 
 ## Current Position
 
-Phase: 24 — EN Reconnect (v3.1 reopened, ready to plan)
-Plan: —
-Status: Ready to execute
-Last activity: 2026-05-19 -- Phase 24 planning complete
+Phase: 28 — Provider Expansion R2 (scoped 2026-05-19, ready to plan)
+Plan: 28-00..28-06 (sketched in CONTEXT.md, not yet materialized)
+Status: Ready for `/gsd-autonomous --only 28` (autonomous will plan + execute)
+Last activity: 2026-05-19 -- Phase 28 CONTEXT.md locked with D1-D7 decisions
 
 ## Shipped Milestones
 
@@ -43,7 +43,7 @@ Last activity: 2026-05-19 -- Phase 24 planning complete
 | Milestone | Phases | Status |
 |-----------|--------|--------|
 | v3.0 Universal Anime Scraper | 15-20 | Phases 15-19 SHIPPED 2026-05-11..12; Phase 20 cutover SHIPPED 2026-05-18 (over-rotated — see v3.1 Phase 24) |
-| v3.1 Scraper Self-Healing | 21-26 | REOPENED 2026-05-19 — Phases 21-23 SHIPPED 2026-05-13 but regression undid 21's user-facing surface; Phases 24-26 newly scoped |
+| v3.1 Scraper Self-Healing | 21-28 | REOPENED 2026-05-19 — Phases 21-23 SHIPPED 2026-05-13 but regression undid 21's user-facing surface; Phases 24-27 scoped 2026-05-19; Phase 28 added 2026-05-19 (AnimeFever + Miruro + 9anime.me.uk per operator "as many providers as possible") |
 
 ## v3.1 Phase Map
 
@@ -54,7 +54,9 @@ Last activity: 2026-05-19 -- Phase 24 planning complete
 | 23 | Self-Maintenance Loop | SCRAPER-HEAL-12..16 | SHIPPED 2026-05-13 — W-INT-02 (cacheStream symbol), W-INT-03 (silent-200) addressed in Phase 25 |
 | 24 | EN Reconnect | SCRAPER-HEAL-17..20 | PLANNING — restore EnglishPlayer.vue, EN tab, type unions; provider verification per "test each provider" gate |
 | 25 | Audit Findings Resolution | SCRAPER-HEAL-21..24 | PLANNING — BLK-INT-01 hls3 allowlist auto-discovery, W-INT-01 probe race test, W-INT-02 cacheStream symbol, W-INT-03 silent-200 |
-| 26 | Provider Expansion | SCRAPER-HEAL-25..28 | PLANNING — AllAnime parser lift to scraper, fresh 2026 EN-source survival research, AnimeKai recovery (carried from v3.0 Phase 19) |
+| 26 | Provider Expansion | SCRAPER-HEAL-25..28 | Wave 1 SHIPPED 2026-05-19 (AllAnime live + has_english filter); Wave 2 at operator decision gate (`human_needed`); 26-04..07 deferred |
+| 27 | AnimePahe Revival via Stealth-Chromium Sidecar | SCRAPER-HEAL-29..33 | PLANNING — Node 20 + Fastify + puppeteer-extra stealth sidecar; depends on Phase 24 SCRAPER-HEAL-20 verdict log |
+| 28 | Provider Expansion R2 | SCRAPER-HEAL-34..39 | PLANNING — AnimeFever (slot 4) + Miruro (slot 5, spike-gated) + 9anime.me.uk (slot 6, last-resort). CONTEXT locked with D1-D7. Ready for `/gsd-plan-phase --phase 28` |
 
 ## v3.1 Drivers (from PoC 2026-05-13)
 
@@ -76,8 +78,8 @@ Last activity: 2026-05-19 -- Phase 24 planning complete
 ## Session Continuity
 
 Last session: 2026-05-19T00:00:00.000Z
-Stopped at: v3.1 reopened with three new phases scoped (24 EN Reconnect, 25 Audit Findings Resolution, 26 Provider Expansion). Top-level planning docs (STATE, MILESTONES, ROADMAP) updated; v3.1-REQUIREMENTS.md rewritten from the misnamed v3.0-archive; per-phase CONTEXT.md created for each new phase; v3.1-MILESTONE-AUDIT.md annotated as superseded. No code changes yet — that begins at `/gsd-plan-phase --phase 24`.
-Resume from: `/gsd-plan-phase --phase 24` (Phase 24 EN Reconnect — the user-visible regression restore is the lowest-risk fastest-win starting point).
+Stopped at: Phase 28 (Provider Expansion R2) scoped 2026-05-19 — AnimeFever + Miruro + 9anime.me.uk per operator "as many providers as possible." CONTEXT.md locked with D1-D7 decisions; SCRAPER-HEAL-34..39 added to v3.1-REQUIREMENTS.md; ROADMAP.md grew Phase 28 entry. Phase 24 still blocked on upstream provider recovery (`human_needed` from prior autonomous run); Phase 28 can ship independently — its only soft dependency on Phase 24 is the UI dropdown polish in 28-06 which degrades gracefully.
+Resume from: `/gsd-autonomous --only 28` (executes Phase 28 end-to-end: discuss-phase auto-skips because 28-CONTEXT.md exists; plan-phase generates 6 PLAN files from the locked decisions; execute-phase runs Wave 0 spikes → Wave 1 AnimeFever lift → Wave 2 Miruro conditional → Wave 3 9anime + dropdown polish). Override individual decisions D1-D7 by editing 28-CONTEXT.md *before* invoking autonomous.
 
 ## Operator Next Steps
 
