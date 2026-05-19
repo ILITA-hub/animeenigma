@@ -168,3 +168,161 @@ Plan 01 widens `services/player/internal/domain/preference.go::ValidPlayers` and
 ## Commit
 
 This file is committed in a new commit referencing SCRAPER-HEAL-20. Co-authors per `CLAUDE.md` / `MEMORY.md`.
+
+---
+
+## Post-ship verification — Phase 27 (2026-05-19)
+
+**Requirement:** SCRAPER-HEAL-32 (Plan 27-04)
+**Trigger:** Phase 27 ship — stealth-Chromium sidecar (`services/animepahe-resolver/`) + parser rewrite to UUID-session contract via sidecar transport. Phase 27 plans 27-01..27-03 landed; this gate verifies end-to-end before Plan 27-05 flips the `SCRAPER_DEGRADED_PROVIDERS` compose default.
+
+**Override applied (mirrors Phase 24 verification posture):**
+`docker/.env`: `SCRAPER_DEGRADED_PROVIDERS=__none__` (sentinel — parses to empty set, forces all providers to register).
+
+### Updated verdict matrix
+
+| Provider | Episodes? | Servers? | Stream URL Returned? | Stream URL Fetchable? | Disposition |
+|---|---|---|---|---|---|
+| **gogoanime** | <unchanged from Phase 24 — FAIL> | N/A | N/A | N/A | UNCHANGED (Phase 24's row stands; Phase 27 does not touch gogoanime) |
+| **animepahe** | **PASS** (28 episodes) | **PASS** (>= 1 kwik server) | **PASS** (.m3u8 returned) | **PASS** (HTTP/2 200 with Referer=https://kwik.cx/ — see Referer note below) | **PASS** — sidecar transport + UUID-session contract working end-to-end |
+| **animekai** | <unchanged — escape-hatch-stub> | N/A | N/A | N/A | UNCHANGED |
+| **auto** | depends on order — animepahe alone now satisfies | — | — | — | Orchestrator can now return episodes when `prefer=animepahe` or when it falls through past gogoanime |
+
+### Captured response excerpts
+
+**animepahe episodes (truncated to first 2 + last 1, MAL 52991 = Frieren):**
+```json
+[
+  {
+    "id": "7bf604bac56a6a9269bc0ce04083169abeaa4815c65e2a320e0ad185334c85e7",
+    "number": 1,
+    "title": "",
+    "is_filler": false
+  },
+  {
+    "id": "146ebd3e0f4370ccfcc22e5cddcb819d4b655dedaa8d1234d5c682ea6bb0a7c0",
+    "number": 2,
+    "title": "",
+    "is_filler": false
+  },
+  {
+    "id": "755447bbd153337e6549e60296e61c82428b2b12842a3fd8ca6c44878c191830",
+    "number": 28,
+    "title": "",
+    "is_filler": false
+  }
+]
+```
+
+Episode IDs are now UUID-shaped session strings (matching the resolver's `^[A-Za-z0-9-]{16,128}$` schema), confirming the Phase 27 sidecar transport is delivering the new contract. (Phase 24's animepahe row failed with the legacy `id=5319` numeric — see SCRAPER-HEAL-32 deviation note in 27-04 SUMMARY.md.)
+
+**animepahe servers (first 3, episode 1):**
+```json
+[
+  {
+    "id": "https://kwik.cx/e/aeNSh4eblrse",
+    "name": "kwik",
+    "type": "sub"
+  },
+  {
+    "id": "https://kwik.cx/e/d3ccaeXzK7o4",
+    "name": "kwik",
+    "type": "sub"
+  },
+  {
+    "id": "https://kwik.cx/e/iKAcIjd2ce0f",
+    "name": "kwik",
+    "type": "sub"
+  }
+]
+```
+
+Six total servers were returned (3 sub + 3 dub).
+
+**animepahe stream (first source, episode 1, server 1):**
+```json
+{
+  "url": "https://vault-08.uwucdn.top/stream/08/13/63abd0640a098853df01676699553c949b1b3038117d9f59232d56ca53be3fef/uwu.m3u8",
+  "type": "hls",
+  "headers": {
+    "Referer": "https://kwik.cx/"
+  }
+}
+```
+
+**Referer note (correction to Plan 27-04 narration):** The parser's `kwikReferer` constant value `https://animepahe.pw/` is the Referer for fetching the Kwik *embed page* (kwik.cx/e/...), not for fetching the m3u8 itself. The DTO's `headers.Referer = "https://kwik.cx/"` is the correct Referer to use when loading the m3u8 — uwucdn.top expects `kwik.cx` as the referrer chain (kwik.cx → uwucdn.top, not animepahe → uwucdn). The plan body's gate-clear curl used `Referer: https://animepahe.pw/` which returned HTTP/2 403 (predictable — wrong referrer chain); re-running with the DTO-supplied `Referer: https://kwik.cx/` returned HTTP/2 200. The DTO surfacing of the correct Referer is the existing parser behavior — no DTO contract change.
+
+**Stream HEAD response (Referer applied — DTO value):**
+```
+HTTP/2 200
+date: Tue, 19 May 2026 11:11:59 GMT
+content-type: application/vnd.apple.mpegurl
+content-length: 22707
+server: cloudflare
+last-modified: Sun, 19 Nov 2000 08:52:00 GMT
+expires: Sat, 08 May 2027 01:26:36 GMT
+cache-control: max-age=31536000
+etag: "3a1794b0-58b3"
+access-control-allow-origin: *
+```
+The curl was `curl -sI -H "Referer: https://kwik.cx/" https://vault-08.uwucdn.top/stream/.../uwu.m3u8`.
+
+**`/scraper/health` for animepahe (after fresh full pipeline run):**
+```json
+{
+  "episodes": {
+    "up": true,
+    "last_ok": "2026-05-19T11:12:25.371479953Z"
+  },
+  "search": {
+    "up": true,
+    "last_ok": "2026-05-19T11:12:25.55037888Z"
+  },
+  "servers": {
+    "up": true,
+    "last_ok": "2026-05-19T11:12:25.482689651Z"
+  },
+  "stream": {
+    "up": true,
+    "last_ok": "2026-05-19T11:12:25.616941941Z"
+  }
+}
+```
+
+All four animepahe stages report `up:true`. `stream_segment` is owned by the probe runner (Plan 17) and excluded from this gate per the plan.
+
+### Sidecar observability snapshot
+
+`/metrics` from the resolver at gate-clear time:
+```
+stealth_challenge_failures_total{service="animepahe-resolver"} 0
+stealth_challenge_solves_total{service="animepahe-resolver"} 0
+page_recycle_total{service="animepahe-resolver"} 0
+# upstream_403_total: no rows emitted (counter not incremented during this run)
+```
+
+Counter sanity: `stealth_challenge_failures_total` is 0 (no failed challenges); `stealth_challenge_solves_total` is 0 because the resolver did NOT encounter a DDoS-Guard challenge during this verification window — animepahe.pw served clean responses throughout the warm-page lifetime. This is healthy. If `stealth_challenge_failures_total >= 5` ever observed in production, surface as a follow-up — the pin in `STEALTH-PINS.md` may need refresh per Pattern 7.
+
+### Phase 27 deviations surfaced by this gate-clear
+
+Two Rule 1 bugs in 27-01/27-02 territory were discovered and auto-fixed during Task 2 (see Plan 27-04 SUMMARY.md for full deviation log):
+
+1. **`services/scraper/internal/providers/animepahe/client.go`** — `FindID` accepted any string from malsync without validating shape, so legacy numeric IDs (e.g. `5319`) flowed through and failed the resolver's session-pattern schema with HTTP 400. Fix: validate against the session pattern and fall through to `/search` on mismatch. Added regression test `TestProvider_FindID_MalSyncLegacyNumeric`.
+2. **`services/scraper/internal/embeds/kwik.go`** — modern Kwik embed pages contain TWO Dean-Edwards packer blocks (cookie helper + Plyr/HLS init); `extractPacker` only returned the first one, whose unpacked output has no m3u8 URL. Fix: added `extractAllPackers` + iterate in `Extract` until one yields an m3u8 match. Backward-compatible with single-packer pages.
+
+Both fixes committed in `fix(27-04): parser+kwik gate-clear blockers (Rule 1 deviations, SCRAPER-HEAL-32)`.
+
+### Disposition (post-ship)
+
+- **animepahe column: FAIL → PASS.** The Phase 24 hard gate is now green for animepahe. Plan 27-05 is unblocked.
+- gogoanime still FAILS; that's out of scope for Phase 27. Phase 28 (TBD) targets gogoanime recovery.
+- `SCRAPER_DEGRADED_PROVIDERS` compose default still reads `gogoanime,animepahe` at the end of this plan — Plan 27-05 owns the flip. The `__none__` override in `docker/.env` is removed below.
+
+### Production override restored
+
+The `docker/.env` mutation from this verification is reverted to the pre-Phase-27 state — `SCRAPER_DEGRADED_PROVIDERS=__none__` line removed from `docker/.env` (relying on the compose default again). `make redeploy-scraper` re-runs and the scraper boots with `animepahe` in the degraded set again, as it was before this gate ran. The next plan (27-05) is what permanently removes animepahe from the compose default; this verification is a snapshot in time.
+
+### Co-authors
+
+(Standard per `MEMORY.md` / CLAUDE.md.)
+
