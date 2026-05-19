@@ -193,17 +193,49 @@ func TestProvider_FindID_MalSyncHit(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, _, fm, _ := newTestProvider(t, srv)
-	fm.mappings["21"] = "1"
+	// Phase 27 SCRAPER-HEAL-32 (Plan 27-04): the malsync identifier must
+	// match the resolver's UUID-session contract — legacy numeric ids
+	// (e.g. "1") are rejected and forced through /search instead. Use a
+	// real session-shaped fixture so the hit path is exercised.
+	const sessionFixture = "abcdef1234567890ABCDEF"
+	fm.mappings["21"] = sessionFixture
 
 	id, err := p.FindID(context.Background(), domain.AnimeRef{ShikimoriID: "21", Title: "One Piece"})
 	if err != nil {
 		t.Fatalf("FindID err = %v", err)
 	}
-	if id != "1" {
-		t.Errorf("FindID = %q; want %q", id, "1")
+	if id != sessionFixture {
+		t.Errorf("FindID = %q; want %q", id, sessionFixture)
 	}
 	if searchCalls.Load() != 0 {
 		t.Errorf("must not call upstream search on malsync hit; got %d calls", searchCalls.Load())
+	}
+}
+
+// TestProvider_FindID_MalSyncLegacyNumeric: malsync returns the legacy
+// numeric AnimePahe identifier (pre-Phase-27 shape) → provider must reject
+// it as not-session-shaped and fall through to /search. Regression test for
+// the SCRAPER-HEAL-32 gate-clear bug discovered in Plan 27-04.
+func TestProvider_FindID_MalSyncLegacyNumeric(t *testing.T) {
+	t.Parallel()
+	var searchCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		searchCalls.Add(1)
+		_, _ = w.Write(loadFixture(t, "search_naruto.json"))
+	}))
+	defer srv.Close()
+	p, _, fm, _ := newTestProvider(t, srv)
+	// Legacy numeric identifier from malsync.moe (the real shape returned
+	// for Frieren MAL 52991 is "5319"). The parser MUST treat this as a
+	// miss and use /search to recover the actual UUID session.
+	fm.mappings["21"] = "5319"
+
+	_, err := p.FindID(context.Background(), domain.AnimeRef{ShikimoriID: "21", Title: "Naruto"})
+	if err != nil {
+		t.Fatalf("FindID err = %v", err)
+	}
+	if searchCalls.Load() != 1 {
+		t.Errorf("expected /search fallback on legacy malsync hit; got %d calls", searchCalls.Load())
 	}
 }
 

@@ -40,6 +40,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,25 @@ import (
 // providerName is the stable identifier returned by Name() and used as the
 // orchestrator's registry key.
 const providerName = "animepahe"
+
+// sessionPattern matches the AnimePahe session UUID contract enforced by the
+// resolver sidecar (`^[A-Za-z0-9-]{16,128}$`). The legacy malsync.moe data
+// still publishes the deprecated numeric AnimePahe anime id under the
+// `animepahe` site key (e.g. "5319" for Frieren). That numeric id is NOT
+// usable against the modern `/api?m=release&id=<session>` endpoint — only
+// the UUID-shaped session is. When malsync returns a non-session identifier
+// the parser MUST fall through to the /search fuzzy match, which yields the
+// correct session, otherwise every release request fails the resolver's
+// query-string schema validation with HTTP 400. Phase 27 SCRAPER-HEAL-32
+// gate (Plan 27-04 Task 2) surfaced this — see deviation note in 27-04
+// SUMMARY.md.
+var sessionPattern = regexp.MustCompile(`^[A-Za-z0-9-]{16,128}$`)
+
+// isSessionShape reports whether id matches the AnimePahe UUID-session
+// contract. Empty strings and the legacy numeric ids return false.
+func isSessionShape(id string) bool {
+	return id != "" && sessionPattern.MatchString(id)
+}
 
 // fuzzyMatchThreshold is the minimum Jaro-Winkler score for /api?m=search
 // fuzzy fallback to claim a match (per RESEARCH.md Pitfall 5 / A6).
@@ -242,11 +262,23 @@ func (p *Provider) HealthCheck(ctx context.Context) domain.Health {
 // also persisted so `/release` 404 invalidation works across process
 // restarts (see malsync.go::FindID).
 func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, error) {
-	// 1. malsync hit?
+	// 1. malsync hit? (Phase 27 SCRAPER-HEAL-32: reject legacy numeric ids;
+	//    only UUID-shaped sessions are usable against the resolver's
+	//    `/release` schema. The malsync.moe dataset still publishes the
+	//    pre-2024 numeric AnimePahe anime id for some titles — passing that
+	//    through fails the resolver query-string validator with HTTP 400
+	//    and the orchestrator marks the provider down. Fall through to the
+	//    /search fuzzy match in that case so we recover the real session.)
 	if ref.ShikimoriID != "" {
 		if id, ok, err := p.malsync.Lookup(ctx, ref.ShikimoriID, providerName); err == nil && ok {
-			p.markStage(health.StageSearch, nil)
-			return id, nil
+			if isSessionShape(id) {
+				p.markStage(health.StageSearch, nil)
+				return id, nil
+			}
+			// Stale/legacy mapping — evict so the next call doesn't repeat
+			// the same wasted lookup. Best-effort; the in-flight request
+			// proceeds to /search either way.
+			_ = p.malsync.Invalidate(ctx, ref.ShikimoriID, providerName, id)
 		}
 	}
 	// 2. Fuzzy /search fallback (via resolver sidecar).
