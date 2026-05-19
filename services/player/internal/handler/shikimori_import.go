@@ -344,7 +344,7 @@ func (h *ShikimoriImportHandler) fetchShikimoriPage(ctx context.Context, nicknam
 	}
 
 	var entries []shikimoriAnimeRate
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	if err := DecodeJSONLimited(resp.Body, &entries, MaxImporterResponseBytes); err != nil {
 		return nil, errors.Wrap(err, errors.CodeInternal, "decode Shikimori response")
 	}
 
@@ -391,7 +391,7 @@ func (h *ShikimoriImportHandler) searchCatalogByShikimoriID(ctx context.Context,
 	var result struct {
 		Data CatalogAnime `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := DecodeJSONLimited(resp.Body, &result, MaxImporterResponseBytes); err != nil {
 		return nil
 	}
 

@@ -398,7 +398,7 @@ func (h *MALImportHandler) fetchMALPage(ctx context.Context, username string, of
 	}
 
 	var entries []MALAnimeEntry
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	if err := DecodeJSONLimited(resp.Body, &entries, MaxImporterResponseBytes); err != nil {
 		return nil, errors.Wrap(err, errors.CodeInternal, "decode response")
 	}
 
@@ -475,7 +475,7 @@ func (h *MALImportHandler) searchCatalogByMALID(ctx context.Context, malID int) 
 			Anime  CatalogAnime `json:"anime"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := DecodeJSONLimited(resp.Body, &result, MaxImporterResponseBytes); err != nil {
 		return nil
 	}
 
