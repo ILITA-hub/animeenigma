@@ -5,7 +5,7 @@
 - ✅ **v1.0 Smart Watch Picker Overhaul** — Phases 1-8 (shipped 2026-05-03) — see `.planning/milestones/v1.0-ROADMAP.md`
 - ✅ **v2.0 Recommendations Engine** — Phases 9-14 (shipped 2026-05-07) — see `.planning/milestones/v2.0-ROADMAP.md`
 - ✅ **v3.0 Universal Anime Scraper** — Phases 15-20 (shipped 2026-05-18; Phase 20 cutover landed but over-rotated — regression repaired in v3.1 Phase 24) — see below
-- 🟡 **v3.1 Scraper Self-Healing** — Phases 21-26 (REOPENED 2026-05-19; 21-23 shipped 2026-05-13 with SCRAPER-HEAL-08 regression + audit gaps still open; 24-26 newly scoped) — see `.planning/milestones/v3.1-ROADMAP.md`
+- 🟡 **v3.1 Scraper Self-Healing** — Phases 21-28 (REOPENED 2026-05-19; 21-23 shipped 2026-05-13 with SCRAPER-HEAL-08 regression + audit gaps still open; 24-27 scoped 2026-05-19; **Phase 28 added 2026-05-19** — AnimeFever + Miruro + 9anime.me.uk per operator request) — see `.planning/milestones/v3.1-ROADMAP.md`
 
 ## Phases
 
@@ -291,6 +291,8 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 | 24 | v3.1 | 0/5 | Planning    | — |
 | 25 | v3.1 | 0/4 | Planning    | — |
 | 26 | v3.1 | 0/7 | Planning    | — |
+| 27 | v3.1 | 0/5 | Planning    | — |
+| 28 | v3.1 | 0/6 | Planning    | — |
 
 ### Phase 27: AnimePahe Revival via Stealth-Chromium Sidecar
 
@@ -305,3 +307,19 @@ Plans:
 - [ ] 27-03-PLAN.md — Wave 2: docker-compose wiring — animepahe-resolver service block (mem_limit 500m, seccomp:unconfined, /healthz healthcheck), scraper depends_on service_healthy + SCRAPER_ANIMEPAHE_RESOLVER_URL env; cold-compose smoke
 - [ ] 27-04-PLAN.md — Wave 3: end-to-end gate-clear — re-run Phase 24 SCRAPER-HEAL-20 curl pipeline against Frieren through the gateway with SCRAPER_DEGRADED_PROVIDERS=__none__ override; append `## Post-ship verification — Phase 27` to docs/issues/scraper-provider-verification-2026-05-19.md flipping animepahe row to PASS
 - [ ] 27-05-PLAN.md — Wave 3: compose default flip — SCRAPER_DEGRADED_PROVIDERS default changes from gogoanime,animepahe to gogoanime (env-override escape hatch preserved); make redeploy-scraper; D7 gate (b) 10-minute no-403/timeout-flood log scan; /animeenigma-after-update skill commits changelog + push
+
+### Phase 28: Provider Expansion Round 2 — AnimeFever + Miruro + 9anime.me.uk
+
+**Goal:** Grow the EN failover pool from 1 working provider (allanime) to 4 by adding three new providers in order of reliability ceiling: AnimeFever (clean HTML scrape), Miruro (obfuscation-gated, spike-killable), 9anime.me.uk (last-resort brand-jack, MP4-only). EnglishPlayer source dropdown lights up with 4 selectable options (allanime + animefever + miruro + nineanime), conditional Miruro on spike convergence. Frieren E2E passes through every shipped provider; 9anime uses Marriagetoxin episode 1 as alternate test target (Frieren absent in upstream catalog).
+**Requirements**: SCRAPER-HEAL-34, SCRAPER-HEAL-35, SCRAPER-HEAL-36, SCRAPER-HEAL-37, SCRAPER-HEAL-38, SCRAPER-HEAL-39
+**Depends on:** v3.1 Phase 26 Wave 1 (AllAnime live — confirms the provider-lift template works) + v3.1 Phase 24 EnglishPlayer restored (for dropdown observability — soft dependency; backend ships without it).
+**Plans:** 6 plans across 4 waves (Wave 0: 28-00 + 28-01 spikes parallel; Wave 1: 28-02 AnimeFever + 28-03 embed extractors parallel; Wave 2: 28-04 Miruro lift conditional on Wave 0 convergence; Wave 3: 28-05 9anime lift + 28-06 dropdown polish + /animeenigma-after-update). See `.planning/phases/28-provider-expansion-r2/28-CONTEXT.md`.
+
+Plans:
+- [ ] 28-00-PLAN.md — Wave 0: Miruro obfuscation spike (SCRAPER-HEAL-34) — 2-day kill-switch. Reverse-engineer `VITE_PROXY_OBF_KEY` transform from minified frontend JS, port to Go, verify `pro.ultracloud.cc` returns playable HLS for one Frieren episode. Output: SPIKE-MIRURO.md verdict (`converged` / `killed`).
+- [ ] 28-01-PLAN.md — Wave 0: AnimeFever embed-extractor recon (SCRAPER-HEAL-35) — identify which embed hosts AnimeFever proxies to for Frieren; classify as `existing-registry` vs `needs-new-extractor`. Output: SPIKE-ANIMEFEVER.md ordered host list.
+- [ ] 28-02-PLAN.md — Wave 1: AnimeFever provider lift (SCRAPER-HEAL-36) — `services/scraper/internal/providers/animefever/` package, title-fuzzy + MalSync fallback FindID, HTML scrape pipeline, golden-file tests, register in main.go failover slot 4. Frieren E2E gate.
+- [ ] 28-03-PLAN.md — Wave 1: New embed extractors (SCRAPER-HEAL-38) — implement each `embeds/<host>.go` identified in 28-01's recon (likely candidates: streamwish, filelions, doodstream). Each one templated against `embeds/streamhg.go`, golden-file tested.
+- [ ] 28-04-PLAN.md — Wave 2 (gated on 28-00 verdict): Miruro provider lift (SCRAPER-HEAL-37) — `services/scraper/internal/providers/miruro/` package, AniList-ID-direct FindID via ARM, ultracloud-proxy stream extraction. Register failover slot 5. If 28-00 verdicts `killed`, this plan is `SKIPPED` and SCRAPER-HEAL-37 rolls to v3.2.
+- [ ] 28-05-PLAN.md — Wave 3: 9anime.me.uk provider lift (SCRAPER-HEAL-39) — `services/scraper/internal/providers/nineanime/` package, title-fuzzy FindID, per-episode WP slug walking, MP4 path extraction from `my.1anime.site` iframe. Allowlist update in `libs/videoutils/proxy.go`. Register failover slot 6 (LAST — documented as lowest reliability tier in CONTEXT.md D2). Alternate test target Marriagetoxin episode 1.
+- [ ] 28-06-PLAN.md — Wave 3: dropdown polish + after-update — `capitalizeProvider` branches for animefever / miruro / nineanime, i18n keys (en/ru/ja), Playwright e2e for source switching mid-episode, `/animeenigma-after-update` skill ships changelog + commit + push.
