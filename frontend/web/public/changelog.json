@@ -3,6 +3,14 @@
     "date": "2026-05-19",
     "entries": [
       {
+        "type": "feature",
+        "message": "🎉 AnimePahe ОЖИЛ! Английская EN-озвучка снова идёт через animepahe — Frieren тянется все 28 эпизодов без единого 403. Под капотом — новый микросервис animepahe-resolver: один тёплый Chromium с puppeteer-extra stealth разруливает DDoS-Guard за нас. Скрапер теперь зовёт сайдкар вместо прямого фетча, ВЕЛИКОЛЕПНАЯ архитектура. Никто другой так не делает!"
+      },
+      {
+        "type": "perf",
+        "message": "⚡ animepahe убран из SCRAPER_DEGRADED_PROVIDERS по умолчанию — теперь оркестратор реально пробует его, а не SKIPPED-ит на старте. Escape-hatch остался: при желании operator может вернуть его в degraded через docker/.env без пересборки. Поверьте мне, лучшая защита!"
+      },
+      {
         "type": "fix",
         "message": "📝 Японские сабы Jimaku теперь подтягиваются ДЛЯ ВСЕХ аниме — раньше тихо отдавали пустоту для тайтлов, у которых в нашей БД ещё не был резолвнут AniList ID (а Jimaku ищет ИМЕННО по нему). Дорохедоро S2, Frieren, и десятки других — Jimaku их знает, мы — нет. `SubsAggregator.fetchJimaku` молча возвращал nil при пустом `anime.AniListID` без попытки lazy-резолва, в отличие от соседнего `ensureExternalIDs` для IMDb/TMDB. Добавили зеркальный `ensureAniListID` — ARM маппит shikimori → anilist, бэкенд персистит ID в БД, и Jimaku зовётся уже с корректным ключом. На Дорохедоро S2 сразу вылезли две дорожки (Erai-raws .ass + ABEMA .srt). ВЕЛИКОЛЕПНО 🎌"
       },
