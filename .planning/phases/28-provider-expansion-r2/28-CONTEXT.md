@@ -12,13 +12,13 @@
 Grow the EN failover pool from 1 working provider (allanime, shipped Phase 26 Wave 1) to 4. Three new providers in priority order by reliability ceiling:
 
 1. **AnimeFever** (`animefever.cc`) — clean HTML scrape against a PHP+Cloudflare-passive backend. Failover slot 4. Reliability MEDIUM.
-2. **Miruro** (`miruro.tv`) — Vite SPA over an obfuscated proxy (`pro.ultracloud.cc`). Failover slot 5, gated on a 2-day obfuscation reverse-engineering spike. Reliability MEDIUM if spike converges; DROPPED if it doesn't.
+2. **Miruro** (`miruro.tv`) — Vite SPA over an obfuscated proxy (`pro.ultracloud.cc`). Failover slot 5, gated on a 4-agent-session obfuscation reverse-engineering spike. Reliability MEDIUM if spike converges; DROPPED if it doesn't.
 3. **9anime.me.uk** — WordPress 6.9.4 + dramastream theme; brand-jack of the dead aniwave ecosystem. Failover slot 6 (last-resort). Reliability LOW (~6-month half-life expected). MP4-only, no canonical ID mapping, title-fuzzy-match only.
 
 **Concretely, this phase delivers:**
 
 1. **AnimeFever lift (SCRAPER-HEAL-36)** — new `services/scraper/internal/providers/animefever/` package implementing the `domain.Provider` interface against `animefever.cc`. FindID via title-search-with-MalSync-fallback (no canonical ID exposed). ListEpisodes/ListServers scrape server-rendered HTML. GetStream delegates to embed-extractor registry (extractors added in SCRAPER-HEAL-38 if missing). Cookie-jar handled by existing `domain.BaseHTTPClient`.
-2. **Miruro lift (SCRAPER-HEAL-37, conditional)** — new `services/scraper/internal/providers/miruro/` package. FindID via AniList-ID-direct (ARM lookup MAL → AniList because Miruro URL is `/anime/<anilist_id>`). All other methods route through the deobfuscated `pro.ultracloud.cc` JSON proxy. **Hard kill-switch on SCRAPER-HEAL-34 spike**: if the obfuscation transform can't be ported to pure Go inside 2 days, Miruro is dropped from Phase 28 and SCRAPER-HEAL-37 rolls to v3.2.
+2. **Miruro lift (SCRAPER-HEAL-37, conditional)** — new `services/scraper/internal/providers/miruro/` package. FindID via AniList-ID-direct (ARM lookup MAL → AniList because Miruro URL is `/anime/<anilist_id>`). All other methods route through the deobfuscated `pro.ultracloud.cc` JSON proxy. **Hard kill-switch on SCRAPER-HEAL-34 spike**: if the obfuscation transform can't be ported to pure Go inside 4 agent-sessions, Miruro is dropped from Phase 28 and SCRAPER-HEAL-37 rolls to v3.2.
 3. **9anime.me.uk lift (SCRAPER-HEAL-39)** — new `services/scraper/internal/providers/nineanime/` package. FindID via title-fuzzy-match only (no MAL/AniList in URLs; no series-level entity — episodes are individual WP posts). Per-episode WP slug walking for episode enumeration. Stream extraction: iframe-then-MP4-source from `my.1anime.site/index.php?action=play&file=...`. HLS proxy allowlist update in `libs/videoutils/proxy.go` adds `my.1anime.site`. Documented as last-resort tier.
 4. **Embed extractors (SCRAPER-HEAL-38)** — add the embed-host extractors that AnimeFever's recon (SCRAPER-HEAL-35) reveals are missing. Typical 2026 candidates: `streamwish.go`, `filelions.go`, `doodstream.go`. Each templated from `embeds/streamhg.go`. Golden-file tested.
 5. **Spikes as artifacts (SCRAPER-HEAL-34, -35)** — both spikes produce written `SPIKE-*.md` artifacts (one per spike) with verdicts and either ship the work or kill the dependent plan. Spikes are NOT throwaway — the SPIKE files become permanent decision logs.
@@ -57,9 +57,11 @@ Recon evidence:
 
 Alternate test target for 9anime: Marriagetoxin episode 1 (`/marriagetoxin-episode-1-english-subbed/` if it exists, else episode 7 which is confirmed present). Frieren is not usable for 9anime canary because the upstream doesn't carry it.
 
-### D3 — Miruro spike has a hard 2-day kill-switch; failure does NOT block the phase
+### D3 — Miruro spike has a hard 4-agent-session kill-switch; failure does NOT block the phase
 
-The obfuscation transform reverse-engineering is bounded effort. If 2 days of focused work don't yield a clean Go port (i.e., no `utls`/`chromedp` dependency surfaces required, and `pro.ultracloud.cc` returns playable HLS from the prod IP), then SCRAPER-HEAL-37 is marked `killed` in the spike artifact and rolls to v3.2. The remaining Phase 28 work (AnimeFever, 9anime, extractors, dropdown polish) is wholly independent and proceeds.
+The obfuscation transform reverse-engineering is bounded effort (E=34 on the Fibonacci scale per `.planning/CONVENTIONS.md`). If 4 agent-sessions of focused work don't yield a clean Go port (i.e., no `utls`/`chromedp` dependency surfaces required, and `pro.ultracloud.cc` returns playable HLS from the prod IP), then SCRAPER-HEAL-37 is marked `killed` in the spike artifact and rolls to v3.2. The remaining Phase 28 work (AnimeFever, 9anime, extractors, dropdown polish) is wholly independent and proceeds.
+
+The kill-switch is workflow time-box, NOT an effort estimate — per project convention, plan-level effort lives in CDI's `E` factor (right side of the `*`).
 
 Spike convergence criteria (gate to advance to SCRAPER-HEAL-37):
 1. The transform from `(endpoint, OBF_KEY)` → obfuscated URL is implementable in pure Go using only `crypto/hmac`, `crypto/sha256`, `crypto/aes`, or `encoding/base64` (i.e., no TLS-fingerprinting required).
@@ -113,7 +115,7 @@ New allowlist entries expected:
 </decisions>
 
 <open_questions>
-- **Are 2 days a tight timebox for the Miruro spike?** The survival sweep's effort estimate was 5-7 days "if obfuscation reverse-engineering converges in 1-2 days of spike." We're sizing the spike at the lower bound. If the operator wants 3 days, override D3.
+- **Is 4 agent-sessions a tight timebox for the Miruro spike?** Spike CDI is `0.02 * 34` — the E=34 anchor calibrates against "research + significant phase-of-work." Workflow timebox sized accordingly; bump to 6 sessions if operator wants more rope (override D3 to read "6 agent-sessions").
 - **Should 9anime's title-fuzzy include a Shikimori/MAL pre-resolution step?** Default: yes — the `AnimeRef` already carries Shikimori ID, and we fetch the Russian + English titles from catalog to feed the fuzzy match. Implementation overhead is minimal.
 - **Source dropdown order in UI**: should the order in the dropdown match the failover-chain order (allanime → animefever → miruro → nineanime), or alphabetical, or by user preference (last-used first)? Default: failover-chain order; matches user expectation of "primary first."
 </open_questions>
@@ -121,7 +123,7 @@ New allowlist entries expected:
 <risks>
 ## Risks specific to this phase
 
-- **Miruro spike doesn't converge** — explicit kill-switch in D3 makes this a controlled outcome, not a phase blocker. Cost: 2 person-days of spike effort wasted; Phase 28 ships with 2 new providers instead of 3.
+- **Miruro spike doesn't converge** — explicit kill-switch in D3 makes this a controlled outcome, not a phase blocker. Cost: spike CDI `0.02 * 34` worth of work absorbed without shipping the dependent plan; Phase 28 ships with 2 new providers instead of 3 (UXΔ ceiling drops from `+3` to `+2`).
 - **AnimeFever rebrands its DOM selectors** — HTML scraping is fragile. Mitigation: per CLAUDE.md and Phase 23 canary infrastructure, the daily canary catches selector breakage within 24h and the maintenance bot Pattern 7 dispatch handles known-class fixes (Phase 25 SCRAPER-HEAL-21 ships this loop). For DOM changes the bot can't classify, Telegram fires an alert and operator intervenes.
 - **9anime.me.uk DMCAs / migrates / rebrands** — high-probability event (~6-month half-life). Mitigation: D2's documented trade-off + operator kill via `SCRAPER_DEGRADED_PROVIDERS=nineanime`. No replanning needed; 9anime stays in the codebase as inert provider until a future cleanup phase removes it.
 - **Embed extractor recon (SCRAPER-HEAL-35) reveals a host we can't extract** (e.g., heavily-obfuscated JS player) — Mitigation: the recon spike's verdict says either "implementable as `<host>.go`" or "blocked — falls back to remaining hosts AnimeFever proxies to." If ALL of AnimeFever's hosts are blocked, SCRAPER-HEAL-36 ships with degraded coverage (search/list/servers work, GetStream fails on un-extractable hosts). Frieren E2E gate would catch this and force a re-spike.
@@ -145,24 +147,33 @@ New allowlist entries expected:
 <plan_sketch>
 ## Plan Sketch (for `/gsd-plan-phase` to flesh out)
 
-**Wave 0 — Spikes (1-2 days, parallel)**
+**Wave 0 — Spikes (parallel)**
 
-- `28-00-PLAN.md` — Miruro obfuscation spike (SCRAPER-HEAL-34). 2-day kill-switch. Output: `.planning/phases/28-provider-expansion-r2/SPIKE-MIRURO.md` verdict (`converged` | `killed`) + Go reference implementation of the OBF transform if converged.
+- `28-00-PLAN.md` — Miruro obfuscation spike (SCRAPER-HEAL-34). Workflow timebox: 4 agent-sessions kill-switch. Output: `.planning/phases/28-provider-expansion-r2/SPIKE-MIRURO.md` verdict (`converged` | `killed`) + Go reference implementation of the OBF transform if converged.
+  - `UXΔ = 0 (Ambiguous)` · `CDI = 0.02 * 34` · `MVQ = Basilisk 75%/90%`
 - `28-01-PLAN.md` — AnimeFever embed-extractor recon (SCRAPER-HEAL-35). Output: `.planning/phases/28-provider-expansion-r2/SPIKE-ANIMEFEVER.md` with ordered embed-host list and `existing-registry | needs-new-extractor` classification per host.
+  - `UXΔ = 0 (Ambiguous)` · `CDI = 0.01 * 3` · `MVQ = Sprite 60%/85%`
 
-**Wave 1 — AnimeFever (3-4 days, parallel)**
+**Wave 1 — AnimeFever (parallel)**
 
 - `28-02-PLAN.md` — AnimeFever provider lift (SCRAPER-HEAL-36). New `services/scraper/internal/providers/animefever/` package. FindID via title-search-with-MalSync-fallback. ListEpisodes/ListServers via HTML scrape. GetStream delegates to embed registry. Cookie-jar handled by existing `BaseHTTPClient`. Registered in `main.go` failover slot 4. Frieren E2E gate.
+  - `UXΔ = +2 (Better)` · `CDI = 0.02 * 13` · `MVQ = Griffin 85%/80%`
 - `28-03-PLAN.md` — New embed extractors (SCRAPER-HEAL-38). Conditional on 28-01's recon. Each `embeds/<host>.go` templated from `embeds/streamhg.go`; golden-file tested. If 28-01 returns empty list (all hosts already covered), 28-03 ships as a no-op.
+  - `UXΔ = +1 (Better)` · `CDI = 0.015 * 8` · `MVQ = Sprite 70%/80%`
 
-**Wave 2 — Miruro (conditional on Wave 0 verdict, 4-5 days)**
+**Wave 2 — Miruro (conditional on Wave 0 verdict)**
 
 - `28-04-PLAN.md` — Miruro provider lift (SCRAPER-HEAL-37). Conditional on `28-00` verdict `converged`. New `services/scraper/internal/providers/miruro/` package. FindID via AniList-ID-direct (ARM lookup). All upstream calls route through the deobfuscated `pro.ultracloud.cc`. May add `services/scraper/internal/embeds/ultracloud.go` if stream-extraction requires it. Registered in `main.go` failover slot 5. Frieren E2E gate.
+  - `UXΔ = +2 (Better)` · `CDI = 0.04 * 21` · `MVQ = Phoenix 70%/85%`
 
-**Wave 3 — 9anime + Polish (parallel, 2-3 days)**
+**Wave 3 — 9anime + Polish (parallel)**
 
 - `28-05-PLAN.md` — 9anime.me.uk provider lift (SCRAPER-HEAL-39). New `services/scraper/internal/providers/nineanime/` package. FindID via title-fuzzy-match using Shikimori/MAL metadata for scoring. ListEpisodes walks per-episode WP slugs. GetStream extracts iframe → MP4 source from `my.1anime.site`. Allowlist update in `libs/videoutils/proxy.go` adds `my.1anime.site`. Registered LAST in failover chain (slot 6). Alternate test target: Marriagetoxin episode 1 or 7.
+  - `UXΔ = 0 (Ambiguous)` · `CDI = 0.075 * 13` · `MVQ = Basilisk 40%/30%`
 - `28-06-PLAN.md` — Source dropdown polish + Playwright e2e + `/animeenigma-after-update`. `capitalizeProvider` branches for animefever/miruro/nineanime in `EnglishPlayer.vue`. i18n keys in `frontend/web/src/locales/{en,ru,ja}.json`. Playwright e2e for source switching mid-episode. After-update skill ships changelog entry + commit (3 co-authors) + push.
+  - `UXΔ = +3 (Better)` · `CDI = 0.015 * 5` · `MVQ = Sprite 88%/92%`
+
+**Phase-level aggregate** (Miruro converges): `UXΔ ≈ +1.4 (Better, weighted by Wave 3 user-facing plans)` · `CDI cumulative ≈ 0.195 across 6 plans, weighted-E ≈ 13` · `MVQ-mix = Basilisk + Sprite + Griffin + Phoenix — a coherent "transformation under tension" zoo`.
 
 **Wave gates:**
 

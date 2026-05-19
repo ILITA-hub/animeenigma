@@ -54,6 +54,16 @@ Primary data sources:
 
 ## Code Conventions
 
+### Effort & impact metrics — NO days, hours, sprints
+
+**Time-effort units are not used in this project.** Every plan/feature/CHANGELOG entry scored on three dimensional metrics — full spec at `.planning/CONVENTIONS.md`:
+
+- **UXΔ** (UX Delta) — signed `-5..+5` with `Better`/`Worse`/`Ambiguous` label. e.g. `UXΔ = +2 (Better)`
+- **CDI** (Coherence Disruption Index) — two numbers: `(Spread × Shift) * Effort_Fib`. e.g. `CDI = 0.02 * 13`. Effort on Fibonacci scale (1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233+). DO NOT pre-multiply.
+- **MVQ** (Mythic Vibe Quotient) — creature + match%/slop-resistance%. e.g. `MVQ = Griffin 85%/80%`. Creatures: Phoenix / Griffin / Kraken / Sprite / Basilisk / Dragon.
+
+Sub-agents that produce plans (gsd-planner, gsd-discuss-phase, gsd-roadmapper, etc.) MUST follow this convention. Reject any plan that returns "N days" — re-score and re-submit.
+
 ### Go Services
 
 ```
