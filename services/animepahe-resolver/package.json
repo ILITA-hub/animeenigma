@@ -1,0 +1,22 @@
+{
+  "name": "animepahe-resolver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Stealth-Chromium sidecar for the AnimeEnigma scraper service. Warmed puppeteer-extra Chromium maintained at the process level; exposes /healthz /search /release /play /metrics on :3000. HARDCODED upstream is https://animepahe.pw (see server.js header + STEALTH-PINS.md).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0",
+    "puppeteer-extra": "3.3.6",
+    "puppeteer-extra-plugin-stealth": "2.11.2",
+    "fastify": "^4.28.0",
+    "pino": "^9.5.0",
+    "prom-client": "^15.1.3"
+  }
+}

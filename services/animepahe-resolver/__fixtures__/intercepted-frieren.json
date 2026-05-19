@@ -1,0 +1,48 @@
+{
+  "_comment": "Captured upstream payload shapes for offline test runs in server.test.js + upstream.test.js. Shapes mirror the live probe payloads documented in 27-CONTEXT.md > Specific Ideas > 'Live probe payload shapes'. NOT a substitute for the Go-side goldens (testdata/animepahe/frieren-*.{json,html}) which Plan 27-02 captures fresh from the deployed sidecar per CONTEXT D4. This file exists so the Node test suite is offline-safe.",
+  "_source": "Synthesized from 2026-05-19 live probe + RESEARCH §Specific Ideas",
+  "search": {
+    "total": 3,
+    "per_page": 8,
+    "current_page": 1,
+    "data": [
+      {
+        "id": 5319,
+        "title": "Frieren: Beyond Journey's End",
+        "type": "TV",
+        "episodes": 28,
+        "status": "Finished Airing",
+        "season": "Fall",
+        "year": 2023,
+        "score": 9.27,
+        "poster": "https://i.animepahe.pw/posters/frieren-fixture.jpg",
+        "session": "65a00d22-e684-4a33-5fa2-707b8e64a84d"
+      }
+    ]
+  },
+  "release": {
+    "total": 28,
+    "per_page": 30,
+    "current_page": 1,
+    "last_page": 1,
+    "next_page_url": null,
+    "data": [
+      {
+        "id": 60059,
+        "anime_id": 5319,
+        "episode": 1,
+        "episode2": 0,
+        "edition": "",
+        "title": "",
+        "snapshot": "https://i.animepahe.pw/snapshots/frieren-ep1-fixture.jpg",
+        "disc": "BD",
+        "audio": "jpn",
+        "duration": "00:26:01",
+        "session": "7bf604bac56a6a9269bc0ce04083169abeaa4815c65e2a320e0ad185334c85e7",
+        "filler": 0,
+        "created_at": "2023-09-29 15:03:47"
+      }
+    ]
+  },
+  "play": "<!DOCTYPE html><html lang=\"en\"><head><title>Frieren: Beyond Journey's End Ep. 1 :: animepahe</title></head><body><div id=\"player-card\"><div id=\"resolutionMenu\" class=\"dropdown-menu\"><button data-src=\"https://kwik.cx/e/abc123def456\" data-audio=\"jpn\" data-resolution=\"1080\" data-fansub=\"SubsPlease\">SubsPlease - 1080p</button><button data-src=\"https://kwik.cx/e/abc123def457\" data-audio=\"jpn\" data-resolution=\"720\" data-fansub=\"SubsPlease\">SubsPlease - 720p</button></div></div></body></html>"
+}
