@@ -8,33 +8,35 @@
 //
 // Responsibilities:
 //
-//   - FindID resolves an AnimeRef → AnimePahe anime ID via malsync.moe
-//     (24h cache; 24h negative cache) with a Jaro-Winkler ≥ 0.85 fuzzy
-//     fallback against /api?m=search results.
-//   - ListEpisodes paginates /api?m=release with a 50-page hard cap, caching
-//     the assembled list for 6h at key episodes:animepahe:{providerID}.
-//   - ListServers scrapes /play/{anime}/{episode} for kwik.cx button[data-src]
-//     URLs. Real-empty → []Server{} (NOT error); selector drift → ErrExtractFailed.
+//   - FindID resolves an AnimeRef → AnimePahe anime UUID `session` via
+//     malsync.moe (24h cache; 24h negative cache) with a Jaro-Winkler
+//     ≥ 0.85 fuzzy fallback against the resolver's `/search` results.
+//   - ListEpisodes paginates `/release?session=<animeSession>&page=N` with a
+//     50-page hard cap, caching the assembled list for 6h at key
+//     episodes:animepahe:{animeSession}.
+//   - ListServers scrapes `/play?animeSession=<a>&episodeSession=<e>` for
+//     kwik.cx button[data-src] URLs. Real-empty → []Server{} (NOT error);
+//     selector drift → ErrExtractFailed.
 //   - GetStream looks up the kwik URL via the embeds.Registry and delegates
 //     extraction. Stream URLs are cached with TTL min(expires-30s, 5min);
 //     already-expired URLs are NOT cached.
-//   - HealthCheck returns an in-memory snapshot of the four stage timings
-//     (Phase 17 will extend this with real probes).
+//   - HealthCheck returns an in-memory snapshot of the four stage timings.
 //
-// DDoS-Guard handling: every upstream HTML/JSON fetch goes through
-// getWithDDoSGuard, which on a 403+`Server: ddos-guard` response runs
-// ensureDDoSCookie once and retries. The cookie persists in the
-// BaseHTTPClient's jar so subsequent requests are clean (RESEARCH.md Pattern 3).
+// Phase 27 SCRAPER-HEAL-30: every upstream-fetch goes through the
+// `resolverClient` (see resolver.go) which talks to the
+// `animepahe-resolver` stealth-Chromium sidecar. The Go-side DDoS-Guard
+// handshake (Pattern 3) is GONE — the sidecar owns the challenge stack.
+// MalSync invalidation on `/release` 404 is single-strike (A9) and backed
+// by a persistent reverse-mapping cache key so it survives process
+// restarts (see malsync.go::Invalidate).
 package animepahe
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -107,31 +109,47 @@ const (
 
 // malSyncClient is the malsync lookup contract — abstracted so tests can
 // inject a fake without standing up a real malsync HTTP server.
+//
+// Phase 27 A9 (SCRAPER-HEAL-30): extended with two helpers backing
+// single-strike invalidation on /release 404. LookupMalID is the reverse
+// of Lookup (providerID → malID via persistent cache); Invalidate evicts
+// both the forward and reverse cache entries in one variadic Delete.
+// Both are best-effort: callers IGNORE the returned error and continue.
+//
+// All three methods are exercised by the parser; the resolver-transport
+// migration (Task 1) introduces the interface, and the persistent-cache
+// implementation lands in malsync.go (Task 2 conceptually; physically
+// landed alongside the interface so the package compiles).
 type malSyncClient interface {
 	Lookup(ctx context.Context, malID, provider string) (string, bool, error)
+	LookupMalID(ctx context.Context, providerID, provider string) (string, error)
+	Invalidate(ctx context.Context, malID, provider, providerID string) error
 }
 
 // Deps is the constructor input for New(). Every reference field must be
 // non-nil except Log (a no-op fallback is constructed if absent).
 type Deps struct {
-	// BaseURL is the AnimePahe base URL (default https://animepahe.ru per
-	// CONTEXT.md). Plan 16-05 wires this from ANIMEPAHE_BASE_URL.
-	BaseURL string
-	HTTP    *domain.BaseHTTPClient
-	Embeds  *domain.Registry
-	MalSync malSyncClient
-	Cache   cache.Cache
-	Log     *logger.Logger
+	// ResolverURL is the animepahe-resolver sidecar base URL (default
+	// http://animepahe-resolver:3000 per Phase 27 D2). Plan 27-02 wires
+	// this from SCRAPER_ANIMEPAHE_RESOLVER_URL. Replaces the Phase 16
+	// BaseURL field (no Go-side code talks to animepahe.* upstream
+	// directly anymore — the sidecar owns the stealth-Chromium stack).
+	ResolverURL string
+	HTTP        *domain.BaseHTTPClient
+	Embeds      *domain.Registry
+	MalSync     malSyncClient
+	Cache       cache.Cache
+	Log         *logger.Logger
 }
 
 // Provider implements domain.Provider for the AnimePahe upstream.
 type Provider struct {
-	baseURL string
-	http    *domain.BaseHTTPClient
-	embeds  *domain.Registry
-	malsync malSyncClient
-	cache   cache.Cache
-	log     *logger.Logger
+	resolver *resolverClient
+	http     *domain.BaseHTTPClient
+	embeds   *domain.Registry
+	malsync  malSyncClient
+	cache    cache.Cache
+	log      *logger.Logger
 
 	// stages is the in-memory health snapshot, updated on each method call.
 	// Phase 16 only requires the snapshot exist with the four canonical
@@ -140,12 +158,13 @@ type Provider struct {
 	stages   map[string]domain.StageHealth
 }
 
-// New constructs a Provider with sane defaults — empty BaseURL falls back to
-// https://animepahe.ru. WR-11: required dependencies (HTTP, Embeds, MalSync,
-// Cache) are validated eagerly and a non-nil error is returned if any is
-// missing. main.go fatals on the error, so misconfiguration surfaces at
-// boot rather than later as a confusing nil-pointer dereference 502.
-// d.Log is optional and falls back to logger.Default().
+// New constructs a Provider with sane defaults — empty ResolverURL falls
+// back to http://animepahe-resolver:3000 (the docker-compose service name).
+// WR-11: required dependencies (HTTP, Embeds, MalSync, Cache) are validated
+// eagerly and a non-nil error is returned if any is missing. main.go fatals
+// on the error, so misconfiguration surfaces at boot rather than later as a
+// confusing nil-pointer dereference 502. d.Log is optional and falls back to
+// logger.Default().
 func New(d Deps) (*Provider, error) {
 	if d.HTTP == nil {
 		return nil, errors.New("animepahe: Deps.HTTP is required")
@@ -162,18 +181,18 @@ func New(d Deps) (*Provider, error) {
 	if d.Log == nil {
 		d.Log = logger.Default()
 	}
-	base := d.BaseURL
-	if base == "" {
-		base = "https://animepahe.ru"
+	resolverURL := d.ResolverURL
+	if resolverURL == "" {
+		resolverURL = "http://animepahe-resolver:3000"
 	}
 	p := &Provider{
-		baseURL: strings.TrimRight(base, "/"),
-		http:    d.HTTP,
-		embeds:  d.Embeds,
-		malsync: d.MalSync,
-		cache:   d.Cache,
-		log:     d.Log,
-		stages:  make(map[string]domain.StageHealth, len(stageNames)),
+		resolver: newResolverClient(resolverURL, d.HTTP),
+		http:     d.HTTP,
+		embeds:   d.Embeds,
+		malsync:  d.MalSync,
+		cache:    d.Cache,
+		log:      d.Log,
+		stages:   make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Pre-seed all four stages so HealthCheck always returns the canonical
 	// shape even before any traffic.
@@ -214,34 +233,14 @@ func (p *Provider) HealthCheck(ctx context.Context) domain.Health {
 	return domain.Health{Provider: providerName, Stages: snap}
 }
 
-// getWithDDoSGuard fetches urlStr, transparently handling a 403 + DDoS-Guard
-// response: it runs ensureDDoSCookie() once and retries the request. Caller
-// is responsible for closing the returned body.
-func (p *Provider) getWithDDoSGuard(ctx context.Context, urlStr string) (*http.Response, error) {
-	resp, err := p.http.Get(ctx, urlStr)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusForbidden || !strings.EqualFold(resp.Header.Get("Server"), "ddos-guard") {
-		return resp, nil
-	}
-	// Drain the 403 body and close before retrying.
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
-
-	target, err := url.Parse(urlStr)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureDDoSCookie(ctx, p.http, target); err != nil {
-		return nil, err
-	}
-	return p.http.Get(ctx, urlStr)
-}
-
-// FindID resolves an AnimeRef → AnimePahe anime ID. First tries malsync.moe
-// (positive + negative cache); falls back to /api?m=search with a Jaro-Winkler
-// fuzzy match (threshold 0.85).
+// FindID resolves an AnimeRef → AnimePahe anime UUID `session`. First tries
+// malsync.moe (positive + negative cache); falls back to the resolver's
+// /search endpoint with a Jaro-Winkler fuzzy match (threshold 0.85).
+//
+// Phase 27: when the MalSync forward write fires (positive cache hit), the
+// reverse-mapping key `malsync_reverse:animepahe:<session> → <malID>` is
+// also persisted so `/release` 404 invalidation works across process
+// restarts (see malsync.go::FindID).
 func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, error) {
 	// 1. malsync hit?
 	if ref.ShikimoriID != "" {
@@ -250,38 +249,14 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 			return id, nil
 		}
 	}
-	// 2. Fuzzy /api?m=search fallback.
+	// 2. Fuzzy /search fallback (via resolver sidecar).
 	if ref.Title == "" {
 		err := domain.WrapNotFound(errors.New("no title"), "animepahe: cannot search without a title")
 		p.markStage(health.StageSearch, err)
 		return "", err
 	}
-	q := url.QueryEscape(ref.Title)
-	searchURL := fmt.Sprintf("%s/api?m=search&q=%s", p.baseURL, q)
-	resp, err := p.getWithDDoSGuard(ctx, searchURL)
+	sr, err := p.resolver.Search(ctx, ref.Title)
 	if err != nil {
-		err = domain.WrapProviderDown(err, "animepahe: search fetch")
-		p.markStage(health.StageSearch, err)
-		return "", err
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode != http.StatusOK {
-		err = domain.WrapProviderDown(fmt.Errorf("status %d", resp.StatusCode), "animepahe: search non-200")
-		p.markStage(health.StageSearch, err)
-		return "", err
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyAPI))
-	if err != nil {
-		err = domain.WrapProviderDown(err, "animepahe: search read body")
-		p.markStage(health.StageSearch, err)
-		return "", err
-	}
-	var sr searchResponse
-	if err := json.Unmarshal(body, &sr); err != nil {
-		err = domain.WrapExtractFailed(err, "animepahe: search decode")
 		p.markStage(health.StageSearch, err)
 		return "", err
 	}
@@ -315,9 +290,14 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 	return best.session, nil
 }
 
-// ListEpisodes paginates /api?m=release for the given AnimePahe anime ID,
-// caches the assembled list for 6 hours, and returns ([]Episode, nil) for
-// the real-empty case.
+// ListEpisodes paginates `/release?session=<animeSession>&page=N` for the
+// given AnimePahe anime UUID `session`, caches the assembled list for 6
+// hours, and returns ([]Episode, nil) for the real-empty case.
+//
+// Phase 27 A9: on a /release 404 the persistent MalSync reverse map is
+// consulted; if a known mal_id maps to this animeSession the forward +
+// reverse entries are evicted (single-strike invalidation). The 404 is
+// surfaced unchanged.
 func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domain.Episode, error) {
 	cacheKey := fmt.Sprintf("episodes:%s:%s", providerName, providerID)
 	var cached []domain.Episode
@@ -328,33 +308,19 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 
 	all := make([]domain.Episode, 0, 32)
 	for page := 1; page <= maxEpisodePages; page++ {
-		u := fmt.Sprintf("%s/api?m=release&id=%s&sort=episode_asc&page=%d", p.baseURL, url.PathEscape(providerID), page)
-		resp, err := p.getWithDDoSGuard(ctx, u)
+		rr, err := p.resolver.Release(ctx, providerID, page)
 		if err != nil {
-			err = domain.WrapProviderDown(err, "animepahe: release fetch")
-			p.markStage(health.StageEpisodes, err)
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-			_ = resp.Body.Close()
-			err = domain.WrapProviderDown(
-				fmt.Errorf("status %d, body=%q", resp.StatusCode, string(body)),
-				fmt.Sprintf("animepahe: release page %d non-200", page),
-			)
-			p.markStage(health.StageEpisodes, err)
-			return nil, err
-		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyAPI))
-		_ = resp.Body.Close()
-		if err != nil {
-			err = domain.WrapProviderDown(err, "animepahe: release read body")
-			p.markStage(health.StageEpisodes, err)
-			return nil, err
-		}
-		var rr releaseResponse
-		if err := json.Unmarshal(body, &rr); err != nil {
-			err = domain.WrapExtractFailed(err, "animepahe: release decode")
+			// A9 single-strike: on /release 404 evict the MalSync mapping
+			// so the next FindID call re-runs /search. The reverse-key
+			// lookup is persistent (see malsync.go::LookupMalID) so this
+			// works across process restarts. Best-effort: any lookup or
+			// delete error is ignored — failing to evict a stale mapping
+			// is strictly less bad than failing the user-visible 404.
+			if errors.Is(err, domain.ErrNotFound) {
+				if malID, lookupErr := p.malsync.LookupMalID(ctx, providerID, providerName); lookupErr == nil && malID != "" {
+					_ = p.malsync.Invalidate(ctx, malID, providerName, providerID)
+				}
+			}
 			p.markStage(health.StageEpisodes, err)
 			return nil, err
 		}
@@ -388,34 +354,20 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 	return all, nil
 }
 
-// ListServers scrapes /play/{anime}/{episode} for kwik.cx button[data-src]
-// URLs. Each match becomes one domain.Server with ID = raw kwik URL, Name = "kwik".
+// ListServers scrapes the resolver's /play HTML response for kwik.cx
+// button[data-src] URLs. Each match becomes one domain.Server with ID =
+// raw kwik URL, Name = "kwik". The scheme check (T-27-02-01) + host filter
+// + data-audio sub/dub derivation (CR-02) are preserved byte-for-byte
+// from the pre-Phase-27 implementation.
 func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string) ([]domain.Server, error) {
-	u := fmt.Sprintf("%s/play/%s/%s", p.baseURL, url.PathEscape(providerID), url.PathEscape(episodeID))
-	resp, err := p.getWithDDoSGuard(ctx, u)
+	body, err := p.resolver.Play(ctx, providerID, episodeID)
 	if err != nil {
-		err = domain.WrapProviderDown(err, "animepahe: /play fetch")
-		p.markStage(health.StageServers, err)
-		return nil, err
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode != http.StatusOK {
-		err = domain.WrapProviderDown(fmt.Errorf("status %d", resp.StatusCode), "animepahe: /play non-200")
-		p.markStage(health.StageServers, err)
-		return nil, err
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyHTML))
-	if err != nil {
-		err = domain.WrapProviderDown(err, "animepahe: /play read body")
 		p.markStage(health.StageServers, err)
 		return nil, err
 	}
 	// Selector drift sentinel: an empty body is structurally distinct from a
 	// healthy 200 page with zero buttons (real-empty).
-	if len(strings.TrimSpace(string(body))) == 0 {
+	if len(strings.TrimSpace(body)) == 0 {
 		err = domain.WrapExtractFailed(
 			errors.New("/play response body is empty"),
 			"animepahe: /play selector drift (empty body)",
@@ -423,7 +375,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		p.markStage(health.StageServers, err)
 		return nil, err
 	}
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
 	if err != nil {
 		err = domain.WrapExtractFailed(err, "animepahe: /play parse")
 		p.markStage(health.StageServers, err)
@@ -435,10 +387,10 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		if src == "" {
 			return
 		}
-		// WR-05: reject any non-http(s) scheme up-front. `url.Parse` accepts
-		// arbitrary schemes (e.g. `kwik://kwik.cx/`) so a path-traversal-style
-		// embedURL could otherwise satisfy the host filter and propagate to
-		// the orchestrator's extract step.
+		// WR-05 / T-27-02-01: reject any non-http(s) scheme up-front.
+		// `url.Parse` accepts arbitrary schemes (e.g. `kwik://kwik.cx/`)
+		// so a path-traversal-style embedURL could otherwise satisfy the
+		// host filter and propagate to the orchestrator's extract step.
 		pu, perr := url.Parse(src)
 		if perr != nil || (pu.Scheme != "http" && pu.Scheme != "https") {
 			return
@@ -502,9 +454,10 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		p.markStage(health.StageStream, err)
 		return nil, err
 	}
-	// Provide Referer = p.baseURL so the Kwik upstream accepts the embed
-	// fetch (real Kwik requires the AnimePahe referrer chain).
-	headers := http.Header{"Referer": []string{p.baseURL}}
+	// Provide Referer = kwikReferer (https://animepahe.pw/) so the Kwik
+	// upstream accepts the embed fetch (Kwik requires the parent-site
+	// Referer chain; D2 alignment).
+	headers := http.Header{"Referer": []string{kwikReferer}}
 	stream, err := ext.Extract(ctx, serverID, headers)
 	if err != nil {
 		// Pass the error through; the extractor already wrapped it.

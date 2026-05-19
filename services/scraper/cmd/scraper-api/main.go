@@ -87,13 +87,19 @@ func main() {
 	defer func() { _ = redisCache.Close() }()
 	log.Infow("redis connected", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
 
-	// Build the shared HTTP client for AnimePahe. Per-host rate limits keep
-	// us polite and let DDoS-Guard's cookie jar warm up before sustained
-	// traffic. The jar is exposed via *BaseHTTPClient.Jar() so the
-	// ensureDDoSCookie helper can pre-populate `__ddg2_` cookies.
+	// Build the shared HTTP client for AnimePahe.
+	//
+	// Phase 27 SCRAPER-HEAL-30: the per-host rate limits for upstream
+	// animepahe.{ru,com,si} are GONE — the resolver sidecar owns
+	// upstream rate-pacing (its single Chromium worker naturally
+	// serializes). The internal `animepahe-resolver` host gets a higher
+	// RPS (5/sec, burst 5) since it lives on the docker network and
+	// rate-limiting twice (orchestrator + sidecar) would add latency
+	// without reducing load on upstream. kwik.cx / kwik.si /
+	// api.malsync.moe limits preserved (still hit directly from this
+	// process).
 	animePaheBaseHTTP := domain.NewBaseHTTPClient(log,
-		domain.WithPerHostRPS("animepahe.ru", 1.0, 2),
-		domain.WithPerHostRPS("animepahe.com", 1.0, 2),
+		domain.WithPerHostRPS("animepahe-resolver", 5.0, 5),
 		domain.WithPerHostRPS("kwik.cx", 1.0, 2),
 		domain.WithPerHostRPS("kwik.si", 1.0, 2),
 		domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
@@ -107,12 +113,12 @@ func main() {
 	// error so a misconfigured Deps surfaces at boot, not via a runtime
 	// 502 (nil pointer dereference) minutes after deploy.
 	animePaheProvider, err := animepahe.New(animepahe.Deps{
-		BaseURL: cfg.AnimePahe.BaseURL,
-		HTTP:    animePaheBaseHTTP,
-		Embeds:  registry,
-		MalSync: malSyncClient,
-		Cache:   redisCache,
-		Log:     log,
+		ResolverURL: cfg.AnimePahe.ResolverURL,
+		HTTP:        animePaheBaseHTTP,
+		Embeds:      registry,
+		MalSync:     malSyncClient,
+		Cache:       redisCache,
+		Log:         log,
 	})
 	if err != nil {
 		log.Fatalw("failed to construct AnimePahe provider", "error", err)
@@ -396,7 +402,7 @@ func main() {
 			"providers", len(orchestrator.HealthSnapshot(context.Background())),
 			"embed_extractors", len(registry.Names()),
 			"megacloud_url", cfg.MegacloudExtractor.URL,
-			"animepahe_base_url", cfg.AnimePahe.BaseURL,
+			"animepahe_resolver_url", cfg.AnimePahe.ResolverURL,
 			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
 			"animekai_enabled", cfg.AnimeKai.Enabled,
 			"animekai_base_url", cfg.AnimeKai.BaseURL,

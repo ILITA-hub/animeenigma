@@ -14,6 +14,10 @@
 // rather than Go convention so the json tags can be omitted where the field
 // names match — and so the DTOs are recognizable when audit-diffed against
 // the on-disk fixtures.
+//
+// DTO shapes verified verbatim against testdata/animepahe/frieren-{search,
+// release}.json (Phase 27 D4 / A1+A2) — no struct field changes required
+// when the parser migrated to the resolver transport.
 package animepahe
 
 // epDTO is one entry inside /api?m=release&id={id}.data[]. The upstream emits
