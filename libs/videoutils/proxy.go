@@ -303,6 +303,19 @@ func (e *UpstreamError) Error() string {
 	return fmt.Sprintf("upstream error (status %d, domain %s)", e.StatusCode, e.Domain)
 }
 
+// DomainNotAllowedError is returned by ProxyWithReferer (and any future
+// HLS-proxy entry point) when the parsed URL's host is not in
+// HLSProxyAllowedDomains. Streaming handlers should catch this with
+// errors.As and emit HTTP 502 — the upstream URL is structurally
+// unreachable through our allowlist gate, not a transient/caller error.
+type DomainNotAllowedError struct {
+	Domain string
+}
+
+func (e *DomainNotAllowedError) Error() string {
+	return fmt.Sprintf("domain not allowed for HLS proxy: %s", e.Domain)
+}
+
 // ProxyWithReferer proxies a stream with a custom Referer header
 // This is needed for HLS streams that require specific referer for authentication
 func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) error {
@@ -314,7 +327,7 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 
 	// Check if domain is allowed for HLS proxy
 	if !isHLSDomainAllowed(parsed.Host) {
-		return fmt.Errorf("domain not allowed for HLS proxy: %s", parsed.Host)
+		return &DomainNotAllowedError{Domain: parsed.Host}
 	}
 
 	// Create upstream request

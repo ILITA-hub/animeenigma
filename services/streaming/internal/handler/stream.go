@@ -219,12 +219,30 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Phase 25 W-INT-03 / SCRAPER-HEAL-24: allowlist gap surfaces as 502
+		// instead of the prior silent 200 / Content-Length:0. The FE error
+		// boundary, Prometheus dashboards, and the BLK-INT-01 self-heal
+		// canary all rely on this becoming an observable failure.
+		var domainErr *videoutils.DomainNotAllowedError
+		if errors.As(err, &domainErr) {
+			metrics.ProxyUpstreamErrors.WithLabelValues("403", domainErr.Domain).Inc()
+			h.log.Warnw("HLS proxy rejected non-allowlisted domain",
+				"domain", domainErr.Domain,
+				"url", sourceURL,
+			)
+			http.Error(w, "domain not allowed for HLS proxy", http.StatusBadGateway)
+			return
+		}
+
 		h.log.Errorw("failed to proxy HLS stream",
 			"error", err,
 			"url", sourceURL,
 			"referer", referer,
 		)
-		// Don't send error response if headers already sent
+		// Belt-and-braces: if we reach here, headers may or may not have
+		// been written. Try a final 502 — http.Error is a no-op when
+		// headers are already committed, so this is safe in both states.
+		http.Error(w, "internal proxy error", http.StatusBadGateway)
 	}
 }
 
