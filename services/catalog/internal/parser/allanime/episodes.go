@@ -62,7 +62,7 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 			Name:     name,
 			JName:    e.NativeName,
 			Poster:   e.ThumbnailURL,
-			Episodes: e.AvailableEpisodes["raw"],
+			Episodes: e.AvailableEpisodes["sub"],
 		})
 	}
 	return out, nil
@@ -87,7 +87,7 @@ func (c *Client) EpisodesByID(ctx context.Context, showID string) ([]Episode, er
 			Show struct {
 				ID                      string `json:"_id"`
 				AvailableEpisodesDetail struct {
-					Raw []string `json:"raw"`
+					Sub []string `json:"sub"`
 				} `json:"availableEpisodesDetail"`
 			} `json:"show"`
 		} `json:"data"`
@@ -101,9 +101,9 @@ func (c *Client) EpisodesByID(ctx context.Context, showID string) ([]Episode, er
 		return nil, fmt.Errorf("allanime: query rejected (likely stale SHA): %s", string(resp.Errors[0]))
 	}
 
-	rawList := resp.Data.Show.AvailableEpisodesDetail.Raw
+	rawList := resp.Data.Show.AvailableEpisodesDetail.Sub
 	if len(rawList) == 0 {
-		return nil, fmt.Errorf("allanime: no raw episodes for show %s", showID)
+		return nil, fmt.Errorf("allanime: no episodes for show %s", showID)
 	}
 
 	episodes := make([]Episode, 0, len(rawList))
@@ -147,39 +147,53 @@ func (c *Client) RawStream(ctx context.Context, episodeID string) (Stream, error
 	}
 	ext := buildExtensions(c.effectiveSourcesSHA())
 
-	var resp struct {
+	// Two response shapes from AllAnime's sources resolver:
+	//   1. Legacy: data.episode.sourceUrls[...] — direct JSON.
+	//   2. Current: data._m + data.tobeparsed — AES-256-CTR blob, decrypts to
+	//      `{"episode":{"sourceUrls":[...]}}` (same shape as #1 once decoded).
+	// We parse the envelope generically and decrypt on demand.
+	var envelope struct {
 		Data struct {
-			Episode struct {
-				SourceUrls []struct {
-					SourceURL  string  `json:"sourceUrl"`
-					SourceName string  `json:"sourceName"`
-					Type       string  `json:"type"`
-					Priority   float64 `json:"priority"`
-					Sandbox    string  `json:"sandbox"`
-					Subtitles  []struct {
-						SourceURL string `json:"src"`
-						Lang      string `json:"lang"`
-						Label     string `json:"label"`
-					} `json:"subtitles"`
-				} `json:"sourceUrls"`
-			} `json:"episode"`
+			Episode    *episodeData `json:"episode"`
+			Tobeparsed string       `json:"tobeparsed"`
 		} `json:"data"`
 		Errors []json.RawMessage `json:"errors"`
 	}
 
-	if err := c.doGraphQL(ctx, SourcesQuery, vars, ext, &resp); err != nil {
+	// Sources are served by a known-stable pre-registered SHA; we don't send
+	// `query` here (passing empty string makes endpointURL omit it).
+	if err := c.doGraphQL(ctx, "", vars, ext, &envelope); err != nil {
 		return Stream{}, err
 	}
-	if len(resp.Errors) > 0 {
-		return Stream{}, fmt.Errorf("allanime: query rejected (likely stale SHA): %s", string(resp.Errors[0]))
+
+	sourcesEpisode := envelope.Data.Episode
+	if envelope.Data.Tobeparsed != "" {
+		plain, derr := decryptTobeparsed(envelope.Data.Tobeparsed)
+		if derr != nil {
+			return Stream{}, fmt.Errorf("allanime: decrypt tobeparsed: %w", derr)
+		}
+		var inner struct {
+			Episode *episodeData `json:"episode"`
+		}
+		if err := json.Unmarshal(plain, &inner); err != nil {
+			return Stream{}, fmt.Errorf("allanime: parse decrypted sources: %w", err)
+		}
+		sourcesEpisode = inner.Episode
 	}
-	if len(resp.Data.Episode.SourceUrls) == 0 {
+
+	if sourcesEpisode == nil || len(sourcesEpisode.SourceUrls) == 0 {
+		// Surface any upstream error only when we genuinely couldn't get
+		// sources; benign resolver errors that still ship a tobeparsed blob
+		// (rare) shouldn't poison the caller.
+		if len(envelope.Errors) > 0 {
+			return Stream{}, fmt.Errorf("allanime: query rejected (likely stale SHA): %s", string(envelope.Errors[0]))
+		}
 		return Stream{}, fmt.Errorf("allanime: no sources for episode %s", episodeID)
 	}
 
 	// Sort by priority descending; pick the highest-priority source whose URL
 	// looks like a playable stream (http(s)://...).
-	sources := resp.Data.Episode.SourceUrls
+	sources := sourcesEpisode.SourceUrls
 	sort.SliceStable(sources, func(i, j int) bool {
 		return sources[i].Priority > sources[j].Priority
 	})
@@ -199,7 +213,7 @@ func (c *Client) RawStream(ctx context.Context, episodeID string) (Stream, error
 		}
 		return Stream{
 			URL:       url,
-			Type:      streamTypeFromURL(url),
+			Type:      streamType(url, s.FileExtension),
 			Quality:   "auto",
 			Subtitles: subs,
 		}, nil
@@ -208,13 +222,37 @@ func (c *Client) RawStream(ctx context.Context, episodeID string) (Stream, error
 	return Stream{}, fmt.Errorf("allanime: no playable source URL for episode %s", episodeID)
 }
 
+// episodeData is the inner `episode` payload of the sources GraphQL response,
+// shared by the legacy direct-JSON shape and the AES-CTR `tobeparsed` shape
+// (the decrypted blob has the same schema).
+type episodeData struct {
+	EpisodeString string      `json:"episodeString"`
+	SourceUrls    []sourceURL `json:"sourceUrls"`
+}
+
+type sourceURL struct {
+	SourceURL     string  `json:"sourceUrl"`
+	SourceName    string  `json:"sourceName"`
+	Type          string  `json:"type"`
+	Priority      float64 `json:"priority"`
+	Sandbox       string  `json:"sandbox"`
+	FileExtension string  `json:"fileExtenstion"` // AllAnime spelling — sic
+	Subtitles     []struct {
+		SourceURL string `json:"src"`
+		Lang      string `json:"lang"`
+		Label     string `json:"label"`
+	} `json:"subtitles"`
+}
+
 // doGraphQL GETs a single persisted query against the active domain. On
 // transport failure it marks the domain failed and bubbles the error up so
 // the caller can decide whether to wrap as ServiceUnavailable.
 //
-// The gqlQuery argument is the full GraphQL operation string; we always
-// send it alongside the persisted-query extension so Apollo can auto-
-// register the operation under the SHA on cache miss.
+// gqlQuery is the GraphQL operation string. When non-empty we send it
+// alongside the persisted-query extension so Apollo's APQ flow can auto-
+// register the operation under our SHA on cache miss. For pinned SHAs that
+// hit a pre-registered server-side resolver, pass "" — endpointURL omits the
+// `query` param.
 func (c *Client) doGraphQL(ctx context.Context, gqlQuery, vars, ext string, out any) error {
 	domain, err := c.pickDomain(ctx)
 	if err != nil {
@@ -295,6 +333,19 @@ func decodeSourceURL(s string) string {
 	// non-http sources). This means we'll return Stream{} if all sources
 	// are obfuscated; the caller falls back to other providers.
 	return decoded
+}
+
+// streamType picks the container type using the source's fileExtenstion hint
+// (preferred — accurate when AllAnime supplies it for its own CDN URLs that
+// have no extension in path) and falls back to URL inspection.
+func streamType(u, hint string) string {
+	switch strings.ToLower(hint) {
+	case "mp4":
+		return "mp4"
+	case "m3u8", "hls":
+		return "hls"
+	}
+	return streamTypeFromURL(u)
 }
 
 // streamTypeFromURL guesses the stream container type from the URL suffix.

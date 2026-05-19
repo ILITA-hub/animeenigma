@@ -64,7 +64,7 @@ func TestSearch_ReturnsParsedResults(t *testing.T) {
 						"englishName": "Bocchi the Rock!",
 						"nativeName": "ぼっち・ざ・ろっく！",
 						"thumbnail": "/poster.jpg",
-						"availableEpisodes": {"raw": 12}
+						"availableEpisodes": {"sub": 12}
 					}]
 				}
 			}
@@ -166,7 +166,7 @@ func TestEpisodesByID_ReturnsSortedEpisodes(t *testing.T) {
 				"show": {
 					"_id": "abc123",
 					"availableEpisodesDetail": {
-						"raw": ["3", "1", "12", "2"]
+						"sub": ["3", "1", "12", "2"]
 					}
 				}
 			}
@@ -197,14 +197,37 @@ func TestEpisodesByID_ReturnsSortedEpisodes(t *testing.T) {
 
 func TestEpisodesByID_EmptyRawListReturnsError(t *testing.T) {
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"data":{"show":{"_id":"x","availableEpisodesDetail":{"raw":[]}}}}`)
+		fmt.Fprint(w, `{"data":{"show":{"_id":"x","availableEpisodesDetail":{"sub":[]}}}}`)
 	}))
 	defer mock.Close()
 
 	c := newMockClient(t, mock)
 	_, err := c.EpisodesByID(context.Background(), "x")
-	if err == nil || !strings.Contains(err.Error(), "no raw episodes") {
-		t.Fatalf("want 'no raw episodes' error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "no episodes") {
+		t.Fatalf("want 'no episodes' error, got %v", err)
+	}
+}
+
+func TestRawStream_DecryptsTobeparsedBlob(t *testing.T) {
+	// Blob generated with the static AllAnime key (SHA256("Xot36i3lK3:v1")),
+	// IV=0102030405060708090a0b0c, plaintext =
+	//   {"episode":{"episodeString":"1","sourceUrls":[{
+	//     "sourceUrl":"https://stream.example/p.m3u8",
+	//     "priority":5,"type":"hls","sourceName":"Test"}]}}
+	const blob = "AQECAwQFBgcICQoLDJJfIo9z91GChe+uo8lgpuv3BSLzA2Yen/msseqvEWmnwyhznODeGzNclwcH9qrki+8Snw6A/5Nq0MI4nISrk5D2NBkipDkq8Zci41b40S8MWMybiwSpHAsVCwKTDK0I14wS7/1ROVUqPWawrneU3vC6CnmZjViG4nCSBk6IlI71FmGfprfj8Y0D9BlSVKGyxpGwuNWdjIUAAAAAAAAAAAAAAAAAAAAA"
+
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"data":{"_m":"b7","tobeparsed":"%s"}}`, blob)
+	}))
+	defer mock.Close()
+
+	c := newMockClient(t, mock)
+	s, err := c.RawStream(context.Background(), "abc123/1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.URL != "https://stream.example/p.m3u8" {
+		t.Errorf("URL = %q, want decrypted HLS URL", s.URL)
 	}
 }
 

@@ -24,11 +24,18 @@ const (
 
 // Computed SHA256 hashes of the operations above. These are the Apollo
 // persisted-query cache keys. If the operator overrides via env they win;
-// otherwise we derive deterministically from the query string itself.
+// otherwise:
+//   - Search and Episodes use SHAs derived from the in-code query strings;
+//     Apollo auto-registers the queries under those SHAs on first hit.
+//   - Sources pins to a known-stable SHA registered by AllAnime's own
+//     clients (ani-cli, the web UI). Auto-registering our own copy of the
+//     sources query hits a buggier server resolver path that errors with
+//     "Cannot set property 'countryOfOrigin' of undefined" — the pre-
+//     registered SHA exercises the cached, healthy resolver instead.
 var (
 	SHASearchFallback   = computeSHA(SearchQuery)
 	SHAEpisodesFallback = computeSHA(EpisodesQuery)
-	SHASourcesFallback  = computeSHA(SourcesQuery)
+	SHASourcesFallback  = "d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec"
 )
 
 func computeSHA(s string) string {
@@ -99,7 +106,7 @@ func buildSearchVariables(query string) (string, error) {
 		},
 		Limit:           10,
 		Page:            1,
-		TranslationType: "raw",
+		TranslationType: "sub",
 		CountryOrigin:   "ALL",
 	}
 	b, err := json.Marshal(v)
@@ -127,7 +134,7 @@ func buildEpisodesVariables(showID string) (string, error) {
 func buildSourcesVariables(showID, episodeString string) (string, error) {
 	v := map[string]any{
 		"showId":          showID,
-		"translationType": "raw",
+		"translationType": "sub",
 		"episodeString":   episodeString,
 	}
 	b, err := json.Marshal(v)
