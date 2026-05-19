@@ -291,7 +291,7 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 | 24 | v3.1 | 0/5 | Planning    | — |
 | 25 | v3.1 | 0/4 | Planning    | — |
 | 26 | v3.1 | 0/7 | Planning    | — |
-| 27 | v3.1 | 0/5 | Planning    | — |
+| 27 | v3.1 | 2/5 | In Progress|  |
 | 28 | v3.1 | 0/6 | Planning    | — |
 
 ### Phase 27: AnimePahe Revival via Stealth-Chromium Sidecar
@@ -299,11 +299,11 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 **Goal:** A request to `GET /api/anime/{uuid}/scraper/episodes?prefer=animepahe` (gateway → catalog → scraper → animepahe parser → new `animepahe-resolver` sidecar) returns ≥ 28 episodes for Frieren (MAL 52991) with playable Kwik stream URLs end-to-end. A new Node 20 + Fastify + puppeteer-extra stealth-Chromium sidecar at `services/animepahe-resolver/` DDoS-Guard-solves on `animepahe.pw` (the only reachable mirror; `.ru`/`.si` are blackholed, `.io` adds FingerprintJS) and proxies search/release/play fetches through an internal `:3000` HTTP API. The Go parser at `services/scraper/internal/providers/animepahe/` is rewritten to call the sidecar (replacing direct upstream fetches + the deleted `ddosguard.go`) and migrates from the stale numeric-MAL-id API contract to the new UUID-session-token contract returned by `m=search`. The sidecar stays under a 500 MB hard memory cap (D5 ship gate). Once verified, `animepahe` comes off the `SCRAPER_DEGRADED_PROVIDERS` compose default, restoring orchestrator failover.
 **Requirements**: SCRAPER-HEAL-29, SCRAPER-HEAL-30, SCRAPER-HEAL-31, SCRAPER-HEAL-32, SCRAPER-HEAL-33
 **Depends on:** Phase 24 (provider verification hard gate / SCRAPER-HEAL-20 verdict log) — Phase 27 unblocks the `animepahe` column of that log
-**Plans:** 5 plans across 3 waves (Wave 1: 27-01 sidecar scaffold + 27-02 parser rewrite parallel — file scopes disjoint; Wave 2: 27-03 compose wiring; Wave 3: 27-04 gate-clear + 27-05 default-flip serialized per D7)
+**Plans:** 2/5 plans executed
 
 Plans:
-- [ ] 27-01-PLAN.md — Wave 1: sidecar service scaffold (`services/animepahe-resolver/`) — Fastify + puppeteer-extra stealth-Chromium, two-layer healthz, /search /release /play /metrics routes, exact-pinned stealth deps + STEALTH-PINS.md + Pattern 7 branch + Makefile target + 100-request memory soak (D5 hard gate)
-- [ ] 27-02-PLAN.md — Wave 1: Go parser rewrite — resolverClient transport, UUID-session contract migration, delete ddosguard.go, MalSync single-strike invalidation on /release 404 (A9), capture fresh Frieren goldens against deployed sidecar (D4), config SCRAPER_ANIMEPAHE_RESOLVER_URL replaces ANIMEPAHE_BASE_URL
+- [x] 27-01-PLAN.md — Wave 1: sidecar service scaffold (`services/animepahe-resolver/`) — Fastify + puppeteer-extra stealth-Chromium, two-layer healthz, /search /release /play /metrics routes, exact-pinned stealth deps + STEALTH-PINS.md + Pattern 7 branch + Makefile target + 100-request memory soak (D5 hard gate)
+- [x] 27-02-PLAN.md — Wave 1: Go parser rewrite — resolverClient transport, UUID-session contract migration, delete ddosguard.go, MalSync single-strike invalidation on /release 404 (A9), capture fresh Frieren goldens against deployed sidecar (D4), config SCRAPER_ANIMEPAHE_RESOLVER_URL replaces ANIMEPAHE_BASE_URL
 - [ ] 27-03-PLAN.md — Wave 2: docker-compose wiring — animepahe-resolver service block (mem_limit 500m, seccomp:unconfined, /healthz healthcheck), scraper depends_on service_healthy + SCRAPER_ANIMEPAHE_RESOLVER_URL env; cold-compose smoke
 - [ ] 27-04-PLAN.md — Wave 3: end-to-end gate-clear — re-run Phase 24 SCRAPER-HEAL-20 curl pipeline against Frieren through the gateway with SCRAPER_DEGRADED_PROVIDERS=__none__ override; append `## Post-ship verification — Phase 27` to docs/issues/scraper-provider-verification-2026-05-19.md flipping animepahe row to PASS
 - [ ] 27-05-PLAN.md — Wave 3: compose default flip — SCRAPER_DEGRADED_PROVIDERS default changes from gogoanime,animepahe to gogoanime (env-override escape hatch preserved); make redeploy-scraper; D7 gate (b) 10-minute no-403/timeout-flood log scan; /animeenigma-after-update skill commits changelog + push
