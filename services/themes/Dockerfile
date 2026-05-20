@@ -15,6 +15,7 @@ COPY libs/database/go.mod libs/database/go.sum* ./libs/database/
 COPY libs/authz/go.mod libs/authz/go.sum* ./libs/authz/
 COPY libs/httputil/go.mod libs/httputil/go.sum* ./libs/httputil/
 COPY libs/pagination/go.mod libs/pagination/go.sum* ./libs/pagination/
+COPY libs/streamprobe/go.mod libs/streamprobe/go.sum* ./libs/streamprobe/
 COPY libs/animeparser/go.mod libs/animeparser/go.sum* ./libs/animeparser/
 COPY libs/videoutils/go.mod libs/videoutils/go.sum* ./libs/videoutils/
 COPY libs/idmapping/go.mod libs/idmapping/go.sum* ./libs/idmapping/
@@ -24,6 +25,7 @@ COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 COPY services/streaming/go.mod services/streaming/go.sum* ./services/streaming/
 COPY services/player/go.mod services/player/go.sum* ./services/player/
 COPY services/rooms/go.mod services/rooms/go.sum* ./services/rooms/
+COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/scheduler/go.mod services/scheduler/go.sum* ./services/scheduler/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 COPY services/themes/go.mod services/themes/go.sum* ./services/themes/
