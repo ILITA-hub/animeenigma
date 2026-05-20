@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/httputil"
 )
 
 type Config struct {
@@ -102,7 +103,7 @@ func Load() (*Config, error) {
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),
 			BurstSize:         getEnvInt("RATE_LIMIT_BURST", 200),
 		},
-		CORSOrigins: strings.Split(getEnv("CORS_ORIGINS", ""), ","),
+		CORSOrigins: httputil.ParseCommaList(getEnv("CORS_ORIGINS", "")),
 		Environment: strings.ToLower(getEnv("ENVIRONMENT", "")),
 		DevMode:     getEnvBool("DEV_MODE", false),
 		SiteURL:     strings.TrimRight(getEnv("SITE_URL", ""), "/"),

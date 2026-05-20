@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 )
 
@@ -61,10 +61,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("STREAM_TOKEN_SECRET environment variable is required")
 	}
 
-	allowedDomains := strings.Split(getEnv("PROXY_ALLOWED_DOMAINS", ""), ",")
-	if len(allowedDomains) == 1 && allowedDomains[0] == "" {
-		allowedDomains = []string{} // Empty means allow all
-	}
+	allowedDomains := httputil.ParseCommaList(getEnv("PROXY_ALLOWED_DOMAINS", ""))
 
 	return &Config{
 		Server: ServerConfig{

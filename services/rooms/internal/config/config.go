@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/httputil"
 )
 
 type Config struct {
@@ -39,14 +39,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
 	}
 
-	rawOrigins := getEnv("ALLOWED_WS_ORIGINS", "")
-	var origins []string
-	for _, o := range strings.Split(rawOrigins, ",") {
-		o = strings.TrimSpace(o)
-		if o != "" {
-			origins = append(origins, o)
-		}
-	}
+	origins := httputil.ParseCommaList(getEnv("ALLOWED_WS_ORIGINS", ""))
 
 	return &Config{
 		Server: ServerConfig{
