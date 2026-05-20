@@ -388,14 +388,21 @@ func JWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL string) f
 					httputil.Unauthorized(w)
 					return
 				}
+				// WV3-T1: derive a deterministic SessionID from
+				// (userID, raw ak_*, UTC-day) so audit logs can correlate
+				// ak_* calls and a future per-session revocation middleware
+				// has something to act on. See apikey_session.go for the
+				// derivation contract.
+				sid := deriveAPIKeySessionID(resolved.UserID, token, time.Now())
 				// Mint a short-lived JWT for downstream services
-				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role, "")
+				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role, sid)
 				if mintErr != nil {
 					httputil.Unauthorized(w)
 					return
 				}
 				// Replace header so downstream services see a valid JWT
 				r.Header.Set("Authorization", "Bearer "+tokenPair.AccessToken)
+				resolved.SessionID = sid
 				claims = resolved
 			} else {
 				// Standard JWT validation
@@ -445,13 +452,17 @@ func OptionalJWTValidationMiddleware(jwtConfig authz.JWTConfig, authServiceURL s
 					next.ServeHTTP(w, r)
 					return
 				}
-				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role, "")
+				// WV3-T1: derive deterministic SessionID — same contract as
+				// JWTValidationMiddleware above; see apikey_session.go.
+				sid := deriveAPIKeySessionID(resolved.UserID, token, time.Now())
+				tokenPair, mintErr := jwtManager.GenerateTokenPair(resolved.UserID, resolved.Username, resolved.Role, sid)
 				if mintErr != nil {
 					r.Header.Del("Authorization")
 					next.ServeHTTP(w, r)
 					return
 				}
 				r.Header.Set("Authorization", "Bearer "+tokenPair.AccessToken)
+				resolved.SessionID = sid
 				ctx := authz.ContextWithClaims(r.Context(), resolved)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
