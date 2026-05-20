@@ -292,7 +292,7 @@ After v3.1 ships, run `/gsd-new-milestone` to start the next cycle. Reserved fut
 | 25 | v3.1 | 0/4 | Planning    | — |
 | 26 | v3.1 | 0/7 | Planning    | — |
 | 27 | v3.1 | 5/5 | Complete   | 2026-05-19 |
-| 28 | v3.1 | 2/7 | In Progress|  |
+| 28 | v3.1 | 5/7 | In Progress|  |
 
 ### Phase 27: AnimePahe Revival via Stealth-Chromium Sidecar
 
@@ -313,13 +313,13 @@ Plans:
 **Goal:** Grow the EN failover pool from 1 working provider (allanime) to 4 by adding three new providers in order of reliability ceiling: AnimeFever (clean HTML scrape), Miruro (obfuscation-gated, spike-killable), 9anime.me.uk (last-resort brand-jack, MP4-only). EnglishPlayer source dropdown lights up with 4 selectable options (allanime + animefever + miruro + nineanime), conditional Miruro on spike convergence. Frieren E2E passes through every shipped provider; 9anime uses Marriagetoxin episode 1 as alternate test target (Frieren absent in upstream catalog).
 **Requirements**: SCRAPER-HEAL-34, SCRAPER-HEAL-35, SCRAPER-HEAL-36, SCRAPER-HEAL-37, SCRAPER-HEAL-38, SCRAPER-HEAL-39
 **Depends on:** v3.1 Phase 26 Wave 1 (AllAnime live — confirms the provider-lift template works) + v3.1 Phase 24 EnglishPlayer restored (for dropdown observability — soft dependency; backend ships without it).
-**Plans:** 2/7 plans executed
+**Plans:** 5/7 plans executed
 
 Plans:
 - [x] 28-00-PLAN.md — Wave 0: Miruro obfuscation spike (SCRAPER-HEAL-34) — 4-agent-session kill-switch. Reverse-engineer `VITE_PROXY_OBF_KEY` transform from minified frontend JS, port to Go, verify `pro.ultracloud.cc` returns playable HLS for one Frieren episode. Output: SPIKE-MIRURO.md verdict (`converged` / `killed`). `UXΔ = 0 (Ambiguous)` · `CDI = 0.02 * 34` · `MVQ = Basilisk 75%/90%`.
 - [x] 28-01-PLAN.md — Wave 0: AnimeFever embed-extractor recon (SCRAPER-HEAL-35) — identify which embed hosts AnimeFever proxies to for Frieren; classify as `existing-registry` vs `needs-new-extractor`. Output: SPIKE-ANIMEFEVER.md ordered host list. `UXΔ = 0 (Ambiguous)` · `CDI = 0.01 * 3` · `MVQ = Sprite 60%/85%`.
-- [ ] 28-02-PLAN.md — Wave 1: AnimeFever provider lift (SCRAPER-HEAL-36) — `services/scraper/internal/providers/animefever/` package, title-fuzzy + MalSync fallback FindID, HTML scrape pipeline, golden-file tests, register in main.go failover slot 4. Frieren E2E gate. `UXΔ = +2 (Better)` · `CDI = 0.02 * 13` · `MVQ = Griffin 85%/80%`.
-- [ ] 28-03-PLAN.md — Wave 1: New embed extractors (SCRAPER-HEAL-38) — implement each `embeds/<host>.go` identified in 28-01's recon (likely candidates: streamwish, filelions, doodstream). Each one templated against `embeds/streamhg.go`, golden-file tested. `UXΔ = +1 (Better)` · `CDI = 0.015 * 8` · `MVQ = Sprite 70%/80%`.
-- [ ] 28-04-PLAN.md — Wave 2 (gated on 28-00 verdict): Miruro provider lift (SCRAPER-HEAL-37) — `services/scraper/internal/providers/miruro/` package, AniList-ID-direct FindID via ARM, ultracloud-proxy stream extraction. Register failover slot 5. If 28-00 verdicts `killed`, this plan is `SKIPPED` and SCRAPER-HEAL-37 rolls to v3.2. `UXΔ = +2 (Better)` · `CDI = 0.04 * 21` · `MVQ = Phoenix 70%/85%`.
+- [x] 28-02-PLAN.md — Wave 1: AnimeFever provider lift (SCRAPER-HEAL-36) — `services/scraper/internal/providers/animefever/` package, title-fuzzy + MalSync fallback FindID, HTML scrape pipeline, golden-file tests, register in main.go failover slot 4. Frieren E2E gate. `UXΔ = +2 (Better)` · `CDI = 0.02 * 13` · `MVQ = Griffin 85%/80%`.
+- [x] 28-03-PLAN.md — Wave 1: New embed extractors (SCRAPER-HEAL-38) — implement each `embeds/<host>.go` identified in 28-01's recon (likely candidates: streamwish, filelions, doodstream). Each one templated against `embeds/streamhg.go`, golden-file tested. `UXΔ = +1 (Better)` · `CDI = 0.015 * 8` · `MVQ = Sprite 70%/80%`.
+- [x] 28-04-PLAN.md — Wave 2 (gated on 28-00 verdict): Miruro provider lift (SCRAPER-HEAL-37) — `services/scraper/internal/providers/miruro/` package, AniList-ID-direct FindID via ARM, ultracloud-proxy stream extraction. Register failover slot 5. If 28-00 verdicts `killed`, this plan is `SKIPPED` and SCRAPER-HEAL-37 rolls to v3.2. `UXΔ = +2 (Better)` · `CDI = 0.04 * 21` · `MVQ = Phoenix 70%/85%`.
 - [ ] 28-05-PLAN.md — Wave 3: 9anime.me.uk provider lift (SCRAPER-HEAL-39) — `services/scraper/internal/providers/nineanime/` package, title-fuzzy FindID, per-episode WP slug walking, MP4 path extraction from `my.1anime.site` iframe. Allowlist update in `libs/videoutils/proxy.go`. Register failover slot 6 (LAST — documented as lowest reliability tier in CONTEXT.md D2). Alternate test target Marriagetoxin episode 1. `UXΔ = 0 (Ambiguous)` · `CDI = 0.075 * 13` · `MVQ = Basilisk 40%/30%`.
 - [ ] 28-06-PLAN.md — Wave 3: dropdown polish + after-update — `capitalizeProvider` branches for animefever / miruro / nineanime, i18n keys (en/ru/ja), Playwright e2e for source switching mid-episode, `/animeenigma-after-update` skill ships changelog + commit + push. `UXΔ = +3 (Better)` · `CDI = 0.015 * 5` · `MVQ = Sprite 88%/92%`.
