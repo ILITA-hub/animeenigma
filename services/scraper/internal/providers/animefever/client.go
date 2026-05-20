@@ -200,19 +200,68 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 	}
 	var best candidate
 	doc.Find("div.card-block").Each(func(_ int, sel *goquery.Selection) {
-		anchor := sel.Find("a").First()
+		anchor := sel.Find("a[href*='/info/']").First()
 		href, _ := anchor.Attr("href")
-		title, _ := anchor.Attr("title")
-		if title == "" {
-			title = strings.TrimSpace(sel.Find("h3").First().Text())
-		}
 		slug := extractSlugFromHref(href)
 		if slug == "" {
 			return
 		}
-		score := fuzzy.JaroWinkler(normQuery, fuzzy.NormalizeTitle(title))
-		if score > best.score {
-			best = candidate{slug: slug, title: title, score: score}
+		// Score against every plausible title carrier on the card:
+		//   1. The <div class="card-block" title="..."> attribute (Japanese romaji on live data)
+		//   2. The <a title="..."> attribute (alternate localized title when present)
+		//   3. The <h3> text (often the same romaji)
+		//   4. The slug itself (matches the English title on animefever.cc)
+		// Keep the best of all four — JaroWinkler is monotonic, no precedence ambiguity.
+		titles := []string{}
+		if t, ok := sel.Attr("title"); ok && t != "" {
+			titles = append(titles, t)
+		}
+		if t, ok := anchor.Attr("title"); ok && t != "" {
+			titles = append(titles, t)
+		}
+		if h3 := strings.TrimSpace(sel.Find("h3").First().Text()); h3 != "" {
+			titles = append(titles, h3)
+		}
+		// Slug carries the English title hyphenated; normalize replaces hyphens.
+		titles = append(titles, slug)
+
+		bestTitle := ""
+		bestScore := 0.0
+		for _, t := range titles {
+			s := fuzzy.JaroWinkler(normQuery, fuzzy.NormalizeTitle(t))
+			if s > bestScore {
+				bestScore, bestTitle = s, t
+			}
+		}
+		// Slug-shape bias: animefever publishes the same show across several
+		// slugs — the primary entry's slug ends in `.<numericID>` ("…end.14401"),
+		// while localization variants append "-dub" / "-season-2" without an ID.
+		// JaroWinkler is unfortunately quite forgiving of "-dub"/"-sub" suffixes
+		// (only 3 extra chars on a 28-char title), so bias decisively:
+		//   +0.05 for canonical `.<digits>` slugs (the primary entry)
+		//   -0.05 for "-dub" / "-sub" / "-season-N" / "-spanish" variants
+		// Use a single classifier and apply both directions so primary wins.
+		isCanonical := false
+		if i := strings.LastIndex(slug, "."); i > 0 {
+			suffix := slug[i+1:]
+			if suffix != "" && suffix[0] >= '0' && suffix[0] <= '9' {
+				isCanonical = true
+			}
+		}
+		isVariant := strings.HasSuffix(slug, "-dub") ||
+			strings.HasSuffix(slug, "-sub") ||
+			strings.Contains(slug, "-season-") ||
+			strings.Contains(slug, "-spanish") ||
+			strings.Contains(slug, "-french") ||
+			strings.Contains(slug, "-german")
+		switch {
+		case isCanonical:
+			bestScore += 0.05
+		case isVariant:
+			bestScore -= 0.05
+		}
+		if bestScore > best.score {
+			best = candidate{slug: slug, title: bestTitle, score: bestScore}
 		}
 	})
 
