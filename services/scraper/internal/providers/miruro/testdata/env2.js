@@ -1,0 +1,1 @@
+window.env=JSON.parse("{\"VITE_ANILIST_CLIENT_ID\":\"18233\",\"VITE_ANILIST_REDIRECT_URI\":\"https://www.miruro.tv/callback\",\"VITE_PIPE_OBF_KEY\":\"71951034f8fbcf53d89db52ceb3dc22c\",\"VITE_PROXY_A\":\"https://pro.ultracloud.cc/\",\"VITE_PROXY_B\":\"https://pru.ultracloud.cc/\",\"VITE_PROXY_OBF_KEY\":\"a54d389c18527d9fd3e7f0643e27edbe\"}");
