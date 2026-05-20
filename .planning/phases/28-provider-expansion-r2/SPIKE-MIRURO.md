@@ -145,6 +145,40 @@ No `chromedp`, `utls`, `tls-client`, `goja`, `cloudscraper`, or `flaresolverr`.
 - T-28-00-04 (Cloudflare TLS fingerprint): **did not fire** for any of the 7 probes during this spike. Production-IP plain Go-style HTTP with a Chrome UA header sufficed for all 200 responses.
 - T-28-00-03 (response size DoS): largest decoded body was 1.3 MiB (Frieren `info`). Cap reads in Plan 28-04's client at 4 MiB via `io.LimitReader` per CONTEXT.md threat register.
 
+## Live Integration Probe (Gate 2 + Gate 4 reproducibility artifact)
+
+In addition to the manual curl probes recorded under Gate 2 / Gate 4 above, the Go port itself was exercised against production via a `-tags=integration` test (`obfuscation_integration_test.go`). Output captured 2026-05-20:
+
+```
+=== RUN   TestLiveMiruroSecurePipe/info_154587
+    fetched info/154587 — status=200 x-obfuscated="1" bytes=37116
+    info OK: id=154587 idMal=52991 title="Sousou no Frieren"
+--- PASS: TestLiveMiruroSecurePipe/info_154587 (0.06s)
+
+=== RUN   TestLiveMiruroSecurePipe/episodes_154587
+    fetched episodes — status=200 x-obfuscated="1" bytes=24491
+    provider dune sub: 28 eps
+    provider kiwi sub: 28 eps  / dub: 28 eps
+    provider hop  sub: 28 eps  / dub: 28 eps
+    provider bee  sub: 28 eps  / dub: 28 eps
+    Gate 4 PASSED: aggregate sub episode count = 112
+--- PASS: TestLiveMiruroSecurePipe/episodes_154587 (0.03s)
+```
+
+This proves the Go port produces the same wire shape the React SPA does (otherwise upstream would return 4xx/5xx as it did for the unprefixed `/api/anime/154587` probe earlier) and that the gunzip+JSON decode logic round-trips correctly.
+
+Re-run at any time with:
+```bash
+go test -tags=integration -run TestLiveMiruroSecurePipe \
+  ./services/scraper/internal/providers/miruro/...
+```
+
+## Final Verdict (locked)
+
+**Verdict: converged.** All four D3 convergence gates pass with stdlib-only Go primitives. No `utls`, `chromedp`, or third-party HTTP-fingerprinting library is required.
+
+Plan 28-04 (Miruro provider lift, SCRAPER-HEAL-37) **proceeds in Wave 2** and consumes this package's `BuildSecurePipeURL` + `DecodeObfuscatedResponse` directly. No further architectural decisions are deferred — the obfuscation surface is fully characterised.
+
 ## Probe Method (for Reproduction)
 
 ```bash
