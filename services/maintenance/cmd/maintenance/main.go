@@ -34,14 +34,14 @@ func main() {
 	// Load config
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalw("config error", "error", err)
+		log.FatalSync("config error", "error", err)
 	}
 
 	log.Infow("starting AnimeEnigma maintenance service")
 
 	// Preflight: verify Claude CLI
 	if err := verifyClaudeCLI(cfg.Claude.Path); err != nil {
-		log.Fatalw("claude CLI check failed", "error", err)
+		log.FatalSync("claude CLI check failed", "error", err)
 	}
 	log.Infow("claude CLI verified")
 
@@ -51,10 +51,10 @@ func main() {
 	// Preflight: verify Telegram bot
 	webhookInfo, err := tg.GetWebhookInfo()
 	if err != nil {
-		log.Fatalw("telegram webhook check failed", "error", err)
+		log.FatalSync("telegram webhook check failed", "error", err)
 	}
 	if webhookInfo.URL != "" {
-		log.Fatalw("alerts bot has webhook set — getUpdates will not work, remove webhook first",
+		log.FatalSync("alerts bot has webhook set — getUpdates will not work, remove webhook first",
 			"webhook_url", webhookInfo.URL,
 		)
 	}
@@ -62,7 +62,7 @@ func main() {
 
 	botInfo, err := tg.GetMe()
 	if err != nil {
-		log.Fatalw("telegram getMe failed", "error", err)
+		log.FatalSync("telegram getMe failed", "error", err)
 	}
 	log.Infow("bot identified",
 		"username", botInfo.Username,
@@ -87,7 +87,7 @@ func main() {
 		resolveProjectPath(cfg.Claude.ProjectRoot, cfg.IssuePath),
 	)
 	if err := stateMgr.Load(); err != nil {
-		log.Fatalw("state load failed", "error", err)
+		log.FatalSync("state load failed", "error", err)
 	}
 	stateMgr.SetBotInfo(botInfo.ID, reactionsSupported)
 	stateMgr.SetSessionStarted()

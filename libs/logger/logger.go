@@ -12,6 +12,19 @@ import (
 type Logger struct {
 	*zap.SugaredLogger
 	base *zap.Logger
+
+	// exiter is the function called by FatalSync to terminate the process.
+	// Defaults to defaultExiter (os.Exit) in New(); same-package tests
+	// override via setExiter to assert exit behavior without killing the
+	// test process. Unexported so production callers cannot disable
+	// process termination by accident.
+	exiter func(int)
+
+	// syncObserver, when non-nil, replaces the Sync() call inside
+	// FatalSync. Same-package tests install one to assert "Sync was
+	// called before exiter" with deterministic ordering; production
+	// code path uses l.Sync() directly when this is nil.
+	syncObserver func() error
 }
 
 type Config struct {
@@ -50,6 +63,7 @@ func New(cfg Config) (*Logger, error) {
 	return &Logger{
 		SugaredLogger: base.Sugar(),
 		base:          base,
+		exiter:        defaultExiter,
 	}, nil
 }
 
@@ -78,7 +92,9 @@ func (l *Logger) WithContext(ctx context.Context) *Logger {
 			zap.String("trace_id", span.SpanContext().TraceID().String()),
 			zap.String("span_id", span.SpanContext().SpanID().String()),
 		),
-		base: l.base,
+		base:         l.base,
+		exiter:       l.exiter,
+		syncObserver: l.syncObserver,
 	}
 }
 
@@ -86,6 +102,8 @@ func (l *Logger) With(args ...interface{}) *Logger {
 	return &Logger{
 		SugaredLogger: l.SugaredLogger.With(args...),
 		base:          l.base,
+		exiter:        l.exiter,
+		syncObserver:  l.syncObserver,
 	}
 }
 
