@@ -71,6 +71,15 @@ func main() {
 	registry.Register(earnvidsExtractor)
 	log.Infow("registered embed extractor", "name", earnvidsExtractor.Name())
 
+	// Phase 28 (SCRAPER-HEAL-38) — vidstream_vip extractor for AnimeFever.
+	// Plain regex against inline `sources: [{"file":"...m3u8"}]` literal —
+	// NOT a Dean-Edwards-packer (CONTEXT.md D4 + RESEARCH.md Discretion).
+	// MUST be registered BEFORE the AnimeFever provider construction (Plan
+	// 28-02) so the embed Registry.Find lookup at GetStream time succeeds.
+	vidstreamVipExtractor := embeds.NewVidstreamVipExtractor()
+	registry.Register(vidstreamVipExtractor)
+	log.Infow("registered embed extractor", "name", vidstreamVipExtractor.Name())
+
 	// Redis cache — shared by malsync, episodes, stream TTLs. We fatal here
 	// instead of degrading gracefully because every AnimePahe response is
 	// cached on the way back; without Redis the upstream rate limits and
