@@ -272,6 +272,21 @@ MINIO_SECRET_KEY
 MINIO_BUCKET
 ```
 
+Gateway service specific (WV3-T3 — per-user rate limit):
+```
+RATE_LIMIT_RPS               # per-IP RPS, default 100   (existing)
+RATE_LIMIT_BURST             # per-IP burst, default 200 (existing)
+USER_RATE_LIMIT_PER_MINUTE   # per-authenticated-user GCRA rate, default 60
+USER_RATE_LIMIT_BURST        # per-authenticated-user GCRA burst, default 10
+REDIS_ADDR                   # default redis:6379 — gateway now uses Redis for the per-user limiter
+```
+
+The per-user limit (`USER_RATE_LIMIT_*`) is layered on top of the per-IP
+limit and only applies AFTER auth (anonymous traffic stays per-IP-limited).
+A Redis outage fails open (logs WARN, lets the request through) so a Redis
+blip cannot 500 every authenticated request. Blocked-request count is
+exposed at `/metrics` as `gateway_rate_limit_user_blocked_total` (no labels).
+
 ## UI Audit Test User (DO NOT DELETE)
 
 Permanent test account for automated UI/UX audits, integration tests, and Playwright e2e tests:

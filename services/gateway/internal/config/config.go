@@ -61,6 +61,13 @@ type ServiceURLs struct {
 type RateLimitConfig struct {
 	RequestsPerSecond int
 	BurstSize         int
+
+	// WV3-T3 — per-authenticated-user rate limit (GCRA / redis_rate).
+	// Layered on top of the existing per-IP limiter above. Applied at
+	// the gateway AFTER auth so the bucket key is user_id (not IP).
+	// Anonymous traffic is unaffected by these knobs.
+	UserPerMinute int // default 60 — env USER_RATE_LIMIT_PER_MINUTE
+	UserBurst     int // default 10 — env USER_RATE_LIMIT_BURST
 }
 
 func Load() (*Config, error) {
@@ -102,6 +109,11 @@ func Load() (*Config, error) {
 		RateLimit: RateLimitConfig{
 			RequestsPerSecond: getEnvInt("RATE_LIMIT_RPS", 100),
 			BurstSize:         getEnvInt("RATE_LIMIT_BURST", 200),
+			// WV3-T3 defaults. 60 req/min, burst 10 — generous enough that
+			// well-behaved authenticated UIs (page loads, prefetch) stay
+			// under the limit; tight enough to neuter targeted abuse.
+			UserPerMinute: getEnvInt("USER_RATE_LIMIT_PER_MINUTE", 60),
+			UserBurst:     getEnvInt("USER_RATE_LIMIT_BURST", 10),
 		},
 		CORSOrigins: httputil.ParseCommaList(getEnv("CORS_ORIGINS", "")),
 		Environment: strings.ToLower(getEnv("ENVIRONMENT", "")),

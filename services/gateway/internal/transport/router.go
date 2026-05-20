@@ -19,6 +19,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/time/rate"
 )
 
@@ -28,7 +29,7 @@ func NewRouter(
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
 ) http.Handler {
-	h, _ := NewRouterWithCleanup(proxyHandler, cfg, log, metricsCollector)
+	h, _ := NewRouterWithCleanup(proxyHandler, cfg, log, metricsCollector, nil)
 	return h
 }
 
@@ -38,11 +39,19 @@ func NewRouter(
 // NewRouter (the goroutine lives as long as the process). Test callers
 // MUST register cleanup via `t.Cleanup(cleanup)` so each test does not
 // leak one goroutine per `NewRouter` invocation — see REVIEW.md WR-04.
+//
+// The redisClient param (WV3-T3) is optional. When non-nil it enables the
+// per-authenticated-user GCRA rate limiter (UserRateLimitMiddleware) layered
+// on top of every protected route group — IPRateLimiter → JWT → user_rate
+// → handler. Passing nil leaves the protected groups exactly as they were
+// before WV3-T3 so tests that don't care about the user limiter (and code
+// paths that intentionally run without Redis) keep working.
 func NewRouterWithCleanup(
 	proxyHandler *handler.ProxyHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
+	redisClient *redis.Client,
 ) (http.Handler, func()) {
 	if cfg.DevMode {
 		log.Warnw("⚠️  DEV MODE ENABLED — admin auth is BYPASSED. Do NOT use in production!")
@@ -61,6 +70,14 @@ func NewRouterWithCleanup(
 	r.Use(MaxBodySizeMiddleware(10 * 1024 * 1024)) // 10MB
 	rateLimitMW, rateLimiter := RateLimitMiddlewareWithStop(cfg.RateLimit)
 	r.Use(rateLimitMW)
+
+	// WV3-T3: per-authenticated-user rate limit (GCRA / redis_rate). Built
+	// ONCE here and applied inside every protected route group AFTER its
+	// JWT middleware so the bucket key is user_id (not IP). When the
+	// caller passes a nil Redis client (older NewRouter signature, or
+	// tests that don't care), the user limiter degrades to a pass-through
+	// — same effect as having no extra middleware at all.
+	userRateLimit := newUserRateLimitChainFn(redisClient, cfg.RateLimit.UserPerMinute, cfg.RateLimit.UserBurst, log)
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +111,7 @@ func NewRouterWithCleanup(
 	r.Route("/admin", func(r chi.Router) {
 		if !cfg.DevMode {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.Use(AdminRoleMiddleware)
 		}
 
@@ -177,6 +195,7 @@ func NewRouterWithCleanup(
 		r.Get("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.Post("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
 			r.Patch("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
 			r.Delete("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
@@ -209,6 +228,7 @@ func NewRouterWithCleanup(
 		// existing precedent for the same "specific-before-general" gotcha.
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.Use(AdminRoleMiddleware)
 			r.HandleFunc("/admin/scraper/*", proxyHandler.ProxyToScraper)
 		})
@@ -217,6 +237,7 @@ func NewRouterWithCleanup(
 		// more-specific /admin/scraper/* group above.
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.Use(AdminRoleMiddleware)
 			r.HandleFunc("/admin/*", proxyHandler.ProxyToCatalog)
 		})
@@ -246,6 +267,7 @@ func NewRouterWithCleanup(
 		// caught during Task 9 verification).
 		r.Group(func(r chi.Router) {
 			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.HandleFunc("/users/recs", proxyHandler.ProxyToPlayer)
 			r.HandleFunc("/users/recs/", proxyHandler.ProxyToPlayer)
 		})
@@ -256,6 +278,7 @@ func NewRouterWithCleanup(
 		// gates again in services/player/internal/transport/router.go).
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.Use(AdminRoleMiddleware)
 			r.HandleFunc("/admin/recs/*", proxyHandler.ProxyToPlayer)
 		})
@@ -265,18 +288,21 @@ func NewRouterWithCleanup(
 		// own OptionalAuthMiddleware on the inner /events/rec route.
 		r.Group(func(r chi.Router) {
 			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.HandleFunc("/events/rec", proxyHandler.ProxyToPlayer)
 		})
 
 		// Player service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.HandleFunc("/users/*", proxyHandler.ProxyToPlayer)
 		})
 
 		// Rooms service routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
 			r.HandleFunc("/rooms/*", proxyHandler.ProxyToRooms)
 			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
@@ -293,6 +319,7 @@ func NewRouterWithCleanup(
 			// Protected routes (rate themes)
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
 				r.Post("/{id}/rate", proxyHandler.ProxyToThemes)
 				r.Delete("/{id}/rate", proxyHandler.ProxyToThemes)
 				r.Get("/my-ratings", proxyHandler.ProxyToThemes)
@@ -301,6 +328,7 @@ func NewRouterWithCleanup(
 			// Admin routes (sync)
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
 				r.Use(AdminRoleMiddleware)
 				r.Post("/admin/sync", proxyHandler.ProxyToThemes)
 				r.Get("/admin/sync/status", proxyHandler.ProxyToThemes)
@@ -316,6 +344,7 @@ func NewRouterWithCleanup(
 			r.Get("/health", proxyHandler.ProxyToLibrary) // public
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
 				r.Use(AdminRoleMiddleware)
 				r.HandleFunc("/*", proxyHandler.ProxyToLibrary)
 			})
@@ -334,6 +363,7 @@ func NewRouterWithCleanup(
 			// Admin routes (protected)
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
 				r.HandleFunc("/admin/*", proxyHandler.ProxyToStreaming)
 			})
 		})

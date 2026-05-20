@@ -105,7 +105,11 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 	log := logger.Default()
 	proxySvc := service.NewProxyService(cfg.Services, log)
 	proxyHandler := handler.NewProxyHandler(proxySvc, log)
-	router, rateLimiterStop := NewRouterWithCleanup(proxyHandler, cfg, log, sharedGatewayCollector())
+	// router_test passes nil for the Redis client — these tests cover the
+	// chi route-resolution layer, not the per-user rate limiter (WV3-T3).
+	// With nil, newUserRateLimitChainFn yields a pass-through middleware
+	// so the protected route groups behave exactly as they did pre-T3.
+	router, rateLimiterStop := NewRouterWithCleanup(proxyHandler, cfg, log, sharedGatewayCollector(), nil)
 	// REVIEW.md WR-04: stop the per-IP rate-limiter's eviction goroutine
 	// when the test ends, otherwise each NewRouter invocation in the test
 	// suite leaks one goroutine for the lifetime of the binary.

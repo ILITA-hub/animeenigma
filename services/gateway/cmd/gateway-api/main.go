@@ -14,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/transport"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -36,8 +37,38 @@ func main() {
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("gateway")
 
-	// Initialize router
-	router := transport.NewRouter(proxyHandler, cfg, log, metricsCollector)
+	// WV3-T3: wire Redis for the per-user GCRA rate limiter. RedisAddr was
+	// already in config (host:port form, e.g. "redis:6379") but had no
+	// consumer before this task. We use a raw *redis.Client because the
+	// redis_rate/v10 limiter accepts the client directly — libs/cache is a
+	// JSON-marshaling cache helper, not a thin client factory, and would
+	// add an extra layer with no upside for this use case. We ping at
+	// startup so an unreachable Redis surfaces in the logs immediately;
+	// the middleware itself fails open (logs WARN, lets the request
+	// through), so a Redis outage degrades to "per-IP only" rather than
+	// 500ing every authenticated request.
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.Services.RedisAddr})
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := redisClient.Ping(pingCtx).Err(); err != nil {
+		// Don't fatal — fail open: gateway still serves traffic, just
+		// without the per-user limiter until Redis comes back. The per-IP
+		// limiter higher in the chain remains in force.
+		log.Warnw("gateway redis ping failed; per-user rate limiter will fail-open until reachable",
+			"addr", cfg.Services.RedisAddr,
+			"error", err,
+		)
+	} else {
+		log.Infow("gateway redis connection established",
+			"addr", cfg.Services.RedisAddr,
+			"user_rate_per_minute", cfg.RateLimit.UserPerMinute,
+			"user_rate_burst", cfg.RateLimit.UserBurst,
+		)
+	}
+	pingCancel()
+	defer func() { _ = redisClient.Close() }()
+
+	// Initialize router (wires the user rate limiter into every protected group)
+	router, _ := transport.NewRouterWithCleanup(proxyHandler, cfg, log, metricsCollector, redisClient)
 
 	// Create HTTP server
 	srv := &http.Server{
