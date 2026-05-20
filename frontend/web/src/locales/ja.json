@@ -213,6 +213,17 @@
       "tab": "RAW JP",
       "unavailable": "このアニメはまだ生の日本語ソースで利用できません。KodikまたはAnimeLibをお試しください。"
     },
+    "scraperProviders": {
+      "allanime": "AllAnime",
+      "animefever": "AnimeFever",
+      "miruro": "Miruro",
+      "nineanime": "9anime",
+      "animepahe": "AnimePahe",
+      "gogoanime": "Anitaku",
+      "animekai": "AnimeKai"
+    },
+    "sourceLabel": "ソース",
+    "sourceUnavailable": "このソースは現在応答していません。別のソースを試してください。",
     "subtitlePicker": {
       "label": "字幕",
       "none": "オフ"

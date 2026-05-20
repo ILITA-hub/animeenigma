@@ -213,6 +213,17 @@
       "tab": "RAW JP",
       "unavailable": "This anime isn't yet available via the raw Japanese provider. Try Kodik or AnimeLib instead."
     },
+    "scraperProviders": {
+      "allanime": "AllAnime",
+      "animefever": "AnimeFever",
+      "miruro": "Miruro",
+      "nineanime": "9anime",
+      "animepahe": "AnimePahe",
+      "gogoanime": "Anitaku",
+      "animekai": "AnimeKai"
+    },
+    "sourceLabel": "Source",
+    "sourceUnavailable": "This source isn't responding right now. Try another.",
     "subtitlePicker": {
       "label": "Subtitles",
       "none": "Off"

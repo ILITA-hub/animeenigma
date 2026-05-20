@@ -213,6 +213,17 @@
       "tab": "RAW JP",
       "unavailable": "Это аниме пока недоступно через сырой японский источник. Попробуйте Kodik или AnimeLib."
     },
+    "scraperProviders": {
+      "allanime": "AllAnime",
+      "animefever": "AnimeFever",
+      "miruro": "Miruro",
+      "nineanime": "9anime",
+      "animepahe": "AnimePahe",
+      "gogoanime": "Anitaku",
+      "animekai": "AnimeKai"
+    },
+    "sourceLabel": "Источник",
+    "sourceUnavailable": "Этот источник сейчас не отвечает. Попробуйте другой.",
     "subtitlePicker": {
       "label": "Субтитры",
       "none": "Выключить"
