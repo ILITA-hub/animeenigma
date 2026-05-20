@@ -459,3 +459,48 @@ func TestGetEnvBool_Falsy(t *testing.T) {
 		})
 	}
 }
+
+// TestLoad_AnimeFeverDefaults — Phase 28 SCRAPER-HEAL-36. With no env var
+// set, AnimeFever.BaseURL defaults to https://animefever.cc (the canonical
+// upstream confirmed via 2026-05-20 live recon).
+func TestLoad_AnimeFeverDefaults(t *testing.T) {
+	unsetEnv(t,
+		"SCRAPER_ANIMEFEVER_BASE_URL",
+		"REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB",
+		"SCRAPER_ANIMEPAHE_RESOLVER_URL",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AnimeFever.BaseURL != "https://animefever.cc" {
+		t.Fatalf("AnimeFever.BaseURL = %q; want https://animefever.cc", cfg.AnimeFever.BaseURL)
+	}
+}
+
+// TestLoad_AnimeFeverBaseURLOverride — SCRAPER_ANIMEFEVER_BASE_URL takes
+// precedence over the default.
+func TestLoad_AnimeFeverBaseURLOverride(t *testing.T) {
+	setEnv(t, "SCRAPER_ANIMEFEVER_BASE_URL", "https://animefever.io")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AnimeFever.BaseURL != "https://animefever.io" {
+		t.Fatalf("AnimeFever.BaseURL = %q; want https://animefever.io", cfg.AnimeFever.BaseURL)
+	}
+}
+
+// TestLoad_AnimeFeverInvalidBaseURL — malformed URL fails Load() at boot
+// with an error that names the env var verbatim (so operators can grep
+// logs).
+func TestLoad_AnimeFeverInvalidBaseURL(t *testing.T) {
+	setEnv(t, "SCRAPER_ANIMEFEVER_BASE_URL", "not-a-url")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load: nil error; want non-nil for malformed SCRAPER_ANIMEFEVER_BASE_URL")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_ANIMEFEVER_BASE_URL") {
+		t.Fatalf("error %q must mention SCRAPER_ANIMEFEVER_BASE_URL so operators can grep", err.Error())
+	}
+}

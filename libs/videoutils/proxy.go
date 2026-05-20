@@ -322,6 +322,10 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	{Domain: "googlevideo.com", Reason: "Direct YouTube CDN (some AllAnime sources resolve here)", Owner: "@legacy", Added: "2026-05-20"},
 	{Domain: "sharepoint.com", Reason: "OneDrive-backed source variant (AllAnime)", Owner: "@legacy", Added: "2026-05-20"},
 	{Domain: "fast4speed.rsvp", Reason: "AllAnime own CDN — direct MP4 with signed Authorization, requires Referer: https://allmanga.to/", Owner: "@legacy", Added: "2026-05-20"},
+
+	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever embed + HLS CDN hosts.
+	{Domain: "am.vidstream.vip", Reason: "AnimeFever JWPlayer embed page host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "static-cdn-ca1.mofl.pro", Reason: "AnimeFever HLS master.m3u8 + segments CDN (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
 }
 
 // HLSProxyAllowedDomains is the flat []string view of
