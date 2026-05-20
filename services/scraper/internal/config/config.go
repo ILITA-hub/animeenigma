@@ -24,6 +24,7 @@ type Config struct {
 	Gogoanime          GogoanimeConfig
 	AnimeKai           AnimeKaiConfig
 	AllAnime           AllAnimeConfig
+	AnimeFever         AnimeFeverConfig
 	DegradedProviders  DegradedProvidersConfig
 }
 
@@ -136,6 +137,15 @@ type AllAnimeConfig struct {
 	BaseURL string
 }
 
+// AnimeFeverConfig is the per-provider override surface for
+// animefever.Provider (Phase 28 — SCRAPER-HEAL-36). Always-on; operator
+// can disable via SCRAPER_DEGRADED_PROVIDERS=animefever if upstream goes
+// hard down. BaseURL defaults to https://animefever.cc; override via
+// SCRAPER_ANIMEFEVER_BASE_URL when the upstream rotates hostnames.
+type AnimeFeverConfig struct {
+	BaseURL string
+}
+
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 //
@@ -174,6 +184,9 @@ func Load() (*Config, error) {
 		AllAnime: AllAnimeConfig{
 			BaseURL: getEnv("SCRAPER_ALLANIME_BASE_URL", "https://api.allanime.day"),
 		},
+		AnimeFever: AnimeFeverConfig{
+			BaseURL: getEnv("SCRAPER_ANIMEFEVER_BASE_URL", "https://animefever.cc"),
+		},
 		DegradedProviders: parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", "")),
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
@@ -210,6 +223,15 @@ func Load() (*Config, error) {
 		}
 		if parsed.Scheme == "" || parsed.Host == "" {
 			return nil, fmt.Errorf("invalid SCRAPER_ANIMEKAI_BASE_URL %q: missing scheme or host", u)
+		}
+	}
+	if u := cfg.AnimeFever.BaseURL; u != "" {
+		parsed, err := url.Parse(u)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SCRAPER_ANIMEFEVER_BASE_URL %q: %w", u, err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid SCRAPER_ANIMEFEVER_BASE_URL %q: missing scheme or host", u)
 		}
 	}
 	return cfg, nil
