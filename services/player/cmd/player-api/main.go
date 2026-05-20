@@ -85,6 +85,15 @@ func main() {
 		log.Fatalw("failed to create watch_progress compound index", "error", err)
 	}
 
+	// Audit Wave 2 T2: drop the redundant standalone idx_watch_progress_user_id.
+	// The compound index above ((user_id, anime_id, episode_number)) already
+	// serves WHERE user_id = $1 queries via Postgres prefix matching, so the
+	// standalone secondary is pure write overhead. Idempotent: no-op when the
+	// index never existed (fresh DBs post-GORM-tag-removal).
+	if err := db.DB.Exec(`DROP INDEX IF EXISTS idx_watch_progress_user_id`).Error; err != nil {
+		log.Fatalw("failed to drop redundant idx_watch_progress_user_id", "error", err)
+	}
+
 	// Phase 1 (workstream: social) — one-shot idempotent migration that
 	// merges every legacy `reviews` row into `anime_list` then drops the
 	// `reviews` table. Guarded by db.Migrator().HasTable("reviews"); after
