@@ -213,6 +213,14 @@
       "tab": "RAW JP",
       "unavailable": "This anime isn't yet available via the raw Japanese provider. Try Kodik or AnimeLib instead."
     },
+    "ourenglish": {
+      "label": "OurEnglish",
+      "unavailable": "This anime isn't available through any English provider right now. Try Kodik or AniLib.",
+      "sourceLabel": "Source",
+      "sourceAuto": "Auto (best available)",
+      "serverLabel": "Server",
+      "activeProvider": "Streaming from {name}"
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",

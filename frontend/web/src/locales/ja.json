@@ -213,6 +213,14 @@
       "tab": "RAW JP",
       "unavailable": "このアニメはまだ生の日本語ソースで利用できません。KodikまたはAnimeLibをお試しください。"
     },
+    "ourenglish": {
+      "label": "OurEnglish",
+      "unavailable": "現在、英語ソースではこのアニメを利用できません。KodikまたはAniLibをお試しください。",
+      "sourceLabel": "ソース",
+      "sourceAuto": "自動（最適）",
+      "serverLabel": "サーバー",
+      "activeProvider": "{name}から配信中"
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",

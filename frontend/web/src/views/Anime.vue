@@ -363,6 +363,18 @@
               >
                 RU
               </button>
+              <!-- Phase 24-28 — OurEnglish (scraper-microservice failover) -->
+              <button
+                v-if="ourEnglishEnabled"
+                @click="switchLanguage('en')"
+                :aria-pressed="videoLanguage === 'en'"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+                :class="videoLanguage === 'en'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/50 hover:text-white/70'"
+              >
+                EN
+              </button>
               <button
                 v-if="isHentai"
                 @click="switchLanguage('18+')"
@@ -417,6 +429,18 @@
                 AniLib
               </button>
             </ButtonGroup>
+            <template v-else-if="videoLanguage === 'en' && ourEnglishEnabled">
+              <button
+                @click="videoProvider = 'ourenglish'"
+                :aria-pressed="videoProvider === 'ourenglish'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'ourenglish'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                {{ $t('player.ourenglish.label') }}
+              </button>
+            </template>
             <template v-else-if="videoLanguage === '18+'">
               <button
                 @click="videoProvider = 'hanime'"
@@ -491,6 +515,12 @@
               :preferred-combo="resolvedCombo"
               :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
+            />
+            <!-- OurEnglish Player (Phase 24-28 scraper microservice) -->
+            <OurEnglishPlayer
+              v-else-if="videoProvider === 'ourenglish' && ourEnglishEnabled"
+              :anime-id="anime.id"
+              :initial-episode="resumeStartEpisode"
             />
             <!-- Hanime Player -->
             <HanimePlayer
@@ -998,6 +1028,11 @@ const HanimePlayer = defineAsyncComponent(() => import('@/components/player/Hani
 // Workstream raw-jp, Phase 04 — lazy-load RawPlayer behind a Vite flag.
 const RawPlayer = defineAsyncComponent(() => import('@/components/player/RawPlayer.vue'))
 const rawProviderEnabled = import.meta.env.VITE_RAW_PROVIDER_ENABLED === 'true'
+// Phase 24-28 — OurEnglish (scraper-microservice-backed EN player).
+// Behind VITE_OURENGLISH_ENABLED so it can ship dark until upstream
+// gates are green in production.
+const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
+const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
@@ -1117,14 +1152,16 @@ const savingShikimoriId = ref(false)
 // Runtime-validate localStorage values — users who previously selected an
 // EN player ('english' / 'hianime' / 'consumet') would otherwise hit a value
 // outside the new union, no v-if branch matches, and nothing renders.
-const VALID_LANGUAGES = ['ru', '18+', 'raw'] as const
+const VALID_LANGUAGES = ['ru', 'en', '18+', 'raw'] as const
 type VideoLanguage = (typeof VALID_LANGUAGES)[number]
 const _savedLang = localStorage.getItem('preferred_video_language')
 const videoLanguage = ref<VideoLanguage>(
   (VALID_LANGUAGES as readonly string[]).includes(_savedLang ?? '') ? (_savedLang as VideoLanguage) : 'ru'
 )
 // Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
-const VALID_PROVIDERS = ['kodik', 'animelib', 'hanime', 'raw'] as const
+// Phase 24-28 — 'ourenglish' is the scraper-microservice-backed EN provider
+// (failover across gogoanime/animepahe/allanime/animefever/miruro/nineanime).
+const VALID_PROVIDERS = ['kodik', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
 type VideoProvider = (typeof VALID_PROVIDERS)[number]
 const _savedProv = localStorage.getItem('preferred_video_provider')
 const videoProvider = ref<VideoProvider>(
@@ -1299,7 +1336,14 @@ const playerSwitchTracker = useOverrideTracker({
   // onUserPickedProvider is typed to exclude it.)
   // Workstream raw-jp / Phase 04 — 'raw' is also outside the tracked
   // PlayerName set; map to 'kodik' for the bucket label like hanime.
-  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw' ? 'kodik' : videoProvider.value,
+  // Phase 24-28 — 'ourenglish' maps to 'english' (the existing analytics
+  // bucket for EN providers, preserved across the HiAnime→Consumet→OurEnglish
+  // generation rollover).
+  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw'
+    ? 'kodik'
+    : videoProvider.value === 'ourenglish'
+      ? 'english'
+      : videoProvider.value,
   resolvedCombo,
   currentEpisode: currentEpisodeForTracker,
 })
@@ -1913,12 +1957,16 @@ const retry = () => {
 }
 
 // Language / provider switching
-const switchLanguage = (lang: 'ru' | '18+' | 'raw') => {
+const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
   videoLanguage.value = lang
   // Auto-select first provider in the group
   if (lang === 'ru') {
     const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'animelib' | null
     videoProvider.value = savedRu || 'kodik'
+  } else if (lang === 'en') {
+    // Phase 24-28 — single-provider group; the in-player source dropdown
+    // pins the failover preference inside OurEnglishPlayer itself.
+    videoProvider.value = 'ourenglish'
   } else if (lang === '18+') {
     videoProvider.value = 'hanime'
   } else if (lang === 'raw') {

@@ -10,28 +10,40 @@ AnimeEnigma is a self-hosted anime streaming platform with Shikimori/MAL integra
 
 ### Video Player Architecture
 
-The platform has 4 video players, each targeting different source APIs:
+The platform has 5 video players, each targeting different source APIs:
 
 | Player | Lang | Component | Video Tech | Tracking | JP Subs | Quality |
 |--------|------|-----------|-----------|----------|---------|---------|
 | **Kodik** | RU | `KodikPlayer.vue` | Kodik iframe | No | No | No (iframe) |
-| **AnimeLib** | RU | `AnimeLibPlayer.vue` | HTML5 `<video>` (MP4) or Kodik iframe fallback | Yes | No | Yes (MP4) |
+| **AniLib** | RU | `AnimeLibPlayer.vue` | HTML5 `<video>` (MP4) | Yes | No | Yes (MP4) |
+| **OurEnglish** | EN | `OurEnglishPlayer.vue` | HTML5 `<video>` + hls.js (HLS) or MP4 via backend HLS proxy | Planned | Yes (via SubtitleOverlay) | Yes |
+| **Hanime** | 18+ | `HanimePlayer.vue` | HTML5 `<video>` + hls.js | Yes | No | Yes |
+| **Raw** | JP | `RawPlayer.vue` | HTML5 `<video>` + hls.js (HLS) or MP4 (AllAnime `fast4speed.rsvp`) | No | Yes (Jimaku + others) | Yes |
 
-> EN players (HiAnime + Consumet) were removed in May 2026 after upstream shutdowns made them non-functional. Replacements are being planned. The English-language tab is intentionally hidden from the UI until new providers ship; the subtitle, skip-intro, and HLS-proxy infrastructure was preserved for reuse.
+> **OurEnglish** (shipped 2026-05 across v3.1 Phases 24–28) replaces the May-2026 removal of HiAnime + Consumet. Single user-facing surface; the backend `services/scraper/` microservice failovers across **gogoanime → animepahe → allanime → animefever → miruro → nineanime** (+ optional `animekai`). The in-player **Source** dropdown lets users pin a specific provider; default is auto. Behind `VITE_OURENGLISH_ENABLED` (defaults on) so it can be dark-shipped via env override if needed.
 
-**Shared components (reused by future EN players):**
+**Backend route family** (gateway → catalog → scraper microservice):
+- `GET /api/anime/{uuid}/scraper/episodes?prefer=<provider>`
+- `GET /api/anime/{uuid}/scraper/servers?episode=<id>&prefer=<provider>`
+- `GET /api/anime/{uuid}/scraper/stream?episode=<id>&server=<id>&category=sub|dub&prefer=<provider>`
+- `GET /api/anime/_/scraper/health`
+
+**Shared components (reused across players):**
 - `SubtitleOverlay.vue` — Custom selectable-text JP subtitle renderer (ASS/SRT/VTT). Teleports to fullscreen element, time-synced via `requestAnimationFrame`.
 - `subtitle-parser.ts` — Parses ASS (via `ass-compiler`), SRT, VTT into `SubtitleCue[]`
-- `libs/videoutils/proxy.go` — Backend HLS proxy for CORS. Allowed domains include streaming CDNs, `jimaku.cc`, `cdnlibs.org` (AnimeLib).
+- `OtherSubsPanel.vue` — Aggregated subtitle picker (Jimaku, OpenSubtitles, etc.)
+- `ReportButton.vue` — Per-stream user-reportable error path; persists to disk + Telegram admin notification
+- `libs/videoutils/proxy.go` — Backend HLS proxy for CORS. Structured `HLSProxyAllowedDomainsWithProvenance` allowlist with quarterly-review provenance fields. Covers streaming CDNs, `jimaku.cc`, `cdnlibs.org` (AniLib), `kwik.cx` (AnimePahe), `fast4speed.rsvp` (AllAnime), `am.vidstream.vip` + `static-cdn-ca1.mofl.pro` (AnimeFever), `pro.ultracloud.cc` + `pru.ultracloud.cc` (Miruro), `my.1anime.site` (9anime), Hanime CDN families (`hanime.tv`, `htv-*`, `hydaelyn-*`, `zodiark-*`).
 
-**Known issue:** AnimeLib subtitles are broken — direct MP4 player can't render soft-subs embedded in the video. Kodik iframe fallback works but may not always be available.
+**Known issue:** AniLib subtitles are broken — direct MP4 player can't render soft-subs embedded in the video.
 
 ### Video Streaming Model
 
-Videos are sourced in three ways:
+Videos are sourced in four ways:
 1. **Kodik iframe** — Frontend embeds Kodik's player iframe (no direct video control)
-2. **Backend proxy/restream** — Backend proxies MP4 streams from AnimeLib for CORS
+2. **Backend proxy/restream** — Backend proxies MP4/HLS streams from AniLib, AnimePahe (Kwik), AllAnime (`fast4speed.rsvp`), AnimeFever, Miruro, 9anime, and Hanime CDNs through `services/streaming` HLS proxy for CORS + Referer injection
 3. **Self-hosted storage** — Admin-uploaded videos stored in MinIO
+4. **Stealth-Chromium sidecar** — `services/animepahe-resolver/` (Phase 27) solves DDoS-Guard on `animepahe.pw` so the Go scraper can hit the upstream API; sidecar is internal-only, capped at 500 MB RSS
 
 ### On-Demand Catalog Population
 
@@ -47,8 +59,11 @@ The anime catalog is NOT pre-populated. Instead:
 Primary data sources:
 - **Shikimori** — Anime metadata (titles, descriptions, posters, genres)
 - **Kodik** — RU video streaming (iframe embed). Parser: `services/catalog/internal/parser/kodik/`
-- **AnimeLib** — RU video streaming (direct MP4 + Kodik fallback). Parser: `services/catalog/internal/parser/animelib/`
-- **Jimaku.cc** — Japanese subtitle files (ASS/SRT/VTT). Infrastructure preserved for future EN players.
+- **AniLib** — RU video streaming (direct MP4). Parser: `services/catalog/internal/parser/animelib/`
+- **OurEnglish (`services/scraper/`)** — EN video streaming via failover orchestrator. Providers (in order): `gogoanime` → `animepahe` (Kwik via stealth sidecar) → `allanime` → `animefever` → `miruro` (secure-pipe pure-Go obfuscation) → `nineanime` (MP4-only last-resort) → optional `animekai`. Provider impls live at `services/scraper/internal/providers/{name}/`. Embed extractors at `services/scraper/internal/embeds/`.
+- **Hanime** — 18+ video streaming. Parser: `services/catalog/internal/parser/hanime/`
+- **AllAnime raw-JP** — Original-audio JP video (Raw player). Library/parser: `services/catalog/internal/parser/allanime/` (+ `services/scraper/internal/providers/allanime/`).
+- **Jimaku.cc** — Japanese subtitle files (ASS/SRT/VTT). Consumed by `OurEnglish`, `Raw` players via `SubtitleOverlay.vue`.
 - **ARM** (`arm.haglund.dev`) — Anime ID mapping (Shikimori/MAL → AniList). Library: `libs/idmapping/`
 - **MAL** (optional) — Additional metadata, ratings sync
 

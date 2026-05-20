@@ -213,6 +213,14 @@
       "tab": "RAW JP",
       "unavailable": "Это аниме пока недоступно через сырой японский источник. Попробуйте Kodik или AnimeLib."
     },
+    "ourenglish": {
+      "label": "OurEnglish",
+      "unavailable": "Это аниме сейчас не доступно через английские источники. Попробуйте Kodik или AniLib.",
+      "sourceLabel": "Источник",
+      "sourceAuto": "Авто (лучший доступный)",
+      "serverLabel": "Сервер",
+      "activeProvider": "Стрим от {name}"
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",
