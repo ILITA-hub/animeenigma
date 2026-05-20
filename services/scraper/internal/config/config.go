@@ -26,6 +26,7 @@ type Config struct {
 	AllAnime           AllAnimeConfig
 	AnimeFever         AnimeFeverConfig
 	Miruro             MiruroConfig
+	NineAnime          NineAnimeConfig
 	DegradedProviders  DegradedProvidersConfig
 }
 
@@ -147,6 +148,17 @@ type AnimeFeverConfig struct {
 	BaseURL string
 }
 
+// NineAnimeConfig is the per-provider override surface for nineanime.Provider
+// (Phase 28 — SCRAPER-HEAL-39). 9anime.me.uk is a brand-jack WordPress
+// instance accepted as a low-quality, last-resort source per CONTEXT.md D2.
+// BaseURL defaults to https://9anime.me.uk; override via
+// SCRAPER_NINEANIME_BASE_URL when the upstream rotates hostnames. Operator
+// kill via SCRAPER_DEGRADED_PROVIDERS=nineanime when upstream breaks
+// (~6-month half-life expected).
+type NineAnimeConfig struct {
+	BaseURL string
+}
+
 // MiruroConfig is the per-provider override surface for miruro.Provider
 // (Phase 28 — SCRAPER-HEAL-37). BaseURL is the host the React SPA calls
 // directly for the secure-pipe endpoint (`/api/secure/pipe`); ProxyURL +
@@ -207,6 +219,9 @@ func Load() (*Config, error) {
 			ProxyURL:    getEnv("SCRAPER_MIRURO_PROXY_A", "https://pro.ultracloud.cc"),
 			ProxyURLAlt: getEnv("SCRAPER_MIRURO_PROXY_B", "https://pru.ultracloud.cc"),
 		},
+		NineAnime: NineAnimeConfig{
+			BaseURL: getEnv("SCRAPER_NINEANIME_BASE_URL", "https://9anime.me.uk"),
+		},
 		DegradedProviders: parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", "")),
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
@@ -252,6 +267,18 @@ func Load() (*Config, error) {
 		}
 		if parsed.Scheme == "" || parsed.Host == "" {
 			return nil, fmt.Errorf("invalid SCRAPER_ANIMEFEVER_BASE_URL %q: missing scheme or host", u)
+		}
+	}
+	// Phase 28 — NineAnime URL validation. SCRAPER_NINEANIME_BASE_URL fails
+	// Load() at boot when malformed so an operator typo doesn't surface as
+	// a deferred provider-down minutes after deploy.
+	if u := cfg.NineAnime.BaseURL; u != "" {
+		parsed, err := url.Parse(u)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SCRAPER_NINEANIME_BASE_URL %q: %w", u, err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid SCRAPER_NINEANIME_BASE_URL %q: missing scheme or host", u)
 		}
 	}
 	// Phase 28 — Miruro URL validation. Three independent env vars all
