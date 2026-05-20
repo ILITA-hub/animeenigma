@@ -4,14 +4,14 @@ milestone: v3.1
 milestone_name: Scraper Self-Healing
 status: executing
 stopped_at: Phase 28 (Provider Expansion R2) scoped 2026-05-19 — AnimeFever + Miruro + 9anime.me.uk per operator "as many providers as possible." CONTEXT.md locked with D1-D7 decisions; SCRAPER-HEAL-34..39 added to v3.1-REQUIREMENTS.md; ROADMAP.md grew Phase 28 entry. Phase 24 still blocked on upstream provider recovery (`human_needed` from prior autonomous run); Phase 28 can ship independently — its only soft dependency on Phase 24 is the UI dropdown polish in 28-06 which degrades gracefully.
-last_updated: "2026-05-19T10:14:26.200Z"
-last_activity: 2026-05-19 -- Phase 27 execution started
+last_updated: "2026-05-20T01:35:24.989Z"
+last_activity: 2026-05-20 -- Phase 28 execution started
 progress:
   total_phases: 14
-  completed_phases: 6
-  total_plans: 46
-  completed_plans: 29
-  percent: 63
+  completed_phases: 7
+  total_plans: 53
+  completed_plans: 34
+  percent: 64
 ---
 
 # Project State
@@ -22,14 +22,14 @@ See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v
 
 **Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row. v3.1's contribution: when the user actually presses Play on an English-source anime, the player surfaces real video instead of upstream ad-decoy garbage.
 
-**Current focus:** Phase 27 — AnimePahe Revival via Stealth-Chromium Sidecar
+**Current focus:** Phase 28 — Provider Expansion Round 2
 
 ## Current Position
 
-Phase: 27 (AnimePahe Revival via Stealth-Chromium Sidecar) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 27
-Last activity: 2026-05-19 -- Phase 27 execution started
+Phase: 28 (Provider Expansion Round 2) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 28
+Last activity: 2026-05-20 -- Phase 28 execution started
 
 ## Shipped Milestones
 
