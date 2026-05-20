@@ -224,69 +224,131 @@ type VideoResolver interface {
 	ResolveExternal(ctx context.Context, externalURL string) (*StreamResult, error)
 }
 
-// HLSProxyAllowedDomains contains domains allowed for HLS proxying
-// Note: MegaCloud CDNs use dynamically generated domain names, so we allow
-// common TLDs used by streaming CDNs. Rate limiting protects against abuse.
-var HLSProxyAllowedDomains = []string{
-	// Known streaming domains
-	"megacloud.tv",
-	"megacloud.blog",
-	"megacloud.club",
-	"rapid-cloud.co",
-	"rapidcloud.live",
-	"vidstream.pro",
-	"vidstreamz.online",
-	"mcloud.to",
-	"mcloud2.to",
-	"mgstatics.xyz",
-	"netmagcdn.com", // MegaCloud HLS CDN
-	"owocdn.top",    // AnimePahe/Kwik CDN
-	"uwucdn.top",    // AnimePahe/Kwik CDN (mirror)
-	"kwik.cx",       // AnimePahe CDN
-	"jimaku.cc",      // Japanese subtitle files
-	"cdnlibs.org",    // AnimeLib video CDN
-	"hentaicdn.org",  // AnimeLib video CDN (mirror)
-	// Hanime video CDN
-	"hanime.tv",
-	"highwinds-cdn.com",
-	"htv-*",        // htv-belias.com, htv-hydaelyn.com, etc.
-	"hydaelyn-*",   // hydaelyn-25x-00.top through hydaelyn-25x-19.top
-	"zodiark-*",    // zodiark-25x-00.top through zodiark-25x-09.top
+// AllowedDomain represents a single entry in the HLS proxy allow-list along
+// with provenance metadata used by the quarterly review process.
+//
+// Provenance fields drive scripts/audit-hls-allowlist.sh — see
+// docs/security/hls-proxy-allowlist.md for the review cadence and the
+// requirements for new entries.
+type AllowedDomain struct {
+	// Domain is the host pattern matched by isHLSDomainAllowed. May be an
+	// exact host (e.g. "kwik.cx"), an eTLD+1 (e.g. "premilkyway.com" — any
+	// subdomain matches via the strings.HasSuffix(host, "."+allowed) gate),
+	// or a prefix wildcard ending in "*" (e.g. "htv-*").
+	Domain string
+	// Reason is a short, human-readable note describing what this entry is
+	// for (e.g. "AnimePahe CDN", "AllAnime upstream CDN"). Used by the audit
+	// script and is the only place provenance lives in code.
+	Reason string
+	// Owner is the GitHub handle (with leading "@") of the person who
+	// vouches for this entry during the quarterly review. Entries added
+	// before the structured provenance refactor are owned by "@legacy" and
+	// MUST be backfilled at the next review.
+	Owner string
+	// Added is the YYYY-MM-DD date this entry was added (or the date the
+	// provenance refactor landed for entries with unknown history).
+	Added string
+}
+
+// HLSProxyAllowedDomainsWithProvenance is the canonical structured allow-list
+// used by the HLS proxy. Add new entries here only — the flat string view
+// HLSProxyAllowedDomains is derived from this slice at package init time.
+//
+// IMPORTANT: New entries require a CODEOWNERS-gated review (see
+// .github/CODEOWNERS) and must carry honest Owner/Added/Reason values.
+// Quarterly review process: docs/security/hls-proxy-allowlist.md.
+//
+// The "@legacy" Owner + 2026-05-20 Added date on existing entries marks
+// the structured-provenance refactor — those entries pre-date the new
+// process and have no individually-attributable provenance. They will be
+// backfilled with real owners on the next quarterly review.
+var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
+	// Known streaming domains (HiAnime / MegaCloud family — predates this refactor).
+	{Domain: "megacloud.tv", Reason: "MegaCloud HLS host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "megacloud.blog", Reason: "MegaCloud HLS host (mirror)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "megacloud.club", Reason: "MegaCloud HLS host (mirror)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "rapid-cloud.co", Reason: "Rapid-Cloud HLS host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "rapidcloud.live", Reason: "Rapid-Cloud HLS host (mirror)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "vidstream.pro", Reason: "VidStream HLS host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "vidstreamz.online", Reason: "VidStream HLS host (mirror)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "mcloud.to", Reason: "MCloud HLS host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "mcloud2.to", Reason: "MCloud HLS host (mirror)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "mgstatics.xyz", Reason: "MegaCloud static asset host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "netmagcdn.com", Reason: "MegaCloud HLS CDN", Owner: "@legacy", Added: "2026-05-20"},
+
+	// AnimePahe CDN hosts (SCRAPER-PAHE-05).
+	{Domain: "owocdn.top", Reason: "AnimePahe/Kwik CDN", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "uwucdn.top", Reason: "AnimePahe/Kwik CDN (mirror)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "kwik.cx", Reason: "AnimePahe CDN", Owner: "@legacy", Added: "2026-05-20"},
+
+	// Japanese subtitles (Phase 14).
+	{Domain: "jimaku.cc", Reason: "Japanese subtitle files", Owner: "@legacy", Added: "2026-05-20"},
+
+	// AnimeLib video CDNs.
+	{Domain: "cdnlibs.org", Reason: "AnimeLib video CDN", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "hentaicdn.org", Reason: "AnimeLib video CDN (mirror)", Owner: "@legacy", Added: "2026-05-20"},
+
+	// Hanime video CDN family.
+	{Domain: "hanime.tv", Reason: "Hanime primary host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "highwinds-cdn.com", Reason: "Hanime Highwinds CDN", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "htv-*", Reason: "Hanime htv-belias.com, htv-hydaelyn.com, etc. (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "hydaelyn-*", Reason: "Hanime hydaelyn-25x-00.top through 19.top (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "zodiark-*", Reason: "Hanime zodiark-25x-00.top through 09.top (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
+
 	// Phase 18 — Anitaku/Gogoanime CDN entries.
-	// Rotating subdomains (e.g. abc.premilkyway.com) match via the existing
-	// strings.HasSuffix(host, "."+allowed) gate in isHLSDomainAllowed.
-	"anitaku.to",        // optional — frontend may proxy anitaku poster URLs in future
-	"vibeplayer.site",   // vibeplayer same-origin HLS host
-	"premilkyway.com",   // StreamHG primary CDN (rotating subdomain on this eTLD+1)
-	"dramiyos-cdn.com",  // Earnvids primary CDN (rotating subdomain on this eTLD+1)
-	"cdn.cimovix.store", // subtitle .vtt host (shared by vibeplayer + streamhg + earnvids)
+	// Rotating subdomains match via strings.HasSuffix(host, "."+allowed) in isHLSDomainAllowed.
+	{Domain: "anitaku.to", Reason: "Anitaku poster + future-proxy host (Phase 18)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "vibeplayer.site", Reason: "Vibeplayer same-origin HLS host (Phase 18)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "premilkyway.com", Reason: "StreamHG primary CDN, rotating subdomain on eTLD+1 (Phase 18)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "dramiyos-cdn.com", Reason: "Earnvids primary CDN, rotating subdomain on eTLD+1 (Phase 18)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "cdn.cimovix.store", Reason: "Subtitle .vtt host shared by vibeplayer/streamhg/earnvids (Phase 18)", Owner: "@legacy", Added: "2026-05-20"},
+
 	// Phase 22 — Provider Robustness (SCRAPER-HEAL-10).
-	// hls3 CDN hosts captured in PoC 2026-05-13 (docs/plans/2026-05-13-scraper-self-healing-spec.md §2,§3.2).
-	// Used as the secondary URL family when hls2's signed m3u8 expires / 403s / geo-blocks.
-	// Allowed by Plan 22-01's multi-URL extractor; without this allowlist, the streaming
-	// service rejects the URL with 403 and the multi-URL fallback is dead code.
-	"managementadvisory.sbs", // StreamHG hls3 CDN (rotating subdomain on eTLD+1)
-	"exoplanethunting.space", // Earnvids hls3 CDN (rotating subdomain on eTLD+1)
+	{Domain: "managementadvisory.sbs", Reason: "StreamHG hls3 CDN, rotating subdomain on eTLD+1 (Phase 22 SCRAPER-HEAL-10)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "exoplanethunting.space", Reason: "Earnvids hls3 CDN, rotating subdomain on eTLD+1 (Phase 22 SCRAPER-HEAL-10)", Owner: "@legacy", Added: "2026-05-20"},
+
 	// v3.1 milestone audit hotfix 2026-05-13 (closes BLK-INT-01).
-	// Live observation: hls3 CDN families have rotated post-Phase-22 to these eTLD+1s.
-	// Adding them keeps the cold-path winners in the allowlist while v3.1's Phase 23
-	// canary + maintenance bot (Pattern 7 button_fix) handle future rotations on-demand.
-	"cdn-centaurus.com",          // observed StreamHG/Earnvids primary CDN (post-Phase-22 rotation)
-	"meadowlarkdesignstudio.cfd", // observed hls3 CDN (post-Phase-22 rotation)
-	"goldenridgeproduction.shop", // observed hls3 CDN (DEF-22-01)
-	// workstream raw-jp / Phase 01 — AllAnime raw-JP CDN families. AllAnime
-	// returns mixed source hosts depending on per-anime upstream. wixmp +
-	// blogger are the common YT-fed mirrors; allanime.day exposes its own
-	// edge hosts.
-	"allanime.day",
-	"allanime.to",
-	"allmanga.to",
-	"wixmp.com",          // common AllAnime upstream CDN
-	"wixmp-ed30a86b8c4858749c87952r.akamaized.net", // wixmp signed edges
-	"blogger.com",        // YouTube-fed mirror used by some AllAnime sources
-	"googlevideo.com",    // direct YouTube CDN (some AllAnime sources resolve here)
-	"sharepoint.com",     // observed OneDrive-backed source variant
-	"fast4speed.rsvp",    // AllAnime own CDN — direct MP4 with signed Authorization, requires Referer: https://allmanga.to/
+	{Domain: "cdn-centaurus.com", Reason: "Observed StreamHG/Earnvids primary CDN, post-Phase-22 rotation", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "meadowlarkdesignstudio.cfd", Reason: "Observed hls3 CDN, post-Phase-22 rotation", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "goldenridgeproduction.shop", Reason: "Observed hls3 CDN (DEF-22-01)", Owner: "@legacy", Added: "2026-05-20"},
+
+	// Workstream raw-jp / Phase 01 — AllAnime raw-JP CDN families.
+	{Domain: "allanime.day", Reason: "AllAnime edge host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "allanime.to", Reason: "AllAnime edge host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "allmanga.to", Reason: "AllAnime edge host", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "wixmp.com", Reason: "Common AllAnime upstream CDN", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "wixmp-ed30a86b8c4858749c87952r.akamaized.net", Reason: "wixmp signed edges (AllAnime)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "blogger.com", Reason: "YouTube-fed mirror used by some AllAnime sources", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "googlevideo.com", Reason: "Direct YouTube CDN (some AllAnime sources resolve here)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "sharepoint.com", Reason: "OneDrive-backed source variant (AllAnime)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "fast4speed.rsvp", Reason: "AllAnime own CDN — direct MP4 with signed Authorization, requires Referer: https://allmanga.to/", Owner: "@legacy", Added: "2026-05-20"},
+}
+
+// HLSProxyAllowedDomains is the flat []string view of
+// HLSProxyAllowedDomainsWithProvenance. Existing call sites (the streaming
+// HLS proxy, the scraper URL validator, and the various regression-lock
+// tests) iterate this slice unchanged.
+//
+// Do NOT modify this slice directly — edit HLSProxyAllowedDomainsWithProvenance
+// and this view is rebuilt automatically. The variable is left mutable for
+// backwards compatibility with test code that historically read len() and
+// values, but production code should treat it as read-only.
+var HLSProxyAllowedDomains = HLSProxyAllowedDomainsList()
+
+// HLSProxyAllowedDomainsList returns the flat []string view of the HLS proxy
+// allow-list. Equivalent to the package-level HLSProxyAllowedDomains, but
+// guaranteed to be a fresh slice — callers may mutate the result without
+// affecting other callers.
+//
+// New code should prefer HLSProxyAllowedDomainsWithProvenance when provenance
+// is relevant (audit tooling, security review); use this function or
+// HLSProxyAllowedDomains when only the host strings are needed.
+func HLSProxyAllowedDomainsList() []string {
+	out := make([]string, len(HLSProxyAllowedDomainsWithProvenance))
+	for i, e := range HLSProxyAllowedDomainsWithProvenance {
+		out[i] = e.Domain
+	}
+	return out
 }
 
 // UpstreamError represents an error from the upstream CDN.

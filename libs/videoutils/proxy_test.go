@@ -101,6 +101,57 @@ func TestIsHLSDomainAllowed_PortStripping(t *testing.T) {
 	assert.False(t, isHLSDomainAllowed("evil.com:443"), "should strip port but still reject unknown domain")
 }
 
+// TestHLSProxyAllowedDomainsList_MatchesProvenanceProjection verifies the
+// flat []string view of the allow-list is exactly the Domain projection of
+// the structured HLSProxyAllowedDomainsWithProvenance slice. This is the
+// load-bearing invariant for the structured-provenance refactor: any caller
+// that historically iterated HLSProxyAllowedDomains as []string must see the
+// same entries in the same order after the refactor.
+func TestHLSProxyAllowedDomainsList_MatchesProvenanceProjection(t *testing.T) {
+	list := HLSProxyAllowedDomainsList()
+	if len(list) != len(HLSProxyAllowedDomainsWithProvenance) {
+		t.Fatalf("list length %d != provenance length %d", len(list), len(HLSProxyAllowedDomainsWithProvenance))
+	}
+	for i, e := range HLSProxyAllowedDomainsWithProvenance {
+		if list[i] != e.Domain {
+			t.Errorf("index %d: list=%q, provenance.Domain=%q", i, list[i], e.Domain)
+		}
+	}
+	// Also lock the package-level HLSProxyAllowedDomains view (initialized
+	// from HLSProxyAllowedDomainsList) to the same projection.
+	if len(HLSProxyAllowedDomains) != len(HLSProxyAllowedDomainsWithProvenance) {
+		t.Fatalf("HLSProxyAllowedDomains length %d != provenance length %d",
+			len(HLSProxyAllowedDomains), len(HLSProxyAllowedDomainsWithProvenance))
+	}
+	for i, d := range HLSProxyAllowedDomains {
+		if d != HLSProxyAllowedDomainsWithProvenance[i].Domain {
+			t.Errorf("HLSProxyAllowedDomains[%d] = %q, want %q",
+				i, d, HLSProxyAllowedDomainsWithProvenance[i].Domain)
+		}
+	}
+}
+
+// TestHLSProxyAllowedDomainsWithProvenance_HasNonEmptyMetadata verifies every
+// entry carries Reason/Owner/Added — the audit script (scripts/audit-hls-allowlist.sh)
+// relies on these fields being populated. Entries with empty provenance
+// would silently print blank columns and defeat the quarterly review.
+func TestHLSProxyAllowedDomainsWithProvenance_HasNonEmptyMetadata(t *testing.T) {
+	for _, e := range HLSProxyAllowedDomainsWithProvenance {
+		if e.Domain == "" {
+			t.Errorf("entry has empty Domain: %+v", e)
+		}
+		if e.Reason == "" {
+			t.Errorf("entry %q has empty Reason", e.Domain)
+		}
+		if e.Owner == "" {
+			t.Errorf("entry %q has empty Owner", e.Domain)
+		}
+		if e.Added == "" {
+			t.Errorf("entry %q has empty Added date", e.Domain)
+		}
+	}
+}
+
 // TestHLSProxyAllowedDomains_HasAnimePaheHosts locks the three AnimePahe CDN
 // hosts in HLSProxyAllowedDomains. Without these, the HLS proxy returns 403
 // for every AnimePahe stream → user-visible breakage. This is a

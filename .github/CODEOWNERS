@@ -1,0 +1,19 @@
+# CODEOWNERS — required-review gate for security-sensitive files.
+#
+# GitHub's CODEOWNERS spec: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+# Branch-protection rule "Require review from Code Owners" must also be enabled
+# in repository settings for this file to enforce reviews — CODEOWNERS alone
+# only suggests reviewers.
+#
+# Rules below are last-match-wins per GitHub's spec.
+
+# HLS proxy allow-list — see docs/security/hls-proxy-allowlist.md.
+# Any new entry adds a host that user clients and the scraper will trust;
+# this gate requires the security owner to sign off on additions.
+/libs/videoutils/proxy.go            @StaticVirtualObserver
+
+# The audit tooling itself shares the same owner — its output is the
+# evidence used during quarterly review, so changes need the same scrutiny.
+/libs/videoutils/cmd/audit-allowlist/ @StaticVirtualObserver
+/scripts/audit-hls-allowlist.sh      @StaticVirtualObserver
+/docs/security/                      @StaticVirtualObserver
