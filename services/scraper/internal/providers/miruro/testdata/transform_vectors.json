@@ -1,0 +1,57 @@
+{
+  "_comment": "Transform vectors for Miruro's /api/secure/pipe GET-path obfuscation. The 'transform' is base64url(json({path, method, query, body, version?})) — NOT a cryptographic transform. Captured 2026-05-20 from production-server probes against https://www.miruro.tv/. The vectors describe (plaintext-input, base64url-output) pairs.",
+  "key_findings": {
+    "obfuscation_family": "base64url-of-json (transport encoding, not crypto)",
+    "VITE_PROXY_OBF_KEY_used": false,
+    "VITE_PIPE_OBF_KEY_used_for_GET": false,
+    "VITE_PIPE_OBF_KEY_used_for_POST": true,
+    "response_encoding_x_obfuscated_1": "base64url(gzip(jsonBody))",
+    "response_encoding_x_obfuscated_2": "base64url(xor(gzip(jsonBody), pipe_obf_key))"
+  },
+  "vectors": [
+    {
+      "name": "info_154587",
+      "endpoint_path": "info/154587",
+      "method": "GET",
+      "query": {},
+      "expected_url_query_e": "eyJwYXRoIjoiaW5mby8xNTQ1ODciLCJtZXRob2QiOiJHRVQiLCJxdWVyeSI6e30sImJvZHkiOm51bGx9",
+      "expected_full_url": "https://www.miruro.tv/api/secure/pipe?e=eyJwYXRoIjoiaW5mby8xNTQ1ODciLCJtZXRob2QiOiJHRVQiLCJxdWVyeSI6e30sImJvZHkiOm51bGx9",
+      "observed_http_status": 200,
+      "observed_x_obfuscated": "1",
+      "observed_response_decoded_excerpt": "{\"media\":{\"id\":154587,\"idMal\":52991,\"type\":\"ANIME\",\"title\":{\"native\":\"葬送のフリーレン\",\"romaji\":\"Sousou no Frieren\",\"english\":\"Frieren: Beyond Journey's End\"}}}"
+    },
+    {
+      "name": "episodes_154587",
+      "endpoint_path": "episodes",
+      "method": "GET",
+      "query": {"anilistId": 154587},
+      "expected_url_query_e": "eyJwYXRoIjoiZXBpc29kZXMiLCJtZXRob2QiOiJHRVQiLCJxdWVyeSI6eyJhbmlsaXN0SWQiOjE1NDU4N30sImJvZHkiOm51bGx9",
+      "expected_full_url": "https://www.miruro.tv/api/secure/pipe?e=eyJwYXRoIjoiZXBpc29kZXMiLCJtZXRob2QiOiJHRVQiLCJxdWVyeSI6eyJhbmlsaXN0SWQiOjE1NDU4N30sImJvZHkiOm51bGx9",
+      "observed_http_status": 200,
+      "observed_x_obfuscated": "1",
+      "observed_response_decoded_excerpt": "{\"mappings\":{...},\"providers\":{\"ANIMEKAI\":{...},\"dune\":{\"episodes\":{\"sub\":[28 episodes]}},\"kiwi\":{...},\"hop\":{...},\"bee\":{...}}}"
+    },
+    {
+      "name": "sources_frieren_ep1_kiwi",
+      "endpoint_path": "sources",
+      "method": "GET",
+      "query": {"episodeId": "YW5pbWVwYWhlOjUzMTk6NjAwNTk6MQ", "provider": "kiwi", "category": ""},
+      "expected_url_query_e": "eyJwYXRoIjoic291cmNlcyIsIm1ldGhvZCI6IkdFVCIsInF1ZXJ5Ijp7ImVwaXNvZGVJZCI6IllXNXBiV1Z3WVdobE9qVXpNVGs2TmpBd05UazZNUSIsInByb3ZpZGVyIjoia2l3aSIsImNhdGVnb3J5IjoiIn0sImJvZHkiOm51bGx9",
+      "observed_http_status": 200,
+      "observed_x_obfuscated": "1",
+      "observed_response_decoded_excerpt": "{\"streams\":[{\"url\":\"https://vault-08.uwucdn.top/stream/08/13/.../uwu.m3u8\",\"type\":\"hls\",\"quality\":\"1080p\",\"audio\":\"sub\",\"referer\":\"https://kwik.cx/\"}, ...]}"
+    }
+  ],
+  "negative_cases": [
+    {
+      "name": "empty_path_rejected",
+      "endpoint_path": "",
+      "expected_error": "endpoint path must not be empty"
+    },
+    {
+      "name": "absolute_path_rejected",
+      "endpoint_path": "/api/info/154587",
+      "expected_error": "endpoint path must not start with '/' or '/api/'"
+    }
+  ]
+}
