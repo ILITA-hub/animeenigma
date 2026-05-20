@@ -35,8 +35,10 @@
       "name": "sources_frieren_ep1_kiwi",
       "endpoint_path": "sources",
       "method": "GET",
-      "query": {"episodeId": "YW5pbWVwYWhlOjUzMTk6NjAwNTk6MQ", "provider": "kiwi", "category": ""},
-      "expected_url_query_e": "eyJwYXRoIjoic291cmNlcyIsIm1ldGhvZCI6IkdFVCIsInF1ZXJ5Ijp7ImVwaXNvZGVJZCI6IllXNXBiV1Z3WVdobE9qVXpNVGs2TmpBd05UazZNUSIsInByb3ZpZGVyIjoia2l3aSIsImNhdGVnb3J5IjoiIn0sImJvZHkiOm51bGx9",
+      "query": {"category": "", "episodeId": "YW5pbWVwYWhlOjUzMTk6NjAwNTk6MQ", "provider": "kiwi"},
+      "_query_order_note": "Canonical Go marshal sorts map keys alphabetically (category, episodeId, provider). Live API accepts BOTH this ordering and insertion ordering — verified 2026-05-20.",
+      "expected_url_query_e": "eyJwYXRoIjoic291cmNlcyIsIm1ldGhvZCI6IkdFVCIsInF1ZXJ5Ijp7ImNhdGVnb3J5IjoiIiwiZXBpc29kZUlkIjoiWVc1cGJXVndZV2hsT2pVek1UazZOakF3TlRrNk1RIiwicHJvdmlkZXIiOiJraXdpIn0sImJvZHkiOm51bGx9",
+      "expected_full_url": "https://www.miruro.tv/api/secure/pipe?e=eyJwYXRoIjoic291cmNlcyIsIm1ldGhvZCI6IkdFVCIsInF1ZXJ5Ijp7ImNhdGVnb3J5IjoiIiwiZXBpc29kZUlkIjoiWVc1cGJXVndZV2hsT2pVek1UazZOakF3TlRrNk1RIiwicHJvdmlkZXIiOiJraXdpIn0sImJvZHkiOm51bGx9",
       "observed_http_status": 200,
       "observed_x_obfuscated": "1",
       "observed_response_decoded_excerpt": "{\"streams\":[{\"url\":\"https://vault-08.uwucdn.top/stream/08/13/.../uwu.m3u8\",\"type\":\"hls\",\"quality\":\"1080p\",\"audio\":\"sub\",\"referer\":\"https://kwik.cx/\"}, ...]}"
