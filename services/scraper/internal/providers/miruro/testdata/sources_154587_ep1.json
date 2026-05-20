@@ -1,0 +1,17 @@
+{
+  "streams": [
+    {
+      "url": "https://vault-08.uwucdn.top/stream/08/13/abcdef/uwu.m3u8",
+      "type": "hls",
+      "quality": "1080p",
+      "referer": "https://kwik.cx/"
+    },
+    {
+      "url": "https://vault-08.uwucdn.top/stream/08/13/abcdef/uwu.m3u8",
+      "type": "hls",
+      "quality": "720p",
+      "referer": "https://kwik.cx/"
+    }
+  ],
+  "embeds": []
+}

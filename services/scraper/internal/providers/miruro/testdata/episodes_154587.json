@@ -1,0 +1,1798 @@
+{
+  "providers": {
+    "dune": {
+      "episodes": {
+        "sub": [
+          {
+            "id": "dune_ep1_id",
+            "number": 1,
+            "title": "Episode 1",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep2_id",
+            "number": 2,
+            "title": "Episode 2",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep3_id",
+            "number": 3,
+            "title": "Episode 3",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep4_id",
+            "number": 4,
+            "title": "Episode 4",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep5_id",
+            "number": 5,
+            "title": "Episode 5",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep6_id",
+            "number": 6,
+            "title": "Episode 6",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep7_id",
+            "number": 7,
+            "title": "Episode 7",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep8_id",
+            "number": 8,
+            "title": "Episode 8",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep9_id",
+            "number": 9,
+            "title": "Episode 9",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep10_id",
+            "number": 10,
+            "title": "Episode 10",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep11_id",
+            "number": 11,
+            "title": "Episode 11",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep12_id",
+            "number": 12,
+            "title": "Episode 12",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep13_id",
+            "number": 13,
+            "title": "Episode 13",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep14_id",
+            "number": 14,
+            "title": "Episode 14",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep15_id",
+            "number": 15,
+            "title": "Episode 15",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep16_id",
+            "number": 16,
+            "title": "Episode 16",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep17_id",
+            "number": 17,
+            "title": "Episode 17",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep18_id",
+            "number": 18,
+            "title": "Episode 18",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep19_id",
+            "number": 19,
+            "title": "Episode 19",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep20_id",
+            "number": 20,
+            "title": "Episode 20",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep21_id",
+            "number": 21,
+            "title": "Episode 21",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep22_id",
+            "number": 22,
+            "title": "Episode 22",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep23_id",
+            "number": 23,
+            "title": "Episode 23",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep24_id",
+            "number": 24,
+            "title": "Episode 24",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep25_id",
+            "number": 25,
+            "title": "Episode 25",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep26_id",
+            "number": 26,
+            "title": "Episode 26",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep27_id",
+            "number": 27,
+            "title": "Episode 27",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "dune_ep28_id",
+            "number": 28,
+            "title": "Episode 28",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          }
+        ]
+      }
+    },
+    "kiwi": {
+      "episodes": {
+        "sub": [
+          {
+            "id": "kiwi_ep1_id",
+            "number": 1,
+            "title": "Episode 1",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep2_id",
+            "number": 2,
+            "title": "Episode 2",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep3_id",
+            "number": 3,
+            "title": "Episode 3",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep4_id",
+            "number": 4,
+            "title": "Episode 4",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep5_id",
+            "number": 5,
+            "title": "Episode 5",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep6_id",
+            "number": 6,
+            "title": "Episode 6",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep7_id",
+            "number": 7,
+            "title": "Episode 7",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep8_id",
+            "number": 8,
+            "title": "Episode 8",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep9_id",
+            "number": 9,
+            "title": "Episode 9",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep10_id",
+            "number": 10,
+            "title": "Episode 10",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep11_id",
+            "number": 11,
+            "title": "Episode 11",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep12_id",
+            "number": 12,
+            "title": "Episode 12",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep13_id",
+            "number": 13,
+            "title": "Episode 13",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep14_id",
+            "number": 14,
+            "title": "Episode 14",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep15_id",
+            "number": 15,
+            "title": "Episode 15",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep16_id",
+            "number": 16,
+            "title": "Episode 16",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep17_id",
+            "number": 17,
+            "title": "Episode 17",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep18_id",
+            "number": 18,
+            "title": "Episode 18",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep19_id",
+            "number": 19,
+            "title": "Episode 19",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep20_id",
+            "number": 20,
+            "title": "Episode 20",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep21_id",
+            "number": 21,
+            "title": "Episode 21",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep22_id",
+            "number": 22,
+            "title": "Episode 22",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep23_id",
+            "number": 23,
+            "title": "Episode 23",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep24_id",
+            "number": 24,
+            "title": "Episode 24",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep25_id",
+            "number": 25,
+            "title": "Episode 25",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep26_id",
+            "number": 26,
+            "title": "Episode 26",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep27_id",
+            "number": 27,
+            "title": "Episode 27",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_ep28_id",
+            "number": 28,
+            "title": "Episode 28",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          }
+        ],
+        "dub": [
+          {
+            "id": "kiwi_dub_ep1_id",
+            "number": 1,
+            "title": "Episode 1",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep2_id",
+            "number": 2,
+            "title": "Episode 2",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep3_id",
+            "number": 3,
+            "title": "Episode 3",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep4_id",
+            "number": 4,
+            "title": "Episode 4",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep5_id",
+            "number": 5,
+            "title": "Episode 5",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep6_id",
+            "number": 6,
+            "title": "Episode 6",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep7_id",
+            "number": 7,
+            "title": "Episode 7",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep8_id",
+            "number": 8,
+            "title": "Episode 8",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep9_id",
+            "number": 9,
+            "title": "Episode 9",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep10_id",
+            "number": 10,
+            "title": "Episode 10",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep11_id",
+            "number": 11,
+            "title": "Episode 11",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep12_id",
+            "number": 12,
+            "title": "Episode 12",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep13_id",
+            "number": 13,
+            "title": "Episode 13",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep14_id",
+            "number": 14,
+            "title": "Episode 14",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep15_id",
+            "number": 15,
+            "title": "Episode 15",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep16_id",
+            "number": 16,
+            "title": "Episode 16",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep17_id",
+            "number": 17,
+            "title": "Episode 17",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep18_id",
+            "number": 18,
+            "title": "Episode 18",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep19_id",
+            "number": 19,
+            "title": "Episode 19",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep20_id",
+            "number": 20,
+            "title": "Episode 20",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep21_id",
+            "number": 21,
+            "title": "Episode 21",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep22_id",
+            "number": 22,
+            "title": "Episode 22",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep23_id",
+            "number": 23,
+            "title": "Episode 23",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep24_id",
+            "number": 24,
+            "title": "Episode 24",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep25_id",
+            "number": 25,
+            "title": "Episode 25",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep26_id",
+            "number": 26,
+            "title": "Episode 26",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep27_id",
+            "number": 27,
+            "title": "Episode 27",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "kiwi_dub_ep28_id",
+            "number": 28,
+            "title": "Episode 28",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          }
+        ]
+      }
+    },
+    "hop": {
+      "episodes": {
+        "sub": [
+          {
+            "id": "hop_ep1_id",
+            "number": 1,
+            "title": "Episode 1",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep2_id",
+            "number": 2,
+            "title": "Episode 2",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep3_id",
+            "number": 3,
+            "title": "Episode 3",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep4_id",
+            "number": 4,
+            "title": "Episode 4",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep5_id",
+            "number": 5,
+            "title": "Episode 5",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep6_id",
+            "number": 6,
+            "title": "Episode 6",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep7_id",
+            "number": 7,
+            "title": "Episode 7",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep8_id",
+            "number": 8,
+            "title": "Episode 8",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep9_id",
+            "number": 9,
+            "title": "Episode 9",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep10_id",
+            "number": 10,
+            "title": "Episode 10",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep11_id",
+            "number": 11,
+            "title": "Episode 11",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep12_id",
+            "number": 12,
+            "title": "Episode 12",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep13_id",
+            "number": 13,
+            "title": "Episode 13",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep14_id",
+            "number": 14,
+            "title": "Episode 14",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep15_id",
+            "number": 15,
+            "title": "Episode 15",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep16_id",
+            "number": 16,
+            "title": "Episode 16",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep17_id",
+            "number": 17,
+            "title": "Episode 17",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep18_id",
+            "number": 18,
+            "title": "Episode 18",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep19_id",
+            "number": 19,
+            "title": "Episode 19",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep20_id",
+            "number": 20,
+            "title": "Episode 20",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep21_id",
+            "number": 21,
+            "title": "Episode 21",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep22_id",
+            "number": 22,
+            "title": "Episode 22",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep23_id",
+            "number": 23,
+            "title": "Episode 23",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep24_id",
+            "number": 24,
+            "title": "Episode 24",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep25_id",
+            "number": 25,
+            "title": "Episode 25",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep26_id",
+            "number": 26,
+            "title": "Episode 26",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep27_id",
+            "number": 27,
+            "title": "Episode 27",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_ep28_id",
+            "number": 28,
+            "title": "Episode 28",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          }
+        ],
+        "dub": [
+          {
+            "id": "hop_dub_ep1_id",
+            "number": 1,
+            "title": "Episode 1",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep2_id",
+            "number": 2,
+            "title": "Episode 2",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep3_id",
+            "number": 3,
+            "title": "Episode 3",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep4_id",
+            "number": 4,
+            "title": "Episode 4",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep5_id",
+            "number": 5,
+            "title": "Episode 5",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep6_id",
+            "number": 6,
+            "title": "Episode 6",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep7_id",
+            "number": 7,
+            "title": "Episode 7",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep8_id",
+            "number": 8,
+            "title": "Episode 8",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep9_id",
+            "number": 9,
+            "title": "Episode 9",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep10_id",
+            "number": 10,
+            "title": "Episode 10",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep11_id",
+            "number": 11,
+            "title": "Episode 11",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep12_id",
+            "number": 12,
+            "title": "Episode 12",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep13_id",
+            "number": 13,
+            "title": "Episode 13",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep14_id",
+            "number": 14,
+            "title": "Episode 14",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep15_id",
+            "number": 15,
+            "title": "Episode 15",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep16_id",
+            "number": 16,
+            "title": "Episode 16",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep17_id",
+            "number": 17,
+            "title": "Episode 17",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep18_id",
+            "number": 18,
+            "title": "Episode 18",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep19_id",
+            "number": 19,
+            "title": "Episode 19",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep20_id",
+            "number": 20,
+            "title": "Episode 20",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep21_id",
+            "number": 21,
+            "title": "Episode 21",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep22_id",
+            "number": 22,
+            "title": "Episode 22",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep23_id",
+            "number": 23,
+            "title": "Episode 23",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep24_id",
+            "number": 24,
+            "title": "Episode 24",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep25_id",
+            "number": 25,
+            "title": "Episode 25",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep26_id",
+            "number": 26,
+            "title": "Episode 26",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep27_id",
+            "number": 27,
+            "title": "Episode 27",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "hop_dub_ep28_id",
+            "number": 28,
+            "title": "Episode 28",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          }
+        ]
+      }
+    },
+    "bee": {
+      "episodes": {
+        "sub": [
+          {
+            "id": "bee_ep1_id",
+            "number": 1,
+            "title": "Episode 1",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep2_id",
+            "number": 2,
+            "title": "Episode 2",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep3_id",
+            "number": 3,
+            "title": "Episode 3",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep4_id",
+            "number": 4,
+            "title": "Episode 4",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep5_id",
+            "number": 5,
+            "title": "Episode 5",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep6_id",
+            "number": 6,
+            "title": "Episode 6",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep7_id",
+            "number": 7,
+            "title": "Episode 7",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep8_id",
+            "number": 8,
+            "title": "Episode 8",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep9_id",
+            "number": 9,
+            "title": "Episode 9",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep10_id",
+            "number": 10,
+            "title": "Episode 10",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep11_id",
+            "number": 11,
+            "title": "Episode 11",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep12_id",
+            "number": 12,
+            "title": "Episode 12",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep13_id",
+            "number": 13,
+            "title": "Episode 13",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep14_id",
+            "number": 14,
+            "title": "Episode 14",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep15_id",
+            "number": 15,
+            "title": "Episode 15",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep16_id",
+            "number": 16,
+            "title": "Episode 16",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep17_id",
+            "number": 17,
+            "title": "Episode 17",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep18_id",
+            "number": 18,
+            "title": "Episode 18",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep19_id",
+            "number": 19,
+            "title": "Episode 19",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep20_id",
+            "number": 20,
+            "title": "Episode 20",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep21_id",
+            "number": 21,
+            "title": "Episode 21",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep22_id",
+            "number": 22,
+            "title": "Episode 22",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep23_id",
+            "number": 23,
+            "title": "Episode 23",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep24_id",
+            "number": 24,
+            "title": "Episode 24",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep25_id",
+            "number": 25,
+            "title": "Episode 25",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep26_id",
+            "number": 26,
+            "title": "Episode 26",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep27_id",
+            "number": 27,
+            "title": "Episode 27",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_ep28_id",
+            "number": 28,
+            "title": "Episode 28",
+            "filler": false,
+            "audio": "sub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          }
+        ],
+        "dub": [
+          {
+            "id": "bee_dub_ep1_id",
+            "number": 1,
+            "title": "Episode 1",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep2_id",
+            "number": 2,
+            "title": "Episode 2",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep3_id",
+            "number": 3,
+            "title": "Episode 3",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep4_id",
+            "number": 4,
+            "title": "Episode 4",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep5_id",
+            "number": 5,
+            "title": "Episode 5",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep6_id",
+            "number": 6,
+            "title": "Episode 6",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep7_id",
+            "number": 7,
+            "title": "Episode 7",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep8_id",
+            "number": 8,
+            "title": "Episode 8",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep9_id",
+            "number": 9,
+            "title": "Episode 9",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep10_id",
+            "number": 10,
+            "title": "Episode 10",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep11_id",
+            "number": 11,
+            "title": "Episode 11",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep12_id",
+            "number": 12,
+            "title": "Episode 12",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep13_id",
+            "number": 13,
+            "title": "Episode 13",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep14_id",
+            "number": 14,
+            "title": "Episode 14",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep15_id",
+            "number": 15,
+            "title": "Episode 15",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep16_id",
+            "number": 16,
+            "title": "Episode 16",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep17_id",
+            "number": 17,
+            "title": "Episode 17",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep18_id",
+            "number": 18,
+            "title": "Episode 18",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep19_id",
+            "number": 19,
+            "title": "Episode 19",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep20_id",
+            "number": 20,
+            "title": "Episode 20",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep21_id",
+            "number": 21,
+            "title": "Episode 21",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep22_id",
+            "number": 22,
+            "title": "Episode 22",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep23_id",
+            "number": 23,
+            "title": "Episode 23",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep24_id",
+            "number": 24,
+            "title": "Episode 24",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep25_id",
+            "number": 25,
+            "title": "Episode 25",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep26_id",
+            "number": 26,
+            "title": "Episode 26",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep27_id",
+            "number": 27,
+            "title": "Episode 27",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          },
+          {
+            "id": "bee_dub_ep28_id",
+            "number": 28,
+            "title": "Episode 28",
+            "filler": false,
+            "audio": "dub",
+            "airDate": "2026-01-01",
+            "duration": 1440
+          }
+        ]
+      }
+    }
+  }
+}
