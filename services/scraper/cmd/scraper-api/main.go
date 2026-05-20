@@ -24,6 +24,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/miruro"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/nineanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
 )
@@ -316,6 +317,40 @@ func main() {
 		log.Infow("registered provider", "name", miruroProvider.Name())
 	}
 
+	// Phase 28 Plan 28-05 (SCRAPER-HEAL-39) — 9anime.me.uk as the LAST-RESORT
+	// EN provider (failover slot 6 per CONTEXT.md D5).
+	//
+	// Per CONTEXT.md D2 — explicitly accepted as low-quality, last-resort.
+	// Operator policy "as many providers as possible" overrides the natural
+	// "not-worth" verdict. ~6-month half-life expected. Operator kills via
+	// SCRAPER_DEGRADED_PROVIDERS=nineanime when upstream rebrands/DMCAs.
+	//
+	// Per WR-04 — the nineanime.Deps struct INTENTIONALLY omits the Embeds
+	// field present on AnimeFever/Miruro. MP4 extraction happens inline
+	// via regex; the embed registry is not consulted at GetStream time.
+	// Adding a dead Embeds field here would mislead future maintainers.
+	nineAnimeBaseHTTP := domain.NewBaseHTTPClient(log,
+		domain.WithPerHostRPS("9anime.me.uk", 1.0, 2),
+		domain.WithPerHostRPS("my.1anime.site", 1.0, 2),
+	)
+	nineAnimeProvider, err := nineanime.New(nineanime.Deps{
+		BaseURL: cfg.NineAnime.BaseURL,
+		HTTP:    nineAnimeBaseHTTP,
+		Cache:   redisCache,
+		Log:     log,
+	})
+	if err != nil {
+		log.Fatalw("failed to construct NineAnime provider", "error", err)
+	}
+	if cfg.DegradedProviders.IsDegraded(nineAnimeProvider.Name()) {
+		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
+			"name", nineAnimeProvider.Name(),
+			"reason", "global kill-switch")
+	} else {
+		orchestrator.Register(nineAnimeProvider)
+		log.Infow("registered provider", "name", nineAnimeProvider.Name())
+	}
+
 	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
 	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
 	// ErrProviderDown so failover lands on the previous two providers.
@@ -443,8 +478,8 @@ func main() {
 	// maintainer dropping any Register() call surfaces the regression at boot
 	// via this fatal.
 	// Phase 28: order per CONTEXT.md D5 register order — gogoanime → animepahe
-	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05, future).
-	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "animefever", "miruro"}
+	// → allanime → animefever (28-02) → miruro (28-04) → nineanime (28-05).
+	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "animefever", "miruro", "nineanime"}
 	if cfg.AnimeKai.Enabled {
 		candidateProviders = append(candidateProviders, "animekai")
 	}
@@ -487,6 +522,7 @@ func main() {
 			"animekai_enabled", cfg.AnimeKai.Enabled,
 			"animekai_base_url", cfg.AnimeKai.BaseURL,
 			"animefever_base_url", cfg.AnimeFever.BaseURL,
+			"nineanime_base_url", cfg.NineAnime.BaseURL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)
