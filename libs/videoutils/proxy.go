@@ -287,6 +287,17 @@ var HLSProxyAllowedDomains = []string{
 	"googlevideo.com",    // direct YouTube CDN (some AllAnime sources resolve here)
 	"sharepoint.com",     // observed OneDrive-backed source variant
 	"fast4speed.rsvp",    // AllAnime own CDN — direct MP4 with signed Authorization, requires Referer: https://allmanga.to/
+	// Phase 28 Plan 28-04 (SCRAPER-HEAL-37) — Miruro proxy + alt proxy
+	// hosts. www.miruro.tv hosts the secure-pipe entry point but is NOT
+	// allowlisted here (the SPA-side fetcher is the only consumer; HLS
+	// proxy never sees miruro.tv URLs). pro/pru.ultracloud.cc are
+	// VITE_PROXY_A/B fallback hosts the provider client retries against
+	// on 5xx. uwucdn.top is the observed downstream CDN (vault-*.uwucdn.top)
+	// that hosts the actual m3u8 manifests; kwik.cx is already allowlisted
+	// above via the AnimePahe entry.
+	"pro.ultracloud.cc",
+	"pru.ultracloud.cc",
+	"uwucdn.top", // Miruro downstream HLS CDN (rotating vault-NN.uwucdn.top edges)
 }
 
 // UpstreamError represents an error from the upstream CDN.

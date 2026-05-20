@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/config"
@@ -21,6 +22,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/miruro"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/transport"
 )
@@ -238,6 +240,48 @@ func main() {
 		log.Infow("registered provider", "name", allAnimeProvider.Name())
 	}
 
+	// Phase 28 Plan 28-04 (SCRAPER-HEAL-37) — Miruro provider. Failover
+	// slot 5 (between allanime/animefever and 9anime). Uses the pure-Go
+	// secure-pipe transform from Plan 28-00's obfuscation.go. FindID
+	// resolves Shikimori/MAL → AniList via libs/idmapping ARM. Pipe
+	// endpoint lives at www.miruro.tv/api/secure/pipe; pro.ultracloud.cc
+	// + pru.ultracloud.cc are env2.js VITE_PROXY_A/B fallback hosts we
+	// configure for D7 allowlist parity + future failover.
+	//
+	// MERGE NOTE for parallel Plans 28-02/28-03: This block sits AFTER
+	// allanime and BEFORE the animekai gated block. Plan 28-02 (animefever)
+	// inserts BEFORE this block; Plan 28-03 (vidstream_vip extractor)
+	// modifies embed registry only (no main.go provider block).
+	miruroBaseHTTP := domain.NewBaseHTTPClient(log,
+		// T-28-04-07: Cloudflare-fronted host gets half the standard
+		// per-host RPS (0.5 / burst 2). Fallback proxies same pacing.
+		domain.WithPerHostRPS("www.miruro.tv", 0.5, 2),
+		domain.WithPerHostRPS("pro.ultracloud.cc", 0.5, 2),
+		domain.WithPerHostRPS("pru.ultracloud.cc", 0.5, 2),
+		domain.WithPerHostRPS("arm.haglund.dev", 1.0, 2),
+	)
+	armClient := idmapping.NewClient()
+	miruroProvider, err := miruro.New(miruro.Deps{
+		BaseURL:     cfg.Miruro.BaseURL,
+		ProxyURL:    cfg.Miruro.ProxyURL,
+		ProxyURLAlt: cfg.Miruro.ProxyURLAlt,
+		HTTP:        miruroBaseHTTP,
+		Cache:       redisCache,
+		IDMapping:   armClient,
+		Log:         log,
+	})
+	if err != nil {
+		log.Fatalw("failed to construct Miruro provider", "error", err)
+	}
+	if cfg.DegradedProviders.IsDegraded(miruroProvider.Name()) {
+		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
+			"name", miruroProvider.Name(),
+			"reason", "global kill-switch")
+	} else {
+		orchestrator.Register(miruroProvider)
+		log.Infow("registered provider", "name", miruroProvider.Name())
+	}
+
 	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
 	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
 	// ErrProviderDown so failover lands on the previous two providers.
@@ -364,7 +408,10 @@ func main() {
 	// Register()-ed, so the expected count subtracts those. A future
 	// maintainer dropping any Register() call surfaces the regression at boot
 	// via this fatal.
-	candidateProviders := []string{"gogoanime", "animepahe", "allanime"}
+	// Phase 28 Plan 28-04: "miruro" added after "allanime". Parallel Plan
+	// 28-02 will insert "animefever" between them and Plan 28-05 will
+	// append "nineanime" after miruro; merge order is preserved.
+	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "miruro"}
 	if cfg.AnimeKai.Enabled {
 		candidateProviders = append(candidateProviders, "animekai")
 	}
