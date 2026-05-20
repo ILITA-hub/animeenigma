@@ -78,3 +78,5 @@ replace github.com/ILITA-hub/animeenigma/libs/cache => ../../libs/cache
 replace github.com/ILITA-hub/animeenigma/libs/streamprobe => ../../libs/streamprobe
 
 replace github.com/ILITA-hub/animeenigma/libs/videoutils => ../../libs/videoutils
+
+replace github.com/ILITA-hub/animeenigma/libs/idmapping => ../../libs/idmapping
