@@ -333,6 +333,17 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	// source family.
 	{Domain: "pro.ultracloud.cc", Reason: "Miruro upstream proxy host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
 	{Domain: "pru.ultracloud.cc", Reason: "Miruro alternate proxy host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
+
+	// Phase 28 (SCRAPER-HEAL-39) — 9anime.me.uk MP4 embed + CDN host.
+	// my.1anime.site serves the <iframe src="...index.php?action=play&file=
+	// <name>.mp4"> + the absolute MP4 at <host>/videos/<name>.mp4 with
+	// Accept-Ranges: bytes. Cloudflare-fronted, Engintron caching.
+	// Per D7 the allowlist entry lands in the same commit as the provider
+	// registration; if the 9anime provider is later DEGRADED, this entry
+	// stays (it's harmless — Phase 25 SCRAPER-HEAL-24 returns 502 on
+	// unallowed hosts so a degraded provider can't accidentally serve
+	// content through this entry).
+	{Domain: "my.1anime.site", Reason: "9anime.me.uk MP4 embed + CDN host (Phase 28 SCRAPER-HEAL-39)", Owner: "@legacy", Added: "2026-05-20"},
 }
 
 // HLSProxyAllowedDomains is the flat []string view of
