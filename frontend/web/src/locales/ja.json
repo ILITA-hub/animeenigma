@@ -265,8 +265,7 @@
       "loadJpSubs": "日本語字幕の読み込みに失敗しました",
       "networkError": "ネットワークエラー: {details}",
       "mediaError": "メディアエラー: {details}",
-      "playbackError": "再生エラー: {details}",
-      "videojsError": "Video.jsエラー (コード {code}): {message}"
+      "playbackError": "再生エラー: {details}"
     },
     "skipIntro": "オープニングをスキップ",
     "skipOutro": "エンディングをスキップ",

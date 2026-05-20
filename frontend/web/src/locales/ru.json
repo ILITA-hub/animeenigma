@@ -265,8 +265,7 @@
       "loadJpSubs": "Не удалось загрузить японские субтитры",
       "networkError": "Ошибка сети: {details}",
       "mediaError": "Ошибка медиа: {details}",
-      "playbackError": "Ошибка воспроизведения: {details}",
-      "videojsError": "Ошибка Video.js (код {code}): {message}"
+      "playbackError": "Ошибка воспроизведения: {details}"
     },
     "skipIntro": "Пропустить опенинг",
     "skipOutro": "Пропустить эндинг",

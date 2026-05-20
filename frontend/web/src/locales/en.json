@@ -265,8 +265,7 @@
       "loadJpSubs": "Failed to load Japanese subtitles",
       "networkError": "Network error: {details}",
       "mediaError": "Media error: {details}",
-      "playbackError": "Playback error: {details}",
-      "videojsError": "Video.js error (code {code}): {message}"
+      "playbackError": "Playback error: {details}"
     },
     "skipIntro": "Skip Intro",
     "skipOutro": "Skip Ending",
