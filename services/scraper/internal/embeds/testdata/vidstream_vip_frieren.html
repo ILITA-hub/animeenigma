@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>am.vidstream.vip — Frieren ep28</title>
+  <script src="https://cdn.jwplayer.com/libraries/abcd1234.js"></script>
+</head>
+<body>
+<div id="player"></div>
+<script>
+// Captured 2026-05-20 from am.vidstream.vip embed page for Frieren beyond
+// journey's end ep28 (AnimeFever upstream). The inline `sources` literal is
+// the load-bearing shape; everything else in this fixture is representative
+// surrounding noise from the actual JWPlayer init block.
+var playerInstance = jwplayer("player");
+playerInstance.setup({
+  playlist: [{
+    image: "https://static-cdn-ca1.mofl.pro/posters/frieren-ep28.jpg",
+    sources: [{"file":"https://static-cdn-ca1.mofl.pro/streams/frieren/ep28/master.m3u8","type":"mp4","label":"HD"}],
+    tracks: []
+  }],
+  autostart: false,
+  width: "100%",
+  height: "100%",
+  primary: "html5",
+  hlshtml: true
+});
+</script>
+</body>
+</html>
