@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	github.com/ILITA-hub/animeenigma/libs/cache v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/idmapping v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/streamprobe v0.0.0-00010101000000-000000000000
@@ -78,3 +79,25 @@ replace github.com/ILITA-hub/animeenigma/libs/cache => ../../libs/cache
 replace github.com/ILITA-hub/animeenigma/libs/streamprobe => ../../libs/streamprobe
 
 replace github.com/ILITA-hub/animeenigma/libs/videoutils => ../../libs/videoutils
+
+replace github.com/ILITA-hub/animeenigma/libs/idmapping => ../../libs/idmapping
+
+// Phase 28 Plan 28-04: exclude the legacy top-level genproto module which
+// ships a duplicate `googleapis/rpc/status` package now also exported from
+// the modular `google.golang.org/genproto/googleapis/rpc` module. Without
+// this exclude, go mod resolution after adding libs/idmapping reaches the
+// torrent → genproto edge from libs/library via the workspace, triggering
+// "ambiguous import" against grpc@v1.77.0. The legacy module is only
+// touched transitively by anacrolix/torrent (used by services/library);
+// excluding it forces all `googleapis/rpc/status` references to resolve
+// against the modular sub-module.
+exclude (
+	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
+	google.golang.org/genproto v0.0.0-20240123012728-ef4313101c80
+)
+
+// Pin the modular genproto sub-module forward so it always wins resolution
+// against any other legacy genproto top-level versions transitively required
+// by anacrolix/torrent / anacrolix/dht via the workspace.
+require google.golang.org/genproto v0.0.0-20240213162025-012b6fc9bca9

@@ -25,6 +25,7 @@ type Config struct {
 	AnimeKai           AnimeKaiConfig
 	AllAnime           AllAnimeConfig
 	AnimeFever         AnimeFeverConfig
+	Miruro             MiruroConfig
 	DegradedProviders  DegradedProvidersConfig
 }
 
@@ -146,6 +147,20 @@ type AnimeFeverConfig struct {
 	BaseURL string
 }
 
+// MiruroConfig is the per-provider override surface for miruro.Provider
+// (Phase 28 — SCRAPER-HEAL-37). BaseURL is the host the React SPA calls
+// directly for the secure-pipe endpoint (`/api/secure/pipe`); ProxyURL +
+// ProxyURLAlt are the env2.js VITE_PROXY_A / VITE_PROXY_B fallbacks
+// (`pro.ultracloud.cc` / `pru.ultracloud.cc`). The fallbacks are
+// preserved here for D7 allowlist parity and future failover; the SPA
+// does NOT use them on the GET path (see SPIKE-MIRURO.md §Gate 2). Invalid
+// URLs fail Load() at boot.
+type MiruroConfig struct {
+	BaseURL     string
+	ProxyURL    string
+	ProxyURLAlt string
+}
+
 // Load reads configuration from environment variables, falling back to
 // sensible defaults that work inside the docker-compose network.
 //
@@ -186,6 +201,11 @@ func Load() (*Config, error) {
 		},
 		AnimeFever: AnimeFeverConfig{
 			BaseURL: getEnv("SCRAPER_ANIMEFEVER_BASE_URL", "https://animefever.cc"),
+		},
+		Miruro: MiruroConfig{
+			BaseURL:     getEnv("SCRAPER_MIRURO_BASE_URL", "https://www.miruro.tv"),
+			ProxyURL:    getEnv("SCRAPER_MIRURO_PROXY_A", "https://pro.ultracloud.cc"),
+			ProxyURLAlt: getEnv("SCRAPER_MIRURO_PROXY_B", "https://pru.ultracloud.cc"),
 		},
 		DegradedProviders: parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", "")),
 	}
@@ -232,6 +252,29 @@ func Load() (*Config, error) {
 		}
 		if parsed.Scheme == "" || parsed.Host == "" {
 			return nil, fmt.Errorf("invalid SCRAPER_ANIMEFEVER_BASE_URL %q: missing scheme or host", u)
+		}
+	}
+	// Phase 28 — Miruro URL validation. Three independent env vars all
+	// validated identically; an empty value falls back to the default and
+	// is therefore guaranteed non-empty by the time we get here.
+	miruroURLs := []struct {
+		name string
+		val  string
+	}{
+		{"SCRAPER_MIRURO_BASE_URL", cfg.Miruro.BaseURL},
+		{"SCRAPER_MIRURO_PROXY_A", cfg.Miruro.ProxyURL},
+		{"SCRAPER_MIRURO_PROXY_B", cfg.Miruro.ProxyURLAlt},
+	}
+	for _, m := range miruroURLs {
+		if m.val == "" {
+			continue
+		}
+		parsed, err := url.Parse(m.val)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s %q: %w", m.name, m.val, err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid %s %q: missing scheme or host", m.name, m.val)
 		}
 	}
 	return cfg, nil

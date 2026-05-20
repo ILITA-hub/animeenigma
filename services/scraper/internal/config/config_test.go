@@ -437,6 +437,87 @@ func TestGetEnvBool_Truthy(t *testing.T) {
 	}
 }
 
+// TestLoad_MiruroDefaults — Phase 28 SCRAPER-HEAL-37. With no env vars
+// set, MiruroConfig defaults to BaseURL=https://www.miruro.tv and the
+// two env2.js VITE_PROXY_* hosts (pro.ultracloud.cc / pru.ultracloud.cc).
+func TestLoad_MiruroDefaults(t *testing.T) {
+	unsetEnv(t,
+		"SCRAPER_MIRURO_BASE_URL",
+		"SCRAPER_MIRURO_PROXY_A",
+		"SCRAPER_MIRURO_PROXY_B",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Miruro.BaseURL != "https://www.miruro.tv" {
+		t.Fatalf("Miruro.BaseURL = %q; want https://www.miruro.tv", cfg.Miruro.BaseURL)
+	}
+	if cfg.Miruro.ProxyURL != "https://pro.ultracloud.cc" {
+		t.Fatalf("Miruro.ProxyURL = %q; want https://pro.ultracloud.cc", cfg.Miruro.ProxyURL)
+	}
+	if cfg.Miruro.ProxyURLAlt != "https://pru.ultracloud.cc" {
+		t.Fatalf("Miruro.ProxyURLAlt = %q; want https://pru.ultracloud.cc", cfg.Miruro.ProxyURLAlt)
+	}
+}
+
+// TestLoad_MiruroOverride — env vars override defaults.
+func TestLoad_MiruroOverride(t *testing.T) {
+	setEnv(t, "SCRAPER_MIRURO_BASE_URL", "https://miruro.example.com")
+	setEnv(t, "SCRAPER_MIRURO_PROXY_A", "https://proxy-a.example.com")
+	setEnv(t, "SCRAPER_MIRURO_PROXY_B", "https://proxy-b.example.com")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Miruro.BaseURL != "https://miruro.example.com" {
+		t.Fatalf("Miruro.BaseURL override = %q", cfg.Miruro.BaseURL)
+	}
+	if cfg.Miruro.ProxyURL != "https://proxy-a.example.com" {
+		t.Fatalf("Miruro.ProxyURL override = %q", cfg.Miruro.ProxyURL)
+	}
+	if cfg.Miruro.ProxyURLAlt != "https://proxy-b.example.com" {
+		t.Fatalf("Miruro.ProxyURLAlt override = %q", cfg.Miruro.ProxyURLAlt)
+	}
+}
+
+// TestLoad_MiruroInvalidBaseURL — malformed URL fails Load() with an
+// error mentioning SCRAPER_MIRURO_BASE_URL verbatim.
+func TestLoad_MiruroInvalidBaseURL(t *testing.T) {
+	setEnv(t, "SCRAPER_MIRURO_BASE_URL", "not-a-url")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid SCRAPER_MIRURO_BASE_URL")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_MIRURO_BASE_URL") {
+		t.Fatalf("error %q must mention SCRAPER_MIRURO_BASE_URL", err.Error())
+	}
+}
+
+// TestLoad_MiruroInvalidProxyA — malformed PROXY_A fails Load().
+func TestLoad_MiruroInvalidProxyA(t *testing.T) {
+	setEnv(t, "SCRAPER_MIRURO_PROXY_A", "not-a-url")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid SCRAPER_MIRURO_PROXY_A")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_MIRURO_PROXY_A") {
+		t.Fatalf("error %q must mention SCRAPER_MIRURO_PROXY_A", err.Error())
+	}
+}
+
+// TestLoad_MiruroInvalidProxyB — malformed PROXY_B fails Load().
+func TestLoad_MiruroInvalidProxyB(t *testing.T) {
+	setEnv(t, "SCRAPER_MIRURO_PROXY_B", "not-a-url")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid SCRAPER_MIRURO_PROXY_B")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_MIRURO_PROXY_B") {
+		t.Fatalf("error %q must mention SCRAPER_MIRURO_PROXY_B", err.Error())
+	}
+}
+
 // TestGetEnvBool_Falsy — "0", "false", "f", "False" all return false; AND
 // unparseable values fall back to the default (also false here).
 func TestGetEnvBool_Falsy(t *testing.T) {

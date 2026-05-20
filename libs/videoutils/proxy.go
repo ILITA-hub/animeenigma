@@ -326,6 +326,13 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever embed + HLS CDN hosts.
 	{Domain: "am.vidstream.vip", Reason: "AnimeFever JWPlayer embed page host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
 	{Domain: "static-cdn-ca1.mofl.pro", Reason: "AnimeFever HLS master.m3u8 + segments CDN (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
+
+	// Phase 28 (SCRAPER-HEAL-37) — Miruro proxy hosts.
+	// uwucdn.top already covered by AnimePahe legacy entry above; Miruro
+	// shares the vault-*.uwucdn.top edges via the animepahe-derived 'kiwi'
+	// source family.
+	{Domain: "pro.ultracloud.cc", Reason: "Miruro upstream proxy host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
+	{Domain: "pru.ultracloud.cc", Reason: "Miruro alternate proxy host (Phase 28)", Owner: "@legacy", Added: "2026-05-20"},
 }
 
 // HLSProxyAllowedDomains is the flat []string view of
