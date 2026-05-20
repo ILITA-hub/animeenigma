@@ -1,5 +1,5 @@
 <template>
-  <div class="glass-card rounded-2xl p-5 flex flex-col">
+  <div class="glass-card rounded-2xl p-5 flex flex-col relative">
     <!-- Header with tabs -->
     <div class="flex items-center justify-between mb-5">
       <div class="flex items-center gap-3">
@@ -51,10 +51,14 @@
         </div>
         <div v-for="group in limitedChangelog" :key="group.date" class="mb-3">
           <div class="text-xs text-gray-500 font-medium mb-1.5 px-2">{{ formatDate(group.date) }}</div>
-          <div
+          <button
             v-for="(entry, idx) in group.entries"
             :key="idx"
-            class="flex items-start gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors"
+            type="button"
+            @click="onEntryClick(group.date, idx)"
+            :aria-expanded="isExpanded(group.date, idx)"
+            class="group w-full text-left flex items-start gap-2.5 p-2 rounded-xl transition-colors cursor-pointer focus:outline-none focus:bg-white/5"
+            :class="isExpanded(group.date, idx) ? 'bg-white/[0.04]' : 'hover:bg-white/5'"
           >
             <span
               class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
@@ -62,8 +66,23 @@
             >
               {{ $t(`updates.${entry.type}`) }}
             </span>
-            <p class="text-sm text-gray-300 line-clamp-2">{{ entry.message }}</p>
-          </div>
+            <div
+              class="entry-msg flex-1 min-w-0"
+              :class="{ 'entry-msg--open': isExpanded(group.date, idx) }"
+            >
+              <div class="entry-msg__inner">
+                <p class="text-sm text-gray-300 group-hover:text-white transition-colors whitespace-pre-wrap break-words select-text">{{ entry.message }}</p>
+              </div>
+            </div>
+            <svg
+              class="w-4 h-4 text-gray-500 flex-shrink-0 mt-1 transition-transform duration-200"
+              :class="{ 'rotate-180': isExpanded(group.date, idx) }"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
       </template>
     </div>
@@ -121,11 +140,12 @@
         </a>
       </template>
     </div>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { animeApi } from '@/api/client'
 
@@ -180,6 +200,34 @@ const limitedChangelog = computed(() => {
 const news = ref<NewsItem[]>([])
 const newsLoading = ref(true)
 const newsError = ref(false)
+
+const expandedKey = ref<string | null>(null)
+
+function entryKey(date: string, idx: number): string {
+  return `${date}-${idx}`
+}
+
+function isExpanded(date: string, idx: number): boolean {
+  return expandedKey.value === entryKey(date, idx)
+}
+
+function toggleEntry(date: string, idx: number) {
+  const key = entryKey(date, idx)
+  expandedKey.value = expandedKey.value === key ? null : key
+}
+
+function onEntryClick(date: string, idx: number) {
+  // Don't toggle if the user is selecting text inside the row
+  const sel = window.getSelection()
+  if (sel && sel.toString().length > 0) return
+  toggleEntry(date, idx)
+}
+
+function handleEsc(e: KeyboardEvent) {
+  if (e.key === 'Escape' && expandedKey.value) {
+    expandedKey.value = null
+  }
+}
 
 // --- Caching helpers ---
 function getCached<T>(key: string): T | null {
@@ -281,6 +329,11 @@ function formatRelativeTime(dateStr: string): string {
 onMounted(() => {
   fetchChangelog()
   fetchNews()
+  window.addEventListener('keydown', handleEsc)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleEsc)
 })
 </script>
 
@@ -319,6 +372,22 @@ onMounted(() => {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Inline expand/collapse for changelog entries.
+   grid-template-rows transition between a fixed collapsed height
+   and `1fr` (auto). Works in Chrome 117+, Firefox 119+, Safari 17.4+.
+   Older browsers degrade to instant snap — acceptable. */
+.entry-msg {
+  display: grid;
+  grid-template-rows: 2.5rem;
+  transition: grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.entry-msg--open {
+  grid-template-rows: 1fr;
+}
+.entry-msg__inner {
   overflow: hidden;
 }
 </style>
