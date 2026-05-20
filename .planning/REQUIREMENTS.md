@@ -194,8 +194,17 @@ This is the real universal abstraction — not "Zoro-family HTML parser" (which 
 
 **v3.1 self-healing requirements (SCRAPER-HEAL-01..33)** live in `.planning/milestones/v3.1-REQUIREMENTS.md`. The Phase 27 additions (SCRAPER-HEAL-29..33 — stealth-Chromium sidecar + parser rewrite + compose wiring + gate-clear + degraded-providers flip) are registered there. The v3.0 traceability matrix above is not re-stated for v3.1 self-healing work.
 
-**v3.1 Phase 28 spike pointers (mirrored from v3.1-REQUIREMENTS.md so per-plan greps resolve):**
+---
+
+## v3.1 SCRAPER-HEAL traceability (Phase 28 — provider-expansion-r2)
+
+Phase 28 adds SCRAPER-HEAL-34..39 (live in `.planning/milestones/v3.1-REQUIREMENTS.md`). This sub-table mirrors the v3.0 shape so the milestone-audit pass can roll up phase-28 progress without a second hop.
 
 | REQ-ID | Phase | Status |
 |---|---|---|
 | SCRAPER-HEAL-34 | Phase 28 | Complete (Spike — verdict: converged) — see `.planning/phases/28-provider-expansion-r2/SPIKE-MIRURO.md` + `services/scraper/internal/providers/miruro/obfuscation.go` |
+| SCRAPER-HEAL-35 | Phase 28 | Complete (Spike — recon classified embeds; see SPIKE-ANIMEFEVER.md) |
+| SCRAPER-HEAL-36 | Phase 28 | Pending (AnimeFever lift — Plan 28-02) |
+| SCRAPER-HEAL-37 | Phase 28 | Pending (Miruro lift — Plan 28-04, gated on -34) |
+| SCRAPER-HEAL-38 | Phase 28 | Pending (new embed extractors — Plan 28-03; spike output: `vidstream_vip.go` only) |
+| SCRAPER-HEAL-39 | Phase 28 | Pending (9anime.me.uk lift — Plan 28-05) |
