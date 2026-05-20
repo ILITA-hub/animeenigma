@@ -123,7 +123,7 @@ func Load() (*Config, error) {
 		"test":        true,
 	}
 	if cfg.DevMode && !devEnvs[cfg.Environment] {
-		fmt.Fprintf(os.Stderr, "FATAL: DEV_MODE=true is forbidden when ENVIRONMENT=%q — forcing DevMode=false\n", cfg.Environment)
+		fmt.Fprintf(os.Stderr, "WARN: DEV_MODE=true is forbidden when ENVIRONMENT=%q — forcing DevMode=false\n", cfg.Environment)
 		cfg.DevMode = false
 	}
 
