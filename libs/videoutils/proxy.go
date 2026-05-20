@@ -287,6 +287,14 @@ var HLSProxyAllowedDomains = []string{
 	"googlevideo.com",    // direct YouTube CDN (some AllAnime sources resolve here)
 	"sharepoint.com",     // observed OneDrive-backed source variant
 	"fast4speed.rsvp",    // AllAnime own CDN — direct MP4 with signed Authorization, requires Referer: https://allmanga.to/
+	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever embed + HLS CDN hosts.
+	// am.vidstream.vip serves the JWPlayer embed page (Plan 28-03's
+	// vidstream_vip extractor reads its inline `sources: [{"file":...}]`
+	// literal); static-cdn-ca1.mofl.pro hosts the master.m3u8 + segment
+	// payloads. Without both entries the streaming service's Phase 25
+	// SCRAPER-HEAL-24 fail-closed gate returns 502 for AnimeFever streams.
+	"am.vidstream.vip",
+	"static-cdn-ca1.mofl.pro",
 }
 
 // UpstreamError represents an error from the upstream CDN.

@@ -18,6 +18,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/allanime"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animefever"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
@@ -238,6 +239,35 @@ func main() {
 		log.Infow("registered provider", "name", allAnimeProvider.Name())
 	}
 
+	// Phase 28 (SCRAPER-HEAL-36) — AnimeFever as the FOURTH live EN provider.
+	// Failover slot 4 per CONTEXT.md D5. Always-on; operator disables via
+	// SCRAPER_DEGRADED_PROVIDERS=animefever if upstream breaks.
+	// HTML-scrape + AJAX-POST data path; embed extraction delegated to the
+	// vidstream_vip extractor registered in Plan 28-03 (sibling Wave 1 plan).
+	animeFeverBaseHTTP := domain.NewBaseHTTPClient(log,
+		domain.WithPerHostRPS("animefever.cc", 1.0, 2),
+		domain.WithPerHostRPS("am.vidstream.vip", 1.0, 2),
+		domain.WithPerHostRPS("static-cdn-ca1.mofl.pro", 2.0, 4),
+	)
+	animeFeverProvider, err := animefever.New(animefever.Deps{
+		BaseURL: cfg.AnimeFever.BaseURL,
+		HTTP:    animeFeverBaseHTTP,
+		Embeds:  registry,
+		Cache:   redisCache,
+		Log:     log,
+	})
+	if err != nil {
+		log.Fatalw("failed to construct AnimeFever provider", "error", err)
+	}
+	if cfg.DegradedProviders.IsDegraded(animeFeverProvider.Name()) {
+		log.Warnw("provider SKIPPED (degraded via SCRAPER_DEGRADED_PROVIDERS)",
+			"name", animeFeverProvider.Name(),
+			"reason", "global kill-switch")
+	} else {
+		orchestrator.Register(animeFeverProvider)
+		log.Infow("registered provider", "name", animeFeverProvider.Name())
+	}
+
 	// Phase 19 — AnimeKai (gated, ESCAPE-HATCH path). Default FALSE in prod.
 	// SCRAPER-KAI-05: env-flag toggle; SCRAPER-KAI-06: stub provider returns
 	// ErrProviderDown so failover lands on the previous two providers.
@@ -364,7 +394,7 @@ func main() {
 	// Register()-ed, so the expected count subtracts those. A future
 	// maintainer dropping any Register() call surfaces the regression at boot
 	// via this fatal.
-	candidateProviders := []string{"gogoanime", "animepahe", "allanime"}
+	candidateProviders := []string{"gogoanime", "animepahe", "allanime", "animefever"}
 	if cfg.AnimeKai.Enabled {
 		candidateProviders = append(candidateProviders, "animekai")
 	}
@@ -406,6 +436,7 @@ func main() {
 			"gogoanime_base_url", cfg.Gogoanime.BaseURL,
 			"animekai_enabled", cfg.AnimeKai.Enabled,
 			"animekai_base_url", cfg.AnimeKai.BaseURL,
+			"animefever_base_url", cfg.AnimeFever.BaseURL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)
