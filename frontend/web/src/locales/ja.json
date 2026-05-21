@@ -99,6 +99,14 @@
     "reviewsCount": "{count}件のレビュー",
     "watchersCount": "{count}人が視聴中",
     "writeReview": "レビューを書く",
+    "reviewStats": {
+      "watched": "📺 {watched}/{total}話 · {status}",
+      "watchedOpen": "📺 {watched}話 · {status}",
+      "noProgress": "📺 0/{total}話 · {status} ⚠️",
+      "noProgressOpen": "📺 0話 · {status} ⚠️",
+      "planToWatchFlag": "📺 {watched}/{total}話 · {status} ⚠️",
+      "planToWatchOpenFlag": "📺 {watched}話 · {status} ⚠️"
+    },
     "editReview": "レビューを編集",
     "yourRating": "あなたの評価",
     "reviewPlaceholder": "このアニメについて感想を共有してください...",

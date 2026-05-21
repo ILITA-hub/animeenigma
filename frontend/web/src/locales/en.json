@@ -99,6 +99,14 @@
     "reviewsCount": "{count} reviews",
     "watchersCount": "{count} watching",
     "writeReview": "Write a review",
+    "reviewStats": {
+      "watched": "📺 {watched}/{total} · {status}",
+      "watchedOpen": "📺 {watched} eps · {status}",
+      "noProgress": "📺 0/{total} · {status} ⚠️",
+      "noProgressOpen": "📺 0 eps · {status} ⚠️",
+      "planToWatchFlag": "📺 {watched}/{total} · {status} ⚠️",
+      "planToWatchOpenFlag": "📺 {watched} eps · {status} ⚠️"
+    },
     "editReview": "Edit review",
     "yourRating": "Your rating",
     "reviewPlaceholder": "Share your thoughts about this anime...",
