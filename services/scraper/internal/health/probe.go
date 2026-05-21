@@ -331,10 +331,26 @@ func (r *ProbeRunner) runOneTick(ctx context.Context) {
 		return
 	}
 
-	// Stage 4: stream
-	stream, err := r.provider.GetStream(ctx, providerID, episodes[0].ID, servers[0].ID, domain.CategorySub)
-	if err == nil && (stream == nil || len(stream.Sources) == 0) {
-		err = fmt.Errorf("get_stream returned no sources")
+	// Stage 4: stream — try up to the first 2 servers. AllAnime (and other
+	// multi-server providers) often list an embed-page host as servers[0]
+	// which GetStream rejects with ErrExtractFailed; the orchestrator's own
+	// retry loop walks past these in production. Mirror that behaviour here
+	// so the probe can reach a working non-embed server instead of marking
+	// the stream stage DOWN on a known-embed first entry.
+	var stream *domain.Stream
+	maxServers := 2
+	if len(servers) < maxServers {
+		maxServers = len(servers)
+	}
+	for i := 0; i < maxServers; i++ {
+		stream, err = r.provider.GetStream(ctx, providerID, episodes[0].ID, servers[i].ID, domain.CategorySub)
+		if err == nil && (stream == nil || len(stream.Sources) == 0) {
+			err = fmt.Errorf("get_stream returned no sources")
+		}
+		if errors.Is(err, domain.ErrExtractFailed) && i < maxServers-1 {
+			continue
+		}
+		break
 	}
 	if !r.record(stages, StageStream, now, err) {
 		r.markRemainingStale(stages, StageStream)
@@ -343,7 +359,7 @@ func (r *ProbeRunner) runOneTick(ctx context.Context) {
 	}
 
 	// Stage 5: stream_segment — bounded GET of the first 4 KiB.
-	segErr := r.fetchSegment(ctx, stream.Sources[0].URL)
+	segErr := r.fetchSegment(ctx, stream.Sources[0].URL, stream.Headers)
 	r.record(stages, StageStreamSegment, now, segErr)
 	r.commit(name, stages, now)
 }
@@ -449,7 +465,7 @@ func (r *ProbeRunner) commit(name string, stages map[string]StageStatus, now tim
 // The CheckRedirect policy installed in NewProbeRunner also refuses to follow
 // 3xx Location bounces, so even an allow-listed origin cannot trampoline the
 // probe at an internal service.
-func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string) error {
+func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string, headers map[string]string) error {
 	if urlStr == "" {
 		return errors.New("stream_segment: empty source URL")
 	}
@@ -472,6 +488,9 @@ func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
 	if err != nil {
 		return fmt.Errorf("stream_segment: build request: %w", err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := r.http.Do(req)
 	if err != nil {

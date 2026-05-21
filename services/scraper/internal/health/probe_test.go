@@ -423,7 +423,7 @@ func TestProbe_FetchSegmentRejectsPrivateHost(t *testing.T) {
 		"gopher://internal/x",                       // exotic scheme
 	}
 	for _, urlStr := range cases {
-		err := r.fetchSegment(context.Background(), urlStr)
+		err := r.fetchSegment(context.Background(), urlStr, nil)
 		if err == nil {
 			t.Errorf("fetchSegment(%q) returned nil; want SSRF rejection error", urlStr)
 		}
@@ -455,7 +455,7 @@ func TestProbe_HTTPClientRefusesRedirects(t *testing.T) {
 	)
 	allowPrivateHostsForTest(r) // allow the httptest.Server itself (WR-NEW-02: test-only helper)
 
-	err := r.fetchSegment(context.Background(), srv.URL)
+	err := r.fetchSegment(context.Background(), srv.URL, nil)
 	if err == nil {
 		t.Fatal("fetchSegment returned nil; want redirect-not-followed error")
 	}
