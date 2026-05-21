@@ -752,7 +752,13 @@
                   >
                     {{ review.username || $t('anime.user') }}
                   </router-link>
-                  <p class="text-white/60 text-sm">{{ formatDate(review.created_at) }}</p>
+                  <p class="text-white/60 text-sm">
+                    {{ formatDate(review.created_at) }}
+                    <template v-if="review.status">
+                      <span class="text-white/30 mx-1">·</span>
+                      <span :class="isReviewFlagged(review) ? 'text-amber-400' : 'text-white/60'">{{ formatReviewStats(review) }}</span>
+                    </template>
+                  </p>
                 </div>
               </div>
               <div class="flex items-center gap-1 text-amber-400">
@@ -1068,6 +1074,14 @@ interface Review {
   score: number
   review_text: string
   created_at: string
+  // Steam-style review context (2026-05-21). Live values from anime_list
+  // row — NOT snapshotted at review time. `anime` carries episodes_count
+  // for the "watched / total" rendering; backend preloads it.
+  status?: string
+  episodes?: number
+  anime?: {
+    episodes_count?: number
+  }
 }
 
 interface Comment {
@@ -1480,6 +1494,50 @@ const formatDate = (dateStr: string) => {
     month: 'long',
     year: 'numeric',
   })
+}
+
+const formatReviewStats = (review: Review): string => {
+  const status = review.status || 'watching'
+  const episodes = review.episodes ?? 0
+  const total = review.anime?.episodes_count ?? 0
+
+  // Map raw status enum -> existing watchlist.* i18n keys.
+  const statusKeyMap: Record<string, string> = {
+    watching: 'watchlist.watching',
+    completed: 'watchlist.completed',
+    on_hold: 'watchlist.onHold',
+    dropped: 'watchlist.dropped',
+    plan_to_watch: 'watchlist.planToWatch',
+  }
+  const statusLabel = t(statusKeyMap[status] || statusKeyMap.watching)
+
+  // Pick template variant: closed (total known) vs open (total unknown);
+  // flagged (plan_to_watch OR episodes==0) vs normal.
+  const flagged = status === 'plan_to_watch' || episodes === 0
+  const open = total === 0
+
+  let key: string
+  if (flagged && status === 'plan_to_watch' && open) {
+    key = 'anime.reviewStats.planToWatchOpenFlag'
+  } else if (flagged && status === 'plan_to_watch') {
+    key = 'anime.reviewStats.planToWatchFlag'
+  } else if (flagged && open) {
+    key = 'anime.reviewStats.noProgressOpen'
+  } else if (flagged) {
+    key = 'anime.reviewStats.noProgress'
+  } else if (open) {
+    key = 'anime.reviewStats.watchedOpen'
+  } else {
+    key = 'anime.reviewStats.watched'
+  }
+
+  return t(key, { watched: episodes, total, status: statusLabel })
+}
+
+const isReviewFlagged = (review: Review): boolean => {
+  const status = review.status || 'watching'
+  const episodes = review.episodes ?? 0
+  return status === 'plan_to_watch' || episodes === 0
 }
 
 const formatNextEpisode = (dateStr: string) => {
