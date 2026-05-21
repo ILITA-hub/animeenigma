@@ -174,6 +174,22 @@ func main() {
 	// does not proxy /internal/*.
 	internalCacheHandler := handler.NewInternalCacheHandler(redisCache, animeRepo, log)
 
+	// Workstream notifications, Phase 2 — internal latest-episode
+	// lookup endpoint consumed by the notifications detector. Same
+	// gateway-non-routing security model as InvalidateRaw above.
+	// Wraps kodik/animelib parser adapters behind a 5-min Redis cache
+	// keyed by the literal notifications:episodes:{shikimori}:{player}:
+	// {translation_id}:{watch_type} pattern (NOTIF-DET-01).
+	episodesLookupService := service.NewEpisodesLookupService(
+		redisCache,
+		catalogService.KodikClient(),
+		catalogService.AnimeLibClient(),
+		animeRepo,
+		catalogService,
+		log,
+	)
+	internalEpisodesHandler := handler.NewInternalEpisodesHandler(episodesLookupService, log)
+
 	// Workstream raw-jp, Phase 02 — multi-provider subtitle aggregator.
 	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by
 	// IMDb/TMDB) and merges results. Mounts /api/anime/{id}/subtitles[/all].
@@ -191,7 +207,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

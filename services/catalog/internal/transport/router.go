@@ -22,6 +22,7 @@ func NewRouter(
 	rawHandler *handler.RawHandler,
 	subtitlesHandler *handler.SubtitlesHandler,
 	internalCacheHandler *handler.InternalCacheHandler,
+	internalEpisodesHandler *handler.InternalEpisodesHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -54,6 +55,12 @@ func NewRouter(
 	// /internal/resolve-api-key.
 	if internalCacheHandler != nil {
 		r.Post("/internal/cache/invalidate/raw/{shikimoriId}", internalCacheHandler.InvalidateRaw)
+	}
+
+	// Phase 2 v1.0 Notifications Engine — NOTIF-DET-01 / D-DET-02.
+	// Same gateway-non-routing security model as InvalidateRaw above.
+	if internalEpisodesHandler != nil {
+		r.Get("/internal/anime/{shikimoriId}/episodes", internalEpisodesHandler.GetLatestEpisode)
 	}
 
 	// API routes
