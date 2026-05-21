@@ -127,3 +127,10 @@ func makeAnimes(n int) []*domain.Anime {
 	}
 	return out
 }
+
+// fakeAnimeWithID returns a domain.Anime value carrying the given ID. Used
+// by Plan 03-03 resolver tests that need a populated Anime value (not a
+// pointer) inside cache fixtures.
+func fakeAnimeWithID(id string) domain.Anime {
+	return domain.Anime{ID: id, Name: "fake-" + id}
+}
