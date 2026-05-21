@@ -135,7 +135,10 @@ test.describe('hero spotlight block (Phase 2)', () => {
     const context = await browser.newContext({ reducedMotion: 'reduce' })
     const page = await context.newPage()
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    // 'networkidle' can hang on the production site due to long-poll fetches
+    // and background prefetch — wait for the spotlight selector (or timeout)
+    // instead of full networkidle on the secondary context.
+    await page.locator(SPOTLIGHT_SELECTOR).first().waitFor({ state: 'attached', timeout: 15000 }).catch(() => {})
 
     const block = page.locator(SPOTLIGHT_SELECTOR)
     const blockCount = await block.count()
@@ -175,7 +178,10 @@ test.describe('hero spotlight block (Phase 2)', () => {
     const context = await browser.newContext({ viewport: { width: 375, height: 667 } })
     const page = await context.newPage()
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    // 'networkidle' can hang on the production site due to long-poll fetches
+    // and background prefetch — wait for the spotlight selector (or timeout)
+    // instead of full networkidle on the secondary context.
+    await page.locator(SPOTLIGHT_SELECTOR).first().waitFor({ state: 'attached', timeout: 15000 }).catch(() => {})
 
     const block = page.locator(SPOTLIGHT_SELECTOR)
     const blockCount = await block.count()
