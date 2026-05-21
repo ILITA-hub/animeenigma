@@ -1,11 +1,16 @@
 package handler
 
 // Tests for Phase 1 (workstream: social) plan 02 — SOCIAL-NF-01 contract:
-// the review endpoints' JSON wire shape must be EXACTLY the 7 canonical
+// the review endpoints' JSON wire shape must be EXACTLY the 9 canonical
 // scalars + optional `anime` preload, even though the underlying
-// `AnimeListEntry` row has many more fields (status, episodes, notes, tags,
-// mal_id, etc.). The handler-local `reviewResponse` projection struct is
-// what enforces this; these tests assert the projection is in place.
+// `AnimeListEntry` row has many more fields (notes, tags, mal_id,
+// is_rewatching, priority, started_at, completed_at, updated_at). The
+// handler-local `reviewResponse` projection struct is what enforces this;
+// these tests assert the projection is in place.
+//
+// 2026-05-21: `status` + `episodes` promoted from forbidden to allowed as
+// part of the Steam-style review-context feature. See
+// docs/superpowers/specs/2026-05-21-steam-style-review-context-design.md.
 
 import (
 	"bytes"
@@ -120,6 +125,8 @@ var allowedReviewKeys = map[string]bool{
 	"score":       true,
 	"review_text": true,
 	"created_at":  true,
+	"status":      true, // Steam-style review-context (2026-05-21)
+	"episodes":    true, // Steam-style review-context (2026-05-21)
 	"anime":       true,
 }
 
@@ -127,7 +134,7 @@ var allowedReviewKeys = map[string]bool{
 // in the wire response. If the handler accidentally writes
 // `*domain.AnimeListEntry` directly, every one of these leaks.
 var forbiddenLeakKeys = []string{
-	"status", "episodes", "notes", "tags", "mal_id",
+	"notes", "tags", "mal_id",
 	"is_rewatching", "priority", "started_at", "completed_at", "updated_at",
 }
 
@@ -145,8 +152,9 @@ func decodeResponseData(t *testing.T, body *bytes.Buffer) json.RawMessage {
 }
 
 // assertReviewShape asserts a single JSON object has only the canonical
-// review keys (any subset of allowedReviewKeys) and none of the forbidden
-// leak keys.
+// review keys (any subset of allowedReviewKeys), none of the forbidden
+// leak keys, AND the two Steam-style context fields (status, episodes)
+// are present in the body — proves the projection actually populates them.
 func assertReviewShape(t *testing.T, obj map[string]json.RawMessage) {
 	t.Helper()
 	for k := range obj {
@@ -157,12 +165,16 @@ func assertReviewShape(t *testing.T, obj map[string]json.RawMessage) {
 		_, present := obj[k]
 		assert.Falsef(t, present, "forbidden key %q leaked into review response", k)
 	}
+	_, hasStatus := obj["status"]
+	assert.Truef(t, hasStatus, "review response must include `status` for Steam-style context")
+	_, hasEpisodes := obj["episodes"]
+	assert.Truef(t, hasEpisodes, "review response must include `episodes` for Steam-style context")
 }
 
-// TestReviewHandler_GetAnimeReviews_ShapeIsExactly7Fields — seed a row with
+// TestReviewHandler_GetAnimeReviews_ShapeIsCanonical — seed a row with
 // ALL the wider AnimeListEntry fields populated; assert the JSON body
-// elements expose only the 7 canonical scalars (+ optional `anime`).
-func TestReviewHandler_GetAnimeReviews_ShapeIsExactly7Fields(t *testing.T) {
+// elements expose only the 9 canonical scalars (+ optional `anime`).
+func TestReviewHandler_GetAnimeReviews_ShapeIsCanonical(t *testing.T) {
 	h, db := setupReviewHandlerTestDB(t)
 
 	seedHandlerListRow(t, db, domain.AnimeListEntry{
@@ -189,9 +201,9 @@ func TestReviewHandler_GetAnimeReviews_ShapeIsExactly7Fields(t *testing.T) {
 	assertReviewShape(t, list[0])
 }
 
-// TestReviewHandler_CreateOrUpdateReview_ShapeIsExactly7Fields — POST a new
+// TestReviewHandler_CreateOrUpdateReview_ShapeIsCanonical — POST a new
 // review; assert the response body has the canonical shape and no leaks.
-func TestReviewHandler_CreateOrUpdateReview_ShapeIsExactly7Fields(t *testing.T) {
+func TestReviewHandler_CreateOrUpdateReview_ShapeIsCanonical(t *testing.T) {
 	h, _ := setupReviewHandlerTestDB(t)
 
 	body := bytes.NewBufferString(`{"anime_id":"anime-1","score":9,"review_text":"loved it"}`)
@@ -211,9 +223,9 @@ func TestReviewHandler_CreateOrUpdateReview_ShapeIsExactly7Fields(t *testing.T) 
 	assertReviewShape(t, obj)
 }
 
-// TestReviewHandler_GetUserReview_ShapeIsExactly7Fields — GET /reviews/me
+// TestReviewHandler_GetUserReview_ShapeIsCanonical — GET /reviews/me
 // after a review exists; assert the same shape contract.
-func TestReviewHandler_GetUserReview_ShapeIsExactly7Fields(t *testing.T) {
+func TestReviewHandler_GetUserReview_ShapeIsCanonical(t *testing.T) {
 	h, db := setupReviewHandlerTestDB(t)
 	seedHandlerListRow(t, db, domain.AnimeListEntry{
 		ID: "row-1", UserID: "user-A", AnimeID: "anime-1",
