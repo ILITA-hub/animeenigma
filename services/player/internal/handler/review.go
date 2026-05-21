@@ -27,7 +27,24 @@ type reviewResponse struct {
 	Score      int               `json:"score"`
 	ReviewText string            `json:"review_text"`
 	CreatedAt  time.Time         `json:"created_at"`
-	Anime      *domain.AnimeInfo `json:"anime,omitempty"`
+	// Status and Episodes — Steam-style review context (2026-05-21). Live
+	// values from anime_list.status / anime_list.episodes, NOT snapshotted.
+	// If the reviewer keeps watching after publishing, these numbers update.
+	//
+	// TODO(rewatch): surface rewatch context on review cards. AnimeListEntry
+	// has is_rewatching (bool) and WatchProgress has watch_count (1 = first
+	// watch, 2+ = rewatch). Future enhancement should render "🔁 On rewatch"
+	// as a 4th segment. See
+	// docs/superpowers/specs/2026-05-21-steam-style-review-context-design.md.
+	//
+	// TODO(passive-watcher): fix the false-negative ⚠️ for users who watch
+	// without updating their list. Replace `episodes` source with
+	// max(anime_list.episodes, COUNT DISTINCT episode_number in
+	// watch_history WHERE completed=true) — adds a subquery per render.
+	// Same spec link as above.
+	Status   string            `json:"status"`
+	Episodes int               `json:"episodes"`
+	Anime    *domain.AnimeInfo `json:"anime,omitempty"`
 }
 
 // toReviewResponse projects an AnimeListEntry into the wire-stable
@@ -41,6 +58,8 @@ func toReviewResponse(e *domain.AnimeListEntry) reviewResponse {
 		Score:      e.Score,
 		ReviewText: e.ReviewText,
 		CreatedAt:  e.CreatedAt,
+		Status:     e.Status,
+		Episodes:   e.Episodes,
 		Anime:      e.Anime,
 	}
 }
