@@ -207,6 +207,52 @@ func (r *ListRepository) GetByUserStatuses(ctx context.Context, userID string) (
 	return entries, err
 }
 
+// GetByUserAndStatusesWithProgress returns one InternalListItem per
+// (user_id, anime_id) where anime_list.status ∈ statuses, joined with the
+// animes projection (name / name_ru / poster_url / episodes_aired /
+// episodes_count) and a LEFT JOIN against watch_progress so the user's
+// furthest-reached episode_number for that anime rides along on the same
+// row. Missing watch_progress yields last_watched_episode=0 via COALESCE.
+//
+// Used by the workstream hero-spotlight v1.0 Phase 3 catalog aggregator
+// (`not_time_yet`, `continue_watching_new` resolvers) via the
+// /internal/users/{user_id}/list endpoint. LIMIT 200 defensively bounds
+// the join even if the user has a pathologically large list.
+//
+// ORDER BY anime_list.updated_at DESC so the caller gets recency for free
+// (resolvers that pick "most recently aired" benefit from the locality).
+func (r *ListRepository) GetByUserAndStatusesWithProgress(
+	ctx context.Context,
+	userID string,
+	statuses []string,
+) ([]domain.InternalListItem, error) {
+	const q = `
+SELECT
+  al.anime_id                                                 AS anime_id,
+  a.name                                                      AS name,
+  a.name_ru                                                   AS name_ru,
+  a.poster_url                                                AS poster_url,
+  COALESCE(a.episodes_aired, 0)                               AS episodes_aired,
+  COALESCE(a.episodes_count, 0)                               AS episodes_count,
+  al.status                                                   AS status,
+  COALESCE(MAX(wp.episode_number), 0)                         AS last_watched_episode,
+  to_char(al.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')        AS updated_at
+FROM anime_list al
+JOIN animes a ON a.id = al.anime_id
+LEFT JOIN watch_progress wp
+  ON wp.user_id = al.user_id AND wp.anime_id = al.anime_id
+WHERE al.user_id = ? AND al.status IN ?
+GROUP BY al.anime_id, a.name, a.name_ru, a.poster_url, a.episodes_aired, a.episodes_count, al.status, al.updated_at
+ORDER BY al.updated_at DESC
+LIMIT 200
+`
+	var out []domain.InternalListItem
+	if err := r.db.WithContext(ctx).Raw(q, userID, statuses).Scan(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID string, statuses []string) (*domain.WatchlistStats, error) {
 	var stats domain.WatchlistStats
 

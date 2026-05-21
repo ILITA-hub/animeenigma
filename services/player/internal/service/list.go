@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
@@ -82,6 +83,34 @@ func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status, 
 // GetUserStatuses returns lightweight anime_id+status pairs for the entire list
 func (s *ListService) GetUserStatuses(ctx context.Context, userID string) ([]domain.AnimeStatusEntry, error) {
 	return s.listRepo.GetByUserStatuses(ctx, userID)
+}
+
+// GetUserListByStatusesWithProgress returns the joined anime_list × animes ×
+// watch_progress projection used by the workstream hero-spotlight v1.0 Phase 3
+// internal endpoint. One round-trip per resolver, LIMIT 200 row cap. Empty
+// `statuses` returns a non-nil empty slice with no error — the spotlight
+// `not_time_yet` / `continue_watching_new` resolvers occasionally pass an
+// empty filter when their card is ineligible and we want a fast 200 + [].
+//
+// Errors are wrapped with libs/errors so the handler emits a stable
+// INTERNAL code and the log line carries `GetUserListByStatusesWithProgress`
+// in the message for grep-ability.
+func (s *ListService) GetUserListByStatusesWithProgress(
+	ctx context.Context,
+	userID string,
+	statuses []string,
+) ([]domain.InternalListItem, error) {
+	if len(statuses) == 0 {
+		return []domain.InternalListItem{}, nil
+	}
+	items, err := s.listRepo.GetByUserAndStatusesWithProgress(ctx, userID, statuses)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "GetUserListByStatusesWithProgress: query")
+	}
+	if items == nil {
+		items = []domain.InternalListItem{}
+	}
+	return items, nil
 }
 
 // GetPublicWatchlistPaginated returns user's public watchlist with pagination.
