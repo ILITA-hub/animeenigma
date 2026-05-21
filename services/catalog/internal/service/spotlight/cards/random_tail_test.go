@@ -16,7 +16,7 @@ func TestRandomTail_Type(t *testing.T) {
 	}
 }
 
-func TestRandomTail_Resolve_CallsSearch_WithPage2PageSize100(t *testing.T) {
+func TestRandomTail_Resolve_CallsSearch_WithPage3PageSize100(t *testing.T) {
 	repo := &fakeAnimeSearcher{items: makeAnimes(50)}
 	c := newFakeCache()
 	r := NewRandomTailResolver(repo, c, testLogger())
@@ -27,8 +27,8 @@ func TestRandomTail_Resolve_CallsSearch_WithPage2PageSize100(t *testing.T) {
 	}
 
 	f := repo.snapshotFilters()
-	if f.Page != 2 {
-		t.Errorf("Page = %d, want 2", f.Page)
+	if f.Page != 3 {
+		t.Errorf("Page = %d, want 3 (ranks 201..300, outside anime_of_day's top-200 pool)", f.Page)
 	}
 	if f.PageSize != 100 {
 		t.Errorf("PageSize = %d, want 100", f.PageSize)

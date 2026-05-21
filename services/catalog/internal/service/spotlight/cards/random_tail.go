@@ -12,18 +12,22 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
 )
 
-// randomTailPage is the repo page index for ranks 101..200 with
+// randomTailPage is the repo page index for ranks 201..300 with
 // PageSize=100. Combined with Sort="score" Order="desc", this fetches
-// the second hundred by (sort_priority DESC, score DESC) — see GOTCHA
-// comment inside Resolve.
-const randomTailPage = 2
+// the third hundred by (sort_priority DESC, score DESC) — see GOTCHA
+// comment inside Resolve. Page 3 (not 2) so the pool does not overlap
+// `anime_of_day`'s top-200 pool, which previously caused both cards to
+// surface the same anime on date-seed collisions (e.g. Kimetsu no Yaiba
+// at rank 180 — well-known title users perceive as "top 100").
+const randomTailPage = 3
 
-// randomTailPageSize is the candidate pool — 100 anime ranked 101..200.
+// randomTailPageSize is the candidate pool — 100 anime ranked 201..300.
 const randomTailPageSize = 100
 
 // RandomTailResolver implements spotlight.Resolver for the
 // `random_tail` card. Picks one anime per UTC calendar day from ranks
-// 101..200 by score — "good but not top-rated" discovery surface.
+// 201..300 by score — "good but not top-rated" discovery surface that
+// excludes anime_of_day's top-200 pool.
 type RandomTailResolver struct {
 	repo  animeSearcher
 	cache cache.Cache
@@ -55,7 +59,7 @@ func (r *RandomTailResolver) Resolve(ctx context.Context, _ *string) (*spotlight
 	//
 	// GOTCHA (services/catalog/internal/repo/anime.go:134-147):
 	// AnimeRepository.Search injects "sort_priority DESC" as the primary
-	// sort axis. Page=2, PageSize=100 returns ranks 101..200 by
+	// sort axis. Page=3, PageSize=100 returns ranks 201..300 by
 	// (sort_priority DESC, score DESC). Pinned anime never appear in
 	// discovery (intended per CLAUDE.md "Pinning anime to the top").
 	// This is the desired behaviour — pinned items are already prominently
