@@ -106,9 +106,15 @@
 
       <!-- Episode list -->
       <div>
-        <h3 class="text-white/60 text-sm mb-2">
-          {{ $t('player.episodesCount', { count: episodes.length }) }}
-        </h3>
+        <div class="flex items-center gap-3 mb-3 flex-wrap">
+          <h3 class="text-white/60 text-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            {{ $t('player.episodesCount', { count: episodes.length }) }}
+          </h3>
+          <slot name="header-middle" />
+        </div>
         <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
           <button
             v-for="ep in episodes"

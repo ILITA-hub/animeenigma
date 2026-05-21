@@ -85,19 +85,20 @@
 
         <!-- Episode selector below player -->
         <div class="mt-4">
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3 mb-3 flex-wrap">
             <h3 class="text-white/60 text-sm flex items-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
               {{ $t('player.episodesCount', { count: episodes.length }) }}
             </h3>
+            <slot name="header-middle" />
             <!-- Mark as watched button -->
             <button
               v-if="authStore.isAuthenticated"
               @click="markCurrentEpisodeWatched"
               :disabled="markingWatched"
-              class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              class="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
               :class="episodeMarkedWatched
                 ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/10 text-white hover:bg-white/20'"
@@ -105,7 +106,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
-              {{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}
+              <span class="hidden sm:inline">{{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}</span>
             </button>
           </div>
           <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">

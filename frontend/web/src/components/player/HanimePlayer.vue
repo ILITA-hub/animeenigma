@@ -10,7 +10,7 @@
       <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
       </svg>
-      Эпизоды не найдены на Hanime
+      {{ $t('player.noEpisodes', { source: 'Hanime' }) }}
     </div>
 
     <!-- Main content when episodes available -->
@@ -25,7 +25,7 @@
           >
             <div class="text-center">
               <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p class="text-white/60 text-sm">Загрузка эпизода...</p>
+              <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: (selectedEpisodeIndex ?? 0) + 1 }) }}</p>
             </div>
           </div>
 
@@ -64,20 +64,21 @@
               <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              <p>Выберите эпизод</p>
+              <p>{{ $t('player.selectEpisode') }}</p>
             </div>
           </div>
         </div>
 
         <!-- Episode selector below player -->
         <div class="mt-4">
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3 mb-3 flex-wrap">
             <h3 class="text-white/60 text-sm flex items-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
-              Эпизоды ({{ episodes.length }})
+              {{ $t('player.episodesCount', { count: episodes.length }) }}
             </h3>
+            <slot name="header-middle" />
           </div>
           <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
             <button

@@ -505,7 +505,11 @@
               :preferred-combo="resolvedCombo"
               :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
-            />
+            >
+              <template #header-middle>
+                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+              </template>
+            </KodikPlayer>
             <!-- AnimeLib Player -->
             <AnimeLibPlayer
               v-else-if="videoProvider === 'animelib'"
@@ -515,13 +519,21 @@
               :preferred-combo="resolvedCombo"
               :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
-            />
+            >
+              <template #header-middle>
+                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+              </template>
+            </AnimeLibPlayer>
             <!-- OurEnglish Player (Phase 24-28 scraper microservice) -->
             <OurEnglishPlayer
               v-else-if="videoProvider === 'ourenglish' && ourEnglishEnabled"
               :anime-id="anime.id"
               :initial-episode="resumeStartEpisode"
-            />
+            >
+              <template #header-middle>
+                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+              </template>
+            </OurEnglishPlayer>
             <!-- Hanime Player -->
             <HanimePlayer
               v-else-if="videoProvider === 'hanime'"
@@ -529,108 +541,22 @@
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
               :initial-episode="resumeStartEpisode"
-            />
+            >
+              <template #header-middle>
+                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+              </template>
+            </HanimePlayer>
             <!-- Workstream raw-jp / Phase 04 — RawPlayer mounts behind the
                  same VITE_RAW_PROVIDER_ENABLED flag that gates the chip. -->
             <RawPlayer
               v-else-if="videoProvider === 'raw' && rawProviderEnabled"
               :anime-id="anime.id"
-            />
+            >
+              <template #header-middle>
+                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+              </template>
+            </RawPlayer>
           </template>
-
-          <!-- Resume State Banner (Phase 4 — A-03 / A-04) -->
-          <!-- Shown only for authenticated users once watch_progress is loaded.
-               Anonymous users see no banner (Phase 7 / D-01 will add one).
-               The four kinds correspond to the resume state machine:
-                 watching         — "you finished ep N" breadcrumb
-                 finished         — "you finished this anime" + actions
-                 not-yet-aired    — "ep N+1 — not yet available [{{when}}]"
-                 currently-airing — "ep N+1 is airing now"
-                 first-time       — no banner -->
-          <div
-            v-if="authStore.isAuthenticated && resume.loaded.value && resume.kind.value !== 'first-time'"
-            class="mt-4"
-          >
-            <!-- watching -->
-            <div
-              v-if="resume.kind.value === 'watching' && resume.finishedEpisode.value > 0"
-              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs"
-              role="status"
-            >
-              <svg class="w-3.5 h-3.5 text-cyan-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
-              <span>{{ $t('anime.resume.justFinished', { n: resume.finishedEpisode.value }) }}</span>
-            </div>
-
-            <!-- finished -->
-            <div
-              v-else-if="resume.kind.value === 'finished'"
-              class="rounded-lg bg-white/5 border border-white/10 p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
-              role="status"
-            >
-              <div class="flex items-center gap-2 text-white/70 text-sm flex-shrink-0">
-                <svg class="w-4 h-4 text-emerald-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <span>{{ $t('anime.resume.youFinishedThis') }}</span>
-              </div>
-              <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
-                <button
-                  type="button"
-                  @click="resumeRewatch"
-                  class="px-3 py-1.5 text-xs rounded-md bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 transition-colors"
-                >
-                  {{ $t('anime.resume.rewatch') }}
-                </button>
-                <button
-                  v-if="currentListStatus !== 'completed'"
-                  type="button"
-                  @click="setListStatus('completed')"
-                  class="px-3 py-1.5 text-xs rounded-md bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 transition-colors"
-                >
-                  {{ $t('anime.resume.markCompleteInList') }}
-                </button>
-                <router-link
-                  v-if="anime?.genres?.length"
-                  :to="{ path: '/browse', query: { genres: anime.genres[0] } }"
-                  class="px-3 py-1.5 text-xs rounded-md bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 transition-colors"
-                >
-                  {{ $t('anime.resume.findSimilar') }}
-                </router-link>
-              </div>
-            </div>
-
-            <!-- not-yet-aired -->
-            <div
-              v-else-if="resume.kind.value === 'not-yet-aired'"
-              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs"
-              role="status"
-            >
-              <svg class="w-3.5 h-3.5 text-amber-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span v-if="resumeNextEpisodeNumber && resumeNextAt">
-                {{ $t('anime.resume.notYetAvailableEta', { n: resumeNextEpisodeNumber, when: formatNextEpisode(resumeNextAt) }) }}
-              </span>
-              <span v-else-if="resumeNextEpisodeNumber">
-                {{ $t('anime.resume.notYetAvailable', { n: resumeNextEpisodeNumber }) }}
-              </span>
-            </div>
-
-            <!-- currently-airing -->
-            <div
-              v-else-if="resume.kind.value === 'currently-airing' && resumeNextEpisodeNumber"
-              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs"
-              role="status"
-            >
-              <span class="relative flex h-2 w-2" aria-hidden="true">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400/60 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-pink-400/70"></span>
-              </span>
-              <span>{{ $t('anime.resume.currentlyAiring', { n: resumeNextEpisodeNumber }) }}</span>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1039,6 +965,7 @@ const rawProviderEnabled = import.meta.env.VITE_RAW_PROVIDER_ENABLED === 'true'
 // gates are green in production.
 const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
 const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
+import ResumePill from '@/components/player/ResumePill.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
@@ -1304,6 +1231,28 @@ const resumeNextEpisodeNumber = computed<number | undefined>(() => {
     return Math.max(1, resume.lastWatched.value + 1)
   }
   return undefined
+})
+
+// Resume pill props bundled into one object so each player slot can
+// `v-bind` them in one line. Visibility is auth-gated here — the pill
+// component itself decides per-kind visibility.
+const resumePillProps = computed(() => {
+  if (!authStore.isAuthenticated || !resume.loaded.value || resume.kind.value === 'first-time') {
+    return { kind: 'first-time' as const }
+  }
+  const etaLabel = (resume.kind.value === 'not-yet-aired' && resumeNextAt.value)
+    ? formatNextEpisode(resumeNextAt.value)
+    : undefined
+  return {
+    kind: resume.kind.value,
+    finishedEpisode: resume.finishedEpisode.value,
+    nextEpisodeNumber: resumeNextEpisodeNumber.value,
+    nextEpisodeEtaLabel: etaLabel,
+    canMarkCompleteInList: currentListStatus.value !== 'completed',
+    findSimilarRoute: anime.value?.genres?.length
+      ? { path: '/browse', query: { genres: anime.value.genres[0] } }
+      : undefined,
+  }
 })
 
 // Restart from episode 1 — used by the "Rewatch" action on the finished
