@@ -32,18 +32,24 @@
           {{ t(`spotlight.platformStats.${camelize(m.key)}`) }}
         </p>
         <p
-          class="mt-2 font-semibold text-white tabular-nums leading-none"
+          class="mt-1 font-semibold text-white tabular-nums leading-none"
           :class="
             data.metrics.length === 1
-              ? 'text-5xl md:text-6xl'
+              ? 'text-4xl md:text-5xl'
               : 'text-3xl md:text-4xl'
           "
         >
           {{ m.value.toLocaleString(localeStr) }}
         </p>
         <p
+          v-if="data.metrics.length === 1"
+          class="mt-2 text-sm font-medium text-gray-400"
+        >
+          {{ t('spotlight.platformStats.lastSevenDays') }}
+        </p>
+        <p
           v-if="typeof m.delta === 'number' && m.delta > 0"
-          class="mt-2 text-xs font-medium text-cyan-400 tabular-nums"
+          class="mt-1 text-xs font-medium text-cyan-400 tabular-nums"
         >
           {{ t('spotlight.platformStats.deltaPositive', { n: m.delta }) }}
         </p>

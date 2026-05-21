@@ -4,7 +4,7 @@
   >
     <header class="md:hidden">
       <p
-        class="text-xs font-medium text-cyan-300/80 uppercase tracking-wider mb-1"
+        class="text-xs font-medium text-cyan-300/80 uppercase tracking-wider mb-2"
       >
         {{ t('spotlight.randomTail.title') }}
       </p>

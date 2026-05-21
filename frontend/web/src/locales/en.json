@@ -996,6 +996,7 @@
       "title": "Anime of the day",
       "watchCta": "Watch",
       "addCta": "Add to list",
+      "addCtaComingSoon": "Coming soon — list management is being rolled out",
       "scoreLabel": "Score",
       "episodesLabel": "{n} ep."
     },
@@ -1015,7 +1016,8 @@
       "episodesAdded7d": "New episodes",
       "activeRooms7d": "Watch parties",
       "deltaPositive": "+{n} vs last week",
-      "noChange": "—"
+      "noChange": "—",
+      "lastSevenDays": "Last 7 days"
     },
     "personalPick": {
       "title": "Picked for you",

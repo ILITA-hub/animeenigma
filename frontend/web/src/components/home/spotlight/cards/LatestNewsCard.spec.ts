@@ -54,22 +54,17 @@ const mock5 = {
 }
 
 describe('LatestNewsCard', () => {
-  it('renders the readMore link with a verified router target', () => {
+  it('renders the readMore anchor pointing to #changelog (post-UI-audit fix)', () => {
     const wrapper = mountCard({ data: mock5 })
-    // Find all RouterLinkStub instances. The readMore link is the only one
-    // in the header — entry <li>s are NOT router-links in Phase 2 (the whole
-    // entry is read-only text; clicking the readMore link is the affordance).
-    const links = wrapper.findAllComponents(RouterLinkStub)
-    expect(links.length).toBeGreaterThanOrEqual(1)
-    // The header readMore link is the first router-link in DOM order.
-    const readMore = links[0]
-    // Phase 2 route-discovery: no /changelog route exists; LastUpdates is a
-    // home-page tab. Plan 02-03 acceptance criterion explicitly defers the
-    // exact path to executor verification. The link MUST go somewhere valid;
-    // for Phase 2 we point at "/" so the changelog tab is in view.
-    const to = readMore.props('to')
-    expect(typeof to).toBe('string')
-    expect(to).toBe('/')
+    // F1.1 resolution: the readMore CTA used to be a router-link to "/" (a
+    // no-op when the user is already on home); it is now a same-page anchor
+    // with smooth-scroll behavior that lands on the LastUpdates section.
+    const anchor = wrapper.find('a[href="#changelog"]')
+    expect(anchor.exists()).toBe(true)
+    expect(anchor.text()).toContain('spotlight.latestNews.readMore')
+    // No router-link in the header anymore.
+    const routerLinks = wrapper.findAllComponents(RouterLinkStub)
+    expect(routerLinks.length).toBe(0)
   })
 
   it('renders up to 3 entries (caps at slice(0, 3))', () => {

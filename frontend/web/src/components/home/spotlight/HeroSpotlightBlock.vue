@@ -24,9 +24,9 @@
     aria-hidden="true"
   >
     <div
-      class="glass-card rounded-2xl h-[420px] md:h-[320px] lg:h-[320px] overflow-hidden"
+      class="glass-card rounded-2xl min-h-[420px] md:min-h-[340px] lg:min-h-[320px] lg:max-h-[400px] overflow-hidden"
     >
-      <div class="w-full h-full skeleton-shimmer" />
+      <div class="w-full h-full min-h-[420px] md:min-h-[340px] lg:min-h-[320px] skeleton-shimmer" />
     </div>
   </div>
 
@@ -47,7 +47,7 @@
     @keydown.right="next"
   >
     <div
-      class="relative glass-card rounded-2xl overflow-hidden flex flex-col h-[420px] md:h-[320px] lg:h-[320px]"
+      class="relative glass-card rounded-2xl overflow-hidden flex flex-col min-h-[420px] md:min-h-[340px] lg:min-h-[320px] lg:max-h-[400px]"
     >
       <div
         class="relative w-full flex-1 min-h-0 pb-10"
@@ -121,6 +121,11 @@
         @next="next"
         @goto="goTo"
       />
+      <!-- SR-only pause announcement (UI-SPEC §A11y; F1.3/F6.1 resolution).
+           aria-live=polite so it speaks at the screen reader's next idle. -->
+      <span class="sr-only" aria-live="polite">
+        {{ paused ? t('spotlight.pauseAutoplay') : '' }}
+      </span>
     </div>
   </section>
 </template>
@@ -174,9 +179,16 @@ function advance(): void {
 // via onScopeDispose), eliminating the leak class hand-rolled setInterval
 // requires us to manage. immediate:false because we wait for cards to load
 // AND for the initial-index watch to fire before the first tick.
-const { pause, resume } = useIntervalFn(advance, AUTO_CYCLE_INTERVAL_MS, {
+const { pause, resume, isActive } = useIntervalFn(advance, AUTO_CYCLE_INTERVAL_MS, {
   immediate: false,
 })
+
+// SR-only announcement when auto-cycle is paused. F1.3/F6.1 — the
+// spotlight.pauseAutoplay i18n key shipped in EN/RU/JA but had no consumer.
+// Computed false when: cycle still active, single-card mode, or reduced-motion.
+const paused = computed<boolean>(
+  () => !isActive.value && cards.value.length > 1 && !reducedMotion.value,
+)
 
 function startCycle(): void {
   // Reduced-motion users opt out of auto-advance entirely (HSB-FE-06).

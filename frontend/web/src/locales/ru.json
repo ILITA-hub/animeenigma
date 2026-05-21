@@ -996,6 +996,7 @@
       "title": "Аниме дня",
       "watchCta": "Смотреть",
       "addCta": "В список",
+      "addCtaComingSoon": "Скоро — управление списком в разработке",
       "scoreLabel": "Рейтинг",
       "episodesLabel": "{n} эп."
     },
@@ -1015,7 +1016,8 @@
       "episodesAdded7d": "Новых серий",
       "activeRooms7d": "Совместных просмотров",
       "deltaPositive": "+{n} за неделю",
-      "noChange": "—"
+      "noChange": "—",
+      "lastSevenDays": "За последние 7 дней"
     },
     "personalPick": {
       "title": "Выбрано для вас",

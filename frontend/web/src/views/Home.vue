@@ -307,7 +307,7 @@
     <ContinueWatchingRow />
 
     <!-- Activity Feed + Last Updates -->
-    <div class="px-4 lg:px-8 max-w-7xl mx-auto pb-12">
+    <div id="changelog" class="px-4 lg:px-8 max-w-7xl mx-auto pb-12 scroll-mt-24">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ActivityFeed />
         <LastUpdates />

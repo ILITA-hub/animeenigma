@@ -996,6 +996,7 @@
       "title": "今日のアニメ",
       "watchCta": "視聴",
       "addCta": "リストに追加",
+      "addCtaComingSoon": "近日公開 — リスト管理は順次展開中",
       "scoreLabel": "スコア",
       "episodesLabel": "{n}話"
     },
@@ -1015,7 +1016,8 @@
       "episodesAdded7d": "新着エピソード",
       "activeRooms7d": "同時視聴",
       "deltaPositive": "+{n} 前週比",
-      "noChange": "—"
+      "noChange": "—",
+      "lastSevenDays": "過去7日間"
     },
     "personalPick": {
       "title": "あなたへのおすすめ",

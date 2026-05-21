@@ -94,8 +94,10 @@
         </router-link>
         <button
           type="button"
-          class="btn btn-ghost text-sm md:text-base"
-          @click="onAdd"
+          disabled
+          aria-disabled="true"
+          class="btn btn-ghost text-sm md:text-base opacity-50 cursor-not-allowed"
+          :title="t('spotlight.animeOfDay.addCtaComingSoon')"
         >
           {{ t('spotlight.animeOfDay.addCta') }}
         </button>
@@ -122,8 +124,6 @@ const locale = computed(() => {
   return typeof v === 'string' ? v : 'ru'
 })
 
-function onAdd() {
-  // Phase 2: stubbed handler. Phase 3 will wire to the watchlist API.
-  // Kept intentionally silent — no console.log noise in production.
-}
+// "Add to list" CTA is rendered disabled (UI audit F6.3) pending Phase 3's
+// watchlist wiring — no handler needed yet.
 </script>

@@ -6,12 +6,13 @@
       <h3 class="text-lg md:text-xl font-semibold text-white">
         {{ t('spotlight.latestNews.title') }}
       </h3>
-      <router-link
-        to="/"
+      <a
+        href="#changelog"
         class="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors"
+        @click.prevent="scrollToChangelog"
       >
         {{ t('spotlight.latestNews.readMore') }}
-      </router-link>
+      </a>
     </header>
 
     <ul
@@ -42,16 +43,34 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LatestNewsData } from '@/types/spotlight'
 
 defineProps<{ data: LatestNewsData }>()
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
 
-// Phase 2: simple ISO-string passthrough. Phase 3 may swap to formatRelative
-// from @vueuse/core via the spotlight.latestNews.entryDate key.
+const localeStr = computed<string>(() => {
+  const v = (i18nLocale as { value?: unknown }).value
+  return typeof v === 'string' ? v : 'ru'
+})
+
+// Locale-aware medium date format: "May 21, 2026" / "21 мая 2026 г." /
+// "2026年5月21日". Falls back to the raw ISO string if the input is
+// malformed (defensive — the backend emits YYYY-MM-DD).
 function formatEntryDate(iso: string): string {
-  return iso
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  try {
+    return new Intl.DateTimeFormat(localeStr.value, { dateStyle: 'medium' }).format(d)
+  } catch {
+    return iso
+  }
+}
+
+function scrollToChangelog(): void {
+  const el = document.getElementById('changelog')
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 // The backend's Phase 1 resolver emits `{date, type, message}` per entry —
