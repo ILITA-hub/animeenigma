@@ -48,7 +48,12 @@ type WatchProgress struct {
 	DroppedOffAt  *int      `json:"dropped_off_at,omitempty"`
 	LastWatchedAt time.Time `json:"last_watched_at"`
 	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	// UpdatedAt carries a dedicated B-tree index (HSB-NF-02) so the
+	// workstream hero-spotlight v1.0 Phase 3 `now_watching` resolver's
+	// `WHERE wp.updated_at > NOW() - INTERVAL '5 minutes'` predicate runs
+	// against an index instead of degrading to a sequential scan as
+	// watch_progress grows. AutoMigrate creates the index on player restart.
+	UpdatedAt time.Time `gorm:"index:idx_watch_progress_updated_at" json:"updated_at"`
 }
 
 func (WatchProgress) TableName() string {
@@ -254,6 +259,27 @@ type BulkAnimeProgressEntry struct {
 // progress on are omitted from the map; the frontend treats absence as
 // "no badge". Phase 9 (UX-16).
 type BulkAnimeProgressMap map[string]BulkAnimeProgressEntry
+
+// InternalListItem is the per-anime payload of GET /internal/users/{user_id}/list.
+// Used by the catalog spotlight aggregator (workstream hero-spotlight v1.0 Phase 3
+// — not_time_yet + continue_watching_new resolvers). Joined from anime_list + animes
+// + watch_progress in one query so callers do not fan out per anime.
+//
+// Trust boundary: this struct crosses the docker-network only — the
+// /internal/* route is NOT proxied by the gateway, and no JWT is required.
+// The catalog resolver passes a JWT-derived user_id; no untrusted user input
+// reaches this surface.
+type InternalListItem struct {
+	AnimeID            string `json:"anime_id"`
+	Name               string `json:"name,omitempty"`
+	NameRU             string `json:"name_ru,omitempty"`
+	PosterURL          string `json:"poster_url,omitempty"`
+	EpisodesAired      int    `json:"episodes_aired,omitempty"`
+	EpisodesCount      int    `json:"episodes_count,omitempty"`
+	Status             string `json:"status"`                         // "watching" | "planned" | "postponed"
+	LastWatchedEpisode int    `json:"last_watched_episode,omitempty"` // 0 when no watch_progress row
+	UpdatedAt          string `json:"updated_at,omitempty"`           // anime_list.updated_at (ISO 8601)
+}
 
 // AnimeStatusEntry is a lightweight entry for the status map and stats
 type AnimeStatusEntry struct {
