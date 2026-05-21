@@ -148,6 +148,11 @@
             </Transition>
           </div>
 
+          <!-- Workstream notifications / Phase 3 — header bell. Visible only
+               when logged in (anonymous users get no polling and no badge).
+               Gated by the feature flag for rollback. -->
+          <NotificationBell v-if="notifEnabled && authStore.isAuthenticated" />
+
           <!-- User Avatar / Login -->
           <template v-if="authStore.isAuthenticated">
             <router-link
@@ -216,6 +221,16 @@
 
             <!-- Divider -->
             <div class="my-1 border-t border-white/10" />
+
+            <!-- Workstream notifications / Phase 3 — mobile bell. Same
+                 NotificationBell component as desktop; dropdown is
+                 max-w-[calc(100vw-1.5rem)] so it fits the narrow viewport. -->
+            <div
+              v-if="notifEnabled && authStore.isAuthenticated"
+              class="px-3 py-2"
+            >
+              <NotificationBell />
+            </div>
 
             <!-- Profile / Login -->
             <template v-if="authStore.isAuthenticated">
@@ -304,10 +319,15 @@ import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const router = useRouter()
 const { locale } = useI18n()
 const authStore = useAuthStore()
+
+// Workstream notifications / Phase 3 — feature flag mirrors App.vue. Build-
+// time constant, no reactive dependency.
+const notifEnabled = (import.meta.env.VITE_NOTIFICATIONS_ENABLED as string | undefined) !== 'false'
 
 const navLinks = [
   { to: '/', label: 'nav.home' },
