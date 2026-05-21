@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
 )
 
 // spotlightCtxTimeout is the per-request budget the handler imposes when
@@ -26,7 +29,7 @@ type aggregator interface {
 }
 
 // SpotlightHandler serves GET /api/home/spotlight (workstream
-// hero-spotlight, v1.0 Phase 1). Public, no auth.
+// hero-spotlight, v1.0 Phase 1 — Phase 3 added optional-auth wiring).
 //
 // DELIBERATE DIVERGENCE 3 (non-negotiable, enforced by acceptance grep):
 // this handler writes the bare {cards, generated_at} JSON envelope
@@ -62,9 +65,14 @@ func NewSpotlightHandler(agg aggregator, enabled bool, log *logger.Logger) *Spot
 //     this almost never happens because aggregator.Resolve absorbs all
 //     per-card failures and returns partial-success).
 //
-// Phase 1 contract: this endpoint is public. The handler reads but does
-// NOT validate `Authorization` headers. Phase 3 will add optional-auth
-// middleware and start passing a real userID to the aggregator.
+// Phase 3 contract: this endpoint is mounted behind OptionalAuthMiddleware
+// (transport/optional_auth.go), so claims may or may not be present on
+// the request context. When present, the handler derives userID and
+// passes it to aggregator.Resolve so login-only cards (personal_pick
+// login path, not_time_yet, continue_watching_new) become eligible. The
+// raw bearer token is forwarded on ctx via cards.ContextWithJWT so the
+// personal_pick login path can fan out to player /api/users/recs with
+// the caller's auth.
 func (h *SpotlightHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// HSB-BE-07: feature flag short-circuit. Bare 404 — deliberately
 	// NOT the shared NotFound helper (which writes a
@@ -77,15 +85,31 @@ func (h *SpotlightHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	started := time.Now()
 
-	// Phase 1 — endpoint is public; tolerate any Authorization header
-	// the client sent for unrelated reasons. Do NOT log the header
-	// value (Pitfall 6 in 01-RESEARCH.md — never leak JWTs to logs).
-	h.log.Infow("spotlight.request", "user", "anon")
+	// Phase 3 — derive userID from authz claims (set by OptionalAuthMiddleware
+	// upstream). Anon callers have no claims attached → userID stays nil.
+	// Do NOT log the bearer token (Pitfall 6 in 01-RESEARCH.md — never leak
+	// JWTs to logs). User label is "anon" or the userID — never the JWT.
+	var userID *string
+	userLabel := "anon"
+	if claims, ok := authz.ClaimsFromContext(r.Context()); ok && claims != nil && claims.UserID != "" {
+		id := claims.UserID
+		userID = &id
+		userLabel = id
+	}
+	h.log.Infow("spotlight.request", "user", userLabel)
 
-	ctx, cancel := context.WithTimeout(r.Context(), spotlightCtxTimeout)
+	// Attach the raw bearer token (if present) to ctx so login-only resolvers
+	// can forward it to player /api/users/recs. Empty string is fine —
+	// cards.JWTFromContext returns ok=false on empty. We forward the token
+	// regardless of claims presence: when OptionalAuthMiddleware stripped an
+	// invalid JWT, claims will be absent and userID stays nil; login-only
+	// resolvers gate on userID, not on JWT presence, so an invalid bearer is
+	// harmless on ctx.
+	ctx := cards.ContextWithJWT(r.Context(), httputil.BearerToken(r))
+	ctx, cancel := context.WithTimeout(ctx, spotlightCtxTimeout)
 	defer cancel()
 
-	resp, err := h.agg.Resolve(ctx, nil)
+	resp, err := h.agg.Resolve(ctx, userID)
 	if err != nil {
 		// Catastrophic — aggregator itself failed. In practice this
 		// almost never happens because aggregator.Resolve absorbs all

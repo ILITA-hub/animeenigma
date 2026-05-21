@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
 	"go.uber.org/zap"
 )
 
@@ -23,13 +26,42 @@ func testLogger() *logger.Logger {
 
 // fakeAggregator implements the `aggregator` interface declared inside
 // spotlight.go. Returns whatever (resp, err) tuple the test configures.
+// Plan 03-04 extends it to capture the userID arg and the JWT carried on
+// ctx so the new handler-wiring tests can assert what the aggregator saw.
 type fakeAggregator struct {
 	resp *spotlight.Response
 	err  error
+
+	mu               sync.Mutex
+	gotUserID        *string
+	gotJWT           string
+	gotJWTOK         bool
+	capturedUserID   bool
+	capturedJWTState bool
 }
 
-func (f *fakeAggregator) Resolve(_ context.Context, _ *string) (*spotlight.Response, error) {
+func (f *fakeAggregator) Resolve(ctx context.Context, userID *string) (*spotlight.Response, error) {
+	f.mu.Lock()
+	if userID != nil {
+		// Copy the pointed value so the test reads a stable snapshot.
+		v := *userID
+		f.gotUserID = &v
+	} else {
+		f.gotUserID = nil
+	}
+	f.capturedUserID = true
+	jwt, ok := cards.JWTFromContext(ctx)
+	f.gotJWT = jwt
+	f.gotJWTOK = ok
+	f.capturedJWTState = true
+	f.mu.Unlock()
 	return f.resp, f.err
+}
+
+func (f *fakeAggregator) snapshot() (userID *string, jwt string, jwtOK bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gotUserID, f.gotJWT, f.gotJWTOK
 }
 
 // TestSpotlightHandler_Get_Envelope verifies the success path emits the
@@ -204,6 +236,117 @@ func TestSpotlightHandler_Get_NoEnvelopeWrapper(t *testing.T) {
 	body := w.Body.String()
 	if strings.Contains(body, `"success":`) {
 		t.Errorf("response body contains `\"success\":` — handler must NOT use httputil envelope; body=%s", body)
+	}
+}
+
+// TestSpotlightHandler_Get_NoClaims_UserIDNil_JWTEmpty — Phase 3 contract.
+// When no Authorization header is present and no claims are attached
+// (OptionalAuthMiddleware passes through unchanged), the handler MUST
+// pass userID=nil to the aggregator AND the JWT-on-ctx MUST be empty
+// (ok=false). This is the anonymous-caller path.
+func TestSpotlightHandler_Get_NoClaims_UserIDNil_JWTEmpty(t *testing.T) {
+	fake := &fakeAggregator{
+		resp: &spotlight.Response{
+			Cards:       []spotlight.Card{{Type: "anime_of_day"}},
+			GeneratedAt: "2026-05-21T00:00:00Z",
+		},
+	}
+	h := NewSpotlightHandler(fake, true, testLogger())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/home/spotlight", nil)
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	gotUserID, gotJWT, jwtOK := fake.snapshot()
+	if gotUserID != nil {
+		t.Errorf("expected userID=nil for anon caller, got %v", *gotUserID)
+	}
+	if gotJWT != "" {
+		t.Errorf("expected empty JWT on ctx for anon caller, got %q", gotJWT)
+	}
+	if jwtOK {
+		t.Errorf("expected JWTFromContext ok=false for anon caller")
+	}
+}
+
+// TestSpotlightHandler_Get_WithClaims_UserIDPopulated_JWTForwarded — Phase 3
+// contract. When OptionalAuthMiddleware attached valid Claims AND the request
+// carries an Authorization Bearer header, the handler MUST pass *userID equal
+// to claims.UserID AND forward the bearer token via cards.ContextWithJWT.
+func TestSpotlightHandler_Get_WithClaims_UserIDPopulated_JWTForwarded(t *testing.T) {
+	fake := &fakeAggregator{
+		resp: &spotlight.Response{
+			Cards:       []spotlight.Card{{Type: "anime_of_day"}},
+			GeneratedAt: "2026-05-21T00:00:00Z",
+		},
+	}
+	h := NewSpotlightHandler(fake, true, testLogger())
+
+	claims := &authz.Claims{UserID: "u1", Username: "tester", Role: authz.RoleUser}
+	req := httptest.NewRequest(http.MethodGet, "/api/home/spotlight", nil)
+	req.Header.Set("Authorization", "Bearer abc")
+	ctx := authz.ContextWithClaims(req.Context(), claims)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	gotUserID, gotJWT, jwtOK := fake.snapshot()
+	if gotUserID == nil {
+		t.Fatalf("expected non-nil *userID for logged-in caller, got nil")
+	}
+	if *gotUserID != "u1" {
+		t.Errorf("expected *userID = %q, got %q", "u1", *gotUserID)
+	}
+	if gotJWT != "abc" {
+		t.Errorf("expected JWT on ctx = %q, got %q", "abc", gotJWT)
+	}
+	if !jwtOK {
+		t.Errorf("expected JWTFromContext ok=true when bearer is forwarded")
+	}
+}
+
+// TestSpotlightHandler_Get_InvalidJWT_TreatedAsAnon — simulates what happens
+// when OptionalAuthMiddleware strips an invalid JWT (no Claims attached) but
+// the raw Authorization header is still present on the request. The handler
+// MUST still derive userID=nil (no claims → anon) but the bearer token is
+// forwarded on ctx regardless — login-only resolvers gate on userID, not on
+// JWT presence, so this is a safe pass-through.
+func TestSpotlightHandler_Get_InvalidJWT_TreatedAsAnon(t *testing.T) {
+	fake := &fakeAggregator{
+		resp: &spotlight.Response{
+			Cards:       []spotlight.Card{{Type: "anime_of_day"}},
+			GeneratedAt: "2026-05-21T00:00:00Z",
+		},
+	}
+	h := NewSpotlightHandler(fake, true, testLogger())
+
+	// NO claims attached (mirroring OptionalAuthMiddleware's strip-on-invalid behavior)
+	// but the raw Authorization header is still present.
+	req := httptest.NewRequest(http.MethodGet, "/api/home/spotlight", nil)
+	req.Header.Set("Authorization", "Bearer invalid")
+	w := httptest.NewRecorder()
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	gotUserID, gotJWT, jwtOK := fake.snapshot()
+	if gotUserID != nil {
+		t.Errorf("expected userID=nil when no claims attached (invalid JWT stripped), got %v", *gotUserID)
+	}
+	// Bearer is forwarded regardless — login-only resolvers gate on userID.
+	if gotJWT != "invalid" {
+		t.Errorf("expected JWT on ctx = %q (handler forwards Authorization header verbatim), got %q", "invalid", gotJWT)
+	}
+	if !jwtOK {
+		t.Errorf("expected JWTFromContext ok=true (non-empty bearer was forwarded)")
 	}
 }
 
