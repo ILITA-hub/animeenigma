@@ -50,6 +50,7 @@ export interface DiagnosticReport {
   error_message: string | null
   scraper_provider: string | null  // Phase 16 SCRAPER-NF-05 (snake_case for Go report.go)
   tried_chain: string[]            // Phase 16 SCRAPER-NF-05 (snake_case for Go report.go)
+  category: string                 // "bug" | "issue" | "feature" | "" — set by footer FeedbackButton
   console_logs: string
   network_logs: string
   page_html: string
@@ -204,6 +205,7 @@ export function collectDiagnostics(
   userDescription: string,
   userId: string | null,
   username: string | null,
+  category: string = '',
 ): DiagnosticReport {
   let pageHtml = ''
   try {
@@ -232,6 +234,7 @@ export function collectDiagnostics(
     error_message: context.errorMessage ?? null,
     scraper_provider: context.scraperProvider ?? null,
     tried_chain: context.triedChain ?? [],
+    category,
     console_logs: JSON.stringify(consoleLogs),
     network_logs: JSON.stringify(networkLogs),
     page_html: pageHtml,

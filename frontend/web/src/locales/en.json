@@ -177,19 +177,6 @@
     "subtitles": "Subtitles",
     "noTranslations": "No translations available",
     "noEpisodes": "No episodes found on {source}",
-    "reportNotWorking": "Report a Problem",
-    "reportTitle": "Report a Problem",
-    "reportSent": "Report Sent",
-    "reportThankYou": "Thank you! We'll look into it.",
-    "reportPlayer": "Player",
-    "reportAnime": "Anime",
-    "reportEpisode": "Episode",
-    "reportServer": "Server",
-    "reportError": "Error",
-    "reportDescriptionPlaceholder": "Describe the problem (optional)...",
-    "reportDisclaimer": "Browser data and logs will be sent for diagnostics.",
-    "reportSending": "Sending...",
-    "reportSubmit": "Send Report",
     "loadingEpisode": "Loading episode {n}...",
     "selectEpisode": "Select an episode to start watching",
     "selectVoice": "Select voice acting to start watching",
@@ -215,8 +202,6 @@
     "native": "Native",
     "recommendedVoice": "Recommended voice acting",
     "episodeShort": "ep.",
-    "reportProvider": "Provider",
-    "reportTried": "Tried",
     "raw": {
       "tab": "RAW JP",
       "unavailable": "This anime isn't yet available via the raw Japanese provider. Try Kodik or AnimeLib instead."
@@ -783,7 +768,24 @@
     "saveFailed": "Failed to save"
   },
   "footer": {
-    "rights": "All rights reserved"
+    "rights": "All rights reserved",
+    "feedback": {
+      "button": "Send feedback",
+      "title": "Send feedback",
+      "categoryLabel": "What are you reporting?",
+      "categoryBug": "Bug",
+      "categoryIssue": "Issue",
+      "categoryFeature": "Feature",
+      "descriptionPlaceholderBug": "What broke? Steps to reproduce, expected vs. actual…",
+      "descriptionPlaceholderIssue": "Tell us what's off — wording, behavior, anything confusing…",
+      "descriptionPlaceholderFeature": "What would you like AnimeEnigma to do?",
+      "disclaimer": "Browser data and recent logs will be attached for diagnostics.",
+      "submit": "Send",
+      "sending": "Sending…",
+      "sent": "Feedback sent",
+      "thankYou": "Thank you! We'll take a look.",
+      "submitError": "Couldn't send feedback. Please try again."
+    }
   },
   "status": {
     "title": "System Status",
@@ -928,8 +930,8 @@
         "a": "Not yet — the web app is fully mobile-responsive and works offline-ish via the browser cache. A native app may come later, but for now installing the site as a PWA (Add to Home Screen) is the closest thing."
       },
       "q7": {
-        "q": "How do I report a broken player?",
-        "a": "Each of the four players has a Report button in the controls. Tap it, optionally describe what broke, and submit — the report is saved to disk on the server and an admin gets a Telegram notification. Console logs and network requests are auto-attached to help debugging."
+        "q": "How do I report a bug or request a feature?",
+        "a": "Use the \"Send feedback\" link in the page footer — pick Bug, Issue, or Feature, optionally describe it, and submit. The report is saved on the server and an admin gets a Telegram notification. Console logs and network requests are auto-attached to help debugging."
       },
       "q8": {
         "q": "Who runs this site?",

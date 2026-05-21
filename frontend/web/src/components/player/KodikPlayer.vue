@@ -214,17 +214,6 @@
       {{ error }}
     </div>
 
-    <!-- Report button -->
-    <ReportButton
-      player-type="kodik"
-      :anime-id="animeId"
-      :anime-name="animeName || animeId"
-      :episode-number="selectedEpisode"
-      :server-name="selectedTranslation ? translations.find(t => t.id === selectedTranslation)?.title : undefined"
-      :stream-url="embedUrl"
-      :error-message="error"
-      :accent-color="ACCENT_COLOR"
-    />
   </div>
 </template>
 
@@ -237,10 +226,7 @@ import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
 import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
-import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
-
-const ACCENT_COLOR = '#06b6d4'
 
 // Watch progress tracking
 const currentTime = ref(0)

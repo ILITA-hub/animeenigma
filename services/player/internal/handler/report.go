@@ -20,8 +20,10 @@ import (
 const maxReportBodySize = 2 * 1024 * 1024 // 2MB
 
 // allowedPlayerTypes is a whitelist of valid player types for report filenames.
+// "feedback" is the global footer button (no player context); the rest are
+// per-player surfaces that may attach diagnostics.
 var allowedPlayerTypes = map[string]bool{
-	"kodik": true, "animelib": true,
+	"kodik": true, "animelib": true, "hanime": true, "ourenglish": true, "raw": true, "feedback": true,
 }
 
 type ReportHandler struct {
@@ -90,6 +92,7 @@ func (h *ReportHandler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 		"user_id", claims.UserID,
 		"username", claims.Username,
 		"player_type", report.PlayerType,
+		"category", report.Category,
 		"anime_id", report.AnimeID,
 		"anime_name", report.AnimeName,
 		"episode_number", report.EpisodeNumber,
@@ -160,6 +163,7 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 		"user_id":        claims.UserID,
 		"username":       claims.Username,
 		"player_type":    report.PlayerType,
+		"category":       report.Category,
 		"anime_id":       report.AnimeID,
 		"anime_name":     report.AnimeName,
 		"episode_number": report.EpisodeNumber,
@@ -197,6 +201,7 @@ func (h *ReportHandler) sendToMaintenance(claims *authz.Claims, report *domain.E
 		"username":    claims.Username,
 		"user_id":     claims.UserID,
 		"player_type": report.PlayerType,
+		"category":    report.Category,
 		"anime_name":  report.AnimeName,
 		"server_name": report.ServerName,
 		"error_message": report.ErrorMessage,
@@ -232,14 +237,39 @@ func (h *ReportHandler) sendToMaintenance(claims *authz.Claims, report *domain.E
 func (h *ReportHandler) sendTelegramNotification(claims *authz.Claims, report *domain.ErrorReport, reportFile string) {
 	var b strings.Builder
 
-	b.WriteString("🚨 <b>Player Error Report</b>\n\n")
+	// Header varies by report origin: footer feedback vs. legacy player error.
+	switch report.PlayerType {
+	case "feedback":
+		emoji := "📨"
+		label := "User Feedback"
+		switch report.Category {
+		case "bug":
+			emoji, label = "🐛", "Bug Report"
+		case "issue":
+			emoji, label = "❓", "Issue Report"
+		case "feature":
+			emoji, label = "💡", "Feature Request"
+		}
+		b.WriteString(fmt.Sprintf("%s <b>%s</b>\n\n", emoji, label))
+	default:
+		b.WriteString("🚨 <b>Player Error Report</b>\n\n")
+	}
 
 	// User info
 	b.WriteString(fmt.Sprintf("👤 <b>User:</b> %s (ID: %s)\n", escapeHTML(claims.Username), escapeHTML(claims.UserID)))
 
-	// Player & content
-	b.WriteString(fmt.Sprintf("🎬 <b>Player:</b> %s\n", escapeHTML(report.PlayerType)))
-	b.WriteString(fmt.Sprintf("📺 <b>Anime:</b> %s\n", escapeHTML(report.AnimeName)))
+	// Category (shown when present, including legacy player reports if tagged)
+	if report.Category != "" {
+		b.WriteString(fmt.Sprintf("🏷 <b>Category:</b> %s\n", escapeHTML(report.Category)))
+	}
+
+	// Player & content — only meaningful when player context was attached.
+	if report.PlayerType != "" && report.PlayerType != "feedback" {
+		b.WriteString(fmt.Sprintf("🎬 <b>Player:</b> %s\n", escapeHTML(report.PlayerType)))
+	}
+	if report.AnimeName != "" {
+		b.WriteString(fmt.Sprintf("📺 <b>Anime:</b> %s\n", escapeHTML(report.AnimeName)))
+	}
 
 	if report.EpisodeNumber != nil {
 		b.WriteString(fmt.Sprintf("📋 <b>Episode:</b> %d\n", *report.EpisodeNumber))

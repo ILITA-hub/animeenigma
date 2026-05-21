@@ -60,13 +60,14 @@
 
     <!-- Footer -->
     <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10">
-      <div class="max-w-7xl mx-auto flex items-center justify-center gap-4">
+      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
         <p class="text-white/60 text-sm">
           &copy; {{ new Date().getFullYear() }} AnimeEnigma. {{ $t('footer.rights') }}
         </p>
         <router-link to="/status" class="text-white/60 hover:text-white/80 text-sm transition-colors">
           {{ $t('status.title') }}
         </router-link>
+        <FeedbackButton />
       </div>
     </footer>
 
@@ -79,6 +80,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import Navbar from '@/components/layout/Navbar.vue'
+import FeedbackButton from '@/components/layout/FeedbackButton.vue'
 import Toaster from '@/components/ui/Toaster.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
 

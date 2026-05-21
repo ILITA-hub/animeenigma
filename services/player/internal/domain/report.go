@@ -1,6 +1,9 @@
 package domain
 
-// ErrorReport represents a user-submitted error report from the video player.
+// ErrorReport represents a user-submitted feedback or error report.
+// PlayerType="feedback" denotes a generic footer report (no player context);
+// other PlayerType values come from the now-removed per-player buttons and
+// any future surfaces that want to attach player diagnostics.
 type ErrorReport struct {
 	// Player context
 	PlayerType    string `json:"player_type"`
@@ -11,6 +14,7 @@ type ErrorReport struct {
 	StreamURL     string `json:"stream_url,omitempty"`
 	ErrorMessage  string `json:"error_message,omitempty"`
 	// User input
+	Category    string `json:"category,omitempty"` // bug | issue | feature
 	Description string `json:"description"`
 	// Browser context
 	URL        string `json:"url"`

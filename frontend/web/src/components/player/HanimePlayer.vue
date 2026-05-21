@@ -134,16 +134,6 @@
       </div>
     </div>
 
-    <!-- Report button -->
-    <ReportButton
-      player-type="hanime"
-      :anime-id="animeId"
-      :anime-name="animeName || animeId"
-      :episode-number="selectedEpisodeIndex !== null ? selectedEpisodeIndex + 1 : undefined"
-      :stream-url="streamUrl"
-      :error-message="error"
-      :accent-color="ACCENT_COLOR"
-    />
   </div>
 </template>
 
@@ -152,9 +142,6 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import Hls from 'hls.js'
 import { hanimeApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
-import ReportButton from './ReportButton.vue'
-
-const ACCENT_COLOR = '#ec4899'
 
 interface HanimeEpisode {
   name: string

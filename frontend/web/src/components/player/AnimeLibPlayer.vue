@@ -284,17 +284,6 @@
       </div>
     </div>
 
-    <!-- Report button -->
-    <ReportButton
-      player-type="animelib"
-      :anime-id="animeId"
-      :anime-name="animeName || animeId"
-      :episode-number="selectedEpisode ? parseInt(selectedEpisode.number) : undefined"
-      :server-name="selectedTranslation?.team_name"
-      :stream-url="streamUrl"
-      :error-message="error"
-      :accent-color="ACCENT_COLOR"
-    />
   </div>
 </template>
 
@@ -308,10 +297,7 @@ import { useWatchSession } from '@/composables/useWatchSession'
 import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
-import ReportButton from './ReportButton.vue'
 import type { WatchCombo } from '@/types/preference'
-
-const ACCENT_COLOR = '#f97316'
 
 interface AnimeLibEpisode {
   id: number

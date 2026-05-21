@@ -177,19 +177,6 @@
     "subtitles": "字幕",
     "noTranslations": "利用可能な翻訳がありません",
     "noEpisodes": "{source}でエピソードが見つかりません",
-    "reportNotWorking": "問題を報告",
-    "reportTitle": "問題を報告",
-    "reportSent": "レポート送信完了",
-    "reportThankYou": "ありがとうございます！確認いたします。",
-    "reportPlayer": "プレイヤー",
-    "reportAnime": "アニメ",
-    "reportEpisode": "エピソード",
-    "reportServer": "サーバー",
-    "reportError": "エラー",
-    "reportDescriptionPlaceholder": "問題を説明してください（任意）...",
-    "reportDisclaimer": "診断のためにブラウザデータとログが送信されます。",
-    "reportSending": "送信中...",
-    "reportSubmit": "送信",
     "loadingEpisode": "エピソード{n}を読み込み中...",
     "selectEpisode": "エピソードを選択して視聴を開始",
     "selectVoice": "吹替を選択して視聴を開始",
@@ -215,8 +202,6 @@
     "native": "ネイティブ",
     "recommendedVoice": "おすすめの吹替",
     "episodeShort": "話",
-    "reportProvider": "プロバイダー",
-    "reportTried": "試行",
     "raw": {
       "tab": "RAW JP",
       "unavailable": "このアニメはまだ生の日本語ソースで利用できません。KodikまたはAnimeLibをお試しください。"
@@ -783,7 +768,24 @@
     "saveFailed": "保存に失敗しました"
   },
   "footer": {
-    "rights": "All rights reserved"
+    "rights": "All rights reserved",
+    "feedback": {
+      "button": "フィードバックを送る",
+      "title": "フィードバックを送る",
+      "categoryLabel": "どのような内容ですか？",
+      "categoryBug": "バグ",
+      "categoryIssue": "気になる点",
+      "categoryFeature": "ご要望",
+      "descriptionPlaceholderBug": "何が起きましたか？再現手順、期待と実際の動作…",
+      "descriptionPlaceholderIssue": "気になる点を教えてください — 表現、挙動、わかりにくい箇所など…",
+      "descriptionPlaceholderFeature": "AnimeEnigmaに加えたい機能はありますか？",
+      "disclaimer": "診断のためブラウザデータと最近のログを添付します。",
+      "submit": "送信",
+      "sending": "送信中…",
+      "sent": "送信完了",
+      "thankYou": "ありがとうございます！確認します。",
+      "submitError": "送信に失敗しました。もう一度お試しください。"
+    }
   },
   "status": {
     "title": "システムステータス",
@@ -928,8 +930,8 @@
         "a": "まだありません — Webアプリはモバイル対応済みで、ブラウザキャッシュ経由でほぼオフラインでも動きます。将来的にネイティブアプリが出るかもしれませんが、現状ではサイトをPWAとしてインストール（「ホーム画面に追加」）するのが最も近い選択肢です。"
       },
       "q7": {
-        "q": "プレイヤーの不具合はどう報告しますか？",
-        "a": "4つのプレイヤーそれぞれにコントロール内に「報告」ボタンがあります。タップして、必要なら不具合の内容を書いて送信してください — 報告はサーバーのディスクに保存され、管理者にTelegram通知が届きます。コンソールログとネットワークリクエストはデバッグのために自動で添付されます。"
+        "q": "バグ報告や機能リクエストはどこから送れますか？",
+        "a": "ページ下部の「フィードバックを送る」リンクから、バグ・気になる点・ご要望のいずれかを選んで、必要なら説明を書いて送信してください。報告はサーバーに保存され、管理者にTelegramで通知が届きます。コンソールログとネットワークリクエストはデバッグのために自動で添付されます。"
       },
       "q8": {
         "q": "このサイトは誰が運営していますか？",
