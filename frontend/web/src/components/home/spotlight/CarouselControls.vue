@@ -49,10 +49,19 @@
       </svg>
     </button>
 
-    <!-- Dot indicators (one per card) -->
+    <!-- Dot indicators (one per card).
+         Originally rendered with role="tablist" + bare <button> children per
+         UI-SPEC §Visual Contract, but axe-core flagged this as a critical
+         aria-required-children violation: role="tablist" requires role="tab"
+         children, and tabs use aria-selected (not aria-current). Since these
+         dots are slide-picker navigation buttons (not APG tabs in the
+         tabbed-content sense), the correct fix is to drop the tablist role
+         and keep aria-current as the active-state signal. The wrapping div
+         is identified via the spotlight.* aria-label / data-testid hooks
+         consumers already use. -->
     <div
       class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2"
-      role="tablist"
+      data-testid="spotlight-dots"
     >
       <button
         v-for="idx in dotIndices"

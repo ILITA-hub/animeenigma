@@ -60,7 +60,7 @@ test.describe('hero spotlight block (Phase 2)', () => {
 
     await expect(block).toBeVisible()
     // Require at least 2 cards for a meaningful cycle.
-    const dots = block.locator('[role="tablist"] button')
+    const dots = block.locator('[data-testid="spotlight-dots"] button')
     const dotCount = await dots.count()
     test.skip(dotCount < 2, 'Need at least 2 cards to verify auto-cycle')
 
@@ -81,7 +81,7 @@ test.describe('hero spotlight block (Phase 2)', () => {
     const blockCount = await block.count()
     test.skip(blockCount === 0, 'Spotlight returned 0 cards')
 
-    const dots = block.locator('[role="tablist"] button')
+    const dots = block.locator('[data-testid="spotlight-dots"] button')
     const dotCount = await dots.count()
     test.skip(dotCount < 2, 'Need at least 2 cards to verify pause-on-hover')
 
@@ -99,7 +99,7 @@ test.describe('hero spotlight block (Phase 2)', () => {
     const blockCount = await block.count()
     test.skip(blockCount === 0, 'Spotlight returned 0 cards')
 
-    const dots = block.locator('[role="tablist"] button')
+    const dots = block.locator('[data-testid="spotlight-dots"] button')
     const dotCount = await dots.count()
     test.skip(dotCount < 2, 'Need at least 2 cards to verify keyboard nav')
 
@@ -118,7 +118,7 @@ test.describe('hero spotlight block (Phase 2)', () => {
     const blockCount = await block.count()
     test.skip(blockCount === 0, 'Spotlight returned 0 cards')
 
-    const dots = block.locator('[role="tablist"] button')
+    const dots = block.locator('[data-testid="spotlight-dots"] button')
     const dotCount = await dots.count()
     test.skip(dotCount < 2, 'Need at least 2 cards to verify keyboard nav')
 
@@ -144,7 +144,7 @@ test.describe('hero spotlight block (Phase 2)', () => {
       test.skip(true, 'Spotlight returned 0 cards')
       return
     }
-    const dots = block.locator('[role="tablist"] button')
+    const dots = block.locator('[data-testid="spotlight-dots"] button')
     const dotCount = await dots.count()
     if (dotCount < 2) {
       await context.close()
@@ -210,7 +210,7 @@ test.describe('hero spotlight block (Phase 2)', () => {
     const blockCount = await block.count()
     test.skip(blockCount === 0, 'Spotlight returned 0 cards')
 
-    const dots = block.locator('[role="tablist"] button')
+    const dots = block.locator('[data-testid="spotlight-dots"] button')
     const dotCount = await dots.count()
     expect(dotCount).toBeGreaterThanOrEqual(1)
     expect(dotCount).toBeLessThanOrEqual(4) // Phase 2 caps at 4 static cards

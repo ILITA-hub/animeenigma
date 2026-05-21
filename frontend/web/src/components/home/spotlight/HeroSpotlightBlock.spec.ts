@@ -298,7 +298,7 @@ describe('HeroSpotlightBlock', () => {
 
     expect(readActiveIndex(wrapper)).toBe(initial)
     // Only 1 card — only 1 dot button rendered.
-    const dots = wrapper.findAll('[role="tablist"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
     expect(dots.length).toBe(1)
   })
 

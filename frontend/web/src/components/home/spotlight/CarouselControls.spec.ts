@@ -46,7 +46,7 @@ describe('CarouselControls', () => {
       props: { currentIndex: 2, cardCount: 4 },
     })
 
-    const dots = wrapper.findAll('[role="tablist"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
     expect(dots.length).toBe(4)
 
     expect(dots[0].attributes('aria-current')).toBe('false')
@@ -89,7 +89,7 @@ describe('CarouselControls', () => {
       props: { currentIndex: 0, cardCount: 4 },
     })
 
-    const dots = wrapper.findAll('[role="tablist"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
     expect(dots.length).toBe(4)
 
     // Click third dot — visually slide 3, internally idx 2 (0-indexed)
@@ -106,7 +106,7 @@ describe('CarouselControls', () => {
       props: { currentIndex: 0, cardCount: 3 },
     })
 
-    const dots = wrapper.findAll('[role="tablist"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
     // Third dot — should pass { n: 3 } (1-indexed for humans)
     const thirdLabel = dots[2].attributes('aria-label') ?? ''
     expect(thirdLabel).toContain('spotlight.goToSlide')
