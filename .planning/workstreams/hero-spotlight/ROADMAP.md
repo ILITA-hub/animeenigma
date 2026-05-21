@@ -113,7 +113,15 @@ production with 4 cards.
 
 **Requirements:** HSB-FE-01..09, HSB-FE-20..23, HSB-FE-40
 
-**SPEC:** `phases/02-frontend-carousel/02-SPEC.md` (to be written by gsd-plan-phase)
+**SPEC:** Generated from `phases/02-frontend-carousel/{02-CONTEXT,02-RESEARCH,02-UI-SPEC,02-VALIDATION}.md`
+
+**Plans:** 6 plans
+- [ ] 02-01-PLAN.md — Types + useSpotlight composable + VITE_HERO_SPOTLIGHT_ENABLED + @axe-core/playwright install (Wave 1)
+- [ ] 02-02-PLAN.md — CarouselControls.vue (stateless chevrons + dots) (Wave 1)
+- [ ] 02-03-PLAN.md — 4 card SFCs: AnimeOfDayCard, RandomTailCard, LatestNewsCard, PlatformStatsCard (Wave 2)
+- [ ] 02-04-PLAN.md — HeroSpotlightBlock.vue state machine + cross-fade CSS (Wave 3)
+- [ ] 02-05-PLAN.md — i18n payloads (en/ru spotlight.*) + key-parity Vitest (Wave 2)
+- [ ] 02-06-PLAN.md — Home.vue mount + Playwright e2e + axe-core a11y gate + redeploy (Wave 4, checkpoint)
 
 **Touches:**
 - `frontend/web/src/components/home/spotlight/HeroSpotlightBlock.vue` (new)
