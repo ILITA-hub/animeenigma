@@ -221,6 +221,16 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/collections", proxyHandler.ProxyToCatalog)
 		r.HandleFunc("/collections/*", proxyHandler.ProxyToCatalog)
 
+		// Workstream hero-spotlight, v1.0 Phase 1 (HSB-BE-06) — hero spotlight
+		// aggregator. Public, NO JWT (Phase 1 is anonymous; future personalized
+		// cards will use optional-auth on the catalog side, not enforced auth
+		// here). Mounts at /api/home/spotlight; the catalog proxy path-rewrite
+		// is a no-op so the catalog router sees the same path. Registered
+		// alongside the other public catalog passthroughs above; /home/* does
+		// not collide with /anime/* but the "specific-before-general" placement
+		// convention is project-wide.
+		r.HandleFunc("/home/spotlight", proxyHandler.ProxyToCatalog)
+
 		// Phase 17 Plan 03: admin scraper routes (protected, proxied to scraper).
 		// CRITICAL ORDER — this group MUST be registered BEFORE the generic
 		// /admin/* → catalog group below. chi resolves routes in registration
