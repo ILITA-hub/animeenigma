@@ -77,7 +77,17 @@ describe('spotlight i18n parity', () => {
     expect(typeof (ruSpotlight as Record<string, unknown>)[key]).toBe('string')
   })
 
-  const expectedSubNamespaces = ['animeOfDay', 'randomTail', 'latestNews', 'platformStats'] as const
+  const expectedSubNamespaces = [
+    'animeOfDay',
+    'randomTail',
+    'latestNews',
+    'platformStats',
+    'personalPick',
+    'telegramNews',
+    'nowWatching',
+    'notTimeYet',
+    'continueWatchingNew',
+  ] as const
 
   it.each(expectedSubNamespaces)('en.json has spotlight.%s sub-namespace', (ns) => {
     expect((enSpotlight as Record<string, unknown>)[ns]).toBeTypeOf('object')
@@ -120,5 +130,56 @@ describe('spotlight i18n parity', () => {
   it.each(platformStatsKeys)('spotlight.platformStats.%s present in both locales', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
+  })
+
+  // ── Phase 3 (Plan 03-05) ─ five new sub-namespaces ──────────────────────
+  const personalPickKeys = ['title', 'titleAnon', 'moreLink'] as const
+  it.each(personalPickKeys)('spotlight.personalPick.%s present in both locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).personalPick?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).personalPick?.[k]).toBe('string')
+  })
+
+  it('spotlight.personalPick.moreLink preserves {n} interpolation', () => {
+    expect((enSpotlight as Record<string, Record<string, string>>).personalPick.moreLink).toContain('{n}')
+    expect((ruSpotlight as Record<string, Record<string, string>>).personalPick.moreLink).toContain('{n}')
+  })
+
+  const telegramNewsKeys = ['title', 'openCta'] as const
+  it.each(telegramNewsKeys)('spotlight.telegramNews.%s present in both locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).telegramNews?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).telegramNews?.[k]).toBe('string')
+  })
+
+  const nowWatchingKeys = ['title', 'sessionLabel', 'liveBadge'] as const
+  it.each(nowWatchingKeys)('spotlight.nowWatching.%s present in both locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).nowWatching?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).nowWatching?.[k]).toBe('string')
+  })
+
+  it('spotlight.nowWatching.sessionLabel preserves {username},{anime},{n} interpolation', () => {
+    const en = (enSpotlight as Record<string, Record<string, string>>).nowWatching.sessionLabel
+    const ru = (ruSpotlight as Record<string, Record<string, string>>).nowWatching.sessionLabel
+    for (const tpl of [en, ru]) {
+      expect(tpl).toContain('{username}')
+      expect(tpl).toContain('{anime}')
+      expect(tpl).toContain('{n}')
+    }
+  })
+
+  const notTimeYetKeys = ['title', 'subtitlePlanned', 'subtitlePostponed', 'watchCta'] as const
+  it.each(notTimeYetKeys)('spotlight.notTimeYet.%s present in both locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).notTimeYet?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).notTimeYet?.[k]).toBe('string')
+  })
+
+  const continueWatchingNewKeys = ['title', 'newEpisodeBadge', 'resumeCta'] as const
+  it.each(continueWatchingNewKeys)('spotlight.continueWatchingNew.%s present in both locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).continueWatchingNew?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).continueWatchingNew?.[k]).toBe('string')
+  })
+
+  it('spotlight.continueWatchingNew.newEpisodeBadge preserves {n} interpolation', () => {
+    expect((enSpotlight as Record<string, Record<string, string>>).continueWatchingNew.newEpisodeBadge).toContain('{n}')
+    expect((ruSpotlight as Record<string, Record<string, string>>).continueWatchingNew.newEpisodeBadge).toContain('{n}')
   })
 })

@@ -1014,6 +1014,31 @@
       "activeRooms7d": "Watch parties",
       "deltaPositive": "+{n} vs last week",
       "noChange": "—"
+    },
+    "personalPick": {
+      "title": "Picked for you",
+      "titleAnon": "Trending now",
+      "moreLink": "+ {n} more →"
+    },
+    "telegramNews": {
+      "title": "From our Telegram",
+      "openCta": "Open post →"
+    },
+    "nowWatching": {
+      "title": "Watching now",
+      "sessionLabel": "{username} → {anime} · ep {n}",
+      "liveBadge": "LIVE"
+    },
+    "notTimeYet": {
+      "title": "Is it time yet?",
+      "subtitlePlanned": "From your Planned list",
+      "subtitlePostponed": "From your Postponed list",
+      "watchCta": "Watch"
+    },
+    "continueWatchingNew": {
+      "title": "Continue watching",
+      "newEpisodeBadge": "New ep {n}!",
+      "resumeCta": "Resume"
     }
   }
 }

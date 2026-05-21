@@ -1014,6 +1014,31 @@
       "activeRooms7d": "Совместных просмотров",
       "deltaPositive": "+{n} за неделю",
       "noChange": "—"
+    },
+    "personalPick": {
+      "title": "Выбрано для вас",
+      "titleAnon": "В тренде",
+      "moreLink": "+ ещё {n} →"
+    },
+    "telegramNews": {
+      "title": "Из нашего Telegram",
+      "openCta": "Открыть пост →"
+    },
+    "nowWatching": {
+      "title": "Сейчас смотрят",
+      "sessionLabel": "{username} → {anime} · эп {n}",
+      "liveBadge": "LIVE"
+    },
+    "notTimeYet": {
+      "title": "Не пришло ли время?",
+      "subtitlePlanned": "Из «Запланировано»",
+      "subtitlePostponed": "Из «Отложено»",
+      "watchCta": "Смотреть"
+    },
+    "continueWatchingNew": {
+      "title": "Продолжить просмотр",
+      "newEpisodeBadge": "Новая серия ep {n}!",
+      "resumeCta": "Продолжить"
     }
   }
 }

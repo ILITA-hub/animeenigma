@@ -1,7 +1,11 @@
 /**
- * Workstream hero-spotlight — Phase 2 (frontend-carousel) Plan 02-01.
+ * Workstream hero-spotlight — Phase 2 (frontend-carousel) Plan 02-01,
+ * extended by Phase 3 (dynamic-cards-migration) Plan 03-05 with 5 new variants.
  *
- * Discriminated-union types for the `GET /api/home/spotlight` envelope.
+ * Discriminated-union types for the `GET /api/home/spotlight` envelope. All
+ * 9 SpotlightCard variants are declared here; HeroSpotlightBlock.vue dispatches
+ * via an explicit v-if/v-else-if chain (NOT `<component :is>`) so vue-tsc
+ * narrows `card.data` for each branch.
  *
  * Field shapes were verified against the LIVE Phase 1 endpoint on 2026-05-21
  * via:
@@ -30,12 +34,6 @@
  *     compatible).
  *  5. Per RESEARCH.md Pitfall 8, fields stay snake_case all the way from
  *     backend through composable to card component — no transform step.
- *
- * Phase 3 will add additional card variants (personal_pick, now_watching,
- * telegram_news, not_time_yet, continue_watching_new). Those are NOT
- * forward-declared here — adding them now without backend support would
- * make `cardFor()` switch coverage misleadingly "exhaustive". Phase 3's
- * plan owns extending this union.
  */
 
 /* ──────────────────────────────────────────────────────────────────────── */
@@ -132,8 +130,86 @@ export interface PlatformStatsData {
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
-/*  Discriminated union — narrows correctly in `cardFor(card.type)`         */
-/*  switch / map in HeroSpotlightBlock.vue.                                 */
+/*  Phase 3 (Plan 03-05) additions — 5 new card variants                    */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * PersonalPickCard — 1..3 picks. When the viewer is anonymous, the backend
+ * downgrades to `source: 'trending'`; logged-in users get a personalized list
+ * (`source: 'personal'`). The UI uses `source` to swap the title key and the
+ * mobile-footer "+ N more →" router target (/browse?sort=trending vs /recs).
+ */
+export interface PersonalPickItem {
+  anime: SpotlightAnime
+  // Optional i18n key (e.g. "spotlight.personalPick.reason.becauseYouWatched")
+  // — the card renders `t(item.reason_i18n_key)` when present.
+  reason_i18n_key?: string
+}
+export interface PersonalPickData {
+  items: PersonalPickItem[]
+  source: 'trending' | 'personal'
+}
+
+/**
+ * TelegramNewsCard — 1..3 telegram-channel post excerpts. Backend supplies
+ * the human-facing `title?` / `excerpt` / external `link?` / ISO `date?`.
+ * The card renders excerpts as line-clamp-2 with an "Open post →" anchor
+ * carrying `rel="noopener noreferrer"` (T-03-18 in the threat register).
+ */
+export interface TelegramPost {
+  title?: string
+  excerpt: string
+  link?: string
+  date?: string
+}
+export interface TelegramNewsData {
+  posts: TelegramPost[]
+}
+
+/**
+ * NowWatchingCard — 1..3 live-watching sessions. Each row renders a green
+ * "LIVE" dot, the username (linking to the public profile), the anime title
+ * (linking to detail), and the current episode number. Backend enforces
+ * HSB-NF-04 (no PII beyond username/public_id/anime-fields).
+ */
+export interface NowWatchingSession {
+  username: string
+  public_id: string
+  anime_id: string
+  anime_name?: string
+  anime_name_ru?: string
+  poster_url?: string
+  episode_number: number
+  updated_at: string
+}
+export interface NowWatchingData {
+  sessions: NowWatchingSession[]
+}
+
+/**
+ * NotTimeYetCard — single anime from the viewer's Planned or Postponed list
+ * that the backend deemed "ready to start". The UI swaps the subtitle key
+ * based on `status` and links to the anime detail page for an opt-in start.
+ */
+export interface NotTimeYetData {
+  anime: SpotlightAnime
+  status: 'planned' | 'postponed'
+}
+
+/**
+ * ContinueWatchingNewCard — single anime where the user finished
+ * `last_watched_episode` and a `new_episode_number` aired since. The card
+ * renders a purple "New ep N!" badge and a "Resume" CTA.
+ */
+export interface ContinueWatchingNewData {
+  anime: SpotlightAnime
+  last_watched_episode: number
+  new_episode_number: number
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
+/*  Discriminated union — narrows correctly in the v-if/v-else-if dispatch  */
+/*  chain inside HeroSpotlightBlock.vue.                                    */
 /* ──────────────────────────────────────────────────────────────────────── */
 
 export type SpotlightCard =
@@ -141,6 +217,11 @@ export type SpotlightCard =
   | { type: 'random_tail'; data: RandomTailData }
   | { type: 'latest_news'; data: LatestNewsData }
   | { type: 'platform_stats'; data: PlatformStatsData }
+  | { type: 'personal_pick'; data: PersonalPickData }
+  | { type: 'telegram_news'; data: TelegramNewsData }
+  | { type: 'now_watching'; data: NowWatchingData }
+  | { type: 'not_time_yet'; data: NotTimeYetData }
+  | { type: 'continue_watching_new'; data: ContinueWatchingNewData }
 
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Top-level fetch envelope returned by `GET /api/home/spotlight`.         */
