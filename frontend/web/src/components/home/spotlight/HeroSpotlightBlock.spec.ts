@@ -351,4 +351,86 @@ describe('HeroSpotlightBlock', () => {
     expect(errSpy).not.toHaveBeenCalled()
     errSpy.mockRestore()
   })
+
+  // ── Phase 3 (Plan 03-05) ─ 5 new card types dispatch correctly ─────────
+  //
+  // Fixtures for each new card variant. We mount with a single-card carousel
+  // for each type and assert the matching card component renders.
+  const newCardFixtures: Record<string, SpotlightCard> = {
+    personal_pick: {
+      type: 'personal_pick',
+      data: {
+        source: 'personal',
+        items: [{ anime: { id: 'p1', name: 'A', name_ru: 'А' } }],
+      },
+    },
+    telegram_news: {
+      type: 'telegram_news',
+      data: { posts: [{ excerpt: 'hello', link: 'https://t.me/x/1' }] },
+    },
+    now_watching: {
+      type: 'now_watching',
+      data: {
+        sessions: [
+          {
+            username: 'u1',
+            public_id: 'pid1',
+            anime_id: 'a1',
+            anime_name: 'A',
+            episode_number: 3,
+            updated_at: '2026-05-21T10:00:00Z',
+          },
+        ],
+      },
+    },
+    not_time_yet: {
+      type: 'not_time_yet',
+      data: { status: 'planned', anime: { id: 'a1', name: 'A', name_ru: 'А' } },
+    },
+    continue_watching_new: {
+      type: 'continue_watching_new',
+      data: {
+        anime: { id: 'a1', name: 'A', name_ru: 'А' },
+        last_watched_episode: 5,
+        new_episode_number: 7,
+      },
+    },
+  }
+
+  it.each(Object.keys(newCardFixtures))(
+    'dispatches new card type %s via v-if/v-else-if chain',
+    async (type) => {
+      mockState.loading.value = false
+      mockState.cards.value = []
+      const wrapper = mountBlock()
+      mockState.cards.value = [newCardFixtures[type]]
+      await flushPromises()
+
+      // Section + slide container present.
+      expect(wrapper.find('section[role="region"]').exists()).toBe(true)
+      const slide = wrapper.find('[role="group"]')
+      expect(slide.exists()).toBe(true)
+
+      // The slide aria-label encodes the card title via the mocked t().
+      // For multi-item / personal cards we expect their title key; for
+      // single-anime cards we expect the anime name "A" (from fixture).
+      const label = slide.attributes('aria-label') ?? ''
+      switch (type) {
+        case 'personal_pick':
+          expect(label).toContain('spotlight.personalPick.title')
+          break
+        case 'telegram_news':
+          expect(label).toContain('spotlight.telegramNews.title')
+          break
+        case 'now_watching':
+          expect(label).toContain('spotlight.nowWatching.title')
+          break
+        case 'not_time_yet':
+        case 'continue_watching_new':
+          // getLocalizedTitle stub returns first non-empty -> "A".
+          expect(label).toContain('"title":"A"')
+          break
+      }
+    },
+  )
 })

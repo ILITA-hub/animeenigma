@@ -87,6 +87,31 @@
             :key="`platform_stats:${currentIndex}`"
             :data="active.data"
           />
+          <PersonalPickCard
+            v-else-if="active.type === 'personal_pick'"
+            :key="`personal_pick:${currentIndex}`"
+            :data="active.data"
+          />
+          <TelegramNewsCard
+            v-else-if="active.type === 'telegram_news'"
+            :key="`telegram_news:${currentIndex}`"
+            :data="active.data"
+          />
+          <NowWatchingCard
+            v-else-if="active.type === 'now_watching'"
+            :key="`now_watching:${currentIndex}`"
+            :data="active.data"
+          />
+          <NotTimeYetCard
+            v-else-if="active.type === 'not_time_yet'"
+            :key="`not_time_yet:${currentIndex}`"
+            :data="active.data"
+          />
+          <ContinueWatchingNewCard
+            v-else-if="active.type === 'continue_watching_new'"
+            :key="`continue_watching_new:${currentIndex}`"
+            :data="active.data"
+          />
         </transition>
       </div>
       <CarouselControls
@@ -111,6 +136,11 @@ import AnimeOfDayCard from './cards/AnimeOfDayCard.vue'
 import RandomTailCard from './cards/RandomTailCard.vue'
 import LatestNewsCard from './cards/LatestNewsCard.vue'
 import PlatformStatsCard from './cards/PlatformStatsCard.vue'
+import PersonalPickCard from './cards/PersonalPickCard.vue'
+import TelegramNewsCard from './cards/TelegramNewsCard.vue'
+import NowWatchingCard from './cards/NowWatchingCard.vue'
+import NotTimeYetCard from './cards/NotTimeYetCard.vue'
+import ContinueWatchingNewCard from './cards/ContinueWatchingNewCard.vue'
 import { getLocalizedTitle } from '@/utils/title'
 
 // Locked at 7000 ms per HSB-FE-03. Do not parametrize — the cadence is part
@@ -242,6 +272,26 @@ function cardTitle(card: SpotlightCard): string {
       return t('spotlight.latestNews.title')
     case 'platform_stats':
       return t('spotlight.platformStats.title')
+    case 'personal_pick':
+      return card.data.source === 'trending'
+        ? t('spotlight.personalPick.titleAnon')
+        : t('spotlight.personalPick.title')
+    case 'telegram_news':
+      return t('spotlight.telegramNews.title')
+    case 'now_watching':
+      return t('spotlight.nowWatching.title')
+    case 'not_time_yet':
+      return getLocalizedTitle(
+        card.data.anime.name,
+        card.data.anime.name_ru,
+        card.data.anime.name_jp,
+      )
+    case 'continue_watching_new':
+      return getLocalizedTitle(
+        card.data.anime.name,
+        card.data.anime.name_ru,
+        card.data.anime.name_jp,
+      )
   }
 }
 </script>
