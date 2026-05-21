@@ -954,5 +954,32 @@
     "emptyItems": "このコレクションにはまだアニメがありません。",
     "notFound": "コレクションが見つかりません。",
     "homeRowLabel": "コレクション"
+  },
+  "notifications": {
+    "bell": {
+      "tooltip": "通知",
+      "ariaLabel": "通知",
+      "ariaLabelWithCount": "通知、未読 {count} 件"
+    },
+    "dropdown": {
+      "markAllRead": "すべて既読にする",
+      "empty": "通知はまだありません。",
+      "loading": "読み込み中…",
+      "title": "通知"
+    },
+    "newEpisode": {
+      "singleEp": "第 {n} 話が公開されました",
+      "rangeEp": "第 {n}–{m} 話が公開されました",
+      "via": "{translation} 経由"
+    },
+    "unknown": {
+      "title": "新しい通知 — リストで確認"
+    },
+    "toast": {
+      "dismissAria": "閉じる"
+    },
+    "time": {
+      "justNow": "たった今"
+    }
   }
 }

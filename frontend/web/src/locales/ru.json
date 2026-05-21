@@ -954,5 +954,32 @@
     "emptyItems": "В этой подборке пока нет аниме.",
     "notFound": "Подборка не найдена.",
     "homeRowLabel": "Подборки"
+  },
+  "notifications": {
+    "bell": {
+      "tooltip": "Уведомления",
+      "ariaLabel": "Уведомления",
+      "ariaLabelWithCount": "Уведомления, непрочитанных: {count}"
+    },
+    "dropdown": {
+      "markAllRead": "Отметить все как прочитанные",
+      "empty": "Пока нет уведомлений.",
+      "loading": "Загрузка…",
+      "title": "Уведомления"
+    },
+    "newEpisode": {
+      "singleEp": "Вышла серия {n}",
+      "rangeEp": "Вышли серии {n}–{m}",
+      "via": "через {translation}"
+    },
+    "unknown": {
+      "title": "Новое уведомление — откройте список"
+    },
+    "toast": {
+      "dismissAria": "Закрыть"
+    },
+    "time": {
+      "justNow": "только что"
+    }
   }
 }

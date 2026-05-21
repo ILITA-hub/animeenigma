@@ -954,5 +954,32 @@
     "emptyItems": "No anime in this collection yet.",
     "notFound": "Collection not found.",
     "homeRowLabel": "Collections"
+  },
+  "notifications": {
+    "bell": {
+      "tooltip": "Notifications",
+      "ariaLabel": "Notifications",
+      "ariaLabelWithCount": "Notifications, {count} unread"
+    },
+    "dropdown": {
+      "markAllRead": "Mark all as read",
+      "empty": "No notifications yet.",
+      "loading": "Loading…",
+      "title": "Notifications"
+    },
+    "newEpisode": {
+      "singleEp": "Episode {n} is out",
+      "rangeEp": "Episodes {n}–{m} are out",
+      "via": "via {translation}"
+    },
+    "unknown": {
+      "title": "New notification — view in dropdown"
+    },
+    "toast": {
+      "dismissAria": "Dismiss"
+    },
+    "time": {
+      "justNow": "just now"
+    }
   }
 }
