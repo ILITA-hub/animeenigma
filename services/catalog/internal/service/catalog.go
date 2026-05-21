@@ -140,6 +140,16 @@ func (s *CatalogService) AnimeLibClient() *animelib.Client {
 	return s.animelibClient
 }
 
+// ResolveAnimeLibID exposes the otherwise-unexported findAnimeLibID helper so
+// the Phase 2 notifications detector (via services/catalog/internal/service/
+// episodes_lookup.go) can map a catalog *domain.Anime → AnimeLib's internal
+// numeric ID without duplicating the search-then-pick logic. The 24h
+// `animelib:mapping:{anime.ID}` Redis cache inside findAnimeLibID already
+// absorbs the cost of repeated lookups across detector runs.
+func (s *CatalogService) ResolveAnimeLibID(ctx context.Context, anime *domain.Anime) (int, error) {
+	return s.findAnimeLibID(ctx, anime)
+}
+
 // HanimeClient returns the Hanime parser client.
 func (s *CatalogService) HanimeClient() *hanime.Client {
 	return s.hanimeClient
