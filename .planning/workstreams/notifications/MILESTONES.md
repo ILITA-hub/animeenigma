@@ -1,9 +1,12 @@
 # Milestones — `notifications` workstream
 
-## v1.0 Notifications Engine (active)
+## v1.0 Notifications Engine (shipped)
 
-**Status:** 🟢 Planning — roadmap drafted 2026-05-20, Phase 1 plan pending
+**Status:** ✅ Shipped — 3/3 phases delivered, 30/30 requirements, audit PASSED
 **Started:** 2026-05-20
+**Shipped:** 2026-05-21
+**Audit:** `v1.0-MILESTONE-AUDIT.md` — PASSED
+**Summary:** `milestones/v1.0-SUMMARY.md`
 **Source design doc:** `/data/animeenigma/docs/superpowers/specs/2026-05-11-notifications-engine-design.md`
 
 **Scope:** A new `services/notifications/` Go microservice on port 8087 + two new tables (`user_notifications` + `parser_episode_snapshots`) + one new catalog internal endpoint (`/internal/anime/{shikimori_id}/episodes`) + hourly cron detector + daily cleanup + frontend bell / dropdown / toast / Pinia store / type-pluggable renderer registry / 3-locale i18n. First (and only v1.0) concrete notification type is `new_episode` — "a new episode of an ongoing show you are watching is available on the same player/translation". Engine is built type-pluggable so future types (`new_comment`, `friend_activity`, `system_announcement`) need a payload + a renderer component only, with zero engine changes.

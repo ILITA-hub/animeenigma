@@ -33,7 +33,7 @@ A user with 3-8 ongoing shows in their `anime_list.status = 'watching'` should n
 
 ## Active milestone
 
-🟢 **v1.0 Notifications Engine** — Three phases, vertical-slice decomposition:
+✅ **v1.0 Notifications Engine** — **SHIPPED 2026-05-21**. See [`milestones/v1.0-SUMMARY.md`](milestones/v1.0-SUMMARY.md) and [`v1.0-MILESTONE-AUDIT.md`](v1.0-MILESTONE-AUDIT.md). Original phase decomposition (frozen for reference):
 
 | Phase | Layer | Independently demoable end-state |
 |---|---|---|
