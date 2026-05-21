@@ -7,6 +7,12 @@
          readers see the alert before the page title. -->
     <SystemStatusBanner />
 
+    <!-- Phase 2 (HSB-FE-01) — HeroSpotlightBlock. Self-gated on flag +
+         cards.length > 0 + non-error state; silent self-hide otherwise.
+         Mounted ABOVE the legacy trending row during the Phase 2 dual-flag
+         transition window. Phase 3 (HSB-MIG-01) owns the legacy row removal. -->
+    <HeroSpotlightBlock />
+
     <!-- Search Bar -->
     <h1 class="sr-only">AnimeEnigma</h1>
     <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
@@ -443,6 +449,7 @@ import ContinueWatchingRow from '@/components/home/ContinueWatchingRow.vue'
 // Phase 17 (UX-33) — admin-curated editorial collections home row.
 import CollectionsRow from '@/components/home/CollectionsRow.vue'
 import SystemStatusBanner from '@/components/home/SystemStatusBanner.vue'
+import HeroSpotlightBlock from '@/components/home/spotlight/HeroSpotlightBlock.vue'
 
 interface HomeAnime {
   id: string
