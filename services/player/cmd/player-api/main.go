@@ -94,6 +94,21 @@ func main() {
 		log.Fatalw("failed to drop redundant idx_watch_progress_user_id", "error", err)
 	}
 
+	// Hero-spotlight workstream Plan 03-01 (HSB-NF-02 / HSB-BE-30): standalone
+	// index on watch_progress.updated_at so the spotlight `now_watching` resolver
+	// can `WHERE updated_at > NOW() - INTERVAL '5 minutes'` cheaply as
+	// watch_progress grows. The GORM tag in domain/watch.go declares this index,
+	// but GORM AutoMigrate silently skips adding new single-column indexes to
+	// tables that already exist (no DDL change emitted), so the index never
+	// appeared on the deployed DB. Raw idempotent backfill — no-op on fresh DBs
+	// where AutoMigrate did create it. (Found during Plan 03-07 smoke check 8.)
+	if err := db.DB.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_watch_progress_updated_at
+		ON watch_progress (updated_at)
+	`).Error; err != nil {
+		log.Fatalw("failed to create idx_watch_progress_updated_at", "error", err)
+	}
+
 	// Phase 1 (workstream: social) — one-shot idempotent migration that
 	// merges every legacy `reviews` row into `anime_list` then drops the
 	// `reviews` table. Guarded by db.Migrator().HasTable("reviews"); after
