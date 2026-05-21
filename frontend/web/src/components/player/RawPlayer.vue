@@ -362,17 +362,29 @@ const selectEpisode = async (ep: RawEpisode) => {
   selectedSubKey.value = ''
   subsByLang.value = null
   disposePlayer()
+
+  // Subtitles run in parallel but are awaited independently. Jimaku occasionally
+  // stalls past the gateway's 15s timeout; bundling subs into the stream's
+  // Promise.all would let that rejection nuke the already-resolved streamUrl
+  // and trap the user on an infinite spinner with no video.
+  void (async () => {
+    try {
+      const subsResp = await subtitlesApi.byLang(props.animeId, ep.number, ['ja', 'en', 'ru'])
+      if (selectedEpisode.value?.id !== ep.id) return
+      subsByLang.value = subsResp.data?.data ?? subsResp.data
+      autoSelectSubtitle()
+    } catch {
+      if (selectedEpisode.value?.id !== ep.id) return
+      subsByLang.value = null
+    }
+  })()
+
   try {
-    const [streamResp, subsResp] = await Promise.all([
-      rawApi.getStream(props.animeId, ep.number),
-      subtitlesApi.byLang(props.animeId, ep.number, ['ja', 'en', 'ru']),
-    ])
+    const streamResp = await rawApi.getStream(props.animeId, ep.number)
+    if (selectedEpisode.value?.id !== ep.id) return
     const stream: RawStream = streamResp.data?.data ?? streamResp.data
     streamUrl.value = stream.url
     attachStream(stream.url, stream.type)
-
-    subsByLang.value = subsResp.data?.data ?? subsResp.data
-    autoSelectSubtitle()
   } catch {
     streamUrl.value = null
   } finally {
