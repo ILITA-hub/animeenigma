@@ -30,7 +30,10 @@ import RandomTailCard from './RandomTailCard.vue'
 
 function mountCard(props: Record<string, unknown>) {
   return mount(RandomTailCard, {
-    props,
+    // Card components have a typed `data` prop; vue-tsc requires a concrete
+    // shape rather than `Record<string, unknown>`. Cast at the boundary so
+    // the helper stays generic across the three card specs.
+    props: props as unknown as InstanceType<typeof RandomTailCard>['$props'],
     global: { stubs: { 'router-link': RouterLinkStub } },
   })
 }

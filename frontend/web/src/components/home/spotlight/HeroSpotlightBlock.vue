@@ -64,9 +64,27 @@
         aria-atomic="true"
       >
         <transition :name="reducedMotion ? 'none' : 'spotlight-fade'" mode="out-in">
-          <component
-            :is="cardFor(active.type)"
-            :key="`${active.type}:${currentIndex}`"
+          <!-- Per-type branches keep card prop types strictly checked under
+               vue-tsc — a bare <component :is=cardFor(...)> widens the data
+               prop to the union and breaks the build. -->
+          <AnimeOfDayCard
+            v-if="active.type === 'anime_of_day'"
+            :key="`anime_of_day:${currentIndex}`"
+            :data="active.data"
+          />
+          <RandomTailCard
+            v-else-if="active.type === 'random_tail'"
+            :key="`random_tail:${currentIndex}`"
+            :data="active.data"
+          />
+          <LatestNewsCard
+            v-else-if="active.type === 'latest_news'"
+            :key="`latest_news:${currentIndex}`"
+            :data="active.data"
+          />
+          <PlatformStatsCard
+            v-else-if="active.type === 'platform_stats'"
+            :key="`platform_stats:${currentIndex}`"
             :data="active.data"
           />
         </transition>
@@ -207,20 +225,6 @@ const active = computed<SpotlightCard | null>(() => {
   if (cards.value.length === 0) return null
   return cards.value[currentIndex.value] ?? null
 })
-
-// Static map from card.type → component. Keeping this as a constant (not a
-// switch) makes the dispatch O(1) and lets the TypeScript checker flag any
-// missing variant when SpotlightCard's union is extended in Phase 3.
-const CARD_MAP = {
-  anime_of_day: AnimeOfDayCard,
-  random_tail: RandomTailCard,
-  latest_news: LatestNewsCard,
-  platform_stats: PlatformStatsCard,
-} as const
-
-function cardFor(type: SpotlightCard['type']) {
-  return CARD_MAP[type]
-}
 
 // Resolves a human-readable title for the slide aria-label. Anime cards use
 // the localized helper (Pitfall 8 — fields are snake_case end-to-end).
