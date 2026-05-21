@@ -981,5 +981,39 @@
     "time": {
       "justNow": "たった今"
     }
+  },
+  "spotlight": {
+    "regionLabel": "今日の注目",
+    "slideLabel": "{n} / {total} スライド",
+    "slideLabelWithTitle": "{n} / {total} スライド: {title}",
+    "prevSlide": "前のスライド",
+    "nextSlide": "次のスライド",
+    "goToSlide": "スライド {n} へ",
+    "pauseAutoplay": "自動再生を一時停止",
+    "animeOfDay": {
+      "title": "今日のアニメ",
+      "watchCta": "視聴",
+      "addCta": "リストに追加",
+      "scoreLabel": "スコア",
+      "episodesLabel": "{n}話"
+    },
+    "randomTail": {
+      "title": "ランダムピック",
+      "subtitle": "新しい発見を",
+      "discoverCta": "開く"
+    },
+    "latestNews": {
+      "title": "新着情報",
+      "readMore": "更新履歴を見る →",
+      "entryDate": "{date}"
+    },
+    "platformStats": {
+      "title": "今週のプラットフォーム",
+      "animeAdded7d": "新着アニメ",
+      "episodesAdded7d": "新着エピソード",
+      "activeRooms7d": "同時視聴",
+      "deltaPositive": "+{n} 前週比",
+      "noChange": "—"
+    }
   }
 }
