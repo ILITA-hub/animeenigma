@@ -33,6 +33,11 @@ type Config struct {
 	// Library — workstream raw-jp, Phase 06 (v0.2). Hybrid resolver
 	// consults this service first before falling back to AllAnime.
 	Library LibraryConfig
+	// SpotlightEnabled gates GET /api/home/spotlight (workstream
+	// hero-spotlight, v1.0 Phase 1). When false the handler returns
+	// a bare 404 with no body so the frontend HSB-FE-02 v-if hides
+	// the block. Default true. Env: SPOTLIGHT_ENABLED.
+	SpotlightEnabled bool
 }
 
 type ServerConfig struct {
@@ -185,6 +190,7 @@ func Load() (*Config, error) {
 			APIURL:  getEnv("LIBRARY_API_URL", "http://library:8089"),
 			Timeout: getEnvDuration("LIBRARY_API_TIMEOUT", 2*time.Second),
 		},
+		SpotlightEnabled: getEnvBool("SPOTLIGHT_ENABLED", true),
 	}, nil
 }
 
@@ -222,6 +228,19 @@ func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
 	if val := os.Getenv(key); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {
 			return d
+		}
+	}
+	return defaultVal
+}
+
+// getEnvBool parses a boolean env var via strconv.ParseBool. Accepts
+// "true"/"false"/"1"/"0"/"t"/"f"/"True"/"False" etc. On unset OR parse
+// failure (e.g. "garbage"), returns defaultVal. Used for feature flags
+// like SPOTLIGHT_ENABLED (workstream hero-spotlight, v1.0 Phase 1).
+func getEnvBool(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			return b
 		}
 	}
 	return defaultVal
