@@ -6,13 +6,13 @@ milestone_name: "Notifications Engine"
 created: 2026-05-20
 status: planning
 last_updated: "2026-05-21"
-last_activity: "2026-05-21 — Phase 1 SHIPPED. 6 atomic commits merged to main (worktree branch worktree-agent-ac54bed54dd03a2c1, no-ff merge). 6/6 success criteria PASS live. Two auto-fix deviations: D-PORT (8087→8090 due to host maintenance binary collision, same precedent as library v0.2 at 8089) and D-DOCKERFILE (sibling go.mod COPY added to 10 service Dockerfiles for go.work compatibility). Service live at notifications:8090, gateway routes /api/notifications/* under JWT, /internal/notifications producer endpoint ready for Phase 2 detector. CRUD surface ready for Phase 3 frontend development."
+last_activity: "2026-05-21 — Phase 2 SHIPPED. 5 atomic commits merged. Catalog has new /internal/anime/{id}/episodes (5min Redis cache, kodik+animelib only; English deferred to v1.0.x). NewEpisodeDetectorJob (hourly cron ±5min jitter) with bootstrap protection, dedupe-key UPSERT, failure isolation, idempotency, aggregation. Daily cleanup at 03:30. Admin /internal/detector/run-once + /internal/cleanup/run-once for deterministic verify. 6 Prometheus metrics. 5 unit tests including Test_Detector_BootstrapProtection. 7/7 SC PASS. All 10 services healthy. Two auto-fixes in verification (catalog envelope unwrap, Postgres INTERVAL syntax). Phase 3 (frontend) unblocked — real notifications now materialize hourly."
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 33
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State — `notifications` workstream
@@ -27,22 +27,22 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 ## Current Position
 
-Phase: Phase 1 (Notifications Service Foundation) — COMPLETE ✓
-Plan: `phases/01-notifications-foundation/PLAN.md` (executed)
-Status: Phase 1 shipped; Phase 2 (detector + catalog endpoint) ready to plan
-Last activity: 2026-05-21 — Phase 1 merged to main; 6/6 SC pass; SUMMARY.md written
+Phase: Phase 2 (Detector + Catalog Endpoint) — COMPLETE ✓
+Plan: `phases/02-detector-and-catalog-endpoint/02-PLAN.md` (executed)
+Status: Phases 1 + 2 shipped; Phase 3 (frontend bell + dropdown + toast) ready to plan
+Last activity: 2026-05-21 — Phase 2 merged to main; 7/7 SC pass; 02-SUMMARY.md written
 
 ## Resume / Continuity
 
-**Resume file:** none — Phase 1 done, awaiting Phase 2 plan generation.
-**Next command:** `/gsd-plan-phase 2 --ws notifications` to plan the detector + catalog endpoint, then `/gsd-execute-phase 2 --ws notifications`.
+**Resume file:** none — Phases 1 + 2 done, awaiting Phase 3 plan generation.
+**Next command:** `/gsd-plan-phase 3 --ws notifications` then `/gsd-ui-phase 3 --ws notifications` (frontend phase — UI-SPEC generation) then `/gsd-execute-phase 3 --ws notifications`.
 
 ## Workstream Phase Map
 
 | Phase | Name                                                                          | Requirements                                            | Status |
 |-------|-------------------------------------------------------------------------------|---------------------------------------------------------|--------|
 | 1     | Notifications Service Foundation                                              | NOTIF-FOUND-01..08, NOTIF-NF-04 (partial)               | **complete ✓** |
-| 2     | Catalog Internal Endpoint + Episode Detector + Cleanup                        | NOTIF-DET-01..10, NOTIF-NF-01, NOTIF-NF-02              | pending |
+| 2     | Catalog Internal Endpoint + Episode Detector + Cleanup                        | NOTIF-DET-01..10, NOTIF-NF-01, NOTIF-NF-02              | **complete ✓** |
 | 3     | Frontend — Bell + Dropdown + Toast + Pinia Store + Renderer Registry + i18n   | NOTIF-UI-01..08, NOTIF-NF-03                            | pending |
 
 ## Operator Next Steps
