@@ -70,10 +70,13 @@ func NewRouter(
 		r.Get("/anime/news", newsHandler.GetNews)
 
 		// Hero spotlight aggregator (workstream hero-spotlight, v1.0 Phase 1).
-		// Public — no auth (Phase 3 will add optional-auth for personalized
-		// cards). Feature-flag gated INSIDE the handler — returns bare 404
-		// when SPOTLIGHT_ENABLED=false (see config.go).
-		r.Get("/home/spotlight", spotlightHandler.Get)
+		// Phase 3 (Plan 03-04) wraps this — and ONLY this — route with
+		// OptionalAuthMiddleware so login-only cards (personal_pick login
+		// path, not_time_yet, continue_watching_new) become eligible when a
+		// valid JWT is present. The middleware NEVER 401s — anon callers
+		// proceed with userID=nil. Feature-flag gated INSIDE the handler —
+		// returns bare 404 when SPOTLIGHT_ENABLED=false (see config.go).
+		r.With(OptionalAuthMiddleware(cfg.JWT)).Get("/home/spotlight", spotlightHandler.Get)
 
 		// Public catalog routes
 		r.Route("/anime", func(r chi.Router) {

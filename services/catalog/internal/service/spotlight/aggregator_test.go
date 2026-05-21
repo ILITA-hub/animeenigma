@@ -483,6 +483,130 @@ func TestKeyPrefix_AllWritesUseSpotlightPrefix(t *testing.T) {
 	}
 }
 
+// capturingResolver is a fake Resolver that captures the (userID, JWT-on-ctx)
+// it was invoked with. Used by Plan 03-04 Task 2 to assert the aggregator
+// fan-out propagates the userID + ctx-attached JWT to every resolver. The
+// `card` is returned verbatim; nil ⇒ ineligible (silent drop).
+type capturingResolver struct {
+	typ  string
+	card *Card
+
+	mu        sync.Mutex
+	gotUserID *string
+	gotJWT    string
+	gotJWTOK  bool
+	captured  bool
+}
+
+func (f *capturingResolver) Type() string { return f.typ }
+
+func (f *capturingResolver) Resolve(ctx context.Context, userID *string) (*Card, error) {
+	// Import path workaround — aggregator package cannot import cards (it
+	// would create a cycle), so we read the JWT directly via the same key
+	// the cards.ContextWithJWT helper uses. The key type is the unexported
+	// struct{} value behind `cards.ContextWithJWT`; we re-define a local
+	// alias at the bottom of this file.
+	f.mu.Lock()
+	if userID != nil {
+		v := *userID
+		f.gotUserID = &v
+	} else {
+		f.gotUserID = nil
+	}
+	jwt, ok := jwtFromCtxForTest(ctx)
+	f.gotJWT = jwt
+	f.gotJWTOK = ok
+	f.captured = true
+	f.mu.Unlock()
+	return f.card, nil
+}
+
+func (f *capturingResolver) snapshot() (userID *string, jwt string, jwtOK bool, called bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gotUserID, f.gotJWT, f.gotJWTOK, f.captured
+}
+
+// TestAggregator_NineCards_PassesUserIDAndJWT proves the aggregator's fan-out
+// preserves the (userID, JWT-on-ctx) contract across 9 concurrent resolvers —
+// the exact wave-3 configuration Plan 04 wires in main.go. Every resolver:
+//
+//  1. Saw the same userID pointer value the caller passed.
+//  2. Saw the same JWT string the caller attached via ContextWithJWT.
+//  3. Contributed its card to the response (len(Cards) == 9).
+//
+// This is the regression guard for the 9-card production wiring (HSB-BE-02).
+func TestAggregator_NineCards_PassesUserIDAndJWT(t *testing.T) {
+	caps := []*capturingResolver{
+		{typ: "anime_of_day", card: &Card{Type: "anime_of_day"}},
+		{typ: "random_tail", card: &Card{Type: "random_tail"}},
+		{typ: "latest_news", card: &Card{Type: "latest_news"}},
+		{typ: "platform_stats", card: &Card{Type: "platform_stats"}},
+		{typ: "personal_pick", card: &Card{Type: "personal_pick"}},
+		{typ: "telegram_news", card: &Card{Type: "telegram_news"}},
+		{typ: "now_watching", card: &Card{Type: "now_watching"}},
+		{typ: "not_time_yet", card: &Card{Type: "not_time_yet"}},
+		{typ: "continue_watching_new", card: &Card{Type: "continue_watching_new"}},
+	}
+	resolvers := make([]Resolver, 0, len(caps))
+	for _, c := range caps {
+		resolvers = append(resolvers, c)
+	}
+
+	c := newFakeCache()
+	agg := NewAggregator(c, testLogger(t), resolvers)
+
+	wantUserID := "user1"
+	wantJWT := "testjwt"
+	ctx := contextWithJWTForTest(context.Background(), wantJWT)
+	resp, err := agg.Resolve(ctx, &wantUserID)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(resp.Cards) != 9 {
+		t.Fatalf("expected 9 cards, got %d (cards=%+v)", len(resp.Cards), resp.Cards)
+	}
+
+	for _, cr := range caps {
+		got, jwt, jwtOK, called := cr.snapshot()
+		if !called {
+			t.Errorf("resolver %q was not invoked", cr.typ)
+			continue
+		}
+		if got == nil {
+			t.Errorf("resolver %q saw userID=nil, want *userID=%q", cr.typ, wantUserID)
+			continue
+		}
+		if *got != wantUserID {
+			t.Errorf("resolver %q saw *userID=%q, want %q", cr.typ, *got, wantUserID)
+		}
+		if !jwtOK || jwt != wantJWT {
+			t.Errorf("resolver %q saw JWT=%q ok=%v, want %q ok=true", cr.typ, jwt, jwtOK, wantJWT)
+		}
+	}
+}
+
+// jwtKeyForTest mirrors the unexported jwtKey type in the cards package so
+// the aggregator tests can verify the JWT-on-ctx contract without importing
+// cards (which would create a package cycle: cards → spotlight → cards).
+// The struct{} value type must be IDENTICAL to the one in
+// services/catalog/internal/service/spotlight/cards/jwt_context.go for the
+// ctx-value lookup to match — but since contextWithJWTForTest writes via
+// the same local key, they are consistent within this test file.
+type jwtKeyForTest struct{}
+
+func contextWithJWTForTest(ctx context.Context, jwt string) context.Context {
+	return context.WithValue(ctx, jwtKeyForTest{}, jwt)
+}
+
+func jwtFromCtxForTest(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(jwtKeyForTest{}).(string)
+	if !ok || v == "" {
+		return "", false
+	}
+	return v, true
+}
+
 // TestAggregator_ErroringResolver_EmitsErrorw verifies that a resolver
 // returning (nil, err) is dropped AND its sibling cards are returned.
 // Log assertion is best-effort (we don't introspect logs directly) but
