@@ -1018,7 +1018,11 @@
     "personalPick": {
       "title": "Выбрано для вас",
       "titleAnon": "В тренде",
-      "moreLink": "+ ещё {n} →"
+      "moreLink": "+ ещё {n} →",
+      "reason": {
+        "trending": "В тренде",
+        "personal": "Рекомендация"
+      }
     },
     "telegramNews": {
       "title": "Из нашего Telegram",

@@ -1018,7 +1018,11 @@
     "personalPick": {
       "title": "あなたへのおすすめ",
       "titleAnon": "トレンド",
-      "moreLink": "+ もう{n}件 →"
+      "moreLink": "+ もう{n}件 →",
+      "reason": {
+        "trending": "トレンド",
+        "personal": "おすすめ"
+      }
     },
     "telegramNews": {
       "title": "Telegram より",
