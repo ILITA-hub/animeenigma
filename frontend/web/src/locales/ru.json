@@ -981,5 +981,39 @@
     "time": {
       "justNow": "только что"
     }
+  },
+  "spotlight": {
+    "regionLabel": "Подборка дня",
+    "slideLabel": "Слайд {n} из {total}",
+    "slideLabelWithTitle": "Слайд {n} из {total}: {title}",
+    "prevSlide": "Предыдущий слайд",
+    "nextSlide": "Следующий слайд",
+    "goToSlide": "Перейти к слайду {n}",
+    "pauseAutoplay": "Автопрокрутка приостановлена",
+    "animeOfDay": {
+      "title": "Аниме дня",
+      "watchCta": "Смотреть",
+      "addCta": "В список",
+      "scoreLabel": "Рейтинг",
+      "episodesLabel": "{n} эп."
+    },
+    "randomTail": {
+      "title": "Случайная находка",
+      "subtitle": "Откройте что-то новое",
+      "discoverCta": "Открыть"
+    },
+    "latestNews": {
+      "title": "Что нового",
+      "readMore": "Все обновления →",
+      "entryDate": "{date}"
+    },
+    "platformStats": {
+      "title": "Платформа за неделю",
+      "animeAdded7d": "Новых аниме",
+      "episodesAdded7d": "Новых серий",
+      "activeRooms7d": "Совместных просмотров",
+      "deltaPositive": "+{n} за неделю",
+      "noChange": "—"
+    }
   }
 }

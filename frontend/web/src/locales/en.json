@@ -981,5 +981,39 @@
     "time": {
       "justNow": "just now"
     }
+  },
+  "spotlight": {
+    "regionLabel": "Today's spotlight",
+    "slideLabel": "Slide {n} of {total}",
+    "slideLabelWithTitle": "Slide {n} of {total}: {title}",
+    "prevSlide": "Previous slide",
+    "nextSlide": "Next slide",
+    "goToSlide": "Go to slide {n}",
+    "pauseAutoplay": "Autoplay paused",
+    "animeOfDay": {
+      "title": "Anime of the day",
+      "watchCta": "Watch",
+      "addCta": "Add to list",
+      "scoreLabel": "Score",
+      "episodesLabel": "{n} ep."
+    },
+    "randomTail": {
+      "title": "Random pick",
+      "subtitle": "Discover something new",
+      "discoverCta": "Open"
+    },
+    "latestNews": {
+      "title": "What's new",
+      "readMore": "Read full changelog →",
+      "entryDate": "{date}"
+    },
+    "platformStats": {
+      "title": "Platform this week",
+      "animeAdded7d": "New anime",
+      "episodesAdded7d": "New episodes",
+      "activeRooms7d": "Watch parties",
+      "deltaPositive": "+{n} vs last week",
+      "noChange": "—"
+    }
   }
 }
