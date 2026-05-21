@@ -294,6 +294,7 @@ RATE_LIMIT_BURST             # per-IP burst, default 200 (existing)
 USER_RATE_LIMIT_PER_MINUTE   # per-authenticated-user GCRA rate, default 60
 USER_RATE_LIMIT_BURST        # per-authenticated-user GCRA burst, default 10
 REDIS_ADDR                   # default redis:6379 — gateway now uses Redis for the per-user limiter
+NOTIFICATIONS_SERVICE_URL    # default http://notifications:8090 — gateway proxies /api/notifications/* here
 ```
 
 The per-user limit (`USER_RATE_LIMIT_*`) is layered on top of the per-IP
@@ -301,6 +302,14 @@ limit and only applies AFTER auth (anonymous traffic stays per-IP-limited).
 A Redis outage fails open (logs WARN, lets the request through) so a Redis
 blip cannot 500 every authenticated request. Blocked-request count is
 exposed at `/metrics` as `gateway_rate_limit_user_blocked_total` (no labels).
+
+Notifications service specific (workstream notifications, v1.0 Phase 1):
+```
+CATALOG_URL                  # default http://catalog:8081 — Phase 2 detector calls catalog's /internal/anime/{id}/episodes
+```
+The notifications service uses the standard `DB_*` + `JWT_SECRET` + `REDIS_HOST`
+trio. Internal producer endpoint `POST /internal/notifications` is reachable
+only inside the Docker network — the gateway does not proxy `/internal/*`.
 
 ## UI Audit Test User (DO NOT DELETE)
 
@@ -573,6 +582,7 @@ After completing any implementation work (features, bug fixes, refactoring), **a
 | scheduler  | 8085 | /metrics  | Background jobs                |
 | themes     | 8086 | /metrics  | Anime OP/ED ratings            |
 | library    | 8089 | /metrics  | Library service (BitTorrent → HLS → MinIO, admin-only) |
+| notifications | 8090 | /metrics | Generic notification engine (new episodes, future types) |
 | web        | 80   | -         | Vue 3 frontend (nginx)         |
 
 ### Gateway Routing
@@ -590,6 +600,7 @@ All API requests go through the gateway service:
 - `/api/game/*` → rooms:8084
 - `/api/themes/*` → themes:8086 (public + protected + admin)
 - `/api/library/*` → library:8089 (admin-only; routes added incrementally in v0.2 Phases 2–5)
+- `/api/notifications/*` → notifications:8090 (JWT required; internal `/internal/notifications` NOT exposed — Docker-network-only)
 
 ### Monitoring Endpoints
 
