@@ -335,6 +335,26 @@ func NewRouterWithCleanup(
 			})
 		})
 
+		// Notifications service routes (workstream notifications, v1.0 Phase 1).
+		// All routes JWT-required (user-scoped CRUD). The internal producer
+		// endpoint (/internal/notifications) is intentionally NOT registered
+		// here — it is reachable only from inside the Docker network
+		// (notifications:8090), enforced by gateway-non-routing (D-05).
+		// Literal sub-paths (mark-all-read, unread-count) registered BEFORE
+		// param routes ({id}/...) to avoid chi precedence shadowing.
+		r.Route("/notifications", func(r chi.Router) {
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
+				r.Get("/", proxyHandler.ProxyToNotifications)
+				r.Get("/unread-count", proxyHandler.ProxyToNotifications)
+				r.Post("/mark-all-read", proxyHandler.ProxyToNotifications)
+				r.Post("/{id}/read", proxyHandler.ProxyToNotifications)
+				r.Post("/{id}/dismiss", proxyHandler.ProxyToNotifications)
+				r.Post("/{id}/click", proxyHandler.ProxyToNotifications)
+			})
+		})
+
 		// Library service routes (workstream raw-jp / v0.2). Phase 2 adds
 		// /search behind admin auth; /health remains public so the docker
 		// healthcheck + ops probes still work without credentials. All other
