@@ -78,15 +78,15 @@
 
 ### Frontend — Bell + Dropdown + Toast + Polling (Phase 3)
 
-- [ ] **NOTIF-UI-01**: `useNotificationsStore` Pinia store at `frontend/web/src/stores/notifications.ts`. State: `notifications: UserNotification[]`, `unreadCount: number`, `shownToastIds: Set<string>` (session-only, not persisted). Actions: `fetchUnread()` (calls `GET /api/notifications?status=unread`), `markRead(id)`, `dismiss(id)`, `markAllRead()`, `handleClick(notification)` (calls `POST /:id/click` then `router.push(payload.watch_url)`), `startPolling()`, `stopPolling()`. Getter: `latestUndismissedToast` — first unread notification not in `shownToastIds`. Polling interval 60s; pauses on `document.hidden` via `visibilitychange` listener and immediately re-fetches on visibility regain. On logout: `stopPolling()` + clear state.
+- [x] **NOTIF-UI-01**: `useNotificationsStore` Pinia store at `frontend/web/src/stores/notifications.ts`. State: `notifications: UserNotification[]`, `unreadCount: number`, `shownToastIds: Set<string>` (session-only, not persisted). Actions: `fetchUnread()` (calls `GET /api/notifications?status=unread`), `markRead(id)`, `dismiss(id)`, `markAllRead()`, `handleClick(notification)` (calls `POST /:id/click` then `router.push(payload.watch_url)`), `startPolling()`, `stopPolling()`. Getter: `latestUndismissedToast` — first unread notification not in `shownToastIds`. Polling interval 60s; pauses on `document.hidden` via `visibilitychange` listener and immediately re-fetches on visibility regain. On logout: `stopPolling()` + clear state.
 
-- [ ] **NOTIF-UI-02**: `NotificationBell.vue` component at `frontend/web/src/components/NotificationBell.vue`. Mounted in the existing site header (find the slot in `App.vue` or the header component — adjacent to user avatar / language switcher per UI convention). Renders a bell icon + a red badge with `unreadCount` (hidden when zero, shows `99+` when > 99). Click opens the dropdown. Accessible: `role="button"`, `aria-label="Notifications (N unread)"`, focus ring matches site convention.
+- [x] **NOTIF-UI-02**: `NotificationBell.vue` component at `frontend/web/src/components/NotificationBell.vue`. Mounted in the existing site header (find the slot in `App.vue` or the header component — adjacent to user avatar / language switcher per UI convention). Renders a bell icon + a red badge with `unreadCount` (hidden when zero, shows `99+` when > 99). Click opens the dropdown. Accessible: `role="button"`, `aria-label="Notifications (N unread)"`, focus ring matches site convention.
 
-- [ ] **NOTIF-UI-03**: `NotificationDropdown.vue` at `frontend/web/src/components/NotificationDropdown.vue`. Renders the active set in a scrollable list, max-height ~480px. Empty state: localized "No notifications yet" with a muted icon. Each card rendered via the type-pluggable registry (NOTIF-UI-06) — looks up `payload.type` → renderer component. Footer "Mark all as read" button. Closes on outside-click and Esc. Position: anchored right-edge to the bell.
+- [x] **NOTIF-UI-03**: `NotificationDropdown.vue` at `frontend/web/src/components/NotificationDropdown.vue`. Renders the active set in a scrollable list, max-height ~480px. Empty state: localized "No notifications yet" with a muted icon. Each card rendered via the type-pluggable registry (NOTIF-UI-06) — looks up `payload.type` → renderer component. Footer "Mark all as read" button. Closes on outside-click and Esc. Position: anchored right-edge to the bell.
 
-- [ ] **NOTIF-UI-04**: `NotificationToast.vue` at `frontend/web/src/components/NotificationToast.vue`. Slide-in animation. Position: bottom-right on desktop (≥ 768px viewport), top-full-width on mobile. Auto-hide after 8 seconds with a pause-on-hover. Suppressed when the current route param `animeId` matches `payload.anime_id` (user is already on the page for this anime — toast would be redundant). On click → same `handleClick` as the dropdown card. Dismiss × in corner sets `shownToastIds.add(id)` so the same notification doesn't pop again in this session even if still unread.
+- [x] **NOTIF-UI-04**: `NotificationToast.vue` at `frontend/web/src/components/NotificationToast.vue`. Slide-in animation. Position: bottom-right on desktop (≥ 768px viewport), top-full-width on mobile. Auto-hide after 8 seconds with a pause-on-hover. Suppressed when the current route param `animeId` matches `payload.anime_id` (user is already on the page for this anime — toast would be redundant). On click → same `handleClick` as the dropdown card. Dismiss × in corner sets `shownToastIds.add(id)` so the same notification doesn't pop again in this session even if still unread.
 
-- [ ] **NOTIF-UI-05**: `NewEpisodeCard.vue` at `frontend/web/src/components/notifications/NewEpisodeCard.vue`. Renders the `new_episode` type:
+- [x] **NOTIF-UI-05**: `NewEpisodeCard.vue` at `frontend/web/src/components/notifications/NewEpisodeCard.vue`. Renders the `new_episode` type:
   - Anime poster (52×72 thumbnail) on the left
   - Anime title (1 line, truncate)
   - Range line: `Ep N` if N === M, else `Ep N–M` (using payload's `first_unwatched_episode` and `latest_available_episode`)
@@ -95,9 +95,9 @@
   - Dismiss × button → calls `dismiss(id)`
   - Whole card is the click target → `handleClick(notification)`
 
-- [ ] **NOTIF-UI-06**: Type-pluggable renderer registry at `frontend/web/src/lib/notification-renderers.ts`. Exports `renderers: Record<string, Component>` keyed by `payload.type`. v1.0 ships with `new_episode: NewEpisodeCard`. Adding a new type in v1.1 requires only adding a new key + component here — zero changes to the bell, dropdown, toast, or store. Unknown types render a graceful fallback `UnknownNotificationCard.vue` (one-liner: "New notification — view in dropdown") that the dropdown can show; the toast suppresses unknown types entirely.
+- [x] **NOTIF-UI-06**: Type-pluggable renderer registry at `frontend/web/src/lib/notification-renderers.ts`. Exports `renderers: Record<string, Component>` keyed by `payload.type`. v1.0 ships with `new_episode: NewEpisodeCard`. Adding a new type in v1.1 requires only adding a new key + component here — zero changes to the bell, dropdown, toast, or store. Unknown types render a graceful fallback `UnknownNotificationCard.vue` (one-liner: "New notification — view in dropdown") that the dropdown can show; the toast suppresses unknown types entirely.
 
-- [ ] **NOTIF-UI-07**: i18n keys added to all three locale files (`frontend/web/src/locales/{en,ru,ja}.json`) under `notifications.*`. Required keys:
+- [x] **NOTIF-UI-07**: i18n keys added to all three locale files (`frontend/web/src/locales/{en,ru,ja}.json`) under `notifications.*`. Required keys:
   - `notifications.bell.tooltip` ("Notifications" / "Уведомления" / "通知")
   - `notifications.dropdown.markAllRead` ("Mark all as read" / "Прочитать все" / "すべて既読にする")
   - `notifications.dropdown.empty` ("No notifications yet" / "Пока нет уведомлений" / "通知はまだありません")
@@ -106,7 +106,7 @@
   - `notifications.newEpisode.via` ("via {translation}" / "перевод {translation}" / "翻訳: {translation}")
   - Relative-time keys ("just now", "5m ago", etc. — reuse if already present, else add)
 
-- [ ] **NOTIF-UI-08**: App-level wiring in `App.vue`:
+- [x] **NOTIF-UI-08**: App-level wiring in `App.vue`:
   - On mount + on auth state change: if `authStore.isAuthenticated`, call `notificationsStore.fetchUnread()` then `notificationsStore.startPolling()`. Else `notificationsStore.stopPolling()` + clear.
   - Mount `<NotificationToast />` at the app root so it's always above other content.
   - `NotificationBell` mounted in the existing header component (one-line addition).
@@ -124,7 +124,7 @@
 
 - [x] **NOTIF-NF-02**: Logging via `libs/logger` with structured fields. Detector runs log at INFO: `combos_scanned`, `affected_combos`, `notifications_upserted`, `duration_ms`, `parser_failures`. Per-combo errors log at WARN with combo context. No PII in logs (user_id is fine; usernames are not logged).
 
-- [ ] **NOTIF-NF-03**: Manual E2E verification path documented in the Phase 3 SUMMARY: log in as `ui_audit_bot`, seed `watch_history` to ep 5 of Frieren (Kodik + AniLibria + ru + dub), insert a `parser_episode_snapshots` row with `latest_episode = 6`, run the detector once (admin endpoint or `make` shortcut), confirm bell + toast appear with "Ep 6 is out", click → lands on `/anime/{uuid}/watch?player=kodik&episode=6&translation=...`, click dismiss → bell badge returns to zero.
+- [x] **NOTIF-NF-03**: Manual E2E verification path documented in the Phase 3 SUMMARY: log in as `ui_audit_bot`, seed `watch_history` to ep 5 of Frieren (Kodik + AniLibria + ru + dub), insert a `parser_episode_snapshots` row with `latest_episode = 6`, run the detector once (admin endpoint or `make` shortcut), confirm bell + toast appear with "Ep 6 is out", click → lands on `/anime/{uuid}/watch?player=kodik&episode=6&translation=...`, click dismiss → bell badge returns to zero.
 
 - [ ] **NOTIF-NF-04**: `CLAUDE.md` updates (Service Ports table + Gateway Routing section):
   - Add row: `notifications | 8090 | /metrics | Generic notification engine (new episodes, future types) |` (port changed from design-doc 8087 — see D-PORT)

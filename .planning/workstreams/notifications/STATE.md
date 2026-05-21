@@ -6,13 +6,13 @@ milestone_name: "Notifications Engine"
 created: 2026-05-20
 status: planning
 last_updated: "2026-05-21"
-last_activity: "2026-05-21 — Phase 2 SHIPPED. 5 atomic commits merged. Catalog has new /internal/anime/{id}/episodes (5min Redis cache, kodik+animelib only; English deferred to v1.0.x). NewEpisodeDetectorJob (hourly cron ±5min jitter) with bootstrap protection, dedupe-key UPSERT, failure isolation, idempotency, aggregation. Daily cleanup at 03:30. Admin /internal/detector/run-once + /internal/cleanup/run-once for deterministic verify. 6 Prometheus metrics. 5 unit tests including Test_Detector_BootstrapProtection. 7/7 SC PASS. All 10 services healthy. Two auto-fixes in verification (catalog envelope unwrap, Postgres INTERVAL syntax). Phase 3 (frontend) unblocked — real notifications now materialize hourly."
+last_activity: "2026-05-21 — Phase 3 SHIPPED. 6 atomic commits merged (1 merge-conflict resolved in .env.example — Phase 2 detector vars + Phase 3 frontend flag + existing hero-spotlight block). Pinia store + 60s polling with visibilitychange handling; NotificationBell with pink-500 badge in Navbar; NotificationDropdown cloning language-switcher styling; NotificationToast at desktop bottom-right / mobile top-16 (avoiding existing Toaster.vue); NewEpisodeCard + UnknownNotificationCard via type-pluggable registry; i18n en/ru/ja; watch_url translator + router redirect alias; VITE_NOTIFICATIONS_ENABLED env flag; relativeTime.ts via Intl.RelativeTimeFormat (no new dep); 8 Playwright TCs. 8/8 SC PASS + 8/8 e2e TC PASS. All services healthy. v1.0 feature-complete; ready for milestone audit + complete + cleanup."
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 67
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State — `notifications` workstream
@@ -27,15 +27,14 @@ See: `PROJECT.md` (workstream-local) and `/data/animeenigma/.planning/PROJECT.md
 
 ## Current Position
 
-Phase: Phase 2 (Detector + Catalog Endpoint) — COMPLETE ✓
-Plan: `phases/02-detector-and-catalog-endpoint/02-PLAN.md` (executed)
-Status: Phases 1 + 2 shipped; Phase 3 (frontend bell + dropdown + toast) ready to plan
-Last activity: 2026-05-21 — Phase 2 merged to main; 7/7 SC pass; 02-SUMMARY.md written
+Phase: ALL 3 PHASES COMPLETE ✓ — v1.0 feature-complete
+Status: Ready for `/gsd-audit-milestone` then `/gsd-complete-milestone v1.0` then `/gsd-cleanup`
+Last activity: 2026-05-21 — Phase 3 merged; frontend deployed; v1.0 feature-complete
 
 ## Resume / Continuity
 
-**Resume file:** none — Phases 1 + 2 done, awaiting Phase 3 plan generation.
-**Next command:** `/gsd-plan-phase 3 --ws notifications` then `/gsd-ui-phase 3 --ws notifications` (frontend phase — UI-SPEC generation) then `/gsd-execute-phase 3 --ws notifications`.
+**Resume file:** none — milestone v1.0 done.
+**Next command:** `/gsd-audit-milestone --ws notifications` to audit, then `/gsd-complete-milestone v1.0 --ws notifications`, then `/gsd-cleanup --ws notifications`.
 
 ## Workstream Phase Map
 
@@ -43,7 +42,7 @@ Last activity: 2026-05-21 — Phase 2 merged to main; 7/7 SC pass; 02-SUMMARY.md
 |-------|-------------------------------------------------------------------------------|---------------------------------------------------------|--------|
 | 1     | Notifications Service Foundation                                              | NOTIF-FOUND-01..08, NOTIF-NF-04 (partial)               | **complete ✓** |
 | 2     | Catalog Internal Endpoint + Episode Detector + Cleanup                        | NOTIF-DET-01..10, NOTIF-NF-01, NOTIF-NF-02              | **complete ✓** |
-| 3     | Frontend — Bell + Dropdown + Toast + Pinia Store + Renderer Registry + i18n   | NOTIF-UI-01..08, NOTIF-NF-03                            | pending |
+| 3     | Frontend — Bell + Dropdown + Toast + Pinia Store + Renderer Registry + i18n   | NOTIF-UI-01..08, NOTIF-NF-03                            | **complete ✓** |
 
 ## Operator Next Steps
 
