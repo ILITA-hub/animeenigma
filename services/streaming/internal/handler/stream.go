@@ -229,6 +229,7 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 			h.log.Warnw("HLS proxy rejected non-allowlisted domain",
 				"domain", domainErr.Domain,
 				"url", sourceURL,
+				"referer", referer,
 			)
 			http.Error(w, "domain not allowed for HLS proxy", http.StatusBadGateway)
 			return

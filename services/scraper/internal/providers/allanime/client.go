@@ -385,9 +385,22 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	}
 
 	streamURL := decodeSourceURL(pick.SourceURL)
+	// Normalize protocol-relative URLs (//host/path → https://host/path).
+	if strings.HasPrefix(streamURL, "//") {
+		streamURL = "https:" + streamURL
+	}
 	if !strings.HasPrefix(streamURL, "http") {
 		err := domain.WrapExtractFailed(
 			fmt.Errorf("source %q is not a fully-qualified URL (got %q)", pick.SourceName, streamURL),
+			"allanime: GetStream")
+		p.markStage(health.StageStream, err)
+		return nil, err
+	}
+	// Reject known embed page hosts — they serve an HTML player, not a direct
+	// HLS/MP4 stream. ErrExtractFailed lets the orchestrator try the next server.
+	if isEmbedPageHost(streamURL) {
+		err := domain.WrapExtractFailed(
+			fmt.Errorf("source %q resolves to embed page host %q", pick.SourceName, streamURL),
 			"allanime: GetStream")
 		p.markStage(health.StageStream, err)
 		return nil, err
@@ -604,6 +617,33 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// embedPageHosts lists known hosts that serve an HTML embed player rather than
+// a direct HLS/MP4 stream. AllAnime's sourceUrls for Vid-mp4 and similar
+// server types frequently point here. Returning ErrExtractFailed for these
+// causes the orchestrator to try the next server instead of marking the whole
+// stream stage DOWN with an unplayable URL.
+var embedPageHosts = map[string]bool{
+	"vidstreaming.io":     true,
+	"www.vidstreaming.io": true,
+	"gogo-stream.com":     true,
+	"www.gogo-stream.com": true,
+	"gogo-play.net":       true,
+	"www.gogo-play.net":   true,
+	"streamsb.net":        true,
+	"www.streamsb.net":    true,
+	"streamlare.com":      true,
+	"www.streamlare.com":  true,
+	"bysekoze.com":        true,
+}
+
+func isEmbedPageHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return embedPageHosts[u.Hostname()]
 }
 
 // Compile-time assertion: Provider satisfies domain.Provider. Failing this
