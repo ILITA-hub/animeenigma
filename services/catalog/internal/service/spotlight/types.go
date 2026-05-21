@@ -69,6 +69,87 @@ type PlatformStatsData struct {
 	Metrics []StatsMetric `json:"metrics"`
 }
 
+// --- Phase 3 dynamic card payloads -------------------------------------
+//
+// The five structs below extend the Card discriminated union for the Phase 3
+// dynamic resolvers (workstream hero-spotlight v1.0). Each maps 1:1 to the
+// TypeScript discriminated union extension in
+// docs/superpowers/specs/2026-05-21-hero-spotlight-block-design.md §4.1.
+
+// PersonalPickItem is one suggestion in the personal_pick card.
+// ReasonI18nKey is optional (omitted from JSON when empty).
+type PersonalPickItem struct {
+	Anime         domain.Anime `json:"anime"`
+	ReasonI18nKey string       `json:"reason_i18n_key,omitempty"`
+}
+
+// PersonalPickData is the payload for `Card{Type: "personal_pick"}` —
+// HSB-BE-20. Items is 1..3 after AdaptiveSlice (HSB-BE-30). Source is
+// "trending" for anon callers, "personal" for logged-in callers.
+//
+// Items MUST be initialized as `[]PersonalPickItem{}` (NOT a nil slice) so
+// it marshals as `"items":[]` — the Phase 2 frontend treats `null` as a
+// parse failure (see TestPersonalPickData_ItemsMarshalAsArray).
+type PersonalPickData struct {
+	Items  []PersonalPickItem `json:"items"`
+	Source string             `json:"source"`
+}
+
+// TelegramPost is one excerpt in the telegram_news card. Title / Link /
+// Date are optional (Telegram channel scrapes sometimes lack each).
+type TelegramPost struct {
+	Title   string `json:"title,omitempty"`
+	Excerpt string `json:"excerpt"`
+	Link    string `json:"link,omitempty"`
+	Date    string `json:"date,omitempty"`
+}
+
+// TelegramNewsData is the payload for `Card{Type: "telegram_news"}` —
+// HSB-BE-21. Posts is 1..3 after AdaptiveSlice (HSB-BE-30).
+type TelegramNewsData struct {
+	Posts []TelegramPost `json:"posts"`
+}
+
+// NowWatchingSession exposes ONLY public user fields per HSB-NF-04
+// (privacy gate). The user UUID NEVER leaves the SQL — only username +
+// public_id are projected; both are publicly visible on user profile
+// pages already.
+type NowWatchingSession struct {
+	Username      string `json:"username"`
+	PublicID      string `json:"public_id"`
+	AnimeID       string `json:"anime_id"`
+	AnimeName     string `json:"anime_name,omitempty"`
+	AnimeNameRU   string `json:"anime_name_ru,omitempty"`
+	PosterURL     string `json:"poster_url,omitempty"`
+	EpisodeNumber int    `json:"episode_number"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+// NowWatchingData is the payload for `Card{Type: "now_watching"}` —
+// HSB-BE-22 + HSB-NF-04. Sessions is 1..3 after AdaptiveSlice (HSB-BE-30).
+type NowWatchingData struct {
+	Sessions []NowWatchingSession `json:"sessions"`
+}
+
+// NotTimeYetData is the payload for `Card{Type: "not_time_yet"}` —
+// HSB-BE-24. Single-item card (login only). Status is "planned" or
+// "postponed".
+type NotTimeYetData struct {
+	Anime  domain.Anime `json:"anime"`
+	Status string       `json:"status"`
+}
+
+// ContinueWatchingNewData is the payload for `Card{Type:
+// "continue_watching_new"}` — HSB-BE-25. Single-item card (login only).
+// NewEpisodeNumber is the anime's EpisodesAired (the newest aired episode
+// number); LastWatchedEpisode is the user's most-recent watch_progress
+// episode number. A card is eligible when NewEpisodeNumber > LastWatchedEpisode + 1.
+type ContinueWatchingNewData struct {
+	Anime              domain.Anime `json:"anime"`
+	LastWatchedEpisode int          `json:"last_watched_episode"`
+	NewEpisodeNumber   int          `json:"new_episode_number"`
+}
+
 // Response is the top-level envelope returned by `GET /api/home/spotlight`.
 //
 // CRITICAL: Cards MUST marshal as `[]` (empty array) and NOT `null` when

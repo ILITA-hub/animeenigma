@@ -95,6 +95,170 @@ func TestTypes_JSONShape(t *testing.T) {
 	}
 }
 
+// TestNewCardDataShapes_RoundTrip verifies the 5 Phase 3 Data structs
+// round-trip through json.Marshal + json.Unmarshal without dropping any
+// declared fields and with the correct omitempty behavior. Regression guard
+// against accidental tag drift.
+func TestNewCardDataShapes_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	t.Run("PersonalPickData", func(t *testing.T) {
+		t.Parallel()
+		in := PersonalPickData{
+			Items: []PersonalPickItem{
+				{Anime: domain.Anime{ID: "id1", Name: "A"}, ReasonI18nKey: "spotlight.personalPick.reason.trending"},
+				{Anime: domain.Anime{ID: "id2", Name: "B"}},
+			},
+			Source: "trending",
+		}
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var out PersonalPickData
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(out.Items) != 2 {
+			t.Fatalf("expected 2 items, got %d", len(out.Items))
+		}
+		if out.Source != "trending" {
+			t.Errorf("Source = %q; want trending", out.Source)
+		}
+		if out.Items[0].ReasonI18nKey != "spotlight.personalPick.reason.trending" {
+			t.Errorf("ReasonI18nKey lost: %q", out.Items[0].ReasonI18nKey)
+		}
+		// omitempty check — item 2 has no ReasonI18nKey
+		if strings.Contains(string(raw), `"reason_i18n_key":""`) {
+			t.Errorf("omitempty failed for empty ReasonI18nKey: %s", raw)
+		}
+	})
+
+	t.Run("TelegramNewsData", func(t *testing.T) {
+		t.Parallel()
+		in := TelegramNewsData{
+			Posts: []TelegramPost{
+				{Title: "T", Excerpt: "ex", Link: "https://t.me/x/1", Date: "2026-05-21T12:00:00Z"},
+				{Excerpt: "ex2"},
+			},
+		}
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var out TelegramNewsData
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(out.Posts) != 2 {
+			t.Fatalf("expected 2 posts, got %d", len(out.Posts))
+		}
+		if out.Posts[0].Link != "https://t.me/x/1" {
+			t.Errorf("Link lost: %q", out.Posts[0].Link)
+		}
+		// omitempty checks: post 2 has no title/link/date
+		if strings.Contains(string(raw), `"title":""`) {
+			t.Errorf("omitempty failed for empty Title: %s", raw)
+		}
+		if strings.Contains(string(raw), `"link":""`) {
+			t.Errorf("omitempty failed for empty Link: %s", raw)
+		}
+	})
+
+	t.Run("NowWatchingData", func(t *testing.T) {
+		t.Parallel()
+		in := NowWatchingData{
+			Sessions: []NowWatchingSession{
+				{
+					Username:      "user1",
+					PublicID:      "user-1",
+					AnimeID:       "anime-1",
+					AnimeName:     "Anime One",
+					AnimeNameRU:   "Аниме Один",
+					PosterURL:     "/p.jpg",
+					EpisodeNumber: 5,
+					UpdatedAt:     "2026-05-21T12:00:00Z",
+				},
+			},
+		}
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var out NowWatchingData
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(out.Sessions) != 1 {
+			t.Fatalf("expected 1 session, got %d", len(out.Sessions))
+		}
+		s := out.Sessions[0]
+		if s.Username != "user1" || s.PublicID != "user-1" {
+			t.Errorf("public fields lost: %+v", s)
+		}
+		if s.EpisodeNumber != 5 {
+			t.Errorf("EpisodeNumber lost: %d", s.EpisodeNumber)
+		}
+	})
+
+	t.Run("NotTimeYetData", func(t *testing.T) {
+		t.Parallel()
+		in := NotTimeYetData{Anime: domain.Anime{ID: "a1", Name: "A"}, Status: "planned"}
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var out NotTimeYetData
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if out.Status != "planned" {
+			t.Errorf("Status lost: %q", out.Status)
+		}
+		if out.Anime.ID != "a1" {
+			t.Errorf("Anime.ID lost: %q", out.Anime.ID)
+		}
+	})
+
+	t.Run("ContinueWatchingNewData", func(t *testing.T) {
+		t.Parallel()
+		in := ContinueWatchingNewData{
+			Anime:              domain.Anime{ID: "a1", Name: "A"},
+			LastWatchedEpisode: 3,
+			NewEpisodeNumber:   5,
+		}
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var out ContinueWatchingNewData
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if out.LastWatchedEpisode != 3 || out.NewEpisodeNumber != 5 {
+			t.Errorf("episode fields lost: %+v", out)
+		}
+	})
+}
+
+// TestPersonalPickData_ItemsMarshalAsArray ensures an empty Items slice
+// marshals as `"items":[]` (mirror of the `Cards: []Card{}` rule). Phase 2
+// frontend treats `null` as a parse failure.
+func TestPersonalPickData_ItemsMarshalAsArray(t *testing.T) {
+	t.Parallel()
+	data := PersonalPickData{Items: []PersonalPickItem{}, Source: "trending"}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"items":[]`) {
+		t.Fatalf(`expected '"items":[]' in output, got: %s`, raw)
+	}
+	if strings.Contains(string(raw), `"items":null`) {
+		t.Fatalf(`output must NOT contain '"items":null', got: %s`, raw)
+	}
+}
+
 // TestTypes_EmptyCardsMarshalArray guards against `var cards []Card`
 // producing `"cards":null`. The Phase 2 frontend rejects null.
 func TestTypes_EmptyCardsMarshalArray(t *testing.T) {
