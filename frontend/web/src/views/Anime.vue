@@ -322,27 +322,6 @@
                 {{ $t('anime.watch') || 'Смотреть онлайн' }}
               </span>
             </h2>
-            <!-- Phase 11 / UX-23 — Theater Mode toggle. Stays inside the
-                 player section header so it remains visible after the
-                 hide-non-player-content CSS rule kicks in. -->
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-white/5 border border-white/10 text-white/70 hover:text-white text-xs transition-colors"
-              :aria-pressed="theaterMode"
-              @click="toggleTheater"
-            >
-              <svg v-if="!theaterMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
-              </svg>
-              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 9V4H4M20 4h-5v5M15 20v-5h5M4 15h5v5" />
-              </svg>
-              <span class="hidden sm:inline">
-                {{ theaterMode ? $t('player.theaterModeExit') : $t('player.theaterModeEnter') }}
-              </span>
-            </button>
           </div>
           <!-- Language tabs + Provider sub-tabs -->
           <!-- UA-062 (UX-12 Phase 5): ButtonGroup wraps the RU/EN/18+ toggle
@@ -1068,10 +1047,6 @@ function setTheater(on: boolean) {
   if (typeof localStorage !== 'undefined') {
     localStorage.setItem('theaterMode', on ? '1' : '0')
   }
-}
-
-function toggleTheater() {
-  setTheater(!theaterMode.value)
 }
 
 function applyBodyTheaterClass(on: boolean) {
