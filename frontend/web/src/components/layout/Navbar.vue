@@ -334,7 +334,6 @@ const navLinks = [
   { to: '/browse', label: 'nav.catalog' },
   { to: '/schedule', label: 'nav.schedule' },
   { to: '/themes', label: 'nav.themes' },
-  { to: '/game', label: 'nav.rooms' },
 ]
 
 const languages = [
