@@ -343,11 +343,17 @@ func main() {
 	recEventsRepo := repo.NewRecEventsRepository(db.DB)
 	recEventsHandler := handler.NewRecEventsHandler(recEventsRepo, log)
 
+	// Workstream hero-spotlight v1.0 Phase 3 — internal endpoint that the
+	// catalog spotlight aggregator hits to resolve `not_time_yet` and
+	// `continue_watching_new` cards. Mounted by NewRouter OUTSIDE /api with
+	// no auth middleware (docker-network trust boundary).
+	internalListHandler := handler.NewInternalListHandler(listService, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, recEventsHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, recEventsHandler, internalListHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

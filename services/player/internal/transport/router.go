@@ -30,6 +30,7 @@ func NewRouter(
 	recsHandler *handler.RecsHandler,
 	adminRecsHandler *handler.AdminRecsHandler, // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02)
 	recEventsHandler *handler.RecEventsHandler, // Phase 14 (REC-EVAL-01)
+	internalListHandler *handler.InternalListHandler, // hero-spotlight v1.0 Phase 3
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -53,6 +54,18 @@ func NewRouter(
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metrics.Handler().ServeHTTP(w, r)
 	})
+
+	// Internal endpoint (workstream hero-spotlight, v1.0 Phase 3).
+	// Mounted OUTSIDE /api with no AuthMiddleware — nginx/gateway does NOT
+	// proxy /internal/*, so the route is reachable only from within the
+	// docker network. Defense-in-depth gateway-not-proxied assertion is
+	// added in Plan 04's gateway router test. Precedent:
+	// services/catalog/internal/transport/router.go's
+	// /internal/cache/invalidate/raw/{shikimoriId} +
+	// /internal/anime/{shikimoriId}/episodes routes.
+	if internalListHandler != nil {
+		r.Get("/internal/users/{user_id}/list", internalListHandler.ListByStatuses)
+	}
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
