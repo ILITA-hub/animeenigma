@@ -1,13 +1,12 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.1
-milestone_name: milestone
-current_phase: 03
-current_plan: 1
-status: completed
-stopped_at: Workstream scaffolded; awaiting `gsd-plan-phase` on Phase 1.
-last_updated: "2026-05-21T06:47:35.839Z"
-last_activity: 2026-05-21
+workstream: hero-spotlight
+milestone: v1.0
+milestone_name: HeroSpotlightBlock
+status: shipped
+shipped_at: 2026-05-21
+last_updated: "2026-05-21"
+last_activity: "2026-05-21 — v1.0 HeroSpotlightBlock SHIPPED. 3 phases, 19 plans, 45/45 requirements, 113 commits, 220 files, +40,085 LOC. Audit PASSED + integration verified. 9-card spotlight live at https://animeenigma.ru/. Archive: milestones/v1.0-ROADMAP.md + milestones/v1.0-REQUIREMENTS.md. Next milestone: v1.1 (conditional on usage data — slide-order personalization, opt-outs, editorial card, WebSocket now_watching, flag cleanup)."
 progress:
   total_phases: 3
   completed_phases: 3
