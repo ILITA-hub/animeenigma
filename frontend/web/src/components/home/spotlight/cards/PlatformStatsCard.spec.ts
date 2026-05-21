@@ -74,18 +74,16 @@ describe('PlatformStatsCard', () => {
     expect(wrapper.text()).toContain('"n":5')
   })
 
-  it('renders text-gray-500 noChange when delta === 0 or null', () => {
+  it('omits noChange indicator when delta === 0 or null (cleaner visual)', () => {
     const wrapperZero = mount(PlatformStatsCard, {
       props: { data: make([{ key: 'anime_added_7d', value: 10, delta: 0 }]) },
     })
-    expect(wrapperZero.html()).toContain('text-gray-500')
-    expect(wrapperZero.text()).toContain('spotlight.platformStats.noChange')
+    expect(wrapperZero.text()).not.toContain('spotlight.platformStats.noChange')
 
     const wrapperNull = mount(PlatformStatsCard, {
       props: { data: make([{ key: 'anime_added_7d', value: 10, delta: null }]) },
     })
-    expect(wrapperNull.html()).toContain('text-gray-500')
-    expect(wrapperNull.text()).toContain('spotlight.platformStats.noChange')
+    expect(wrapperNull.text()).not.toContain('spotlight.platformStats.noChange')
   })
 
   it('uses tabular-nums on value paragraph', () => {

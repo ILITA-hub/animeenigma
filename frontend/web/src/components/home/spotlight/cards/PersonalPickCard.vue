@@ -22,10 +22,10 @@
         v-show="i === 0 || mdAndUp"
         :key="item.anime.id"
         :to="`/anime/${item.anime.id}`"
-        class="flex flex-col gap-2 group min-w-0"
+        class="flex flex-col gap-2 group min-w-0 min-h-0"
       >
         <div
-          class="relative rounded-lg overflow-hidden bg-white/5 aspect-[2/3]"
+          class="relative rounded-lg overflow-hidden bg-white/5 flex-1 min-h-0"
         >
           <img
             :src="item.anime.poster_url || '/placeholder.svg'"

@@ -1,6 +1,6 @@
 <template>
   <article
-    class="w-full h-full flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-4 lg:p-6"
+    class="w-full h-full flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-4 lg:p-6 md:items-center"
   >
     <header class="md:hidden">
       <p
@@ -12,7 +12,7 @@
 
     <router-link
       :to="`/anime/${data.anime.id}`"
-      class="flex-shrink-0 self-center md:self-start w-32 md:w-40 lg:w-48 group"
+      class="flex-shrink-0 self-center md:self-center w-28 md:w-32 lg:w-44 group"
     >
       <div
         class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3]"
