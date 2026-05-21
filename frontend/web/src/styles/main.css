@@ -317,3 +317,15 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Spotlight (Phase 02) — cross-fade between carousel slides.
+   The "none" transition name short-circuits Vue's transition entirely
+   when prefers-reduced-motion is on. */
+.spotlight-fade-enter-active,
+.spotlight-fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+.spotlight-fade-enter-from,
+.spotlight-fade-leave-to {
+  opacity: 0;
+}
