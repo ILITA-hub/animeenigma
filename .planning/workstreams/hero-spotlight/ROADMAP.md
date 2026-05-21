@@ -157,7 +157,16 @@ fully replaces the legacy row.
 
 **Requirements:** HSB-BE-20..26, HSB-BE-30, HSB-FE-24..28, HSB-MIG-01..02, HSB-NF-02, HSB-NF-04, HSB-NF-05
 
-**SPEC:** `phases/03-dynamic-cards-migration/03-SPEC.md` (to be written by gsd-plan-phase)
+**SPEC:** `phases/03-dynamic-cards-migration/{03-CONTEXT,03-RESEARCH,03-VALIDATION}.md`
+
+**Plans:** 7 plans
+- [ ] 03-01-PLAN.md — Player internal endpoint + GORM index on watch_progress.updated_at (Wave 1)
+- [ ] 03-02-PLAN.md — Catalog OptionalAuthMiddleware + AdaptiveSlice + PlayerClient + JWT context helpers (Wave 1)
+- [ ] 03-03-PLAN.md — 5 dynamic resolvers (personal_pick, telegram_news, now_watching, not_time_yet, continue_watching_new) (Wave 2)
+- [ ] 03-04-PLAN.md — Wire resolvers + middleware into catalog; retrofit latest_news to AdaptiveSlice; gateway defense-in-depth test (Wave 3)
+- [ ] 03-05-PLAN.md — 5 frontend cards + i18n + HeroSpotlightBlock dispatch extension (Wave 3)
+- [ ] 03-06-PLAN.md — Home.vue trendingRecs removal + CLAUDE.md docs (Wave 4)
+- [ ] 03-07-PLAN.md — Redeploy + smoke + Playwright e2e + human-verify checkpoint (Wave 5)
 
 **Touches:**
 - `services/catalog/internal/service/spotlight/cards/{personal_pick,telegram_news,now_watching,not_time_yet,continue_watching_new}.go` (new)
