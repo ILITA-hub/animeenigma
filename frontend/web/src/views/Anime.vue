@@ -275,14 +275,6 @@
         </div>
       </div>
 
-      <!-- Phase 11 / UX-22 — Quick-Nav sticky pill list (desktop floating
-           right column + mobile horizontal pill row). Wrapped in a
-           .non-player-content div so theater-mode (UX-23) hides it
-           alongside the other non-player sections. -->
-      <div class="non-player-content">
-        <AnimeQuickNav />
-      </div>
-
       <!-- Synopsis -->
       <!-- Phase 11 / UX-22 — section-overview anchor for AnimeQuickNav. -->
       <section id="section-overview" class="mt-8 non-player-content">
@@ -925,7 +917,7 @@ import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button, ButtonGroup } from '@/components/ui'
-import { GenreChip, AnimeCardNew, AnimeContextMenu, AnimeQuickNav } from '@/components/anime'
+import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
