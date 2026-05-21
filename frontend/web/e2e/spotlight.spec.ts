@@ -219,7 +219,11 @@ test.describe('hero spotlight block (Phase 2)', () => {
     const dots = block.locator('[data-testid="spotlight-dots"] button')
     const dotCount = await dots.count()
     expect(dotCount).toBeGreaterThanOrEqual(1)
-    expect(dotCount).toBeLessThanOrEqual(4) // Phase 2 caps at 4 static cards
+    // Phase 2 originally capped at 4 static cards; Phase 3 added 5 more
+    // (personal_pick, telegram_news, now_watching, not_time_yet,
+    // continue_watching_new) for a max of 9 live cards. Cap raised
+    // accordingly — exact count depends on data eligibility at runtime.
+    expect(dotCount).toBeLessThanOrEqual(9)
 
     if (dotCount < 2) {
       test.skip(true, 'Need at least 2 cards to verify dot navigation')
