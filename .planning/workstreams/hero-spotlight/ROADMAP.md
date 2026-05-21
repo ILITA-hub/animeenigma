@@ -72,12 +72,12 @@ tables or external services beyond reading them.
 **SPEC:** `phases/01-backend-aggregator/01-SPEC.md` (to be written by gsd-plan-phase)
 
 **Plans:** 6 plans
-- [ ] 01-01-PLAN.md — Scaffold spotlight package (types, seed helpers, Resolver interface, Aggregator skeleton)
-- [ ] 01-02-PLAN.md — 4 card resolvers (anime_of_day, random_tail, latest_news, platform_stats) + web client for changelog.json
-- [ ] 01-03-PLAN.md — Concurrent Aggregator (per-card 800ms, overall 2s, eligibility filter, snapshot fallback)
-- [ ] 01-04-PLAN.md — Catalog handler + SPOTLIGHT_ENABLED config flag + chi route + main.go DI wiring
-- [ ] 01-05-PLAN.md — Gateway /api/home/spotlight → catalog proxy
-- [ ] 01-06-PLAN.md — docker/.env.example + smoke script + human-verify checkpoint
+- [x] 01-01-PLAN.md — Scaffold spotlight package (types, seed helpers, Resolver interface, Aggregator skeleton)
+- [x] 01-02-PLAN.md — 4 card resolvers (anime_of_day, random_tail, latest_news, platform_stats) + web client for changelog.json
+- [x] 01-03-PLAN.md — Concurrent Aggregator (per-card 800ms, overall 2s, eligibility filter, snapshot fallback)
+- [x] 01-04-PLAN.md — Catalog handler + SPOTLIGHT_ENABLED config flag + chi route + main.go DI wiring
+- [x] 01-05-PLAN.md — Gateway /api/home/spotlight → catalog proxy
+- [x] 01-06-PLAN.md — docker/.env.example + smoke script + human-verify checkpoint
 
 **Touches:**
 - `services/catalog/internal/handler/spotlight.go` (new)
