@@ -218,6 +218,12 @@ func (a *Aggregator) Resolve(ctx context.Context, userID *string) (*Response, er
 // This is intentional so a hard Redis failure stays distinguishable from
 // a clean cache miss in logs.
 func (a *Aggregator) loadSnapshot(ctx context.Context, userID *string) *Response {
+	// Defensive: a nil cache (test wiring or feature-half-built) means
+	// snapshot infra is unreachable. Treat as a clean miss — no log,
+	// no panic — so the caller continues with empty cards.
+	if a.cache == nil {
+		return nil
+	}
 	var snap Response
 	err := a.cache.Get(ctx, SnapshotKey(userID), &snap)
 	if err == nil {
@@ -236,6 +242,11 @@ func (a *Aggregator) loadSnapshot(ctx context.Context, userID *string) *Response
 // a snapshot-write failure must never affect the response that has
 // already been built.
 func (a *Aggregator) saveSnapshot(ctx context.Context, userID *string, resp *Response) {
+	// Defensive: nil cache (test wiring or feature-half-built) means
+	// the write is silently a no-op — symmetric with loadSnapshot.
+	if a.cache == nil {
+		return
+	}
 	if err := a.cache.Set(ctx, SnapshotKey(userID), resp, snapshotTTL); err != nil {
 		a.log.Warnw("spotlight.snapshot_save_failed", "error", err)
 	}
