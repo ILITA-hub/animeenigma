@@ -485,15 +485,29 @@ groups:
         condition: C
         noDataState: OK
         execErrState: Error
-        for: 15m
+        # AUTO-125: extended to 4h to absorb intermittent fetch failures
+        # (stale ctk tokens, signed-URL expiry, transient CDN 5xx) that
+        # are absorbed by the orchestrator's own provider-failover loop
+        # and therefore do not surface to users. The probe now fetches
+        # via the local HLS proxy (probe.go fetchSegment), which closes
+        # the systematic false-positive class where direct CDN access
+        # was Referer/geo-blocked but real user playback worked. What
+        # remains is genuinely intermittent — a 4h `for:` smooths it.
+        for: 4h
         data:
+          # AUTO-125: alert only when BOTH `stream` and `stream_segment`
+          # are DOWN for the same provider. If `stream` is up but
+          # `stream_segment` is flapping, the orchestrator's fallback
+          # absorbs the issue (verified: ~8 fallbacks/day to miruro
+          # during the 2026-05-21 incident, zero user reports). A real
+          # provider outage trips both stages.
           - refId: A
             relativeTimeRange:
               from: 900
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              expr: provider_health_up{stage="stream_segment"}
+              expr: max by (provider) (provider_health_up{stage=~"stream|stream_segment"})
               instant: true
               refId: A
           - refId: B
@@ -524,8 +538,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Scraper provider {{ $labels.provider }} stream_segment DOWN"
-          description: "Provider {{ $labels.provider }} cannot fetch the first HLS segment from the golden pool for 15+ min — likely upstream broken or selector drift. Check /api/admin/scraper/health."
+          summary: "Scraper provider {{ $labels.provider }} stream_segment + stream DOWN"
+          description: "Provider {{ $labels.provider }} has BOTH the stream and stream_segment stages DOWN for 4+ hours — likely real upstream outage or selector drift (orchestrator fallback can no longer mask). Check /api/admin/scraper/health and parser_zero_match_total/parser_ad_decoy_total."
 
   # ============================================================================
   # Scraper Self-Healing (v3.1) — Phase 23 Plan 23-03

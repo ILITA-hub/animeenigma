@@ -53,6 +53,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
 
@@ -74,6 +75,13 @@ const (
 	// initialDelayEnvVar lets tests / fast-verify shrink the boot-time
 	// initial delay. Unset = production-default jittered 0..interval/4.
 	initialDelayEnvVar = "SCRAPER_PROBE_INITIAL_DELAY_OVERRIDE_SECONDS"
+
+	// proxyBaseURLEnvVar overrides the default local HLS-proxy base URL
+	// used to reach allowlisted CDN hosts. Unset = "http://streaming:8082".
+	// Tests use this to point the probe at an httptest.Server.
+	proxyBaseURLEnvVar  = "SCRAPER_PROBE_PROXY_BASE_URL"
+	defaultProxyBaseURL = "http://streaming:8082"
+	hlsProxyPath        = "/api/v1/hls-proxy"
 )
 
 // ProbeRunner is a per-provider liveness probe goroutine. Construct one
@@ -93,6 +101,19 @@ type ProbeRunner struct {
 	// that point fetchSegment at an httptest.Server (127.0.0.1:randomport)
 	// flip it via the test-only allowPrivateHostsForTest helper.
 	allowPrivateHosts bool
+	// proxyBaseURL is the base URL of the local streaming service's HLS
+	// proxy (AUTO-125). When the segment-fetch target host matches the
+	// shared HLS allowlist (libs/videoutils.HLSProxyAllowedDomains),
+	// fetchSegment rewrites the request to
+	// `{proxyBaseURL}/api/v1/hls-proxy?url=<encoded>&referer=<encoded>`,
+	// so the probe exercises the same code path that real user playback
+	// takes. Direct CDN access is blocked by most provider CDNs (signed
+	// URL, Referer-gated, geo-fenced) and historically caused the
+	// stream_segment stage to flap DOWN for providers whose users were
+	// successfully streaming via the proxy. Default
+	// "http://streaming:8082"; overridden via SCRAPER_PROBE_PROXY_BASE_URL
+	// or WithProxyBaseURL (tests).
+	proxyBaseURL string
 	// computeInitialDelayFn, when non-nil, is invoked instead of the default
 	// computeInitialDelay inside Start. REVIEW.md iter-2 WR-NEW-01: this
 	// injection seam lets a test deterministically drive the outer
@@ -117,6 +138,14 @@ func WithRNG(rng *rand.Rand) ProbeOption { return func(r *ProbeRunner) { r.rng =
 // WithHTTPClient overrides the segment-fetch HTTP client. Tests inject a
 // client that talks to an httptest.Server.
 func WithHTTPClient(c *http.Client) ProbeOption { return func(r *ProbeRunner) { r.http = c } }
+
+// WithProxyBaseURL overrides the local HLS-proxy base URL (AUTO-125). Tests
+// use this to point the segment-fetch rewrite at an httptest.Server. The
+// SCRAPER_PROBE_PROXY_BASE_URL env var also overrides; an explicit option
+// passed to NewProbeRunner wins over the env var.
+func WithProxyBaseURL(base string) ProbeOption {
+	return func(r *ProbeRunner) { r.proxyBaseURL = base }
+}
 
 // REVIEW.md iter-2 WR-NEW-02: the previous `WithAllowPrivateHosts`
 // public functional option has been removed. The SSRF host-allowlist is
@@ -163,13 +192,25 @@ func NewProbeRunner(p domain.Provider, pool []domain.AnimeRef, cache *InMemoryHe
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		now: time.Now,
-		rng: rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0)),
+		now:          time.Now,
+		rng:          rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0)),
+		proxyBaseURL: proxyBaseURLFromEnv(),
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
 	return r
+}
+
+// proxyBaseURLFromEnv returns the SCRAPER_PROBE_PROXY_BASE_URL value if set,
+// otherwise defaultProxyBaseURL. Trailing slash is stripped so callers can
+// concatenate hlsProxyPath without double-slashing.
+func proxyBaseURLFromEnv() string {
+	v := strings.TrimRight(os.Getenv(proxyBaseURLEnvVar), "/")
+	if v == "" {
+		return defaultProxyBaseURL
+	}
+	return v
 }
 
 // Start blocks until ctx is cancelled. Designed for `go r.Start(ctx)`.
@@ -480,17 +521,45 @@ func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string, headers m
 	if host == "" {
 		return errors.New("stream_segment: rejected empty host")
 	}
-	if !r.allowPrivateHosts && isPrivateOrLoopback(host) {
+
+	// AUTO-125: when the upstream host matches the HLS allowlist, route the
+	// fetch through the local streaming-service HLS proxy. This is the same
+	// path real user playback takes — most provider CDNs reject the direct
+	// GET from inside the scraper (signed URL, geo-fence, Referer gate), so
+	// probing the CDN directly produced false-positive DOWN gauges while
+	// actual users were streaming fine through the proxy.
+	//
+	// SSRF: the proxy host is "streaming" — an internal docker-compose
+	// service. We allow this specific case because the URL is constructed
+	// by US (not provided by the upstream); the proxy itself enforces the
+	// allowlist before fetching, and the CheckRedirect policy below still
+	// refuses 3xx bounces. Non-allowlisted hosts continue to take the
+	// original direct path, with the original SSRF guard intact.
+	fetchURL := urlStr
+	throughProxy := false
+	if isHLSAllowlistedHost(host) {
+		fetchURL = buildHLSProxyURL(r.proxyBaseURL, urlStr, headers)
+		throughProxy = true
+	}
+
+	if !throughProxy && !r.allowPrivateHosts && isPrivateOrLoopback(host) {
 		return fmt.Errorf("stream_segment: rejected host %q", host)
 	}
 	ctx, cancel := context.WithTimeout(ctx, segmentTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchURL, nil)
 	if err != nil {
 		return fmt.Errorf("stream_segment: build request: %w", err)
 	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	// When going through the proxy, omit upstream headers — the proxy
+	// already sets the correct Referer + User-Agent for the target CDN
+	// based on the `referer` query param + its own configured UA. Forwarding
+	// the upstream Referer twice can confuse some CDNs (echoed Referer
+	// fails the Referer check).
+	if !throughProxy {
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 	}
 	resp, err := r.http.Do(req)
 	if err != nil {
@@ -523,6 +592,52 @@ func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string, headers m
 		return fmt.Errorf("stream_segment: read body: %w", readErr)
 	}
 	return nil
+}
+
+// isHLSAllowlistedHost reports whether `host` matches the shared HLS proxy
+// allowlist. MIRROR of libs/videoutils.isHLSDomainAllowed — same lowercase
+// + port-strip + HasSuffix-on-"."+allowed contract, same prefix-wildcard
+// handling for `htv-*` style entries. Re-derived locally per the existing
+// convention (services/scraper/internal/handler/scraper_test.go) of
+// mirroring the helper rather than exporting it from libs/videoutils, so
+// the libs surface stays minimal. Regression-lock tests in
+// libs/videoutils/proxy_test.go pin the source behavior; this mirror only
+// needs to share the same rules at the call site.
+//
+// MIRROR: keep this in sync with libs/videoutils/proxy.go isHLSDomainAllowed.
+func isHLSAllowlistedHost(host string) bool {
+	host = strings.ToLower(host)
+	if colonIdx := strings.LastIndex(host, ":"); colonIdx != -1 {
+		host = host[:colonIdx]
+	}
+	for _, allowed := range videoutils.HLSProxyAllowedDomains {
+		allowed = strings.ToLower(allowed)
+		if strings.HasSuffix(allowed, "*") {
+			prefix := allowed[:len(allowed)-1]
+			if strings.HasPrefix(host, prefix) || strings.Contains(host, "."+prefix) {
+				return true
+			}
+		} else if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildHLSProxyURL constructs the local streaming-service proxy URL for the
+// given upstream URL. The proxy expects `url` (the upstream) and `referer`
+// (the header to send upstream) as query parameters; both are URL-encoded.
+// Empty `referer` is omitted so the proxy falls back to its configured
+// default Referer for the upstream domain.
+func buildHLSProxyURL(base, upstreamURL string, headers map[string]string) string {
+	q := url.Values{}
+	q.Set("url", upstreamURL)
+	if ref := headers["Referer"]; ref != "" {
+		q.Set("referer", ref)
+	} else if ref := headers["referer"]; ref != "" {
+		q.Set("referer", ref)
+	}
+	return base + hlsProxyPath + "?" + q.Encode()
 }
 
 // isPrivateOrLoopback reports whether `host` resolves to (or literally is)

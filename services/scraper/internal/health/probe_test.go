@@ -537,6 +537,110 @@ func TestProbe_FatalPanicDoesNotRespawn(t *testing.T) {
 	}
 }
 
+// TestProbe_FetchSegmentRoutesAllowlistedHostsThroughProxy — AUTO-125.
+// When the upstream URL host is in the HLS allowlist, fetchSegment MUST
+// rewrite the GET to {proxyBaseURL}/api/v1/hls-proxy?url=<encoded>&...
+// instead of fetching the upstream directly. Verifies:
+//   - the proxy server (httptest.Server) is the destination
+//   - the `url` query param round-trips the original upstream URL
+//   - the `referer` query param carries the upstream Referer header
+//   - upstream headers are NOT forwarded on the request line (the proxy
+//     sets its own Referer + UA on behalf of the probe)
+func TestProbe_FetchSegmentRoutesAllowlistedHostsThroughProxy(t *testing.T) {
+	name := "tp-proxy-rewrite"
+	defer resetProviderMetrics(name)
+
+	var gotURL, gotReferer, gotReqReferer string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		gotURL = req.URL.Query().Get("url")
+		gotReferer = req.URL.Query().Get("referer")
+		gotReqReferer = req.Header.Get("Referer")
+		_, _ = w.Write([]byte("OKOK"))
+	}))
+	defer srv.Close()
+
+	cache := NewInMemoryHealthCache()
+	log := newProbeTestLogger(t)
+	t0 := time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC)
+	nowFn, _ := freshClock(t0)
+	r := NewProbeRunner(&FakeProvider{NameVal: name}, DefaultGoldenPool, cache, log,
+		WithNow(nowFn),
+		WithRNG(rand.New(rand.NewPCG(42, 0))),
+		WithProxyBaseURL(srv.URL),
+	)
+	allowPrivateHostsForTest(r) // httptest binds 127.0.0.1
+
+	// kwik.cx is an HLS-allowlisted CDN (AnimePahe). The rewrite path
+	// MUST trigger and direct the GET at our test server, not kwik.cx.
+	upstreamURL := "https://kwik.cx/e/abc123.m3u8"
+	upstreamReferer := "https://animepahe.ru/"
+	err := r.fetchSegment(context.Background(), upstreamURL, map[string]string{
+		"Referer": upstreamReferer,
+	})
+	if err != nil {
+		t.Fatalf("fetchSegment returned %v; want nil (proxy served 200)", err)
+	}
+	if gotURL != upstreamURL {
+		t.Errorf("proxy `url` query = %q; want %q", gotURL, upstreamURL)
+	}
+	if gotReferer != upstreamReferer {
+		t.Errorf("proxy `referer` query = %q; want %q", gotReferer, upstreamReferer)
+	}
+	if gotReqReferer != "" {
+		t.Errorf("Referer header forwarded twice: got %q on request to proxy; want empty (proxy handles Referer via query param)", gotReqReferer)
+	}
+}
+
+// TestProbe_FetchSegmentBypassesProxyForNonAllowlistedHost — AUTO-125.
+// When the host is NOT in the HLS allowlist (e.g. a direct AllAnime
+// fast4speed.rsvp signed MP4 isn't an HLS host, or a public test
+// server like example.com), fetchSegment MUST take the direct path —
+// the proxy rewrite only applies to allowlisted hosts.
+//
+// Note: fast4speed.rsvp IS in the allowlist (AllAnime CDN), so we use
+// an httptest.Server bound to 127.0.0.1 instead, and verify the proxy
+// server is NOT hit (gotProxyHit stays false).
+func TestProbe_FetchSegmentBypassesProxyForNonAllowlistedHost(t *testing.T) {
+	name := "tp-proxy-bypass"
+	defer resetProviderMetrics(name)
+
+	var proxyHit atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		proxyHit.Add(1)
+		_, _ = w.Write([]byte("PROXY"))
+	}))
+	defer proxy.Close()
+
+	var directHit atomic.Int32
+	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		directHit.Add(1)
+		_, _ = w.Write([]byte("DIRECT"))
+	}))
+	defer direct.Close()
+
+	cache := NewInMemoryHealthCache()
+	log := newProbeTestLogger(t)
+	t0 := time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC)
+	nowFn, _ := freshClock(t0)
+	r := NewProbeRunner(&FakeProvider{NameVal: name}, DefaultGoldenPool, cache, log,
+		WithNow(nowFn),
+		WithRNG(rand.New(rand.NewPCG(42, 0))),
+		WithProxyBaseURL(proxy.URL),
+	)
+	allowPrivateHostsForTest(r)
+
+	// `direct.URL` is http://127.0.0.1:<port> — not allowlisted.
+	if err := r.fetchSegment(context.Background(), direct.URL, nil); err != nil {
+		t.Fatalf("fetchSegment direct path returned %v; want nil", err)
+	}
+	if proxyHit.Load() != 0 {
+		t.Errorf("proxy was hit %d times; want 0 (non-allowlisted host MUST bypass proxy)", proxyHit.Load())
+	}
+	if directHit.Load() != 1 {
+		t.Errorf("direct path hit count = %d; want 1", directHit.Load())
+	}
+}
+
 // TestProbe_NextSleepClamp — WR-07 regression. nextSleep MUST never return
 // a duration shorter than probeBaseInterval/2 regardless of how the RNG
 // behaves (defensive lower bound).
