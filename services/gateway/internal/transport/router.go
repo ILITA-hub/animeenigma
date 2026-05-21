@@ -222,14 +222,22 @@ func NewRouterWithCleanup(
 		r.HandleFunc("/collections/*", proxyHandler.ProxyToCatalog)
 
 		// Workstream hero-spotlight, v1.0 Phase 1 (HSB-BE-06) — hero spotlight
-		// aggregator. Public, NO JWT (Phase 1 is anonymous; future personalized
-		// cards will use optional-auth on the catalog side, not enforced auth
-		// here). Mounts at /api/home/spotlight; the catalog proxy path-rewrite
+		// aggregator. Public surface (anonymous allowed). Phase 3 adds 3
+		// login-only cards (personal_pick, not_time_yet, continue_watching_new)
+		// so the gateway MUST resolve ak_-API-key Bearer tokens into freshly
+		// minted JWTs here — otherwise the catalog OptionalAuthMiddleware sees
+		// an unrecognized opaque Bearer string and falls back to "anon", and
+		// the 3 personalized resolvers stay invisible to api-key callers.
+		// (Bug found during Plan 03-07 execution — Rule 2 auto-fix.)
+		// Mounts at /api/home/spotlight; the catalog proxy path-rewrite
 		// is a no-op so the catalog router sees the same path. Registered
 		// alongside the other public catalog passthroughs above; /home/* does
 		// not collide with /anime/* but the "specific-before-general" placement
 		// convention is project-wide.
-		r.HandleFunc("/home/spotlight", proxyHandler.ProxyToCatalog)
+		r.Group(func(r chi.Router) {
+			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.HandleFunc("/home/spotlight", proxyHandler.ProxyToCatalog)
+		})
 
 		// Phase 17 Plan 03: admin scraper routes (protected, proxied to scraper).
 		// CRITICAL ORDER — this group MUST be registered BEFORE the generic
