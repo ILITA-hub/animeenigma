@@ -5,8 +5,10 @@ go 1.24.0
 require (
 	github.com/ILITA-hub/animeenigma/libs/authz v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/database v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	gorm.io/datatypes v1.2.5
+	gorm.io/gorm v1.30.0
 )
 
 require (
@@ -26,11 +28,14 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
+	google.golang.org/grpc v1.77.0 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 	gorm.io/driver/postgres v1.5.7 // indirect
 	gorm.io/driver/sqlite v1.6.0 // indirect
-	gorm.io/gorm v1.30.0 // indirect
 )
 
 replace (
