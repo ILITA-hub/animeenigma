@@ -68,6 +68,15 @@ func (h *ProxyHandler) ProxyToLibrary(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "library")
 }
 
+// ProxyToNotifications proxies requests to the notifications service (workstream
+// notifications, v1.0 Phase 1 — see .planning/workstreams/notifications/ROADMAP.md).
+// Only /api/notifications/* is exposed; /internal/notifications is reachable solely
+// from inside the Docker network because this gateway never registers a route
+// under /internal/* for it (D-05 security model).
+func (h *ProxyHandler) ProxyToNotifications(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "notifications")
+}
+
 // ProxyToGrafana proxies requests to Grafana
 func (h *ProxyHandler) ProxyToGrafana(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "grafana")

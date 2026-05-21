@@ -15,42 +15,42 @@ COPY libs/database/go.mod libs/database/go.sum* ./libs/database/
 COPY libs/authz/go.mod libs/authz/go.sum* ./libs/authz/
 COPY libs/httputil/go.mod libs/httputil/go.sum* ./libs/httputil/
 COPY libs/pagination/go.mod libs/pagination/go.sum* ./libs/pagination/
+COPY libs/streamprobe/go.mod libs/streamprobe/go.sum* ./libs/streamprobe/
 COPY libs/animeparser/go.mod libs/animeparser/go.sum* ./libs/animeparser/
 COPY libs/videoutils/go.mod libs/videoutils/go.sum* ./libs/videoutils/
 COPY libs/idmapping/go.mod libs/idmapping/go.sum* ./libs/idmapping/
 COPY libs/metrics/go.mod libs/metrics/go.sum* ./libs/metrics/
-COPY libs/streamprobe/go.mod libs/streamprobe/go.sum* ./libs/streamprobe/
 COPY services/auth/go.mod services/auth/go.sum* ./services/auth/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 COPY services/streaming/go.mod services/streaming/go.sum* ./services/streaming/
 COPY services/player/go.mod services/player/go.sum* ./services/player/
 COPY services/rooms/go.mod services/rooms/go.sum* ./services/rooms/
+COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/scheduler/go.mod services/scheduler/go.sum* ./services/scheduler/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 COPY services/themes/go.mod services/themes/go.sum* ./services/themes/
 COPY services/notifications/go.mod services/notifications/go.sum* ./services/notifications/
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
-COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 
-RUN cd services/player && go mod download
+RUN cd services/notifications && go mod download
 
 # Copy source
 COPY libs/ ./libs/
-COPY services/player/ ./services/player/
+COPY services/notifications/ ./services/notifications/
 
 # Build
-RUN cd services/player && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /player-api ./cmd/player-api
+RUN cd services/notifications && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /notifications-api ./cmd/notifications-api
 
 # Runtime stage
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata wget
 
 WORKDIR /app
 
-COPY --from=builder /player-api .
+COPY --from=builder /notifications-api .
 
-EXPOSE 8083
+EXPOSE 8090
 
-CMD ["./player-api"]
+CMD ["./notifications-api"]

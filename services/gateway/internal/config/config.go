@@ -46,7 +46,11 @@ type ServiceURLs struct {
 	StreamingService string
 	ThemesService    string
 	LibraryService   string // workstream raw-jp / v0.2 — library service on port 8087
-	WebService       string
+	// NotificationsService — workstream notifications, v1.0 Phase 1. Port 8090
+	// (8087 was unavailable: host-native maintenance bot already bound there;
+	// same blocker that pushed library to 8089).
+	NotificationsService string
+	WebService           string
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
@@ -93,9 +97,10 @@ func Load() (*Config, error) {
 			RoomsService:     getEnv("ROOMS_SERVICE_URL", "http://rooms:8084"),
 			ScraperService:   getEnv("SCRAPER_SERVICE_URL", "http://scraper:8088"),
 			StreamingService: getEnv("STREAMING_SERVICE_URL", "http://streaming:8082"),
-			ThemesService:    getEnv("THEMES_SERVICE_URL", "http://themes:8086"),
-			LibraryService:   getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
-			WebService:       getEnv("WEB_SERVICE_URL", "http://web:80"),
+			ThemesService:        getEnv("THEMES_SERVICE_URL", "http://themes:8086"),
+			LibraryService:       getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
+			NotificationsService: getEnv("NOTIFICATIONS_SERVICE_URL", "http://notifications:8090"),
+			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
 			PrometheusService: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090"),

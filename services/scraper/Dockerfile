@@ -36,6 +36,7 @@ COPY services/rooms/go.mod services/rooms/go.sum* ./services/rooms/
 COPY services/scheduler/go.mod services/scheduler/go.sum* ./services/scheduler/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 COPY services/themes/go.mod services/themes/go.sum* ./services/themes/
+COPY services/notifications/go.mod services/notifications/go.sum* ./services/notifications/
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
 COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/library/go.mod services/library/go.sum* ./services/library/

@@ -207,6 +207,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.ThemesService, nil
 	case "library":
 		return s.serviceURLs.LibraryService, nil
+	case "notifications":
+		return s.serviceURLs.NotificationsService, nil
 	case "grafana":
 		return s.serviceURLs.GrafanaService, nil
 	case "prometheus":
