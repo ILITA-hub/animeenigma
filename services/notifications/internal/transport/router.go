@@ -33,6 +33,7 @@ import (
 func NewRouter(
 	notifHandler *handler.NotificationHandler,
 	internalHandler *handler.InternalHandler,
+	adminHandler *handler.AdminHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -63,6 +64,14 @@ func NewRouter(
 	// /internal/*. The Phase 2 detector calls these.
 	r.Post("/internal/notifications", internalHandler.CreateNotification)
 	r.Get("/internal/health", internalHandler.Health)
+
+	// Phase 2 manual-trigger endpoints (D-DET-05 / D-DET-06). Wired only
+	// when adminHandler is non-nil (NOTIFICATIONS_DETECTOR_ENABLED=false
+	// can still mount the rest of the service without these).
+	if adminHandler != nil {
+		r.Post("/internal/detector/run-once", adminHandler.RunDetectorOnce)
+		r.Post("/internal/cleanup/run-once", adminHandler.RunCleanupOnce)
+	}
 
 	// Public CRUD — all behind JWT.
 	r.Route("/api/notifications", func(r chi.Router) {

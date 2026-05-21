@@ -586,9 +586,19 @@ services:
       DB_NAME: animeenigma
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       REDIS_HOST: redis
-      # Phase 2 detector will read catalog's /internal/anime/{id}/episodes
-      # — declared now so the env shape is locked in Phase 1 (forward-compat).
+      # Phase 2 detector reads catalog's /internal/anime/{id}/episodes.
       CATALOG_URL: http://catalog:8081
+      # Phase 2 detector cron + cleanup + worker pool settings.
+      # NOTIFICATIONS_DETECTOR_ENABLED=false disables the scheduler at
+      # boot (D-RB-01 rollback toggle) — CRUD + producer endpoint still
+      # work, just no cron-driven creates / cleanup.
+      NOTIFICATIONS_DETECTOR_ENABLED: "true"
+      NOTIFICATIONS_DETECTOR_CRON: "0 * * * *"
+      NOTIFICATIONS_CLEANUP_CRON: "30 3 * * *"
+      NOTIFICATIONS_RETENTION_DAYS: "30"
+      NOTIFICATIONS_DETECTOR_WORKER_LIMIT: "5"
+      NOTIFICATIONS_PARSER_TIMEOUT: "10s"
+      NOTIFICATIONS_UNREAD_GAUGE_INTERVAL: "5m"
     ports:
       - "127.0.0.1:8090:8090"
     depends_on:
@@ -596,6 +606,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      catalog:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8090/health"]
       interval: 30s

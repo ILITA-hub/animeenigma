@@ -296,6 +296,20 @@ logs-%: ## Follow logs for a service (e.g., make logs-gateway)
 	cd docker && docker compose logs -f $*
 
 # ============================================================================
+# Notifications detector + cleanup (workstream notifications, v1.0 Phase 2)
+# ============================================================================
+
+.PHONY: run-detector-once run-cleanup-once
+
+run-detector-once: ## Trigger the notifications detector synchronously (Phase 2 verification)
+	@docker compose -f docker/docker-compose.yml exec -T notifications \
+		wget -qO- --post-data='' http://localhost:8090/internal/detector/run-once
+
+run-cleanup-once: ## Trigger the notifications retention cleanup synchronously (Phase 2 verification)
+	@docker compose -f docker/docker-compose.yml exec -T notifications \
+		wget -qO- --post-data='' http://localhost:8090/internal/cleanup/run-once
+
+# ============================================================================
 # Kubernetes / Kustomize
 # ============================================================================
 
