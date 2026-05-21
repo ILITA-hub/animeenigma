@@ -1503,11 +1503,11 @@ const formatReviewStats = (review: Review): string => {
 
   // Map raw status enum -> existing watchlist.* i18n keys.
   const statusKeyMap: Record<string, string> = {
-    watching: 'watchlist.watching',
-    completed: 'watchlist.completed',
-    on_hold: 'watchlist.onHold',
-    dropped: 'watchlist.dropped',
-    plan_to_watch: 'watchlist.planToWatch',
+    watching: 'profile.watchlist.watching',
+    completed: 'profile.watchlist.completed',
+    on_hold: 'profile.watchlist.onHold',
+    dropped: 'profile.watchlist.dropped',
+    plan_to_watch: 'profile.watchlist.planToWatch',
   }
   const statusLabel = t(statusKeyMap[status] || statusKeyMap.watching)
 

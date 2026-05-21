@@ -102,7 +102,7 @@ Rendering rules:
 | `status == 'plan_to_watch'` | `📺 {episodes}/{total} · Plan to watch ⚠️` — amber/red tint (⚠️ driven by status, not episode count) |
 | `episodes == 0 && status != 'plan_to_watch'` | `📺 0/{total} · {status} ⚠️` — same flag treatment (driven by episode count) |
 
-Status strings reuse existing `watchlist.*` i18n keys (`en.json:399-403`):
+Status strings reuse existing `profile.watchlist.*` i18n keys (`en.json:405-413`):
 `Watching`, `Plan to Watch`, `Completed`, `On Hold`, `Dropped`. RU/JA
 already covered.
 
