@@ -52,6 +52,12 @@
     <!-- Phase 13 / UX-27: global toast renderer for optimistic-action rollbacks -->
     <Toaster />
 
+    <!-- Workstream notifications / Phase 3 — slide-in toast for the latest
+         undismissed notification. Mounted at App-root so it survives route
+         transitions. Gated by the feature flag so VITE_NOTIFICATIONS_ENABLED=
+         false fully disables the surface. -->
+    <NotificationToast v-if="notifEnabled" />
+
     <!-- Footer -->
     <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10">
       <div class="max-w-7xl mx-auto flex items-center justify-center gap-4">
@@ -68,14 +74,38 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onErrorCaptured, ref } from 'vue'
+import { onMounted, onErrorCaptured, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationsStore } from '@/stores/notifications'
 import Navbar from '@/components/layout/Navbar.vue'
 import Toaster from '@/components/ui/Toaster.vue'
+import NotificationToast from '@/components/NotificationToast.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const notifStore = useNotificationsStore()
+
+// Workstream notifications / Phase 3 — feature flag baked at build time.
+// When false (rollback), skip mounting the toast AND skip starting the
+// store's polling lifecycle. Defaults to true.
+const notifEnabled = (import.meta.env.VITE_NOTIFICATIONS_ENABLED as string | undefined) !== 'false'
+
+// Auth-driven lifecycle: start polling on login, stop + clear state on
+// logout. immediate=true so an already-authenticated tab on page-load
+// also kicks the engine. The store's start() is idempotent.
+watch(
+  () => authStore.isAuthenticated,
+  (isAuth) => {
+    if (!notifEnabled) return
+    if (isAuth) {
+      notifStore.start()
+    } else {
+      notifStore.stop()
+    }
+  },
+  { immediate: true },
+)
 
 const appError = ref<Error | null>(null)
 
