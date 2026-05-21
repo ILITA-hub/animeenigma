@@ -13,20 +13,23 @@ import (
 )
 
 // reviewResponse is the EXACT wire shape every review endpoint returns. It
-// has 7 JSON-tagged scalar fields plus the optional `anime` preload — and
+// has 9 JSON-tagged scalar fields plus the optional `anime` preload — and
 // nothing else, even though the underlying `*domain.AnimeListEntry` carries
-// additional fields (status, episodes, notes, tags, mal_id,
-// is_rewatching, priority, started_at, completed_at, updated_at) that MUST
-// NOT leak. SOCIAL-NF-01 contract. Tests in review_shape_test.go assert this
-// projection is in place on every method.
+// additional fields (notes, tags, mal_id, is_rewatching, priority,
+// started_at, completed_at, updated_at) that MUST NOT leak. SOCIAL-NF-01
+// contract — 2026-05-21 update promoted `status` + `episodes` from forbidden
+// to allowed as part of the Steam-style review-context feature (see
+// docs/superpowers/specs/2026-05-21-steam-style-review-context-design.md).
+// Tests in review_shape_test.go assert this projection is in place on every
+// method.
 type reviewResponse struct {
-	ID         string            `json:"id"`
-	UserID     string            `json:"user_id"`
-	AnimeID    string            `json:"anime_id"`
-	Username   string            `json:"username"`
-	Score      int               `json:"score"`
-	ReviewText string            `json:"review_text"`
-	CreatedAt  time.Time         `json:"created_at"`
+	ID         string    `json:"id"`
+	UserID     string    `json:"user_id"`
+	AnimeID    string    `json:"anime_id"`
+	Username   string    `json:"username"`
+	Score      int       `json:"score"`
+	ReviewText string    `json:"review_text"`
+	CreatedAt  time.Time `json:"created_at"`
 	// Status and Episodes — Steam-style review context (2026-05-21). Live
 	// values from anime_list.status / anime_list.episodes, NOT snapshotted.
 	// If the reviewer keeps watching after publishing, these numbers update.
