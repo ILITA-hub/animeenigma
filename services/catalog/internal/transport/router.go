@@ -23,6 +23,7 @@ func NewRouter(
 	subtitlesHandler *handler.SubtitlesHandler,
 	internalCacheHandler *handler.InternalCacheHandler,
 	internalEpisodesHandler *handler.InternalEpisodesHandler,
+	spotlightHandler *handler.SpotlightHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -67,6 +68,12 @@ func NewRouter(
 	r.Route("/api", func(r chi.Router) {
 		// News endpoint (before /anime route to avoid wildcard conflict)
 		r.Get("/anime/news", newsHandler.GetNews)
+
+		// Hero spotlight aggregator (workstream hero-spotlight, v1.0 Phase 1).
+		// Public — no auth (Phase 3 will add optional-auth for personalized
+		// cards). Feature-flag gated INSIDE the handler — returns bare 404
+		// when SPOTLIGHT_ENABLED=false (see config.go).
+		r.Get("/home/spotlight", spotlightHandler.Get)
 
 		// Public catalog routes
 		r.Route("/anime", func(r chi.Router) {

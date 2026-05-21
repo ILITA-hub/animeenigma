@@ -24,6 +24,9 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/cards"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/client"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/transport"
 )
 
@@ -203,11 +206,28 @@ func main() {
 	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, log)
 	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
 
+	// Workstream hero-spotlight, v1.0 Phase 1 — hero spotlight aggregator.
+	// Wires 4 static-card resolvers (anime_of_day, random_tail, latest_news,
+	// platform_stats) behind a concurrent fan-out with per-card 800ms and
+	// overall 2s deadlines (HSB-BE-03, HSB-BE-04). Endpoint mounted at
+	// /api/home/spotlight; flag-gated by cfg.SpotlightEnabled (HSB-BE-07).
+	// Empty baseURL → "http://web:80" docker-network DNS; nil http.Client
+	// → 500ms timeout (snug under the 800ms per-card budget).
+	spotlightWebClient := client.NewWebClient("", nil)
+	spotlightResolvers := []spotlight.Resolver{
+		cards.NewAnimeOfDayResolver(animeRepo, redisCache, log),
+		cards.NewRandomTailResolver(animeRepo, redisCache, log),
+		cards.NewLatestNewsResolver(spotlightWebClient, redisCache, log),
+		cards.NewPlatformStatsResolver(db.DB, redisCache, log),
+	}
+	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
+	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, spotlightHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
