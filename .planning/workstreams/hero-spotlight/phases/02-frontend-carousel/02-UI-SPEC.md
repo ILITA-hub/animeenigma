@@ -50,12 +50,13 @@ Block + card layout uses the standard Tailwind 4-multiple scale (1 unit = 4px). 
 | Block bottom margin | `mb-8` | `mb-8` | `mb-8` |
 | Block min-height | `min-h-[320px]` | `min-h-[340px]` | `min-h-[400px]` |
 | Block max-height | `lg:max-h-[360px]` | none | none |
-| Card inner padding | `p-6` | `p-5` | `p-4` |
+| Card inner padding | `p-6` | `p-4` | `p-4` |
 | Card border-radius | `rounded-2xl` (16px) | same | same |
 
 Exceptions:
 - Touch targets (chevron buttons, dot buttons) use the project's `.touch-target` class (`min-h-[44px] min-w-[44px]`, declared in `main.css:236`) on mobile to satisfy WCAG 2.5.5 tap-target sizing. Visually they are smaller (chevrons ~40px, dots 8px), but their hit area is padded out.
 - Card vertical content gap: `space-y-3` (12px) — a 4-multiple exception confirmed against `ContinueWatchingRow.vue`'s 12px gap between poster and title.
+- 12px sub-step (`space-y-3`, `gap-3`, `bottom-3`) is permitted as a sub-step for tight inline groupings — precedent in `ContinueWatchingRow.vue`. Used by the dot-indicator `bottom-3` offset and the card content `gap-3` / `space-y-3` rhythm.
 
 ---
 
@@ -65,13 +66,13 @@ The block uses exactly **4 sizes × 2 weights** drawn from existing Tailwind def
 
 | Role | Tailwind class | Computed px | Weight | Line height | Usage |
 |------|----------------|-------------|--------|-------------|-------|
-| Display | `text-2xl md:text-3xl` | 24px → 30px | `font-bold` (700) | `leading-tight` (1.25) | Card headline (anime title in `AnimeOfDayCard` / `RandomTailCard`) |
+| Display | `text-2xl md:text-3xl` | 24px → 30px | `font-semibold` (600) | `leading-tight` (1.25) | Card headline (anime title in `AnimeOfDayCard` / `RandomTailCard`) |
 | Heading | `text-lg md:text-xl` | 18px → 20px | `font-semibold` (600) | `leading-snug` (1.375) | Card section title ("Сегодня в фокусе", "Что нового", "Случайная находка", "Платформа за неделю") |
-| Body | `text-sm md:text-base` | 14px → 16px | `font-medium` (500) / `font-normal` (400) | `leading-normal` (1.5) | Meta lines, changelog excerpts, news entry titles |
+| Body | `text-sm md:text-base` | 14px → 16px | `font-medium` (500) | `leading-normal` (1.5) | Meta lines, changelog excerpts, news entry titles |
 | Label / caption | `text-xs` | 12px | `font-medium` (500) | `leading-normal` (1.5) | Genre chips, score chip, "+ N" delta indicators, dot button aria-labels (visually `sr-only`), metric unit labels |
 
 Hard rules:
-- Only **two weight values** in use across the block: `font-medium` (500) for body / chips, `font-semibold` (600) for headings and CTAs, and `font-bold` (700) for the card display title. The 500/600/700 ladder matches the rest of `Home.vue`.
+- Only **two weight values** in use across the block: 500 (`font-medium`) for body / chips / labels, and 600 (`font-semibold`) for headings, the card display title, and CTAs.
 - Anime titles use the project's localization helper `getLocalizedTitle(name, name_ru, name_jp)` from `@/utils/title` (precedent: `ContinueWatchingRow.vue:51`).
 - Numerals in the stats card (`anime_added_7d`, etc.) use `tabular-nums` so transitioning counts do not jiggle column width.
 
@@ -292,7 +293,7 @@ Custom CSS appended to `main.css` (NEW additions for this phase — minimal, ~12
 </div>
 ```
 
-> Note: the dot button is visually 8px (`w-2 h-2`) but its **hit area** is enlarged to 44×44px via the `.touch-target` utility (min-height/min-width) plus a `padding` inset that doesn't change the visible dot. This satisfies WCAG 2.5.5 without compromising the visual density.
+> Note: the dot button is visually 8px (`w-2 h-2`) but its **hit area** is enlarged to 44×44px via the `.touch-target` utility (min-height/min-width) plus a `padding` inset that doesn't change the visible dot. This satisfies WCAG 2.5.5 without compromising the visual density. The `bottom-3` (12px) offset is the documented 12px spacing sub-step exception.
 
 ### `AnimeOfDayCard.vue`
 
@@ -300,7 +301,7 @@ Desktop (`md:` and up): horizontal split — poster left (`w-48`), meta right (`
 Mobile: vertical stack — poster top full-width, meta below.
 
 ```html
-<article class="w-full h-full flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-5 lg:p-6">
+<article class="w-full h-full flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-4 lg:p-6">
   <!-- Eyebrow + title (mobile-only; on desktop shown above meta column) -->
   <header class="md:hidden">
     <p class="text-xs font-medium text-cyan-400 uppercase tracking-wider mb-1">
@@ -338,7 +339,7 @@ Mobile: vertical stack — poster top full-width, meta below.
       <p class="hidden md:block text-xs font-medium text-cyan-400 uppercase tracking-wider mb-2">
         {{ t('spotlight.animeOfDay.title') }}
       </p>
-      <h3 class="text-2xl md:text-3xl font-bold text-white leading-tight line-clamp-2">
+      <h3 class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2">
         {{ getLocalizedTitle(data.anime.name, data.anime.name_ru, data.anime.name_jp) }}
       </h3>
       <p
@@ -393,7 +394,7 @@ Key visual deltas vs `AnimeOfDayCard`:
 Three changelog entries — desktop 3-in-row grid, mobile vertical stack.
 
 ```html
-<article class="w-full h-full flex flex-col gap-4 p-4 md:p-5 lg:p-6">
+<article class="w-full h-full flex flex-col gap-4 p-4 md:p-4 lg:p-6">
   <header class="flex items-baseline justify-between">
     <h3 class="text-lg md:text-xl font-semibold text-white">
       {{ t('spotlight.latestNews.title') }}
@@ -432,7 +433,7 @@ Three changelog entries — desktop 3-in-row grid, mobile vertical stack.
 Up to 3 metric chips — desktop 3-in-row, mobile vertical stack. Hidden metrics (null values from backend) are absent from `data.metrics`, so the array length drives the column count adaptively (1, 2, or 3 chips render).
 
 ```html
-<article class="w-full h-full flex flex-col gap-4 p-4 md:p-5 lg:p-6">
+<article class="w-full h-full flex flex-col gap-4 p-4 md:p-4 lg:p-6">
   <header>
     <h3 class="text-lg md:text-xl font-semibold text-white">
       {{ t('spotlight.platformStats.title') }}
@@ -455,7 +456,7 @@ Up to 3 metric chips — desktop 3-in-row, mobile vertical stack. Hidden metrics
       <p class="text-xs font-medium text-gray-400 uppercase tracking-wider">
         {{ t(`spotlight.platformStats.${m.key}`) }}
       </p>
-      <p class="mt-1 text-3xl md:text-4xl font-bold text-white tabular-nums leading-none">
+      <p class="mt-1 text-3xl md:text-4xl font-semibold text-white tabular-nums leading-none">
         {{ m.value.toLocaleString(locale) }}
       </p>
       <p
@@ -714,7 +715,7 @@ Three breakpoint tiers. AnimeEnigma uses Tailwind v4 defaults: `sm: 640px`, `md:
 
 | Card | Desktop (`lg:` ≥ 1024px) | Tablet (`md:` 768–1023px) | Mobile (< 768px) |
 |------|---------------------------|----------------------------|-------------------|
-| **AnimeOfDayCard** | Poster left (`w-48`), meta right (`flex-1`). Eyebrow above title. CTAs row. | Poster left (`w-40`), meta right. Slightly tighter padding (`p-5`). | Poster top (centered, `w-32`), meta below (full width). Eyebrow shown above poster (mobile-only block). CTAs wrap to a column on very narrow widths. |
+| **AnimeOfDayCard** | Poster left (`w-48`), meta right (`flex-1`). Eyebrow above title. CTAs row. Padding `p-6`. | Poster left (`w-40`), meta right. Padding `p-4` (16px — matches mobile to keep the standard 4/8/16/24 scale). | Poster top (centered, `w-32`), meta below (full width). Eyebrow shown above poster (mobile-only block). CTAs wrap to a column on very narrow widths. Padding `p-4`. |
 | **RandomTailCard** | Same poster-left layout as AnimeOfDay; eyebrow uses `text-cyan-300/80` so it visually contrasts. Single "Open" CTA only. | Same. | Same as AnimeOfDay mobile (poster top, meta below) — single CTA. |
 | **LatestNewsCard** | `<ul class="grid grid-cols-3 gap-4">` — 3 entries side by side. Header row has title + "Read full changelog →" link at right. | `grid-cols-3 gap-3` — slightly smaller gap. | `grid-cols-1` — entries stack vertically. Header row stays at top with title + link wrapping to a second line if needed. |
 | **PlatformStatsCard** | `grid-cols-3` (when 3 metrics) — chips in a row. Value text size `text-4xl`. | `grid-cols-3` when 3 metrics, `grid-cols-2` when 2. | `grid-cols-1` always — chips stack vertically. Value text `text-3xl`. |
@@ -724,7 +725,7 @@ Three breakpoint tiers. AnimeEnigma uses Tailwind v4 defaults: `sm: 640px`, `md:
 | Element | Desktop | Tablet | Mobile |
 |---------|---------|--------|--------|
 | Chevrons | Visible, 40×40 px, positioned `left-2` / `right-2` | Visible, 40×40 px | Visible BUT with reduced opacity `opacity-70 hover:opacity-100` to reduce visual clutter on small screens; hit area still 44×44 via `.touch-target` |
-| Dots | Bottom-center, 8×8 px visual, 8px gap between | Same | Same — `bottom-3` (12px from bottom) so they sit comfortably above the card's content padding |
+| Dots | Bottom-center, 8×8 px visual, 8px gap between | Same | Same — `bottom-3` (12px from bottom, see Spacing Scale exception) so they sit comfortably above the card's content padding |
 | Tap → seek | OK | OK | OK |
 | Swipe gestures | Not supported in Phase 2 | N/A | N/A — Phase 4+ enhancement if user demand arises |
 
