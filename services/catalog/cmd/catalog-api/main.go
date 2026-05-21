@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -206,19 +207,46 @@ func main() {
 	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, log)
 	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
 
-	// Workstream hero-spotlight, v1.0 Phase 1 — hero spotlight aggregator.
-	// Wires 4 static-card resolvers (anime_of_day, random_tail, latest_news,
-	// platform_stats) behind a concurrent fan-out with per-card 800ms and
-	// overall 2s deadlines (HSB-BE-03, HSB-BE-04). Endpoint mounted at
-	// /api/home/spotlight; flag-gated by cfg.SpotlightEnabled (HSB-BE-07).
-	// Empty baseURL → "http://web:80" docker-network DNS; nil http.Client
-	// → 500ms timeout (snug under the 800ms per-card budget).
+	// Workstream hero-spotlight, v1.0 Phase 3 (Plan 03-04) — hero spotlight
+	// aggregator wired with all 9 resolvers:
+	//
+	//   Static cards (Phase 1):
+	//     1. anime_of_day        — random anime (top-of-day, cached 24h)
+	//     2. random_tail         — random anime from the bottom of the catalog
+	//     3. latest_news         — newest changelog entries via web client
+	//     4. platform_stats      — global counters from postgres
+	//
+	//   Dynamic cards (Phase 3 — Plan 03-03):
+	//     5. personal_pick       — trending (anon) or recs (login) via player
+	//     6. telegram_news       — channel posts via telegram parser
+	//     7. now_watching        — live watch_progress snapshot via postgres
+	//     8. not_time_yet        — login-only; planned/postponed list w/ aired eps
+	//     9. continue_watching_new — login-only; new aired ep since last view
+	//
+	// HSB-BE-03 per-card 800ms / HSB-BE-04 overall 2s deadlines applied
+	// inside the aggregator. Endpoint mounted at /api/home/spotlight behind
+	// OptionalAuthMiddleware (Plan 03-04 Task 2 — see router.go); flag-gated
+	// by cfg.SpotlightEnabled (HSB-BE-07).
+	//
+	// Shared *rand.Rand drives the HSB-BE-30 N=2 random-pick branch of
+	// AdaptiveSlice across 4 resolvers (personal_pick / latest_news /
+	// now_watching / telegram_news). Time-seeded so the daily rotation is
+	// non-deterministic across reboots without being predictable.
 	spotlightWebClient := client.NewWebClient("", nil)
+	spotlightPlayerClient := client.NewPlayerClient("", nil, log)
+	spotlightRng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	spotlightResolvers := []spotlight.Resolver{
+		// Static cards (Phase 1)
 		cards.NewAnimeOfDayResolver(animeRepo, redisCache, log),
 		cards.NewRandomTailResolver(animeRepo, redisCache, log),
-		cards.NewLatestNewsResolver(spotlightWebClient, redisCache, log),
+		cards.NewLatestNewsResolver(spotlightWebClient, redisCache, spotlightRng, log),
 		cards.NewPlatformStatsResolver(db.DB, redisCache, log),
+		// Dynamic cards (Phase 3 — Plan 03-03)
+		cards.NewPersonalPickResolver(catalogService, spotlightPlayerClient, redisCache, spotlightRng, log),
+		cards.NewTelegramNewsResolver(telegramClient, redisCache, spotlightRng, log),
+		cards.NewNowWatchingResolver(cards.NewGormNowWatchingAdapter(db.DB), redisCache, spotlightRng, log),
+		cards.NewNotTimeYetResolver(spotlightPlayerClient, redisCache, spotlightRng, log),
+		cards.NewContinueWatchingNewResolver(spotlightPlayerClient, redisCache, spotlightRng, log),
 	}
 	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
