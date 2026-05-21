@@ -37,106 +37,6 @@
       </div>
     </div>
 
-    <!-- Trending Now Row (Phase 10 — anonymous trending; Phase 11 — switches
-         label to "Up Next for you" for logged-in users via row_label_key;
-         Phase 13 — adds an S6 pin treatment when recs[0].pinned===true:
-         a row-header reason line above the row + a colored left-border + a
-         "PINNED" badge on the pinned card). Hidden when no recs returned. -->
-    <div v-if="trendingRecs.length > 0" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl md:text-2xl font-bold text-white">{{ t(rowLabelKey) }}</h2>
-      </div>
-      <!-- Phase 10 (UX-19 / verifies UA-060): per-row dominant-signal chip.
-           Computes the modal `top_contributor` across non-pinned items and
-           renders one localized reason category below the row label. Hidden
-           when the first item is pinned (the existing pin_reason line below
-           handles that case). -->
-      <p
-        v-if="reasonI18nKey && !trendingRecs[0]?.pinned"
-        class="text-xs text-cyan-400/80 mb-2"
-      >
-        {{ t(reasonI18nKey) }}
-      </p>
-      <!-- Phase 13 (REC-UX-03) + UX-09 (Phase 3): pin reason rendered above
-           the row when the first item is pinned. Prefer the i18n key path
-           (pin_reason_key + pin_reason_data) so the line localizes; fall back
-           to the legacy raw pin_reason (English) when the backend hasn't
-           emitted a key yet. -->
-      <p
-        v-if="trendingRecs[0]?.pinned && (trendingRecs[0]?.pin_reason_key || trendingRecs[0]?.pin_reason)"
-        class="text-sm text-cyan-300 mb-3"
-      >
-        {{ trendingRecs[0].pin_reason_key
-          ? t(trendingRecs[0].pin_reason_key, trendingRecs[0].pin_reason_data ?? {})
-          : trendingRecs[0].pin_reason }}
-      </p>
-      <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-1 px-1">
-        <router-link
-          v-for="item in trendingRecs"
-          :key="item.anime.id"
-          :to="`/anime/${item.anime.id}`"
-          class="flex-shrink-0 w-32 md:w-40 lg:w-48 group"
-          @click="onRecClick(item)"
-        >
-          <div
-            class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] mb-2"
-            :class="item.pinned ? 'ring-2 ring-cyan-400 border-l-4 border-cyan-400' : ''"
-          >
-            <span
-              v-if="item.pinned"
-              class="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-cyan-500/90 text-[10px] font-bold text-white tracking-wider"
-            >
-              {{ $t('recs.pinBadge') }}
-            </span>
-            <img
-              :src="item.anime.poster_url || '/placeholder.svg'"
-              alt=""
-              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              loading="lazy"
-            />
-            <div
-              v-if="item.anime.score"
-              class="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/70 backdrop-blur-sm text-xs font-semibold text-yellow-400 flex items-center gap-1"
-            >
-              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-              </svg>
-              {{ item.anime.score?.toFixed(1) }}
-            </div>
-            <!-- Phase 9 (UX-16): per-card progress badge over the poster. Hidden
-                 when the user has no progress on this anime, or when they have
-                 completed it (the watchlist completed state covers that). -->
-            <span
-              v-if="trendingProgress.get(String(item.anime.id))
-                && !trendingProgress.get(String(item.anime.id))!.completed
-                && trendingProgress.get(String(item.anime.id))!.latest_episode > 0"
-              class="absolute bottom-2 left-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/80 text-white"
-            >
-              {{ t('card.episodeProgress', {
-                n: trendingProgress.get(String(item.anime.id))!.latest_episode,
-                total: trendingProgress.get(String(item.anime.id))!.episodes_count
-                  || trendingProgress.get(String(item.anime.id))!.episodes_aired
-                  || '?',
-              }) }}
-            </span>
-          </div>
-          <h3 class="text-sm font-medium text-white truncate group-hover:text-cyan-400 transition-colors">
-            {{ getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp) }}
-          </h3>
-        </router-link>
-      </div>
-    </div>
-    <div v-else-if="trendingLoading" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-      <div class="h-8 w-48 bg-white/10 rounded animate-pulse mb-4" />
-      <div class="flex gap-3 overflow-hidden">
-        <div
-          v-for="i in 8"
-          :key="i"
-          class="flex-shrink-0 w-32 md:w-40 lg:w-48 aspect-[2/3] bg-white/10 rounded-xl animate-pulse"
-        />
-      </div>
-    </div>
-
     <!-- Three Columns Layout -->
     <div class="px-4 lg:px-8 max-w-7xl mx-auto mb-6">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -430,17 +330,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { getLocalizedTitle } from '@/utils/title'
 import { useHomeStore } from '@/stores/home'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useContextMenu } from '@/composables/useContextMenu'
-import { useRecs, type RecItem } from '@/composables/useRecs'
-import { useAnimeProgress } from '@/composables/useAnimeProgress'
-import { emitRecClick, type PinSource } from '@/utils/recsAnalytics'
 import { SearchAutocomplete } from '@/components/ui'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
@@ -466,60 +363,11 @@ interface HomeAnime {
 }
 
 const router = useRouter()
-const route = useRoute()
 const { t } = useI18n()
 const homeStore = useHomeStore()
 const watchlistStore = useWatchlistStore()
 
-// Phase 14 (REC-EVAL-01): rec_click telemetry on the trending row. The
-// router-link still navigates; emit fires non-blocking before navigation.
-function onRecClick(item: RecItem): void {
-  const signalId = item.pinned ? 's6_pin' : (item.top_contributor || 's3')
-  void emitRecClick({
-    event_type: 'rec_click',
-    anime_id: item.anime.id,
-    signal_id: signalId,
-    pinned: !!item.pinned,
-    pin_source: item.pin_source as PinSource | undefined,
-    pin_seed_anime_id: item.pin_seed_anime_id,
-    source_route: route.path,
-    rank: item.rank,
-  })
-}
-
 const searchQuery = ref('')
-
-// Phase 10 — anonymous trending row. The composable fetches /api/users/recs
-// onMounted and exposes the row label key (recs.trending in this phase;
-// recs.upNext when Phase 11 lands and the backend branches on auth state).
-const { recs: rawRecs, isLoading: trendingLoading, rowLabelKey } = useRecs()
-const trendingRecs = computed(() => rawRecs.value.slice(0, 20))
-
-// Phase 9 (UX-16): bulk per-card progress for the trending row. The
-// composable auto-skips when anonymous (no token), so this is a no-op
-// for logged-out visitors. Keyed by the visible trendingRecs anime IDs.
-const trendingIds = computed(() => trendingRecs.value.map((r) => String(r.anime.id)))
-const { progressMap: trendingProgress } = useAnimeProgress(trendingIds)
-
-// Phase 10 (UX-19 / verifies UA-060): compute the dominant `top_contributor`
-// signal across non-pinned trending items. Renders one localized reason chip
-// per row. Pinned items are excluded (they have a dedicated pin_reason line).
-// `s6_pin` would otherwise win in pinned rows; the chip itself is also hidden
-// when the first item is pinned so we never double-render reason copy.
-const dominantSignalKey = computed(() => {
-  const counts = trendingRecs.value
-    .filter((r) => !r.pinned && r.top_contributor)
-    .reduce<Record<string, number>>((acc, r) => {
-      const k = r.top_contributor!
-      acc[k] = (acc[k] || 0) + 1
-      return acc
-    }, {})
-  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
-  return top ? top[0] : null
-})
-const reasonI18nKey = computed(() =>
-  dominantSignalKey.value ? `recs.reason.${dominantSignalKey.value}` : null,
-)
 
 const {
   announcedAnime,
