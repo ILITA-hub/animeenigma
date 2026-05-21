@@ -501,6 +501,25 @@ Tables are auto-created via GORM's `AutoMigrate()` on service startup. For schem
 
 **Note**: GORM only creates new tables/columns, it does NOT modify or drop existing columns to protect data.
 
+### Adding a Spotlight Card Type
+
+The home page's `HeroSpotlightBlock` (workstream `hero-spotlight`) is a 9-card rotating carousel. To add a 10th card type, touch the following 5 anchors (all from the same package boundaries, ~50 lines total):
+
+1. **Backend resolver** — Create `services/catalog/internal/service/spotlight/cards/{new_type}.go` implementing the `spotlight.Resolver` interface (`Type()` + `Resolve(ctx, userID *string) (*spotlight.Card, error)`). Mirror `anime_of_day.go`'s pattern: manual `cache.Get`/`cache.Set` with `errors.Is(err, cache.ErrNotFound)`, return `(nil, nil)` for ineligible, `(nil, err)` for failure, `(*Card, nil)` for success. Multi-item resolvers MUST apply `spotlight.AdaptiveSlice` (the 1-2-3 layout rule). Login-only resolvers return `(nil, nil)` when `userID == nil`. Always carry the `spotlight:` Redis key prefix for new keys (HSB-NF-03). Add a co-located `_test.go` with handwritten fakes — no testify/mock.
+
+2. **Backend Data type** — Add the JSON-shaped `{NewType}Data` struct to `services/catalog/internal/service/spotlight/types.go` extending the Card union. Update `types_test.go` with a round-trip marshal/unmarshal test.
+
+3. **Backend DI** — Add a `cards.New{NewType}Resolver(...)` call to the `spotlightResolvers` slice in `services/catalog/cmd/catalog-api/main.go`. Stable order matters for tie-breaking display order.
+
+4. **Frontend SFC** — Create `frontend/web/src/components/home/spotlight/cards/{NewType}Card.vue` accepting a typed `data` prop (use the new TypeScript variant from step 5). Honor the UI-SPEC contract: ONLY `font-medium` / `font-semibold` weights, `p-4 md:p-6 lg:p-8` padding, Tailwind utility-only, `min-h-[400px] md:min-h-[340px] lg:min-h-[320px]` height. Add `target="_blank"` + `rel="noopener noreferrer"` on any external anchor. Co-locate a `.spec.ts` with at least 5 Vitest assertions.
+
+5. **Frontend dispatch + i18n + types** —
+   - Extend the `SpotlightCard` discriminated union in `frontend/web/src/types/spotlight.ts` with the new `{ type: '{new_type}', data: {NewType}Data }` variant.
+   - Add a `v-else-if="active.type === '{new_type}'"` branch to the dispatch chain in `frontend/web/src/components/home/spotlight/HeroSpotlightBlock.vue` (DO NOT switch to `<component :is>` — keep the typed chain so vue-tsc narrows props).
+   - Add a new `spotlight.{newType}.*` sub-namespace to BOTH `frontend/web/src/locales/en.json` and `frontend/web/src/locales/ru.json`. The parity test at `frontend/web/src/locales/__tests__/spotlight-keys.spec.ts` will fail if any key is added to one file but not the other.
+
+Verify the full stack with: `cd services/catalog && go test ./internal/service/spotlight/... -count=1 -race` and `cd frontend/web && bunx vitest run src/components/home/spotlight/ src/locales/__tests__/spotlight-keys.spec.ts && bunx tsc --noEmit`. The Phase 3 end-to-end Playwright spec `frontend/web/e2e/spotlight.spec.ts` is the canonical regression test for the full carousel.
+
 ## Local Development Commands
 
 Use `make` for all local development operations. Run `make help` to see all available targets.
