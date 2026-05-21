@@ -479,7 +479,7 @@ func TestRecsHandler_PersonalizedBranch_CacheMissComputesAndCaches(t *testing.T)
 
 	// Cache must now contain the per-user key.
 	var cached interface{}
-	require.NoError(t, cache.Get(context.Background(), "recs:user:user-1:topN", &cached),
+	require.NoError(t, cache.Get(context.Background(), "recs:user:user-1:topN:v2", &cached),
 		"per-user cache key must be populated after fresh compute")
 }
 
@@ -499,7 +499,7 @@ func TestRecsHandler_PersonalizedBranch_CacheHitReturnsCachedPayload(t *testing.
 		Total:       1,
 		RowLabelKey: "recs.upNext",
 	}
-	cache.preBake(t, "recs:user:user-1:topN", prebaked)
+	cache.preBake(t, "recs:user:user-1:topN:v2", prebaked)
 
 	recsRepo := repo.NewRecsRepository(db)
 	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
@@ -522,7 +522,7 @@ func TestRecsHandler_PersonalizedBranch_CacheHitReturnsCachedPayload(t *testing.
 	assert.Equal(t, "cached-up-next-1", env.Data.Recs[0].Anime.ID)
 }
 
-func TestRecsHandler_PersonalizedBranch_ExcludesCompletedAndDropped(t *testing.T) {
+func TestRecsHandler_PersonalizedBranch_ExcludesAnyListEntry(t *testing.T) {
 	db := setupRecsTestDB(t)
 	cache := newFakeRecsCache()
 
@@ -550,10 +550,15 @@ func TestRecsHandler_PersonalizedBranch_ExcludesCompletedAndDropped(t *testing.T
 	}
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
 
+	// All three list entries (any status) must be excluded — only anime-fresh
+	// (no list row) survives the candidate pool.
 	for _, item := range env.Data.Recs {
+		assert.NotEqual(t, "anime-watching", item.Anime.ID, "watching anime must NOT appear — recs are for unlisted only")
 		assert.NotEqual(t, "anime-completed", item.Anime.ID, "completed anime must NOT appear in personalized row")
 		assert.NotEqual(t, "anime-dropped", item.Anime.ID, "dropped anime must NOT appear in personalized row")
 	}
+	require.Equal(t, 1, env.Data.Total, "only anime-fresh has no list row and should be the sole rec")
+	assert.Equal(t, "anime-fresh", env.Data.Recs[0].Anime.ID)
 }
 
 func TestRecsHandler_PersonalizedBranch_ColdStartUserDegradesToS3S4(t *testing.T) {
@@ -584,7 +589,7 @@ func TestRecsHandler_PersonalizedBranch_ColdStartUserDegradesToS3S4(t *testing.T
 	}
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
 	assert.True(t, env.Success, "cold-start request must succeed (no NaN, no error)")
-	// Pool is anime-A (watching, retained) + anime-B + anime-C = 3.
+	// Pool is anime-B + anime-C = 2 (anime-A is in user's list → excluded).
 	assert.Greater(t, env.Data.Total, 0, "ensemble must degrade gracefully and still produce ranked recs")
 }
 
@@ -624,10 +629,10 @@ func TestRecsHandler_PersonalizedBranch_PerUserCacheIsolation(t *testing.T) {
 
 	// Pre-bake distinct payloads for two users — verifies the cache key is
 	// per-user.
-	cache.preBake(t, "recs:user:user-A:topN", RecsEnvelope{
+	cache.preBake(t, "recs:user:user-A:topN:v2", RecsEnvelope{
 		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-A"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
 	})
-	cache.preBake(t, "recs:user:user-B:topN", RecsEnvelope{
+	cache.preBake(t, "recs:user:user-B:topN:v2", RecsEnvelope{
 		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-B"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
 	})
 

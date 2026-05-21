@@ -304,7 +304,7 @@ func TestAdminRecsHandler_ForceRecompute_HappyPath(t *testing.T) {
 	assert.NotEmpty(t, env.Data.ComputedAt)
 	assert.GreaterOrEqual(t, env.Data.LatencyMs, int64(0))
 	// Cache was busted (fire-and-forget log on err — happy path: no err).
-	assert.Contains(t, cache.deletes, "recs:user:user-1:topN")
+	assert.Contains(t, cache.deletes, "recs:user:user-1:topN:v2")
 }
 
 func TestAdminRecsHandler_ForceRecompute_EmptyUserID(t *testing.T) {

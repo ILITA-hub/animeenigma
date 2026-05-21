@@ -123,17 +123,19 @@ func TestS11Filter_CandidatePoolForUser_NoAnimeListRowsReturnsAllVisible(t *test
 	assert.Equal(t, want, gotSet, "user with no anime_list rows -> same result as anonymous CandidatePool")
 }
 
-func TestS11Filter_CandidatePoolForUser_ExcludesCompletedAndDropped(t *testing.T) {
+func TestS11Filter_CandidatePoolForUser_ExcludesAnyListEntry(t *testing.T) {
 	db := setupS11TestDB(t)
-	// Per the plan's fixture: 5 anime — 1 visible kept, 1 visible completed (drop),
-	// 1 hidden, 1 soft-deleted, 1 visible dropped (drop).
+	// 5 anime — only anime-6 (visible, no anime_list row) survives. Anime in
+	// the user's list at ANY status are excluded so the rec row never re-shows
+	// something the user has already added.
 	require.NoError(t, db.Exec(
 		`INSERT INTO animes (id, hidden, deleted_at) VALUES
 		 ('anime-1', 0, NULL),
 		 ('anime-2', 0, NULL),
 		 ('anime-3', 1, NULL),
 		 ('anime-4', 0, '2026-01-01 00:00:00'),
-		 ('anime-5', 0, NULL)`,
+		 ('anime-5', 0, NULL),
+		 ('anime-6', 0, NULL)`,
 	).Error)
 	seedAnimeListEntry(t, db, "al-1", "user-A", "anime-1", "watching")
 	seedAnimeListEntry(t, db, "al-2", "user-A", "anime-2", "completed")
@@ -147,17 +149,18 @@ func TestS11Filter_CandidatePoolForUser_ExcludesCompletedAndDropped(t *testing.T
 	for _, id := range got {
 		gotSet[id] = struct{}{}
 	}
-	want := map[recs.AnimeID]struct{}{"anime-1": {}}
-	assert.Equal(t, want, gotSet, "only visible anime not completed/dropped/hidden/deleted survive")
+	want := map[recs.AnimeID]struct{}{"anime-6": {}}
+	assert.Equal(t, want, gotSet, "only visible anime with NO anime_list row for the user survive")
 }
 
-func TestS11Filter_CandidatePoolForUser_KeepsActiveStatuses(t *testing.T) {
+func TestS11Filter_CandidatePoolForUser_ExcludesActiveStatusesToo(t *testing.T) {
 	db := setupS11TestDB(t)
 	require.NoError(t, db.Exec(
 		`INSERT INTO animes (id, hidden, deleted_at) VALUES
 		 ('anime-1', 0, NULL),
 		 ('anime-2', 0, NULL),
-		 ('anime-5', 0, NULL)`,
+		 ('anime-5', 0, NULL),
+		 ('anime-6', 0, NULL)`,
 	).Error)
 	seedAnimeListEntry(t, db, "al-1", "user-B", "anime-1", "planned")
 	seedAnimeListEntry(t, db, "al-2", "user-B", "anime-2", "watching")
@@ -171,18 +174,18 @@ func TestS11Filter_CandidatePoolForUser_KeepsActiveStatuses(t *testing.T) {
 	for _, id := range got {
 		gotSet[id] = struct{}{}
 	}
-	want := map[recs.AnimeID]struct{}{"anime-1": {}, "anime-2": {}, "anime-5": {}}
-	assert.Equal(t, want, gotSet, "watching / planned / on_hold are KEPT; only completed and dropped exclude")
+	want := map[recs.AnimeID]struct{}{"anime-6": {}}
+	assert.Equal(t, want, gotSet, "active statuses (watching/planned/on_hold) are now also excluded — recs are for unlisted anime only")
 }
 
 // ----------------------------------------------------------------------------
-// Phase 14 (REC-ADMIN-01) — FilterAudit tests.
+// FilterAudit tests.
 //
 // FilterAudit returns the items that S11.CandidatePoolForUser would drop, with
 // a reason string per category. Reasons:
-//   - "status=completed" — anime where user's anime_list.status='completed'
-//   - "status=dropped"   — anime where user's anime_list.status='dropped'
-//   - "hidden=true"      — anime where animes.hidden=true (not user-specific)
+//   - "status=<value>" — anime where user has any anime_list row (status
+//     value: watching, planned, on_hold, completed, dropped)
+//   - "hidden=true"    — anime where animes.hidden=true (not user-specific)
 //
 // Soft-deleted anime are NOT in the audit (they're never surfaced anywhere
 // in admin debug; "we never tell admins about silently-vanished rows").
@@ -198,35 +201,41 @@ func TestS11Filter_FilterAudit_EmptyState(t *testing.T) {
 	assert.Empty(t, got, "user with no anime_list rows + no hidden anime -> empty audit")
 }
 
-func TestS11Filter_FilterAudit_AllThreeReasons(t *testing.T) {
+func TestS11Filter_FilterAudit_AllReasons(t *testing.T) {
 	db := setupS11TestDB(t)
-	// 5 anime — anime-1 (visible, no anime_list), anime-2 (visible, completed),
-	// anime-3 (hidden=true), anime-4 (soft-deleted via deleted_at — EXCLUDED
-	// silently from audit), anime-5 (visible, dropped).
+	// 6 anime — anime-1 (visible, no anime_list — survives audit), anime-2
+	// (visible, completed), anime-3 (hidden=true), anime-4 (soft-deleted —
+	// EXCLUDED silently from audit), anime-5 (visible, dropped), anime-6
+	// (visible, watching — now also surfaced because watching excludes too).
 	require.NoError(t, db.Exec(
 		`INSERT INTO animes (id, hidden, deleted_at) VALUES
 		 ('anime-1', 0, NULL),
 		 ('anime-2', 0, NULL),
 		 ('anime-3', 1, NULL),
 		 ('anime-4', 0, '2026-01-01 00:00:00'),
-		 ('anime-5', 0, NULL)`,
+		 ('anime-5', 0, NULL),
+		 ('anime-6', 0, NULL)`,
 	).Error)
 	seedAnimeListEntry(t, db, "al-2", "user-A", "anime-2", "completed")
 	seedAnimeListEntry(t, db, "al-5", "user-A", "anime-5", "dropped")
+	seedAnimeListEntry(t, db, "al-6", "user-A", "anime-6", "watching")
 
 	f := NewS11Filter(db)
 	got, err := f.FilterAudit(context.Background(), "user-A")
 	require.NoError(t, err)
 
-	// Expected 3 entries; soft-deleted anime-4 NOT included.
-	require.Len(t, got, 3, "expected exactly 3 audit rows (completed + dropped + hidden); soft-deleted excluded")
-	// Sorted by (reason ASC, anime_id ASC): hidden=true (anime-3), status=completed (anime-2), status=dropped (anime-5).
+	// Expected 4 entries; soft-deleted anime-4 NOT included.
+	require.Len(t, got, 4, "expected 4 audit rows (hidden + completed + dropped + watching); soft-deleted excluded")
+	// Sorted by (reason ASC, anime_id ASC): hidden=true, status=completed,
+	// status=dropped, status=watching.
 	assert.Equal(t, "hidden=true", got[0].Reason)
 	assert.Equal(t, "anime-3", got[0].AnimeID)
 	assert.Equal(t, "status=completed", got[1].Reason)
 	assert.Equal(t, "anime-2", got[1].AnimeID)
 	assert.Equal(t, "status=dropped", got[2].Reason)
 	assert.Equal(t, "anime-5", got[2].AnimeID)
+	assert.Equal(t, "status=watching", got[3].Reason)
+	assert.Equal(t, "anime-6", got[3].AnimeID)
 }
 
 func TestS11Filter_FilterAudit_OnlyHiddenAnime(t *testing.T) {
@@ -261,19 +270,21 @@ func TestS11Filter_FilterAudit_OnlyUserSpecific(t *testing.T) {
 	).Error)
 	seedAnimeListEntry(t, db, "al-1", "user-A", "a-1", "completed")
 	seedAnimeListEntry(t, db, "al-2", "user-A", "a-2", "dropped")
-	// Active status — must NOT appear in audit.
+	// Active status — now ALSO appears in audit (recs are for unlisted anime).
 	seedAnimeListEntry(t, db, "al-3", "user-A", "a-3", "watching")
 
 	f := NewS11Filter(db)
 	got, err := f.FilterAudit(context.Background(), "user-A")
 	require.NoError(t, err)
 
-	require.Len(t, got, 2)
-	// Sorted by reason ASC: completed first, dropped second.
+	require.Len(t, got, 3)
+	// Sorted by reason ASC: completed, dropped, watching.
 	assert.Equal(t, "status=completed", got[0].Reason)
 	assert.Equal(t, "a-1", got[0].AnimeID)
 	assert.Equal(t, "status=dropped", got[1].Reason)
 	assert.Equal(t, "a-2", got[1].AnimeID)
+	assert.Equal(t, "status=watching", got[2].Reason)
+	assert.Equal(t, "a-3", got[2].AnimeID)
 }
 
 func TestS11Filter_FilterAudit_OtherUsersListIgnored(t *testing.T) {

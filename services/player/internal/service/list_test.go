@@ -171,7 +171,7 @@ func TestMarkEpisodeWatched_CacheBustOnSeedUpdate(t *testing.T) {
 	// Cache invalidation is fire-and-forget; allow the goroutine a moment.
 	assert.Eventually(t, func() bool {
 		for _, k := range cache.DeletedKeys() {
-			if k == "recs:user:u5:topN" {
+			if k == "recs:user:u5:topN:v2" {
 				return true
 			}
 		}

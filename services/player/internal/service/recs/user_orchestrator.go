@@ -22,9 +22,14 @@ type userOrchestratorCache interface {
 
 // Cache key prefixes for the user-scope rec engine. Exported so handler
 // and main.go can construct the same keys without re-defining magic strings.
+//
+// The :v2 suffix invalidates caches written under the old S11 filter (which
+// kept watching/planned/on_hold). The new filter excludes any anime in the
+// user's list, and stale v1 caches would otherwise keep surfacing those
+// entries until the 6h TTL expired.
 const (
 	UserTopNKeyPrefix = "recs:user:"
-	UserTopNKeySuffix = ":topN"
+	UserTopNKeySuffix = ":topN:v2"
 	DebounceKeyPrefix = "recs:debounce:"
 
 	// debounceTTL is the per-user debounce window: at most one

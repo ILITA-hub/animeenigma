@@ -5,7 +5,9 @@
 // (row_label_key=recs.trending), while logged-in callers get a personalized
 // "Up Next for you" row (row_label_key=recs.upNext) computed from the full
 // 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 Phase-12 ensemble, with
-// completed/dropped anime excluded by S11.CandidatePoolForUser.
+// any anime already in the user's anime_list (any status) excluded by
+// S11.CandidatePoolForUser — signals still read the list to score affinity,
+// they just don't recommend it back at the user.
 package handler
 
 import (
@@ -53,9 +55,11 @@ const userTopNTTL = 6 * time.Hour
 const userRowSliceSize = 50
 
 // userTopNKey returns the per-user topN cache key in canonical shape so the
-// handler / cron / trigger paths all agree.
+// handler / cron / trigger paths all agree. Delegates to recs.UserTopNKey so
+// the cache-key version (:v2 suffix; see UserTopNKeySuffix) stays in lockstep
+// across handler, orchestrator, and admin paths.
 func userTopNKey(userID string) string {
-	return "recs:user:" + userID + ":topN"
+	return recs.UserTopNKey(recs.UserID(userID))
 }
 
 // RecAnimePayload is the anime fields the frontend AnimeCard needs to render.
@@ -205,7 +209,8 @@ func (h *RecsHandler) serveAnonymous(ctx context.Context, w http.ResponseWriter)
 }
 
 // serveLoggedIn serves the personalized Up Next row. Per-user cache,
-// CandidatePoolForUser (excluding completed/dropped), full ensemble.
+// CandidatePoolForUser (excluding any anime already in the user's list),
+// full ensemble.
 func (h *RecsHandler) serveLoggedIn(ctx context.Context, w http.ResponseWriter, userID string) {
 	// 1. Cache read-through (per-user key).
 	var cached RecsEnvelope
@@ -378,9 +383,10 @@ func deriveTopContributor(breakdown map[recs.SignalID]recs.NormalizedScore, weig
 }
 
 // computeFreshForUser runs the personalized ensemble for a logged-in user:
-// S11.CandidatePoolForUser (excludes completed/dropped) -> full Phase-12
-// ensemble 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 -> stable sort
-// -> top-50 server slice -> hydrate -> envelope with row_label_key=recs.upNext.
+// S11.CandidatePoolForUser (excludes any anime already in the user's list) ->
+// full Phase-12 ensemble 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 ->
+// stable sort -> top-50 server slice -> hydrate -> envelope with
+// row_label_key=recs.upNext.
 func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (RecsEnvelope, error) {
 	pool, err := h.s11.CandidatePoolForUser(ctx, recs.UserID(userID))
 	if err != nil {

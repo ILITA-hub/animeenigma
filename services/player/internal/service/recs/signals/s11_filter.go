@@ -10,13 +10,15 @@ package signals
 //
 //   - CandidatePool(ctx)              — anonymous (Phase 10). Filters out
 //     admin-hidden anime and soft-deleted rows.
-//   - CandidatePoolForUser(ctx, uid)  — logged-in (Phase 11). Anonymous filter
-//     plus exclusion of anime the user has marked completed or dropped
-//     (REC-UX-04). The anonymous path is intentionally untouched so the
-//     anonymous trending row keeps its existing semantics.
+//   - CandidatePoolForUser(ctx, uid)  — logged-in. Anonymous filter plus
+//     exclusion of any anime present in the user's anime_list, regardless of
+//     status. Recs are for things the user has NOT already added to their list;
+//     the ranking signals (S1/S2/S5) still read anime_list independently to
+//     compute affinity scores, so the user's history continues to shape the
+//     ordering — it just isn't recommended back at them.
 //
-// Phase 14 added FilterAudit for the admin debug page — returns the items
-// the per-user filter would exclude with a reason string per category.
+// FilterAudit (admin debug page) returns the items the per-user filter would
+// exclude with a reason string per category.
 
 import (
 	"context"
@@ -53,12 +55,14 @@ func (f *S11Filter) CandidatePool(ctx context.Context) ([]recs.AnimeID, error) {
 
 // CandidatePoolForUser returns the IDs of every anime eligible for ranking
 // in the logged-in "Up Next for you" row: the anonymous CandidatePool minus
-// anime that the caller has marked 'completed' or 'dropped' in their
-// watchlist. Phase 11 — REC-UX-04.
+// any anime the caller has in their anime_list (any status — watching,
+// planned, on_hold, completed, dropped). Recs are for things the user has
+// NOT already added to their list; the ranking signals (S1/S2/S5) still
+// read anime_list independently to compute affinity, so the user's history
+// continues to shape the ordering — it just isn't recommended back at them.
 //
-// Active statuses ('watching', 'planned', 'on_hold') and anime with no
-// anime_list row at all are kept — the LEFT JOIN treats al.status IS NULL
-// as a pass.
+// Only anime with no anime_list row at all (al.status IS NULL on the LEFT
+// JOIN) survive.
 func (f *S11Filter) CandidatePoolForUser(ctx context.Context, userID recs.UserID) ([]recs.AnimeID, error) {
 	var ids []recs.AnimeID
 	err := f.db.WithContext(ctx).
@@ -67,7 +71,7 @@ func (f *S11Filter) CandidatePoolForUser(ctx context.Context, userID recs.UserID
 		Joins("LEFT JOIN anime_list al ON al.anime_id = a.id AND al.user_id = ?", userID).
 		Where("a.hidden = ?", false).
 		Where("a.deleted_at IS NULL").
-		Where("(al.status IS NULL OR al.status NOT IN ?)", []string{"completed", "dropped"}).
+		Where("al.status IS NULL").
 		Pluck("a.id", &ids).Error
 	if err != nil {
 		return nil, err
@@ -76,8 +80,7 @@ func (f *S11Filter) CandidatePoolForUser(ctx context.Context, userID recs.UserID
 }
 
 // FilteredOutEntry is one row in the admin-debug filter audit panel.
-// Reason ∈ {"status=completed", "status=dropped", "hidden=true"}.
-// Phase 14 (REC-ADMIN-01).
+// Reason is one of {"hidden=true", "status=<watching|planned|on_hold|completed|dropped>"}.
 type FilteredOutEntry struct {
 	AnimeID string `json:"anime_id"`
 	Reason  string `json:"reason"`
@@ -85,14 +88,18 @@ type FilteredOutEntry struct {
 
 // FilterAudit returns every anime the per-user S11 filter would exclude,
 // with a reason string per applicable category. An anime that triggers
-// multiple categories (e.g. hidden=true AND in the user's completed list)
-// emits multiple rows — admins see every reason that applied.
+// multiple categories (e.g. hidden=true AND in the user's list) emits
+// multiple rows — admins see every reason that applied.
+//
+// Any anime_list row excludes the anime now (recs are "things not yet in
+// your list"), so the audit emits one status=<value> row per anime_list
+// entry regardless of status.
 //
 // Soft-deleted anime (deleted_at IS NOT NULL) are EXCLUDED from the audit
 // — they're never surfaced anywhere in the admin debug surface.
 //
 // Output is sorted by (reason ASC, anime_id ASC) for deterministic test
-// snapshots and stable rendering. Phase 14 (REC-ADMIN-01).
+// snapshots and stable rendering.
 func (f *S11Filter) FilterAudit(ctx context.Context, userID recs.UserID) ([]FilteredOutEntry, error) {
 	type row struct {
 		AnimeID string
@@ -104,18 +111,13 @@ func (f *S11Filter) FilterAudit(ctx context.Context, userID recs.UserID) ([]Filt
 		FROM animes a
 		WHERE a.hidden = TRUE AND a.deleted_at IS NULL
 		UNION ALL
-		SELECT al.anime_id, 'status=completed' AS reason
+		SELECT al.anime_id, 'status=' || al.status AS reason
 		FROM anime_list al
 		JOIN animes a ON a.id = al.anime_id
-		WHERE al.user_id = ? AND al.status = 'completed' AND a.deleted_at IS NULL
-		UNION ALL
-		SELECT al.anime_id, 'status=dropped' AS reason
-		FROM anime_list al
-		JOIN animes a ON a.id = al.anime_id
-		WHERE al.user_id = ? AND al.status = 'dropped' AND a.deleted_at IS NULL
+		WHERE al.user_id = ? AND a.deleted_at IS NULL
 		ORDER BY reason ASC, anime_id ASC
 	`
-	if err := f.db.WithContext(ctx).Raw(q, string(userID), string(userID)).Scan(&rows).Error; err != nil {
+	if err := f.db.WithContext(ctx).Raw(q, string(userID)).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]FilteredOutEntry, 0, len(rows))

@@ -241,7 +241,7 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 1. Candidate pool (excludes completed/dropped/hidden/soft-deleted).
+	// 1. Candidate pool (excludes any anime in user's list / hidden / soft-deleted).
 	pool, err := h.s11.CandidatePoolForUser(ctx, recs.UserID(userID))
 	if err != nil {
 		h.log.Errorw("admin recs: candidate pool failed", "user_id", userID, "error", err)
@@ -452,8 +452,10 @@ func (h *AdminRecsHandler) ForceRecompute(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 1. Bust the per-user topN cache (fire-and-forget).
-	if err := h.cache.Delete(ctx, "recs:user:"+userID+":topN"); err != nil {
+	// 1. Bust the per-user topN cache (fire-and-forget). Uses the shared
+	//    UserTopNKey helper so the :v2 suffix stays in lockstep with the
+	//    handler / orchestrator read/write paths.
+	if err := h.cache.Delete(ctx, recs.UserTopNKey(recs.UserID(userID))); err != nil {
 		h.log.Warnw("admin recs: cache delete failed (non-fatal)", "user_id", userID, "error", err)
 	}
 
