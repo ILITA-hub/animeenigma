@@ -33,11 +33,17 @@ func NewDismissedRetentionCleanupJob(db *gorm.DB, retentionDays int, log *logger
 
 // Run executes the DELETE. Returns the rows-affected count for logging /
 // metrics / the admin endpoint's JSON response.
+//
+// IMPORTANT: pgx (the Postgres driver this service uses) refuses to encode
+// an int parameter into a text-shaped slot, which broke an earlier
+// `(? || ' days')::interval` formulation. The `INTERVAL '1 day' * N` form
+// keeps the parameter as a plain integer so pgx is happy AND the math is
+// done server-side. Caught during SC6 of the Phase 2 verification gauntlet.
 func (j *DismissedRetentionCleanupJob) Run(ctx context.Context) (int64, error) {
 	const q = `
 		DELETE FROM user_notifications
 		WHERE dismissed_at IS NOT NULL
-		  AND dismissed_at < NOW() - ((? || ' days')::interval)
+		  AND dismissed_at < NOW() - (INTERVAL '1 day' * ?)
 	`
 	res := j.db.WithContext(ctx).Exec(q, j.retentionDays)
 	if res.Error != nil {

@@ -25,7 +25,20 @@ type EpisodeChecker interface {
 
 // EpisodeCheckerResponse mirrors the wire shape catalog's
 // service.EpisodesLookupResult produces.
+//
+// IMPORTANT: catalog wraps every response in libs/httputil.JSON's
+// {"success": bool, "data": {...}} envelope. The detector must unwrap
+// `data` before reading the payload — this was caught in SC2 of the
+// Phase 2 verification gauntlet where every snapshot persisted as 0
+// because the unwrapped LatestAvailableEpisode field was always absent
+// from the top-level JSON object.
 type EpisodeCheckerResponse struct {
+	Success bool                         `json:"success"`
+	Data    EpisodeCheckerResponsePayload `json:"data"`
+}
+
+// EpisodeCheckerResponsePayload is the inner object catalog returns.
+type EpisodeCheckerResponsePayload struct {
 	LatestAvailableEpisode int       `json:"latest_available_episode"`
 	CheckedAt              time.Time `json:"checked_at"`
 }
@@ -97,7 +110,7 @@ func (c *HTTPEpisodeChecker) LatestEpisode(ctx context.Context, combo domain.Com
 		if err := json.Unmarshal(body, &parsed); err != nil {
 			return 0, apperrors.Wrap(err, apperrors.CodeInternal, "decode episodes response")
 		}
-		return parsed.LatestAvailableEpisode, nil
+		return parsed.Data.LatestAvailableEpisode, nil
 	case http.StatusNotFound:
 		// Combo has no upstream match — treat as not-found, NOT failure.
 		// Detector skips silently rather than logging a parser failure.
