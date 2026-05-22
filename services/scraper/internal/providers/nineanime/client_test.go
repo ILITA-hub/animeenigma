@@ -506,6 +506,122 @@ func iframeURLFromReqHost(r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
+// TestGetStream_YouTubeIframeRejected — 2026-05-22 upstream regression.
+// A "Naruto (Shinsaku Anime) 2026"-style stub series whose episode page
+// embeds ONLY a YouTube trailer iframe (no my.1anime.site MP4 wrapper)
+// must fail at the host-allowlist gate, not at the downstream <source>
+// regex. The error must:
+//   - be ErrExtractFailed (orchestrator continues failover)
+//   - mention "iframe host" (maintenance bot dispatch signature)
+//   - mention "youtube.com" (operator triage clarity)
+//
+// This is a regression-lock against the pre-fix behavior where the
+// permissive iframe regex would grab the YouTube iframe and then fail
+// later with the misleading "no video source" error — misattributing
+// upstream shape regression to a packed-JS drift.
+func TestGetStream_YouTubeIframeRejected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body>
+			<iframe width="975" height="548" src="https://www.youtube.com/embed/ABCDEF12345"
+			    frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+		</body></html>`))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	_, err := p.GetStream(context.Background(),
+		"naruto-shinsaku-anime",
+		srv.URL+"/naruto-shinsaku-anime-episode-1-english-subbed/",
+		"1anime",
+		domain.CategorySub)
+	if err == nil {
+		t.Fatal("GetStream: nil error; want ErrExtractFailed (YouTube iframe must be rejected)")
+	}
+	if !errors.Is(err, domain.ErrExtractFailed) {
+		t.Fatalf("GetStream error = %v; want errors.Is(err, ErrExtractFailed)", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "iframe host") {
+		t.Errorf("error must mention 'iframe host' for maintenance-bot dispatch; got %q", msg)
+	}
+	if !strings.Contains(msg, "youtube.com") {
+		t.Errorf("error must mention the actual rejected host for operator triage; got %q", msg)
+	}
+}
+
+// TestGetStream_MegaplayRedirectRejected — 2026-05-22 popular-catalog
+// migration. The upstream rewrote popular series (One Piece, AoT, Demon
+// Slayer, JJK) to embed `1anime.site/megaplay/stream/s-2/<id>/sub`
+// instead of the legacy `my.1anime.site/index.php?action=play&file=*.mp4`
+// wrapper. The new shape's downstream content (megaplay.buzz JS player)
+// is not extractable by this provider. Fail cleanly at the host gate so
+// the maintenance bot's Pattern-7 dispatch sees a stable signature.
+func TestGetStream_MegaplayRedirectRejected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body>
+			<iframe src="https://1anime.site/megaplay/stream/s-2/2142/sub"
+			    width="100%" height="600" frameborder="0"></iframe>
+		</body></html>`))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	_, err := p.GetStream(context.Background(),
+		"hd-one-piece",
+		srv.URL+"/one-piece-episode-1-english-subbed/",
+		"1anime",
+		domain.CategorySub)
+	if err == nil {
+		t.Fatal("GetStream: nil error; want ErrExtractFailed (1anime.site/megaplay must be rejected)")
+	}
+	if !errors.Is(err, domain.ErrExtractFailed) {
+		t.Fatalf("GetStream error = %v; want errors.Is(err, ErrExtractFailed)", err)
+	}
+	if !strings.Contains(err.Error(), "iframe host") {
+		t.Errorf("error must mention 'iframe host' for maintenance-bot dispatch; got %q", err.Error())
+	}
+}
+
+// TestIsAllowedIframeHost — unit test for the host-allowlist helper.
+// Production case: only my.1anime.site is accepted. Same-origin baseURL
+// is also accepted for httptest isolation. Anything else is rejected.
+func TestIsAllowedIframeHost(t *testing.T) {
+	log := logger.Default()
+	p, err := New(Deps{
+		BaseURL: "https://9anime.me.uk",
+		HTTP:    domain.NewBaseHTTPClient(log),
+		Cache:   newInMemoryCache(),
+		Log:     log,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	cases := []struct {
+		host string
+		want bool
+		why  string
+	}{
+		{"my.1anime.site", true, "canonical embed host"},
+		{"My.1Anime.Site", true, "case-insensitive"},
+		{"9anime.me.uk", true, "same-origin baseURL host (test isolation)"},
+		{"www.youtube.com", false, "YouTube placeholder regression"},
+		{"youtube.com", false, "YouTube without www"},
+		{"1anime.site", false, "megaplay redirect host (no my. prefix)"},
+		{"megaplay.buzz", false, "popular-catalog migration target"},
+		{"evil.my.1anime.site.attacker.com", false, "suffix-injection attempt"},
+		{"my.1anime.site.attacker.com", false, "domain-prefix-injection attempt"},
+		{"", false, "empty host"},
+	}
+	for _, tc := range cases {
+		if got := p.isAllowedIframeHost(tc.host); got != tc.want {
+			t.Errorf("isAllowedIframeHost(%q) = %v; want %v (%s)",
+				tc.host, got, tc.want, tc.why)
+		}
+	}
+}
+
 // --- markStage / HealthCheck ---------------------------------------------
 
 // TestMarkStage_Success — successful stage call sets Up=true.

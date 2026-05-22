@@ -35,10 +35,36 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/fuzzy"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 )
+
+// Selector identifiers for parser_zero_match_total. Stable, short, and
+// kebab-cased per the project convention (services/scraper/internal/embeds/
+// vibeplayer.go + services/scraper/internal/providers/gogoanime/client.go).
+// These labels are the maintenance-bot's Pattern-7 dispatch keys —
+// renaming them silently breaks the bot. See .claude/maintenance-prompt.md
+// "Scraper Provider Schema Drift" section.
+const (
+	selectorMy1AnimeIframe = "my_1anime_iframe"
+	selectorVideoMP4Source = "video_mp4_source"
+)
+
+// embedAllowedHosts is the production allowlist of legitimate embed hosts
+// the upstream's HTML may legally point an iframe at. The historical contract
+// is `my.1anime.site` (direct-MP4 wrapper). Any other host is treated as an
+// upstream-shape regression — new megaplay.buzz redirects, YouTube trailer
+// placeholders, and any future rebrand all fail at this gate with a clean
+// parser_zero_match_total{selector="my_1anime_iframe"} signal so the
+// maintenance bot's Pattern-7 dispatch can fire.
+//
+// Tests mount the iframe on the same httptest.Server as the series page;
+// isAllowedIframeHost permits that case via the same-origin fallback to
+// p.baseURL's host, so test isolation stays intact without leaking a
+// permissive regex into production.
+var embedAllowedHosts = []string{"my.1anime.site"}
 
 // providerName is the stable identifier returned by Name() and used as the
 // orchestrator's registry key.
@@ -67,17 +93,20 @@ const (
 // stage rename in the health package flows here automatically.
 var stageNames = health.AllStages
 
-// iframeSrcRegex extracts the my.1anime.site iframe URL from the episode
-// WP post HTML. Anchored to the strict `my.1anime.site` host (T-28-05-05
-// SSRF defense — no arbitrary-host injection from upstream HTML).
+// iframeSrcRegex extracts an iframe URL from the episode WP post HTML.
+// The regex itself is permissive (any URL); the host-allowlist check in
+// GetStream (see embedAllowedHosts + isAllowedIframeHost) enforces the
+// T-28-05-05 SSRF defense — only `my.1anime.site` (or the test server's
+// same-origin host) is accepted. This split keeps the regex testable
+// against an httptest.Server URL while production stays anchored on the
+// canonical embed host.
 //
-// Per 28-05-PLAN.md the regex MUST allow http or https + may include
-// optional explicit port for testability (httptest.NewServer URLs include
-// `127.0.0.1:NNNNN`). The test path uses a same-origin iframe to a
-// httptest server, so we relax the anchor to "any URL" in the test build
-// path while keeping the production behaviour strict — accomplished by a
-// two-stage match: first try the strict regex, then the permissive one
-// as a fallback when the strict miss is in a test environment.
+// Upstream-shape regressions (2026-05 popular-catalog migration to
+// 1anime.site/megaplay → megaplay.buzz, YouTube trailer placeholders for
+// stub series) all fail at the host-allowlist gate with
+// parser_zero_match_total{selector="my_1anime_iframe"} so the maintenance
+// bot's Pattern-7 dispatch can fire on a stable, parseable signal rather
+// than a downstream `<source>`-regex miss that misattributes the failure.
 var iframeSrcRegex = regexp.MustCompile(`(?i)<iframe[^>]+src=["']([^"']+)["']`)
 
 // videoSrcRegex extracts the <source src="videos/<name>.mp4"> from the
@@ -167,6 +196,34 @@ func (p *Provider) HealthCheck(ctx context.Context) domain.Health {
 		snap[k] = v
 	}
 	return domain.Health{Provider: providerName, Stages: snap}
+}
+
+// isAllowedIframeHost reports whether `host` is a legitimate embed target.
+// Production: only my.1anime.site (embedAllowedHosts). Tests: also accept
+// the provider's own baseURL host so a same-origin httptest iframe is
+// extractable without leaking a permissive regex into production code.
+// Case-insensitive; ignores port.
+func (p *Provider) isAllowedIframeHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	for _, allowed := range embedAllowedHosts {
+		if host == allowed {
+			return true
+		}
+	}
+	// Test isolation: same-origin httptest iframe (parsedIframe.Hostname()
+	// equals the host of p.baseURL). Production never matches this branch
+	// because p.baseURL is 9anime.me.uk, which is never embedAllowedHosts'
+	// inverse — the upstream wouldn't legitimately self-host an MP4 embed
+	// at its own series-page origin.
+	if u, err := url.Parse(p.baseURL); err == nil {
+		if h := strings.ToLower(u.Hostname()); h != "" && h == host {
+			return true
+		}
+	}
+	return false
 }
 
 // FindID resolves AnimeRef → 9anime slug via the WP REST API
@@ -451,12 +508,14 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 	// (2) Regex iframe src.
 	m := iframeSrcRegex.FindSubmatch(body)
 	if len(m) < 2 {
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorMy1AnimeIframe).Inc()
 		err := domain.WrapExtractFailed(errors.New("no iframe src"), "nineanime: iframe regex")
 		p.markStage(health.StageStream, err)
 		return nil, err
 	}
 	iframeURL := strings.TrimSpace(string(m[1]))
 	if iframeURL == "" || !(strings.HasPrefix(iframeURL, "http://") || strings.HasPrefix(iframeURL, "https://")) {
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorMy1AnimeIframe).Inc()
 		err := domain.WrapExtractFailed(
 			fmt.Errorf("malformed iframe url %q", iframeURL),
 			"nineanime: iframe url shape")
@@ -465,7 +524,25 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 	}
 	parsedIframe, perr := url.Parse(iframeURL)
 	if perr != nil {
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorMy1AnimeIframe).Inc()
 		err := domain.WrapExtractFailed(perr, "nineanime: parse iframe url")
+		p.markStage(health.StageStream, err)
+		return nil, err
+	}
+
+	// (2b) Host allowlist: only my.1anime.site (production) or the
+	// provider's baseURL host (httptest same-origin) is acceptable. Any
+	// other host indicates upstream shape regression — 1anime.site/megaplay
+	// redirect, megaplay.buzz, YouTube trailer placeholder, etc. Emit a
+	// parser_zero_match_total counter so the maintenance bot's Pattern-7
+	// dispatch fires on a stable signature instead of a downstream regex
+	// miss that would otherwise misattribute the failure.
+	if !p.isAllowedIframeHost(parsedIframe.Hostname()) {
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorMy1AnimeIframe).Inc()
+		err := domain.WrapExtractFailed(
+			fmt.Errorf("iframe host %q not in allowlist {my.1anime.site}; upstream popular catalog migrated to megaplay or stub series uses non-embed iframe (e.g. YouTube)",
+				parsedIframe.Hostname()),
+			"nineanime: iframe host")
 		p.markStage(health.StageStream, err)
 		return nil, err
 	}
@@ -509,6 +586,7 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 	// (4) Regex <source src="videos/...mp4">.
 	vm := videoSrcRegex.FindSubmatch(embedBody)
 	if len(vm) < 2 {
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorVideoMP4Source).Inc()
 		err := domain.WrapExtractFailed(errors.New("no video source"), "nineanime: video regex")
 		p.markStage(health.StageStream, err)
 		return nil, err

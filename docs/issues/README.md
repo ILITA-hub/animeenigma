@@ -224,6 +224,25 @@ Track issues discovered during development. Each entry should include root cause
   - `docker/.env.example` — operator documentation block.
 - **Status:** Open — awaiting first operator capture of live SHAs. Architecture is correct; only data refresh required.
 
+### ISS-013: Nineanime upstream popular-catalog migrated off `my.1anime.site` to `megaplay.buzz` (Phase 28 provider degradation)
+- **Date:** 2026-05-22
+- **Severity:** Medium (last-resort EN provider degraded; failover chain still has working providers above it; popular anime now unplayable via nineanime, new uploads still work)
+- **Affected:** `nineanime` provider's `stream` stage for any series whose 9anime.me.uk catalog entry has been migrated to the new player (~all popular series tested: One Piece, Attack on Titan, Demon Slayer, Jujutsu Kaisen). Stub entries with YouTube-trailer-only placeholders (e.g. "Naruto (Shinsaku Anime) 2026") were also wrongly producing this stream failure pre-fix.
+- **Symptom:** Scraper health endpoint reported the nineanime `stream` stage DOWN with `last_err: "nineanime: video regex: scraper: extract failed (cause: no video source)"`. `last_ok = 0001-01-01T00:00:00Z` indicated the stage had never succeeded since the upstream migrated.
+- **Root cause:** Two issues compounded.
+  1. **Upstream catalog migration.** 9anime.me.uk's popular catalog moved from the legacy `my.1anime.site/index.php?action=play&file=*.mp4` direct-MP4 wrapper to a redirect chain: `1anime.site/megaplay/stream/s-2/<id>/sub` → `megaplay.buzz/stream/s-2/<id>/sub`. The new target is a dynamic JS player (obfuscated) that fetches the actual stream URL via XHR — no inline `<source src="videos/...mp4">` exists for the regex to match. The provider's `doc.go` explicitly anticipates this ("~6-month half-life expected; operator kill-switch SCRAPER_DEGRADED_PROVIDERS=nineanime").
+  2. **Iframe regex too permissive.** The original `iframeSrcRegex` matched any iframe on the episode page without checking the host. When a stub series embedded a YouTube trailer first (and no MP4 wrapper anywhere), the extractor grabbed the YouTube iframe and produced a misleading "no video source" downstream — misattributing upstream catalog migration to a packed-JS drift the maintenance bot's Pattern 7 auto-edit workflow would have tried (and failed) to fix.
+- **Fix applied (2026-05-22):**
+  - Added explicit host allowlist (`embedAllowedHosts = ["my.1anime.site"]`) checked via `isAllowedIframeHost` in `services/scraper/internal/providers/nineanime/client.go`. The httptest-isolation case is preserved via a same-origin baseURL fallback (production never hits that fallback because 9anime.me.uk is not in the allowlist of legitimate embed hosts).
+  - Two new selector identifiers wired into `parser_zero_match_total`: `my_1anime_iframe` (iframe extraction / host gate misses) and `video_mp4_source` (downstream `<source>` regex misses). The maintenance bot's Pattern 7 dispatch now sees a stable, parseable signature distinguishing upstream-shape regression from packed-JS rotation.
+  - Updated `.claude/maintenance-prompt.md` Pattern 7 fix-paths list with a sub-pattern for this signature, explicitly tier=`escalate` (recommend `SCRAPER_DEGRADED_PROVIDERS=nineanime`) — auto-edit selectors does NOT apply since the breakage is upstream player technology change, not CSS-selector drift.
+  - Regression tests in `services/scraper/internal/providers/nineanime/client_test.go`: `TestGetStream_YouTubeIframeRejected`, `TestGetStream_MegaplayRedirectRejected`, `TestIsAllowedIframeHost` (10 host-allowlist cases including suffix/prefix injection attempts).
+- **Verification:**
+  - Live drive via `wget http://127.0.0.1:8088/scraper/stream?mal_id=21&prefer=nineanime` for One Piece (popular-migrated): returns HTTP 502 with `parser_zero_match_total{provider="nineanime",selector="my_1anime_iframe"} 1`. `last_err` is now `nineanime: iframe host: scraper: extract failed (cause: iframe host "1anime.site" not in allowlist {my.1anime.site}; ...)`.
+  - Live drive for Marriagetoxin (legacy direct-MP4 still active upstream): returns stream URL `https://my.1anime.site/videos/marriagetoxin-episode-1.mp4` with `type=mp4` and Referer header. Legacy path intact.
+- **Operator next step (optional):** When the rest of the popular catalog migrates and new uploads also stop using `my.1anime.site`, add `nineanime` to `SCRAPER_DEGRADED_PROVIDERS` in `docker/.env`. The doc.go-documented kill-switch removes the provider from the EN failover chain without any code change.
+- **Status:** Fixed (extractor + bot dispatch). Open (kill-switch decision deferred to operator — depends on rate of new-upload migration).
+
 ## Resolved Issues
 
 ### ISS-010: Search returns empty / single result for any anime not in local DB (Shikimori .one → .io migration)
