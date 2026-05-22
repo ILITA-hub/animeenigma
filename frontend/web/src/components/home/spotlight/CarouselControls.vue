@@ -1,34 +1,31 @@
 <template>
   <!--
-    Workstream hero-spotlight — Phase 2 (frontend-carousel) Plan 02-02.
+    Workstream hero-spotlight — Phase 2 (frontend-carousel) Plan 02-02,
+    refactored in v1.1-polish Phase 01 Task 5 (HSB-V11-CC-06).
 
-    Stateless carousel chrome: two chevron buttons (prev/next) and `cardCount`
-    dot indicators. Parent component (HeroSpotlightBlock in Plan 02-04) owns
-    the carousel state machine and consumes the `prev` / `next` / `goto`
-    events emitted from this component.
+    Stateless carousel chrome:
+      - Two chevron buttons (prev/next) with 44×44 tap targets.
+      - One labeled-pill dot per card. Each pill renders the card-type
+        icon from SpotlightIcon, an aria-label from the i18n kicker key
+        in cardTokens, and a tooltip via title=. The active pill picks
+        up the card's accent background; inactive pills stay glass-on-
+        glass.
 
-    A11y per UI-SPEC §Accessibility Contract:
-      - Dot buttons are real <button> elements with aria-label via i18n and
-        aria-current="true"/"false" derived from props.
-      - Chevron <button>s have aria-label via i18n; inner SVG marked
-        aria-hidden="true" since the button itself carries the label.
-      - All interactive elements opt into the project's .touch-target utility
-        (44x44 WCAG 2.5.5 tap-target sizing) even when the visual dot is 8x8.
+    Parent (HeroSpotlightBlock) owns the carousel state and emits handlers
+    for prev / next / goto. The dots iterate the `cards` prop (NOT a bare
+    cardCount integer) so each dot can read its card's type/icon/accent.
 
-    No <style> block — all styling via Tailwind utilities + project tokens
-    from main.css (.glass-card, .touch-target, global :focus-visible ring).
-
-    Iteration approach: use Array.from({length: cardCount}, (_, idx) => idx)
-    so the loop variable is 0-indexed directly. This keeps the emitted
-    `goto` payload 0-indexed without an off-by-one conversion in the
-    template; the human-facing aria-label uses `idx + 1` for the slide
-    number.
+    Accessibility:
+      - Dots are real <button> elements with aria-label / aria-current.
+      - Active dot uses aria-current="true"; others "false". (Tabs use
+        aria-selected — these are nav buttons, not APG tabs.)
+      - data-testid="spotlight-dots" preserved for e2e selectors.
   -->
   <div class="contents">
-    <!-- Chevron PREV -->
+    <!-- Chevron PREV — 44×44 touch target -->
     <button
       type="button"
-      class="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 touch-target flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors focus:outline-none"
+      class="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-11 h-11 min-h-[44px] touch-target flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors focus:outline-none"
       :aria-label="t('spotlight.prevSlide')"
       @click="$emit('prev')"
     >
@@ -37,10 +34,10 @@
       </svg>
     </button>
 
-    <!-- Chevron NEXT -->
+    <!-- Chevron NEXT — 44×44 touch target -->
     <button
       type="button"
-      class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 touch-target flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors focus:outline-none"
+      class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-11 h-11 min-h-[44px] touch-target flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors focus:outline-none"
       :aria-label="t('spotlight.nextSlide')"
       @click="$emit('next')"
     >
@@ -49,43 +46,54 @@
       </svg>
     </button>
 
-    <!-- Dot indicators (one per card).
-         Originally rendered with role="tablist" + bare <button> children per
-         UI-SPEC §Visual Contract, but axe-core flagged this as a critical
-         aria-required-children violation: role="tablist" requires role="tab"
-         children, and tabs use aria-selected (not aria-current). Since these
-         dots are slide-picker navigation buttons (not APG tabs in the
-         tabbed-content sense), the correct fix is to drop the tablist role
-         and keep aria-current as the active-state signal. The wrapping div
-         is identified via the spotlight.* aria-label / data-testid hooks
-         consumers already use. -->
+    <!-- Labeled-pill dot indicators (one per card).
+
+         Each pill carries the card-type icon + the card's kicker label
+         (i18n via cardTokens[card.type].kickerKey). Active pill picks up
+         the accent background from accentDotBg[token.accent]; inactive
+         stay glass-on-glass.
+
+         data-testid is preserved verbatim for e2e selector compatibility
+         (frontend/web/e2e/spotlight*.spec.ts). -->
     <div
-      class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2"
+      class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5"
       data-testid="spotlight-dots"
     >
+      <!-- Each dot reads from cardTokens by card.type. If the backend
+           ships an unknown variant the frontend doesn't yet know about
+           (forward-compat scenario), we fall back to FALLBACK_TOKEN so
+           the dot still renders rather than throwing on an undefined
+           property access. -->
       <button
-        v-for="idx in dotIndices"
-        :key="idx"
+        v-for="(card, i) in cards"
+        :key="`${card.type}:${i}`"
         type="button"
         :class="[
-          'touch-target w-2 h-2 rounded-full transition-colors',
-          idx === currentIndex ? 'bg-cyan-400' : 'bg-white/30 hover:bg-white/50',
+          'group relative inline-flex items-center justify-center w-8 h-8 rounded-full transition',
+          i === currentIndex
+            ? `${accentDotBg[tokenFor(card.type).accent]} scale-110`
+            : 'bg-white/10 hover:bg-white/20 text-white/70',
         ]"
-        :aria-label="t('spotlight.goToSlide', { n: idx + 1 })"
-        :aria-current="idx === currentIndex ? 'true' : 'false'"
-        @click="$emit('goto', idx)"
-      />
+        :aria-label="t(tokenFor(card.type).kickerKey)"
+        :aria-current="i === currentIndex ? 'true' : 'false'"
+        :title="t(tokenFor(card.type).kickerKey)"
+        @click="$emit('goto', i)"
+      >
+        <SpotlightIcon :name="tokenFor(card.type).icon" class="w-3.5 h-3.5" />
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { SpotlightCard } from '@/types/spotlight'
+import { cardTokens, accentDotBg, type CardToken, type SpotlightCardType } from './tokens'
+import SpotlightIcon from './SpotlightIcon.vue'
 
-const props = defineProps<{
+defineProps<{
   currentIndex: number
-  cardCount: number
+  cards: SpotlightCard[]
 }>()
 
 defineEmits<{
@@ -96,10 +104,15 @@ defineEmits<{
 
 const { t } = useI18n()
 
-// 0-indexed array of dot indices. Centralizing this here means the template
-// can iterate over a plain number[] (no template helper needed) and the
-// `goto` emit payload is always 0-indexed by construction.
-const dotIndices = computed<number[]>(() =>
-  Array.from({ length: Math.max(0, props.cardCount) }, (_, i) => i),
-)
+// Forward-compat fallback for the "backend ships unknown variant" case.
+// Mirrors the HeroSpotlightBlock.spec.ts contract that an unknown type
+// renders silently (no console.error, no thrown access on cardTokens).
+const FALLBACK_TOKEN: CardToken = {
+  accent: 'cyan',
+  kickerKey: 'spotlight.regionLabel',
+  icon: 'sparkles',
+}
+function tokenFor(type: string): CardToken {
+  return cardTokens[type as SpotlightCardType] ?? FALLBACK_TOKEN
+}
 </script>

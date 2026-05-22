@@ -63,7 +63,12 @@
         aria-live="polite"
         aria-atomic="true"
       >
-        <transition :name="reducedMotion ? 'none' : 'spotlight-fade'" mode="out-in">
+        <transition
+          :name="reducedMotion ? 'none' : 'spotlight-fade'"
+          mode="out-in"
+          @before-leave="onBeforeLeave"
+          @after-leave="onAfterLeave"
+        >
           <!-- Per-type branches keep card prop types strictly checked under
                vue-tsc — a bare <component :is=cardFor(...)> widens the data
                prop to the union and breaks the build. -->
@@ -116,7 +121,7 @@
       </div>
       <CarouselControls
         :current-index="currentIndex"
-        :card-count="cards.length"
+        :cards="cards"
         @prev="prev"
         @next="next"
         @goto="goTo"
@@ -131,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useIntervalFn, useMediaQuery } from '@vueuse/core'
 import { useSpotlight } from '@/composables/useSpotlight'
@@ -169,6 +174,51 @@ const currentIndex = ref(0)
 // this guard, a Phase 3 refresh() would re-randomize the slide under the
 // user's feet.
 let initialized = false
+
+// v1.1-polish Phase 01 Task 4 (HSB-V11-CC-05) — transition lock.
+//
+// The Phase 03 UAT surfaced a "blank-card" bug: hammering ArrowRight 10×
+// rapidly outraced the 400ms cross-fade and left the carousel stuck in
+// the leave-to opacity:0 state — no card visible. The lock ignores nav
+// input while the OUTGOING card is fading out; once @after-leave fires
+// the new card is already in the DOM (mid-enter), so subsequent nav can
+// safely interrupt the enter without producing a blank frame.
+//
+// We deliberately use @after-leave (NOT @after-enter): the leave phase
+// is when the blank-card bug originates, so that's the only window we
+// must protect. Holding the lock until @after-enter would double the
+// no-input window (leave 400ms + enter 400ms = 800ms) and break legit
+// rapid-click flows (the user clicked through a card they recognized).
+//
+// The watchdog backstop force-clears the flag after 600ms in case the
+// leave hook never fires (e.g. transition cancelled by a route change).
+const TRANSITION_LOCK_WATCHDOG_MS = 600
+const isTransitioning = ref(false)
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+
+function onBeforeLeave(): void {
+  isTransitioning.value = true
+  if (watchdogTimer !== null) clearTimeout(watchdogTimer)
+  watchdogTimer = setTimeout(() => {
+    isTransitioning.value = false
+    watchdogTimer = null
+  }, TRANSITION_LOCK_WATCHDOG_MS)
+}
+
+function onAfterLeave(): void {
+  isTransitioning.value = false
+  if (watchdogTimer !== null) {
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
+  }
+}
+
+onBeforeUnmount(() => {
+  if (watchdogTimer !== null) {
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
+  }
+})
 
 function advance(): void {
   if (cards.value.length === 0) return
@@ -209,19 +259,20 @@ function restart(): void {
 }
 
 function next(): void {
-  if (cards.value.length === 0) return
+  if (cards.value.length === 0 || isTransitioning.value) return
   currentIndex.value = (currentIndex.value + 1) % cards.value.length
   restart()
 }
 
 function prev(): void {
-  if (cards.value.length === 0) return
+  if (cards.value.length === 0 || isTransitioning.value) return
   currentIndex.value =
     (currentIndex.value - 1 + cards.value.length) % cards.value.length
   restart()
 }
 
 function goTo(i: number): void {
+  if (isTransitioning.value) return
   if (i < 0 || i >= cards.value.length) return
   currentIndex.value = i
   restart()
