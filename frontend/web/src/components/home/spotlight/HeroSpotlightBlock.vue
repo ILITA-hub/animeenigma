@@ -121,7 +121,7 @@
       </div>
       <CarouselControls
         :current-index="currentIndex"
-        :card-count="cards.length"
+        :cards="cards"
         @prev="prev"
         @next="next"
         @goto="goTo"
