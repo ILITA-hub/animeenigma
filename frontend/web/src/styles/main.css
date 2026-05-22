@@ -320,12 +320,75 @@ body {
 
 /* Spotlight (Phase 02) — cross-fade between carousel slides.
    The "none" transition name short-circuits Vue's transition entirely
-   when prefers-reduced-motion is on. */
+   when prefers-reduced-motion is on.
+
+   v1.1-polish Phase 01 (HSB-V11-CC-05): hoisted the 0.4s magic number to
+   the --spotlight-fade-ms CSS var. HeroSpotlightBlock.vue's transition
+   lock uses the same window so a missed @after-enter hook never deadlocks
+   the carousel for longer than the actual fade. */
+:root {
+  --spotlight-fade-ms: 400ms;
+}
 .spotlight-fade-enter-active,
 .spotlight-fade-leave-active {
-  transition: opacity 0.4s ease;
+  transition: opacity var(--spotlight-fade-ms) ease;
 }
 .spotlight-fade-enter-from,
 .spotlight-fade-leave-to {
   opacity: 0;
+}
+
+/* Spotlight CTA classes (HSB-V11-CC-04).
+
+   Three CTA hierarchies the v1.1-polish refactor needs to reuse across
+   9 card SFCs:
+
+     .cta-hero  — Primary, "Watch →" type action on the AnimeOfDay /
+                  ContinueWatchingNew cards. Bold, accent-filled.
+     .cta-card  — Secondary, "Open post →" / "Resume" on cards where the
+                  primary action sits elsewhere. Glass-pill.
+     .cta-text  — Tertiary, inline-text "+ 2 more →" link. No background.
+
+   Variants are switched via `data-accent="purple|amber|green|sky|teal"`.
+   Default (no attribute) is cyan. */
+.cta-hero {
+  @apply inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-base bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/30 transition;
+}
+.cta-card {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm bg-white/10 hover:bg-white/20 text-white transition;
+}
+.cta-text {
+  @apply inline-flex items-center gap-1 text-sm font-medium text-cyan-400 hover:text-cyan-300 transition;
+}
+
+.cta-hero[data-accent="purple"] {
+  @apply bg-purple-500 hover:bg-purple-400 shadow-purple-500/30;
+}
+.cta-hero[data-accent="amber"] {
+  @apply bg-amber-500 hover:bg-amber-400 shadow-amber-500/30;
+}
+.cta-hero[data-accent="green"] {
+  @apply bg-green-500 hover:bg-green-400 shadow-green-500/30;
+}
+.cta-hero[data-accent="sky"] {
+  @apply bg-sky-500 hover:bg-sky-400 shadow-sky-500/30;
+}
+.cta-hero[data-accent="teal"] {
+  @apply bg-teal-500 hover:bg-teal-400 shadow-teal-500/30;
+}
+
+.cta-text[data-accent="purple"] {
+  @apply text-purple-400 hover:text-purple-300;
+}
+.cta-text[data-accent="amber"] {
+  @apply text-amber-400 hover:text-amber-300;
+}
+.cta-text[data-accent="green"] {
+  @apply text-green-400 hover:text-green-300;
+}
+.cta-text[data-accent="sky"] {
+  @apply text-sky-400 hover:text-sky-300;
+}
+.cta-text[data-accent="teal"] {
+  @apply text-teal-400 hover:text-teal-300;
 }
