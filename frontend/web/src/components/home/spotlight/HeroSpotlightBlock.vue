@@ -67,7 +67,7 @@
           :name="reducedMotion ? 'none' : 'spotlight-fade'"
           mode="out-in"
           @before-leave="onBeforeLeave"
-          @after-enter="onAfterEnter"
+          @after-leave="onAfterLeave"
         >
           <!-- Per-type branches keep card prop types strictly checked under
                vue-tsc — a bare <component :is=cardFor(...)> widens the data
@@ -180,9 +180,18 @@ let initialized = false
 // The Phase 03 UAT surfaced a "blank-card" bug: hammering ArrowRight 10×
 // rapidly outraced the 400ms cross-fade and left the carousel stuck in
 // the leave-to opacity:0 state — no card visible. The lock ignores nav
-// input while the fade is in flight; the watchdog backstop force-clears
-// the flag after 600ms in case @after-enter never fires (e.g. transition
-// gets cancelled by a route change).
+// input while the OUTGOING card is fading out; once @after-leave fires
+// the new card is already in the DOM (mid-enter), so subsequent nav can
+// safely interrupt the enter without producing a blank frame.
+//
+// We deliberately use @after-leave (NOT @after-enter): the leave phase
+// is when the blank-card bug originates, so that's the only window we
+// must protect. Holding the lock until @after-enter would double the
+// no-input window (leave 400ms + enter 400ms = 800ms) and break legit
+// rapid-click flows (the user clicked through a card they recognized).
+//
+// The watchdog backstop force-clears the flag after 600ms in case the
+// leave hook never fires (e.g. transition cancelled by a route change).
 const TRANSITION_LOCK_WATCHDOG_MS = 600
 const isTransitioning = ref(false)
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null
@@ -196,7 +205,7 @@ function onBeforeLeave(): void {
   }, TRANSITION_LOCK_WATCHDOG_MS)
 }
 
-function onAfterEnter(): void {
+function onAfterLeave(): void {
   isTransitioning.value = false
   if (watchdogTimer !== null) {
     clearTimeout(watchdogTimer)
