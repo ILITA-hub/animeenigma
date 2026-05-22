@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 workstream: hero-spotlight
 milestone: v1.1-polish
 milestone_name: HeroSpotlightVisualPolish
-status: planned
-last_updated: "2026-05-21"
-last_activity: "2026-05-21 — v1.1-polish milestone planned. 10 phases (01 foundation + 9 card refactors), 30 requirements. Direction: cinematic backdrops + distinct templates. Driven by Phase 03 UAT findings ('EACH card looks poor'). Phase 01 also bundles the rapid-click transition blank-card bug fix."
+status: in_progress
+last_updated: "2026-05-22"
+last_activity: "2026-05-22 — Phase 01 (Foundation) COMPLETE + deployed to https://animeenigma.ru/. 7 atomic commits: tokens.ts, SpotlightIcon, SpotlightBackdrop (poster-blur + gradient-mesh), cta-{hero,card,text} classes, transition lock fix (Phase 03 blank-card bug), labeled-pill dots, e2e regression. 140/140 Vitest passing; tsc + eslint clean; transition-lock e2e green. Awaiting user eyeball before kicking off Phases 02-10."
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 10
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 10
 ---
 
 # Project State — `hero-spotlight` workstream
@@ -42,7 +42,7 @@ progress:
 
 | # | Phase | Status | Files Touched | Blocked By |
 |---|-------|--------|---------------|-----------|
-| 01 | Foundation | Planned | tokens, SpotlightBackdrop, SpotlightIcon, CTA classes, transition lock, CarouselControls | — |
+| 01 | Foundation | **Complete (deployed)** | tokens, SpotlightBackdrop, SpotlightIcon, CTA classes, transition lock, CarouselControls | — |
 | 02 | AnimeOfDayCard refactor | Planned | cards/AnimeOfDayCard.vue | 01 |
 | 03 | RandomTailCard refactor | Planned | cards/RandomTailCard.vue | 01 |
 | 04 | PersonalPickCard refactor | Planned | cards/PersonalPickCard.vue | 01 |
