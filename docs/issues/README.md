@@ -224,6 +224,24 @@ Track issues discovered during development. Each entry should include root cause
   - `docker/.env.example` — operator documentation block.
 - **Status:** Open — awaiting first operator capture of live SHAs. Architecture is correct; only data refresh required.
 
+### ISS-014: ARM (`arm.haglund.dev`) origin hangs — AniList GraphQL fallback added to `libs/idmapping`
+- **Date:** 2026-05-22
+- **Severity:** Medium (every miruro search blocked for 10s before fallback; catalog Jimaku-subs aggregation and `backfill-attributes` cron also affected)
+- **Affected:** Every caller of `libs/idmapping` — miruro provider (`services/scraper/internal/providers/miruro/`), catalog subtitle aggregator (`services/catalog/internal/service/subs_aggregator.go`), `backfill-attributes` cron, catalog MAL import path (`services/catalog/internal/service/catalog.go`).
+- **Symptom:** Scraper health endpoint reports `miruro` `search` stage DOWN with `last_err: "miruro: ARM lookup: scraper: provider down (cause: ARM request failed: Get \"https://arm.haglund.dev/...\": context deadline exceeded)"`. Catalog logs show identical timeouts during Jimaku subtitle lookups and MAL→AniList backfill cron runs.
+- **Root cause:** ARM's Cloudflare-fronted origin has been silently dropping our requests at the application layer since the second week of 2026-05. From inside the scraper container (and reproducibly from the host's network too): TLS handshake completes, HTTP/2 stream opens, GET request is sent over the wire — and then the origin server NEVER responds. Curl times out cleanly at whatever budget the caller set. AUTO-139's IPv4-dialer fix (commit `68e96fc`, 2026-05-22 ~01:54Z) was a misdiagnosis: the underlying transport layer was healthy, the application origin is sick. Confirmed via `curl -v -m 8 "https://arm.haglund.dev/api/v2/ids?source=myanimelist&id=21"` from both inside the scraper container and from the host — both reach TLS handshake, send the GET, then wait until timeout.
+- **Fix applied (2026-05-22):**
+  - Added an AniList GraphQL fallback in `libs/idmapping/client.go`. Strategy: try ARM first (3s timeout — tightened from 10s); if ARM errors or returns no AniList ID, POST `query($mal:Int){Media(idMal:$mal,type:ANIME){id idMal}}` to `https://graphql.anilist.co`. On success, merge `AniList` + `MAL` into the result. On both-failed, return the wrapped ARM error so the maintenance bot's dispatch key (`ARM lookup`) still matches the right pattern.
+  - The `Resolve*` callers see the same `*MappingResult` shape; `AniDB`/`Kitsu`/`LiveChart`/`IMDB` stay nil when the fallback fires (graceful degradation — those fields are only used by the catalog's Kitsu mappings step which already handles nil).
+  - 10 unit tests in `libs/idmapping/client_test.go`: ARM happy path (AniList must NOT be hit), ARM-fails-AniList-fallback, ARM-partial-AniList-fills-gap, both-failed-error-wraps, ARM 404 + AniList success, AniList-knows-nothing returns ARM partial, empty ID, Shikimori delegates to MAL, AniList GraphQL error, non-numeric ID rejected.
+  - Maintenance prompt updated with this signature → tier=`info_only` since the fallback handles the case. Escalate only if BOTH ARM and AniList appear in the same `last_err`.
+- **Verification (live, post-redeploy 2026-05-22 04:06Z):**
+  - `miruro` health stages: `search up=true last_ok=2026-05-22T04:06:49Z` (was up=false / never-ok before the fix).
+  - `episodes up=true` (was DOWN due to short-circuit cascade from search).
+  - Real query: `wget "http://127.0.0.1:8088/scraper/episodes?mal_id=16498&title=Attack+on+Titan&prefer=miruro"` returns episodes.
+- **Known residual issue (separate fix needed next):** miruro's `stream` stage was reporting `http 444: ...502 upstream` pre-fix — that record is stale (probe never got past search). The new probe ticks will reveal the actual stream state. Additionally: One Piece (1100+ episodes) now reaches miruro and triggers `decoded response exceeded size cap (4 MiB)` — separate bug in `services/scraper/internal/providers/miruro/obfuscation.go` `MaxDecodedResponseBytes`. Will be addressed as ISS-015 next turn.
+- **Status:** Fixed (ARM-down failure mode papered over by AniList fallback). Stream stage observability deferred to ISS-015.
+
 ### ISS-013: Nineanime upstream popular-catalog migrated off `my.1anime.site` to `megaplay.buzz` (Phase 28 provider degradation)
 - **Date:** 2026-05-22
 - **Severity:** Medium (last-resort EN provider degraded; failover chain still has working providers above it; popular anime now unplayable via nineanime, new uploads still work)
