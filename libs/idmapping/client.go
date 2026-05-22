@@ -1,9 +1,11 @@
 package idmapping
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -29,9 +31,19 @@ type Client struct {
 
 // NewClient creates a new ARM mapping client.
 func NewClient() *Client {
+	// Force IPv4 — Docker container egress has no IPv6 route; Go's default
+	// dialer otherwise prefers IPv6 and blackholes until the 10s timeout.
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp4", addr)
+		},
+	}
 	return &Client{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-		baseURL:    defaultBaseURL,
+		httpClient: &http.Client{
+			Timeout:   10 * time.Second,
+			Transport: transport,
+		},
+		baseURL: defaultBaseURL,
 	}
 }
 
