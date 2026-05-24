@@ -62,11 +62,39 @@ const (
 	XObfuscatedXorGz  = "2"
 )
 
+// SoftCapWarnBytes is the threshold above which a decoded response is
+// considered "large" and the caller is expected to emit a structured
+// warning log. This is NOT a rejection — crossing the soft cap is
+// allowed and means the upstream payload is approaching the hard cap.
+// Set to 75% of MaxDecodedResponseBytes so ops gets ~15 years of
+// upstream-JSON-growth headroom-warning before the hard cap actually
+// breaks anything (One Piece grew from ~5 MiB to 6 MiB in ~3 years).
+//
+// The caller (services/scraper/internal/providers/miruro/client.go after
+// DecodeObfuscatedResponse) checks `len(decoded) > SoftCapWarnBytes`
+// and logs a Warn. This intentionally keeps obfuscation.go's signatures
+// unchanged — the soft cap is a pure-data constant, not a control flow.
+const SoftCapWarnBytes = 12 << 20 // 12 MiB
+
 // MaxDecodedResponseBytes caps the gunzip output to defend against
-// inflation-bomb DoS (T-28-00-03). Largest legitimate Miruro response
-// observed during the spike was ~1.3 MiB (`info/154587`); 4 MiB leaves
-// headroom for future endpoints that bundle more episodes.
-const MaxDecodedResponseBytes = 4 << 20 // 4 MiB
+// inflation-bomb DoS (T-28-00-03). Bumped 4 MiB → 16 MiB on 2026-05-22
+// (ISS-015): the prior 4 MiB cap rejected the One Piece episodes
+// response (measured 6.04 MiB decoded on 2026-05-22). The original
+// "1.3 MiB largest" estimate held for the `info/<id>` endpoint but
+// undercounted the `episodes` endpoint where the upstream returns
+// `~1100 entries × 5 inner-providers × sub+dub` for One Piece-class
+// long runners. 16 MiB comfortably exceeds the largest realistic
+// upstream payload at the observed ~0.3 MiB/year growth rate, giving
+// ~30 years before another cap bump is needed. SoftCapWarnBytes
+// (12 MiB) signals the operator ~15 years before the hard cap matters.
+//
+// The raw-body read cap in client.go is intentionally LEFT at 4 MiB
+// because compressed responses are 3-5x smaller (One Piece raw was
+// 2.55 MiB) and the 4 MiB raw ceiling stays the strongest possible
+// guard at the wire layer. A future endpoint whose raw body exceeds
+// 4 MiB will surface as a clean "read body truncated" error rather
+// than a silent decoder mis-parse.
+const MaxDecodedResponseBytes = 16 << 20 // 16 MiB
 
 var (
 	// ErrEmptyEndpoint is returned by TransformProxyURL when the caller

@@ -224,6 +224,35 @@ Track issues discovered during development. Each entry should include root cause
   - `docker/.env.example` — operator documentation block.
 - **Status:** Open — awaiting first operator capture of live SHAs. Architecture is correct; only data refresh required.
 
+### ISS-015: Miruro `stream` stage broken for popular anime — decoded-response cap + fractional episode number
+- **Date:** 2026-05-24
+- **Severity:** Medium (entire miruro provider degraded for any anime whose episodes JSON exceeded 4 MiB OR contained fractional episode numbers — i.e. all long runners)
+- **Affected:** `miruro` provider's `episodes` stage and (transitively) `servers`/`stream`/`stream_segment` for One Piece (1100+ episodes) and any other show whose upstream JSON either exceeded the 4 MiB decoded cap or contained a fractional episode number (e.g. recap specials at `1004.5`).
+- **Symptom (compound):**
+  - **Sub-issue A — cap:** Scraper logs `miruro: decode response: scraper: extract failed (cause: miruro: decoded response exceeded size cap)`. Orchestrator fails over from miruro to the next provider.
+  - **Sub-issue B — fractional:** Scraper logs `miruro: parse episodes response: scraper: extract failed (cause: json: cannot unmarshal number 1004.5 into Go struct field rawEpisode.providers.episodes.number of type int)`. Surfaces only after sub-issue A is fixed and the cap stops rejecting the body before unmarshal.
+- **Root cause:**
+  1. **Decoded-cap too small.** `MaxDecodedResponseBytes = 4 << 20` (4 MiB) in `services/scraper/internal/providers/miruro/obfuscation.go` was set based on a 2024-era estimate of the `info/<id>` endpoint payload (~1.3 MiB). The `episodes` endpoint at long-runner scale was never benchmarked: One Piece measured **6.04 MiB** decoded on 2026-05-22 (probe: 1162 episodes × ~5 inner-providers × sub+dub × ~80-byte JSON per entry → roughly 6-7 MiB inflated). Naruto: 2.68 MiB. AoT: 0.14 MiB. The 4 MiB cap fell exactly in the gap between Naruto and One Piece — the latter rejected silently as `ErrDecodedTooLarge`.
+  2. **DTO numeric type too strict.** `rawEpisode.Number` was typed `int`; upstream returns floats (e.g. `1004.5`) for recap specials interspersed in long-running series. Go's `encoding/json` rejects float input to `int` field with the `cannot unmarshal number 1004.5` error, killing the entire parse mid-stream.
+- **Fix applied (2026-05-22, redeployed 2026-05-24):**
+  - `obfuscation.go`: Bumped `MaxDecodedResponseBytes` 4 MiB → 16 MiB. Added `SoftCapWarnBytes = 12 MiB` (75% of the hard cap). Client code logs a Warn when a decoded response exceeds the soft cap — gives ops ~15 years of upstream-JSON-growth heads-up before another bump is needed.
+  - `dto.go`: New `episodeNumber` type (`type episodeNumber float64`) with custom `UnmarshalJSON` accepting both int and float JSON input. `Int()` method truncates toward zero (1004.5 → 1004) for the int-typed downstream `cachedEpisode.Number`. Display titles still convey the fractional nature ("Recap Special") so users disambiguate visually.
+  - `client.go`: Calls `e.Number.Int()` in `normalizeEpisodes` and logs the soft-cap warn from `fetchPipe`.
+  - 5 new regression tests in `obfuscation_test.go` and `client_test.go`:
+    - `TestDecodeObfuscatedResponse_OnePieceClass` — asserts the cap can hold an 8 MiB payload (One Piece + 33% headroom). Pins the One Piece floor so a future regression that lowers the cap fails immediately.
+    - `TestSoftCapWarnBytes_Invariants` — asserts the soft cap is strictly less than hard cap AND at least 50% of hard cap (loses signal if tuned too low).
+    - `TestDecodeObfuscatedResponse_SoftCapAccepts` — payloads above the soft cap but below the hard cap must decode cleanly.
+    - `TestListEpisodes_FractionalEpisodeNumber` — synthetic kiwi-block payload with `{1004, 1004.5, 1005}` must parse, with the recap special truncated to 1004 (collision with the real ep 1004 is acceptable — both surface in the list and the user disambiguates by title).
+    - `TestEpisodeNumber_UnmarshalAcceptsBothShapes` — direct unit test of the JSON-flexible numeric field across `0`, `1`, `1.0`, `1004.5`, `0.7`, `-1.2`, plus a non-number rejection case.
+- **Verification (live, post-redeploy 2026-05-24 09:47Z):**
+  - `wget "http://127.0.0.1:8088/scraper/episodes?mal_id=21&title=One+Piece&prefer=miruro"` → 1162 episodes returned via miruro (was 0/failed pre-fix). No failover warn in scraper logs.
+  - `wget ".../scraper/servers?...episode=<ep1_id>"` → returns `[{id:"kiwi"}]`.
+  - `wget ".../scraper/stream?...server=kiwi"` → returns `{"sources":[{"url":"https://vault-05.uwucdn.top/.../uwu.m3u8","type":"hls","quality":"1080p"}],"headers":{"Referer":"https://kwik.cx/"}}`.
+  - Fetched the first 4 KiB of the returned HLS manifest through `streaming:8082/api/v1/hls-proxy` — got a real `#EXTM3U` with AES-128-keyed segments. **The miruro provider is now genuinely playable end-to-end.**
+  - Smaller-anime regression: Naruto (220 eps) and AoT (25 eps) still resolve through miruro.
+  - Health endpoint: all 5 miruro stages now `up=true` with fresh `last_ok` timestamps.
+- **Status:** Fixed.
+
 ### ISS-014: ARM (`arm.haglund.dev`) origin hangs — AniList GraphQL fallback added to `libs/idmapping`
 - **Date:** 2026-05-22
 - **Severity:** Medium (every miruro search blocked for 10s before fallback; catalog Jimaku-subs aggregation and `backfill-attributes` cron also affected)

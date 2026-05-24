@@ -1,5 +1,7 @@
 package miruro
 
+import "encoding/json"
+
 // Upstream JSON shapes for the three Miruro endpoints we consume. Field
 // names mirror what the SPA receives — see SPIKE-MIRURO.md §"Live Integration
 // Probe" for the captured payload shapes (Frieren AniList 154587, 2026-05-20).
@@ -43,7 +45,12 @@ type providerEpisodeBlock struct {
 
 // rawEpisode is one episode entry. ID is the opaque upstream identifier
 // — base64-looking string the SPA passes back verbatim on the sources
-// follow-up call. Number is a 1-indexed episode number.
+// follow-up call. Number is the upstream episode number; ISS-015
+// switched it from `int` to `episodeNumber` (a thin json.Number
+// wrapper) after One Piece's `1004.5` recap special tripped the
+// default int decoder. Fractional values truncate to int when surfaced
+// downstream — the domain.Episode contract requires an int Number and
+// users disambiguate fractional specials by the title text.
 //
 // Per the spike's Gate 4 sample (kiwi block, ep 1):
 //
@@ -51,14 +58,43 @@ type providerEpisodeBlock struct {
 //	 "title":"Shall We Go, Then?","airDate":"2026-01-16",
 //	 "duration":1561,"audio":"sub","filler":false,...}
 type rawEpisode struct {
-	ID       string `json:"id"`
-	Number   int    `json:"number"`
-	Title    string `json:"title"`
-	Filler   bool   `json:"filler"`
-	Audio    string `json:"audio"`
-	AirDate  string `json:"airDate"`
-	Duration int    `json:"duration"`
+	ID       string        `json:"id"`
+	Number   episodeNumber `json:"number"`
+	Title    string        `json:"title"`
+	Filler   bool          `json:"filler"`
+	Audio    string        `json:"audio"`
+	AirDate  string        `json:"airDate"`
+	Duration int           `json:"duration"`
 }
+
+// episodeNumber is a JSON-decoder-tolerant episode-number type. It
+// accepts BOTH integer (`1`, `1004`) and float (`1004.5`) inputs from
+// the upstream JSON. ISS-015: the previous `int` field rejected the
+// `1004.5` recap special One Piece introduced sometime in 2025-2026,
+// blowing up the entire episodes parse with `cannot unmarshal number
+// 1004.5 into Go struct field rawEpisode.providers.episodes.number of
+// type int`. Truncates fractional input to int via Go's default
+// float→int conversion (toward zero) when materialized via Int().
+type episodeNumber float64
+
+// UnmarshalJSON accepts any JSON number (int or float). A non-number
+// value (string, null) or malformed JSON returns the unmarshal error
+// verbatim — callers handle it the same way they handle a malformed
+// ID field.
+func (e *episodeNumber) UnmarshalJSON(b []byte) error {
+	var f float64
+	if err := json.Unmarshal(b, &f); err != nil {
+		return err
+	}
+	*e = episodeNumber(f)
+	return nil
+}
+
+// Int returns the integer portion of the episode number (truncated
+// toward zero). 1004.5 becomes 1004; 0.7 becomes 0; -1.2 becomes -1.
+// The caller (normalizeEpisodes) uses this for the int-typed
+// cachedEpisode.Number that downstream domain.Episode requires.
+func (e episodeNumber) Int() int { return int(e) }
 
 // sourcesResponse models the decoded body of
 // `sources?episodeId=<eid>&provider=<p>[&category=<c>]`. Each stream

@@ -241,6 +241,78 @@ func TestDecodeObfuscatedResponse_SizeCap(t *testing.T) {
 	}
 }
 
+// TestDecodeObfuscatedResponse_OnePieceClass — ISS-015 regression-lock.
+// The 4 MiB cap rejected One Piece's 6.04 MiB episodes JSON in
+// production on 2026-05-22. The new 16 MiB cap MUST accept a synthesized
+// 8 MiB response (One Piece + 33% growth headroom). If a future
+// maintainer ever lowers MaxDecodedResponseBytes below 8 MiB without
+// confirming the One Piece episodes payload has shrunk upstream, this
+// test fails immediately rather than re-breaking production.
+func TestDecodeObfuscatedResponse_OnePieceClass(t *testing.T) {
+	const onePieceClassSize = 8 << 20 // 8 MiB — One Piece + 33% headroom
+	if MaxDecodedResponseBytes < onePieceClassSize {
+		t.Fatalf("MaxDecodedResponseBytes=%d is below the One Piece-class "+
+			"floor (%d). Lowering this cap will reject One Piece episodes "+
+			"in production. See ISS-015.", MaxDecodedResponseBytes, onePieceClassSize)
+	}
+	body := bytes.Repeat([]byte("A"), onePieceClassSize)
+	encoded := encodeForTest(t, body, false, nil)
+
+	got, err := DecodeObfuscatedResponse(encoded, XObfuscatedGzip, nil)
+	if err != nil {
+		t.Fatalf("DecodeObfuscatedResponse: %v", err)
+	}
+	if len(got) != onePieceClassSize {
+		t.Errorf("decoded length = %d; want %d", len(got), onePieceClassSize)
+	}
+}
+
+// TestSoftCapWarnBytes_Invariants — ISS-015 consistency lock. The soft
+// cap exists to give ops a structured-log heads-up BEFORE the hard cap
+// breaks anything. Both invariants below must hold:
+//
+//  1. SoftCapWarnBytes < MaxDecodedResponseBytes — otherwise the warn
+//     is useless (fires only when the hard cap has already rejected).
+//  2. SoftCapWarnBytes >= 50% of MaxDecodedResponseBytes — otherwise
+//     the warn fires too often on normal upstream growth and ops tunes
+//     it out. 75% is the documented target; 50% is the hard floor.
+//
+// This test does NOT pin the exact ratio (which may be re-tuned with
+// upstream growth) but blocks pathological mis-configurations.
+func TestSoftCapWarnBytes_Invariants(t *testing.T) {
+	if SoftCapWarnBytes >= MaxDecodedResponseBytes {
+		t.Errorf("SoftCapWarnBytes=%d must be strictly less than "+
+			"MaxDecodedResponseBytes=%d", SoftCapWarnBytes, MaxDecodedResponseBytes)
+	}
+	if SoftCapWarnBytes*2 < MaxDecodedResponseBytes {
+		t.Errorf("SoftCapWarnBytes=%d is below 50%% of MaxDecodedResponseBytes=%d; "+
+			"the warn will fire on normal upstream growth and lose signal value",
+			SoftCapWarnBytes, MaxDecodedResponseBytes)
+	}
+}
+
+// TestDecodeObfuscatedResponse_SoftCapAccepts — payloads between
+// SoftCapWarnBytes and MaxDecodedResponseBytes must decode successfully
+// (the warn is logged separately by the client.go caller; this layer
+// only enforces the hard cap).
+func TestDecodeObfuscatedResponse_SoftCapAccepts(t *testing.T) {
+	size := SoftCapWarnBytes + 1024 // just above the soft cap
+	if size >= MaxDecodedResponseBytes {
+		t.Skip("soft cap + 1 KiB exceeds hard cap; cannot construct accept case")
+	}
+	body := bytes.Repeat([]byte("B"), size)
+	encoded := encodeForTest(t, body, false, nil)
+
+	got, err := DecodeObfuscatedResponse(encoded, XObfuscatedGzip, nil)
+	if err != nil {
+		t.Fatalf("DecodeObfuscatedResponse must accept payloads above the soft cap "+
+			"but below the hard cap; got error: %v", err)
+	}
+	if len(got) != size {
+		t.Errorf("decoded length = %d; want %d", len(got), size)
+	}
+}
+
 // encodeForTest produces the on-the-wire payload the upstream would
 // emit for `body`. xorWithKey applies the same XOR-cycle the SPA
 // reverses on receipt.

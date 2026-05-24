@@ -335,7 +335,7 @@ func normalizeEpisodes(resp episodesResponse) []cachedEpisode {
 	for _, e := range pickedEps {
 		out = append(out, cachedEpisode{
 			ID:       e.ID,
-			Number:   e.Number,
+			Number:   e.Number.Int(), // truncate fractional (One Piece 1004.5 → 1004; ISS-015)
 			Title:    e.Title,
 			Filler:   e.Filler,
 			Provider: picked,
@@ -710,6 +710,19 @@ func (p *Provider) doSecurePipe(ctx context.Context, host, endpoint string, quer
 	decoded, derr := DecodeObfuscatedResponse(body, xobf, p.obfKey)
 	if derr != nil {
 		return nil, domain.WrapExtractFailed(derr, "miruro: decode response")
+	}
+	// Soft-cap early warning (ISS-015). When a decoded payload crosses
+	// ~75% of MaxDecodedResponseBytes, log a Warn so ops sees the trend
+	// before the next One Piece-class growth blows through the hard cap.
+	// The log includes both the absolute size and the cap utilization
+	// percent so the operator can spot a runaway upstream from one line.
+	if len(decoded) > SoftCapWarnBytes {
+		p.log.Warnw("miruro: decoded response approaching hard cap",
+			"endpoint", endpoint,
+			"decoded_bytes", len(decoded),
+			"soft_cap_bytes", SoftCapWarnBytes,
+			"hard_cap_bytes", MaxDecodedResponseBytes,
+			"cap_utilization_pct", (100*len(decoded))/MaxDecodedResponseBytes)
 	}
 	return decoded, nil
 }

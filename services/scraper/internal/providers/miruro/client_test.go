@@ -404,6 +404,91 @@ func TestListEpisodes_RealEmpty(t *testing.T) {
 	}
 }
 
+// TestListEpisodes_FractionalEpisodeNumber — ISS-015 regression-lock.
+// One Piece's `1004.5` recap special was rejected by the previous
+// `Number int` DTO with `cannot unmarshal number 1004.5 into Go struct
+// field rawEpisode.providers.episodes.number of type int`. The new
+// episodeNumber type (float64-backed) MUST accept the fractional
+// upstream value and surface it truncated to int (1004.5 → 1004)
+// without breaking the parse of the surrounding episodes.
+func TestListEpisodes_FractionalEpisodeNumber(t *testing.T) {
+	// Hand-craft a synthetic episodes response containing the kiwi
+	// preferred-provider block with one int episode and one fractional
+	// recap special — mimicking the shape that broke One Piece.
+	body := []byte(`{
+		"providers": {
+			"kiwi": {
+				"episodes": {
+					"sub": [
+						{"id":"k_1","number":1004,"title":"Real Episode","audio":"sub","filler":false,"airDate":"2026-01-01","duration":1440},
+						{"id":"k_1_5","number":1004.5,"title":"Recap Special","audio":"sub","filler":true,"airDate":"2026-01-08","duration":600},
+						{"id":"k_2","number":1005,"title":"Next Real Episode","audio":"sub","filler":false,"airDate":"2026-01-15","duration":1440}
+					]
+				}
+			}
+		}
+	}`)
+	srv := httptest.NewServer(pipeHandler(t, map[string][]byte{"episodes": body}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv, &stubIDMapper{})
+	eps, err := p.ListEpisodes(context.Background(), "21")
+	if err != nil {
+		t.Fatalf("ListEpisodes: %v (must not reject parse on fractional number — ISS-015)", err)
+	}
+	if len(eps) != 3 {
+		t.Fatalf("expected 3 episodes (real + recap + next-real), got %d", len(eps))
+	}
+	// Verify the fractional episode is preserved at the truncated int.
+	var seenIDs []string
+	for _, e := range eps {
+		seenIDs = append(seenIDs, e.ID)
+	}
+	if eps[0].Number != 1004 || eps[0].ID != "k_1" {
+		t.Errorf("eps[0] = {%d,%q}; want {1004,\"k_1\"}", eps[0].Number, eps[0].ID)
+	}
+	if eps[1].Number != 1004 || eps[1].ID != "k_1_5" {
+		t.Errorf("eps[1] = {%d,%q}; want {1004,\"k_1_5\"} (recap special truncated to 1004)",
+			eps[1].Number, eps[1].ID)
+	}
+	if eps[2].Number != 1005 || eps[2].ID != "k_2" {
+		t.Errorf("eps[2] = {%d,%q}; want {1005,\"k_2\"}", eps[2].Number, eps[2].ID)
+	}
+}
+
+// TestEpisodeNumber_UnmarshalAcceptsBothShapes — direct unit test for
+// the JSON-flexible numeric field that backs rawEpisode.Number.
+func TestEpisodeNumber_UnmarshalAcceptsBothShapes(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int
+	}{
+		{"0", 0},
+		{"1", 1},
+		{"1004", 1004},
+		{"1.0", 1},
+		{"1004.5", 1004},
+		{"0.7", 0},
+		{"-1.2", -1},
+	}
+	for _, tc := range cases {
+		var e episodeNumber
+		if err := e.UnmarshalJSON([]byte(tc.in)); err != nil {
+			t.Errorf("UnmarshalJSON(%q): unexpected error %v", tc.in, err)
+			continue
+		}
+		if got := e.Int(); got != tc.want {
+			t.Errorf("UnmarshalJSON(%q).Int() = %d; want %d", tc.in, got, tc.want)
+		}
+	}
+	// Non-number input must error (preserves the rest of the strict-
+	// schema contract).
+	var bad episodeNumber
+	if err := bad.UnmarshalJSON([]byte(`"not-a-number"`)); err == nil {
+		t.Error("UnmarshalJSON of string literal must error; got nil")
+	}
+}
+
 // TestListEpisodes_EmptyAniListID: empty providerID → ExtractFailed.
 func TestListEpisodes_EmptyAniListID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
