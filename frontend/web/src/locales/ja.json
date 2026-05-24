@@ -1027,6 +1027,7 @@
     },
     "personalPick": {
       "title": "あなたへのおすすめ",
+      "titleWithName": "{name}さんへのおすすめ",
       "titleAnon": "トレンド",
       "moreLink": "+ もう{n}件 →",
       "reason": {

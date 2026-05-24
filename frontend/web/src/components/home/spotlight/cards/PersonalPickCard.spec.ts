@@ -1,19 +1,32 @@
 /**
- * Workstream hero-spotlight — Phase 3 (dynamic-cards-migration) Plan 03-05 / Task 2.
+ * Workstream hero-spotlight — v1.1-polish Phase 04 (HSB-V11-PP-01..04).
  *
- * Vitest spec for PersonalPickCard.vue. Verifies:
- *   1. Renders 3 items in a row on desktop
- *   2. Renders mobile footer "+ ещё N →" link only when items.length > 1
- *   3. Mobile footer link target is /browse?sort=trending when source='trending'
- *   4. Mobile footer link target is /recs when source='personal'
- *   5. Title key is `personalPick.titleAnon` when source='trending', else `personalPick.title`
- *   6. Uses only font-medium / font-semibold weights
- *   7. Tablet padding p-4 (never p-5)
- *   8. All visible strings flow through t()
+ * Vitest spec for the refactored two-zone PersonalPickCard.vue.
+ *
+ * Verifies (against the new featured + secondary layout):
+ *   1. Featured pick is the FIRST item, has an aria-label referencing the
+ *      featured anime's title.
+ *   2. Secondary list (<li>) count === min(items.length - 1, 2) on desktop.
+ *   3. Username appears in the title when source='personal' AND the auth
+ *      store exposes user.username → titleWithName key + {name} param.
+ *   4. Mobile "+ N more →" footer button uses .cta-card classes (full-width
+ *      footer), only rendered when items.length > 1.
+ *   5. Mobile footer link routes to /browse?sort=trending for source=trending
+ *      and to /recs for source=personal.
+ *   6. Reason chip renders t(item.reason_i18n_key) for items that have one.
+ *   7. SpotlightBackdrop variant="poster-blur" wraps the article and
+ *      receives the featured anime's poster URL.
+ *   8. Typography contract: only font-medium / font-semibold weights;
+ *      tablet padding p-4 / md:p-6 / lg:p-8 (never p-5).
+ *   9. Anonymous (source='trending') title uses titleAnon, NOT titleWithName.
+ *  10. Logged-in with no username falls back to plain 'title' key.
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, RouterLinkStub } from '@vue/test-utils'
+import { ref } from 'vue'
+
+// ── Mocks ────────────────────────────────────────────────────────────────
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -28,12 +41,42 @@ vi.mock('@/utils/title', () => ({
     name || nameRu || nameJp || '',
 }))
 
+// Auth-store mock with a mutable `user` ref so individual tests can flip
+// between anonymous (null), logged-in-without-username, and logged-in-with-
+// username states without a fresh module import.
+const mockAuthUser = ref<{ username?: string } | null>(null)
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    get user() {
+      return mockAuthUser.value
+    },
+  }),
+}))
+
 import PersonalPickCard from './PersonalPickCard.vue'
 
 function mountCard(props: Record<string, unknown>) {
   return mount(PersonalPickCard, {
     props: props as unknown as InstanceType<typeof PersonalPickCard>['$props'],
-    global: { stubs: { 'router-link': RouterLinkStub } },
+    global: {
+      stubs: {
+        'router-link': RouterLinkStub,
+        // SpotlightBackdrop / SpotlightIcon stubbed to a deterministic root
+        // element so we can assert their presence + forwarded props without
+        // depending on their inline-SVG / decorative DOM internals.
+        SpotlightBackdrop: {
+          name: 'SpotlightBackdrop',
+          props: ['variant', 'posterUrl', 'accent'],
+          template:
+            '<div data-testid="backdrop" :data-variant="variant" :data-poster-url="posterUrl"></div>',
+        },
+        SpotlightIcon: {
+          name: 'SpotlightIcon',
+          props: ['name'],
+          template: '<span data-testid="icon" :data-name="name"></span>',
+        },
+      },
+    },
   })
 }
 
@@ -44,8 +87,13 @@ const animeFixture = (i: number) => ({
   poster_url: `/poster-${i}.jpg`,
 })
 
-describe('PersonalPickCard', () => {
-  it('renders 3 items in a row on desktop', () => {
+beforeEach(() => {
+  // Reset auth user between tests so logged-in state never leaks.
+  mockAuthUser.value = null
+})
+
+describe('PersonalPickCard (v1.1-polish two-zone layout)', () => {
+  it('featured pick is the FIRST item and exposes an aria-label with its title', () => {
     const data = {
       source: 'personal',
       items: [
@@ -56,22 +104,112 @@ describe('PersonalPickCard', () => {
     }
     const wrapper = mountCard({ data })
     const links = wrapper.findAllComponents(RouterLinkStub)
-    // Each of 3 items is a router-link; mobile footer link is also rendered
-    // (items.length > 1) so total = 4.
-    expect(links.length).toBe(4)
-    // Three poster images rendered.
-    expect(wrapper.findAll('img').length).toBe(3)
+    // First router-link is the featured anchor — aria-label references the
+    // featured (first) anime's title, NOT the second/third.
+    const featuredLink = links.find(
+      (l) => l.attributes('aria-label') === 'Anime 1',
+    )
+    expect(featuredLink).toBeDefined()
+    expect(featuredLink!.props('to')).toBe('/anime/anime-1')
   })
 
-  it('does NOT render mobile footer link when only 1 item', () => {
+  it('renders min(items-1, 2) secondary <li> rows on desktop', () => {
+    const data = {
+      source: 'personal',
+      items: [
+        { anime: animeFixture(1) },
+        { anime: animeFixture(2) },
+        { anime: animeFixture(3) },
+      ],
+    }
+    const wrapper = mountCard({ data })
+    const secondaryItems = wrapper.findAll('ul li')
+    // 3 items total → 1 featured + 2 secondary.
+    expect(secondaryItems.length).toBe(2)
+  })
+
+  it('renders only 1 secondary <li> row when 2 items total', () => {
+    const data = {
+      source: 'personal',
+      items: [{ anime: animeFixture(1) }, { anime: animeFixture(2) }],
+    }
+    const wrapper = mountCard({ data })
+    expect(wrapper.findAll('ul li').length).toBe(1)
+  })
+
+  it('renders no secondary <li> rows when only 1 item', () => {
+    const data = {
+      source: 'personal',
+      items: [{ anime: animeFixture(1) }],
+    }
+    const wrapper = mountCard({ data })
+    expect(wrapper.findAll('ul li').length).toBe(0)
+  })
+
+  it('username appears in title when source=personal and auth has a username', () => {
+    mockAuthUser.value = { username: 'ui_audit_bot' }
+    const data = {
+      source: 'personal',
+      items: [{ anime: animeFixture(1) }],
+    }
+    const wrapper = mountCard({ data })
+    const html = wrapper.html()
+    expect(html).toContain('spotlight.personalPick.titleWithName')
+    expect(html).toContain('ui_audit_bot')
+    // The {name} param must be carried through t() — our mock t() stringifies
+    // params as ::JSON, so the param JSON must contain `"name":"ui_audit_bot"`.
+    expect(html).toContain('"name":"ui_audit_bot"')
+  })
+
+  it('falls back to titleAnon when source=trending (even if username present)', () => {
+    mockAuthUser.value = { username: 'ui_audit_bot' }
     const data = {
       source: 'trending',
       items: [{ anime: animeFixture(1) }],
     }
     const wrapper = mountCard({ data })
+    // `wrapper.text()` strips HTML comments — safe to grep for the i18n key.
+    expect(wrapper.text()).toContain('spotlight.personalPick.titleAnon')
+    expect(wrapper.text()).not.toContain(
+      'spotlight.personalPick.titleWithName',
+    )
+  })
+
+  it('falls back to plain title when source=personal but auth has no username', () => {
+    // mockAuthUser stays null by default (anonymous-in-store).
+    const data = {
+      source: 'personal',
+      items: [{ anime: animeFixture(1) }],
+    }
+    const wrapper = mountCard({ data })
+    const text = wrapper.text()
+    // titleWithName i18n key must NOT render; plain `title` key does.
+    expect(text).not.toContain('spotlight.personalPick.titleWithName')
+    expect(text).toContain('spotlight.personalPick.title')
+    expect(text).not.toContain('spotlight.personalPick.titleAnon')
+  })
+
+  it('mobile "+ N more →" footer button uses cta-card classes', () => {
+    const data = {
+      source: 'personal',
+      items: [{ anime: animeFixture(1) }, { anime: animeFixture(2) }],
+    }
+    const wrapper = mountCard({ data })
     const links = wrapper.findAllComponents(RouterLinkStub)
-    expect(links.length).toBe(1) // only the single item link
-    // No "moreLink" text rendered.
+    const footer = links.find((l) => l.props('to') === '/recs')
+    expect(footer).toBeDefined()
+    // The footer button is full-width, glass-pill (cta-card), mobile-only.
+    const cls = (footer!.attributes('class') ?? '') as string
+    expect(cls).toContain('cta-card')
+    expect(cls).toContain('md:hidden')
+  })
+
+  it('does NOT render mobile footer button when only 1 item', () => {
+    const data = {
+      source: 'trending',
+      items: [{ anime: animeFixture(1) }],
+    }
+    const wrapper = mountCard({ data })
     expect(wrapper.text()).not.toContain('spotlight.personalPick.moreLink')
   })
 
@@ -82,7 +220,6 @@ describe('PersonalPickCard', () => {
     }
     const wrapper = mountCard({ data })
     const links = wrapper.findAllComponents(RouterLinkStub)
-    // Find the link whose `to` mentions /browse
     const footer = links.find((l) => {
       const to = l.props('to') as unknown
       return typeof to === 'string' && to.includes('/browse')
@@ -102,27 +239,54 @@ describe('PersonalPickCard', () => {
     expect(footer).toBeDefined()
   })
 
-  it('uses titleAnon when source=trending', () => {
+  it('renders reason chip with t(reason_i18n_key) for featured item that carries one', () => {
     const data = {
-      source: 'trending',
-      items: [{ anime: animeFixture(1) }],
+      source: 'personal',
+      items: [
+        {
+          anime: animeFixture(1),
+          reason_i18n_key: 'spotlight.personalPick.reason.personal',
+        },
+      ],
     }
     const wrapper = mountCard({ data })
-    expect(wrapper.text()).toContain('spotlight.personalPick.titleAnon')
-    expect(wrapper.text()).not.toContain('spotlight.personalPick.title::')
+    expect(wrapper.text()).toContain('spotlight.personalPick.reason.personal')
   })
 
-  it('uses title key when source=personal', () => {
+  it('renders reason chip for each secondary item that carries reason_i18n_key', () => {
+    const data = {
+      source: 'personal',
+      items: [
+        { anime: animeFixture(1) }, // featured, no reason
+        {
+          anime: animeFixture(2),
+          reason_i18n_key: 'spotlight.personalPick.reason.trending',
+        },
+        {
+          anime: animeFixture(3),
+          reason_i18n_key: 'spotlight.personalPick.reason.personal',
+        },
+      ],
+    }
+    const wrapper = mountCard({ data })
+    // Both secondary reason keys flow through t() and appear in the DOM.
+    expect(wrapper.text()).toContain('spotlight.personalPick.reason.trending')
+    expect(wrapper.text()).toContain('spotlight.personalPick.reason.personal')
+  })
+
+  it('wraps the article with SpotlightBackdrop variant="poster-blur" + featured posterUrl', () => {
     const data = {
       source: 'personal',
       items: [{ anime: animeFixture(1) }],
     }
     const wrapper = mountCard({ data })
-    expect(wrapper.text()).toContain('spotlight.personalPick.title')
-    expect(wrapper.text()).not.toContain('spotlight.personalPick.titleAnon')
+    const backdrop = wrapper.find('[data-testid="backdrop"]')
+    expect(backdrop.exists()).toBe(true)
+    expect(backdrop.attributes('data-variant')).toBe('poster-blur')
+    expect(backdrop.attributes('data-poster-url')).toBe('/poster-1.jpg')
   })
 
-  it('uses only font-medium and font-semibold typography weights', () => {
+  it('uses only font-medium / font-semibold typography weights (no font-bold / font-normal)', () => {
     const data = {
       source: 'personal',
       items: [{ anime: animeFixture(1) }],
@@ -134,7 +298,7 @@ describe('PersonalPickCard', () => {
     expect(html).toMatch(/font-medium|font-semibold/)
   })
 
-  it('uses tablet padding p-4 (never p-5)', () => {
+  it('uses p-4 / md:p-6 / lg:p-8 padding (never p-5)', () => {
     const data = {
       source: 'personal',
       items: [{ anime: animeFixture(1) }],
@@ -143,5 +307,7 @@ describe('PersonalPickCard', () => {
     const html = wrapper.html()
     expect(html).not.toMatch(/\bp-5\b/)
     expect(html).toMatch(/\bp-4\b/)
+    expect(html).toMatch(/\bmd:p-6\b/)
+    expect(html).toMatch(/\blg:p-8\b/)
   })
 })
