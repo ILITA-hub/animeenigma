@@ -109,10 +109,17 @@ func (r *TelegramNewsResolver) buildCardFromItems(items []telegram.NewsItem) *sp
 	}
 	posts := make([]spotlight.TelegramPost, 0, len(items))
 	for _, it := range items {
+		// ImageURL flows through from the parser when present (Phase 06 /
+		// HSB-V11-TG-01). The parser scrapes background-image URLs out of
+		// the `.tgme_widget_message_photo_wrap` style attribute; about 30%
+		// of @anime_enigma posts carry an image in practice. text-only
+		// posts emit the zero value, which json:"image_url,omitempty"
+		// strips so the wire shape stays unchanged for image-less posts.
 		posts = append(posts, spotlight.TelegramPost{
-			Excerpt: it.Text,
-			Link:    it.Link,
-			Date:    it.Date,
+			Excerpt:  it.Text,
+			Link:     it.Link,
+			Date:     it.Date,
+			ImageURL: it.ImageURL,
 		})
 	}
 	picked := spotlight.AdaptiveSlice(posts, r.rng)

@@ -96,12 +96,24 @@ type PersonalPickData struct {
 }
 
 // TelegramPost is one excerpt in the telegram_news card. Title / Link /
-// Date are optional (Telegram channel scrapes sometimes lack each).
+// Date / ImageURL are optional (Telegram channel scrapes sometimes lack
+// each — text-only posts have no image, repost-of-text posts have no
+// title, etc.).
+//
+// ImageURL was added in v1.1-polish Phase 06 (HSB-V11-TG-01). The
+// underlying parser (`internal/parser/telegram.NewsItem.ImageURL`) has
+// always extracted background-image URLs from `.tgme_widget_message_photo_wrap`,
+// but the spotlight Card surface dropped the field on the way through.
+// The pre-implementation spike on the live `news:telegram` Redis cache
+// confirmed real Telegram posts in production carry image URLs (e.g.
+// `https://cdn4.telesco.pe/file/...`), so the v1.1 frontend can render
+// real per-post thumbnails — not a forward-compat no-op.
 type TelegramPost struct {
-	Title   string `json:"title,omitempty"`
-	Excerpt string `json:"excerpt"`
-	Link    string `json:"link,omitempty"`
-	Date    string `json:"date,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Excerpt  string `json:"excerpt"`
+	Link     string `json:"link,omitempty"`
+	Date     string `json:"date,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
 }
 
 // TelegramNewsData is the payload for `Card{Type: "telegram_news"}` —
