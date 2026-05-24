@@ -1021,6 +1021,7 @@
     },
     "personalPick": {
       "title": "Выбрано для вас",
+      "titleWithName": "Для вас, {name}",
       "titleAnon": "В тренде",
       "moreLink": "+ ещё {n} →",
       "reason": {

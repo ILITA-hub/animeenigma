@@ -1021,6 +1021,7 @@
     },
     "personalPick": {
       "title": "Picked for you",
+      "titleWithName": "For you, {name}",
       "titleAnon": "Trending now",
       "moreLink": "+ {n} more →",
       "reason": {
