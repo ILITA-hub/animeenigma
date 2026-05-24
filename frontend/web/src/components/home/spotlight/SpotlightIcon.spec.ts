@@ -52,4 +52,28 @@ describe('SpotlightIcon', () => {
     const b = mount(SpotlightIcon, { props: { name: 'lightning' } })
     expect(a.html()).not.toBe(b.html())
   })
+
+  // v1.1-polish Phase 06 — labeled mode for icons that carry semantic
+  // meaning on their own (e.g. the Telegram brand mark in TelegramNewsCard's
+  // header). When caller passes aria-label, the SVG becomes role="img"
+  // and aria-hidden is dropped so screen readers announce it.
+  it('drops aria-hidden + adds role=img + aria-label when labeled', () => {
+    const wrapper = mount(SpotlightIcon, {
+      props: { name: 'telegram' },
+      attrs: { 'aria-label': 'Telegram' },
+    })
+    const svg = wrapper.find('svg')
+    expect(svg.exists()).toBe(true)
+    expect(svg.attributes('aria-label')).toBe('Telegram')
+    expect(svg.attributes('role')).toBe('img')
+    expect(svg.attributes('aria-hidden')).toBeUndefined()
+  })
+
+  it('keeps aria-hidden=true when caller omits aria-label (decorative default)', () => {
+    const wrapper = mount(SpotlightIcon, { props: { name: 'play' } })
+    const svg = wrapper.find('svg')
+    expect(svg.attributes('aria-hidden')).toBe('true')
+    expect(svg.attributes('role')).toBeUndefined()
+    expect(svg.attributes('aria-label')).toBeUndefined()
+  })
 })
