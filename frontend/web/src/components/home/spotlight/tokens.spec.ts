@@ -94,6 +94,31 @@ describe('cardTokens', () => {
   })
 })
 
+describe('cardTokens.anime_of_day.genreColors (v1.1-polish HSB-V11-AOD-04)', () => {
+  it('exists and is an object', () => {
+    expect(cardTokens.anime_of_day.genreColors).toBeDefined()
+    expect(typeof cardTokens.anime_of_day.genreColors).toBe('object')
+  })
+
+  it('has at least 10 mapped genre IDs', () => {
+    const keys = Object.keys(cardTokens.anime_of_day.genreColors)
+    expect(keys.length).toBeGreaterThanOrEqual(10)
+  })
+
+  it('every entry pairs a bg-*/20 and text-*/200 class', () => {
+    for (const [, classes] of Object.entries(cardTokens.anime_of_day.genreColors)) {
+      expect(classes).toMatch(/bg-[a-z]+-500\/20/)
+      expect(classes).toMatch(/text-[a-z]+-200/)
+    }
+  })
+
+  it('every key is a numeric string (Shikimori genre IDs are integers)', () => {
+    for (const key of Object.keys(cardTokens.anime_of_day.genreColors)) {
+      expect(key).toMatch(/^\d+$/)
+    }
+  })
+})
+
 describe('accentDotBg', () => {
   it('has an entry for every valid accent', () => {
     for (const accent of VALID_ACCENTS) {
