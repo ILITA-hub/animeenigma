@@ -1,15 +1,18 @@
 /**
- * Workstream hero-spotlight — Phase 2 (frontend-carousel) Plan 02-03 / Task 1.
+ * Workstream hero-spotlight — v1.1-polish Phase 02 (HSB-V11-AOD-01..04).
  *
- * Vitest spec for AnimeOfDayCard.vue. Verifies:
+ * Vitest spec for AnimeOfDayCard.vue (refactored). Verifies:
  *   1. Renders localized title via getLocalizedTitle
- *   2. Renders score chip (yellow-400) when score truthy
- *   3. Omits score chip when score undefined
+ *   2. Renders score badge (yellow-500/20) as a meta-row pill (not absolute)
+ *   3. Omits score pill when score undefined
  *   4. Caps genres at 3 (slice(0, 3))
- *   5. Renders Watch (btn-primary) and Add (btn-ghost) CTAs
- *   6. Uses only font-medium / font-semibold typography weights
- *   7. Tablet padding p-4 — never p-5
- *   8. Has no hardcoded English strings — every label flows through t()
+ *   5. Renders the cinematic SpotlightBackdrop (variant="poster-blur")
+ *   6. Renders no disabled CTA (the dead "Add to list" button is gone)
+ *   7. Renders exactly one .cta-hero "Watch" link
+ *   8. Genre tags use color classes from cardTokens.anime_of_day.genreColors
+ *   9. Uses only font-medium / font-semibold typography weights
+ *  10. Tablet padding p-4 — never p-5
+ *  11. Has no hardcoded English strings — every label flows through t()
  *
  * `vue-i18n` is stubbed with a t() that echoes the key (plus JSON-encoded
  * params if present); `@/utils/title` is stubbed to a first-non-empty
@@ -54,8 +57,8 @@ const baseMockData = {
     score: 9.1,
     episodes_count: 28,
     genres: [
-      { id: '1', name: 'Adventure', russian: 'Приключения' },
-      { id: '2', name: 'Drama', russian: 'Драма' },
+      { id: '1', name: 'Action', russian: 'Экшн' },
+      { id: '8', name: 'Drama', russian: 'Драма' },
     ],
   },
 }
@@ -66,21 +69,34 @@ describe('AnimeOfDayCard', () => {
     expect(wrapper.text()).toContain('Frieren')
   })
 
-  it('renders score chip with yellow-400 when score is truthy', () => {
+  it('renders SpotlightBackdrop with poster-blur variant and the poster URL', () => {
     const wrapper = mountCard({ data: baseMockData })
-    const html = wrapper.html()
-    expect(html).toContain('text-yellow-400')
-    expect(wrapper.text()).toContain('9.1')
+    const backdrop = wrapper.findComponent({ name: 'SpotlightBackdrop' })
+    expect(backdrop.exists()).toBe(true)
+    expect(backdrop.props('variant')).toBe('poster-blur')
+    expect(backdrop.props('posterUrl')).toBe(baseMockData.anime.poster_url)
   })
 
-  it('does not render score chip when score is undefined', () => {
+  it('renders the score badge as a meta-row pill (not an absolute overlay)', () => {
+    const wrapper = mountCard({ data: baseMockData })
+    const html = wrapper.html()
+    // New v1.1 styling moves the badge to a yellow-500/20 pill.
+    expect(html).toContain('bg-yellow-500/20')
+    expect(html).toContain('text-yellow-200')
+    expect(wrapper.text()).toContain('9.1')
+    // The pill must NOT be absolutely positioned over the poster.
+    const pill = wrapper.find('.bg-yellow-500\\/20')
+    expect(pill.exists()).toBe(true)
+    expect(pill.classes()).not.toContain('absolute')
+  })
+
+  it('does not render score pill when score is undefined', () => {
     const data = {
       anime: { ...baseMockData.anime, score: undefined },
     }
     const wrapper = mountCard({ data })
-    // The yellow-400 score chip should be absent. Other yellow may exist
-    // nowhere in this card per UI-SPEC — so a string check is sufficient.
-    expect(wrapper.html()).not.toContain('text-yellow-400')
+    expect(wrapper.html()).not.toContain('bg-yellow-500/20')
+    expect(wrapper.html()).not.toContain('text-yellow-200')
   })
 
   it('caps genres at 3', () => {
@@ -90,23 +106,61 @@ describe('AnimeOfDayCard', () => {
         genres: [
           { id: '1', name: 'A', russian: 'А' },
           { id: '2', name: 'B', russian: 'Б' },
-          { id: '3', name: 'C', russian: 'В' },
-          { id: '4', name: 'D', russian: 'Г' },
-          { id: '5', name: 'E', russian: 'Д' },
+          { id: '4', name: 'C', russian: 'В' },
+          { id: '8', name: 'D', russian: 'Г' },
+          { id: '10', name: 'E', russian: 'Д' },
         ],
       },
     }
     const wrapper = mountCard({ data })
-    // Genre chips use the exact class string from UI-SPEC.
-    const chips = wrapper.findAll('span.bg-white\\/10')
-    expect(chips.length).toBe(3)
+    // Three rendered chips correspond to the three mapped color classes.
+    expect(wrapper.html()).toContain('bg-red-500/20')   // id=1 Action
+    expect(wrapper.html()).toContain('bg-blue-500/20')  // id=2 Adventure
+    expect(wrapper.html()).toContain('bg-yellow-500/20')// id=4 Comedy (also matches score, but score is also yellow — distinct entries)
+    // The 4th + 5th genres (Drama/Fantasy) must NOT render.
+    expect(wrapper.html()).not.toContain('bg-pink-500/20')
+    expect(wrapper.html()).not.toContain('bg-purple-500/20')
   })
 
-  it('renders Watch (btn-primary) and Add (btn-ghost) CTAs', () => {
+  it('does not render any disabled CTA (dead Add-to-list button is removed)', () => {
     const wrapper = mountCard({ data: baseMockData })
-    const html = wrapper.html()
-    expect(html).toContain('btn-primary')
-    expect(html).toContain('btn-ghost')
+    expect(wrapper.find('[aria-disabled="true"]').exists()).toBe(false)
+    expect(wrapper.find('button[disabled]').exists()).toBe(false)
+    // The i18n key for the dropped CTA must not appear in rendered text.
+    expect(wrapper.text()).not.toContain('spotlight.animeOfDay.addCta')
+  })
+
+  it('renders exactly one .cta-hero CTA', () => {
+    const wrapper = mountCard({ data: baseMockData })
+    expect(wrapper.findAll('.cta-hero')).toHaveLength(1)
+  })
+
+  it('applies genre color classes from cardTokens.anime_of_day.genreColors', () => {
+    const wrapper = mountCard({
+      data: {
+        anime: {
+          ...baseMockData.anime,
+          // id=1 = Action → bg-red-500/20 text-red-200
+          genres: [{ id: '1', name: 'Action', russian: 'Экшн' }],
+        },
+      },
+    })
+    expect(wrapper.html()).toContain('bg-red-500/20')
+    expect(wrapper.html()).toContain('text-red-200')
+  })
+
+  it('falls back to neutral bg-white/10 for unmapped genre IDs', () => {
+    const wrapper = mountCard({
+      data: {
+        anime: {
+          ...baseMockData.anime,
+          // id=9999 is intentionally outside the genreColors map.
+          genres: [{ id: '9999', name: 'Unknown', russian: 'Неизвестно' }],
+        },
+      },
+    })
+    expect(wrapper.html()).toContain('bg-white/10')
+    expect(wrapper.html()).toContain('text-gray-300')
   })
 
   it('uses only font-medium and font-semibold typography weights', () => {
@@ -129,7 +183,6 @@ describe('AnimeOfDayCard', () => {
     const text = wrapper.text()
     // With t() stubbed to echo keys, the i18n keys appear as visible text.
     expect(text).toContain('spotlight.animeOfDay.watchCta')
-    expect(text).toContain('spotlight.animeOfDay.addCta')
     // Raw English copy should NOT leak — only the keys.
     expect(text).not.toMatch(/\bWatch\b/)
     expect(text).not.toMatch(/Add to list/)
