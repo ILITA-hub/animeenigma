@@ -152,15 +152,23 @@ export interface PersonalPickData {
 
 /**
  * TelegramNewsCard — 1..3 telegram-channel post excerpts. Backend supplies
- * the human-facing `title?` / `excerpt` / external `link?` / ISO `date?`.
- * The card renders excerpts as line-clamp-2 with an "Open post →" anchor
+ * the human-facing `title?` / `excerpt` / external `link?` / ISO `date?` /
+ * optional `image_url?`.
+ * The card renders excerpts as line-clamp-3 with an "Open post →" anchor
  * carrying `rel="noopener noreferrer"` (T-03-18 in the threat register).
+ *
+ * `image_url` added in v1.1-polish Phase 06 (HSB-V11-TG-01). The Telegram
+ * channel scraper already extracts `background-image:url(...)` from
+ * `.tgme_widget_message_photo_wrap`; the spotlight backend now surfaces
+ * the field. Roughly 30% of @anime_enigma posts carry a CDN URL
+ * (cdn4.telesco.pe); text-only posts emit the field as omitted/undefined.
  */
 export interface TelegramPost {
   title?: string
   excerpt: string
   link?: string
   date?: string
+  image_url?: string
 }
 export interface TelegramNewsData {
   posts: TelegramPost[]
