@@ -1003,7 +1003,13 @@
     "randomTail": {
       "title": "ランダムピック",
       "subtitle": "新しい発見を",
-      "discoverCta": "開く"
+      "discoverCta": "開く",
+      "taglines": [
+        "何か新しいものを発見",
+        "見ましたか？",
+        "倉庫から掘り出した一作",
+        "もしかしたら運命の出会い"
+      ]
     },
     "latestNews": {
       "title": "新着情報",

@@ -1003,7 +1003,13 @@
     "randomTail": {
       "title": "Random pick",
       "subtitle": "Discover something new",
-      "discoverCta": "Open"
+      "discoverCta": "Open",
+      "taglines": [
+        "Discover something new",
+        "Have you seen this one?",
+        "A random gem from the vault",
+        "Maybe it'll be love"
+      ]
     },
     "latestNews": {
       "title": "What's new",
