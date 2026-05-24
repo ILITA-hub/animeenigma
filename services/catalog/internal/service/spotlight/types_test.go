@@ -138,7 +138,13 @@ func TestNewCardDataShapes_RoundTrip(t *testing.T) {
 		t.Parallel()
 		in := TelegramNewsData{
 			Posts: []TelegramPost{
-				{Title: "T", Excerpt: "ex", Link: "https://t.me/x/1", Date: "2026-05-21T12:00:00Z"},
+				{
+					Title:    "T",
+					Excerpt:  "ex",
+					Link:     "https://t.me/x/1",
+					Date:     "2026-05-21T12:00:00Z",
+					ImageURL: "https://cdn4.telesco.pe/file/abc.jpg",
+				},
 				{Excerpt: "ex2"},
 			},
 		}
@@ -156,12 +162,22 @@ func TestNewCardDataShapes_RoundTrip(t *testing.T) {
 		if out.Posts[0].Link != "https://t.me/x/1" {
 			t.Errorf("Link lost: %q", out.Posts[0].Link)
 		}
-		// omitempty checks: post 2 has no title/link/date
+		if out.Posts[0].ImageURL != "https://cdn4.telesco.pe/file/abc.jpg" {
+			t.Errorf("ImageURL lost: %q", out.Posts[0].ImageURL)
+		}
+		// JSON tag must be `image_url` (snake_case end-to-end — Pitfall 8).
+		if !strings.Contains(string(raw), `"image_url":"https://cdn4.telesco.pe/file/abc.jpg"`) {
+			t.Errorf("expected image_url JSON tag, got: %s", raw)
+		}
+		// omitempty checks: post 2 has no title/link/date/image_url
 		if strings.Contains(string(raw), `"title":""`) {
 			t.Errorf("omitempty failed for empty Title: %s", raw)
 		}
 		if strings.Contains(string(raw), `"link":""`) {
 			t.Errorf("omitempty failed for empty Link: %s", raw)
+		}
+		if strings.Contains(string(raw), `"image_url":""`) {
+			t.Errorf("omitempty failed for empty ImageURL: %s", raw)
 		}
 	})
 
