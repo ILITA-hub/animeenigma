@@ -33,6 +33,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import type { SpotlightCard } from '@/types/spotlight'
 
 // ── Composable mock — reactive shim the tests can mutate ────────────────────
@@ -66,11 +67,22 @@ vi.mock('@vueuse/core', async () => {
 })
 
 // ── vue-i18n mock — echoes key + params so we can assert against patterns ──
+// `createI18n` is also stubbed (v1.1-polish Phase 04): PersonalPickCard now
+// imports `@/stores/auth` which loads `@/i18n` and immediately calls
+// `createI18n(...)` at module-init time. Without the stub, the chain throws
+// `No "createI18n" export is defined on the "vue-i18n" mock` when
+// HeroSpotlightBlock mounts PersonalPickCard via the dispatch chain.
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string, params?: Record<string, unknown>) =>
       params ? `${key}::${JSON.stringify(params)}` : key,
     locale: ref('en'),
+  }),
+  createI18n: () => ({
+    global: { t: (key: string) => key, locale: { value: 'en' } },
+    install: () => {
+      /* no-op for tests */
+    },
   }),
 }))
 
@@ -98,8 +110,14 @@ function mockCards(n: number): SpotlightCard[] {
 }
 
 function mountBlock() {
+  // PersonalPickCard (v1.1-polish Phase 04) uses useAuthStore (Pinia),
+  // so the dispatch chain needs an active Pinia even when the test isn't
+  // explicitly exercising the auth store.
+  const pinia = createPinia()
+  setActivePinia(pinia)
   return mount(HeroSpotlightBlock, {
     global: {
+      plugins: [pinia],
       stubs: { 'router-link': RouterLinkStub },
     },
   })

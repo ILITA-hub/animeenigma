@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import en from '../en.json'
 import ru from '../ru.json'
+import ja from '../ja.json'
 
 // Recursively collect every leaf key path in an object, e.g.
 // { a: { b: 'x', c: 'y' } } -> ['a.b', 'a.c']
@@ -133,7 +134,9 @@ describe('spotlight i18n parity', () => {
   })
 
   // ── Phase 3 (Plan 03-05) ─ five new sub-namespaces ──────────────────────
-  const personalPickKeys = ['title', 'titleAnon', 'moreLink'] as const
+  // v1.1-polish Phase 04 added `titleWithName` (with {name} interpolation)
+  // for the username-personalized PersonalPickCard title.
+  const personalPickKeys = ['title', 'titleWithName', 'titleAnon', 'moreLink'] as const
   it.each(personalPickKeys)('spotlight.personalPick.%s present in both locales', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).personalPick?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).personalPick?.[k]).toBe('string')
@@ -142,6 +145,25 @@ describe('spotlight i18n parity', () => {
   it('spotlight.personalPick.moreLink preserves {n} interpolation', () => {
     expect((enSpotlight as Record<string, Record<string, string>>).personalPick.moreLink).toContain('{n}')
     expect((ruSpotlight as Record<string, Record<string, string>>).personalPick.moreLink).toContain('{n}')
+  })
+
+  // v1.1-polish Phase 04 — titleWithName parity across en/ru/ja with {name}
+  // interpolation preserved (the auth-store username flows in via t() params).
+  it('spotlight.personalPick.titleWithName present in all 3 locales (en/ru/ja)', () => {
+    const jaSpotlight = (ja as Record<string, unknown>).spotlight as Record<string, Record<string, unknown>>
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).personalPick?.titleWithName).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).personalPick?.titleWithName).toBe('string')
+    expect(typeof jaSpotlight.personalPick?.titleWithName).toBe('string')
+  })
+
+  it('spotlight.personalPick.titleWithName preserves {name} interpolation across en/ru/ja', () => {
+    const jaSpotlight = (ja as Record<string, unknown>).spotlight as Record<string, Record<string, Record<string, string>>>
+    const enTpl = (enSpotlight as Record<string, Record<string, string>>).personalPick.titleWithName
+    const ruTpl = (ruSpotlight as Record<string, Record<string, string>>).personalPick.titleWithName
+    const jaTpl = jaSpotlight.personalPick.titleWithName as unknown as string
+    for (const tpl of [enTpl, ruTpl, jaTpl]) {
+      expect(tpl).toContain('{name}')
+    }
   })
 
   const telegramNewsKeys = ['title', 'openCta'] as const
