@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import en from '../en.json'
 import ru from '../ru.json'
+import ja from '../ja.json'
 
 // Recursively collect every leaf key path in an object, e.g.
 // { a: { b: 'x', c: 'y' } } -> ['a.b', 'a.c']
@@ -108,6 +109,41 @@ describe('spotlight i18n parity', () => {
   it.each(randomTailKeys)('spotlight.randomTail.%s present in both locales', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).randomTail?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).randomTail?.[k]).toBe('string')
+  })
+
+  // ── Phase 03 (Plan 03) RandomTailCard refactor ──────────────────────────
+  // The rotating-tagline array. HSB-V11-RT-03 promises 4 candidates per
+  // locale and runtime parity across all three shipped locales (en/ru/ja).
+  // The component picks one at mount with Math.random(); if any locale's
+  // array length drifted from another, a session could render a tagline
+  // index that doesn't exist in the user's locale.
+  const jaSpotlight = (ja as Record<string, unknown>).spotlight
+  const locales = { en: enSpotlight, ru: ruSpotlight, ja: jaSpotlight } as const
+
+  it.each(Object.entries(locales))(
+    'spotlight.randomTail.taglines is a 4-element string array in %s.json',
+    (_loc, spotlight) => {
+      const taglines = (spotlight as Record<string, Record<string, unknown>>)
+        .randomTail?.taglines
+      expect(Array.isArray(taglines)).toBe(true)
+      const arr = taglines as unknown[]
+      expect(arr.length).toBe(4)
+      for (const t of arr) {
+        expect(typeof t).toBe('string')
+        expect((t as string).trim().length).toBeGreaterThan(0)
+      }
+    },
+  )
+
+  it('spotlight.randomTail.taglines has equal length across en/ru/ja', () => {
+    const enLen = ((enSpotlight as Record<string, Record<string, unknown>>)
+      .randomTail?.taglines as unknown[]).length
+    const ruLen = ((ruSpotlight as Record<string, Record<string, unknown>>)
+      .randomTail?.taglines as unknown[]).length
+    const jaLen = ((jaSpotlight as Record<string, Record<string, unknown>>)
+      .randomTail?.taglines as unknown[]).length
+    expect(ruLen).toBe(enLen)
+    expect(jaLen).toBe(enLen)
   })
 
   const latestNewsKeys = ['title', 'readMore', 'entryDate'] as const
