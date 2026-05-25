@@ -39,6 +39,40 @@ func TestConfig_LoadScraperServiceDefault(t *testing.T) {
 	}
 }
 
+// TestConfig_LoadWatchTogetherServiceFromEnv asserts that when
+// WATCH_TOGETHER_SERVICE_URL is set, Load() honours the override. Workstream
+// watch-together Phase 01 Plan 01.7 adds the WatchTogetherService field so
+// the gateway can forward /api/watch-together/* (HTTP + WS).
+func TestConfig_LoadWatchTogetherServiceFromEnv(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+	t.Setenv("WATCH_TOGETHER_SERVICE_URL", "http://test-wt:9999")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.Services.WatchTogetherService, "http://test-wt:9999"; got != want {
+		t.Errorf("cfg.Services.WatchTogetherService = %q; want %q", got, want)
+	}
+}
+
+// TestConfig_LoadWatchTogetherServiceDefault asserts the docker-compose
+// default resolves when no env override is present. The default MUST match
+// the internal port the watch-together service binds (watch-together:8091
+// per Phase 01.8 docker-compose wiring).
+func TestConfig_LoadWatchTogetherServiceDefault(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+	t.Setenv("WATCH_TOGETHER_SERVICE_URL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.Services.WatchTogetherService, "http://watch-together:8091"; got != want {
+		t.Errorf("cfg.Services.WatchTogetherService = %q; want %q", got, want)
+	}
+}
+
 // TestDevMode_OnlyAllowedInDevEnvironments asserts that DevMode is only
 // permitted when ENVIRONMENT is in the known dev allow-list. The previous
 // deny-list-only guard (production/prod) let empty strings, misspellings,

@@ -209,6 +209,13 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.LibraryService, nil
 	case "notifications":
 		return s.serviceURLs.NotificationsService, nil
+	case "watch-together":
+		// workstream watch-together, v1.0 Phase 1 — REST passthrough only.
+		// The WebSocket /ws endpoint is NOT routed through this Forward path:
+		// copyForwardHeaders deliberately strips RFC 7230 §6.1 hop-by-hop
+		// headers (Upgrade, Connection, etc.) which would kill the WS
+		// handshake. WS upgrades go through transport/ws_proxy.go instead.
+		return s.serviceURLs.WatchTogetherService, nil
 	case "grafana":
 		return s.serviceURLs.GrafanaService, nil
 	case "prometheus":
