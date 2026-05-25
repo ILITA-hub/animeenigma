@@ -56,25 +56,37 @@ type LatestNewsData struct {
 	Entries []ChangelogEntry `json:"entries"`
 }
 
-// StatsMetric is one metric inside `PlatformStatsData.Metrics`. Delta is
-// a pointer so it can be omitted (nil) when the previous-period value is
-// unknown.
-//
-// v1.1-polish Phase 08 (HSB-V11-PS-*): PreviousValue + Series extend the
-// metric so the refactored PlatformStatsCard can render a delta-chip
-// (current vs prior 7-day window) and a 7-day sparkline. Both are
-// pointer/slice so they `omitempty` when the resolver cannot compute them.
-type StatsMetric struct {
-	Key           string `json:"key"`
-	Value         int64  `json:"value"`
-	PreviousValue *int64 `json:"previous_value,omitempty"` // prior 7-day window total
-	Series        []int  `json:"series,omitempty"`         // 7 daily samples, oldest-first
-	Delta         *int64 `json:"delta,omitempty"`
+// StatsHero is the bombastic top line of the platform_stats card.
+// WorkingOK + UptimePercent are REAL (from Prometheus); the remaining
+// fields are canned joke content (single-language strings) drawn from the
+// embedded pool. UptimePercent is a pointer so it omits when Prometheus is
+// unreachable.
+type StatsHero struct {
+	WorkingOK     bool     `json:"working_ok"`
+	UptimePercent *float64 `json:"uptime_percent,omitempty"`
+	UptimeQuip    string   `json:"uptime_quip"`
+	Service       string   `json:"service"`
+	UXDelta       string   `json:"ux_delta"`
+	CDI           string   `json:"cdi"`
+	MVQ           string   `json:"mvq"`
+	Tagline       string   `json:"tagline"`
 }
 
-// PlatformStatsData is the payload for `Card{Type: "platform_stats"}`.
+// StatsTile is one micro-grid cell — a single aggregated Prometheus metric
+// over one window. Value is non-zero (the resolver filters out <= 0).
+type StatsTile struct {
+	Label  string  `json:"label"`
+	Value  float64 `json:"value"`
+	Window string  `json:"window"` // "day" | "week" | "all"
+	Format string  `json:"format"` // "int" | "bytes" | "seconds"
+}
+
+// PlatformStatsData is the payload for Card{Type: "platform_stats"}.
+// Tiles MUST be initialized as []StatsTile{} (never nil) so it marshals as
+// [] not null (the frontend treats null as a parse failure).
 type PlatformStatsData struct {
-	Metrics []StatsMetric `json:"metrics"`
+	Hero  StatsHero   `json:"hero"`
+	Tiles []StatsTile `json:"tiles"`
 }
 
 // --- Phase 3 dynamic card payloads -------------------------------------

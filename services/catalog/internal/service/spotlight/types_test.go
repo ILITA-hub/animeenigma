@@ -44,10 +44,13 @@ func TestTypes_JSONShape(t *testing.T) {
 			wantInnerKey: "entries",
 		},
 		{
-			name:         "platform_stats has metrics key",
-			card:         Card{Type: "platform_stats", Data: PlatformStatsData{Metrics: []StatsMetric{{Key: "anime_added_7d", Value: 42}}}},
+			name: "platform_stats has hero key",
+			card: Card{Type: "platform_stats", Data: PlatformStatsData{
+				Hero:  StatsHero{WorkingOK: true, UptimeQuip: "fine", Service: "catalog", Tagline: "ok"},
+				Tiles: []StatsTile{},
+			}},
 			wantType:     "platform_stats",
-			wantInnerKey: "metrics",
+			wantInnerKey: "hero",
 		},
 	}
 
@@ -292,20 +295,6 @@ func TestTypes_EmptyCardsMarshalArray(t *testing.T) {
 	}
 }
 
-// TestTypes_StatsMetric_DeltaOmittedWhenNil confirms `delta` is absent
-// from the JSON when StatsMetric.Delta is nil.
-func TestTypes_StatsMetric_DeltaOmittedWhenNil(t *testing.T) {
-	t.Parallel()
-	m := StatsMetric{Key: "x", Value: 5}
-	raw, err := json.Marshal(m)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if strings.Contains(string(raw), `"delta"`) {
-		t.Fatalf(`output must NOT contain 'delta' when Delta is nil, got: %s`, raw)
-	}
-}
-
 // TestDateSeedUTC asserts the seed formula and timezone-invariance.
 func TestDateSeedUTC(t *testing.T) {
 	t.Parallel()
@@ -411,6 +400,59 @@ func TestSnapshotKey(t *testing.T) {
 	userSuffix := strings.TrimPrefix(gotUser, wantUserPrefix)
 	if !dateRE.MatchString(userSuffix) {
 		t.Errorf("SnapshotKey(&\"abc\") suffix = %q; want YYYY-MM-DD shape", userSuffix)
+	}
+}
+
+func TestPlatformStatsData_RoundTrip(t *testing.T) {
+	pct := 99.4
+	in := PlatformStatsData{
+		Hero: StatsHero{
+			WorkingOK:     true,
+			UptimePercent: &pct,
+			UptimeQuip:    "ОЧЕНЬ МНОГО",
+			Service:       "catalog",
+			UXDelta:       "+5 (Tremendous)",
+			CDI:           "0.00 * 99",
+			MVQ:           "Dragon 99%/99%",
+			Tagline:       "Лучшая платформа. Поверьте.",
+		},
+		Tiles: []StatsTile{
+			{Label: "Запросов обработано", Value: 48201, Window: "day", Format: "int"},
+		},
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out PlatformStatsData
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Hero.UptimeQuip != "ОЧЕНЬ МНОГО" || out.Hero.UptimePercent == nil || *out.Hero.UptimePercent != 99.4 {
+		t.Fatalf("hero round-trip mismatch: %+v", out.Hero)
+	}
+	if len(out.Tiles) != 1 || out.Tiles[0].Value != 48201 || out.Tiles[0].Window != "day" {
+		t.Fatalf("tiles round-trip mismatch: %+v", out.Tiles)
+	}
+}
+
+func TestPlatformStatsData_EmptyTilesMarshalArray(t *testing.T) {
+	b, err := json.Marshal(PlatformStatsData{Hero: StatsHero{}, Tiles: []StatsTile{}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"tiles":[]`) {
+		t.Fatalf("expected tiles:[] in %s", b)
+	}
+}
+
+func TestStatsHero_UptimePercentOmittedWhenNil(t *testing.T) {
+	b, err := json.Marshal(StatsHero{WorkingOK: false, UptimeQuip: "x", Service: "s", Tagline: "t"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "uptime_percent") {
+		t.Fatalf("uptime_percent should be omitted when nil: %s", b)
 	}
 }
 
