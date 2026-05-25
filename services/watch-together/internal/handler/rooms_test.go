@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,12 +23,77 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/service"
 )
 
+// fakeDeleteHub records every Broadcast invocation and exposes a
+// monotonic timestamp so tests can assert ordering against svc.Delete
+// (observed via the Redis-side existence of wt:room:{id}).
+type fakeDeleteHub struct {
+	mu    sync.Mutex
+	calls []fakeDeleteHubCall
+}
+
+type fakeDeleteHubCall struct {
+	roomID        string
+	excludeUserID string
+	env           domain.Envelope
+	roomLive      bool // captured at broadcast time
+}
+
+func newFakeDeleteHub() *fakeDeleteHub { return &fakeDeleteHub{} }
+
+func (h *fakeDeleteHub) Broadcast(_ context.Context, roomID string, env domain.Envelope, excludeUserID string) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calls = append(h.calls, fakeDeleteHubCall{
+		roomID:        roomID,
+		excludeUserID: excludeUserID,
+		env:           env,
+	})
+	return 0, nil
+}
+
+func (h *fakeDeleteHub) snapshot() []fakeDeleteHubCall {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]fakeDeleteHubCall, len(h.calls))
+	copy(out, h.calls)
+	return out
+}
+
+// recordingDeleteHub is fakeDeleteHub PLUS a Redis liveness probe at
+// Broadcast time so the ordering test can deterministically assert that
+// the room HASH was still present when room:closed was broadcast.
+type recordingDeleteHub struct {
+	inner *fakeDeleteHub
+	repo  *repo.RoomRepo
+	mu    sync.Mutex
+	live  bool
+}
+
+func (h *recordingDeleteHub) Broadcast(ctx context.Context, roomID string, env domain.Envelope, excludeUserID string) (int, error) {
+	if env.Type == domain.MsgRoomClosed {
+		_, err := h.repo.GetRoom(ctx, roomID)
+		h.mu.Lock()
+		if err == nil {
+			h.live = true
+		}
+		h.mu.Unlock()
+	}
+	return h.inner.Broadcast(ctx, roomID, env, excludeUserID)
+}
+
+func (h *recordingDeleteHub) observedLive() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.live
+}
+
 // testFixture bundles the moving parts an end-to-end handler test needs:
 // a real chi router with the /rooms subtree mounted, a miniredis-backed
 // service, and a small helper to mint claims-bearing requests.
 type testFixture struct {
 	router *chi.Mux
 	svc    *service.RoomService
+	hub    *fakeDeleteHub
 	cfg    *config.Config
 	mr     *miniredis.Miniredis
 }
@@ -57,7 +123,8 @@ func newFixture(t *testing.T) *testFixture {
 	svc.SetIDProviderForTest(func() string { return "room-fixed-id" })
 	svc.SetClockForTest(func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) })
 
-	h := NewRoomHandler(svc, cfg, logger.Default())
+	hub := newFakeDeleteHub()
+	h := NewRoomHandler(svc, hub, newFakeGrace(), cfg, logger.Default())
 
 	router := chi.NewRouter()
 	// Auth-bypass middleware: every request gets a synthesized claim for
@@ -69,7 +136,7 @@ func newFixture(t *testing.T) *testFixture {
 		r.Delete("/{id}", h.Delete)
 	})
 
-	return &testFixture{router: router, svc: svc, cfg: cfg, mr: mr}
+	return &testFixture{router: router, svc: svc, hub: hub, cfg: cfg, mr: mr}
 }
 
 // newFixtureNoAuth builds a router with the REAL AuthMiddleware-equivalent
@@ -89,7 +156,7 @@ func newFixtureNoAuth(t *testing.T) *chi.Mux {
 	cfg := &config.Config{PublicBaseURL: "http://localhost:8000"}
 	r := repo.NewRoomRepo(client, 900*time.Second, logger.Default())
 	svc := service.NewRoomService(r, logger.Default())
-	h := NewRoomHandler(svc, cfg, logger.Default())
+	h := NewRoomHandler(svc, newFakeDeleteHub(), newFakeGrace(), cfg, logger.Default())
 
 	router := chi.NewRouter()
 	// No injectClaims — handler's defensive userID-empty check fires.
@@ -287,12 +354,137 @@ func TestDelete_Host_Returns204(t *testing.T) {
 		t.Fatalf("status = %d, want 204, body=%s", rec.Code, rec.Body.String())
 	}
 
+	// Plan 05.1 — host DELETE must broadcast room:closed before deleting.
+	calls := fx.hub.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 broadcast call, got %d", len(calls))
+	}
+	if calls[0].env.Type != domain.MsgRoomClosed {
+		t.Errorf("broadcast env type = %q, want %q", calls[0].env.Type, domain.MsgRoomClosed)
+	}
+	if calls[0].roomID != "room-fixed-id" {
+		t.Errorf("broadcast roomID = %q, want %q", calls[0].roomID, "room-fixed-id")
+	}
+	if calls[0].excludeUserID != "" {
+		t.Errorf("broadcast excludeUserID = %q, want empty (broadcast to all)", calls[0].excludeUserID)
+	}
+
 	// Subsequent GET should report Gone.
 	req2 := httptest.NewRequest(http.MethodGet, "/api/watch-together/rooms/room-fixed-id", nil)
 	rec2 := httptest.NewRecorder()
 	fx.router.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusGone {
 		t.Errorf("post-delete GET status = %d, want 410", rec2.Code)
+	}
+}
+
+// Plan 05.1 — broadcast room:closed MUST happen BEFORE the Redis keys are
+// deleted so connected members see the explicit close event while the
+// room is still live (no race to a 410). Asserts ordering by probing
+// Redis at broadcast time via recordingDeleteHub.
+func TestDelete_Host_BroadcastsRoomClosedBeforeDelete(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	cfg := &config.Config{PublicBaseURL: "https://animeenigma.ru"}
+	r := repo.NewRoomRepo(client, 900*time.Second, logger.Default())
+	svc := service.NewRoomService(r, logger.Default())
+	svc.SetIDProviderForTest(func() string { return "room-fixed-id" })
+	svc.SetClockForTest(func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) })
+
+	if _, err := svc.Create(context.Background(), "test-user", "test-username", service.CreateRoomInput{
+		AnimeID:       "a-1",
+		EpisodeID:     "e-1",
+		Player:        domain.PlayerAnimeLib,
+		TranslationID: "t-1",
+	}); err != nil {
+		t.Fatalf("seed Create: %v", err)
+	}
+
+	inner := newFakeDeleteHub()
+	probing := &recordingDeleteHub{inner: inner, repo: r}
+	h := NewRoomHandler(svc, probing, newFakeGrace(), cfg, logger.Default())
+	router := chi.NewRouter()
+	router.Use(injectClaims("test-user", "test-username"))
+	router.Route("/api/watch-together/rooms", func(r chi.Router) {
+		r.Delete("/{id}", h.Delete)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/watch-together/rooms/room-fixed-id", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204, body=%s", rec.Code, rec.Body.String())
+	}
+	if !probing.observedLive() {
+		t.Fatalf("broadcast happened AFTER DeleteRoom (room was already gone at broadcast time)")
+	}
+	if mr.Exists("wt:room:room-fixed-id") {
+		t.Errorf("room should be deleted after handler returns; key still in Redis")
+	}
+}
+
+// Plan 05.1 — DELETE on a non-existent room MUST NOT broadcast room:closed
+// (the broadcast is gated behind the preflight Get). 410 stays unchanged.
+func TestDelete_Missing_NoBroadcast(t *testing.T) {
+	fx := newFixture(t)
+	req := httptest.NewRequest(http.MethodDelete, "/api/watch-together/rooms/no-such-room", nil)
+	rec := httptest.NewRecorder()
+	fx.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusGone {
+		t.Fatalf("status = %d, want 410", rec.Code)
+	}
+	if calls := fx.hub.snapshot(); len(calls) != 0 {
+		t.Errorf("expected 0 broadcasts on missing-room delete, got %d", len(calls))
+	}
+}
+
+// Plan 05.1 — DELETE by a non-host MUST NOT broadcast room:closed (the
+// broadcast is gated behind the authz check). 403 stays unchanged.
+func TestDelete_NonHost_NoBroadcast(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	cfg := &config.Config{PublicBaseURL: "https://animeenigma.ru"}
+	r := repo.NewRoomRepo(client, 900*time.Second, logger.Default())
+
+	// user-A creates the room.
+	svcA := service.NewRoomService(r, logger.Default())
+	svcA.SetIDProviderForTest(func() string { return "room-shared-id" })
+	svcA.SetClockForTest(func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) })
+	if _, err := svcA.Create(context.Background(), "user-A", "name-A", service.CreateRoomInput{
+		AnimeID:       "a-1",
+		EpisodeID:     "e-1",
+		Player:        domain.PlayerAnimeLib,
+		TranslationID: "t-1",
+	}); err != nil {
+		t.Fatalf("seed Create: %v", err)
+	}
+
+	// user-B attempts the delete.
+	svcB := service.NewRoomService(r, logger.Default())
+	hubB := newFakeDeleteHub()
+	hB := NewRoomHandler(svcB, hubB, newFakeGrace(), cfg, logger.Default())
+	routerB := chi.NewRouter()
+	routerB.Use(injectClaims("user-B", "name-B"))
+	routerB.Route("/api/watch-together/rooms", func(r chi.Router) {
+		r.Delete("/{id}", hB.Delete)
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/watch-together/rooms/room-shared-id", nil)
+	rec := httptest.NewRecorder()
+	routerB.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+	if calls := hubB.snapshot(); len(calls) != 0 {
+		t.Errorf("expected 0 broadcasts on non-host delete, got %d", len(calls))
+	}
+	if !mr.Exists("wt:room:room-shared-id") {
+		t.Errorf("room was deleted despite 403")
 	}
 }
 
@@ -322,7 +514,7 @@ func TestDelete_NonHost_Returns403(t *testing.T) {
 
 	// user-B's handler attempts the delete.
 	svcB := service.NewRoomService(r, logger.Default())
-	hB := NewRoomHandler(svcB, cfg, logger.Default())
+	hB := NewRoomHandler(svcB, newFakeDeleteHub(), newFakeGrace(), cfg, logger.Default())
 	routerB := chi.NewRouter()
 	routerB.Use(injectClaims("user-B", "name-B"))
 	routerB.Route("/api/watch-together/rooms", func(r chi.Router) {

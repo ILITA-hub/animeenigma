@@ -11,6 +11,7 @@
 package handler
 
 import (
+	"context"
 	stderrors "errors"
 	"net/http"
 	"strings"
@@ -21,26 +22,48 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/service"
 )
+
+// RoomDeleteFanout is the narrow surface of *hub.Hub the Delete handler
+// uses to fan out a room:closed envelope before deleting Redis keys.
+// Mirrors service.HubFanout's Broadcast signature; defined here so
+// rooms_test.go can pass a fake. The real *hub.Hub satisfies this by
+// signature (verified at compile time in main.go).
+type RoomDeleteFanout interface {
+	Broadcast(ctx context.Context, roomID string, env domain.Envelope, excludeUserID string) (int, error)
+}
 
 // RoomHandler serves POST/GET/DELETE /api/watch-together/rooms[/{id}].
 // State lives in the service layer — this struct holds no Redis client and
 // performs no validation beyond JSON decoding (validate lives in
 // service.CreateRoomInput.validate). Config is read for PublicBaseURL only.
+//
+// hub + graceMgr (Plan 05.1) are consulted by Delete to fan out a
+// room:closed envelope to connected members and cancel any pending
+// grace timer BEFORE the explicit DeleteRoom. Closes the 01-04-SUMMARY.md
+// deviation #5 (host DELETE used to silently delete without notifying
+// connected members).
 type RoomHandler struct {
-	svc *service.RoomService
-	cfg *config.Config
-	log *logger.Logger
+	svc      *service.RoomService
+	hub      RoomDeleteFanout
+	graceMgr GraceCanceller
+	cfg      *config.Config
+	log      *logger.Logger
 }
 
 // NewRoomHandler wires the service + config + logger. Pass nil for log to
 // fall back to logger.Default() inside the handler methods.
-func NewRoomHandler(svc *service.RoomService, cfg *config.Config, log *logger.Logger) *RoomHandler {
+//
+// hub + graceMgr (Plan 05.1) may both be nil for legacy / test wiring;
+// when present, Delete broadcasts room:closed and cancels any pending
+// grace timer before tearing the room down.
+func NewRoomHandler(svc *service.RoomService, hub RoomDeleteFanout, graceMgr GraceCanceller, cfg *config.Config, log *logger.Logger) *RoomHandler {
 	if log == nil {
 		log = logger.Default()
 	}
-	return &RoomHandler{svc: svc, cfg: cfg, log: log}
+	return &RoomHandler{svc: svc, hub: hub, graceMgr: graceMgr, cfg: cfg, log: log}
 }
 
 // CreateRoomBody is the JSON request shape for POST /rooms. All 4 fields
@@ -172,6 +195,14 @@ func (h *RoomHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Delete handles DELETE /api/watch-together/rooms/{id}. Only the host
 // (room.host_user_id == requester user_id) can force-close (WT-FOUND-03).
 // 204 on success, 403 ErrNotHost, 410 ErrNotFound.
+//
+// Plan 05.1 — closes 01-04-SUMMARY.md deviation #5: BEFORE deleting Redis
+// keys, we cancel any pending grace timer (so its fire callback can't
+// double-broadcast) and fan out a room:closed envelope to every
+// connected member so they see an explicit close event (not a sudden
+// 410 on the next REST call). The broadcast happens AFTER the authz
+// preflight (svc.Get) + host check, so non-host attempts cannot spam the
+// channel and gone rooms cannot trigger broadcasts.
 func (h *RoomHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID := authz.UserIDFromContext(r.Context())
 	if userID == "" {
@@ -185,26 +216,77 @@ func (h *RoomHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.svc.Delete(r.Context(), userID, roomID)
+	// Plan 05.1 preflight — peek the room so we can broadcast room:closed
+	// AND cancel the grace timer BEFORE the explicit DeleteRoom. The
+	// host-check below is the authz gate; svc.Delete still re-validates
+	// host-ownership (defense in depth — service is the single mutation
+	// surface, handler-side checks could go stale under future refactors).
+	snap, err := h.svc.Get(r.Context(), roomID)
 	if err != nil {
-		switch {
-		case stderrors.Is(err, service.ErrNotFound):
+		if stderrors.Is(err, service.ErrNotFound) {
 			writeGone(w, "room expired or does not exist")
 			h.log.Infow("watch_together delete_room gone",
 				"action", "delete_room",
 				"room_id", roomID,
 				"user_id", userID,
 			)
-		case stderrors.Is(err, service.ErrNotHost):
-			// libs/httputil.Forbidden writes a generic "access denied" body —
-			// we use it here rather than a custom 403 to keep the response
-			// envelope consistent with every other forbidden in the project.
-			httputil.Forbidden(w)
-			h.log.Infow("watch_together delete_room not_host",
-				"action", "delete_room",
+			return
+		}
+		if stderrors.Is(err, service.ErrInvalidInput) {
+			httputil.BadRequest(w, err.Error())
+			return
+		}
+		h.log.Errorw("watch_together delete_room peek failed",
+			"action", "delete_room",
+			"room_id", roomID,
+			"user_id", userID,
+			"error", err,
+		)
+		httputil.Error(w, err)
+		return
+	}
+	if snap.Room.HostUserID != userID {
+		httputil.Forbidden(w)
+		h.log.Infow("watch_together delete_room not_host",
+			"action", "delete_room",
+			"room_id", roomID,
+			"user_id", userID,
+		)
+		return
+	}
+
+	// Authz cleared — cancel any pending grace timer so its fire callback
+	// can't race us into broadcasting a duplicate room:closed, then fan
+	// out the close event so connected members see it explicitly.
+	if h.graceMgr != nil {
+		h.graceMgr.Cancel(roomID)
+	}
+	if h.hub != nil {
+		closedEnv := domain.Envelope{
+			Type: domain.MsgRoomClosed,
+			Data: []byte(`{}`),
+		}
+		if _, berr := h.hub.Broadcast(r.Context(), roomID, closedEnv, ""); berr != nil {
+			h.log.Warnw("watch_together delete_room broadcast room_closed",
 				"room_id", roomID,
 				"user_id", userID,
+				"err", berr,
 			)
+		}
+	}
+
+	if err := h.svc.Delete(r.Context(), userID, roomID); err != nil {
+		switch {
+		case stderrors.Is(err, service.ErrNotFound):
+			// Race: room expired between the peek above and Delete. Treat
+			// as 410 — the broadcast already went out, so connected
+			// members got a close event regardless.
+			writeGone(w, "room expired or does not exist")
+		case stderrors.Is(err, service.ErrNotHost):
+			// Race: host changed between peek and Delete. Effectively
+			// never happens in v1.0 (host_user_id is set once at Create
+			// and never updated), but defensive.
+			httputil.Forbidden(w)
 		case stderrors.Is(err, service.ErrInvalidInput):
 			httputil.BadRequest(w, err.Error())
 		default:
