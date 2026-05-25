@@ -1,81 +1,107 @@
 <template>
-  <article
-    class="w-full h-full flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-4 lg:p-6"
-  >
-    <header class="md:hidden">
-      <p
-        class="text-xs font-medium text-purple-300/90 uppercase tracking-wider mb-1"
-      >
-        {{ t('spotlight.continueWatchingNew.title') }}
-      </p>
-    </header>
+  <article class="relative w-full h-full overflow-hidden">
+    <SpotlightBackdrop
+      variant="poster-blur"
+      accent="purple"
+      :poster-url="data.anime.poster_url"
+    />
+    <!-- Purple secondary overlay — the "new episode just dropped" wash that
+         distinguishes this card from NotTimeYet's amber. -->
+    <div
+      aria-hidden="true"
+      class="absolute inset-0 bg-gradient-to-r from-purple-500/30 via-transparent to-transparent"
+    />
 
-    <router-link
-      :to="`/anime/${data.anime.id}`"
-      class="flex-shrink-0 self-center md:self-start w-32 md:w-40 lg:w-48 group"
+    <div
+      class="relative z-10 w-full h-full flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-6 lg:p-8 md:items-center"
     >
-      <div
-        class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3]"
+      <!-- Poster + hero ribbon -->
+      <router-link
+        :to="watchUrl"
+        class="relative flex-shrink-0 self-center md:self-start w-32 md:w-40 lg:w-52 group"
       >
-        <img
-          :src="data.anime.poster_url || '/placeholder.svg'"
-          :alt="
-            getLocalizedTitle(
-              data.anime.name,
-              data.anime.name_ru,
-              data.anime.name_jp,
-            )
-          "
-          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          loading="lazy"
-        />
-        <span
-          class="absolute top-2 right-2 px-2 py-0.5 text-xs font-semibold bg-purple-500/90 text-white rounded shadow"
+        <div
+          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-purple-500/30"
+        >
+          <img
+            :src="data.anime.poster_url || '/placeholder.svg'"
+            :alt="title"
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+          <!-- Hero ribbon ACROSS the top of the poster -->
+          <div
+            class="absolute inset-x-0 top-0 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white text-xs font-semibold uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5"
+          >
+            <SpotlightIcon
+              name="play"
+              class="w-3.5 h-3.5"
+            />
+            {{
+              t('spotlight.continueWatchingNew.newEpisodeBadge', {
+                n: data.new_episode_number,
+              })
+            }}
+          </div>
+        </div>
+      </router-link>
+
+      <!-- Two-row episode meta with hierarchy -->
+      <div class="flex-1 flex flex-col justify-between gap-3 min-w-0">
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <SpotlightIcon
+              name="play"
+              class="w-5 h-5 text-purple-300"
+            />
+            <p
+              class="text-purple-200 text-sm font-semibold uppercase tracking-[0.15em]"
+            >
+              {{ t('spotlight.continueWatchingNew.title') }}
+            </p>
+          </div>
+
+          <h3
+            class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2 mb-3"
+          >
+            {{ title }}
+          </h3>
+
+          <!-- Subdued: where you stopped -->
+          <p class="text-xs text-gray-400 font-medium">
+            {{
+              t('spotlight.continueWatchingNew.lastWatched', {
+                n: data.last_watched_episode,
+              })
+            }}
+          </p>
+          <!-- Accent: what's new -->
+          <p
+            class="mt-1 text-lg text-purple-200 font-semibold tabular-nums"
+          >
+            {{
+              t('spotlight.continueWatchingNew.newEpisodeLine', {
+                n: data.new_episode_number,
+              })
+            }}
+          </p>
+        </div>
+
+        <!-- Deep-link CTA — jump straight to the new episode in the player. -->
+        <router-link
+          :to="watchUrl"
+          class="cta-hero"
+          data-accent="purple"
         >
           {{
-            t('spotlight.continueWatchingNew.newEpisodeBadge', {
+            t('spotlight.continueWatchingNew.resumeCtaWithEp', {
               n: data.new_episode_number,
             })
           }}
-        </span>
-      </div>
-    </router-link>
-
-    <div class="flex-1 flex flex-col justify-between gap-3 min-w-0">
-      <div>
-        <p
-          class="hidden md:block text-xs font-medium text-purple-300/90 uppercase tracking-wider mb-2"
-        >
-          {{ t('spotlight.continueWatchingNew.title') }}
-        </p>
-        <h3
-          class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2"
-        >
-          {{
-            getLocalizedTitle(
-              data.anime.name,
-              data.anime.name_ru,
-              data.anime.name_jp,
-            )
-          }}
-        </h3>
-        <p
-          class="mt-2 text-sm font-medium text-gray-400"
-        >
-          {{
-            t('spotlight.animeOfDay.episodesLabel', {
-              n: data.last_watched_episode,
-            })
-          }}
-        </p>
-      </div>
-
-      <div class="flex flex-wrap gap-2 mt-3">
-        <router-link
-          :to="`/anime/${data.anime.id}`"
-          class="btn btn-primary text-sm md:text-base"
-        >
-          {{ t('spotlight.continueWatchingNew.resumeCta') }}
+          <SpotlightIcon
+            name="play"
+            class="w-4 h-4"
+          />
         </router-link>
       </div>
     </div>
@@ -83,10 +109,28 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import SpotlightBackdrop from '../SpotlightBackdrop.vue'
+import SpotlightIcon from '../SpotlightIcon.vue'
 import { getLocalizedTitle } from '@/utils/title'
 import type { ContinueWatchingNewData } from '@/types/spotlight'
 
-defineProps<{ data: ContinueWatchingNewData }>()
+const props = defineProps<{ data: ContinueWatchingNewData }>()
 const { t } = useI18n()
+
+const title = computed<string>(() =>
+  getLocalizedTitle(
+    props.data.anime.name,
+    props.data.anime.name_ru,
+    props.data.anime.name_jp,
+  ),
+)
+
+// Canonical deep-link contract honored by Anime.vue's `queryEpisode` computed
+// (and used by the sibling ContinueWatchingRow). `/anime/:id/watch` is only a
+// redirect alias, so link straight to `/anime/:id?episode=N` to skip the hop.
+const watchUrl = computed<string>(
+  () => `/anime/${props.data.anime.id}?episode=${props.data.new_episode_number}`,
+)
 </script>
