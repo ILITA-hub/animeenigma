@@ -50,7 +50,21 @@ function mockCards(count: number): SpotlightCard[] {
         cards.push({ type, data: { anime: { id: `rt-${i}` } } })
         break
       case 'platform_stats':
-        cards.push({ type, data: { metrics: [] } })
+        cards.push({
+          type,
+          data: {
+            hero: {
+              working_ok: true,
+              uptime_quip: 'ОЧЕНЬ МНОГО',
+              service: 'catalog',
+              ux_delta: '+5',
+              cdi: '0.00 * 99',
+              mvq: 'Dragon 99%/99%',
+              tagline: 'Лучшая платформа.',
+            },
+            tiles: [],
+          },
+        })
         break
       case 'now_watching':
         cards.push({ type, data: { sessions: [] } })

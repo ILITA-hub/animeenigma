@@ -1,7 +1,6 @@
 <template>
   <article class="relative w-full h-full overflow-hidden">
     <SpotlightBackdrop variant="gradient-mesh" accent="teal" />
-    <!-- Faint grid pattern overlay for chart context -->
     <div
       aria-hidden="true"
       class="absolute inset-0 opacity-5"
@@ -10,57 +9,48 @@
     <div
       class="relative z-10 w-full h-full grid md:grid-cols-[2fr_3fr] gap-6 p-4 md:p-6 lg:p-8"
     >
-      <!-- Hero stat (left) -->
-      <div v-if="heroMetric" class="flex flex-col justify-center min-w-0">
-        <div class="flex items-center gap-2 mb-2">
+      <!-- Hero (left) -->
+      <div class="flex flex-col justify-center min-w-0">
+        <div class="flex items-center gap-2 mb-3">
           <SpotlightIcon name="chart" class="w-5 h-5 text-teal-300" />
-          <h3 class="text-base font-semibold text-white">
-            {{ t('spotlight.platformStats.title') }}
-          </h3>
+          <h3 class="text-base font-semibold text-white">Как дела у платформы</h3>
         </div>
-        <p
-          class="text-xs font-medium text-teal-200 uppercase tracking-wider mb-2"
-        >
-          {{ t(`spotlight.platformStats.${camelize(heroMetric.key)}`) }}
+
+        <p class="text-2xl md:text-3xl font-semibold text-white leading-tight">
+          Работает:
+          <span :class="hero.working_ok ? 'text-teal-300' : 'text-amber-300'">
+            {{ hero.working_ok ? 'ДА' : 'ТЕХНИЧЕСКИ ДА' }}
+          </span>
         </p>
-        <p
-          class="text-7xl md:text-8xl font-semibold text-white tabular-nums leading-none"
-        >
-          {{ heroMetric.value.toLocaleString(localeStr) }}
+
+        <p class="mt-2 text-lg font-medium text-teal-200">
+          Аптайм: {{ hero.uptime_quip
+          }}<template v-if="hero.uptime_percent != null"> — {{ hero.uptime_percent }}%</template>
         </p>
-        <!-- Delta chip -->
-        <div class="mt-3 flex items-center gap-2">
-          <DeltaChip
-            :current="heroMetric.value"
-            :previous="heroMetric.previous_value"
-          />
-          <span class="text-xs text-gray-400">{{
-            t('spotlight.platformStats.vsPriorWeek')
-          }}</span>
-        </div>
-        <!-- Sparkline -->
-        <Sparkline
-          v-if="heroMetric.series && heroMetric.series.length >= 2"
-          :data="heroMetric.series"
-          class="mt-3 h-10 w-full text-teal-300"
-        />
+
+        <p class="mt-3 text-sm font-medium text-gray-200 break-words">
+          {{ hero.service }} — UXΔ {{ hero.ux_delta }} · CDI {{ hero.cdi }} · MVQ {{ hero.mvq }}
+        </p>
+
+        <p class="mt-4 text-base md:text-lg font-medium text-white/90 italic">
+          «{{ hero.tagline }}»
+        </p>
       </div>
 
-      <!-- Micro-grid (right, 2×2) -->
+      <!-- Tiles (right, 2×2) -->
       <ul class="grid grid-cols-2 gap-3 content-center min-w-0">
         <li
-          v-for="m in supportingMetrics"
-          :key="m.key"
+          v-for="(tile, i) in tiles"
+          :key="i"
           class="flex flex-col p-3 rounded-lg bg-white/5 backdrop-blur-sm"
         >
-          <p
-            class="text-[10px] font-medium text-gray-400 uppercase tracking-wider truncate"
-          >
-            {{ t(`spotlight.platformStats.${camelize(m.key)}`) }}
+          <span class="text-[10px] font-medium text-teal-300 uppercase tracking-wider">
+            {{ windowLabel(tile.window) }}
+          </span>
+          <p class="mt-1 text-2xl font-semibold text-white tabular-nums">
+            {{ formatValue(tile) }}
           </p>
-          <p class="mt-1 text-xl font-semibold text-white tabular-nums">
-            {{ m.value.toLocaleString(localeStr) }}
-          </p>
+          <p class="text-[11px] font-medium text-gray-400 truncate">{{ tile.label }}</p>
         </li>
       </ul>
     </div>
@@ -68,42 +58,45 @@
 </template>
 
 <script setup lang="ts">
-// v1.1-polish Phase 08 (platform-stats-refactor): hero-stat (left, oversized)
-// + 2×2 supporting micro-grid (right) + 7-day sparkline + delta chip.
-//
-// SINGLE-ROOT <article> (project rule): the template root is the bare
-// <article> with NO leading comment and NO top-level v-if, so Vue 3
-// <Transition mode="out-in"> never wedges. The hero block is guarded by
-// v-if="heroMetric" INSIDE the root for defensive safety even though the
-// backend's eligibility check guarantees ≥1 metric.
+// Workstream hero-spotlight — Trump-style joke rewrite of platform_stats.
+// SINGLE-ROOT <article>, NO top-level v-if (Transition mode="out-in" safety).
+// Deliberately i18n-free: chrome is fixed Russian and the joke content is
+// rendered verbatim from the backend payload (everyone sees the same).
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import type { PlatformStatsData } from '@/types/spotlight'
+import type { PlatformStatsData, StatsTile } from '@/types/spotlight'
 import SpotlightBackdrop from '../SpotlightBackdrop.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
-import Sparkline from '../Sparkline.vue'
-import DeltaChip from '../DeltaChip.vue'
 
 const props = defineProps<{ data: PlatformStatsData }>()
-const { t, locale: i18nLocale } = useI18n()
 
-// Hero = first metric; supporting = next four. Backend's emission order is
-// the stable display contract (Phase 1 ships only anime_added_7d, so
-// supportingMetrics is empty until more metrics land — the micro-grid then
-// renders nothing, which is fine).
-const heroMetric = computed(() => props.data.metrics[0])
-const supportingMetrics = computed(() => props.data.metrics.slice(1, 5))
+const hero = computed(() => props.data.hero)
+const tiles = computed(() => props.data.tiles ?? [])
 
-// Backend emits metric keys in snake_case (`anime_added_7d`); UI-SPEC's
-// Copywriting Contract declares the matching i18n keys in camelCase
-// (`spotlight.platformStats.animeAdded7d`). Convert here so the locale JSON
-// can stay camelCase-only.
-function camelize(snake: string): string {
-  return snake.replace(/_([a-z0-9])/g, (_, c) => (c as string).toUpperCase())
+function windowLabel(w: StatsTile['window']): string {
+  switch (w) {
+    case 'day':
+      return 'ЗА ДЕНЬ'
+    case 'week':
+      return 'ЗА НЕДЕЛЮ'
+    default:
+      return 'ЗА ВСЁ ВРЕМЯ'
+  }
 }
 
-const localeStr = computed<string>(() => {
-  const v = (i18nLocale as { value?: unknown }).value
-  return typeof v === 'string' ? v : 'ru'
-})
+function formatValue(tile: StatsTile): string {
+  if (tile.format === 'bytes') return formatBytes(tile.value)
+  if (tile.format === 'seconds') return `${tile.value.toFixed(2)} с`
+  return Math.round(tile.value).toLocaleString('ru')
+}
+
+function formatBytes(n: number): string {
+  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
+  let v = n
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`
+}
 </script>
