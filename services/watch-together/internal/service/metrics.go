@@ -27,11 +27,65 @@ var RoomCreateTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Total watch-together rooms created via POST /rooms",
 })
 
-// init registers RoomCreateTotal onto the default Prometheus registry so the
+// DriftCorrectionsTotal counts every drift correction emitted by the
+// DriftEngine (see sync.go), labelled by severity:
+//
+//	soft       — 1.5s < drift <= 5s (single playback:correction nudge)
+//	hard       — drift > 5s         (single playback:correction nudge,
+//	                                  member's consecutive-hard counter ++)
+//	persistent — 5th consecutive hard drift (error:PERSISTENT_DRIFT, no
+//	                                  further corrections for this member
+//	                                  until Reset/reconnect)
+//
+// Phase 1 Grafana panel (WT-NF-06) ingests this for the "drift corrections
+// per minute" stat. Label cardinality is bounded to 3 — well inside the
+// safe range.
+var DriftCorrectionsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "wt_drift_corrections_total",
+		Help: "Drift corrections emitted by the watch-together drift engine, by severity",
+	},
+	[]string{"severity"}, // "soft" | "hard" | "persistent"
+)
+
+// RateLimitedTotal counts every inbound message rejected by the per-user
+// in-process token bucket (WT-NF-02). Labelled by message type so the
+// Grafana row can break out seek-rate-limits vs chat-rate-limits.
+var RateLimitedTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "wt_ws_rate_limited_total",
+		Help: "Inbound watch-together messages rejected by the per-user rate limiter, by type",
+	},
+	[]string{"type"},
+)
+
+// ChatMessagesTotal counts every chat:message that survives the cap +
+// rate-limit gates and is broadcast to the room. Tracks both the persisted
+// LIST entry AND the wire fanout (1:1 relationship).
+var ChatMessagesTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "wt_chat_messages_total",
+	Help: "Chat messages broadcast (excludes over-cap and rate-limited rejections)",
+})
+
+// ReactionsTotal counts every chat:reaction broadcast. Reactions are
+// ephemeral (no Redis LIST append) but still bumps a counter so the Phase 5
+// Grafana panel can size the activity overlay properly.
+var ReactionsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "wt_reactions_total",
+	Help: "Emoji reactions broadcast to watch-together rooms (not persisted)",
+})
+
+// init registers every metric onto the default Prometheus registry so the
 // service-wide /metrics handler in cmd/watch-together-api/main.go surfaces
-// it automatically. Mirrors the explicit-MustRegister pattern from
+// them automatically. Mirrors the explicit-MustRegister pattern from
 // internal/hub/metrics.go so a grep for `MustRegister` in this service
 // finds every counter.
 func init() {
-	prometheus.MustRegister(RoomCreateTotal)
+	prometheus.MustRegister(
+		RoomCreateTotal,
+		DriftCorrectionsTotal,
+		RateLimitedTotal,
+		ChatMessagesTotal,
+		ReactionsTotal,
+	)
 }
