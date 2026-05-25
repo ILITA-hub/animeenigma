@@ -67,9 +67,14 @@ const { getRoomMock, FakeRoomGoneError } = vi.hoisted(() => {
 vi.mock('@/api/watch-together', () => ({
   getRoom: (id: string) => getRoomMock(id),
   RoomGoneError: FakeRoomGoneError,
-  // Re-export error codes used by the SUT's error branching.
+  // Re-export error codes used by the SUT's error branching. The Phase 04
+  // (state-switching) Plan 04.4 sender-only error trio joins the original
+  // CAPACITY_FULL + AUTH_EXPIRED codes from Phase 02.
   ERR_CAPACITY_FULL: 'CAPACITY_FULL',
   ERR_AUTH_EXPIRED: 'AUTH_EXPIRED',
+  ERR_EPISODE_UNAVAILABLE: 'EPISODE_UNAVAILABLE',
+  ERR_PLAYER_UNAVAILABLE: 'PLAYER_UNAVAILABLE',
+  ERR_TRANSLATION_UNAVAILABLE: 'TRANSLATION_UNAVAILABLE',
 }))
 
 // `useWatchTogetherRoom(roomId)` returns a stubbed handle whose `connect`
@@ -100,6 +105,9 @@ interface FakeHandle {
   // provide it (even as a no-op) or the view crashes the moment any test
   // reaches the live-room render path.
   onPlaybackEvent: ReturnType<typeof vi.fn>
+  // Plan 04.4 Task 2 — PlayerTabBar routes select-player events through
+  // roomHandle.emitChangePlayer (NOT direct local-state mutation).
+  emitChangePlayer: ReturnType<typeof vi.fn>
 }
 
 function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' | 'raw' = 'kodik'): FakeHandle {
@@ -141,6 +149,8 @@ function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' |
     // (also a no-op) so the component's `onBeforeUnmount` cleanup runs
     // without crashing.
     onPlaybackEvent: vi.fn(() => () => {}),
+    // Plan 04.4 — captured by the PlayerTabBar @select-player handler.
+    emitChangePlayer: vi.fn(),
   }
   return handle
 }
@@ -154,17 +164,32 @@ function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' |
 interface SharedState {
   currentHandle: FakeHandle | null
   pushMock: ReturnType<typeof vi.fn>
+  // Plan 04.4 — toast.push spy (separate from router.push above so the
+  // AUTH_EXPIRED router test and the state-error toast tests don't share
+  // a spy and confuse each other's call-count assertions).
+  toastPushMock: ReturnType<typeof vi.fn>
 }
 const sharedState = vi.hoisted(
   () =>
     ({
       currentHandle: null,
       pushMock: vi.fn(),
+      toastPushMock: vi.fn(),
     }) as SharedState,
 )
 
 vi.mock('@/composables/useWatchTogetherRoom', () => ({
   useWatchTogetherRoom: vi.fn(() => sharedState.currentHandle),
+}))
+
+// Plan 04.4 — useToast() is consumed by the SUT to surface sender-only
+// state-error codes as user-visible toasts. Mock to a stable spy.
+vi.mock('@/composables/useToast', () => ({
+  useToast: () => ({
+    push: sharedState.toastPushMock,
+    dismiss: vi.fn(),
+    toasts: { value: [] },
+  }),
 }))
 
 // vue-router mock — capture router.push for the AUTH_EXPIRED test.
@@ -227,6 +252,18 @@ const RawPlayerStub = {
   props: ['animeId', 'room'],
   template: '<div data-testid="raw-player-stub" />',
 }
+// Plan 04.4 Task 2 — PlayerTabBar stub. Exposes a synthetic `select-player`
+// emitter via a button so tests can drive the @select-player handler.
+const PlayerTabBarStub = {
+  name: 'PlayerTabBar',
+  props: ['activePlayer', 'disabled'],
+  emits: ['select-player'],
+  template:
+    '<div data-testid="player-tab-bar-stub" :data-active="activePlayer">' +
+    '<button data-testid="tabbar-emit-animelib" @click="$emit(\'select-player\', \'animelib\')">switch</button>' +
+    '<button data-testid="tabbar-emit-same" @click="$emit(\'select-player\', activePlayer)">same</button>' +
+    '</div>',
+}
 
 const globalStubs = {
   RoomSidebar: RoomSidebarStub,
@@ -236,6 +273,7 @@ const globalStubs = {
   OurEnglishPlayer: OurEnglishPlayerStub,
   HanimePlayer: HanimePlayerStub,
   RawPlayer: RawPlayerStub,
+  PlayerTabBar: PlayerTabBarStub,
 }
 
 function mountView() {
@@ -249,6 +287,7 @@ function mountView() {
 beforeEach(() => {
   getRoomMock.mockReset()
   sharedState.pushMock.mockReset()
+  sharedState.toastPushMock.mockReset()
   lastErrorHandler = null
   lastRoomClosedHandler = null
   sharedState.currentHandle = makeFakeHandle()
@@ -413,5 +452,86 @@ describe('WatchTogetherView', () => {
     expect(html).not.toMatch(/\bfont-bold\b/)
     expect(html).not.toMatch(/\bfont-black\b/)
     expect(html).not.toMatch(/\bfont-extrabold\b/)
+  })
+
+  // ── Plan 04.4 Task 2 — re-mount + tab routing + state-error toasts ───
+
+  it('Test 14: Player re-mount — mutating room.player from kodik to animelib swaps the mounted player', async () => {
+    sharedState.currentHandle = makeFakeHandle('kodik')
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    const wrapper = mountView()
+    await flushPromises()
+    // Pre-condition: Kodik mounted, others not.
+    expect(wrapper.findComponent(KodikPlayerStub).exists()).toBe(true)
+    expect(wrapper.findComponent(AnimeLibPlayerStub).exists()).toBe(false)
+    // Drive the state change as the composable's auto-mutator would.
+    const h = sharedState.currentHandle!
+    ;(h.room.value as { player: string }).player = 'animelib'
+    await flushPromises()
+    expect(wrapper.findComponent(KodikPlayerStub).exists()).toBe(false)
+    expect(wrapper.findComponent(AnimeLibPlayerStub).exists()).toBe(true)
+  })
+
+  it('Test 15: PlayerTabBar @select-player → roomHandle.emitChangePlayer (single call, right arg)', async () => {
+    sharedState.currentHandle = makeFakeHandle('kodik')
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    const wrapper = mountView()
+    await flushPromises()
+    const h = sharedState.currentHandle!
+    expect(h.emitChangePlayer).not.toHaveBeenCalled()
+    await wrapper.find('[data-testid="tabbar-emit-animelib"]').trigger('click')
+    expect(h.emitChangePlayer).toHaveBeenCalledTimes(1)
+    expect(h.emitChangePlayer).toHaveBeenCalledWith('animelib')
+  })
+
+  it('Test 16: PlayerTabBar @select-player with currently-active kind is a no-op (no emitChangePlayer call)', async () => {
+    sharedState.currentHandle = makeFakeHandle('kodik')
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    const wrapper = mountView()
+    await flushPromises()
+    const h = sharedState.currentHandle!
+    // Stub's "same" button emits select-player with the current activePlayer.
+    await wrapper.find('[data-testid="tabbar-emit-same"]').trigger('click')
+    expect(h.emitChangePlayer).not.toHaveBeenCalled()
+  })
+
+  it('Test 17: EPISODE_UNAVAILABLE error → toast.push with i18n key + "error" type', async () => {
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    mountView()
+    await flushPromises()
+    expect(typeof lastErrorHandler).toBe('function')
+    lastErrorHandler?.({ code: 'EPISODE_UNAVAILABLE' })
+    await flushPromises()
+    expect(sharedState.toastPushMock).toHaveBeenCalledTimes(1)
+    expect(sharedState.toastPushMock).toHaveBeenCalledWith(
+      'watch_together.state_change_episode_unavailable',
+      'error',
+    )
+  })
+
+  it('Test 18: PLAYER_UNAVAILABLE error → toast.push with i18n key + "error" type', async () => {
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    mountView()
+    await flushPromises()
+    lastErrorHandler?.({ code: 'PLAYER_UNAVAILABLE' })
+    await flushPromises()
+    expect(sharedState.toastPushMock).toHaveBeenCalledTimes(1)
+    expect(sharedState.toastPushMock).toHaveBeenCalledWith(
+      'watch_together.state_change_player_unavailable',
+      'error',
+    )
+  })
+
+  it('Test 19: TRANSLATION_UNAVAILABLE error → toast.push with i18n key + "error" type', async () => {
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    mountView()
+    await flushPromises()
+    lastErrorHandler?.({ code: 'TRANSLATION_UNAVAILABLE' })
+    await flushPromises()
+    expect(sharedState.toastPushMock).toHaveBeenCalledTimes(1)
+    expect(sharedState.toastPushMock).toHaveBeenCalledWith(
+      'watch_together.state_change_translation_unavailable',
+      'error',
+    )
   })
 })
