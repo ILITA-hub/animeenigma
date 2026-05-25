@@ -121,6 +121,13 @@ func (f *fakeKwikExtractor) Extract(ctx context.Context, embedURL string, header
 
 var _ domain.EmbedExtractor = (*fakeKwikExtractor)(nil)
 
+// testEpSession is a realistic AnimePahe episodeSession (64-char lowercase
+// hex) used by ListServers/GetStream tests. It satisfies the resolver's
+// `^[A-Za-z0-9-]{16,128}$` session contract — earlier tests used short
+// placeholders ("ep-session", "b") that the real sidecar would 400 and that
+// the ISS-016 foreign-id guard correctly rejects.
+const testEpSession = "e2e512651a2794df854216f11d88a5dfdaade2d6d4649de27bdedeb46c3cdbea"
+
 func newTestLogger(t *testing.T) *logger.Logger {
 	t.Helper()
 	log, err := logger.New(logger.Config{Level: "error", Encoding: "console"})
@@ -468,7 +475,7 @@ func TestProvider_ListServers_HappyPath(t *testing.T) {
 	defer srv.Close()
 	p, _, _, _ := newTestProvider(t, srv)
 
-	servers, err := p.ListServers(context.Background(), "anime-session", "ep-session")
+	servers, err := p.ListServers(context.Background(), "anime-session", testEpSession)
 	if err != nil {
 		t.Fatalf("ListServers err = %v", err)
 	}
@@ -508,7 +515,7 @@ func TestProvider_ListServers_DubAudio(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, _, _, _ := newTestProvider(t, srv)
-	servers, err := p.ListServers(context.Background(), "a", "b")
+	servers, err := p.ListServers(context.Background(), "a", testEpSession)
 	if err != nil {
 		t.Fatalf("ListServers err = %v", err)
 	}
@@ -538,7 +545,7 @@ func TestProvider_ListServers_NoButtons(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, _, _, _ := newTestProvider(t, srv)
-	servers, err := p.ListServers(context.Background(), "a", "b")
+	servers, err := p.ListServers(context.Background(), "a", testEpSession)
 	if err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
@@ -562,7 +569,7 @@ func TestProvider_ListServers_SelectorDrift(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, _, _, _ := newTestProvider(t, srv)
-	_, err := p.ListServers(context.Background(), "a", "b")
+	_, err := p.ListServers(context.Background(), "a", testEpSession)
 	if !errors.Is(err, domain.ErrExtractFailed) {
 		t.Errorf("err = %v; want ErrExtractFailed", err)
 	}
@@ -582,7 +589,7 @@ func TestProvider_GetStream_HappyPath(t *testing.T) {
 	}
 	fk.streams[kwikURL] = wantStream
 
-	stream, err := p.GetStream(context.Background(), "anime-sess", "ep-sess", kwikURL, domain.CategorySub)
+	stream, err := p.GetStream(context.Background(), "anime-sess", testEpSession, kwikURL, domain.CategorySub)
 	if err != nil {
 		t.Fatalf("GetStream err = %v", err)
 	}
@@ -602,10 +609,10 @@ func TestProvider_GetStream_HappyPath(t *testing.T) {
 	if got, want := fk.lastReferer, "https://animepahe.pw/"; got != want {
 		t.Errorf("Kwik extractor Referer (literal) = %q; want %q (D2 alignment)", got, want)
 	}
-	// Cache should contain a stream:animepahe:anime-sess:ep-sess:* key.
+	// Cache should contain a stream:animepahe:anime-sess:<episodeID>:* key.
 	found := false
 	for _, k := range fc.snapshotSetLog() {
-		if strings.HasPrefix(k, "stream:animepahe:anime-sess:ep-sess:") {
+		if strings.HasPrefix(k, "stream:animepahe:anime-sess:"+testEpSession+":") {
 			found = true
 		}
 	}
@@ -624,7 +631,7 @@ func TestProvider_GetStream_NoExtractor(t *testing.T) {
 	// Override the registry to have NO extractors.
 	p.embeds = domain.NewRegistry()
 
-	_, err := p.GetStream(context.Background(), "a", "b", "https://kwik.cx/e/abc", domain.CategorySub)
+	_, err := p.GetStream(context.Background(), "a", testEpSession, "https://kwik.cx/e/abc", domain.CategorySub)
 	if !errors.Is(err, domain.ErrExtractFailed) {
 		t.Errorf("err = %v; want ErrExtractFailed", err)
 	}
@@ -641,7 +648,7 @@ func TestProvider_GetStream_CacheTTL_Capped(t *testing.T) {
 	streamURL := fmt.Sprintf("https://stream/m3u8?expires=%d", expires)
 	fk.streams[kwikURL] = &domain.Stream{Sources: []domain.Source{{URL: streamURL, Type: "hls"}}}
 
-	_, err := p.GetStream(context.Background(), "x", "y", kwikURL, domain.CategorySub)
+	_, err := p.GetStream(context.Background(), "x", testEpSession, kwikURL, domain.CategorySub)
 	if err != nil {
 		t.Fatalf("GetStream err = %v", err)
 	}
@@ -649,7 +656,7 @@ func TestProvider_GetStream_CacheTTL_Capped(t *testing.T) {
 	// the cache entry exists (i.e. TTL was > 0 ⇒ cache wrote).
 	foundCacheWrite := false
 	for _, k := range fc.snapshotSetLog() {
-		if strings.HasPrefix(k, "stream:animepahe:x:y:") {
+		if strings.HasPrefix(k, "stream:animepahe:x:"+testEpSession+":") {
 			foundCacheWrite = true
 		}
 	}
@@ -668,13 +675,13 @@ func TestProvider_GetStream_CacheTTL_NoExpiresParam(t *testing.T) {
 	kwikURL := "https://kwik.cx/e/abc-no-expires"
 	fk.streams[kwikURL] = &domain.Stream{Sources: []domain.Source{{URL: "https://stream/m3u8", Type: "hls"}}}
 
-	_, err := p.GetStream(context.Background(), "a", "b", kwikURL, domain.CategorySub)
+	_, err := p.GetStream(context.Background(), "a", testEpSession, kwikURL, domain.CategorySub)
 	if err != nil {
 		t.Fatalf("GetStream err = %v", err)
 	}
 	foundCacheWrite := false
 	for _, k := range fc.snapshotSetLog() {
-		if strings.HasPrefix(k, "stream:animepahe:a:b:") {
+		if strings.HasPrefix(k, "stream:animepahe:a:"+testEpSession+":") {
 			foundCacheWrite = true
 		}
 	}
@@ -695,7 +702,7 @@ func TestProvider_GetStream_ExpiredURL_NoCacheWrite(t *testing.T) {
 	streamURL := fmt.Sprintf("https://stream/m3u8?expires=%d", expires)
 	fk.streams[kwikURL] = &domain.Stream{Sources: []domain.Source{{URL: streamURL, Type: "hls"}}}
 
-	_, err := p.GetStream(context.Background(), "x", "y", kwikURL, domain.CategorySub)
+	_, err := p.GetStream(context.Background(), "x", testEpSession, kwikURL, domain.CategorySub)
 	if err != nil {
 		t.Fatalf("GetStream err = %v", err)
 	}
@@ -871,5 +878,107 @@ func TestProvider_ListEpisodes_ZeroMatchEmitsCounter(t *testing.T) {
 	after := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "episode_list_item"))
 	if delta := after - before; delta != 1 {
 		t.Errorf("parser_zero_match_total delta = %v; want 1", delta)
+	}
+}
+
+// foreignEpisodeID is allanime's "<showID>:<ep>" episode-ID shape. It leaks
+// into animepahe's ListServers/GetStream when an earlier stage failed over
+// (the orchestrator re-runs the chain from animepahe carrying the prior
+// provider's episode ID). It fails the resolver's `^[A-Za-z0-9-]{16,128}$`
+// session schema (the ':' is illegal), so without the ISS-016 guard it would
+// reach the sidecar and come back 400/404.
+const foreignEpisodeID = "PcZRitDAgNmrwdY2p:1"
+
+// TestProvider_ListServers_ForeignEpisodeIDShortCircuits — ISS-016: a foreign
+// (non-session-shaped) episode ID returns ErrNotFound WITHOUT touching the
+// sidecar, and bumps parser_zero_match_total{...,selector="foreign_episode_id"}.
+// Not parallel: asserts a global-counter delta.
+func TestProvider_ListServers_ForeignEpisodeIDShortCircuits(t *testing.T) {
+	before := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "foreign_episode_id"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("sidecar must NOT be called for a foreign episode id; got %s", r.URL.Path)
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+
+	_, err := p.ListServers(context.Background(), "valid-anime-session-0001", foreignEpisodeID)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("ListServers err = %v; want ErrNotFound", err)
+	}
+	after := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "foreign_episode_id"))
+	if delta := after - before; delta != 1 {
+		t.Errorf("foreign_episode_id delta = %v; want 1", delta)
+	}
+}
+
+// TestProvider_GetStream_ForeignEpisodeIDShortCircuits — ISS-016: same guard on
+// the GetStream path. The guard fires before the cache lookup and the embed
+// extractor, so the error is ErrNotFound (not ErrExtractFailed).
+func TestProvider_GetStream_ForeignEpisodeIDShortCircuits(t *testing.T) {
+	before := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "foreign_episode_id"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("sidecar must NOT be called for a foreign episode id; got %s", r.URL.Path)
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+
+	_, err := p.GetStream(context.Background(), "valid-anime-session-0001", foreignEpisodeID, "https://kwik.cx/e/abc", domain.CategorySub)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("GetStream err = %v; want ErrNotFound", err)
+	}
+	after := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "foreign_episode_id"))
+	if delta := after - before; delta != 1 {
+		t.Errorf("foreign_episode_id delta = %v; want 1", delta)
+	}
+}
+
+// TestProvider_ListServers_ValidSessionPassesGuard — a session-shaped episode
+// ID is NOT short-circuited: it reaches the /play path (the happy-path fixture
+// confirms this end-to-end, here we just assert the guard lets it through).
+func TestProvider_ListServers_ValidSessionPassesGuard(t *testing.T) {
+	t.Parallel()
+	reached := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case reached <- struct{}{}:
+		default:
+		}
+		_, _ = w.Write(loadFixture(t, "play_session_ep1.html"))
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+
+	if _, err := p.ListServers(context.Background(), "valid-anime-session-0001", testEpSession); err != nil {
+		t.Fatalf("ListServers err = %v; want nil (valid session must pass the guard)", err)
+	}
+	select {
+	case <-reached:
+	default:
+		t.Error("expected the /play sidecar call to be reached for a valid session id")
+	}
+}
+
+// TestProvider_FindID_FuzzyNoMatchEmitsCounter — ISS-016: when the fuzzy
+// /search best score is below threshold, parser_zero_match_total{...,
+// selector="fuzzy_no_match"} increments by 1 (the signal the English-titled
+// golden-pool probe masks). Not parallel: global-counter delta.
+func TestProvider_FindID_FuzzyNoMatchEmitsCounter(t *testing.T) {
+	before := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "fuzzy_no_match"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"total":1,"data":[{"id":99,"session":"sx0000000000000001","title":"Completely Different Show","type":"TV","year":2020,"episodes":12}]}`))
+	}))
+	defer srv.Close()
+	p, _, _, _ := newTestProvider(t, srv)
+
+	_, err := p.FindID(context.Background(), domain.AnimeRef{Title: "Shingeki no Kyojin"})
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("FindID err = %v; want ErrNotFound", err)
+	}
+	after := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animepahe", "fuzzy_no_match"))
+	if delta := after - before; delta != 1 {
+		t.Errorf("fuzzy_no_match delta = %v; want 1", delta)
 	}
 }

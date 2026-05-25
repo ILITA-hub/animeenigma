@@ -290,6 +290,33 @@ Track issues discovered during development. Each entry should include root cause
 - **Operator next step (optional):** When the rest of the popular catalog migrates and new uploads also stop using `my.1anime.site`, add `nineanime` to `SCRAPER_DEGRADED_PROVIDERS` in `docker/.env`. The doc.go-documented kill-switch removes the provider from the EN failover chain without any code change.
 - **Status:** Fixed (extractor + bot dispatch). Open (kill-switch decision deferred to operator — depends on rate of new-upload migration).
 
+### ISS-016: AnimePahe sidecar `/play`+`/release` 400/404s were failover noise — not a sidecar bug (probe masking + romaji-title gap)
+- **Date:** 2026-05-25
+- **Severity:** Low (no user-facing breakage — investigation reclassified a suspected outage as expected behavior). animepahe resolves correctly for all title-resolvable anime; the residual is log noise + an observability gap.
+- **Affected:** `animepahe` provider's `servers`/`stream` stages (the spurious 400/404 sidecar calls); the liveness probe's accuracy for animepahe.
+- **Symptom (reported):** `animepahe-resolver: /play non-200: status 400` and `/release not found upstream: status 404` in scraper failover logs, while the liveness probe reported animepahe all-stages-UP.
+- **Root cause (single cascade, measured live):**
+  1. **malsync.moe returns numeric animepahe IDs** (e.g. AoT=`49`); `SCRAPER-HEAL-32` rejects non-UUID IDs via `isSessionShape`, so `FindID` always uses the fuzzy `/search` path (Jaro-Winkler ≥ 0.85, `animepahe/client.go`).
+  2. The fuzzy match needs a title matching animepahe's **English** listing. The catalog sends `anime.NameEN` when set, else Shikimori **romaji** `anime.Name` (`catalog .../scraper.go:81-84`). When romaji ≠ English ("Shingeki no Kyojin" vs "Attack on Titan" = 0.50; "Sousou no Frieren" vs "Frieren: Beyond Journey's End" = 0.63), `FindID` fails and the orchestrator **fails over to allanime — the user still gets a stream.**
+  3. The servers/stream stages then re-run the chain from animepahe carrying allanime's `<showID>:<ep>` **episode** ID (contains `:`) → sidecar `/play` **400**; the episodes stage re-runs animepahe's `ListEpisodes` with allanime's bare `<showID>` **anime** ID → sidecar `/release` **404**. Both are pure failover artifacts, not bugs. Note the two are shape-different: the episode ID has a `:` (catchable), but the bare show ID (`PcZRitDAgNmrwdY2p`, 17 alnum chars) is **indistinguishable** from a real animepahe session by `SESSION_PATTERN` alone.
+  4. The probe's golden pool uses **English** titles ("Attack on Titan") → animepahe always green → the whole thing was invisible.
+- **`name_en` AniList backfill considered and REJECTED by measurement.** Sampled 18 empty-`name_en` anime against AniList + live animepahe:
+
+  | Bucket | Count/18 | Backfill helps? |
+  |---|---|---|
+  | AniList English title == romaji `name` (Vinland Saga, SPY×FAMILY, Cyberpunk: Edgerunners, Idol, Dorohedoro, Chihayafuru, Medalist) | ~9 | No — already resolve on animepahe via romaji (verified live: 24/12/10 eps) |
+  | AniList `english: null` | 7 | No — no English title exists anywhere |
+  | romaji ≠ English AND AniList has English AND `name_en` empty | ~0 | (the only bucket backfill could fix — nearly empty) |
+
+  Anime where romaji genuinely differs from English (AoT, Demon Slayer, Frieren) **already have `name_en` populated** by Shikimori, so they're not in the empty set at all. ⇒ no Go-only resolution fix has meaningful benefit; allanime failover is the correct safety net for the unfixable tail.
+- **Fix applied (2026-05-25) — lean: silence the noise, surface the signal, document it:**
+  - **Foreign-episode-ID guard** in `ListServers`/`GetStream` (`services/scraper/internal/providers/animepahe/client.go`): reuse `isSessionShape`; a `:`-containing / non-session episode ID returns `domain.ErrNotFound` (failover-retryable) **before** the sidecar call. Emits `parser_zero_match_total{provider="animepahe",selector="foreign_episode_id"}`. This eliminates the `/play 400`. The `/release 404` from the episodes stage is **intentionally NOT guarded** (review m1): allanime's bare show ID is session-shaped, so a shape guard can't distinguish it — fully eliminating it would require cross-stage provider pinning in the orchestrator (deliberately out of scope; the failed `/release` triggers correct, harmless failover).
+  - **Fuzzy-miss metric** `parser_zero_match_total{provider="animepahe",selector="fuzzy_no_match"}` at the sub-threshold branch — the signal the English-titled golden-pool probe masks. (Probe deliberately NOT changed to romaji: it tests providers in isolation, so a romaji entry would be a perpetual false-red.)
+  - Regression tests in `client_test.go`: `TestProvider_ListServers/GetStream_ForeignEpisodeIDShortCircuits`, `TestProvider_ListServers_ValidSessionPassesGuard`, `TestProvider_FindID_FuzzyNoMatchEmitsCounter`. (Pre-existing tests used unrealistic short episode IDs the real sidecar would 400 — switched to a contract-valid 64-hex `testEpSession`.)
+  - `.claude/maintenance-prompt.md`: two `info_only` Pattern-7 sub-signals (both expected behavior, not regressions; escalate only if allanime is ALSO down).
+- **Verification:** `go test ./internal/providers/animepahe/... -race` green; live E2E — a romaji-title `prefer=animepahe` request fails over to allanime: the `/play 400` is gone (replaced by a clean `animepahe: foreign episode id` short-circuit), the `/release 404` remains (episodes stage, by design — see above), and both counters increment (`foreign_episode_id=1`, `fuzzy_no_match=2`). A normal romaji==English title (Vinland Saga, empty `name_en`) still resolves on animepahe (24 eps, kwik servers).
+- **Status:** Fixed (noise + observability + docs). The romaji↔English tail intentionally relies on allanime failover — no further action unless allanime degrades for the same titles.
+
 ## Resolved Issues
 
 ### ISS-010: Search returns empty / single result for any anime not in local DB (Shikimori .one → .io migration)

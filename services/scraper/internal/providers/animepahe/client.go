@@ -125,6 +125,19 @@ const (
 	selectorEpisodeListItem = "episode_list_item"
 	selectorServerLink      = "server_link"
 	selectorKwikPackedJS    = "kwik_packed_js"
+	// selectorForeignEpisodeID counts ListServers/GetStream calls that
+	// arrived with an episode ID that cannot be an AnimePahe session
+	// (e.g. allanime's "<showID>:<ep>" leaked in when an earlier stage
+	// failed over). We short-circuit to ErrNotFound BEFORE hitting the
+	// sidecar so it never wastes a /play|/release call that the resolver
+	// schema would reject with 400/404 (ISS-016).
+	selectorForeignEpisodeID = "foreign_episode_id"
+	// selectorFuzzyNoMatch counts FindID fuzzy /search runs where the best
+	// Jaro-Winkler score fell below fuzzyMatchThreshold. This is the signal
+	// the English-titled golden-pool probe masks: animepahe genuinely can't
+	// match a romaji-only title against its English listing, and the
+	// orchestrator fails over to allanime (ISS-016).
+	selectorFuzzyNoMatch = "fuzzy_no_match"
 )
 
 // malSyncClient is the malsync lookup contract — abstracted so tests can
@@ -311,6 +324,11 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 		}
 	}
 	if best.score < fuzzyMatchThreshold || best.session == "" {
+		// ISS-016: surface the miss as a metric. The liveness probe uses
+		// English golden-pool titles that always match animepahe's English
+		// listing, so this failure mode (romaji-only title → no match → the
+		// orchestrator fails over to allanime) is otherwise invisible.
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorFuzzyNoMatch).Inc()
 		err := domain.WrapNotFound(
 			fmt.Errorf("best score %.4f", best.score),
 			"animepahe: no fuzzy match for "+ref.Title,
@@ -392,6 +410,21 @@ func (p *Provider) ListEpisodes(ctx context.Context, providerID string) ([]domai
 // + data-audio sub/dub derivation (CR-02) are preserved byte-for-byte
 // from the pre-Phase-27 implementation.
 func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string) ([]domain.Server, error) {
+	// ISS-016: an AnimePahe episodeSession is session-shaped (64-char hex,
+	// no ':'). When an earlier stage failed over to another provider, the
+	// orchestrator re-runs this stage from animepahe carrying that
+	// provider's episode ID (e.g. allanime's "<showID>:<ep>"). The sidecar's
+	// /play schema would reject it with HTTP 400; short-circuit to a
+	// retryable ErrNotFound here so the orchestrator advances silently.
+	if !isSessionShape(episodeID) {
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorForeignEpisodeID).Inc()
+		err := domain.WrapNotFound(
+			fmt.Errorf("episode id %q is not an animepahe session", episodeID),
+			"animepahe: foreign episode id",
+		)
+		p.markStage(health.StageServers, err)
+		return nil, err
+	}
 	body, err := p.resolver.Play(ctx, providerID, episodeID)
 	if err != nil {
 		p.markStage(health.StageServers, err)
@@ -461,6 +494,17 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 // (the kwik URL is sufficient to disambiguate sub vs dub).
 func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverID string, category domain.Category) (*domain.Stream, error) {
 	_ = category // informational only; see WR-06 note above.
+	// ISS-016: reject a foreign-shaped episode ID before doing any work
+	// (cache lookup or sidecar call). See the matching guard in ListServers.
+	if !isSessionShape(episodeID) {
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorForeignEpisodeID).Inc()
+		err := domain.WrapNotFound(
+			fmt.Errorf("episode id %q is not an animepahe session", episodeID),
+			"animepahe: foreign episode id",
+		)
+		p.markStage(health.StageStream, err)
+		return nil, err
+	}
 	// Cache key: hash the serverID (kwik URL) for bounded length.
 	h := sha256.Sum256([]byte(serverID))
 	cacheKey := fmt.Sprintf("stream:%s:%s:%s:%s", providerName, providerID, episodeID, hex.EncodeToString(h[:8]))
