@@ -5,13 +5,13 @@ milestone: v1.1-polish
 milestone_name: HeroSpotlightVisualPolish
 status: in_progress
 last_updated: "2026-05-25"
-last_activity: "2026-05-25 — Phases 02–08 COMPLETE + deployed. Phase 08 (PlatformStatsCard): hero stat + 2×2 micro-grid + pure-SVG Sparkline + DeltaChip; backend StatsMetric gains previous_value + series[7] (dialect-portable per-day COUNTs). 302/302 spotlight Vitest passing; tsc clean; catalog spotlight Go tests green (race clean). Worktree branched from current HEAD → clean fast-forward merge. Phases 09–10 remaining (09 touches the catalog backend)."
+last_activity: "2026-05-25 — Phases 02–09 COMPLETE + deployed. Phase 09 (NotTimeYetCard): amber/clock identity, status pill, addedAt timestamp, direct-to-watch CTA; backend NotTimeYetData.AddedAt from anime_list.updated_at (nil-safe RFC3339 parse). Extracted shared formatAgo to utils/time.ts. 319/319 spotlight+util+parity Vitest passing; tsc clean; catalog spotlight Go tests green. Phase 10 (ContinueWatchingNewCard, frontend-only) is the last remaining card."
 progress:
   total_phases: 10
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 10
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State — `hero-spotlight` workstream
@@ -28,15 +28,15 @@ progress:
 
 ## Current Position
 
-**Status:** v1.1-polish in progress — 8 / 10 phases shipped & deployed.
-**Current Phase:** none in progress (between Phase 08 and Phase 09)
-**Next Phase to Execute:** Phase 09 — NotTimeYetCard refactor (touches catalog backend)
+**Status:** v1.1-polish in progress — 9 / 10 phases shipped & deployed.
+**Current Phase:** none in progress (between Phase 09 and Phase 10)
+**Next Phase to Execute:** Phase 10 — ContinueWatchingNewCard refactor (frontend-only)
 **Last Activity:** 2026-05-25
 
 ## Progress
 
-**Phases Complete:** 8 / 10
-**Plans Complete:** 8 / 10 (one PLAN.md per phase; all written)
+**Phases Complete:** 9 / 10
+**Plans Complete:** 9 / 10 (one PLAN.md per phase; all written)
 
 ## Phase Breakdown
 
@@ -50,14 +50,14 @@ progress:
 | 06 | TelegramNewsCard refactor | **Complete (deployed)** | cards/TelegramNewsCard.vue + backend image_url | 01 |
 | 07 | LatestNewsCard refactor | **Complete (deployed)** | cards/LatestNewsCard.vue, tokens.latest_news widening | 01 |
 | 08 | PlatformStatsCard refactor | **Complete (deployed)** | cards/PlatformStatsCard.vue + Sparkline + DeltaChip + StatsMetric series/previous_value | 01 |
-| 09 | NotTimeYetCard refactor | Planned | cards/NotTimeYetCard.vue + backend added_at pass-through | 01 |
+| 09 | NotTimeYetCard refactor | **Complete (deployed)** | cards/NotTimeYetCard.vue + NotTimeYetData.AddedAt + utils/time.ts | 01 |
 | 10 | ContinueWatchingNewCard refactor | Planned | cards/ContinueWatchingNewCard.vue | 01 |
 
 ## Session Continuity
 
-**Stopped At:** Phases 01–08 shipped & deployed to https://animeenigma.ru/. Phase 08 worktree branched from current HEAD → clean fast-forward merge (no stale-base conflicts). Phases 09–10 remaining.
+**Stopped At:** Phases 01–09 shipped & deployed to https://animeenigma.ru/. Phases 08+09 worktrees branched from current HEAD → clean fast-forward merges. Phase 10 (ContinueWatchingNewCard, frontend-only) remaining, then milestone close-out.
 **Resume File:** None
-**Next Command:** continue autonomous run — Phase 09 (NotTimeYetCard, touches catalog backend)
+**Next Command:** continue autonomous run — Phase 10 (ContinueWatchingNewCard, frontend-only)
 
 ## Open Questions (carried from v1.0)
 
