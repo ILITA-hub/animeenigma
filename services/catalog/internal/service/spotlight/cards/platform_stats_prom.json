@@ -1,0 +1,7 @@
+[
+  { "id": "requests", "label": "Запросов обработано", "metric": "http_requests_total", "format": "int", "windows": ["day", "week", "all"] },
+  { "id": "responses", "label": "Ответов отдано", "metric": "http_request_duration_seconds_count", "format": "int", "windows": ["day", "week", "all"] },
+  { "id": "bytes", "label": "Данных отдано", "metric": "http_response_size_bytes_sum", "format": "bytes", "windows": ["day", "week", "all"] },
+  { "id": "go_routines", "label": "Горутин крутится", "metric": "go_goroutines", "format": "int", "windows": ["all"] },
+  { "id": "anime_requests", "label": "Запросов к каталогу", "metric": "http_requests_total", "format": "int", "windows": ["week", "all"] }
+]
