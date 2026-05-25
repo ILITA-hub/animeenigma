@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight/client"
@@ -129,6 +130,62 @@ func TestNotTimeYet_AiringHappy_RandomPick(t *testing.T) {
 	}
 	if data.Status != "planned" && data.Status != "postponed" {
 		t.Errorf("Status should be planned or postponed, got %q", data.Status)
+	}
+}
+
+func TestNotTimeYet_AddedAt_PopulatedFromUpdatedAt(t *testing.T) {
+	// Single airing candidate so the random pick is deterministic; its
+	// updated_at must flow through to NotTimeYetData.AddedAt (HSB-V11-NT-01).
+	updated := "2026-05-10T08:30:00Z"
+	f := &fakeListByStatuses{items: []client.InternalListItem{
+		{AnimeID: "airing-1", Name: "AiringA", Status: "planned", EpisodesAired: 3, EpisodesCount: 12, UpdatedAt: updated},
+	}}
+	c := newFakeCache()
+	r := NewNotTimeYetResolver(f, c, seededRng(1), testLogger())
+
+	card, err := r.Resolve(context.Background(), ptr("u1"))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if card == nil {
+		t.Fatal("expected non-nil card")
+	}
+	data := card.Data.(spotlight.NotTimeYetData)
+	if data.AddedAt == nil {
+		t.Fatal("expected AddedAt to be populated from a non-zero UpdatedAt, got nil")
+	}
+	want, _ := time.Parse(time.RFC3339, updated)
+	if !data.AddedAt.Equal(want) {
+		t.Errorf("AddedAt = %v; want %v", data.AddedAt, want)
+	}
+}
+
+func TestNotTimeYet_AddedAt_NilWhenUpdatedAtEmptyOrInvalid(t *testing.T) {
+	cases := map[string]string{
+		"empty":   "",
+		"garbage": "not-a-timestamp",
+		"zero":    "0001-01-01T00:00:00Z",
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := &fakeListByStatuses{items: []client.InternalListItem{
+				{AnimeID: "airing-1", Name: "AiringA", Status: "postponed", EpisodesAired: 5, EpisodesCount: 24, UpdatedAt: raw},
+			}}
+			c := newFakeCache()
+			r := NewNotTimeYetResolver(f, c, seededRng(1), testLogger())
+
+			card, err := r.Resolve(context.Background(), ptr("u1"))
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if card == nil {
+				t.Fatal("expected non-nil card")
+			}
+			data := card.Data.(spotlight.NotTimeYetData)
+			if data.AddedAt != nil {
+				t.Errorf("expected nil AddedAt for %q, got %v", raw, data.AddedAt)
+			}
+		})
 	}
 }
 
