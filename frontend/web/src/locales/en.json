@@ -1019,16 +1019,6 @@
       "typeFix": "Bug fix",
       "typePerf": "Performance"
     },
-    "platformStats": {
-      "title": "Platform this week",
-      "animeAdded7d": "New anime",
-      "episodesAdded7d": "New episodes",
-      "activeRooms7d": "Watch parties",
-      "deltaPositive": "+{n} vs last week",
-      "noChange": "—",
-      "lastSevenDays": "Last 7 days",
-      "vsPriorWeek": "vs prior week"
-    },
     "personalPick": {
       "title": "Picked for you",
       "titleWithName": "For you, {name}",

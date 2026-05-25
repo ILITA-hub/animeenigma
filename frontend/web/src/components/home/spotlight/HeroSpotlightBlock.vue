@@ -334,7 +334,7 @@ function cardTitle(card: SpotlightCard): string {
     case 'latest_news':
       return t('spotlight.latestNews.title')
     case 'platform_stats':
-      return t('spotlight.platformStats.title')
+      return 'Как дела у платформы'
     case 'personal_pick':
       return card.data.source === 'trending'
         ? t('spotlight.personalPick.titleAnon')

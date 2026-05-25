@@ -1019,16 +1019,6 @@
       "typeFix": "Исправление",
       "typePerf": "Улучшение"
     },
-    "platformStats": {
-      "title": "Платформа за неделю",
-      "animeAdded7d": "Новых аниме",
-      "episodesAdded7d": "Новых серий",
-      "activeRooms7d": "Совместных просмотров",
-      "deltaPositive": "+{n} за неделю",
-      "noChange": "—",
-      "lastSevenDays": "За последние 7 дней",
-      "vsPriorWeek": "за прошлую неделю"
-    },
     "personalPick": {
       "title": "Выбрано для вас",
       "titleWithName": "Для вас, {name}",

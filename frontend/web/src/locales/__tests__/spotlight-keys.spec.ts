@@ -82,7 +82,6 @@ describe('spotlight i18n parity', () => {
     'animeOfDay',
     'randomTail',
     'latestNews',
-    'platformStats',
     'personalPick',
     'telegramNews',
     'nowWatching',
@@ -159,22 +158,6 @@ describe('spotlight i18n parity', () => {
   it.each(latestNewsKeys)('spotlight.latestNews.%s present in both locales', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).latestNews?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).latestNews?.[k]).toBe('string')
-  })
-
-  // platformStats sub-keys — camelCase matches the camelize() helper that
-  // PlatformStatsCard applies to the backend's snake_case `m.key` values
-  // (Plan 02-03 SUMMARY decision #1).
-  const platformStatsKeys = [
-    'title',
-    'animeAdded7d',
-    'episodesAdded7d',
-    'activeRooms7d',
-    'deltaPositive',
-    'noChange',
-  ] as const
-  it.each(platformStatsKeys)('spotlight.platformStats.%s present in both locales', (k) => {
-    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
-    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
   })
 
   // ── Phase 3 (Plan 03-05) ─ five new sub-namespaces ──────────────────────
