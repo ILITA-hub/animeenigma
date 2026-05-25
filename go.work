@@ -26,4 +26,5 @@ use (
 	./services/scraper
 	./services/streaming
 	./services/themes
+	./services/watch-together
 )
