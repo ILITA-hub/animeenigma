@@ -40,8 +40,8 @@
       <!-- Tiles (right, 2×2) -->
       <ul class="grid grid-cols-2 gap-3 content-center min-w-0">
         <li
-          v-for="(tile, i) in tiles"
-          :key="i"
+          v-for="tile in tiles"
+          :key="tile.label"
           class="flex flex-col p-3 rounded-lg bg-white/5 backdrop-blur-sm"
         >
           <span class="text-[10px] font-medium text-teal-300 uppercase tracking-wider">
@@ -84,6 +84,9 @@ function windowLabel(w: StatsTile['window']): string {
 }
 
 function formatValue(tile: StatsTile): string {
+  // Defensive: a non-finite or negative value (e.g. an upstream error
+  // sentinel) should never render as "NaN Б" / "-1 КБ".
+  if (!Number.isFinite(tile.value) || tile.value < 0) return '—'
   if (tile.format === 'bytes') return formatBytes(tile.value)
   if (tile.format === 'seconds') return `${tile.value.toFixed(2)} с`
   return Math.round(tile.value).toLocaleString('ru')

@@ -41,6 +41,9 @@ describe('PlatformStatsCard (joke)', () => {
     const w = mount(PlatformStatsCard, { props: { data: clone() } })
     expect(w.text()).toContain('ОЧЕНЬ МНОГО')
     expect(w.text()).toContain('99.4%')
+    // mvq is overridden to a %-free value so the not.toContain('%') below
+    // proves the *uptime percent* is omitted, not just that some '%' is gone
+    // (base.hero.mvq is 'Dragon 99%/99%', which would otherwise contaminate it).
     const w2 = mount(PlatformStatsCard, {
       props: { data: clone({ uptime_percent: null, mvq: 'Dragon top/top' }) },
     })
