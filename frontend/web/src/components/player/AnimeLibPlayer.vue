@@ -298,6 +298,7 @@ import { useWatchSession } from '@/composables/useWatchSession'
 import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
@@ -336,12 +337,11 @@ const props = defineProps<{
   totalEpisodes?: number
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
-  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  // Phase 3 (03.2) — when set, the player sync bridge mirrors play/pause/seek
+  // to the room. When null/undefined the bridge is never instantiated and the
+  // player behaves exactly as it did pre-Phase-3 (zero regression).
   room?: WatchTogetherRoomHandle | null
 }>()
-// Phase 2 (02.7) — reference `props.room` so eslint/no-unused-vars + vue-tsc stay happy.
-// Phase 3 replaces this with real WatchTogether sync wiring.
-void props.room
 
 const emit = defineEmits<{
   (e: 'episodeWatched', data: { episode: number }): void
@@ -372,6 +372,13 @@ const usedPreferredCombo = ref(false)
 
 const translationFilter = ref<'all' | 'voice' | 'subtitles'>('all')
 const videoRef = ref<HTMLVideoElement | null>(null)
+
+// Phase 3 (03.2): wire real WatchTogether sync when a room is provided. When
+// room is null/undefined the bridge is never instantiated and the player
+// behaves exactly as it did pre-Phase-3 (zero regression).
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
 
 // Subtitle state
 const streamSubtitles = ref<AnimeLibSubtitle[]>([])
