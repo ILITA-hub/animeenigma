@@ -435,6 +435,47 @@ func TestExists(t *testing.T) {
 	}
 }
 
+// TestMessageCount_ReturnsLLEN verifies the Plan 05.2 helper used by the
+// rooms.go / grace.go teardown observation path. Empty room returns 0
+// (not an error). After AppendMessage runs N times, MessageCount == N (up
+// to the LTRIM cap of 100).
+func TestMessageCount_ReturnsLLEN(t *testing.T) {
+	r, _ := newRepo(t)
+	ctx := context.Background()
+
+	// Empty room → 0, not an error.
+	n, err := r.MessageCount(ctx, "msgcount-room")
+	if err != nil {
+		t.Fatalf("MessageCount empty: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("empty MessageCount = %d, want 0", n)
+	}
+
+	// Create the room + append 3 messages.
+	if err := r.CreateRoom(ctx, sampleRoom("msgcount-room")); err != nil {
+		t.Fatalf("CreateRoom: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		msg := domain.ChatMessage{
+			ID:   fmt.Sprintf("msg-%02d", i),
+			Body: fmt.Sprintf("body %d", i),
+			TS:   int64(1700000000000 + i),
+		}
+		if err := r.AppendMessage(ctx, "msgcount-room", msg); err != nil {
+			t.Fatalf("AppendMessage[%d]: %v", i, err)
+		}
+	}
+
+	n, err = r.MessageCount(ctx, "msgcount-room")
+	if err != nil {
+		t.Fatalf("MessageCount: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("MessageCount = %d, want 3", n)
+	}
+}
+
 func TestPublishSubscribe_RoundTrip(t *testing.T) {
 	// miniredis supports PubSub since v2.30 — verify the roundtrip end-to-end.
 	r, _ := newRepo(t)

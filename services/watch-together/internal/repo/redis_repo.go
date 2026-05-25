@@ -317,6 +317,18 @@ func (r *RoomRepo) CountMembers(ctx context.Context, roomID string) (int, error)
 	return int(n), nil
 }
 
+// MessageCount returns LLEN on the chat messages LIST. Cheap O(1). Used by
+// Plan 05.2 RoomService.Delete + GraceManager.fire to observe the final
+// chat activity level into wt_chat_messages_per_room before deleting keys.
+// Empty room → 0, not an error.
+func (r *RoomRepo) MessageCount(ctx context.Context, roomID string) (int, error) {
+	n, err := r.client.LLen(ctx, KeyRoomMessages(roomID)).Result()
+	if err != nil {
+		return 0, apperrors.Wrap(err, apperrors.CodeInternal, "watch-together: count messages failed")
+	}
+	return int(n), nil
+}
+
 // AppendMessage LPUSHes the JSON-encoded message onto wt:room:{id}:messages
 // and immediately LTRIMs the LIST to [0, 99] (cap 100, newest at head).
 // Refreshes the sliding TTL on all 3 keys atomically.
