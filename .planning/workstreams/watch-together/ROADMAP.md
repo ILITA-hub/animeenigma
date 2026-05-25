@@ -8,7 +8,7 @@
 
 ## Milestones
 
-- ⏳ **v1.0 Watch Together Foundation** — Active (3/5 phases shipped). Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions. Phase 1 (Backend Foundation) closed 2026-05-25; Phase 2 (Frontend Shell + Chat) closed 2026-05-25; Phase 3 (Player Sync — All 5) closed 2026-05-25.
+- ⏳ **v1.0 Watch Together Foundation** — Active (4/5 phases shipped). Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions, validated episode/player/translation switching with sender-only error UX. Phase 1 (Backend Foundation) closed 2026-05-25; Phase 2 (Frontend Shell + Chat) closed 2026-05-25; Phase 3 (Player Sync — All 5) closed 2026-05-25; Phase 4 (State Switching) closed 2026-05-25.
 - ⏳ **v1.1 Per-User Player** — Deferred. Mixed-language friend groups watch in their own language while sharing the timeline. Needs its own brainstorm.
 - ⏳ **v1.2 Persistent Named Rooms** — Conditional. "Saturday Anime Night" rooms that survive past empty state. Adds Postgres + chat retention.
 - ⏳ **v1.3 Voice Piggyback** — Conditional, post v1.1 usage data.
@@ -20,7 +20,7 @@
 | 1 | Backend Foundation | ✅ Complete (2026-05-25 — 9 plans, 8/8 acceptance, smoke green 3× — see [`01-PHASE-SUMMARY.md`](phases/01-backend-foundation/01-PHASE-SUMMARY.md)) |
 | 2 | Frontend Shell + Chat | ✅ Complete (2026-05-25 — 10 plans, 7/7 acceptance, two-browser Playwright smoke spec authored, chunk 6.57 kB gz / 30 kB budget — see [`02-PHASE-SUMMARY.md`](phases/02-frontend-shell/02-PHASE-SUMMARY.md)) |
 | 3 | Player Sync — All 5 | ✅ Complete (2026-05-25 — 7 plans, 9/9 acceptance, two-browser sync e2e spec authored across all 5 players + drift via CDP throttling, Kodik RPC daily canary shipped, 188 unit/component tests + 21 e2e listings — see [`03-PHASE-SUMMARY.md`](phases/03-player-sync/03-PHASE-SUMMARY.md)) |
-| 4 | State Switching | ⏳ Not started |
+| 4 | State Switching | ✅ Complete (2026-05-25 — 6 plans [04.1–04.6], 5/5 acceptance, WT-STATE-01..05 covered; catalog `/internal/anime/{id}/episodes/validate` endpoint + watch-together CatalogClient (3s timeout + 5s cache) + validated `handleChangeEpisode/Player/Translation` handlers + PlayerTabBar.vue + 5-player switcher guards + sender-only error toasts + two-browser e2e spec (4 tests × 3 projects = 12 listings); 50 new backend unit tests + 27 frontend vitest cases on plan-touched specs; soft prerequisite D-04-01 (hero-spotlight `platform_stats.go`) carries to Phase 5 — see [`04-PHASE-SUMMARY.md`](phases/04-state-switching/04-PHASE-SUMMARY.md)) |
 | 5 | Polish + Production-Ship | ⏳ Not started |
 
 ## Next
