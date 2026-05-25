@@ -1026,7 +1026,8 @@
       "activeRooms7d": "Watch parties",
       "deltaPositive": "+{n} vs last week",
       "noChange": "—",
-      "lastSevenDays": "Last 7 days"
+      "lastSevenDays": "Last 7 days",
+      "vsPriorWeek": "vs prior week"
     },
     "personalPick": {
       "title": "Picked for you",
