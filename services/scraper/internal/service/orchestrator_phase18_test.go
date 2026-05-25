@@ -194,7 +194,18 @@ func TestOrchestrator_AnimePaheToGogoanimeFailover(t *testing.T) {
 
 	// 1. Load every golden up-front so a missing fixture fails the test fast
 	//    rather than mid-way through the dispatch chain.
-	searchHTML := loadFixture(t, "search_attack_on_titan.html")
+	//
+	//    The category + episode goldens are One Piece, so the search input must
+	//    resolve to the "one-piece" slug too. The previously-paired
+	//    search_attack_on_titan.html golden made FindID resolve an
+	//    "attack-on-titan-*" slug, which fetchEpisodes' slug-gate (added to
+	//    filter the "Recent Releases" sidebar) then correctly stripped from the
+	//    One Piece episode list → 0 episodes. We use a minimal SYNTHETIC search
+	//    fragment here (only the `p.name a[href^='/category/']` structure FindID
+	//    parses matters) so the whole search→category→episode chain is One Piece.
+	searchHTML := []byte(`<!doctype html><html><body><ul class="items">` +
+		`<li><p class="name"><a href="/category/one-piece" title="One Piece">One Piece</a></p></li>` +
+		`</ul></body></html>`)
 	categoryHTML := loadFixture(t, "category_one_piece.html")
 	episodeHTML := loadFixture(t, "one_piece_episode_1.html")
 
@@ -290,7 +301,7 @@ func TestOrchestrator_AnimePaheToGogoanimeFailover(t *testing.T) {
 	before := testutil.ToFloat64(metrics.ParserFallbackTotal.WithLabelValues(fakePaheName, gogoName))
 
 	// 10. Walk FindID → ListEpisodes → ListServers → GetStream end-to-end.
-	ref := domain.AnimeRef{Title: "Attack on Titan", ShikimoriID: "16498"}
+	ref := domain.AnimeRef{Title: "One Piece", ShikimoriID: "21"}
 	animeID, err := orch.FindID(ctx, ref, "")
 	if err != nil {
 		t.Fatalf("orch.FindID: %v", err)
