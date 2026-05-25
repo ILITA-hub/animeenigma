@@ -1026,7 +1026,8 @@
       "activeRooms7d": "同時視聴",
       "deltaPositive": "+{n} 前週比",
       "noChange": "—",
-      "lastSevenDays": "過去7日間"
+      "lastSevenDays": "過去7日間",
+      "vsPriorWeek": "前週比"
     },
     "personalPick": {
       "title": "あなたへのおすすめ",
