@@ -1026,7 +1026,8 @@
       "activeRooms7d": "Совместных просмотров",
       "deltaPositive": "+{n} за неделю",
       "noChange": "—",
-      "lastSevenDays": "За последние 7 дней"
+      "lastSevenDays": "За последние 7 дней",
+      "vsPriorWeek": "за прошлую неделю"
     },
     "personalPick": {
       "title": "Выбрано для вас",
