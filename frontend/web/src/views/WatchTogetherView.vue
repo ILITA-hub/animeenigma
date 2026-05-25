@@ -68,6 +68,8 @@ import {
 import { useWatchTogetherRoom } from '@/composables/useWatchTogetherRoom'
 import RoomSidebar from '@/components/watch-together/RoomSidebar.vue'
 import ReactionBurstOverlay from '@/components/watch-together/ReactionBurstOverlay.vue'
+import SyncToastStack from '@/components/watch-together/SyncToastStack.vue'
+import ConnectionStatusOverlay from '@/components/watch-together/ConnectionStatusOverlay.vue'
 
 // Lazy-load each player so the WatchTogetherView chunk stays under the
 // 30KB gz budget (WT-NF-04). Mirrors Anime.vue's defineAsyncComponent
@@ -298,6 +300,8 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
         {{ t('watch_together.loading') }}
       </div>
 
+      <ConnectionStatusOverlay :status="liveConnectionStatus" />
+      <SyncToastStack :room="roomHandle" />
       <ReactionBurstOverlay :reactions="liveReactions" />
     </div>
 

@@ -95,6 +95,11 @@ interface FakeHandle {
   disconnect: ReturnType<typeof vi.fn>
   onError: ReturnType<typeof vi.fn>
   onRoomClosed: ReturnType<typeof vi.fn>
+  // Plan 03.5 Task 4 wired SyncToastStack into the live-room branch; the
+  // stack subscribes to `onPlaybackEvent` on mount, so the fake handle MUST
+  // provide it (even as a no-op) or the view crashes the moment any test
+  // reaches the live-room render path.
+  onPlaybackEvent: ReturnType<typeof vi.fn>
 }
 
 function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' | 'raw' = 'kodik'): FakeHandle {
@@ -132,6 +137,10 @@ function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' |
         lastRoomClosedHandler = null
       }
     }),
+    // No-op subscriber for SyncToastStack. Returns its own unsubscriber
+    // (also a no-op) so the component's `onBeforeUnmount` cleanup runs
+    // without crashing.
+    onPlaybackEvent: vi.fn(() => () => {}),
   }
   return handle
 }
