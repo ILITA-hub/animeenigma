@@ -573,6 +573,16 @@ const _selectEpisode = async (ep: AnimeLibEpisode) => {
 
 // User-click episode selector — fires combo_override ('episode') BEFORE the work.
 const selectEpisode = async (ep: AnimeLibEpisode) => {
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.episode_id, which flows
+  // back through the existing :initial-episode prop -> _selectEpisode
+  // programmatic path.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(ep.id))
+    return
+  }
   tracker.recordPickerEvent('episode', { episode: parseInt(ep.number) || 0 })
   await _selectEpisode(ep)
 }
@@ -587,6 +597,13 @@ const _selectTranslation = async (tr: AnimeLibTranslation) => {
 
 // User-click translation selector — fires combo_override ('team') BEFORE the work.
 const selectTranslation = async (tr: AnimeLibTranslation) => {
+  // Phase 4 WT-STATE-04: same routing as selectEpisode — emit to room and let
+  // the inbound room:state_changed broadcast drive the local state mutation
+  // (via the existing programmatic _selectTranslation re-pick path).
+  if (props.room) {
+    props.room.emitChangeTranslation(String(tr.id))
+    return
+  }
   tracker.recordPickerEvent('team', { translation_title: tr.team_name, player: 'animelib' })
   userHasOverridden.value = true
   setPreferredWatchType(tr.type === 'voice' ? 'dub' : 'sub')

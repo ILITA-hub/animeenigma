@@ -687,6 +687,16 @@ const setTranslationType = (type: 'voice' | 'subtitles') => {
 const selectTranslation = (translationId: number) => {
   if (selectedTranslation.value === translationId) return
 
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.translation_id, which flows
+  // back through the existing programmatic path.
+  if (props.room) {
+    props.room.emitChangeTranslation(String(translationId))
+    return
+  }
+
   // Look up the translation title for the override new_combo before mutating state.
   const tr = translations.value.find(t => t.id === translationId)
   tracker.recordPickerEvent('team', {
@@ -711,6 +721,17 @@ const selectTranslation = (translationId: number) => {
 
 const selectEpisode = (episode: number) => {
   if (selectedEpisode.value === episode) return
+
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.episode_id, which flows
+  // back through the existing programmatic path.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(episode))
+    return
+  }
+
   tracker.recordPickerEvent('episode', { episode })
 
   // Save progress of current episode before switching
