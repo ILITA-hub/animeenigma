@@ -13,8 +13,10 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-chi/chi/v5"
-	"github.com/gorilla/websocket"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -972,8 +974,79 @@ func TestBuildWSOriginCheck(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Helpers
+// Plan 05.2 — MembersPerRoom observation test (WT-NF-06).
+//
+// On every successful WS upgrade, broadcastMemberJoined observes
+// wt_members_per_room with the room's current member count. We measure
+// via prometheus.Collect + the dto.Metric histogram sample count to
+// assert the observation actually landed (not just that the metric is
+// registered).
 // ----------------------------------------------------------------------------
+
+func TestWS_BroadcastMemberJoined_ObservesMembersPerRoom(t *testing.T) {
+	before := readMembersPerRoomCount(t)
+
+	fx := newWSFixture(t, 0)
+	roomID := fx.createRoom("alice", "Alice")
+
+	// Connect alice — first member. broadcastMemberJoined runs and
+	// observes 1 (alice just joined).
+	connA, _, err := fx.dial(fx.mintToken("alice", "Alice"), roomID)
+	if err != nil {
+		t.Fatalf("dial A: %v", err)
+	}
+	defer connA.Close()
+	_ = readEnvelopeWithin(t, connA, 2*time.Second) // drain snapshot
+
+	// Connect bob — broadcastMemberJoined runs and observes 2.
+	connB, _, err := fx.dial(fx.mintToken("bob", "Bob"), roomID)
+	if err != nil {
+		t.Fatalf("dial B: %v", err)
+	}
+	defer connB.Close()
+	_ = readEnvelopeWithin(t, connB, 2*time.Second) // drain snapshot
+
+	// Drain alice's member:joined frame so we know the broadcast (and
+	// thus the metric observation that follows it) has completed.
+	joinEnv := readEnvelopeWithin(t, connA, 2*time.Second)
+	if joinEnv.Type != domain.MsgMemberJoined {
+		t.Fatalf("alice second frame = %q, want member:joined", joinEnv.Type)
+	}
+
+	// Tiny wait so the second broadcastMemberJoined's metric observation
+	// has surfaced into the registry. The observation runs synchronously
+	// inside the handler goroutine but the test goroutine reading the
+	// frame may race the metric write under -race.
+	time.Sleep(50 * time.Millisecond)
+
+	after := readMembersPerRoomCount(t)
+	if delta := after - before; delta < 2 {
+		t.Errorf("MembersPerRoom sample count delta = %d, want >= 2 (one per join)", delta)
+	}
+}
+
+// readMembersPerRoomCount returns the histogram's cumulative observation
+// count via the prometheus.Collector interface. testutil.ToFloat64 doesn't
+// work on histograms; we shuttle through the dto channel directly.
+func readMembersPerRoomCount(t *testing.T) uint64 {
+	t.Helper()
+	ch := make(chan prometheus.Metric, 1)
+	go func() {
+		service.MembersPerRoom.Collect(ch)
+		close(ch)
+	}()
+	var total uint64
+	for m := range ch {
+		var dto dto.Metric
+		if err := m.Write(&dto); err != nil {
+			t.Fatalf("Write dto.Metric: %v", err)
+		}
+		if h := dto.GetHistogram(); h != nil {
+			total += h.GetSampleCount()
+		}
+	}
+	return total
+}
 
 // responseStatus returns 0 if resp is nil (gorilla's dialer sometimes does
 // that on connection-refused / handshake-aborted paths), or the StatusCode
