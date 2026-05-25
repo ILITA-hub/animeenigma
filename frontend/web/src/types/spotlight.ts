@@ -210,6 +210,13 @@ export interface NowWatchingData {
 export interface NotTimeYetData {
   anime: SpotlightAnime
   status: 'planned' | 'postponed'
+  /**
+   * ISO-8601 timestamp of when the user added the anime to their list
+   * (anime_list.updated_at). snake_case to match the Go `added_at` JSON
+   * tag — emitted with `omitempty`, so it may be absent. The card renders
+   * it as a relative "Added X ago" line via formatAgo() when present.
+   */
+  added_at?: string | null
 }
 
 /**
