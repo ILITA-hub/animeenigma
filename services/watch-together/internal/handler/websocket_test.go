@@ -26,6 +26,20 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/service"
 )
 
+// nopCatalog is a CatalogValidator stub used by the WS handler tests. The
+// handler tests never exercise state:change_* envelopes (those are covered
+// directly in internal/service/inbound_test.go), so the stub just always
+// returns Valid=true. The InboundRouter still needs a non-nil catalog to
+// satisfy its constructor contract.
+type nopCatalog struct{}
+
+func (nopCatalog) ValidateEpisode(
+	_ context.Context,
+	_, _, _, _, _ string,
+) (service.ValidateResult, error) {
+	return service.ValidateResult{Valid: true}, nil
+}
+
 // wsFixture bundles the moving parts for an end-to-end WS handler test:
 // a chi router with /ws mounted, a real httptest.Server, a miniredis-backed
 // repo, and helpers to mint JWTs against the fixture's secret.
@@ -84,7 +98,7 @@ func newWSFixture(t *testing.T, maxMembers int) *wsFixture {
 	// indirectly when inbound messages flow through.
 	drift := service.NewDriftEngine(log)
 	rl := service.NewRateLimiter()
-	inboundRouter := service.NewInboundRouter(r, wsHub, drift, rl, log)
+	inboundRouter := service.NewInboundRouter(r, wsHub, drift, rl, nopCatalog{}, log)
 	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, inboundRouter, cfg, log)
 
 	httpRouter := chi.NewRouter()
@@ -698,7 +712,7 @@ func TestWS_OriginAllowlist_RejectsMismatchedBrowserOrigin(t *testing.T) {
 
 	driftOrigin := service.NewDriftEngine(log)
 	rlOrigin := service.NewRateLimiter()
-	originRouter := service.NewInboundRouter(r, wsHub, driftOrigin, rlOrigin, log)
+	originRouter := service.NewInboundRouter(r, wsHub, driftOrigin, rlOrigin, nopCatalog{}, log)
 	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, originRouter, cfg, log)
 	httpRouter := chi.NewRouter()
 	httpRouter.Get("/api/watch-together/ws", wsHandler.Upgrade)

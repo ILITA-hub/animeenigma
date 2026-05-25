@@ -65,6 +65,20 @@ type ConnectionCtx struct {
 	Username string
 }
 
+// CatalogValidator is the narrow surface of *CatalogClient the InboundRouter
+// uses for WT-STATE-02 validation. Extracting an interface lets unit tests in
+// inbound_test.go (and handler/websocket_test.go in a sibling package) pass a
+// stub catalog that returns pre-canned ValidateResult / error pairs without
+// standing up an httptest server. The real *CatalogClient satisfies this by
+// signature (verified at compile time when main.go wires it in).
+//
+// Mirrors the HubFanout pattern at the top of this file — same rationale.
+// Exported (vs. catalogValidator) so cross-package callers — notably the WS
+// handler tests in internal/handler/websocket_test.go — can construct fakes.
+type CatalogValidator interface {
+	ValidateEpisode(ctx context.Context, shikimoriID, player, episodeID, translationID, watchType string) (ValidateResult, error)
+}
+
 // errCodeBadPayload is the error code returned to the sender when the
 // router can't decode the inbound payload's Data into the expected shape.
 // Not added to domain/ws_message.go because it's a router-implementation
@@ -124,11 +138,12 @@ var reactionWhitelist = map[string]struct{}{
 // time.Now / uuid.NewString in production). Injection lives behind methods,
 // not exported fields — see SetClockForTest / SetIDProviderForTest.
 type InboundRouter struct {
-	repo  *repo.RoomRepo
-	hub   HubFanout
-	drift *DriftEngine
-	rl    *RateLimiter
-	log   *logger.Logger
+	repo    *repo.RoomRepo
+	hub     HubFanout
+	drift   *DriftEngine
+	rl      *RateLimiter
+	catalog CatalogValidator
+	log     *logger.Logger
 
 	now   func() time.Time
 	newID func() string
@@ -136,24 +151,31 @@ type InboundRouter struct {
 
 // NewInboundRouter wires the deps and installs the production now/newID
 // providers. Pass nil for log to fall back to logger.Default().
+//
+// catalog is the WT-STATE-02 validator used by the 3 state:change_* handlers
+// (handleChangeEpisode / handleChangePlayer / handleChangeTranslation). Pass
+// the real *CatalogClient at boot in main.go; tests pass a stub satisfying
+// CatalogValidator.
 func NewInboundRouter(
 	r *repo.RoomRepo,
 	h HubFanout,
 	drift *DriftEngine,
 	rl *RateLimiter,
+	catalog CatalogValidator,
 	log *logger.Logger,
 ) *InboundRouter {
 	if log == nil {
 		log = logger.Default()
 	}
 	return &InboundRouter{
-		repo:  r,
-		hub:   h,
-		drift: drift,
-		rl:    rl,
-		log:   log,
-		now:   time.Now,
-		newID: uuid.NewString,
+		repo:    r,
+		hub:     h,
+		drift:   drift,
+		rl:      rl,
+		catalog: catalog,
+		log:     log,
+		now:     time.Now,
+		newID:   uuid.NewString,
 	}
 }
 
@@ -193,11 +215,11 @@ func (r *InboundRouter) Dispatch(conn ConnectionCtx, env domain.Envelope) {
 	case domain.MsgPlaybackTimeTick:
 		r.handleTimeTick(ctx, conn, env.Data)
 	case domain.MsgStateChangeEpisode:
-		r.handleStateChange(ctx, conn, env.Data, "episode_id")
+		r.handleChangeEpisode(ctx, conn, env.Data)
 	case domain.MsgStateChangePlayer:
-		r.handleStateChange(ctx, conn, env.Data, "player")
+		r.handleChangePlayer(ctx, conn, env.Data)
 	case domain.MsgStateChangeTrans:
-		r.handleStateChange(ctx, conn, env.Data, "translation_id")
+		r.handleChangeTranslation(ctx, conn, env.Data)
 	case domain.MsgChatMessage:
 		r.handleChat(ctx, conn, env.Data)
 	case domain.MsgChatReaction:
@@ -395,63 +417,88 @@ func (r *InboundRouter) handleTimeTick(ctx context.Context, conn ConnectionCtx, 
 }
 
 // ----------------------------------------------------------------------------
-// Handler — state:change_episode / state:change_player / state:change_translation
+// Handlers — state:change_episode / state:change_player / state:change_translation
 //
-// Phase 1 surface only — no catalog validation (deferred to Phase 4
-// WT-STATE-02). Each change:
-//   - Updates the corresponding HASH field
-//   - Resets playback_time=0 and playback_state=paused (so all members start
-//     the new content together)
-//   - Broadcasts room:state_changed{field, value, by_user_id} to ALL members
-//     (sender INCLUDED — they need the same source-of-truth update)
+// Phase 4 (WT-STATE-02): every state change is validated against the catalog
+// BEFORE mutating Redis or broadcasting. The shared pattern across all 3:
+//
+//  1. Decode the typed payload (StateChange{Episode|Player|Translation}Data);
+//     malformed → BAD_PAYLOAD sender-only.
+//  2. Load the current Room state via repo.GetRoom — needed for the catalog
+//     call (anime_id is required for all 3; player + episode + translation
+//     contribute to whichever field isn't being changed).
+//     ErrNotFound → silent drop (the WS handler will close the connection
+//     separately on the next state-mutating call; design §Server-outbound).
+//  3. Call r.catalog.ValidateEpisode with the right tuple per handler.
+//     - Transport error → log warn, send sender-only error, DO NOT mutate
+//       Redis (better to refuse than silently desync the room).
+//     - Valid=false → map Reason to ErrCode*Unavailable, send sender-only,
+//       DO NOT mutate Redis.
+//  4. Valid=true → HSET the relevant field(s) + reset playback_time=0 +
+//     playback_state=paused + playback_time_updated_at=now; broadcast
+//     room:state_changed{field, value, by_user_id} to ALL (sender INCLUDED —
+//     single source of truth, design §Server-outbound).
+//
+// Transport-error policy: NEVER mutate Redis on transient failure. The user
+// sees an error envelope and can retry; the room state stays self-consistent
+// for the other members.
 // ----------------------------------------------------------------------------
 
-func (r *InboundRouter) handleStateChange(
+// validPlayers is the closed set of player identifiers accepted by
+// handleChangePlayer. Kept in sync with frontend/web/src/components/player/
+// (the 5 player components). Out-of-set values are rejected as BAD_PAYLOAD
+// before any catalog call — saves a round-trip on a clearly bogus value.
+var validPlayers = map[string]struct{}{
+	domain.PlayerKodik:      {},
+	domain.PlayerAnimeLib:   {},
+	domain.PlayerOurEnglish: {},
+	domain.PlayerHanime:     {},
+	domain.PlayerRaw:        {},
+}
+
+// mapValidationReason converts a catalog ValidateResult.Reason into an
+// outbound ErrCode constant. Falls back to the supplied defaultCode when the
+// catalog didn't populate Reason (or used a string we don't recognize) so the
+// caller still gets a meaningful error envelope.
+func mapValidationReason(reason, defaultCode string) string {
+	switch reason {
+	case domain.ErrCodeEpisodeUnavailable,
+		domain.ErrCodePlayerUnavailable,
+		domain.ErrCodeTranslationUnavailable:
+		return reason
+	default:
+		return defaultCode
+	}
+}
+
+// applyStateChange is the shared HSET+broadcast tail used by all 3 validated
+// handlers once the catalog has blessed the change. fields is the partial
+// HASH delta (the changed field(s) PLUS the playback resets). broadcastField
+// + broadcastValue populate the RoomStateChangedData envelope.
+func (r *InboundRouter) applyStateChange(
 	ctx context.Context,
 	conn ConnectionCtx,
-	data json.RawMessage,
-	field string,
+	fields map[string]interface{},
+	broadcastField, broadcastValue string,
 ) {
-	// All three Data shapes have a single string field — decode into a
-	// flexible map[string]interface{} so we handle episode_id / player /
-	// translation_id with one code path.
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		r.sendBadPayload(ctx, conn, "state:change_"+field, err)
-		return
-	}
-	val, ok := raw[field]
-	if !ok {
-		r.sendBadPayload(ctx, conn, "state:change_"+field, fmt.Errorf("missing field %q", field))
-		return
-	}
-	valStr, ok := val.(string)
-	if !ok || valStr == "" {
-		r.sendBadPayload(ctx, conn, "state:change_"+field, fmt.Errorf("field %q must be non-empty string", field))
-		return
-	}
+	nowMs := r.now().UnixMilli()
+	fields["playback_time"] = float64(0)
+	fields["playback_state"] = domain.StatePaused
+	fields["playback_time_updated_at"] = nowMs
 
-	now := r.now()
-	nowMs := now.UnixMilli()
-
-	if err := r.repo.UpdateRoomState(ctx, conn.RoomID, map[string]interface{}{
-		field:                      valStr,
-		"playback_time":            float64(0),
-		"playback_state":           domain.StatePaused,
-		"playback_time_updated_at": nowMs,
-	}); err != nil {
+	if err := r.repo.UpdateRoomState(ctx, conn.RoomID, fields); err != nil {
 		r.log.Errorw("watch_together update room (state change)",
 			"room_id", conn.RoomID,
 			"user_id", conn.UserID,
-			"field", field,
+			"field", broadcastField,
 			"err", err,
 		)
 		return
 	}
 
 	out, err := buildEnvelope(domain.MsgRoomStateChanged, domain.RoomStateChangedData{
-		Field:    field,
-		Value:    valStr,
+		Field:    broadcastField,
+		Value:    broadcastValue,
 		ByUserID: conn.UserID,
 	})
 	if err != nil {
@@ -465,6 +512,183 @@ func (r *InboundRouter) handleStateChange(
 			"err", err,
 		)
 	}
+}
+
+func (r *InboundRouter) handleChangeEpisode(
+	ctx context.Context,
+	conn ConnectionCtx,
+	data json.RawMessage,
+) {
+	var payload domain.StateChangeEpisodeData
+	if err := json.Unmarshal(data, &payload); err != nil {
+		r.sendBadPayload(ctx, conn, domain.MsgStateChangeEpisode, err)
+		return
+	}
+	if payload.EpisodeID == "" {
+		r.sendBadPayload(ctx, conn, domain.MsgStateChangeEpisode,
+			fmt.Errorf("episode_id must be non-empty"))
+		return
+	}
+
+	room, err := r.repo.GetRoom(ctx, conn.RoomID)
+	if err != nil {
+		// Room TTL'd out (ErrNotFound) or transient repo error — silent drop;
+		// the WS handler will surface the closure on the next operation.
+		r.log.Debugw("watch_together change_episode get_room failed",
+			"room_id", conn.RoomID,
+			"user_id", conn.UserID,
+			"err", err,
+		)
+		return
+	}
+
+	// watch_type unused in v1.0 — the validate endpoint accepts an empty
+	// string per 04.1's contract (permissive mode).
+	result, err := r.catalog.ValidateEpisode(ctx,
+		room.AnimeID, room.Player, payload.EpisodeID, room.TranslationID, "")
+	if err != nil {
+		r.log.Warnw("watch_together change_episode catalog transport error",
+			"room_id", conn.RoomID,
+			"user_id", conn.UserID,
+			"err", err,
+		)
+		r.sendErrorToSelf(ctx, conn, domain.ErrCodeEpisodeUnavailable,
+			"upstream validation failed; retry", "")
+		return
+	}
+	if !result.Valid {
+		// The catalog may have rejected because the episode is gone OR because
+		// the room's current translation no longer yields content. Either way
+		// we surface the catalog's chosen reason when it gave us one.
+		code := mapValidationReason(result.Reason, domain.ErrCodeEpisodeUnavailable)
+		r.sendErrorToSelf(ctx, conn, code,
+			fmt.Sprintf("episode %s unavailable on %s/%s", payload.EpisodeID, room.Player, room.TranslationID), "")
+		return
+	}
+
+	r.applyStateChange(ctx, conn,
+		map[string]interface{}{"episode_id": payload.EpisodeID},
+		"episode_id", payload.EpisodeID)
+}
+
+func (r *InboundRouter) handleChangePlayer(
+	ctx context.Context,
+	conn ConnectionCtx,
+	data json.RawMessage,
+) {
+	var payload domain.StateChangePlayerData
+	if err := json.Unmarshal(data, &payload); err != nil {
+		r.sendBadPayload(ctx, conn, domain.MsgStateChangePlayer, err)
+		return
+	}
+	if payload.Player == "" {
+		r.sendBadPayload(ctx, conn, domain.MsgStateChangePlayer,
+			fmt.Errorf("player must be non-empty"))
+		return
+	}
+	if _, ok := validPlayers[payload.Player]; !ok {
+		// Bogus player value — never round-trip to catalog for an obviously
+		// invalid identifier.
+		r.sendBadPayload(ctx, conn, domain.MsgStateChangePlayer,
+			fmt.Errorf("player %q not in {kodik, animelib, ourenglish, hanime, raw}", payload.Player))
+		return
+	}
+
+	room, err := r.repo.GetRoom(ctx, conn.RoomID)
+	if err != nil {
+		r.log.Debugw("watch_together change_player get_room failed",
+			"room_id", conn.RoomID,
+			"user_id", conn.UserID,
+			"err", err,
+		)
+		return
+	}
+
+	// Player-change mode: pass the new player but leave episode_id and
+	// translation_id empty so the catalog only verifies the anime has at
+	// least one episode on the requested player (per 04.1 permissive contract).
+	result, err := r.catalog.ValidateEpisode(ctx, room.AnimeID, payload.Player, "", "", "")
+	if err != nil {
+		r.log.Warnw("watch_together change_player catalog transport error",
+			"room_id", conn.RoomID,
+			"user_id", conn.UserID,
+			"err", err,
+		)
+		r.sendErrorToSelf(ctx, conn, domain.ErrCodePlayerUnavailable,
+			"upstream validation failed; retry", "")
+		return
+	}
+	if !result.Valid {
+		code := mapValidationReason(result.Reason, domain.ErrCodePlayerUnavailable)
+		r.sendErrorToSelf(ctx, conn, code,
+			fmt.Sprintf("player %s unavailable for this anime", payload.Player), "")
+		return
+	}
+
+	// Valid: swap player; reset translation (player-specific) and episode_id
+	// to "1" (sensible v1.0 default; the frontend player's source-loading
+	// logic resolves the actual first available episode on mount). See
+	// 04-CONTEXT.md §Claude's Discretion.
+	r.applyStateChange(ctx, conn,
+		map[string]interface{}{
+			"player":         payload.Player,
+			"translation_id": "",
+			"episode_id":     "1",
+		},
+		"player", payload.Player)
+}
+
+func (r *InboundRouter) handleChangeTranslation(
+	ctx context.Context,
+	conn ConnectionCtx,
+	data json.RawMessage,
+) {
+	var payload domain.StateChangeTranslationData
+	if err := json.Unmarshal(data, &payload); err != nil {
+		r.sendBadPayload(ctx, conn, domain.MsgStateChangeTrans, err)
+		return
+	}
+	if payload.TranslationID == "" {
+		r.sendBadPayload(ctx, conn, domain.MsgStateChangeTrans,
+			fmt.Errorf("translation_id must be non-empty"))
+		return
+	}
+
+	room, err := r.repo.GetRoom(ctx, conn.RoomID)
+	if err != nil {
+		r.log.Debugw("watch_together change_translation get_room failed",
+			"room_id", conn.RoomID,
+			"user_id", conn.UserID,
+			"err", err,
+		)
+		return
+	}
+
+	result, err := r.catalog.ValidateEpisode(ctx,
+		room.AnimeID, room.Player, room.EpisodeID, payload.TranslationID, "")
+	if err != nil {
+		r.log.Warnw("watch_together change_translation catalog transport error",
+			"room_id", conn.RoomID,
+			"user_id", conn.UserID,
+			"err", err,
+		)
+		r.sendErrorToSelf(ctx, conn, domain.ErrCodeTranslationUnavailable,
+			"upstream validation failed; retry", "")
+		return
+	}
+	if !result.Valid {
+		// EPISODE_UNAVAILABLE here usually means the requested translation
+		// renders the current episode unreachable; surface TRANSLATION_UNAVAILABLE
+		// as the default since that's the field the user changed.
+		code := mapValidationReason(result.Reason, domain.ErrCodeTranslationUnavailable)
+		r.sendErrorToSelf(ctx, conn, code,
+			fmt.Sprintf("translation %s unavailable for %s/ep-%s", payload.TranslationID, room.Player, room.EpisodeID), "")
+		return
+	}
+
+	r.applyStateChange(ctx, conn,
+		map[string]interface{}{"translation_id": payload.TranslationID},
+		"translation_id", payload.TranslationID)
 }
 
 // ----------------------------------------------------------------------------

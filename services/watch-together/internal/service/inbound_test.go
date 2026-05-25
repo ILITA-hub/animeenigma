@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -84,15 +85,89 @@ func (h *fakeHub) findFirst(method, msgType string) (fakeHubCall, bool) {
 	return fakeHubCall{}, false
 }
 
+// fakeCatalog satisfies CatalogValidator. The validateFn lets each test
+// install a per-case stub (always-valid / always-invalid / per-call decision)
+// without needing an httptest server. callCount is bumped on every call so
+// tests can assert that the catalog was (or wasn't) hit at all.
+type fakeCatalog struct {
+	mu         sync.Mutex
+	calls      []fakeCatalogCall
+	validateFn func(shikimoriID, player, episodeID, translationID, watchType string) (ValidateResult, error)
+}
+
+// fakeCatalogCall captures one ValidateEpisode invocation. Tests use it to
+// assert that the router passed through the right Room state (anime_id /
+// player / episode_id / translation_id) to the catalog.
+type fakeCatalogCall struct {
+	ShikimoriID, Player, EpisodeID, TranslationID, WatchType string
+}
+
+func (f *fakeCatalog) ValidateEpisode(
+	_ context.Context,
+	shikimoriID, player, episodeID, translationID, watchType string,
+) (ValidateResult, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, fakeCatalogCall{
+		ShikimoriID:   shikimoriID,
+		Player:        player,
+		EpisodeID:     episodeID,
+		TranslationID: translationID,
+		WatchType:     watchType,
+	})
+	fn := f.validateFn
+	f.mu.Unlock()
+	if fn == nil {
+		return ValidateResult{Valid: true}, nil
+	}
+	return fn(shikimoriID, player, episodeID, translationID, watchType)
+}
+
+func (f *fakeCatalog) snapshot() []fakeCatalogCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]fakeCatalogCall, len(f.calls))
+	copy(out, f.calls)
+	return out
+}
+
+// alwaysValid configures fakeCatalog to always return Valid=true.
+func (f *fakeCatalog) alwaysValid() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.validateFn = func(string, string, string, string, string) (ValidateResult, error) {
+		return ValidateResult{Valid: true}, nil
+	}
+}
+
+// alwaysInvalid configures fakeCatalog to always return Valid=false with the
+// given reason (one of the ErrCode*Unavailable constants).
+func (f *fakeCatalog) alwaysInvalid(reason string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.validateFn = func(string, string, string, string, string) (ValidateResult, error) {
+		return ValidateResult{Valid: false, Reason: reason}, nil
+	}
+}
+
+// alwaysError configures fakeCatalog to always return a transport error.
+func (f *fakeCatalog) alwaysError(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.validateFn = func(string, string, string, string, string) (ValidateResult, error) {
+		return ValidateResult{}, err
+	}
+}
+
 // routerFixture bundles the moving parts a router test needs.
 type routerFixture struct {
-	repo   *repo.RoomRepo
-	hub    *fakeHub
-	drift  *DriftEngine
-	rl     *RateLimiter
-	router *InboundRouter
-	mr     *miniredis.Miniredis
-	now    time.Time
+	repo    *repo.RoomRepo
+	hub     *fakeHub
+	drift   *DriftEngine
+	rl      *RateLimiter
+	catalog *fakeCatalog
+	router  *InboundRouter
+	mr      *miniredis.Miniredis
+	now     time.Time
 }
 
 // fixedID returns a stable chat-message id so test asserts are deterministic.
@@ -111,7 +186,11 @@ func newRouterFixture(t *testing.T) *routerFixture {
 	hub := newFakeHub()
 	drift := NewDriftEngine(log)
 	rl := NewRateLimiter()
-	router := NewInboundRouter(r, hub, drift, rl, log)
+	// Default fake catalog returns Valid=true on every call. Tests that need
+	// a different behavior override via fx.catalog.alwaysInvalid / alwaysError.
+	catalog := &fakeCatalog{}
+	catalog.alwaysValid()
+	router := NewInboundRouter(r, hub, drift, rl, catalog, log)
 
 	// Pinned wall-clock for deterministic server_ts / chat TS assertions.
 	fixedNow := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
@@ -119,13 +198,14 @@ func newRouterFixture(t *testing.T) *routerFixture {
 	router.SetIDProviderForTest(func() string { return fixedChatID })
 
 	return &routerFixture{
-		repo:   r,
-		hub:    hub,
-		drift:  drift,
-		rl:     rl,
-		router: router,
-		mr:     mr,
-		now:    fixedNow,
+		repo:    r,
+		hub:     hub,
+		drift:   drift,
+		rl:      rl,
+		catalog: catalog,
+		router:  router,
+		mr:      mr,
+		now:     fixedNow,
 	}
 }
 
@@ -598,6 +678,456 @@ func TestRouter_StateChangeEpisode_UpdatesAndBroadcastsAll(t *testing.T) {
 	_ = json.Unmarshal(call.env.Data, &sc)
 	if sc.Field != "episode_id" || sc.Value != "5" || sc.ByUserID != "alice" {
 		t.Errorf("state_changed = %+v", sc)
+	}
+
+	// Verify catalog was invoked with the room's existing player + translation.
+	cc := fx.catalog.snapshot()
+	if len(cc) != 1 {
+		t.Fatalf("catalog calls = %d, want 1", len(cc))
+	}
+	if cc[0].ShikimoriID != "anime-1" || cc[0].Player != domain.PlayerAnimeLib ||
+		cc[0].EpisodeID != "5" || cc[0].TranslationID != "trans-1" {
+		t.Errorf("catalog call = %+v, want {anime-1, animelib, 5, trans-1}", cc[0])
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Phase 4 / Plan 04.3 — validated state-change handlers.
+//
+// Test matrix per CONTEXT §Inbound message handlers + 04.3-PLAN.md:
+//   - change_episode: Valid=true / Valid=false / transport error / room TTL'd /
+//     bad payload
+//   - change_player:  Valid=true / Valid=false / bogus player value
+//   - change_translation: Valid=true / Valid=false / transport error
+// ----------------------------------------------------------------------------
+
+// helper: did the test capture an error envelope with the given code?
+func findErrorCode(t *testing.T, calls []fakeHubCall, code string) bool {
+	t.Helper()
+	for _, c := range calls {
+		if c.method != "SendTo" || c.env.Type != domain.MsgError {
+			continue
+		}
+		var e domain.ErrorData
+		_ = json.Unmarshal(c.env.Data, &e)
+		if e.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// findBroadcast returns true iff any Broadcast call for the given msgType was
+// recorded. Used to assert "NO broadcast happened" via negation.
+func findBroadcast(calls []fakeHubCall, msgType string) bool {
+	for _, c := range calls {
+		if c.method == "Broadcast" && c.env.Type == msgType {
+			return true
+		}
+	}
+	return false
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.1 — change_episode Valid=true → broadcast + HSET, no error.
+// (Covered partially by Test 11 above; this test focuses on the catalog tuple.)
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Episode_Valid_BroadcastsAndUpdates(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-ep-valid"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+	// Default fixture is alwaysValid.
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeEpisode,
+		map[string]interface{}{"episode_id": "7"})
+
+	calls := fx.hub.snapshot()
+	if !findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatalf("expected room:state_changed broadcast; calls=%v", calls)
+	}
+	if findErrorCode(t, calls, domain.ErrCodeEpisodeUnavailable) {
+		t.Fatal("unexpected EPISODE_UNAVAILABLE error sent on Valid=true path")
+	}
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.EpisodeID != "7" {
+		t.Errorf("EpisodeID = %q, want 7", room.EpisodeID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.2 — change_episode Valid=false → SendTo EPISODE_UNAVAILABLE
+// sender-only, NO broadcast, NO HSET.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Episode_Invalid_SendsErrorNoMutation(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-ep-invalid"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+	fx.catalog.alwaysInvalid(domain.ErrCodeEpisodeUnavailable)
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeEpisode,
+		map[string]interface{}{"episode_id": "999"})
+
+	calls := fx.hub.snapshot()
+	if findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatal("expected NO broadcast on Valid=false")
+	}
+	if !findErrorCode(t, calls, domain.ErrCodeEpisodeUnavailable) {
+		t.Fatalf("expected EPISODE_UNAVAILABLE error to sender; calls=%v", calls)
+	}
+	// Sender-only: the SendTo must be addressed to alice, not broadcast.
+	var senderOnly bool
+	for _, c := range calls {
+		if c.method == "SendTo" && c.env.Type == domain.MsgError && c.userID == "alice" {
+			senderOnly = true
+		}
+	}
+	if !senderOnly {
+		t.Fatal("EPISODE_UNAVAILABLE was not addressed to sender alice")
+	}
+	// Redis unchanged.
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.EpisodeID != "ep-1" {
+		t.Errorf("EpisodeID = %q, want unchanged ep-1", room.EpisodeID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.3 — change_episode transport error → SendTo
+// EPISODE_UNAVAILABLE, NO broadcast, NO HSET.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Episode_TransportError_SendsErrorNoMutation(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-ep-transport"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+	fx.catalog.alwaysError(errors.New("catalog timeout"))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeEpisode,
+		map[string]interface{}{"episode_id": "5"})
+
+	calls := fx.hub.snapshot()
+	if findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatal("transport error must NOT broadcast (Redis-desync risk)")
+	}
+	if !findErrorCode(t, calls, domain.ErrCodeEpisodeUnavailable) {
+		t.Fatalf("expected EPISODE_UNAVAILABLE on transport error; calls=%v", calls)
+	}
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.EpisodeID != "ep-1" {
+		t.Errorf("EpisodeID = %q, want unchanged ep-1", room.EpisodeID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.4 — change_episode against a TTL'd-out room (GetRoom
+// returns ErrNotFound) → silent drop, no envelope, no broadcast.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Episode_RoomTTLOut_SilentDrop(t *testing.T) {
+	fx := newRouterFixture(t)
+	// Do NOT seed a room — GetRoom will return ErrNotFound.
+
+	fx.dispatchJSON(t, aliceConn("ghost-room"), domain.MsgStateChangeEpisode,
+		map[string]interface{}{"episode_id": "5"})
+
+	calls := fx.hub.snapshot()
+	if len(calls) != 0 {
+		t.Fatalf("expected silent drop (no hub calls); got=%v", calls)
+	}
+	// Catalog should NOT have been called either (we never got to validation).
+	if cc := fx.catalog.snapshot(); len(cc) != 0 {
+		t.Fatalf("catalog should NOT be invoked when room is missing; got=%d calls", len(cc))
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.5 — change_episode missing episode_id → BAD_PAYLOAD
+// sender-only, no catalog call.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Episode_BadPayload_RejectsBeforeCatalog(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-ep-bad"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	// Empty payload — episode_id will decode to "".
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeEpisode,
+		map[string]interface{}{})
+
+	calls := fx.hub.snapshot()
+	if !findErrorCode(t, calls, errCodeBadPayload) {
+		t.Fatalf("expected BAD_PAYLOAD; calls=%v", calls)
+	}
+	if findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatal("bad payload must NOT broadcast")
+	}
+	if cc := fx.catalog.snapshot(); len(cc) != 0 {
+		t.Fatalf("bad payload must short-circuit before catalog; got %d calls", len(cc))
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.6 — change_player with invalid player value (not in the
+// 5-member set) → BAD_PAYLOAD sender-only, no catalog call, no broadcast.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Player_BogusValue_BadPayload(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-pl-bogus"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangePlayer,
+		map[string]interface{}{"player": "youtube"})
+
+	calls := fx.hub.snapshot()
+	if !findErrorCode(t, calls, errCodeBadPayload) {
+		t.Fatalf("expected BAD_PAYLOAD for bogus player; calls=%v", calls)
+	}
+	if findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatal("bogus player must NOT broadcast")
+	}
+	if cc := fx.catalog.snapshot(); len(cc) != 0 {
+		t.Fatalf("bogus player must short-circuit before catalog; got %d calls", len(cc))
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.7 — change_player Valid=true → HSET player + reset
+// episode_id="1" + translation_id="" + playback resets; broadcast to ALL.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Player_Valid_ResetsEpisodeAndTranslation(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-pl-valid"
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	r.PlaybackTime = 50.0
+	fx.seedRoom(t, r)
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangePlayer,
+		map[string]interface{}{"player": domain.PlayerKodik})
+
+	calls := fx.hub.snapshot()
+	if !findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatalf("expected room:state_changed broadcast; calls=%v", calls)
+	}
+
+	// Find the broadcast envelope and inspect Field/Value.
+	call, _ := fx.hub.findFirst("Broadcast", domain.MsgRoomStateChanged)
+	var sc domain.RoomStateChangedData
+	_ = json.Unmarshal(call.env.Data, &sc)
+	if sc.Field != "player" || sc.Value != domain.PlayerKodik {
+		t.Errorf("state_changed = %+v, want field=player value=kodik", sc)
+	}
+	if call.excludeUserID != "" {
+		t.Errorf("player change excludeUserID = %q, want \"\" (sender included)", call.excludeUserID)
+	}
+
+	// Redis state reset.
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.Player != domain.PlayerKodik {
+		t.Errorf("Player = %q, want kodik", room.Player)
+	}
+	if room.EpisodeID != "1" {
+		t.Errorf("EpisodeID = %q, want \"1\" (reset to first episode)", room.EpisodeID)
+	}
+	if room.TranslationID != "" {
+		t.Errorf("TranslationID = %q, want empty (reset on player change)", room.TranslationID)
+	}
+	if room.PlaybackTime != 0 || room.PlaybackState != domain.StatePaused {
+		t.Errorf("playback not reset: time=%v state=%q", room.PlaybackTime, room.PlaybackState)
+	}
+
+	// Catalog called with new player + empty episode/translation (per
+	// player-change validation mode).
+	cc := fx.catalog.snapshot()
+	if len(cc) != 1 {
+		t.Fatalf("catalog calls = %d, want 1", len(cc))
+	}
+	if cc[0].Player != domain.PlayerKodik || cc[0].EpisodeID != "" || cc[0].TranslationID != "" {
+		t.Errorf("catalog call = %+v, want {player=kodik, empty ep/trans}", cc[0])
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.8 — change_player Valid=false{PLAYER_UNAVAILABLE} →
+// SendTo PLAYER_UNAVAILABLE sender-only, NO broadcast, NO HSET.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Player_Invalid_SendsErrorNoMutation(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-pl-invalid"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+	fx.catalog.alwaysInvalid(domain.ErrCodePlayerUnavailable)
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangePlayer,
+		map[string]interface{}{"player": domain.PlayerHanime})
+
+	calls := fx.hub.snapshot()
+	if findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatal("Valid=false must NOT broadcast")
+	}
+	if !findErrorCode(t, calls, domain.ErrCodePlayerUnavailable) {
+		t.Fatalf("expected PLAYER_UNAVAILABLE sender-only; calls=%v", calls)
+	}
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.Player != domain.PlayerAnimeLib {
+		t.Errorf("Player = %q, want unchanged animelib", room.Player)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.9 — change_translation Valid=true → HSET translation_id +
+// playback resets; broadcast to ALL.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Translation_Valid_UpdatesAndBroadcasts(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-tr-valid"
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	r.PlaybackTime = 200.0
+	fx.seedRoom(t, r)
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeTrans,
+		map[string]interface{}{"translation_id": "trans-2"})
+
+	calls := fx.hub.snapshot()
+	if !findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatalf("expected room:state_changed broadcast; calls=%v", calls)
+	}
+	call, _ := fx.hub.findFirst("Broadcast", domain.MsgRoomStateChanged)
+	var sc domain.RoomStateChangedData
+	_ = json.Unmarshal(call.env.Data, &sc)
+	if sc.Field != "translation_id" || sc.Value != "trans-2" || sc.ByUserID != "alice" {
+		t.Errorf("state_changed = %+v, want {translation_id, trans-2, alice}", sc)
+	}
+
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.TranslationID != "trans-2" {
+		t.Errorf("TranslationID = %q, want trans-2", room.TranslationID)
+	}
+	if room.PlaybackTime != 0 || room.PlaybackState != domain.StatePaused {
+		t.Errorf("playback not reset: time=%v state=%q", room.PlaybackTime, room.PlaybackState)
+	}
+
+	// Catalog called with current player + episode + new translation.
+	cc := fx.catalog.snapshot()
+	if len(cc) != 1 {
+		t.Fatalf("catalog calls = %d, want 1", len(cc))
+	}
+	if cc[0].EpisodeID != "ep-1" || cc[0].TranslationID != "trans-2" || cc[0].Player != domain.PlayerAnimeLib {
+		t.Errorf("catalog call = %+v, want {animelib, ep-1, trans-2}", cc[0])
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.10 — change_translation Valid=false{TRANSLATION_UNAVAILABLE}
+// → SendTo sender-only, NO broadcast, NO HSET.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Translation_Invalid_SendsErrorNoMutation(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-tr-invalid"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+	fx.catalog.alwaysInvalid(domain.ErrCodeTranslationUnavailable)
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeTrans,
+		map[string]interface{}{"translation_id": "missing-trans"})
+
+	calls := fx.hub.snapshot()
+	if findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatal("Valid=false must NOT broadcast")
+	}
+	if !findErrorCode(t, calls, domain.ErrCodeTranslationUnavailable) {
+		t.Fatalf("expected TRANSLATION_UNAVAILABLE sender-only; calls=%v", calls)
+	}
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.TranslationID != "trans-1" {
+		t.Errorf("TranslationID = %q, want unchanged trans-1", room.TranslationID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.11 — change_translation transport error → SendTo
+// TRANSLATION_UNAVAILABLE, NO broadcast, NO HSET.
+// ----------------------------------------------------------------------------
+
+func TestStateChange_Translation_TransportError_SendsErrorNoMutation(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-tr-transport"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+	fx.catalog.alwaysError(errors.New("catalog 500"))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeTrans,
+		map[string]interface{}{"translation_id": "trans-2"})
+
+	calls := fx.hub.snapshot()
+	if findBroadcast(calls, domain.MsgRoomStateChanged) {
+		t.Fatal("transport error must NOT broadcast")
+	}
+	if !findErrorCode(t, calls, domain.ErrCodeTranslationUnavailable) {
+		t.Fatalf("expected TRANSLATION_UNAVAILABLE on transport error; calls=%v", calls)
+	}
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.TranslationID != "trans-1" {
+		t.Errorf("TranslationID = %q, want unchanged trans-1", room.TranslationID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test StateChange.12 — Verify all Valid=true broadcasts carry the right
+// envelope shape (Field/Value/ByUserID populated AND excludeUserID="" meaning
+// sender included).
+// ----------------------------------------------------------------------------
+
+func TestStateChange_AllValid_BroadcastEnvelopeShape(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "sc-shape"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	tests := []struct {
+		name      string
+		msgType   string
+		payload   map[string]interface{}
+		wantField string
+		wantValue string
+	}{
+		{"episode", domain.MsgStateChangeEpisode,
+			map[string]interface{}{"episode_id": "3"}, "episode_id", "3"},
+		{"player", domain.MsgStateChangePlayer,
+			map[string]interface{}{"player": domain.PlayerOurEnglish}, "player", domain.PlayerOurEnglish},
+		{"translation", domain.MsgStateChangeTrans,
+			map[string]interface{}{"translation_id": "t-9"}, "translation_id", "t-9"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Fresh hub per sub-case so findFirst returns the right call.
+			fx.hub = newFakeHub()
+			fx.router.hub = fx.hub
+			// Re-seed the room each sub-case since player-change mutates it.
+			fx.mr.FlushAll()
+			fx.seedRoom(t, fx.defaultRoom(roomID))
+
+			fx.dispatchJSON(t, aliceConn(roomID), tc.msgType, tc.payload)
+
+			call, ok := fx.hub.findFirst("Broadcast", domain.MsgRoomStateChanged)
+			if !ok {
+				t.Fatalf("[%s] no room:state_changed broadcast", tc.name)
+			}
+			if call.excludeUserID != "" {
+				t.Errorf("[%s] excludeUserID = %q, want \"\"", tc.name, call.excludeUserID)
+			}
+			var sc domain.RoomStateChangedData
+			_ = json.Unmarshal(call.env.Data, &sc)
+			if sc.Field != tc.wantField || sc.Value != tc.wantValue || sc.ByUserID != "alice" {
+				t.Errorf("[%s] envelope = %+v, want field=%s value=%s by=alice",
+					tc.name, sc, tc.wantField, tc.wantValue)
+			}
+		})
 	}
 }
 
