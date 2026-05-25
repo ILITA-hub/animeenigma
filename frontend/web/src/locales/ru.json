@@ -1059,8 +1059,11 @@
     },
     "continueWatchingNew": {
       "title": "Продолжить просмотр",
-      "newEpisodeBadge": "Новая серия ep {n}!",
-      "resumeCta": "Продолжить"
+      "newEpisodeBadge": "Новая серия {n}!",
+      "resumeCta": "Продолжить",
+      "lastWatched": "Вы посмотрели до серии {n}",
+      "newEpisodeLine": "Новая серия {n}",
+      "resumeCtaWithEp": "Смотреть серию {n} →"
     }
   }
 }

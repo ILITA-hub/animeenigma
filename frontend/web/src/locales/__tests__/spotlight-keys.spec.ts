@@ -255,14 +255,33 @@ describe('spotlight i18n parity', () => {
     }
   })
 
-  const continueWatchingNewKeys = ['title', 'newEpisodeBadge', 'resumeCta'] as const
-  it.each(continueWatchingNewKeys)('spotlight.continueWatchingNew.%s present in both locales', (k) => {
+  // v1.1-polish Phase 10 (HSB-V11-CWN-01/02/03) added lastWatched /
+  // newEpisodeLine / resumeCtaWithEp — the hero-ribbon + two-row meta refactor.
+  const continueWatchingNewKeys = [
+    'title',
+    'newEpisodeBadge',
+    'resumeCta',
+    'lastWatched',
+    'newEpisodeLine',
+    'resumeCtaWithEp',
+  ] as const
+  it.each(continueWatchingNewKeys)('spotlight.continueWatchingNew.%s present in all 3 locales (en/ru/ja)', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).continueWatchingNew?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).continueWatchingNew?.[k]).toBe('string')
+    expect(typeof (jaSpotlight as Record<string, Record<string, unknown>>).continueWatchingNew?.[k]).toBe('string')
   })
 
   it('spotlight.continueWatchingNew.newEpisodeBadge preserves {n} interpolation', () => {
     expect((enSpotlight as Record<string, Record<string, string>>).continueWatchingNew.newEpisodeBadge).toContain('{n}')
     expect((ruSpotlight as Record<string, Record<string, string>>).continueWatchingNew.newEpisodeBadge).toContain('{n}')
+  })
+
+  it('spotlight.continueWatchingNew {n}-interpolated keys preserve {n} across en/ru/ja', () => {
+    for (const loc of [enSpotlight, ruSpotlight, jaSpotlight]) {
+      const ns = (loc as Record<string, Record<string, string>>).continueWatchingNew
+      expect(ns.lastWatched).toContain('{n}')
+      expect(ns.newEpisodeLine).toContain('{n}')
+      expect(ns.resumeCtaWithEp).toContain('{n}')
+    }
   })
 })
