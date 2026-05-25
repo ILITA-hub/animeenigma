@@ -44,6 +44,13 @@ type Config struct {
 	// slash — Load() trims it. The handler swaps http→ws / https→wss for
 	// the ws_url field; see wsURLFromBase in internal/handler/rooms.go.
 	PublicBaseURL string
+
+	// AllowAllOrigins disables the WebSocket Origin-header allowlist on
+	// the /ws upgrade handler. Production deployments leave this `false`
+	// so only requests originating from PublicBaseURL can upgrade; local
+	// dev (`make dev` + Vite dev server on a different port) flips it on
+	// via WATCH_TOGETHER_ALLOW_ALL_ORIGINS=true. NEVER enable in prod.
+	AllowAllOrigins bool
 }
 
 type ServerConfig struct {
@@ -80,10 +87,11 @@ func Load() (*Config, error) {
 			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
-		MaxMembers:    getEnvInt("WATCH_TOGETHER_MAX_MEMBERS", 10),
-		RoomTTL:       getEnvDuration("WATCH_TOGETHER_ROOM_TTL", 900*time.Second),
-		GracePeriod:   getEnvDuration("WATCH_TOGETHER_GRACE_PERIOD", 5*time.Minute),
-		PublicBaseURL: strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.ru"), "/"),
+		MaxMembers:      getEnvInt("WATCH_TOGETHER_MAX_MEMBERS", 10),
+		RoomTTL:         getEnvDuration("WATCH_TOGETHER_ROOM_TTL", 900*time.Second),
+		GracePeriod:     getEnvDuration("WATCH_TOGETHER_GRACE_PERIOD", 5*time.Minute),
+		PublicBaseURL:   strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.ru"), "/"),
+		AllowAllOrigins: getEnvBool("WATCH_TOGETHER_ALLOW_ALL_ORIGINS", false),
 	}, nil
 }
 
@@ -110,4 +118,23 @@ func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
 		}
 	}
 	return defaultVal
+}
+
+// getEnvBool parses a permissive boolean: "1", "true", "yes", "on" (any case)
+// → true; "0", "false", "no", "off" (any case) → false; anything else returns
+// the default. Mirrors the cautious-parse style of getEnvInt/getEnvDuration so
+// a malformed value never crashes boot.
+func getEnvBool(key string, defaultVal bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return defaultVal
+	}
 }

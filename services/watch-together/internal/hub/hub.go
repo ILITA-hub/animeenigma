@@ -171,6 +171,28 @@ func (h *Hub) Unregister(c *Connection) {
 		ActiveConnections.WithLabelValues(c.RoomID).Dec()
 	}
 
+	// Fire the per-connection lifecycle hook (01.5 amendment) AFTER the
+	// hub's room-set has been mutated but BEFORE we close the underlying
+	// websocket. Order matters: the WS-upgrade handler installs OnClose
+	// to broadcast `member:left` + call repo.RemoveMember — broadcasting
+	// while the connection is still in the room set would mean alice sees
+	// her own "alice left" frame. Wrapping the call in a recover keeps a
+	// buggy callback from taking down the hub goroutine.
+	if c.OnClose != nil {
+		func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					h.log.Errorw("watch_together hub OnClose panic",
+						"room_id", c.RoomID,
+						"user_id", c.UserID,
+						"recover", rec,
+					)
+				}
+			}()
+			c.OnClose(c)
+		}()
+	}
+
 	c.Close()
 
 	if lastInRoom {

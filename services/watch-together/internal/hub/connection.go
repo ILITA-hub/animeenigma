@@ -86,6 +86,17 @@ type Connection struct {
 	// exercise the outbound side; readPump tolerates that gracefully.
 	OnMessage func(*Connection, domain.Envelope)
 
+	// OnClose is the lifecycle teardown hook set by the WS-upgrade handler
+	// (01.5). Fires exactly once from Hub.Unregister AFTER the connection
+	// has been removed from the room set but BEFORE Connection.Close is
+	// invoked, so the callback observes a consistent post-removal hub
+	// state and can broadcast `member:left` / call repo.RemoveMember
+	// without racing with another Register for the same user. May be nil
+	// (Close-only path bypasses it). Idempotent because closeOnce gates
+	// the surrounding Close call but NOT this callback — Unregister is
+	// the sole caller and is itself a no-op on already-removed connections.
+	OnClose func(*Connection)
+
 	// log is the per-connection logger reference (a thin shared pointer).
 	log *logger.Logger
 
