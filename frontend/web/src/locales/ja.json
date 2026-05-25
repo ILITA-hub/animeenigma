@@ -1052,6 +1052,9 @@
       "title": "そろそろ見ませんか?",
       "subtitlePlanned": "「予定」リストから",
       "subtitlePostponed": "「保留」リストから",
+      "statusPlanned": "計画中",
+      "statusPostponed": "延期",
+      "addedAt": "{ago}に追加",
       "watchCta": "視聴"
     },
     "continueWatchingNew": {

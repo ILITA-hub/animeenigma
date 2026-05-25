@@ -109,8 +109,35 @@ func (r *NotTimeYetResolver) Resolve(ctx context.Context, userID *string) (*spot
 	}
 
 	data := spotlight.NotTimeYetData{Anime: anime, Status: picked.Status}
+	// Surface anime_list.updated_at as AddedAt (HSB-V11-NT-01). The player
+	// client ships it as an RFC3339 string; parse defensively — a missing
+	// or malformed timestamp leaves AddedAt nil (omitempty drops it from
+	// the JSON) so the card just hides the "Added X ago" line.
+	if ts := parseUpdatedAt(picked.UpdatedAt); ts != nil {
+		data.AddedAt = ts
+	}
 	if err := r.cache.Set(ctx, key, data, notTimeYetTTL); err != nil {
 		r.log.Warnw("spotlight.cache_set_failed", "type", r.Type(), "key", key, "error", err)
 	}
 	return &spotlight.Card{Type: r.Type(), Data: data}, nil
+}
+
+// parseUpdatedAt parses the player client's anime_list.updated_at string
+// into a *time.Time. Returns nil for empty/zero/unparseable input so the
+// caller can rely on omitempty to drop AddedAt from the JSON. Tries
+// RFC3339 (with and without nanoseconds) — the formats Go's time.Time
+// JSON marshaling and Postgres emit.
+func parseUpdatedAt(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, s); err == nil {
+			if t.IsZero() {
+				return nil
+			}
+			return &t
+		}
+	}
+	return nil
 }

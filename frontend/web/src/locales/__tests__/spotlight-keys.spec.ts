@@ -232,10 +232,27 @@ describe('spotlight i18n parity', () => {
     }
   })
 
-  const notTimeYetKeys = ['title', 'subtitlePlanned', 'subtitlePostponed', 'watchCta'] as const
-  it.each(notTimeYetKeys)('spotlight.notTimeYet.%s present in both locales', (k) => {
+  // v1.1-polish Phase 09 (HSB-V11-NT-01/02) added statusPlanned /
+  // statusPostponed (status pill) + addedAt ({ago} relative timestamp).
+  const notTimeYetKeys = [
+    'title',
+    'subtitlePlanned',
+    'subtitlePostponed',
+    'statusPlanned',
+    'statusPostponed',
+    'addedAt',
+    'watchCta',
+  ] as const
+  it.each(notTimeYetKeys)('spotlight.notTimeYet.%s present in all 3 locales (en/ru/ja)', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).notTimeYet?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).notTimeYet?.[k]).toBe('string')
+    expect(typeof (jaSpotlight as Record<string, Record<string, unknown>>).notTimeYet?.[k]).toBe('string')
+  })
+
+  it('spotlight.notTimeYet.addedAt preserves {ago} interpolation across en/ru/ja', () => {
+    for (const loc of [enSpotlight, ruSpotlight, jaSpotlight]) {
+      expect((loc as Record<string, Record<string, string>>).notTimeYet.addedAt).toContain('{ago}')
+    }
   })
 
   const continueWatchingNewKeys = ['title', 'newEpisodeBadge', 'resumeCta'] as const

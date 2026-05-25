@@ -1052,6 +1052,9 @@
       "title": "Не пришло ли время?",
       "subtitlePlanned": "Из «Запланировано»",
       "subtitlePostponed": "Из «Отложено»",
+      "statusPlanned": "В планах",
+      "statusPostponed": "Отложено",
+      "addedAt": "Добавлено {ago}",
       "watchCta": "Смотреть"
     },
     "continueWatchingNew": {

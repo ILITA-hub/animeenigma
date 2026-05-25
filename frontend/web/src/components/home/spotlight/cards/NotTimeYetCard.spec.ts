@@ -1,7 +1,18 @@
 /**
- * Workstream hero-spotlight — Phase 3 (dynamic-cards-migration) Plan 03-05 / Task 3.
+ * Workstream hero-spotlight — v1.1-polish Phase 09 (HSB-V11-NT-01..04).
  *
- * Vitest spec for NotTimeYetCard.vue.
+ * Vitest spec for the NotTimeYetCard amber/clock refactor. Phase 3 spec
+ * verified the cyan list-passthrough layout; Phase 09 replaces it with:
+ *
+ *   1. Single-root <article> + SpotlightBackdrop (poster-blur, amber).
+ *   2. Amber secondary gradient overlay (from-amber-500/30).
+ *   3. Clock-icon header (SpotlightIcon name="clock").
+ *   4. Status pill — yellow for planned, slate for postponed.
+ *   5. Relative "Added X ago" line via formatAgo when added_at present.
+ *   6. Direct-to-watch CTA: href ends in /watch (not the detail page).
+ *
+ * The `t` mock echoes the key (+ JSON params) so assertions don't need an
+ * i18n bundle — same pattern as LatestNewsCard.spec.ts.
  */
 
 import { describe, it, expect, vi } from 'vitest'
@@ -29,46 +40,106 @@ function mountCard(props: Record<string, unknown>) {
   })
 }
 
+// ISO timestamp `daysAgo` calendar days in the past so the relative-date
+// assertion stays deterministic regardless of run time.
+function isoDaysAgo(daysAgo: number): string {
+  return new Date(Date.now() - daysAgo * 86_400_000).toISOString()
+}
+
 const baseData = {
   status: 'planned' as const,
+  added_at: isoDaysAgo(14),
   anime: {
     id: 'a-1',
     name: 'Frieren',
     name_ru: 'Фрирен',
     poster_url: '/poster.jpg',
+    episodes_count: 28,
   },
 }
 
-describe('NotTimeYetCard', () => {
-  it('renders the title key from i18n', () => {
+describe('NotTimeYetCard — root + backdrop', () => {
+  it('renders a single root <article> element', () => {
     const wrapper = mountCard({ data: baseData })
+    expect(wrapper.element.tagName).toBe('ARTICLE')
+  })
+
+  it('renders the amber secondary gradient overlay', () => {
+    const wrapper = mountCard({ data: baseData })
+    expect(wrapper.html()).toContain('from-amber-500/30')
+  })
+
+  it('renders a poster-blur backdrop driven by the poster url', () => {
+    const wrapper = mountCard({ data: baseData })
+    // SpotlightBackdrop renders the blurred <img> for the poster-blur
+    // variant when a posterUrl is supplied.
+    const imgs = wrapper.findAll('img')
+    expect(imgs.some((i) => i.attributes('src') === '/poster.jpg')).toBe(true)
+  })
+})
+
+describe('NotTimeYetCard — header + status pill', () => {
+  it('renders the clock SpotlightIcon in the header', () => {
+    const wrapper = mountCard({ data: baseData })
+    // SpotlightIcon renders an <svg>; the clock variant is selected via
+    // its `name` prop. We assert the icon component is present alongside
+    // the promoted title key.
+    expect(wrapper.findComponent({ name: 'SpotlightIcon' }).exists()).toBe(true)
     expect(wrapper.text()).toContain('spotlight.notTimeYet.title')
   })
 
-  it('renders subtitlePlanned when status=planned', () => {
+  it('shows the planned status label + yellow pill class', () => {
     const wrapper = mountCard({ data: { ...baseData, status: 'planned' } })
-    expect(wrapper.text()).toContain('spotlight.notTimeYet.subtitlePlanned')
-    expect(wrapper.text()).not.toContain('spotlight.notTimeYet.subtitlePostponed')
+    expect(wrapper.text()).toContain('spotlight.notTimeYet.statusPlanned')
+    expect(wrapper.text()).not.toContain('spotlight.notTimeYet.statusPostponed')
+    expect(wrapper.html()).toContain('bg-yellow-500/20')
+    expect(wrapper.html()).toContain('text-yellow-200')
   })
 
-  it('renders subtitlePostponed when status=postponed', () => {
+  it('shows the postponed status label + slate pill class', () => {
     const wrapper = mountCard({ data: { ...baseData, status: 'postponed' } })
-    expect(wrapper.text()).toContain('spotlight.notTimeYet.subtitlePostponed')
-    expect(wrapper.text()).not.toContain('spotlight.notTimeYet.subtitlePlanned')
+    expect(wrapper.text()).toContain('spotlight.notTimeYet.statusPostponed')
+    expect(wrapper.text()).not.toContain('spotlight.notTimeYet.statusPlanned')
+    expect(wrapper.html()).toContain('bg-slate-500/20')
+    expect(wrapper.html()).toContain('text-slate-300')
+  })
+})
+
+describe('NotTimeYetCard — addedAt + CTA', () => {
+  it('renders the relative addedAt line when added_at is provided', () => {
+    const wrapper = mountCard({ data: baseData })
+    // The `t` mock echoes the addedAt key with its params; formatAgo turns
+    // a 14-day-old timestamp into a "weeks ago" relative string.
+    expect(wrapper.text()).toContain('spotlight.notTimeYet.addedAt')
+    expect(wrapper.text()).toContain('weeks ago')
   })
 
-  it('CTA links to /anime/{id}', () => {
+  it('hides the addedAt line when added_at is absent', () => {
+    const noDate = { ...baseData, added_at: null }
+    const wrapper = mountCard({ data: noDate })
+    expect(wrapper.text()).not.toContain('spotlight.notTimeYet.addedAt')
+  })
+
+  it('CTA links directly to the watch page (/anime/{id}/watch)', () => {
     const wrapper = mountCard({ data: baseData })
     const links = wrapper.findAllComponents(RouterLinkStub)
-    const cta = links.find((l) => l.props('to') === '/anime/a-1')
+    const cta = links.find((l) => l.props('to') === '/anime/a-1/watch')
     expect(cta).toBeDefined()
+    expect((cta!.props('to') as string).endsWith('/watch')).toBe(true)
   })
 
-  it('renders poster with anime.poster_url', () => {
+  it('renders the watchCta label on the CTA', () => {
     const wrapper = mountCard({ data: baseData })
-    const img = wrapper.find('img')
-    expect(img.exists()).toBe(true)
-    expect(img.attributes('src')).toBe('/poster.jpg')
+    expect(wrapper.text()).toContain('spotlight.notTimeYet.watchCta')
+  })
+})
+
+describe('NotTimeYetCard — style discipline', () => {
+  it('renders the poster with anime.poster_url', () => {
+    const wrapper = mountCard({ data: baseData })
+    const img = wrapper.findAll('img').find((i) => i.attributes('loading') === 'lazy')
+    expect(img).toBeDefined()
+    expect(img!.attributes('src')).toBe('/poster.jpg')
   })
 
   it('uses only font-medium and font-semibold typography weights', () => {
@@ -79,7 +150,7 @@ describe('NotTimeYetCard', () => {
     expect(html).toMatch(/font-medium|font-semibold/)
   })
 
-  it('uses tablet padding p-4 (never p-5)', () => {
+  it('uses the p-4 md:p-6 lg:p-8 padding ladder (never p-5)', () => {
     const wrapper = mountCard({ data: baseData })
     const html = wrapper.html()
     expect(html).not.toMatch(/\bp-5\b/)
