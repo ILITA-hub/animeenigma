@@ -27,11 +27,11 @@
  *     year, season, status, kind, rating, has_* flags, etc.). We declare
  *     them all here so card components have full type-safety, but every
  *     extra field is optional.
- *  4. `PlatformMetric.delta` is not currently emitted by the Phase 1
- *     resolver (snapshot showed only `{key, value}`). We keep it as
- *     `delta?: number | null` so the card can render delta when the
- *     backend adds it without a frontend type bump (HSB-FE-22 forward-
- *     compatible).
+ *  4. `PlatformStatsData` was refactored in Phase 27 (platform-stats-jc)
+ *     from a flat `metrics: PlatformMetric[]` array to a structured
+ *     `{ hero: StatsHero, tiles: StatsTile[] }` shape. The old
+ *     `PlatformMetric` interface has been removed. `PlatformStatsCard.vue`
+ *     was updated to match in the same phase.
  *  5. Per RESEARCH.md Pitfall 8, fields stay snake_case all the way from
  *     backend through composable to card component — no transform step.
  */
@@ -116,25 +116,29 @@ export interface LatestNewsData {
   entries: ChangelogEntry[]
 }
 
-export interface PlatformMetric {
-  // Open union of known metric keys; backend may add more without a
-  // frontend bump (the card renders unknown keys with their localized
-  // label falling back to the raw key).
-  key: 'anime_added_7d' | 'episodes_added_7d' | 'active_rooms_7d' | string
+export interface StatsHero {
+  working_ok: boolean
+  // Real 7-day uptime %, from Prometheus. Omitted/null when Prometheus is
+  // unreachable — the card then shows the quip without a number.
+  uptime_percent?: number | null
+  uptime_quip: string
+  service: string
+  ux_delta: string
+  cdi: string
+  mvq: string
+  tagline: string
+}
+
+export interface StatsTile {
+  label: string
   value: number
-  // v1.1-polish Phase 08 (HSB-V11-PS-01): backend now enriches each metric
-  // with the prior 7-day-window total (`previous_value`) + a 7-element
-  // oldest-first daily array (`series`). snake_case matches the Go JSON
-  // tags (`previous_value` / `series`) — fields stay snake_case end-to-end
-  // (RESEARCH.md Pitfall 8). Both optional: omitted when the resolver could
-  // not compute them.
-  previous_value?: number | null
-  series?: number[]
-  delta?: number | null
+  window: 'day' | 'week' | 'all'
+  format: 'int' | 'bytes' | 'seconds'
 }
 
 export interface PlatformStatsData {
-  metrics: PlatformMetric[]
+  hero: StatsHero
+  tiles: StatsTile[]
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
