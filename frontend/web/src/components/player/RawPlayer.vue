@@ -156,21 +156,26 @@ import type {
   RawStream,
   SubtitleTrack,
 } from '@/types/raw'
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 const props = defineProps<{
   animeId: string
-  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  // Phase 3 (03.3) — room prop drives the WatchTogether sync bridge (wired below
+  // once `videoRef` is declared).
   room?: WatchTogetherRoomHandle | null
 }>()
-// Phase 2 (02.7) — reference `props.room` so eslint/no-unused-vars + vue-tsc stay happy.
-// Phase 3 replaces this with real WatchTogether sync wiring.
-void props.room
 
 const { locale } = useI18n()
 
 const playerContainer = ref<HTMLElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
+
+// Phase 3 (03.3): wire real sync when a room is provided. Zero behavior
+// change when room is null/undefined.
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
 
 const loadingEpisodes = ref(false)
 const loadingStream = ref(false)
