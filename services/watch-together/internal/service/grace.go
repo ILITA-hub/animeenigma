@@ -283,7 +283,14 @@ func (g *GraceManager) fire(roomID string) {
 		)
 	}
 
-	// 2. Delete the 3 persistent keys.
+	// 2. Telemetry — Plan 05.2 helper. Decrements RoomsActive gauge and
+	// observes ChatMessagesPerRoom + SessionDurationSeconds histograms.
+	// Must run BEFORE DeleteRoom (the room snapshot is still readable).
+	if room, err := g.repo.GetRoom(ctx, roomID); err == nil && room != nil {
+		observeRoomTeardown(ctx, g.repo, g.log, room)
+	}
+
+	// 3. Delete the 3 persistent keys.
 	if err := g.repo.DeleteRoom(ctx, roomID); err != nil {
 		g.log.Warnw("watch_together grace fire delete",
 			"room_id", roomID,
