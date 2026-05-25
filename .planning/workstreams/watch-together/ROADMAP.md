@@ -8,7 +8,7 @@
 
 ## Milestones
 
-- ⏳ **v1.0 Watch Together Foundation** — Active (2/5 phases shipped). Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions. Phase 1 (Backend Foundation) closed 2026-05-25; Phase 2 (Frontend Shell + Chat) closed 2026-05-25.
+- ⏳ **v1.0 Watch Together Foundation** — Active (3/5 phases shipped). Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions. Phase 1 (Backend Foundation) closed 2026-05-25; Phase 2 (Frontend Shell + Chat) closed 2026-05-25; Phase 3 (Player Sync — All 5) closed 2026-05-25.
 - ⏳ **v1.1 Per-User Player** — Deferred. Mixed-language friend groups watch in their own language while sharing the timeline. Needs its own brainstorm.
 - ⏳ **v1.2 Persistent Named Rooms** — Conditional. "Saturday Anime Night" rooms that survive past empty state. Adds Postgres + chat retention.
 - ⏳ **v1.3 Voice Piggyback** — Conditional, post v1.1 usage data.
@@ -19,7 +19,7 @@
 |-------|-------|--------|
 | 1 | Backend Foundation | ✅ Complete (2026-05-25 — 9 plans, 8/8 acceptance, smoke green 3× — see [`01-PHASE-SUMMARY.md`](phases/01-backend-foundation/01-PHASE-SUMMARY.md)) |
 | 2 | Frontend Shell + Chat | ✅ Complete (2026-05-25 — 10 plans, 7/7 acceptance, two-browser Playwright smoke spec authored, chunk 6.57 kB gz / 30 kB budget — see [`02-PHASE-SUMMARY.md`](phases/02-frontend-shell/02-PHASE-SUMMARY.md)) |
-| 3 | Player Sync — All 5 | ⏳ Not started |
+| 3 | Player Sync — All 5 | ✅ Complete (2026-05-25 — 7 plans, 9/9 acceptance, two-browser sync e2e spec authored across all 5 players + drift via CDP throttling, Kodik RPC daily canary shipped, 188 unit/component tests + 21 e2e listings — see [`03-PHASE-SUMMARY.md`](phases/03-player-sync/03-PHASE-SUMMARY.md)) |
 | 4 | State Switching | ⏳ Not started |
 | 5 | Polish + Production-Ship | ⏳ Not started |
 
@@ -163,6 +163,8 @@ The Kodik regression test (`WT-SYNC-10`) is intentionally a daily Playwright run
 ### Phase 5: Polish + Production-Ship
 
 **Goal:** Production-grade UX. Reaction burst animations, reconnect grace period, mobile bottom-sheet layout, i18n complete, capacity UX, room-expired redirect, auth-expired handling, Grafana panel.
+
+**Note (carried from Phase 3 close-out):** The Kodik canary spec is **already shipped** at [`frontend/web/e2e/kodik-rpc-probe.spec.ts`](../../frontend/web/e2e/kodik-rpc-probe.spec.ts) (354 lines, `[canary]`-tagged, Plan 03.4). Phase 5 does NOT need to author the spec — it only needs to wire the nightly cron + alerting (most likely a GitHub Actions `schedule:` trigger + Telegram notification using the same `TELEGRAM_ADMIN_CHAT_ID` env var the player ReportButton already uses). Filter via `bunx playwright test --grep canary --reporter=list`.
 
 **Depends on:** Phase 4 (full feature works end-to-end).
 **Requirements:** WT-POLISH-01, WT-POLISH-02, WT-POLISH-03, WT-POLISH-04, WT-POLISH-05, WT-POLISH-06, WT-POLISH-07, WT-POLISH-08, WT-NF-05, WT-NF-06, WT-NF-07
