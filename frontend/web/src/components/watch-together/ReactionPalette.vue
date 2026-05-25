@@ -13,7 +13,8 @@
   The local throttle gives the user a visual cooldown so they understand
   the chip is intentionally inert for a beat.
 
-  No `font-bold` — project rule. Tailwind utility-only.
+  Project rule: only font-medium / font-semibold weights. Tailwind
+  utility-only.
 -->
 
 <script setup lang="ts">
