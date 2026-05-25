@@ -42,16 +42,27 @@ import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 
 // ── Mocks (must be hoisted before SUT import) ─────────────────────────────
+//
+// vi.mock factories are HOISTED above every other statement in the file
+// (including `let` / `const` declarations), so the FakeRoomGoneError class
+// and the getRoom mock are defined INSIDE the factory and re-surfaced via
+// `vi.hoisted` so the test bodies can still reference them. This is the
+// canonical vitest pattern for "I want both a mock surface AND test-body
+// access to it" — see vitest.dev/api/vi.html#vi-hoisted.
 
-class FakeRoomGoneError extends Error {
-  constructor() {
-    super('room gone')
-    this.name = 'RoomGoneError'
-    Object.setPrototypeOf(this, FakeRoomGoneError.prototype)
+const { getRoomMock, FakeRoomGoneError } = vi.hoisted(() => {
+  class FakeRoomGoneError extends Error {
+    constructor() {
+      super('room gone')
+      this.name = 'RoomGoneError'
+      Object.setPrototypeOf(this, FakeRoomGoneError.prototype)
+    }
   }
-}
-
-const getRoomMock = vi.fn()
+  return {
+    getRoomMock: vi.fn(),
+    FakeRoomGoneError,
+  }
+})
 
 vi.mock('@/api/watch-together', () => ({
   getRoom: (id: string) => getRoomMock(id),
@@ -65,7 +76,11 @@ vi.mock('@/api/watch-together', () => ({
 // resolves immediately. We expose the onError handler the SUT registers so
 // individual tests can fire CAPACITY_FULL / AUTH_EXPIRED.
 let lastErrorHandler: ((e: { code: string; message?: string }) => void) | null = null
+// Captured but not currently asserted on — kept around for symmetry with
+// onError (and likely needed in a future Phase 5 follow-up that exercises
+// the onRoomClosed branch directly rather than via REST 410).
 let lastRoomClosedHandler: (() => void) | null = null
+void lastRoomClosedHandler
 
 interface FakeHandle {
   room: ReturnType<typeof ref>
@@ -121,27 +136,47 @@ function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' |
   return handle
 }
 
-let currentHandle: FakeHandle = makeFakeHandle()
+// Hoisted state holder: vitest hoists vi.mock factories above module-scope
+// `let` declarations, so we stash mutable state inside `vi.hoisted` so the
+// `useWatchTogetherRoom` factory and the test bodies share one source.
+// The handle is typed as `unknown` here (vi.hoisted runs before our
+// FakeHandle type exists in the bundling order); test bodies cast to
+// FakeHandle on consumption.
+interface SharedState {
+  currentHandle: FakeHandle | null
+  pushMock: ReturnType<typeof vi.fn>
+}
+const sharedState = vi.hoisted(
+  () =>
+    ({
+      currentHandle: null,
+      pushMock: vi.fn(),
+    }) as SharedState,
+)
 
 vi.mock('@/composables/useWatchTogetherRoom', () => ({
-  useWatchTogetherRoom: vi.fn(() => currentHandle),
+  useWatchTogetherRoom: vi.fn(() => sharedState.currentHandle),
 }))
 
 // vue-router mock — capture router.push for the AUTH_EXPIRED test.
-const pushMock = vi.fn()
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { roomId: 'room-abc' }, fullPath: '/watch/room/room-abc' }),
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: sharedState.pushMock }),
 }))
 
-// vue-i18n stub — echo keys.
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({
-    t: (key: string, params?: Record<string, unknown>) =>
-      params ? `${key}::${JSON.stringify(params)}` : key,
-    locale: { value: 'en' },
-  }),
-}))
+// vue-i18n stub — echo keys. Use importOriginal to preserve createI18n
+// (referenced transitively via @/i18n.ts → @/stores/auth.ts).
+vi.mock('vue-i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-i18n')>()
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (key: string, params?: Record<string, unknown>) =>
+        params ? `${key}::${JSON.stringify(params)}` : key,
+      locale: { value: 'en' },
+    }),
+  }
+})
 
 // SUT — must be imported AFTER all vi.mock calls.
 import WatchTogetherView from './WatchTogetherView.vue'
@@ -204,10 +239,10 @@ function mountView() {
 
 beforeEach(() => {
   getRoomMock.mockReset()
-  pushMock.mockReset()
+  sharedState.pushMock.mockReset()
   lastErrorHandler = null
   lastRoomClosedHandler = null
-  currentHandle = makeFakeHandle()
+  sharedState.currentHandle = makeFakeHandle()
 })
 
 afterEach(() => {
@@ -257,11 +292,11 @@ describe('WatchTogetherView', () => {
     getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
     mountView()
     await flushPromises()
-    expect(currentHandle.connect).toHaveBeenCalledTimes(1)
+    expect(sharedState.currentHandle!.connect).toHaveBeenCalledTimes(1)
   })
 
   it('Test 4: room.player === "kodik" mounts KodikPlayer and NOT the other 4', async () => {
-    currentHandle = makeFakeHandle('kodik')
+    sharedState.currentHandle = makeFakeHandle('kodik')
     getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
     const wrapper = mountView()
     await flushPromises()
@@ -273,7 +308,7 @@ describe('WatchTogetherView', () => {
   })
 
   it('Test 5: room.player === "animelib" mounts AnimeLibPlayer', async () => {
-    currentHandle = makeFakeHandle('animelib')
+    sharedState.currentHandle = makeFakeHandle('animelib')
     getRoomMock.mockResolvedValueOnce(makeSnapshot('animelib'))
     const wrapper = mountView()
     await flushPromises()
@@ -282,7 +317,7 @@ describe('WatchTogetherView', () => {
   })
 
   it('Test 6: room.player === "ourenglish" mounts OurEnglishPlayer', async () => {
-    currentHandle = makeFakeHandle('ourenglish')
+    sharedState.currentHandle = makeFakeHandle('ourenglish')
     getRoomMock.mockResolvedValueOnce(makeSnapshot('ourenglish'))
     const wrapper = mountView()
     await flushPromises()
@@ -291,7 +326,7 @@ describe('WatchTogetherView', () => {
   })
 
   it('Test 7: room.player === "hanime" mounts HanimePlayer', async () => {
-    currentHandle = makeFakeHandle('hanime')
+    sharedState.currentHandle = makeFakeHandle('hanime')
     getRoomMock.mockResolvedValueOnce(makeSnapshot('hanime'))
     const wrapper = mountView()
     await flushPromises()
@@ -300,7 +335,7 @@ describe('WatchTogetherView', () => {
   })
 
   it('Test 8: room.player === "raw" mounts RawPlayer', async () => {
-    currentHandle = makeFakeHandle('raw')
+    sharedState.currentHandle = makeFakeHandle('raw')
     getRoomMock.mockResolvedValueOnce(makeSnapshot('raw'))
     const wrapper = mountView()
     await flushPromises()
@@ -309,18 +344,19 @@ describe('WatchTogetherView', () => {
   })
 
   it('Test 9: RoomSidebar receives room/members/messages/sendChat/sendReaction/connectionStatus from composable', async () => {
-    currentHandle = makeFakeHandle('kodik')
+    sharedState.currentHandle = makeFakeHandle('kodik')
     getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
     const wrapper = mountView()
     await flushPromises()
     const sidebar = wrapper.findComponent(RoomSidebarStub)
+    const h = sharedState.currentHandle!
     expect(sidebar.exists()).toBe(true)
-    expect(sidebar.props('room')).toBe(currentHandle.room.value)
-    expect(sidebar.props('members')).toBe(currentHandle.members.value)
-    expect(sidebar.props('messages')).toBe(currentHandle.messages.value)
-    expect(sidebar.props('sendChat')).toBe(currentHandle.sendChat)
-    expect(sidebar.props('sendReaction')).toBe(currentHandle.sendReaction)
-    expect(sidebar.props('connectionStatus')).toBe(currentHandle.connectionStatus.value)
+    expect(sidebar.props('room')).toBe(h.room.value)
+    expect(sidebar.props('members')).toBe(h.members.value)
+    expect(sidebar.props('messages')).toBe(h.messages.value)
+    expect(sidebar.props('sendChat')).toBe(h.sendChat)
+    expect(sidebar.props('sendReaction')).toBe(h.sendReaction)
+    expect(sidebar.props('connectionStatus')).toBe(h.connectionStatus.value)
   })
 
   it('Test 10: on CAPACITY_FULL error received, renders capacity-full state', async () => {
@@ -340,8 +376,8 @@ describe('WatchTogetherView', () => {
     expect(typeof lastErrorHandler).toBe('function')
     lastErrorHandler?.({ code: 'AUTH_EXPIRED' })
     await flushPromises()
-    expect(pushMock).toHaveBeenCalledTimes(1)
-    const arg = pushMock.mock.calls[0][0]
+    expect(sharedState.pushMock).toHaveBeenCalledTimes(1)
+    const arg = sharedState.pushMock.mock.calls[0][0]
     expect(arg).toMatchObject({ path: '/auth' })
     // Either `query.next` or `query.returnUrl` is acceptable; both encode
     // the resume URL. The view's implementation picks one. We assert that
@@ -355,8 +391,9 @@ describe('WatchTogetherView', () => {
     getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
     const wrapper = mountView()
     await flushPromises()
+    const h = sharedState.currentHandle!
     wrapper.unmount()
-    expect(currentHandle.disconnect).toHaveBeenCalledTimes(1)
+    expect(h.disconnect).toHaveBeenCalledTimes(1)
   })
 
   it('Test 13: rendered HTML uses only font-medium / font-semibold weights', async () => {
