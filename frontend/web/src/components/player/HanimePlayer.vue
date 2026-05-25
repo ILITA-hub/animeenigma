@@ -143,6 +143,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import Hls from 'hls.js'
 import { hanimeApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 interface HanimeEpisode {
@@ -162,12 +163,10 @@ const props = defineProps<{
   animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
-  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  // Phase 3 (03.3) — room prop drives the WatchTogether sync bridge (wired below
+  // once `videoRef` is declared).
   room?: WatchTogetherRoomHandle | null
 }>()
-// Phase 2 (02.7) — reference `props.room` so eslint/no-unused-vars + vue-tsc stay happy.
-// Phase 3 replaces this with real WatchTogether sync wiring.
-void props.room
 
 const authStore = useAuthStore()
 
@@ -185,6 +184,12 @@ const error = ref<string | null>(null)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
+
+// Phase 3 (03.3): wire real sync when a room is provided. Zero behavior
+// change when room is null/undefined.
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
 
 // Progress tracking
 const currentTime = ref(0)
