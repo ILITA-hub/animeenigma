@@ -1,35 +1,52 @@
 // Package transport wires the chi HTTP router for the watch-together
-// service. Phase 1 Plan 01.1 only exposes /health + /metrics — REST room
-// lifecycle endpoints land in 01.4, WebSocket upgrade in 01.5.
+// service. Phase 1 plan progression:
 //
-// AuthMiddleware is exported even though 01.1 doesn't use it — downstream
-// plans (01.4) wrap the /api/watch-together/* subtree with it. Mirrors the
-// project convention of double-validating the JWT the gateway already
-// checked (defence-in-depth; same shape as services/notifications and
-// services/themes).
+//	01.1 — /health + /metrics (this file's original form)
+//	01.4 — /api/watch-together/rooms (added in this iteration)
+//	01.5 — /api/watch-together/ws    (lands next)
+//
+// AuthMiddleware is exported so this file and the 01.5 WS handler share
+// one JWT-validation path (mirrors services/notifications + services/themes —
+// every service double-validates the JWT the gateway already checked,
+// defence-in-depth).
 package transport
 
 import (
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/config"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/handler"
 )
 
 // NewRouter builds the chi router for the watch-together service.
 //
-// Route shape for Plan 01.1:
+// Route shape after Plan 01.4:
 //
-//	GET /health   — public liveness probe
-//	GET /metrics  — Prometheus scrape target
+//	GET    /health                                 — public liveness
+//	GET    /metrics                                — Prometheus scrape target
+//	POST   /api/watch-together/rooms               — JWT-protected (01.4)
+//	GET    /api/watch-together/rooms/{id}          — JWT-protected (01.4)
+//	DELETE /api/watch-together/rooms/{id}          — JWT-protected (01.4)
 //
-// Subsequent plans extend this: 01.4 mounts /rooms; 01.5 mounts /ws.
-func NewRouter(cfg *config.Config, log *logger.Logger, metricsCollector *metrics.Collector) http.Handler {
+// Plan 01.5 will mount /api/watch-together/ws on the same /api/watch-together
+// subtree (so it shares this AuthMiddleware) but the upgrader reads its
+// JWT from a query param, not the Authorization header — see the WS plan.
+//
+// roomHandler may be nil; if so the /rooms routes are NOT mounted. Used by
+// unit tests that exercise the middleware stack without the full DI graph.
+func NewRouter(
+	cfg *config.Config,
+	roomHandler *handler.RoomHandler,
+	log *logger.Logger,
+	metricsCollector *metrics.Collector,
+) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware stack — same order as services/notifications + services/themes
@@ -51,10 +68,23 @@ func NewRouter(cfg *config.Config, log *logger.Logger, metricsCollector *metrics
 		metrics.Handler().ServeHTTP(w, req)
 	})
 
-	// Touching cfg here is a no-op for Plan 01.1 — keeps the parameter wired
-	// so downstream plans (01.4, 01.5) can drop in handlers without changing
-	// the constructor signature.
-	_ = cfg
+	// Public CRUD — Plan 01.4. All behind JWT. Mounted at /api/watch-together
+	// so the gateway can proxy the prefix verbatim and the WS endpoint in
+	// 01.5 reuses the same AuthMiddleware scope (only difference is that
+	// WS reads the JWT from a query param via a custom upgrader).
+	if roomHandler != nil {
+		r.Route("/api/watch-together", func(r chi.Router) {
+			r.Use(AuthMiddleware(cfg.JWT))
+			r.Route("/rooms", func(r chi.Router) {
+				r.Post("/", roomHandler.Create)
+				r.Get("/{id}", roomHandler.Get)
+				r.Delete("/{id}", roomHandler.Delete)
+			})
+			// NOTE(01.5): r.Get("/ws", wsHandler.Upgrade) lands in the next plan.
+			// Keep the route group structure as-is so 01.5 only adds a single
+			// line inside this closure.
+		})
+	}
 
 	return r
 }

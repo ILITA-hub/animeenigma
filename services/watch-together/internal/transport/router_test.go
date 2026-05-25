@@ -31,13 +31,15 @@ func getSharedCollector() *metrics.Collector {
 }
 
 // newTestRouter builds a router with the bare-minimum dependencies for
-// /health + /metrics integration tests. No env vars, no Redis, no
-// JWT validation — the test exercises the surface area Plan 01.1 ships.
+// /health + /metrics integration tests. No env vars, no Redis, no JWT
+// validation, and nil RoomHandler so the /rooms subtree is NOT mounted —
+// the test exercises only the surface area Plan 01.1 ships. Handler-level
+// routing tests live in internal/handler/rooms_test.go.
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	cfg := &config.Config{}
 	log := logger.Default()
-	return NewRouter(cfg, log, getSharedCollector())
+	return NewRouter(cfg, nil, log, getSharedCollector())
 }
 
 func TestRouter_Health_ReturnsOK(t *testing.T) {

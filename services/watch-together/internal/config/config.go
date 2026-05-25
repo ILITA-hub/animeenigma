@@ -3,10 +3,11 @@
 // Loaded once at boot via Load(); JWT_SECRET is the only required env var.
 // All other settings have safe defaults (WT-FOUND-01 / WT-NF-03):
 //
-//   - Server.Port:    SERVER_PORT (default 8091)
-//   - MaxMembers:     WATCH_TOGETHER_MAX_MEMBERS (default 10, per WT-NF-02)
-//   - RoomTTL:        WATCH_TOGETHER_ROOM_TTL (default 900s, sliding)
-//   - GracePeriod:    WATCH_TOGETHER_GRACE_PERIOD (default 5m post-last-disconnect)
+//   - Server.Port:     SERVER_PORT (default 8091)
+//   - MaxMembers:      WATCH_TOGETHER_MAX_MEMBERS (default 10, per WT-NF-02)
+//   - RoomTTL:         WATCH_TOGETHER_ROOM_TTL (default 900s, sliding)
+//   - GracePeriod:     WATCH_TOGETHER_GRACE_PERIOD (default 5m post-last-disconnect)
+//   - PublicBaseURL:   WATCH_TOGETHER_PUBLIC_BASE_URL (default https://animeenigma.ru)
 //
 // No Postgres / GORM — this service is Redis-only by design
 // (Phase 01-CONTEXT.md / WT-FOUND-02 deferred persistence to v1.2).
@@ -16,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
@@ -35,6 +37,13 @@ type Config struct {
 	// GracePeriod is the post-last-disconnect window before the room is
 	// torn down. Default 5m.
 	GracePeriod time.Duration
+
+	// PublicBaseURL is the public origin used to construct invite + ws URLs
+	// in the POST /rooms response. Default "https://animeenigma.ru" (prod);
+	// override via WATCH_TOGETHER_PUBLIC_BASE_URL. NEVER include a trailing
+	// slash — Load() trims it. The handler swaps http→ws / https→wss for
+	// the ws_url field; see wsURLFromBase in internal/handler/rooms.go.
+	PublicBaseURL string
 }
 
 type ServerConfig struct {
@@ -71,9 +80,10 @@ func Load() (*Config, error) {
 			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
-		MaxMembers:  getEnvInt("WATCH_TOGETHER_MAX_MEMBERS", 10),
-		RoomTTL:     getEnvDuration("WATCH_TOGETHER_ROOM_TTL", 900*time.Second),
-		GracePeriod: getEnvDuration("WATCH_TOGETHER_GRACE_PERIOD", 5*time.Minute),
+		MaxMembers:    getEnvInt("WATCH_TOGETHER_MAX_MEMBERS", 10),
+		RoomTTL:       getEnvDuration("WATCH_TOGETHER_ROOM_TTL", 900*time.Second),
+		GracePeriod:   getEnvDuration("WATCH_TOGETHER_GRACE_PERIOD", 5*time.Minute),
+		PublicBaseURL: strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.ru"), "/"),
 	}, nil
 }
 

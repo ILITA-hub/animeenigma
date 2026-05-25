@@ -1,35 +1,48 @@
 // Package main is the watch-together service entrypoint (port 8091).
 //
-// v1.0 Watch Together — workstream watch-together, Phase 1 Plan 01.1.
+// v1.0 Watch Together — workstream watch-together, Phase 1.
 //
-// Boot sequence:
+// Boot sequence (updated through Plan 01.4):
 //
 //  1. logger.Default()
 //  2. config.Load() — JWT_SECRET required; SERVER_PORT defaults to 8091;
-//     MaxMembers / RoomTTL / GracePeriod populated from WATCH_TOGETHER_*
-//     env vars.
+//     MaxMembers / RoomTTL / GracePeriod / PublicBaseURL populated from
+//     WATCH_TOGETHER_* env vars.
 //  3. metrics.NewCollector("watch-together") — service-labelled Prometheus
 //     registration.
-//  4. transport.NewRouter(cfg, log, collector) — Phase 1 ships /health +
-//     /metrics; REST + WS land in 01.4 / 01.5.
-//  5. http.Server with graceful shutdown on SIGINT/SIGTERM.
+//  4. redis.NewClient — connection to the shared Redis instance (host/port
+//     from cfg.Redis). Health-checked via PING before the HTTP listener
+//     starts; a Redis outage at boot is fatal because every Redis-only
+//     path needs the client.
+//  5. repo.NewRoomRepo — Redis facade owning every wt:* key.
+//  6. service.NewRoomService — single mutation surface for the room
+//     lifecycle (used by the REST handler today; the WS upgrader in 01.5
+//     will share the same instance for snapshot generation).
+//  7. handler.NewRoomHandler — chi handlers for POST/GET/DELETE /rooms.
+//  8. transport.NewRouter — mounts /health + /metrics + the /rooms subtree.
+//  9. http.Server with graceful shutdown on SIGINT/SIGTERM.
 //
 // No database — service is Redis-only by design (WT-FOUND-02; persistence
-// deferred to v1.2 via the new persistent-rooms workstream). The Redis
-// client is wired in 01.2.
+// deferred to v1.2 via the persistent-rooms workstream).
 package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/handler"
+	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/transport"
 )
 
@@ -43,7 +56,30 @@ func main() {
 	}
 
 	metricsCollector := metrics.NewCollector("watch-together")
-	router := transport.NewRouter(cfg, log, metricsCollector)
+
+	// Redis client — every persistent piece of state in this service lives
+	// in Redis (WT-FOUND-02). PING up-front so config errors surface at
+	// boot, not at first request.
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := redisClient.Ping(pingCtx).Err(); err != nil {
+		pingCancel()
+		log.Fatalw("redis ping failed", "addr", fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port), "error", err)
+	}
+	pingCancel()
+
+	// Repo → Service → Handler. The service is the single mutation surface
+	// for room lifecycle (Plan 01.4); the WS upgrader in 01.5 will hold the
+	// same *RoomService for snapshot generation.
+	roomRepo := repo.NewRoomRepo(redisClient, cfg.RoomTTL, log)
+	roomService := service.NewRoomService(roomRepo, log)
+	roomHandler := handler.NewRoomHandler(roomService, cfg, log)
+
+	router := transport.NewRouter(cfg, roomHandler, log, metricsCollector)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
@@ -59,6 +95,7 @@ func main() {
 			"max_members", cfg.MaxMembers,
 			"room_ttl", cfg.RoomTTL,
 			"grace_period", cfg.GracePeriod,
+			"public_base_url", cfg.PublicBaseURL,
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalw("failed to start server", "error", err)
@@ -74,6 +111,9 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalw("server forced to shutdown", "error", err)
+	}
+	if err := redisClient.Close(); err != nil {
+		log.Warnw("redis client close failed", "error", err)
 	}
 	log.Info("watch-together service stopped")
 }

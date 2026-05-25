@@ -11,43 +11,31 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
 )
 
-// Pin the legacy monolithic genproto module to a version published AFTER the
-// repo split, so that none of its `googleapis/rpc/status` package files exist
-// to collide with the canonical split module
-// `google.golang.org/genproto/googleapis/rpc`. The legacy module gets pulled
-// onto the import graph by go.work workspace mode via services/library's
-// transitive deps; without this pin both modules expose
-// `googleapis/rpc/status` at the same path and the Go loader emits
-// "ambiguous import" at /root/go/pkg/mod/google.golang.org/grpc@v1.77.0
-// /status/status.go:35. The May-2024 release is the first one that omits
-// the moved-out subpackage entirely. See
-// https://github.com/googleapis/go-genproto for the split history.
-require google.golang.org/genproto v0.0.0-20240528184218-531527333157
-
 require (
 	github.com/ILITA-hub/animeenigma/libs/authz v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/cache v0.0.0-00010101000000-000000000000
+	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0-00010101000000-000000000000
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.1
+	github.com/prometheus/client_golang v1.19.0
+	github.com/prometheus/client_model v0.6.2
+	github.com/redis/go-redis/v9 v9.5.1
 )
 
 require (
-	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0 // indirect
 	github.com/ajg/form v1.5.1 // indirect
-	github.com/alicebob/miniredis/v2 v2.38.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-chi/render v1.0.3 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
-	github.com/gorilla/websocket v1.5.1 // indirect
-	github.com/prometheus/client_golang v1.19.0 // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
-	github.com/redis/go-redis/v9 v9.5.1 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
