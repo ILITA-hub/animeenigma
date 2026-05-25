@@ -41,15 +41,18 @@ func (f *fakeAnimeFetcher) SetHasEnglish(ctx context.Context, animeID string, ha
 type fakeScraperForwarder struct {
 	gotEpisodesMALID  int
 	gotEpisodesTitle  string
+	gotEpisodesAlt    []string
 	gotEpisodesPrefer string
 
 	gotServersMALID   int
 	gotServersTitle   string
+	gotServersAlt     []string
 	gotServersEpisode string
 	gotServersPrefer  string
 
 	gotStreamMALID    int
 	gotStreamTitle    string
+	gotStreamAlt      []string
 	gotStreamEpisode  string
 	gotStreamServer   string
 	gotStreamCategory string
@@ -63,24 +66,27 @@ type fakeScraperForwarder struct {
 	replyErr    error
 }
 
-func (f *fakeScraperForwarder) GetEpisodes(ctx context.Context, malID int, title, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string) (int, []byte, error) {
 	f.gotEpisodesMALID = malID
 	f.gotEpisodesTitle = title
+	f.gotEpisodesAlt = altTitles
 	f.gotEpisodesPrefer = prefer
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, title, episodeID, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string) (int, []byte, error) {
 	f.gotServersMALID = malID
 	f.gotServersTitle = title
+	f.gotServersAlt = altTitles
 	f.gotServersEpisode = episodeID
 	f.gotServersPrefer = prefer
 	return f.replyStatus, f.replyBody, f.replyErr
 }
 
-func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (f *fakeScraperForwarder) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string) (int, []byte, error) {
 	f.gotStreamMALID = malID
 	f.gotStreamTitle = title
+	f.gotStreamAlt = altTitles
 	f.gotStreamEpisode = episodeID
 	f.gotStreamServer = serverID
 	f.gotStreamCategory = category

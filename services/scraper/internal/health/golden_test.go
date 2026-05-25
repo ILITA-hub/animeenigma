@@ -2,6 +2,7 @@ package health
 
 import (
 	"math/rand/v2"
+	"reflect"
 	"testing"
 )
 
@@ -27,7 +28,9 @@ func TestGolden_PickDeterministicWithSeed(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		a := Pick(DefaultGoldenPool, rng1)
 		b := Pick(DefaultGoldenPool, rng2)
-		if a != b {
+		// AnimeRef now carries an AltTitles slice (ISS-017), so it's no longer
+		// comparable with !=; use reflect.DeepEqual.
+		if !reflect.DeepEqual(a, b) {
 			t.Fatalf("iter %d: Pick diverged with same seed: %v vs %v", i, a, b)
 		}
 	}

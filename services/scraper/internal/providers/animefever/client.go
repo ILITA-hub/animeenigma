@@ -30,6 +30,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/fuzzy"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
@@ -192,7 +193,23 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 		return "", err
 	}
 
-	normQuery := fuzzy.NormalizeTitle(query)
+	// ISS-017: score each candidate against the primary title AND every
+	// alternate form (romaji / English / Japanese) the catalog supplied,
+	// taking the max. AnimeFever indexes the main series under its ROMAJI
+	// title ("Shingeki no Kyojin") while the catalog's primary may be the
+	// English NameEN ("Attack on Titan", which on AnimeFever only matches
+	// no-embed compilations). Matching against all forms lets the romaji form
+	// resolve the romaji-listed main entry.
+	normQueries := make([]string, 0, 1+len(ref.AltTitles))
+	seenQ := map[string]bool{}
+	for _, q := range append([]string{query}, ref.AltTitles...) {
+		nq := fuzzy.NormalizeTitle(q)
+		if nq == "" || seenQ[nq] {
+			continue
+		}
+		seenQ[nq] = true
+		normQueries = append(normQueries, nq)
+	}
 	type candidate struct {
 		slug  string
 		title string
@@ -228,9 +245,12 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 		bestTitle := ""
 		bestScore := 0.0
 		for _, t := range titles {
-			s := fuzzy.JaroWinkler(normQuery, fuzzy.NormalizeTitle(t))
-			if s > bestScore {
-				bestScore, bestTitle = s, t
+			nt := fuzzy.NormalizeTitle(t)
+			for _, nq := range normQueries {
+				s := fuzzy.JaroWinkler(nq, nt)
+				if s > bestScore {
+					bestScore, bestTitle = s, t
+				}
 			}
 		}
 		// Slug-shape bias: animefever publishes the same show across several
@@ -441,7 +461,7 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	}
 
 	// Fetch the watch page (populates PHPSESSID cookie + lets us cache ctk).
-	if _, err := p.fetchCtk(ctx, slug, eid); err != nil {
+	if _, _, err := p.fetchCtk(ctx, slug, eid); err != nil {
 		// ctk extraction failure is non-fatal here — GetStream re-tries.
 		// We still log and continue; the server list is fixed.
 		p.log.Warnw("animefever: failed to pre-extract ctk during ListServers",
@@ -558,10 +578,23 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 // "evict-ctk-and-retry-once" logic.
 var errStaleCtk = errors.New("animefever: stale ctk token")
 
+// errNoEmbed is the internal sentinel for an upstream "no embed for this
+// (episode, server)" signal (status:false / embed:false with a FRESH ctk).
+// Distinct from errStaleCtk so GetStream does NOT pointlessly retry a token
+// that is already fresh (ISS-017).
+var errNoEmbed = errors.New("animefever: no embed for episode")
+
+// selectorNoEmbed is the parser_zero_match_total selector label for the
+// no-embed path. The golden-pool liveness probe trips this when a golden
+// title fuzzy-matches a recap/compilation entry that AnimeFever has no
+// player embed for — a content-availability signal, not a broken provider
+// (ISS-017).
+const selectorNoEmbed = "no_embed"
+
 // fetchStreamOnce does one full GetStream pass — no retry. On status:false
 // returns errStaleCtk wrapped under ErrExtractFailed.
 func (p *Provider) fetchStreamOnce(ctx context.Context, slug, eid, serverID string) (*domain.Stream, error) {
-	ctk, err := p.fetchCtk(ctx, slug, eid)
+	ctk, ctkCached, err := p.fetchCtk(ctx, slug, eid)
 	if err != nil {
 		return nil, err
 	}
@@ -606,14 +639,22 @@ func (p *Provider) fetchStreamOnce(ctx context.Context, slug, eid, serverID stri
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, domain.WrapExtractFailed(err, "animefever: parse ajax json")
 	}
-	if !out.Status {
-		// Treat as stale-ctk — caller may retry once.
-		return nil, domain.WrapExtractFailed(errStaleCtk, "animefever: ajax status=false")
-	}
-	if !out.Embed {
-		return nil, domain.WrapExtractFailed(
-			errors.New("ajax returned embed=false"),
-			"animefever: ajax no embed")
+	if !out.Status || !out.Embed {
+		// ISS-017: status:false/embed:false does NOT necessarily mean a stale
+		// ctk — measured live, it most often means "this server has no embed
+		// for this episode" (e.g. recap/compilation entries). Only suspect a
+		// stale token when the ctk came from CACHE (it may have rotated since);
+		// in that case surface errStaleCtk so GetStream evicts + retries ONCE
+		// with a fresh token. With a freshly-scraped ctk the token is by
+		// definition not stale, so this is a genuine no-embed → emit the
+		// no_embed metric and surface an honest error (still ErrExtractFailed
+		// so the probe tries the other server and the orchestrator fails over).
+		if !out.Status && ctkCached {
+			return nil, domain.WrapExtractFailed(errStaleCtk, "animefever: ajax status=false (cached ctk; retrying fresh)")
+		}
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorNoEmbed).Inc()
+		return nil, domain.WrapExtractFailed(errNoEmbed,
+			fmt.Sprintf("animefever: no embed for episode on server %q (status=%t embed=%t)", serverID, out.Status, out.Embed))
 	}
 
 	m := iframeSrcRe.FindStringSubmatch(out.Value)
@@ -651,26 +692,28 @@ func (p *Provider) fetchStreamOnce(ctx context.Context, slug, eid, serverID stri
 	return stream, nil
 }
 
-// fetchCtk returns a cached or freshly-scraped ctk token for the
-// (slug, eid) watch page.
-func (p *Provider) fetchCtk(ctx context.Context, slug, eid string) (string, error) {
+// fetchCtk returns a ctk token for the (slug, eid) watch page plus whether it
+// came from the cache. The fromCache flag lets fetchStreamOnce distinguish a
+// genuinely-stale cached token (worth a fresh-fetch retry) from an upstream
+// "no embed" signal returned with a freshly-scraped token (ISS-017).
+func (p *Provider) fetchCtk(ctx context.Context, slug, eid string) (token string, fromCache bool, err error) {
 	if hit, ok := p.cache.getCtk(ctx, slug, eid); ok {
-		return hit, nil
+		return hit, true, nil
 	}
 	watchURL := fmt.Sprintf("%s/watch/%s?ep=%s", p.baseURL, slug, url.QueryEscape(eid))
 	body, err := p.httpGetBody(ctx, watchURL)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	m := ctkRe.FindStringSubmatch(string(body))
 	if len(m) != 2 {
-		return "", domain.WrapExtractFailed(
+		return "", false, domain.WrapExtractFailed(
 			errors.New("no var ctk = ... in watch page"),
 			"animefever: extract ctk")
 	}
-	token := m[1]
+	token = m[1]
 	p.cache.setCtk(ctx, slug, eid, token)
-	return token, nil
+	return token, false, nil
 }
 
 // httpGetBody fetches one URL via BaseHTTPClient and returns the body

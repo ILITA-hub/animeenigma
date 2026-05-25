@@ -5,16 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"io"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 )
@@ -474,6 +479,118 @@ func TestGetStream_AjaxStatusFalse_ReturnsExtractFailed(t *testing.T) {
 	)
 	if !errors.Is(err, domain.ErrExtractFailed) {
 		t.Fatalf("expected ErrExtractFailed for status:false AJAX, got %v", err)
+	}
+}
+
+// TestFindID_MultiTitleResolvesRomajiMainSeries — ISS-017. AnimeFever lists the
+// main series under its ROMAJI title and a recap compilation under the ENGLISH
+// title. With only the English query the compilation wins (its title scores
+// high); the romaji alt-title must flip the match to the main series.
+func TestFindID_MultiTitleResolvesRomajiMainSeries(t *testing.T) {
+	const html = `<!doctype html><html><body>` +
+		`<div class="card-block" title="Attack on Titan Chronicle"><a href="/info/attack-on-titan-chronicle.60449" title="Attack on Titan Chronicle"><h3>Attack on Titan Chronicle</h3></a></div>` +
+		`<div class="card-block" title="Shingeki no Kyojin"><a href="/info/shingeki-no-kyojin-sub.50313" title="Shingeki no Kyojin"><h3>Shingeki no Kyojin</h3></a></div>` +
+		`</body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, html)
+	}))
+	defer srv.Close()
+
+	// Control (fresh provider → fresh show-id cache): English-only query picks
+	// the compilation — this is the bug the alt-title fixes.
+	pEN, _ := newTestProvider(t, srv, nil)
+	idEN, err := pEN.FindID(context.Background(), domain.AnimeRef{Title: "Attack on Titan"})
+	if err != nil {
+		t.Fatalf("FindID (en-only): %v", err)
+	}
+	if idEN != "attack-on-titan-chronicle.60449" {
+		t.Fatalf("en-only FindID = %q; want the compilation (demonstrates the matching gap)", idEN)
+	}
+
+	// With the romaji alt-title, the romaji-listed main series wins.
+	pMulti, _ := newTestProvider(t, srv, nil)
+	id, err := pMulti.FindID(context.Background(), domain.AnimeRef{
+		Title:     "Attack on Titan",
+		AltTitles: []string{"Shingeki no Kyojin"},
+	})
+	if err != nil {
+		t.Fatalf("FindID (multi-title): %v", err)
+	}
+	if id != "shingeki-no-kyojin-sub.50313" {
+		t.Fatalf("multi-title FindID = %q; want shingeki-no-kyojin-sub.50313 (romaji main series)", id)
+	}
+}
+
+// TestGetStream_FreshCtkStatusFalse_NoEmbedNoRetry — ISS-017. A status:false
+// with a FRESHLY-scraped ctk means "no embed for this episode/server", NOT a
+// stale token. The provider must NOT waste a retry (ajax hit exactly once),
+// must NOT report errStaleCtk, and must bump the no_embed metric.
+func TestGetStream_FreshCtkStatusFalse_NoEmbedNoRetry(t *testing.T) {
+	before := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animefever", "no_embed"))
+	watchHTML := readFixture(t, "watch_ep28.html")
+	var ajaxCalls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/ajax/anime/load_episodes_v2":
+			atomic.AddInt32(&ajaxCalls, 1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"status":false,"value":"","embed":false}`)
+		case strings.HasPrefix(r.URL.Path, "/watch/"):
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(watchHTML)
+		}
+	}))
+	defer srv.Close()
+
+	p, _ := newTestProvider(t, srv, nil)
+	_, err := p.GetStream(context.Background(),
+		"frieren-beyond-journeys-end.14401",
+		"frieren-beyond-journeys-end.14401:1028", "tserver", domain.CategorySub)
+	if !errors.Is(err, domain.ErrExtractFailed) {
+		t.Fatalf("err = %v; want ErrExtractFailed", err)
+	}
+	if errors.Is(err, errStaleCtk) {
+		t.Errorf("err must NOT be errStaleCtk for a fresh-ctk no-embed; got %v", err)
+	}
+	if n := atomic.LoadInt32(&ajaxCalls); n != 1 {
+		t.Errorf("ajax calls = %d; want 1 (no wasteful retry on a fresh ctk)", n)
+	}
+	if d := testutil.ToFloat64(metrics.ParserZeroMatchTotal.WithLabelValues("animefever", "no_embed")) - before; d != 1 {
+		t.Errorf("no_embed metric delta = %v; want 1", d)
+	}
+}
+
+// TestGetStream_CachedCtkStatusFalse_RetriesOnce — ISS-017. A status:false with
+// a CACHED ctk could be a genuinely-stale token, so the provider evicts it and
+// retries ONCE with a freshly-scraped token (ajax hit twice).
+func TestGetStream_CachedCtkStatusFalse_RetriesOnce(t *testing.T) {
+	watchHTML := readFixture(t, "watch_ep28.html")
+	var ajaxCalls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/ajax/anime/load_episodes_v2":
+			atomic.AddInt32(&ajaxCalls, 1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"status":false,"value":"","embed":false}`)
+		case strings.HasPrefix(r.URL.Path, "/watch/"):
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(watchHTML)
+		}
+	}))
+	defer srv.Close()
+
+	p, _ := newTestProvider(t, srv, nil)
+	// Pre-seed a CACHED ctk so the first attempt takes the stale-suspect path.
+	p.cache.setCtk(context.Background(), "frieren-beyond-journeys-end.14401", "1028", "cafebabecafebabe")
+	_, err := p.GetStream(context.Background(),
+		"frieren-beyond-journeys-end.14401",
+		"frieren-beyond-journeys-end.14401:1028", "tserver", domain.CategorySub)
+	if !errors.Is(err, domain.ErrExtractFailed) {
+		t.Fatalf("err = %v; want ErrExtractFailed", err)
+	}
+	if n := atomic.LoadInt32(&ajaxCalls); n != 2 {
+		t.Errorf("ajax calls = %d; want 2 (cached-ctk stale → evict + retry once)", n)
 	}
 }
 

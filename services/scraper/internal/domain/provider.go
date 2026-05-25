@@ -32,7 +32,15 @@ type AnimeRef struct {
 	ShikimoriID string // == MAL ID
 	AniListID   string
 	Title       string
-	Year        int
+	// AltTitles carries additional title forms (romaji / Japanese / English
+	// variants) the catalog knows about. Providers that fuzzy-match titles
+	// (ISS-017) score against Title AND every AltTitle and take the max, so a
+	// provider that indexes an anime under a different language form than the
+	// catalog's primary Title (e.g. AnimeFever lists "Shingeki no Kyojin" while
+	// the catalog's NameEN is "Attack on Titan") still resolves correctly.
+	// Optional and backward-compatible: providers that ignore it are unaffected.
+	AltTitles []string
+	Year      int
 }
 
 // Episode is one episode in a provider's listing for a given anime.

@@ -70,25 +70,35 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 // GetEpisodes forwards GET /scraper/episodes?mal_id=<id>&title=<title>&prefer=<prefer>.
 // Title is required for providers whose malsync entries are missing (e.g. gogoanime),
 // which fall back to fuzzy title search; AnimePahe also uses it for its own fuzzy fallback.
-func (c *Client) GetEpisodes(ctx context.Context, malID int, title, prefer string) (int, []byte, error) {
+func (c *Client) GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
 	if title != "" {
 		q.Set("title", title)
 	}
+	setAltTitles(q, altTitles)
 	if prefer != "" {
 		q.Set("prefer", prefer)
 	}
 	return c.doGET(ctx, "/scraper/episodes", q)
 }
 
+// setAltTitles sets the comma-joined `title_alt` query param when alternate
+// title forms are present (ISS-017). The scraper handler splits on commas.
+func setAltTitles(q url.Values, altTitles []string) {
+	if len(altTitles) > 0 {
+		q.Set("title_alt", strings.Join(altTitles, ","))
+	}
+}
+
 // GetServers forwards GET /scraper/servers?mal_id=<id>&title=<title>&episode=<ep>&prefer=<prefer>.
-func (c *Client) GetServers(ctx context.Context, malID int, title, episodeID, prefer string) (int, []byte, error) {
+func (c *Client) GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
 	if title != "" {
 		q.Set("title", title)
 	}
+	setAltTitles(q, altTitles)
 	q.Set("episode", episodeID)
 	if prefer != "" {
 		q.Set("prefer", prefer)
@@ -97,12 +107,13 @@ func (c *Client) GetServers(ctx context.Context, malID int, title, episodeID, pr
 }
 
 // GetStream forwards GET /scraper/stream?mal_id=...&title=...&episode=...&server=...&category=...&prefer=...
-func (c *Client) GetStream(ctx context.Context, malID int, title, episodeID, serverID, category, prefer string) (int, []byte, error) {
+func (c *Client) GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string) (int, []byte, error) {
 	q := url.Values{}
 	q.Set("mal_id", strconv.Itoa(malID))
 	if title != "" {
 		q.Set("title", title)
 	}
+	setAltTitles(q, altTitles)
 	q.Set("episode", episodeID)
 	q.Set("server", serverID)
 	if category != "" {

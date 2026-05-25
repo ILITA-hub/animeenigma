@@ -89,18 +89,24 @@ const (
 // handlers care about. Whitespace is trimmed because some catalog/frontend
 // callers append trailing spaces accidentally.
 type queryParams struct {
-	malID    string
-	title    string
-	episode  string
-	server   string
-	category string
-	prefer   string
+	malID     string
+	title     string
+	altTitles []string
+	episode   string
+	server    string
+	category  string
+	prefer    string
 }
 
 // maxTitleLength caps the `title` query-string parameter so an oversized
 // title can't balloon log lines or fuzzy-match comparison cost. Real anime
 // titles are well under 200 chars; 512 is generous.
 const maxTitleLength = 512
+
+// maxAltTitles bounds the number of alternate title forms (title_alt) honored
+// per request so a caller can't balloon fuzzy-match work with a huge list.
+// The catalog has at most 3 useful forms (romaji Name, NameEN, NameJP).
+const maxAltTitles = 4
 
 // maxPreferLength caps the `prefer` query-string parameter at parse time so
 // a malicious caller can't balloon log lines or response bodies via the
@@ -141,14 +147,52 @@ func parseQuery(r *http.Request) queryParams {
 	if len(title) > maxTitleLength {
 		title = title[:maxTitleLength]
 	}
+	// title_alt carries additional title forms (comma-separated) the catalog
+	// knows about — providers that fuzzy-match score against all of them
+	// (ISS-017). Each form is trimmed + length-capped; blanks and dupes of the
+	// primary title are dropped. Capped at maxAltTitles to bound work.
+	altTitles := parseAltTitles(q.Get("title_alt"), title)
 	return queryParams{
-		malID:    strings.TrimSpace(q.Get("mal_id")),
-		title:    title,
-		episode:  strings.TrimSpace(q.Get("episode")),
-		server:   strings.TrimSpace(q.Get("server")),
-		category: strings.TrimSpace(q.Get("category")),
-		prefer:   prefer,
+		malID:     strings.TrimSpace(q.Get("mal_id")),
+		title:     title,
+		altTitles: altTitles,
+		episode:   strings.TrimSpace(q.Get("episode")),
+		server:    strings.TrimSpace(q.Get("server")),
+		category:  strings.TrimSpace(q.Get("category")),
+		prefer:    prefer,
 	}
+}
+
+// parseAltTitles splits the comma-separated `title_alt` query value into a
+// deduped, trimmed, length-capped slice. The primary title is excluded (it's
+// already carried in queryParams.title) and blanks are dropped. At most
+// maxAltTitles forms are returned. ISS-017.
+func parseAltTitles(raw, primary string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	out := make([]string, 0, maxAltTitles)
+	seen := map[string]bool{strings.ToLower(primary): true}
+	for _, part := range strings.Split(raw, ",") {
+		t := strings.TrimSpace(part)
+		if t == "" {
+			continue
+		}
+		if len(t) > maxTitleLength {
+			t = t[:maxTitleLength]
+		}
+		key := strings.ToLower(t)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, t)
+		if len(out) >= maxAltTitles {
+			break
+		}
+	}
+	return out
 }
 
 // GetEpisodes handles GET /scraper/episodes?mal_id=...&prefer=....
@@ -169,7 +213,7 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.prefer)
+	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -205,7 +249,7 @@ func (h *ScraperHandler) GetServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.prefer)
+	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -252,7 +296,7 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 		cat = domain.CategorySub
 	}
 
-	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.prefer)
+	providerID, err := h.resolveProviderID(r.Context(), qp.malID, qp.title, qp.altTitles, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -335,8 +379,8 @@ func (h *ScraperHandler) GetAdminHealth(w http.ResponseWriter, r *http.Request) 
 // provider-internal ID via the orchestrator's FindID chain. The catalog
 // already mapped catalog-UUID → MAL/Shikimori ID before forwarding, so we
 // pass the value as ShikimoriID (project memory: Shikimori IDs == MAL IDs).
-func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title, prefer string) (string, error) {
-	ref := domain.AnimeRef{ShikimoriID: malID, Title: title}
+func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title string, altTitles []string, prefer string) (string, error) {
+	ref := domain.AnimeRef{ShikimoriID: malID, Title: title, AltTitles: altTitles}
 	return h.svc.FindID(ctx, ref, prefer)
 }
 

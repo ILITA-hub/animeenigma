@@ -38,9 +38,9 @@ type animeFetcher interface {
 // gogoanime) can run their fuzzy title fallback; without it FindID
 // fails with "cannot search without a title".
 type scraperForwarder interface {
-	GetEpisodes(ctx context.Context, malID int, title, prefer string) (int, []byte, error)
-	GetServers(ctx context.Context, malID int, title, episodeID, prefer string) (int, []byte, error)
-	GetStream(ctx context.Context, malID int, title, episodeID, serverID, category, prefer string) (int, []byte, error)
+	GetEpisodes(ctx context.Context, malID int, title string, altTitles []string, prefer string) (int, []byte, error)
+	GetServers(ctx context.Context, malID int, title string, altTitles []string, episodeID, prefer string) (int, []byte, error)
+	GetStream(ctx context.Context, malID int, title string, altTitles []string, episodeID, serverID, category, prefer string) (int, []byte, error)
 	GetHealth(ctx context.Context) (int, []byte, error)
 }
 
@@ -65,35 +65,61 @@ type scraperOps struct {
 //     (per `libs/idmapping` ARM mapping).
 //  3. If ShikimoriID is empty or unparseable, try MALID.
 //  4. Otherwise return ErrMalIDUnavailable so the handler can emit 422.
-func (o *scraperOps) resolveAnime(ctx context.Context, animeID string) (int, string, error) {
+func (o *scraperOps) resolveAnime(ctx context.Context, animeID string) (int, string, []string, error) {
 	if _, err := uuid.Parse(animeID); err != nil {
-		return 0, "", liberrors.NotFound("anime")
+		return 0, "", nil, liberrors.NotFound("anime")
 	}
 
 	anime, err := o.animeRepo.GetByID(ctx, animeID)
 	if err != nil {
-		return 0, "", err
+		return 0, "", nil, err
 	}
 	if anime == nil {
-		return 0, "", liberrors.NotFound("anime")
+		return 0, "", nil, liberrors.NotFound("anime")
 	}
 
 	title := anime.NameEN
 	if title == "" {
 		title = anime.Name
 	}
+	// ISS-017: forward the OTHER title forms as alternates so providers that
+	// index an anime under a different language form than our primary Title
+	// (e.g. AnimeFever lists "Shingeki no Kyojin" while NameEN is "Attack on
+	// Titan") can still fuzzy-match. Order: romaji Name, English NameEN,
+	// Japanese NameJP — minus the chosen primary, deduped, blanks dropped.
+	altTitles := altTitleForms(title, anime.Name, anime.NameEN, anime.NameJP)
 
 	if anime.ShikimoriID != "" {
 		if v, perr := strconv.Atoi(anime.ShikimoriID); perr == nil && v > 0 {
-			return v, title, nil
+			return v, title, altTitles, nil
 		}
 	}
 	if anime.MALID != "" {
 		if v, perr := strconv.Atoi(anime.MALID); perr == nil && v > 0 {
-			return v, title, nil
+			return v, title, altTitles, nil
 		}
 	}
-	return 0, title, ErrMalIDUnavailable
+	return 0, title, altTitles, ErrMalIDUnavailable
+}
+
+// altTitleForms returns the distinct, non-empty title forms in `forms` with
+// `primary` excluded (case-insensitive). Preserves input order. ISS-017.
+func altTitleForms(primary string, forms ...string) []string {
+	seen := map[string]bool{strings.ToLower(strings.TrimSpace(primary)): true}
+	out := make([]string, 0, len(forms))
+	for _, f := range forms {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		k := strings.ToLower(f)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, f)
+	}
+	return out
 }
 
 // GetScraperEpisodes resolves animeID -> MAL ID and forwards to the
@@ -106,11 +132,11 @@ func (o *scraperOps) resolveAnime(ctx context.Context, animeID string) (int, str
 // surface to the caller. Mirrors the SetHasKodik / SetHasAnimeLib lazy-
 // backfill pattern from Phase 15 (UX-31).
 func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer string) (int, []byte, error) {
-	malID, title, err := o.resolveAnime(ctx, animeID)
+	malID, title, altTitles, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	status, body, gErr := o.scraperClient.GetEpisodes(ctx, malID, title, prefer)
+	status, body, gErr := o.scraperClient.GetEpisodes(ctx, malID, title, altTitles, prefer)
 	// Best-effort backfill on confirmed success. Detect non-empty
 	// episodes by a simple substring scan — the response envelope is
 	// `{"success":true,"data":{"episodes":[...]}}` and an empty
@@ -130,20 +156,20 @@ func (o *scraperOps) GetScraperEpisodes(ctx context.Context, animeID, prefer str
 
 // GetScraperServers resolves animeID -> MAL ID + title and forwards.
 func (o *scraperOps) GetScraperServers(ctx context.Context, animeID, episodeID, prefer string) (int, []byte, error) {
-	malID, title, err := o.resolveAnime(ctx, animeID)
+	malID, title, altTitles, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetServers(ctx, malID, title, episodeID, prefer)
+	return o.scraperClient.GetServers(ctx, malID, title, altTitles, episodeID, prefer)
 }
 
 // GetScraperStream resolves animeID -> MAL ID + title and forwards.
 func (o *scraperOps) GetScraperStream(ctx context.Context, animeID, episodeID, serverID, category, prefer string) (int, []byte, error) {
-	malID, title, err := o.resolveAnime(ctx, animeID)
+	malID, title, altTitles, err := o.resolveAnime(ctx, animeID)
 	if err != nil {
 		return 0, nil, err
 	}
-	return o.scraperClient.GetStream(ctx, malID, title, episodeID, serverID, category, prefer)
+	return o.scraperClient.GetStream(ctx, malID, title, altTitles, episodeID, serverID, category, prefer)
 }
 
 // GetScraperHealth bypasses the animeRepo entirely — the scraper's

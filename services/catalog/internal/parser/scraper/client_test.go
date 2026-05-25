@@ -25,7 +25,7 @@ func TestClient_GetEpisodes_BuildsURL(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, time.Second)
-	status, body, err := c.GetEpisodes(context.Background(), 12345, "Bleach", "animepahe")
+	status, body, err := c.GetEpisodes(context.Background(), 12345, "Bleach", []string{"Burichi", "BLEACH"}, "animepahe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -40,6 +40,10 @@ func TestClient_GetEpisodes_BuildsURL(t *testing.T) {
 	}
 	if !strings.Contains(capturedQuery, "prefer=animepahe") {
 		t.Errorf("query = %q, missing prefer=animepahe", capturedQuery)
+	}
+	// ISS-017: alternate title forms are forwarded comma-joined as title_alt.
+	if !strings.Contains(capturedQuery, "title_alt=") {
+		t.Errorf("query = %q, missing title_alt", capturedQuery)
 	}
 	if !strings.Contains(string(body), "not-yet-implemented") {
 		t.Errorf("body = %q, missing not-yet-implemented", string(body))
@@ -58,7 +62,7 @@ func TestClient_GetEpisodes_Returns503Verbatim(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, time.Second)
-	status, body, err := c.GetEpisodes(context.Background(), 1, "", "")
+	status, body, err := c.GetEpisodes(context.Background(), 1, "", nil, "")
 	if err != nil {
 		t.Fatalf("503 must not be an error, got %v", err)
 	}
@@ -80,7 +84,7 @@ func TestClient_GetEpisodes_Returns500_PropagatesAsError(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, time.Second)
-	status, body, err := c.GetEpisodes(context.Background(), 1, "", "")
+	status, body, err := c.GetEpisodes(context.Background(), 1, "", nil, "")
 	if err == nil {
 		t.Fatalf("expected error for 500, got nil")
 	}
@@ -108,7 +112,7 @@ func TestClient_GetServers_BuildsURL(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, time.Second)
-	_, _, err := c.GetServers(context.Background(), 42, "Bleach", "ep-1", "animepahe")
+	_, _, err := c.GetServers(context.Background(), 42, "Bleach", nil, "ep-1", "animepahe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -139,7 +143,7 @@ func TestClient_GetStream_BuildsURL(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, time.Second)
-	_, _, err := c.GetStream(context.Background(), 7, "Bleach", "ep-2", "srv-1", "sub", "animepahe")
+	_, _, err := c.GetStream(context.Background(), 7, "Bleach", nil, "ep-2", "srv-1", "sub", "animepahe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

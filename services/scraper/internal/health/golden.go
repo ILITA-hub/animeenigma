@@ -37,12 +37,19 @@ type goldenEntry struct {
 // goldenEntries is the canonical maintenance list (with MalID kept visible
 // for human review). DefaultGoldenPool is derived from this — code paths
 // should consume DefaultGoldenPool, not this slice.
+// AltTitles carry the romaji form alongside the English Title (ISS-017). The
+// catalog forwards both forms (NameEN + romaji Name) on real requests, so the
+// probe must too — otherwise providers that index an anime under its romaji
+// title (e.g. AnimeFever lists "Shingeki no Kyojin", not "Attack on Titan")
+// fail the probe AND the probe poisons the shared per-MAL-ID slug cache with
+// the English-only resolution, defeating the catalog's alt-title match for
+// these golden anime. Where romaji == English the alt is a harmless dupe.
 var goldenEntries = []goldenEntry{
-	{MalID: "20", Ref: domain.AnimeRef{ShikimoriID: "20", Title: "Naruto", Year: 2002}},
-	{MalID: "21", Ref: domain.AnimeRef{ShikimoriID: "21", Title: "One Piece", Year: 1999}},
-	{MalID: "16498", Ref: domain.AnimeRef{ShikimoriID: "16498", Title: "Attack on Titan", Year: 2013}},
-	{MalID: "38000", Ref: domain.AnimeRef{ShikimoriID: "38000", Title: "Demon Slayer", Year: 2019}},
-	{MalID: "40748", Ref: domain.AnimeRef{ShikimoriID: "40748", Title: "Jujutsu Kaisen", Year: 2020}},
+	{MalID: "20", Ref: domain.AnimeRef{ShikimoriID: "20", Title: "Naruto", AltTitles: []string{"Naruto"}, Year: 2002}},
+	{MalID: "21", Ref: domain.AnimeRef{ShikimoriID: "21", Title: "One Piece", AltTitles: []string{"One Piece"}, Year: 1999}},
+	{MalID: "16498", Ref: domain.AnimeRef{ShikimoriID: "16498", Title: "Attack on Titan", AltTitles: []string{"Shingeki no Kyojin"}, Year: 2013}},
+	{MalID: "38000", Ref: domain.AnimeRef{ShikimoriID: "38000", Title: "Demon Slayer", AltTitles: []string{"Kimetsu no Yaiba"}, Year: 2019}},
+	{MalID: "40748", Ref: domain.AnimeRef{ShikimoriID: "40748", Title: "Jujutsu Kaisen", AltTitles: []string{"Jujutsu Kaisen"}, Year: 2020}},
 }
 
 // DefaultGoldenPool is the static 5-entry list of AnimeRefs the liveness

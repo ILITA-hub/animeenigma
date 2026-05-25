@@ -1230,3 +1230,33 @@ func TestAdminHealthHandler_IncludesPublicProvidersField(t *testing.T) {
 		t.Errorf("data.providers.fakeprov.provider = %q; want fakeprov", got.Provider)
 	}
 }
+
+// TestParseAltTitles — ISS-017: comma-split, trim, drop blanks, exclude the
+// primary (case-insensitive), dedupe, and cap at maxAltTitles.
+func TestParseAltTitles(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     string
+		primary string
+		want    []string
+	}{
+		{"empty", "", "Attack on Titan", nil},
+		{"excludes primary case-insensitive", "attack on titan,Shingeki no Kyojin", "Attack on Titan", []string{"Shingeki no Kyojin"}},
+		{"trims and drops blanks", "  Romaji , ,  JP  ", "EN", []string{"Romaji", "JP"}},
+		{"dedupes", "A,a,A,B", "primary", []string{"A", "B"}},
+		{"caps at maxAltTitles", "t1,t2,t3,t4,t5,t6", "p", []string{"t1", "t2", "t3", "t4"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseAltTitles(tc.raw, tc.primary)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len(got)=%d %v; want %d %v", len(got), got, len(tc.want), tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Errorf("got[%d]=%q; want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
