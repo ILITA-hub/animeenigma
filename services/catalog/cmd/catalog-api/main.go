@@ -194,6 +194,15 @@ func main() {
 	)
 	internalEpisodesHandler := handler.NewInternalEpisodesHandler(episodesLookupService, log)
 
+	// Watch-Together workstream, Phase 04 — WT-STATE-02. Sibling of the
+	// notifications-detector episodes endpoint above. Validates a
+	// (player, episode_id, translation_id) tuple for the WT service's
+	// state:change_{episode,player,translation} inbound handlers. The
+	// kodik/animelib path reuses episodesLookupService (D-04 "smallest
+	// change"); ourenglish/hanime/raw ship permissive v1.0 validation.
+	episodesValidateService := service.NewEpisodesValidateService(episodesLookupService, animeRepo, log)
+	internalEpisodesValidateHandler := handler.NewInternalEpisodesValidateHandler(episodesValidateService, log)
+
 	// Workstream raw-jp, Phase 02 — multi-provider subtitle aggregator.
 	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by
 	// IMDb/TMDB) and merges results. Mounts /api/anime/{id}/subtitles[/all].
@@ -255,7 +264,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("catalog")
 
 	// Initialize router
-	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, spotlightHandler, cfg, log, metricsCollector)
+	router := transport.NewRouter(catalogHandler, adminHandler, newsHandler, collectionHandler, skipTimesHandler, rawHandler, subtitlesHandler, internalCacheHandler, internalEpisodesHandler, internalEpisodesValidateHandler, spotlightHandler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
