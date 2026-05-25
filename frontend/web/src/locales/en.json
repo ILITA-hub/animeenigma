@@ -1016,7 +1016,15 @@
     "sync_toast_played": "{username} played",
     "sync_toast_paused": "{username} paused",
     "sync_toast_seeked": "{username} seeked to {time}",
-    "connection_status_closed": "Connection lost — retrying…"
+    "connection_status_closed": "Connection lost — retrying…",
+    "player_tab_kodik": "Kodik",
+    "player_tab_animelib": "AniLib",
+    "player_tab_ourenglish": "English",
+    "player_tab_hanime": "Hanime",
+    "player_tab_raw": "Raw (JP)",
+    "state_change_episode_unavailable": "Episode unavailable for this anime / player / translation combo",
+    "state_change_player_unavailable": "This player has no episodes for this anime",
+    "state_change_translation_unavailable": "Translation unavailable for this episode"
   },
   "spotlight": {
     "regionLabel": "Today's spotlight",

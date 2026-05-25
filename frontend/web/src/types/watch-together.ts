@@ -125,8 +125,15 @@ export const ERR_CHAT_TOO_LONG = 'CHAT_TOO_LONG' as const
 export const ERR_PERSISTENT_DRIFT = 'PERSISTENT_DRIFT' as const
 export const ERR_AUTH_EXPIRED = 'AUTH_EXPIRED' as const
 export const ERR_EPISODE_UNAVAILABLE = 'EPISODE_UNAVAILABLE' as const
+/** Phase 04 state-switching: sender-only error when the requested player has
+ *  no episodes for this anime. Mirrors Go `ErrPlayerUnavailable`. */
+export const ERR_PLAYER_UNAVAILABLE = 'PLAYER_UNAVAILABLE' as const
+/** Phase 04 state-switching: sender-only error when the requested translation
+ *  is not available for the (anime, player, episode) tuple. Mirrors Go
+ *  `ErrTranslationUnavailable`. */
+export const ERR_TRANSLATION_UNAVAILABLE = 'TRANSLATION_UNAVAILABLE' as const
 
-/** All seven server-emitted error codes. */
+/** All nine server-emitted error codes (7 from Phase 1 + 2 from Phase 4). */
 export type ErrorCode =
   | typeof ERR_CAPACITY_FULL
   | typeof ERR_ROOM_NOT_FOUND
@@ -135,6 +142,8 @@ export type ErrorCode =
   | typeof ERR_PERSISTENT_DRIFT
   | typeof ERR_AUTH_EXPIRED
   | typeof ERR_EPISODE_UNAVAILABLE
+  | typeof ERR_PLAYER_UNAVAILABLE
+  | typeof ERR_TRANSLATION_UNAVAILABLE
 
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Player + playback-state unions.                                         */
