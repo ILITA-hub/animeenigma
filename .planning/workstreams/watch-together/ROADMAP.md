@@ -8,7 +8,7 @@
 
 ## Milestones
 
-- ⏳ **v1.0 Watch Together Foundation** — Active. 5 phases. Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions.
+- ⏳ **v1.0 Watch Together Foundation** — Active (1/5 phases shipped). Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions. Phase 1 (Backend Foundation) closed 2026-05-25.
 - ⏳ **v1.1 Per-User Player** — Deferred. Mixed-language friend groups watch in their own language while sharing the timeline. Needs its own brainstorm.
 - ⏳ **v1.2 Persistent Named Rooms** — Conditional. "Saturday Anime Night" rooms that survive past empty state. Adds Postgres + chat retention.
 - ⏳ **v1.3 Voice Piggyback** — Conditional, post v1.1 usage data.
@@ -17,7 +17,7 @@
 
 | Phase | Title | Status |
 |-------|-------|--------|
-| 1 | Backend Foundation | ⏳ Not started |
+| 1 | Backend Foundation | ✅ Complete (2026-05-25 — 9 plans, 8/8 acceptance, smoke green 3× — see [`01-PHASE-SUMMARY.md`](phases/01-backend-foundation/01-PHASE-SUMMARY.md)) |
 | 2 | Frontend Shell + Chat | ⏳ Not started |
 | 3 | Player Sync — All 5 | ⏳ Not started |
 | 4 | State Switching | ⏳ Not started |
