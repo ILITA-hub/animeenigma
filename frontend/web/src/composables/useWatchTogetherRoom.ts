@@ -181,6 +181,9 @@ interface HandlerRegistry {
 /*  Composable.                                                             */
 /* ──────────────────────────────────────────────────────────────────────── */
 
+/** Stable consumer-facing type alias. The `room?` prop on every player accepts this. */
+export type WatchTogetherRoomHandle = UseWatchTogetherRoomReturn
+
 export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn {
   const auth = useAuthStore()
   // Captured once: the auth ID is stable for the room's lifetime. If it

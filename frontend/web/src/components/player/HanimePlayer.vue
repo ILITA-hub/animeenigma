@@ -143,6 +143,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import Hls from 'hls.js'
 import { hanimeApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 interface HanimeEpisode {
   name: string
@@ -161,7 +162,12 @@ const props = defineProps<{
   animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
+  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  room?: WatchTogetherRoomHandle | null
 }>()
+// Phase 2 (02.7) — reference `props.room` so eslint/no-unused-vars + vue-tsc stay happy.
+// Phase 3 replaces this with real WatchTogether sync wiring.
+void props.room
 
 const authStore = useAuthStore()
 

@@ -299,6 +299,7 @@ import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useW
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import type { WatchCombo } from '@/types/preference'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 interface AnimeLibEpisode {
   id: number
@@ -335,7 +336,12 @@ const props = defineProps<{
   totalEpisodes?: number
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
+  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  room?: WatchTogetherRoomHandle | null
 }>()
+// Phase 2 (02.7) — reference `props.room` so eslint/no-unused-vars + vue-tsc stay happy.
+// Phase 3 replaces this with real WatchTogether sync wiring.
+void props.room
 
 const emit = defineEmits<{
   (e: 'episodeWatched', data: { episode: number }): void

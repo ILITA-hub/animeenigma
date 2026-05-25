@@ -162,6 +162,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import { scraperApi } from '@/api/client'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 interface ScraperEpisode {
   id: string
@@ -205,7 +206,12 @@ interface ScraperEnvelope {
 const props = defineProps<{
   animeId: string
   initialEpisode?: number
+  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  room?: WatchTogetherRoomHandle | null
 }>()
+// Phase 2 (02.7) — reference `props.room` so eslint/no-unused-vars + vue-tsc stay happy.
+// Phase 3 replaces this with real WatchTogether sync wiring.
+void props.room
 
 const playerContainer = ref<HTMLElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)

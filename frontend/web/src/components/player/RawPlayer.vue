@@ -156,10 +156,16 @@ import type {
   RawStream,
   SubtitleTrack,
 } from '@/types/raw'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 const props = defineProps<{
   animeId: string
+  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  room?: WatchTogetherRoomHandle | null
 }>()
+// Phase 2 (02.7) — reference `props.room` so eslint/no-unused-vars + vue-tsc stay happy.
+// Phase 3 replaces this with real WatchTogether sync wiring.
+void props.room
 
 const { locale } = useI18n()
 
