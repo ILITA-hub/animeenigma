@@ -1059,8 +1059,11 @@
     },
     "continueWatchingNew": {
       "title": "Continue watching",
-      "newEpisodeBadge": "New ep {n}!",
-      "resumeCta": "Resume"
+      "newEpisodeBadge": "New episode {n}!",
+      "resumeCta": "Resume",
+      "lastWatched": "Watched up to ep {n}",
+      "newEpisodeLine": "New episode {n}",
+      "resumeCtaWithEp": "Watch episode {n} →"
     }
   }
 }

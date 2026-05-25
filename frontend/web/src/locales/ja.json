@@ -1059,8 +1059,11 @@
     },
     "continueWatchingNew": {
       "title": "続きを見る",
-      "newEpisodeBadge": "新エピソード {n}!",
-      "resumeCta": "再開"
+      "newEpisodeBadge": "新着{n}話！",
+      "resumeCta": "再開",
+      "lastWatched": "{n}話まで視聴済",
+      "newEpisodeLine": "新しい{n}話",
+      "resumeCtaWithEp": "{n}話を見る →"
     }
   }
 }
