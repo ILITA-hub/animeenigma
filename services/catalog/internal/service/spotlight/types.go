@@ -15,6 +15,7 @@ package spotlight
 
 import (
 	"context"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
@@ -152,10 +153,15 @@ type NowWatchingData struct {
 
 // NotTimeYetData is the payload for `Card{Type: "not_time_yet"}` —
 // HSB-BE-24. Single-item card (login only). Status is "planned" or
-// "postponed".
+// "postponed". AddedAt mirrors the anime_list.updated_at the player
+// client returns (v1.1-polish Phase 09, HSB-V11-NT-01) — the frontend
+// renders it as a "Added X ago" relative timestamp. Pointer + omitempty
+// so a missing/unparseable upstream timestamp is simply absent from the
+// JSON rather than serialized as a zero time.
 type NotTimeYetData struct {
-	Anime  domain.Anime `json:"anime"`
-	Status string       `json:"status"`
+	Anime   domain.Anime `json:"anime"`
+	Status  string       `json:"status"`
+	AddedAt *time.Time   `json:"added_at,omitempty"`
 }
 
 // ContinueWatchingNewData is the payload for `Card{Type:
