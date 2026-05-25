@@ -1052,6 +1052,9 @@
       "title": "Is it time yet?",
       "subtitlePlanned": "From your Planned list",
       "subtitlePostponed": "From your Postponed list",
+      "statusPlanned": "Planned",
+      "statusPostponed": "Postponed",
+      "addedAt": "Added {ago}",
       "watchCta": "Watch"
     },
     "continueWatchingNew": {
