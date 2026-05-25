@@ -6,7 +6,7 @@
 	backfill-attributes build-backfill-attributes
 
 # Variables
-SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper library notifications
+SERVICES := auth catalog streaming player rooms scheduler gateway themes scraper library notifications watch-together
 GO_BUILD_FLAGS := -ldflags="-s -w"
 DOCKER_REGISTRY ?= ghcr.io/ilita-hub/animeenigma
 
@@ -310,6 +310,21 @@ run-cleanup-once: ## Trigger the notifications retention cleanup synchronously (
 		wget -qO- --post-data='' http://localhost:8090/internal/cleanup/run-once
 
 # ============================================================================
+# Watch Together (workstream watch-together, v1.0 Phase 1)
+# ============================================================================
+
+.PHONY: redeploy-watch-together logs-watch-together restart-watch-together
+
+redeploy-watch-together: ## Rebuild and restart watch-together service
+	cd docker && docker compose build watch-together && docker compose up -d watch-together
+
+logs-watch-together: ## Follow watch-together service logs
+	cd docker && docker compose logs -f watch-together
+
+restart-watch-together: ## Restart watch-together (no rebuild)
+	cd docker && docker compose restart watch-together
+
+# ============================================================================
 # Kubernetes / Kustomize
 # ============================================================================
 
@@ -465,6 +480,7 @@ health: ## Check health of all services (docker-compose)
 	@curl -sf http://localhost:8088/health > /dev/null && echo "✓ scraper:8088" || echo "✗ scraper:8088"
 	@curl -sf http://localhost:8089/health > /dev/null && echo "✓ library:8089" || echo "✗ library:8089"
 	@curl -sf http://localhost:8090/health > /dev/null && echo "✓ notifications:8090" || echo "✗ notifications:8090"
+	@curl -sf http://localhost:8091/health > /dev/null && echo "✓ watch-together:8091" || echo "✗ watch-together:8091"
 
 metrics: ## Fetch metrics from all services
 	@echo "=== Gateway Metrics ==="

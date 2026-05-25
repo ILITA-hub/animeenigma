@@ -602,6 +602,7 @@ After completing any implementation work (features, bug fixes, refactoring), **a
 | themes     | 8086 | /metrics  | Anime OP/ED ratings            |
 | library    | 8089 | /metrics  | Library service (BitTorrent → HLS → MinIO, admin-only) |
 | notifications | 8090 | /metrics | Generic notification engine (new episodes, future types) |
+| watch-together | 8091 | /metrics | Co-watch service (Redis-only; rooms + sync + chat) |
 | web        | 80   | -         | Vue 3 frontend (nginx)         |
 
 ### Gateway Routing
@@ -620,6 +621,15 @@ All API requests go through the gateway service:
 - `/api/themes/*` → themes:8086 (public + protected + admin)
 - `/api/library/*` → library:8089 (admin-only; routes added incrementally in v0.2 Phases 2–5)
 - `/api/notifications/*` → notifications:8090 (JWT required; internal `/internal/notifications` NOT exposed — Docker-network-only)
+- `/api/watch-together/*` → watch-together:8091 (JWT required for HTTP; WS uses `?token=` query param since browsers can't set custom headers on WS upgrade)
+
+### Watch Together
+
+Ephemeral private friend rooms (2-10 members) for synchronized anime watching. State is Redis-only; rooms expire 15 min after last activity with a 5 min last-member-disconnect grace period. WebSocket protocol covers playback sync, chat, reactions, and state changes across all 5 players (incl. Kodik via the undocumented `kodik_player_api` postMessage RPC).
+
+- Service: `services/watch-together/` (port 8091, gateway-routed under `/api/watch-together/*`)
+- Design doc: `docs/superpowers/specs/2026-05-25-watch-together-design.md`
+- Workstream: `.planning/workstreams/watch-together/` (v1.0 milestone, 5 phases)
 
 ### Monitoring Endpoints
 
