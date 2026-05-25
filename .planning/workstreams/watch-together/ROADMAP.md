@@ -189,3 +189,16 @@ The Kodik regression test (`WT-SYNC-10`) is intentionally a daily Playwright run
 7. i18n: room view renders cleanly in both en and ru with zero raw key strings (smoke-verified in browser).
 8. Grafana dashboard panel shows live data after a few test rooms run; all WT-NF-06 metrics emit.
 9. `CLAUDE.md` updated; new service appears in both tables; design-doc link discoverable.
+
+**Plans:** 9 plans
+
+Plans:
+- [ ] 05.1-PLAN.md — Grace period (5min last-disconnect timer) + close 01.4 DELETE-broadcasts-room:closed TODO
+- [ ] 05.2-PLAN.md — Full Prometheus metric suite (WT-NF-06): wt_rooms_active, members/chat/session histograms, persistent-drift by user_role
+- [ ] 05.3-PLAN.md — ReactionBurstOverlay polish: 8-cap FIFO + 8-column stratification + scale-rise-wiggle keyframes
+- [ ] 05.4-PLAN.md — RoomSidebar mobile bottom-sheet (2-tab bar, collapsed/expanded, drag gestures) + 2 i18n keys
+- [ ] 05.5-PLAN.md — WatchTogetherView polish: capacity (10/10) copy + room-closed redirect + auth-expired modal + onAuthExpired subscriber + 4 i18n keys
+- [ ] 05.6-PLAN.md — Grafana dashboard JSON (12 panels, every wt_* metric)
+- [ ] 05.7-PLAN.md — CLAUDE.md §Watch Together finalization + WT-NF-05 dependency audit attestation
+- [ ] 05.8-PLAN.md — Daily Kodik RPC canary GitHub Actions workflow (cron + Telegram alert)
+- [ ] 05.9-PLAN.md — Phase close: end-to-end smoke + manual checkpoint + 05-PHASE-SUMMARY + ROADMAP/STATE close-out
