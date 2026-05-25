@@ -343,12 +343,18 @@ func TestGraceManager_Fire_BroadcastsRoomClosedBeforeDelete(t *testing.T) {
 	fx.mgr.Start("room-1")
 	time.Sleep(period + graceTestSlack + 80*time.Millisecond)
 
-	if !probingHub.seenLive {
+	if !probingHub.observedLive() {
 		t.Fatalf("Broadcast happened AFTER DeleteRoom (room was already gone at broadcast time)")
 	}
 	if fx.roomExists(t, "room-1") {
 		t.Fatalf("expected room deleted after fire")
 	}
+}
+
+func (p *probingHubImpl) observedLive() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.seenLive
 }
 
 // probingHubImpl wraps the fake hub and probes Redis on every Broadcast,
