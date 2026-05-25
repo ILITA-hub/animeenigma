@@ -404,6 +404,7 @@ func TestSnapshotKey(t *testing.T) {
 }
 
 func TestPlatformStatsData_RoundTrip(t *testing.T) {
+	t.Parallel()
 	pct := 99.4
 	in := PlatformStatsData{
 		Hero: StatsHero{
@@ -437,6 +438,7 @@ func TestPlatformStatsData_RoundTrip(t *testing.T) {
 }
 
 func TestPlatformStatsData_EmptyTilesMarshalArray(t *testing.T) {
+	t.Parallel()
 	b, err := json.Marshal(PlatformStatsData{Hero: StatsHero{}, Tiles: []StatsTile{}})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -447,6 +449,7 @@ func TestPlatformStatsData_EmptyTilesMarshalArray(t *testing.T) {
 }
 
 func TestStatsHero_UptimePercentOmittedWhenNil(t *testing.T) {
+	t.Parallel()
 	b, err := json.Marshal(StatsHero{WorkingOK: false, UptimeQuip: "x", Service: "s", Tagline: "t"})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

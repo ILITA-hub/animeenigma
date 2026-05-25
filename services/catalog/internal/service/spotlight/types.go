@@ -66,10 +66,13 @@ type StatsHero struct {
 	UptimePercent *float64 `json:"uptime_percent,omitempty"`
 	UptimeQuip    string   `json:"uptime_quip"`
 	Service       string   `json:"service"`
-	UXDelta       string   `json:"ux_delta"`
-	CDI           string   `json:"cdi"`
-	MVQ           string   `json:"mvq"`
-	Tagline       string   `json:"tagline"`
+	// UXDelta/CDI/MVQ are the project's scoring metrics (CONVENTIONS.md)
+	// applied to the platform as a joke — canned strings from the pool,
+	// attached to the daily-random Service. Language-neutral.
+	UXDelta string `json:"ux_delta"`
+	CDI     string `json:"cdi"`
+	MVQ     string `json:"mvq"`
+	Tagline string `json:"tagline"`
 }
 
 // StatsTile is one micro-grid cell — a single aggregated Prometheus metric
