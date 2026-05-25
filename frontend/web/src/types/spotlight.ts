@@ -122,6 +122,14 @@ export interface PlatformMetric {
   // label falling back to the raw key).
   key: 'anime_added_7d' | 'episodes_added_7d' | 'active_rooms_7d' | string
   value: number
+  // v1.1-polish Phase 08 (HSB-V11-PS-01): backend now enriches each metric
+  // with the prior 7-day-window total (`previous_value`) + a 7-element
+  // oldest-first daily array (`series`). snake_case matches the Go JSON
+  // tags (`previous_value` / `series`) — fields stay snake_case end-to-end
+  // (RESEARCH.md Pitfall 8). Both optional: omitted when the resolver could
+  // not compute them.
+  previous_value?: number | null
+  series?: number[]
   delta?: number | null
 }
 
