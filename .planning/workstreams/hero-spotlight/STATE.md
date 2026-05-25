@@ -5,13 +5,13 @@ milestone: v1.1-polish
 milestone_name: HeroSpotlightVisualPolish
 status: in_progress
 last_updated: "2026-05-25"
-last_activity: "2026-05-25 — Phases 02–07 COMPLETE + deployed. Cards refactored: AnimeOfDay (02), RandomTail (03), PersonalPick (04), NowWatching (05), TelegramNews (06, +backend image_url), LatestNews (07). 287/287 spotlight Vitest passing; tsc clean; catalog spotlight Go tests green. Phase 07 worktree had a pre-Phase-02 base — re-applied as a clean single commit (08cea79). Phases 08–10 remaining (08+09 touch the catalog backend)."
+last_activity: "2026-05-25 — Phases 02–08 COMPLETE + deployed. Phase 08 (PlatformStatsCard): hero stat + 2×2 micro-grid + pure-SVG Sparkline + DeltaChip; backend StatsMetric gains previous_value + series[7] (dialect-portable per-day COUNTs). 302/302 spotlight Vitest passing; tsc clean; catalog spotlight Go tests green (race clean). Worktree branched from current HEAD → clean fast-forward merge. Phases 09–10 remaining (09 touches the catalog backend)."
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 10
-  completed_plans: 7
-  percent: 70
+  completed_plans: 8
+  percent: 80
 ---
 
 # Project State — `hero-spotlight` workstream
@@ -28,15 +28,15 @@ progress:
 
 ## Current Position
 
-**Status:** v1.1-polish in progress — 7 / 10 phases shipped & deployed.
-**Current Phase:** none in progress (between Phase 07 and Phase 08)
-**Next Phase to Execute:** Phase 08 — PlatformStatsCard refactor (touches catalog backend)
+**Status:** v1.1-polish in progress — 8 / 10 phases shipped & deployed.
+**Current Phase:** none in progress (between Phase 08 and Phase 09)
+**Next Phase to Execute:** Phase 09 — NotTimeYetCard refactor (touches catalog backend)
 **Last Activity:** 2026-05-25
 
 ## Progress
 
-**Phases Complete:** 7 / 10
-**Plans Complete:** 7 / 10 (one PLAN.md per phase; all written)
+**Phases Complete:** 8 / 10
+**Plans Complete:** 8 / 10 (one PLAN.md per phase; all written)
 
 ## Phase Breakdown
 
@@ -49,15 +49,15 @@ progress:
 | 05 | NowWatchingCard refactor | **Complete (deployed)** | cards/NowWatchingCard.vue | 01 |
 | 06 | TelegramNewsCard refactor | **Complete (deployed)** | cards/TelegramNewsCard.vue + backend image_url | 01 |
 | 07 | LatestNewsCard refactor | **Complete (deployed)** | cards/LatestNewsCard.vue, tokens.latest_news widening | 01 |
-| 08 | PlatformStatsCard refactor | Planned | cards/PlatformStatsCard.vue + Sparkline + DeltaChip + backend extension | 01 |
+| 08 | PlatformStatsCard refactor | **Complete (deployed)** | cards/PlatformStatsCard.vue + Sparkline + DeltaChip + StatsMetric series/previous_value | 01 |
 | 09 | NotTimeYetCard refactor | Planned | cards/NotTimeYetCard.vue + backend added_at pass-through | 01 |
 | 10 | ContinueWatchingNewCard refactor | Planned | cards/ContinueWatchingNewCard.vue | 01 |
 
 ## Session Continuity
 
-**Stopped At:** Phases 01–07 shipped & deployed to https://animeenigma.ru/. Phase 07 merged as clean commit 08cea79 (worktree had stale base). STATE.md was stale (had read completed_phases:1) and is now corrected. Phases 08–10 remaining.
+**Stopped At:** Phases 01–08 shipped & deployed to https://animeenigma.ru/. Phase 08 worktree branched from current HEAD → clean fast-forward merge (no stale-base conflicts). Phases 09–10 remaining.
 **Resume File:** None
-**Next Command:** continue autonomous run — Phase 08 (PlatformStatsCard, touches catalog backend)
+**Next Command:** continue autonomous run — Phase 09 (NotTimeYetCard, touches catalog backend)
 
 ## Open Questions (carried from v1.0)
 
