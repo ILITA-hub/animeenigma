@@ -99,6 +99,16 @@ describe('watch_together i18n parity', () => {
     'sync_toast_paused',
     'sync_toast_seeked',
     'connection_status_closed',
+    // Phase 04 (state-switching) Plan 04.4 — PlayerTabBar tab labels.
+    'player_tab_kodik',
+    'player_tab_animelib',
+    'player_tab_ourenglish',
+    'player_tab_hanime',
+    'player_tab_raw',
+    // Phase 04 (state-switching) Plan 04.4 — sender-only state-error toasts.
+    'state_change_episode_unavailable',
+    'state_change_player_unavailable',
+    'state_change_translation_unavailable',
   ] as const
 
   it.each(expectedKeys)('en.json has watch_together.%s as a string', (key) => {
