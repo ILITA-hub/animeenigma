@@ -395,6 +395,18 @@ func (r *InboundRouter) handleTimeTick(ctx context.Context, conn ConnectionCtx, 
 
 	switch correction.Severity {
 	case DriftPersistent:
+		// Plan 05.2 WT-NF-06 — label the persistent-drift counter by whether
+		// the affected user is the room's host or a regular member. The
+		// engine doesn't carry host_user_id, so we fetch the Room HASH here.
+		// This is a rare event (5th consecutive hard drift) so the extra
+		// GetRoom round-trip is acceptable; on lookup error we fall back to
+		// "member" so the counter still bumps but is conservatively labelled.
+		role := "member"
+		if room, gerr := r.repo.GetRoom(ctx, conn.RoomID); gerr == nil && room.HostUserID == conn.UserID {
+			role = "host"
+		}
+		PersistentDriftTotal.WithLabelValues(role).Inc()
+
 		r.sendErrorToSelf(ctx, conn, domain.ErrCodePersistentDrift,
 			"drift exceeds correction threshold for 5 consecutive ticks", "reload")
 	case DriftSoft, DriftHard:

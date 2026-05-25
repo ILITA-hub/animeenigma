@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -1242,5 +1243,61 @@ func TestRouter_OnDisconnect_ClearsDriftAndRateLimit(t *testing.T) {
 	}
 	if !seekBroadcast {
 		t.Fatal("expected fresh seek broadcast after OnDisconnect")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Plan 05.2 — PersistentDriftTotal label tests (WT-NF-06).
+//
+// The drift engine declares "persistent drift" after 5 consecutive hard
+// ticks; the router labels the wt_persistent_drift_total counter by
+// whether the affected user is the room's host or a regular member. We
+// drive 5 hard ticks for each case and assert the labeled counter advances.
+// ----------------------------------------------------------------------------
+
+// pushPersistentDrift drives the supplied conn into persistent-drift state
+// by dispatching 5 hard time_tick envelopes in a row. The fixture's room
+// MUST be set to StatePlaying with PlaybackTime + PlaybackTimeUpdatedAtMs
+// such that drift = |106 - 100| = 6s (hard band).
+func (fx *routerFixture) pushPersistentDrift(t *testing.T, conn ConnectionCtx) {
+	t.Helper()
+	for i := 0; i < 5; i++ {
+		fx.dispatchJSON(t, conn, domain.MsgPlaybackTimeTick, map[string]interface{}{"time": 106.0})
+	}
+}
+
+func TestRouter_TimeTick_PersistentDrift_LabelsHost(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-pdrift-host"
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	r.PlaybackTime = 100.0
+	r.PlaybackTimeUpdatedAtMs = fx.now.UnixMilli()
+	r.HostUserID = "alice" // alice IS the host
+	fx.seedRoom(t, r)
+
+	beforeHost := testutil.ToFloat64(PersistentDriftTotal.WithLabelValues("host"))
+	fx.pushPersistentDrift(t, aliceConn(roomID))
+
+	if got := testutil.ToFloat64(PersistentDriftTotal.WithLabelValues("host")); got != beforeHost+1 {
+		t.Errorf("PersistentDriftTotal{user_role=host} = %v, want %v", got, beforeHost+1)
+	}
+}
+
+func TestRouter_TimeTick_PersistentDrift_LabelsMember(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-pdrift-member"
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	r.PlaybackTime = 100.0
+	r.PlaybackTimeUpdatedAtMs = fx.now.UnixMilli()
+	r.HostUserID = "bob" // host is bob, alice is just a member
+	fx.seedRoom(t, r)
+
+	beforeMember := testutil.ToFloat64(PersistentDriftTotal.WithLabelValues("member"))
+	fx.pushPersistentDrift(t, aliceConn(roomID))
+
+	if got := testutil.ToFloat64(PersistentDriftTotal.WithLabelValues("member")); got != beforeMember+1 {
+		t.Errorf("PersistentDriftTotal{user_role=member} = %v, want %v", got, beforeMember+1)
 	}
 }
