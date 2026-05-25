@@ -81,10 +81,17 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 				"error", err,
 			)
 		} else {
-			metrics = append(metrics, spotlight.StatsMetric{
+			m := spotlight.StatsMetric{
 				Key:   "anime_added_7d",
 				Value: animeCount,
-			})
+			}
+			// v1.1-polish Phase 08: enrich with prior-window total
+			// (previous_value) + per-day series[7]. Both reuse the same
+			// `animes.created_at` column as Value, so they share the
+			// metric's 6-hour cache TTL. Failures are non-fatal — the
+			// metric still emits with the bare Value.
+			r.enrichMetric(ctx, &m, "animes")
+			metrics = append(metrics, m)
 		}
 	} else {
 		// Nil db — log and skip; eligibility branch below handles the
@@ -123,4 +130,63 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 		r.log.Warnw("spotlight.cache_set_failed", "type", r.Type(), "key", key, "error", err)
 	}
 	return &spotlight.Card{Type: r.Type(), Data: data}, nil
+}
+
+// enrichMetric populates m.PreviousValue (the count over the prior 7-day
+// window, i.e. [-14d, -7d)) and m.Series (7 daily counts, oldest-first,
+// covering the trailing 7 days) for the given `animes`-style table, using
+// the same `created_at` column as Value.
+//
+// Implementation note: rather than a dialect-specific GROUP BY date_trunc
+// (Postgres) / DATE() (SQLite), we run bounded Count() queries per day.
+// 7 + 1 cheap COUNTs on an indexed timestamp column is well within the
+// 6-hour-cached resolver budget and keeps the query portable across the
+// production Postgres and the SQLite test harness. Any per-query failure
+// leaves the corresponding field at its zero value (Series stays nil /
+// PreviousValue stays nil) and is logged WARN — the metric still emits.
+func (r *PlatformStatsResolver) enrichMetric(ctx context.Context, m *spotlight.StatsMetric, table string) {
+	if r.db == nil {
+		return
+	}
+	now := time.Now()
+
+	// --- Series: 7 daily samples, oldest-first --------------------------
+	// Bucket i (i=0..6) covers [now-(7-i)*24h, now-(6-i)*24h). The last
+	// bucket (i=6) ends at `now`; the first (i=0) starts 7 days ago.
+	series := make([]int, 7)
+	seriesOK := true
+	for i := 0; i < 7; i++ {
+		start := now.Add(-time.Duration(7-i) * 24 * time.Hour)
+		end := now.Add(-time.Duration(6-i) * 24 * time.Hour)
+		var dayCount int64
+		err := r.db.WithContext(ctx).Table(table).
+			Where("created_at >= ? AND created_at < ?", start, end).
+			Where("deleted_at IS NULL").
+			Count(&dayCount).Error
+		if err != nil {
+			r.log.Warnw("spotlight.stats_series_failed",
+				"metric", m.Key, "day", i, "error", err)
+			seriesOK = false
+			break
+		}
+		series[i] = int(dayCount)
+	}
+	if seriesOK {
+		m.Series = series
+	}
+
+	// --- PreviousValue: prior 7-day window [-14d, -7d) ------------------
+	prevStart := now.Add(-14 * 24 * time.Hour)
+	prevEnd := now.Add(-7 * 24 * time.Hour)
+	var prevCount int64
+	err := r.db.WithContext(ctx).Table(table).
+		Where("created_at >= ? AND created_at < ?", prevStart, prevEnd).
+		Where("deleted_at IS NULL").
+		Count(&prevCount).Error
+	if err != nil {
+		r.log.Warnw("spotlight.stats_previous_failed",
+			"metric", m.Key, "error", err)
+		return
+	}
+	m.PreviousValue = &prevCount
 }

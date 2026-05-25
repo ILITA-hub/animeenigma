@@ -58,10 +58,17 @@ type LatestNewsData struct {
 // StatsMetric is one metric inside `PlatformStatsData.Metrics`. Delta is
 // a pointer so it can be omitted (nil) when the previous-period value is
 // unknown.
+//
+// v1.1-polish Phase 08 (HSB-V11-PS-*): PreviousValue + Series extend the
+// metric so the refactored PlatformStatsCard can render a delta-chip
+// (current vs prior 7-day window) and a 7-day sparkline. Both are
+// pointer/slice so they `omitempty` when the resolver cannot compute them.
 type StatsMetric struct {
-	Key   string `json:"key"`
-	Value int64  `json:"value"`
-	Delta *int64 `json:"delta,omitempty"`
+	Key           string `json:"key"`
+	Value         int64  `json:"value"`
+	PreviousValue *int64 `json:"previous_value,omitempty"` // prior 7-day window total
+	Series        []int  `json:"series,omitempty"`         // 7 daily samples, oldest-first
+	Delta         *int64 `json:"delta,omitempty"`
 }
 
 // PlatformStatsData is the payload for `Card{Type: "platform_stats"}`.
