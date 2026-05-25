@@ -22,6 +22,11 @@
 //  8. hub.NewHub — in-process WebSocket connection registry.
 //  9. handler.NewRoomHandler — chi handlers for POST/GET/DELETE /rooms.
 // 10. handler.NewWebSocketHandler — /ws upgrade entry point (01.5).
+// 10a. service.NewCatalogClient — catalog HTTP back-channel for WT-STATE-02
+//      validation (Plan 04.2 + 04.3). Reads CATALOG_URL (default
+//      http://catalog:8081) and injects into NewInboundRouter so
+//      handleChangeEpisode / handleChangePlayer / handleChangeTranslation
+//      can verify against the catalog before broadcasting.
 // 11. transport.NewRouter — mounts /health + /metrics + /rooms + /ws.
 // 12. http.Server with graceful shutdown on SIGINT/SIGTERM.
 //
@@ -96,12 +101,14 @@ func main() {
 
 	// Inbound message router (01.6) — dispatches every WS envelope to the
 	// correct handler, drives the drift engine, enforces per-user rate
-	// limits. Wired into the WS handler so Connection.OnMessage =
-	// router.Dispatch + Connection.OnClose chains to router.OnDisconnect
-	// for drift/rate-limit cleanup.
+	// limits, and (Plan 04.3) validates state-change inbounds against the
+	// catalog before broadcasting. Wired into the WS handler so
+	// Connection.OnMessage = router.Dispatch + Connection.OnClose chains
+	// to router.OnDisconnect for drift/rate-limit cleanup.
 	driftEngine := service.NewDriftEngine(log)
 	rateLimiter := service.NewRateLimiter()
-	inboundRouter := service.NewInboundRouter(roomRepo, wsHub, driftEngine, rateLimiter, log)
+	catalogClient := service.NewCatalogClient(cfg.CatalogURL, log)
+	inboundRouter := service.NewInboundRouter(roomRepo, wsHub, driftEngine, rateLimiter, catalogClient, log)
 
 	// WS upgrade handler (01.5) — JWT validation, capacity gate, snapshot
 	// on connect, member:joined/left lifecycle. Mounted at /api/watch-together/ws
