@@ -27,10 +27,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 // ── Mocks (must come before SFC import) ──────────────────────────────────
+//
+// vi.mock factories are HOISTED above any module-scope `const`. References
+// from the factory back to module-scope mocks must therefore be wrapped in
+// vi.hoisted() so the function refs survive hoisting (the alternative — a
+// `let` reassigned in beforeEach — bypasses TS's `noUncheckedIndexedAccess`
+// and is less ergonomic).
 
-const pushMock = vi.fn()
-const toastPushMock = vi.fn()
-const createRoomMock = vi.fn()
+const { pushMock, toastPushMock, createRoomMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  toastPushMock: vi.fn(),
+  createRoomMock: vi.fn(),
+}))
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
