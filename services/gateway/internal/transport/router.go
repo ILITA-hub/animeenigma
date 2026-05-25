@@ -79,6 +79,32 @@ func NewRouterWithCleanup(
 	// — same effect as having no extra middleware at all.
 	userRateLimit := newUserRateLimitChainFn(redisClient, cfg.RateLimit.UserPerMinute, cfg.RateLimit.UserBurst, log)
 
+	// Workstream watch-together v1.0 Phase 1 (Plan 01.7) — dedicated WS
+	// reverse proxy for /api/watch-together/ws. The standard ProxyService
+	// path strips RFC 7230 §6.1 hop-by-hop headers (Upgrade, Connection),
+	// which is correct for HTTP but breaks the WS handshake — see
+	// ws_proxy.go for the rationale. Built at router-construction time
+	// so a misconfigured target URL fails fast at startup, not on first
+	// upgrade attempt.
+	//
+	// When WatchTogetherService is unset (legacy tests built before
+	// workstream watch-together shipped — they construct a minimal
+	// ServiceURLs with only the fields they care about), we install a
+	// 502 stub instead of fataling. Production startup ALWAYS has a
+	// value because config.Load() defaults it to "http://watch-together:8091".
+	var wtWSProxy http.HandlerFunc
+	if cfg.Services.WatchTogetherService == "" {
+		wtWSProxy = func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "watch-together service not configured", http.StatusBadGateway)
+		}
+	} else {
+		built, err := newWSProxy(cfg.Services.WatchTogetherService, log)
+		if err != nil {
+			log.Fatalw("failed to build watch-together ws proxy", "error", err, "target", cfg.Services.WatchTogetherService)
+		}
+		wtWSProxy = built
+	}
+
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
@@ -370,6 +396,40 @@ func NewRouterWithCleanup(
 				r.Post("/{id}/read", proxyHandler.ProxyToNotifications)
 				r.Post("/{id}/dismiss", proxyHandler.ProxyToNotifications)
 				r.Post("/{id}/click", proxyHandler.ProxyToNotifications)
+			})
+		})
+
+		// Watch-together service routes (workstream watch-together, v1.0
+		// Phase 1 — see .planning/workstreams/watch-together/).
+		//
+		// SPLIT auth handling (mirrors the watch-together service's own
+		// router in services/watch-together/internal/transport/router.go):
+		//
+		//   - /ws    → registered OUTSIDE JWTValidationMiddleware. Browsers
+		//              CAN'T set Authorization: Bearer on a WebSocket
+		//              upgrade handshake (the Sec-WebSocket-* handshake is
+		//              strict), so the watch-together service validates
+		//              the JWT itself from a ?token= query param. The
+		//              gateway forwards the upgrade transparently via the
+		//              dedicated WS reverse proxy (see ws_proxy.go for
+		//              why we can't reuse ProxyService.Forward).
+		//   - /rooms → JWT-required REST CRUD (standard Bearer header).
+		//
+		// Internal forward-compat route /internal/watch-together/* is NOT
+		// registered (WT-FOUND-08 — Docker-network-only, same D-05 model
+		// as notifications).
+		r.Route("/watch-together", func(r chi.Router) {
+			// WS upgrade — no JWT middleware here (auth via ?token=).
+			r.Get("/ws", wtWSProxy)
+			// REST CRUD — JWT + per-user rate limit.
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
+				r.Route("/rooms", func(r chi.Router) {
+					r.Post("/", proxyHandler.ProxyToWatchTogether)
+					r.Get("/{id}", proxyHandler.ProxyToWatchTogether)
+					r.Delete("/{id}", proxyHandler.ProxyToWatchTogether)
+				})
 			})
 		})
 

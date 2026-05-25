@@ -85,7 +85,9 @@ func newWSEchoBackend(t *testing.T, opts wsBackendOpts) *httptest.Server {
 	}))
 }
 
-// dialWSThroughProxy converts http://... → ws://... and dials.
+// dialWSThroughProxy converts http://... → ws://... and dials. Uses a
+// per-call dialer copy so parallel tests don't race on websocket.DefaultDialer
+// (the global is shared across the gorilla/websocket package).
 func dialWSThroughProxy(t *testing.T, proxyHTTP string, path string, query string, header http.Header) (*websocket.Conn, *http.Response, error) {
 	t.Helper()
 	u, err := url.Parse(proxyHTTP)
@@ -95,7 +97,7 @@ func dialWSThroughProxy(t *testing.T, proxyHTTP string, path string, query strin
 	u.Scheme = "ws"
 	u.Path = path
 	u.RawQuery = query
-	dialer := websocket.DefaultDialer
+	dialer := *websocket.DefaultDialer
 	dialer.HandshakeTimeout = 5 * time.Second
 	return dialer.Dial(u.String(), header)
 }
