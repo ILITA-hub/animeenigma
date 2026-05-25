@@ -52,6 +52,16 @@ func TestQuery_Non200IsError(t *testing.T) {
 	}
 }
 
+func TestQuery_PrometheusErrorStatusIsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"status":"error","errorType":"bad_data","error":"parse error"}`)
+	}))
+	defer srv.Close()
+	if _, err := NewClient(srv.URL).Query(context.Background(), "bad{"); err == nil {
+		t.Fatal("expected error when Prometheus reports status:error")
+	}
+}
+
 func TestHealth_AllUpAndUptime(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("query")
