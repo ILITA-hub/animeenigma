@@ -119,6 +119,64 @@ describe('cardTokens.anime_of_day.genreColors (v1.1-polish HSB-V11-AOD-04)', () 
   })
 })
 
+// ── v1.1-polish Phase 07 (HSB-V11-LN-01..04) ───────────────────────────
+// The `latest_news` token slot is widened with iconByType / labelByType
+// lookup tables. Tests below assert both shape AND specific entries
+// required by LatestNewsCard's per-type accent rendering.
+describe('cardTokens.latest_news extensions', () => {
+  it('exposes an iconByType lookup with the expected keys', () => {
+    const t = cardTokens.latest_news
+    expect(t.iconByType).toBeTypeOf('object')
+    expect(t.iconByType.feat).toBe('sparkles')
+    expect(t.iconByType.fix).toBe('wrench')
+    expect(t.iconByType.perf).toBe('lightning')
+    expect(t.iconByType.docs).toBe('sparkles')
+  })
+
+  it('exposes a labelByType lookup with the expected keys', () => {
+    const t = cardTokens.latest_news
+    expect(t.labelByType).toBeTypeOf('object')
+    expect(t.labelByType.feat).toBeDefined()
+    expect(t.labelByType.fix).toBeDefined()
+    expect(t.labelByType.perf).toBeDefined()
+  })
+
+  it('each labelByType entry has an i18nKey under spotlight.latestNews.* + Tailwind accent', () => {
+    const t = cardTokens.latest_news
+    for (const key of ['feat', 'fix', 'perf'] as const) {
+      const badge = t.labelByType[key]
+      expect(badge.i18nKey).toMatch(/^spotlight\.latestNews\./)
+      expect(badge.accent).toMatch(/bg-/)
+      expect(badge.accent).toMatch(/text-/)
+    }
+  })
+
+  it('per-type accents are color-coded per the Phase 07 spec', () => {
+    const t = cardTokens.latest_news
+    expect(t.labelByType.feat.accent).toContain('cyan')
+    expect(t.labelByType.fix.accent).toContain('green')
+    expect(t.labelByType.perf.accent).toContain('amber')
+  })
+
+  it('every iconByType value is a registered SpotlightIconName', () => {
+    const t = cardTokens.latest_news
+    for (const icon of Object.values(t.iconByType)) {
+      expect(VALID_ICONS).toContain(icon)
+    }
+  })
+
+  it('covers the long-form synonyms shipped in changelog.json today', () => {
+    // Real-world changelog.json carries 'feature' / 'improvement' /
+    // 'infrastructure' alongside the conventional-commit short forms.
+    // Without explicit mappings the per-entry pill would silently
+    // disappear for the vast majority of live entries.
+    const t = cardTokens.latest_news
+    expect(t.iconByType.feature).toBeDefined()
+    expect(t.iconByType.improvement).toBeDefined()
+    expect(t.labelByType.feature).toBeDefined()
+  })
+})
+
 describe('accentDotBg', () => {
   it('has an entry for every valid accent', () => {
     for (const accent of VALID_ACCENTS) {

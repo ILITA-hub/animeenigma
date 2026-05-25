@@ -1014,7 +1014,10 @@
     "latestNews": {
       "title": "What's new",
       "readMore": "Read full changelog →",
-      "entryDate": "{date}"
+      "entryDate": "{date}",
+      "typeFeat": "Feature",
+      "typeFix": "Bug fix",
+      "typePerf": "Performance"
     },
     "platformStats": {
       "title": "Platform this week",

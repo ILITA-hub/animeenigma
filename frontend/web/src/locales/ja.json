@@ -1014,7 +1014,10 @@
     "latestNews": {
       "title": "新着情報",
       "readMore": "更新履歴を見る →",
-      "entryDate": "{date}"
+      "entryDate": "{date}",
+      "typeFeat": "新機能",
+      "typeFix": "修正",
+      "typePerf": "パフォーマンス"
     },
     "platformStats": {
       "title": "今週のプラットフォーム",

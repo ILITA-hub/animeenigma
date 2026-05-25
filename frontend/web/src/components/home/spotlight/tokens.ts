@@ -36,6 +36,30 @@ export interface CardToken {
   icon: SpotlightIconName
 }
 
+/**
+ * Per-changelog-entry-type lookup for LatestNewsCard. The card resolver
+ * passes through whatever `type` string the backend's changelog.json
+ * source carries; the conventional-commit-style keys below match the
+ * v3.1 changelog conventions (feat/fix/perf/docs) AND the longer-form
+ * synonyms ("feature"/"improvement") that exist in the historical
+ * changelog.json payload.
+ *
+ * Unknown types fall back to the `sparkles` icon (no type pill rendered).
+ */
+export interface LatestNewsTypeBadge {
+  i18nKey: string
+  accent: string // Tailwind class string — pinned literal for jit safelist
+}
+
+export interface LatestNewsTokenExtensions {
+  iconByType: Record<string, SpotlightIconName>
+  labelByType: Record<string, LatestNewsTypeBadge>
+}
+
+// CardToken for `latest_news` is widened with the type-badge lookup
+// tables. Other card-type tokens stay on the base `CardToken` shape.
+export type LatestNewsCardToken = CardToken & LatestNewsTokenExtensions
+
 // Derive the discriminator union from the SpotlightCard discriminated union
 // so a future change to types/spotlight.ts is statically caught.
 export type SpotlightCardType = SpotlightCard['type']
@@ -56,9 +80,35 @@ export type SpotlightCardType = SpotlightCard['type']
  *   8  = Drama        10 = Fantasy     14 = Horror       22 = Romance
  *   24 = Sci-Fi       30 = Sports      36 = Slice of Life 37 = Supernatural
  */
-export const cardTokens: Record<SpotlightCardType, CardToken> & {
+
+// Cyan pill for feat-family entries — matches the v1.1 design token
+// accent for "new functionality" badges across the app.
+const FEAT_BADGE: LatestNewsTypeBadge = {
+  i18nKey: 'spotlight.latestNews.typeFeat',
+  accent: 'bg-cyan-500/20 text-cyan-200',
+}
+// Green pill for fix-family entries.
+const FIX_BADGE: LatestNewsTypeBadge = {
+  i18nKey: 'spotlight.latestNews.typeFix',
+  accent: 'bg-green-500/20 text-green-200',
+}
+// Amber pill for perf-family entries.
+const PERF_BADGE: LatestNewsTypeBadge = {
+  i18nKey: 'spotlight.latestNews.typePerf',
+  accent: 'bg-amber-500/20 text-amber-200',
+}
+
+// Map shape preserves the parity guarantee: every variant in SpotlightCard
+// still resolves to a token with {accent, kickerKey, icon}. `anime_of_day`
+// carries the genre-color map (Phase 02) and `latest_news` is upcast to the
+// wider LatestNewsCardToken (Phase 07) so callers can read iconByType /
+// labelByType without extra type assertions.
+type CardTokenMap = Record<SpotlightCardType, CardToken> & {
   anime_of_day: CardToken & { genreColors: Record<string, string> }
-} = {
+  latest_news: LatestNewsCardToken
+}
+
+export const cardTokens: CardTokenMap = {
   anime_of_day:          {
     accent: 'cyan',
     kickerKey: 'spotlight.animeOfDay.title',
@@ -81,7 +131,31 @@ export const cardTokens: Record<SpotlightCardType, CardToken> & {
   random_tail:           { accent: 'purple', kickerKey: 'spotlight.randomTail.title',          icon: 'shuffle'  },
   personal_pick:         { accent: 'cyan',   kickerKey: 'spotlight.personalPick.title',        icon: 'sparkles' },
   telegram_news:         { accent: 'sky',    kickerKey: 'spotlight.telegramNews.title',        icon: 'telegram' },
-  latest_news:           { accent: 'amber',  kickerKey: 'spotlight.latestNews.title',          icon: 'sparkles' },
+  latest_news: {
+    accent: 'amber',
+    kickerKey: 'spotlight.latestNews.title',
+    icon: 'sparkles',
+    // Conventional-commit keys (feat/fix/perf/docs) + the long-form
+    // synonyms that ship in the live changelog.json today. Without the
+    // synonyms the type pill would silently disappear in production.
+    iconByType: {
+      feat:           'sparkles',
+      feature:        'sparkles',
+      fix:            'wrench',
+      perf:           'lightning',
+      improvement:    'lightning',
+      infrastructure: 'wrench',
+      docs:           'sparkles',
+    },
+    labelByType: {
+      feat:           FEAT_BADGE,
+      feature:        FEAT_BADGE,
+      fix:            FIX_BADGE,
+      perf:           PERF_BADGE,
+      improvement:    PERF_BADGE,
+      infrastructure: FIX_BADGE,
+    },
+  },
   platform_stats:        { accent: 'teal',   kickerKey: 'spotlight.platformStats.title',       icon: 'chart'    },
   now_watching:          { accent: 'green',  kickerKey: 'spotlight.nowWatching.title',         icon: 'pulse'    },
   not_time_yet:          { accent: 'amber',  kickerKey: 'spotlight.notTimeYet.title',          icon: 'clock'    },

@@ -146,7 +146,16 @@ describe('spotlight i18n parity', () => {
     expect(jaLen).toBe(enLen)
   })
 
-  const latestNewsKeys = ['title', 'readMore', 'entryDate'] as const
+  // v1.1-polish Phase 07 (HSB-V11-LN-02) added typeFeat / typeFix / typePerf
+  // as per-entry pill labels rendered by LatestNewsCard.
+  const latestNewsKeys = [
+    'title',
+    'readMore',
+    'entryDate',
+    'typeFeat',
+    'typeFix',
+    'typePerf',
+  ] as const
   it.each(latestNewsKeys)('spotlight.latestNews.%s present in both locales', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).latestNews?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).latestNews?.[k]).toBe('string')

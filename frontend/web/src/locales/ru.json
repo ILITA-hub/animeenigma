@@ -1014,7 +1014,10 @@
     "latestNews": {
       "title": "Что нового",
       "readMore": "Все обновления →",
-      "entryDate": "{date}"
+      "entryDate": "{date}",
+      "typeFeat": "Новая фича",
+      "typeFix": "Исправление",
+      "typePerf": "Улучшение"
     },
     "platformStats": {
       "title": "Платформа за неделю",
