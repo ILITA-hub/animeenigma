@@ -40,6 +40,57 @@ func (nopCatalog) ValidateEpisode(
 	return service.ValidateResult{Valid: true}, nil
 }
 
+// fakeGrace satisfies the GraceCanceller interface and records every
+// Cancel/Start invocation so tests can assert exact call sites for the
+// Plan 05.1 wiring. cancelReturn lets a test pin the Cancel return value
+// (true = recovered, false = no pending timer).
+type fakeGrace struct {
+	mu           sync.Mutex
+	cancelCalls  []string
+	startCalls   []string
+	cancelReturn bool
+	period       time.Duration
+}
+
+func newFakeGrace() *fakeGrace {
+	return &fakeGrace{period: 5 * time.Minute}
+}
+
+func (g *fakeGrace) Cancel(roomID string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cancelCalls = append(g.cancelCalls, roomID)
+	return g.cancelReturn
+}
+
+func (g *fakeGrace) Start(roomID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.startCalls = append(g.startCalls, roomID)
+}
+
+func (g *fakeGrace) Period() time.Duration {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.period
+}
+
+func (g *fakeGrace) snapshotStart() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make([]string, len(g.startCalls))
+	copy(out, g.startCalls)
+	return out
+}
+
+func (g *fakeGrace) snapshotCancel() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make([]string, len(g.cancelCalls))
+	copy(out, g.cancelCalls)
+	return out
+}
+
 // wsFixture bundles the moving parts for an end-to-end WS handler test:
 // a chi router with /ws mounted, a real httptest.Server, a miniredis-backed
 // repo, and helpers to mint JWTs against the fixture's secret.
@@ -51,6 +102,7 @@ type wsFixture struct {
 	repo       *repo.RoomRepo
 	roomSvc    *service.RoomService
 	jwtManager *authz.JWTManager
+	grace      *fakeGrace
 	mr         *miniredis.Miniredis
 }
 
@@ -99,7 +151,10 @@ func newWSFixture(t *testing.T, maxMembers int) *wsFixture {
 	drift := service.NewDriftEngine(log)
 	rl := service.NewRateLimiter()
 	inboundRouter := service.NewInboundRouter(r, wsHub, drift, rl, nopCatalog{}, log)
-	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, inboundRouter, cfg, log)
+	// Plan 05.1 — fakeGrace records every Cancel/Start so tests can assert
+	// the upgrade-cancels-grace + last-conn-starts-grace contracts.
+	grace := newFakeGrace()
+	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, inboundRouter, grace, cfg, log)
 
 	httpRouter := chi.NewRouter()
 	httpRouter.Get("/api/watch-together/ws", wsHandler.Upgrade)
@@ -115,6 +170,7 @@ func newWSFixture(t *testing.T, maxMembers int) *wsFixture {
 		repo:       r,
 		roomSvc:    roomSvc,
 		jwtManager: authz.NewJWTManager(cfg.JWT),
+		grace:      grace,
 		mr:         mr,
 	}
 }
@@ -713,7 +769,7 @@ func TestWS_OriginAllowlist_RejectsMismatchedBrowserOrigin(t *testing.T) {
 	driftOrigin := service.NewDriftEngine(log)
 	rlOrigin := service.NewRateLimiter()
 	originRouter := service.NewInboundRouter(r, wsHub, driftOrigin, rlOrigin, nopCatalog{}, log)
-	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, originRouter, cfg, log)
+	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, originRouter, newFakeGrace(), cfg, log)
 	httpRouter := chi.NewRouter()
 	httpRouter.Get("/api/watch-together/ws", wsHandler.Upgrade)
 	server := httptest.NewServer(httpRouter)
@@ -758,6 +814,124 @@ func TestWS_OriginAllowlist_RejectsMismatchedBrowserOrigin(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", resp.StatusCode)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Plan 05.1: HandleUpgrade calls graceMgr.Cancel BEFORE hub.Register so a
+// returning member cancels any pending reconnect window.
+// ----------------------------------------------------------------------------
+
+func TestWS_HandleUpgrade_CancelsPendingGrace(t *testing.T) {
+	fx := newWSFixture(t, 0)
+	roomID := fx.createRoom("alice", "Alice")
+	// Pre-pin the fake grace so Cancel returns "recovered" — verifies the
+	// log path; the test still passes if Cancel returns false because the
+	// assertion is on call count + roomID.
+	fx.grace.cancelReturn = true
+
+	conn, _, err := fx.dial(fx.mintToken("alice", "Alice"), roomID)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	_ = readEnvelopeWithin(t, conn, 2*time.Second) // snapshot
+
+	calls := fx.grace.snapshotCancel()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 Cancel call, got %d: %v", len(calls), calls)
+	}
+	if calls[0] != roomID {
+		t.Errorf("Cancel called with roomID = %q, want %q", calls[0], roomID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Plan 05.1: makeOnClose calls graceMgr.Start when hub.MemberCount(roomID)
+// drops to 0 (last connection in the room).
+// ----------------------------------------------------------------------------
+
+func TestWS_OnClose_LastConnection_StartsGrace(t *testing.T) {
+	fx := newWSFixture(t, 0)
+	roomID := fx.createRoom("alice", "Alice")
+
+	connA, _, err := fx.dial(fx.mintToken("alice", "Alice"), roomID)
+	if err != nil {
+		t.Fatalf("dial A: %v", err)
+	}
+	_ = readEnvelopeWithin(t, connA, 2*time.Second) // snapshot
+
+	// Close Alice — she's the only member, so OnClose should fire grace.Start.
+	if err := connA.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, "bye"),
+		time.Now().Add(2*time.Second),
+	); err != nil {
+		t.Fatalf("write close: %v", err)
+	}
+	_ = connA.Close()
+
+	// Wait for OnClose to run on the hub goroutine.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(fx.grace.snapshotStart()) >= 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	starts := fx.grace.snapshotStart()
+	if len(starts) != 1 {
+		t.Fatalf("expected exactly 1 Start call, got %d: %v", len(starts), starts)
+	}
+	if starts[0] != roomID {
+		t.Errorf("Start called with roomID = %q, want %q", starts[0], roomID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Plan 05.1: makeOnClose does NOT call graceMgr.Start when other members
+// remain in the room (only the last-connection-in-room triggers the timer).
+// ----------------------------------------------------------------------------
+
+func TestWS_OnClose_NotLastConnection_NoGraceStart(t *testing.T) {
+	fx := newWSFixture(t, 0)
+	roomID := fx.createRoom("alice", "Alice")
+
+	connA, _, err := fx.dial(fx.mintToken("alice", "Alice"), roomID)
+	if err != nil {
+		t.Fatalf("dial A: %v", err)
+	}
+	defer connA.Close()
+	_ = readEnvelopeWithin(t, connA, 2*time.Second)
+
+	connB, _, err := fx.dial(fx.mintToken("bob", "Bob"), roomID)
+	if err != nil {
+		t.Fatalf("dial B: %v", err)
+	}
+	_ = readEnvelopeWithin(t, connB, 2*time.Second)
+	_ = readEnvelopeWithin(t, connA, 2*time.Second) // member:joined bob
+
+	// Close Bob — Alice remains, so grace.Start should NOT fire.
+	if err := connB.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, "bye"),
+		time.Now().Add(2*time.Second),
+	); err != nil {
+		t.Fatalf("write close: %v", err)
+	}
+	_ = connB.Close()
+
+	// Wait for member:left to fire on Alice — that's the signal OnClose
+	// completed on the server side.
+	leftEnv := readEnvelopeWithin(t, connA, 3*time.Second)
+	if leftEnv.Type != domain.MsgMemberLeft {
+		t.Fatalf("got %q, want member:left", leftEnv.Type)
+	}
+
+	// Grace.Start MUST NOT have been called (Alice is still there).
+	if starts := fx.grace.snapshotStart(); len(starts) != 0 {
+		t.Errorf("expected 0 Start calls (Alice still present), got %d: %v", len(starts), starts)
 	}
 }
 

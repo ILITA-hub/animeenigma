@@ -46,17 +46,33 @@ import (
 // network conditions so the frontend can render a friendly error.
 const closeFrameDeadline = 2 * time.Second
 
+// GraceCanceller is the narrow surface of *service.GraceManager the WS
+// handler needs. Defined here (consumer-side interface, idiomatic Go) so
+// websocket_test.go can pass a fake without spinning up a real timer
+// registry. The production *service.GraceManager satisfies this by
+// signature (verified at compile time in main.go).
+type GraceCanceller interface {
+	Cancel(roomID string) bool
+	Start(roomID string)
+	Period() time.Duration
+}
+
 // WebSocketHandler serves GET /api/watch-together/ws. Owns the Origin
 // allowlist, JWT validation, capacity gate, and the per-connection
 // lifecycle hooks (snapshot on enter, member:left + RemoveMember on exit).
 // Inbound message routing lives in 01.6 via service.InboundRouter — every
 // envelope decoded by the connection's readPump is dispatched to one of
 // 10 typed handlers (playback:*, state:change_*, chat:*, presence:*).
+//
+// graceMgr (Plan 05.1, WT-POLISH-02) is consulted on every upgrade to
+// cancel any pending reconnect window for the room, and called on the
+// last-connection-in-room OnClose path to start a new grace timer.
 type WebSocketHandler struct {
 	hub        *hub.Hub
 	repo       *repo.RoomRepo
 	roomSvc    *service.RoomService
 	router     *service.InboundRouter
+	graceMgr   GraceCanceller
 	cfg        *config.Config
 	log        *logger.Logger
 	upgrader   websocket.Upgrader
@@ -71,11 +87,19 @@ type WebSocketHandler struct {
 // Every inbound envelope arriving on Connection.OnMessage is forwarded to
 // router.Dispatch; disconnect cleanup (drift state + rate-limit buckets)
 // flows through router.OnDisconnect inside the OnClose hook.
+//
+// graceMgr is the per-room reconnect-window timer registry (Plan 05.1).
+// Upgrade calls graceMgr.Cancel BEFORE hub.Register so a returning member
+// stops the pending grace timer; makeOnClose calls graceMgr.Start when
+// hub.MemberCount drops to 0 so the room state survives a 5-minute
+// reconnect window before tear-down. Pass nil to disable grace handling
+// (tests covering legacy code paths).
 func NewWebSocketHandler(
 	h *hub.Hub,
 	r *repo.RoomRepo,
 	roomSvc *service.RoomService,
 	router *service.InboundRouter,
+	graceMgr GraceCanceller,
 	cfg *config.Config,
 	log *logger.Logger,
 ) *WebSocketHandler {
@@ -87,6 +111,7 @@ func NewWebSocketHandler(
 		repo:       r,
 		roomSvc:    roomSvc,
 		router:     router,
+		graceMgr:   graceMgr,
 		cfg:        cfg,
 		log:        log,
 		upgrader:   newWSUpgrader(cfg),
@@ -179,6 +204,21 @@ func (h *WebSocketHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		writeCloseFrameError(conn, domain.ErrCodeCapacityFull, "room at capacity")
 		_ = conn.Close()
 		return
+	}
+
+	// Plan 05.1 WT-POLISH-02 — if a grace timer is pending for this room
+	// (the last connection dropped within cfg.GracePeriod), the returning
+	// connection cancels it BEFORE Register so the next inbound event can
+	// refresh TTL via the normal sliding path. Cancel returning true is
+	// the "user reconnected in time" signal — bumps wt_grace_recoveries_total
+	// inside GraceManager.Cancel.
+	if h.graceMgr != nil {
+		if recovered := h.graceMgr.Cancel(roomID); recovered {
+			h.log.Infow("watch_together grace recovered",
+				"room_id", roomID,
+				"user_id", userID,
+			)
+		}
 	}
 
 	// Step 5: Persist member meta. JoinedAt + LastSeenAt are the same
@@ -323,6 +363,11 @@ func (h *WebSocketHandler) sendSnapshot(ctx context.Context, c *hub.Connection, 
 // broadcastMemberJoined emits a member:joined envelope to every connection
 // in roomID EXCEPT those owned by userID. Errors are logged-not-returned —
 // a broadcast failure here is non-fatal for the new connection.
+//
+// Plan 05.2 WT-NF-06: post-broadcast, observes wt_members_per_room with
+// the room's current member count (CountMembers is cheap HLEN). The
+// observation reflects the JUST-JOINED state because the WS upgrade
+// handler called AddMember BEFORE Register and BEFORE this broadcast.
 func (h *WebSocketHandler) broadcastMemberJoined(
 	ctx context.Context,
 	roomID, userID string,
@@ -341,6 +386,17 @@ func (h *WebSocketHandler) broadcastMemberJoined(
 		h.log.Warnw("watch_together ws broadcast member_joined",
 			"room_id", roomID,
 			"user_id", userID,
+			"err", err,
+		)
+	}
+
+	// Plan 05.2 — wt_members_per_room histogram observation. Best-effort;
+	// CountMembers failure logs at Debug and skips the observation.
+	if n, err := h.repo.CountMembers(ctx, roomID); err == nil {
+		service.MembersPerRoom.Observe(float64(n))
+	} else {
+		h.log.Debugw("watch_together ws members_per_room count failed",
+			"room_id", roomID,
 			"err", err,
 		)
 	}
@@ -421,6 +477,23 @@ func (h *WebSocketHandler) makeOnClose(roomID, userID string) func(*hub.Connecti
 				"room_id", roomID,
 				"user_id", userID,
 				"err", err,
+			)
+		}
+
+		// Plan 05.1 WT-POLISH-02 — was this the LAST connection in the
+		// room? hub.Unregister has already removed this connection from
+		// the room set (see hub.go) before firing OnClose, so a post-
+		// Unregister MemberCount of 0 truly reflects "no connections
+		// left". Start the grace timer to keep room state queryable for
+		// cfg.GracePeriod. We do NOT call repo.RefreshTTL — the existing
+		// sliding TTL must elapse naturally so a no-show 5 min later
+		// leads to natural Redis expiry alongside the explicit
+		// DeleteRoom inside GraceManager.fire().
+		if h.graceMgr != nil && h.hub.MemberCount(roomID) == 0 {
+			h.graceMgr.Start(roomID)
+			h.log.Infow("watch_together grace started",
+				"room_id", roomID,
+				"period", h.graceMgr.Period(),
 			)
 		}
 
