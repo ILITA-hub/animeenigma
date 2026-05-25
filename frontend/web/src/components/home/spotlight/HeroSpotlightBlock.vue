@@ -24,9 +24,9 @@
     aria-hidden="true"
   >
     <div
-      class="glass-card rounded-2xl min-h-[420px] md:min-h-[340px] lg:min-h-[320px] lg:max-h-[400px] overflow-hidden"
+      class="glass-card rounded-2xl spotlight-frame overflow-hidden"
     >
-      <div class="w-full h-full min-h-[420px] md:min-h-[340px] lg:min-h-[320px] skeleton-shimmer" />
+      <div class="w-full h-full skeleton-shimmer" />
     </div>
   </div>
 
@@ -47,7 +47,7 @@
     @keydown.right="next"
   >
     <div
-      class="relative glass-card rounded-2xl overflow-hidden flex flex-col min-h-[420px] md:min-h-[340px] lg:min-h-[320px] lg:max-h-[400px]"
+      class="relative glass-card rounded-2xl overflow-hidden flex flex-col spotlight-frame"
     >
       <div
         class="relative w-full flex-1 min-h-0 pb-10"

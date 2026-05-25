@@ -351,6 +351,13 @@ body {
 
    Variants are switched via `data-accent="purple|amber|green|sky|teal"`.
    Default (no attribute) is cyan. */
+/* The CTA family lives in @layer components (NOT unlayered) so Tailwind
+   utilities always win over it. This is load-bearing: PersonalPickCard's
+   mobile "+ N more" button relies on `md:hidden` (a utilities-layer rule)
+   beating `.cta-card`'s `display:inline-flex`. Unlayered, `.cta-card` would
+   override `md:hidden` and the button would show on desktop, overlapping and
+   intercepting clicks on the carousel dots. */
+@layer components {
 .cta-hero {
   @apply inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-base bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/30 transition;
 }
@@ -392,6 +399,17 @@ body {
 .cta-text[data-accent="teal"] {
   @apply text-teal-400 hover:text-teal-300;
 }
+} /* end @layer components — cta-* family */
+
+/* Single source of truth for the hero-spotlight block height — one
+   "height-setting block" governing all card types. Fixed height (not min-h)
+   so the carousel never changes size between cards as it rotates. The card
+   content box is ≈ this height minus the ~40px `pb-10` dot strip.
+   Authored UNLAYERED (like .glass-card / .shuffle-deck above) on purpose:
+   a plain rule in a second `@layer components` block gets tree-shaken out by
+   Tailwind v4, and unlayered also means nothing accidentally overrides it. */
+.spotlight-frame { height: 470px; }
+@media (min-width: 768px) { .spotlight-frame { height: 400px; } }
 
 /* Spotlight RandomTail (HSB-V11-RT-04)
 
