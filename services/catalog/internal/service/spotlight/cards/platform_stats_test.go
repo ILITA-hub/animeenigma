@@ -117,6 +117,62 @@ func TestPlatformStats_Resolve_AllMetricsComputable_ReturnsCard(t *testing.T) {
 	}
 }
 
+// TestPlatformStats_Resolve_EmitsSeriesAndPreviousValue asserts the
+// v1.1-polish Phase 08 enrichment (HSB-V11-PS-01): every emitted metric
+// carries a 7-element Series and a non-nil PreviousValue.
+func TestPlatformStats_Resolve_EmitsSeriesAndPreviousValue(t *testing.T) {
+	db := newTestDB(t)
+	now := time.Now()
+	// Rows inside the trailing 7-day window (counted in Value + Series).
+	for i := 0; i < 3; i++ {
+		insertAnime(t, db, "cur-"+string(rune('a'+i)), now.Add(-2*24*time.Hour))
+	}
+	// Rows inside the prior 7-day window [-14d, -7d) (counted in PreviousValue).
+	for i := 0; i < 2; i++ {
+		insertAnime(t, db, "prev-"+string(rune('a'+i)), now.Add(-10*24*time.Hour))
+	}
+
+	c := newFakeCache()
+	r := NewPlatformStatsResolver(db, c, testLogger())
+
+	card, err := r.Resolve(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if card == nil {
+		t.Fatal("expected non-nil card")
+	}
+	data, ok := card.Data.(spotlight.PlatformStatsData)
+	if !ok {
+		t.Fatalf("Card.Data not PlatformStatsData: %T", card.Data)
+	}
+	if len(data.Metrics) == 0 {
+		t.Fatal("expected at least 1 emitted metric")
+	}
+	for _, m := range data.Metrics {
+		if len(m.Series) != 7 {
+			t.Errorf("metric %q: len(Series) = %d, want 7", m.Key, len(m.Series))
+		}
+		if m.PreviousValue == nil {
+			t.Errorf("metric %q: PreviousValue is nil, want non-nil", m.Key)
+		}
+	}
+
+	// Spot-check the numbers for the single Phase-1 metric.
+	m := data.Metrics[0]
+	if m.PreviousValue == nil || *m.PreviousValue != 2 {
+		t.Errorf("PreviousValue = %v, want 2 (prior-window rows)", m.PreviousValue)
+	}
+	// Series sum over the trailing window must equal Value (3 in-window rows).
+	var sum int
+	for _, v := range m.Series {
+		sum += v
+	}
+	if sum != int(m.Value) {
+		t.Errorf("sum(Series) = %d, want Value = %d", sum, m.Value)
+	}
+}
+
 func TestPlatformStats_Resolve_NoMetricsComputable_ReturnsNilNil(t *testing.T) {
 	// nil db drives the "metric failed" branch — no metrics appended →
 	// resolver returns (nil, nil).
