@@ -1019,6 +1019,9 @@
       "typeFix": "修正",
       "typePerf": "パフォーマンス"
     },
+    "platformStats": {
+      "title": "Как дела у платформы"
+    },
     "personalPick": {
       "title": "あなたへのおすすめ",
       "titleWithName": "{name}さんへのおすすめ",

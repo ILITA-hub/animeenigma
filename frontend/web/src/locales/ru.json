@@ -1019,6 +1019,9 @@
       "typeFix": "Исправление",
       "typePerf": "Улучшение"
     },
+    "platformStats": {
+      "title": "Как дела у платформы"
+    },
     "personalPick": {
       "title": "Выбрано для вас",
       "titleWithName": "Для вас, {name}",

@@ -82,6 +82,7 @@ describe('spotlight i18n parity', () => {
     'animeOfDay',
     'randomTail',
     'latestNews',
+    'platformStats',
     'personalPick',
     'telegramNews',
     'nowWatching',
@@ -108,6 +109,15 @@ describe('spotlight i18n parity', () => {
   it.each(randomTailKeys)('spotlight.randomTail.%s present in both locales', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).randomTail?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).randomTail?.[k]).toBe('string')
+  })
+
+  // platformStats is otherwise an i18n-free joke card; the ONLY surviving key
+  // is `title`, used by the shared carousel kicker (tokens.ts kickerKey →
+  // CarouselControls `t(...)`) and HeroSpotlightBlock cardTitle().
+  const platformStatsKeys = ['title'] as const
+  it.each(platformStatsKeys)('spotlight.platformStats.%s present in both locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
   })
 
   // ── Phase 03 (Plan 03) RandomTailCard refactor ──────────────────────────

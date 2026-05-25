@@ -1019,6 +1019,9 @@
       "typeFix": "Bug fix",
       "typePerf": "Performance"
     },
+    "platformStats": {
+      "title": "Как дела у платформы"
+    },
     "personalPick": {
       "title": "Picked for you",
       "titleWithName": "For you, {name}",
