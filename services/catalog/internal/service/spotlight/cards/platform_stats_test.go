@@ -2,8 +2,10 @@ package cards
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	spotlight "github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
 )
@@ -45,6 +47,22 @@ func (p *allNonZeroProm) Health(_ context.Context) (bool, float64, error) {
 }
 func (p *allNonZeroProm) Query(_ context.Context, _ string) (float64, error) {
 	return p.val, nil
+}
+
+// countingProm records how many times each method is called. Used to prove
+// the cache-hit path never touches Prometheus.
+type countingProm struct {
+	queryCalls  int
+	healthCalls int
+}
+
+func (p *countingProm) Health(_ context.Context) (bool, float64, error) {
+	p.healthCalls++
+	return true, 100, nil
+}
+func (p *countingProm) Query(_ context.Context, _ string) (float64, error) {
+	p.queryCalls++
+	return 1, nil
 }
 
 func newPlatformStatsResolverForTest(prom promQuerier) *PlatformStatsResolver {
@@ -125,5 +143,44 @@ func TestPlatformStats_FiltersZeroTiles(t *testing.T) {
 	data := card.Data.(spotlightPlatformStatsData)
 	if len(data.Tiles) != 0 {
 		t.Fatalf("zero-valued metrics must be filtered, got %d tiles", len(data.Tiles))
+	}
+}
+
+func TestPlatformStats_CacheHitSkipsPrometheus(t *testing.T) {
+	// A pre-populated cache entry for today's key must be returned verbatim
+	// WITHOUT touching Prometheus (the once-per-day snapshot contract).
+	pct := 42.0
+	cached := spotlight.PlatformStatsData{
+		Hero: spotlight.StatsHero{
+			WorkingOK:     true,
+			UptimePercent: &pct,
+			UptimeQuip:    "CACHED",
+			Service:       "catalog",
+			Tagline:       "cached tagline",
+			UXDelta:       "x",
+			CDI:           "y",
+			MVQ:           "z",
+		},
+		Tiles: []spotlight.StatsTile{{Label: "L", Value: 5, Window: "day", Format: "int"}},
+	}
+	key := "spotlight:stats:" + spotlight.DateKeyUTC(time.Now())
+	b, err := json.Marshal(cached)
+	if err != nil {
+		t.Fatalf("marshal cached: %v", err)
+	}
+	fc := &fakeCache{store: map[string][]byte{key: b}}
+
+	prom := &countingProm{}
+	card, err := NewPlatformStatsResolver(prom, fc, testLogger()).Resolve(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	data := card.Data.(spotlightPlatformStatsData)
+	if data.Hero.UptimeQuip != "CACHED" || data.Hero.Tagline != "cached tagline" {
+		t.Fatalf("expected cached payload, got %+v", data.Hero)
+	}
+	if prom.queryCalls != 0 || prom.healthCalls != 0 {
+		t.Fatalf("Prometheus must not be called on cache hit: query=%d health=%d",
+			prom.queryCalls, prom.healthCalls)
 	}
 }
