@@ -94,10 +94,19 @@ func main() {
 	instanceID := uuid.NewString()
 	wsHub := hub.NewHub(roomRepo, log, instanceID)
 
+	// Inbound message router (01.6) — dispatches every WS envelope to the
+	// correct handler, drives the drift engine, enforces per-user rate
+	// limits. Wired into the WS handler so Connection.OnMessage =
+	// router.Dispatch + Connection.OnClose chains to router.OnDisconnect
+	// for drift/rate-limit cleanup.
+	driftEngine := service.NewDriftEngine(log)
+	rateLimiter := service.NewRateLimiter()
+	inboundRouter := service.NewInboundRouter(roomRepo, wsHub, driftEngine, rateLimiter, log)
+
 	// WS upgrade handler (01.5) — JWT validation, capacity gate, snapshot
 	// on connect, member:joined/left lifecycle. Mounted at /api/watch-together/ws
 	// in transport.NewRouter, OUTSIDE the AuthMiddleware-wrapped subgroup.
-	wsHandler := handler.NewWebSocketHandler(wsHub, roomRepo, roomService, cfg, log)
+	wsHandler := handler.NewWebSocketHandler(wsHub, roomRepo, roomService, inboundRouter, cfg, log)
 
 	router := transport.NewRouter(cfg, roomHandler, wsHandler, log, metricsCollector)
 

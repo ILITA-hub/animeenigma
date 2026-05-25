@@ -1,0 +1,716 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/repo"
+)
+
+// ----------------------------------------------------------------------------
+// Test scaffolding
+//
+// We use a real miniredis-backed RoomRepo (so the Redis-write side effects
+// actually exercise production code) plus a fakeHub that records every
+// Broadcast / SendTo call for assertion. The DriftEngine and RateLimiter are
+// real (we want their actual behavior exercised), constructed fresh per test.
+// ----------------------------------------------------------------------------
+
+// fakeHubCall captures one Broadcast or SendTo invocation.
+type fakeHubCall struct {
+	method        string // "Broadcast" or "SendTo"
+	roomID        string
+	userID        string // SendTo only
+	excludeUserID string // Broadcast only
+	env           domain.Envelope
+}
+
+// fakeHub satisfies HubFanout. Thread-safe so concurrent handler tests
+// can assert without races.
+type fakeHub struct {
+	mu    sync.Mutex
+	calls []fakeHubCall
+}
+
+func newFakeHub() *fakeHub { return &fakeHub{} }
+
+func (h *fakeHub) Broadcast(_ context.Context, roomID string, env domain.Envelope, excludeUserID string) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calls = append(h.calls, fakeHubCall{
+		method:        "Broadcast",
+		roomID:        roomID,
+		excludeUserID: excludeUserID,
+		env:           env,
+	})
+	return 1, nil
+}
+
+func (h *fakeHub) SendTo(_ context.Context, roomID, userID string, env domain.Envelope) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calls = append(h.calls, fakeHubCall{
+		method: "SendTo",
+		roomID: roomID,
+		userID: userID,
+		env:    env,
+	})
+	return 1, nil
+}
+
+func (h *fakeHub) snapshot() []fakeHubCall {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]fakeHubCall, len(h.calls))
+	copy(out, h.calls)
+	return out
+}
+
+func (h *fakeHub) findFirst(method, msgType string) (fakeHubCall, bool) {
+	for _, c := range h.snapshot() {
+		if c.method == method && c.env.Type == msgType {
+			return c, true
+		}
+	}
+	return fakeHubCall{}, false
+}
+
+// routerFixture bundles the moving parts a router test needs.
+type routerFixture struct {
+	repo   *repo.RoomRepo
+	hub    *fakeHub
+	drift  *DriftEngine
+	rl     *RateLimiter
+	router *InboundRouter
+	mr     *miniredis.Miniredis
+	now    time.Time
+}
+
+// fixedID returns a stable chat-message id so test asserts are deterministic.
+const fixedChatID = "msg-fixed-id"
+
+// newRouterFixture creates a real-Redis-backed router with a pinned clock
+// and pinned newID. Caller seeds the room state explicitly.
+func newRouterFixture(t *testing.T) *routerFixture {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	log := logger.Default()
+	r := repo.NewRoomRepo(client, 900*time.Second, log)
+	hub := newFakeHub()
+	drift := NewDriftEngine(log)
+	rl := NewRateLimiter()
+	router := NewInboundRouter(r, hub, drift, rl, log)
+
+	// Pinned wall-clock for deterministic server_ts / chat TS assertions.
+	fixedNow := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
+	router.SetClockForTest(func() time.Time { return fixedNow })
+	router.SetIDProviderForTest(func() string { return fixedChatID })
+
+	return &routerFixture{
+		repo:   r,
+		hub:    hub,
+		drift:  drift,
+		rl:     rl,
+		router: router,
+		mr:     mr,
+		now:    fixedNow,
+	}
+}
+
+// seedRoom inserts a Room HASH for the test.
+func (fx *routerFixture) seedRoom(t *testing.T, room domain.Room) {
+	t.Helper()
+	if err := fx.repo.CreateRoom(context.Background(), &room); err != nil {
+		t.Fatalf("seed room: %v", err)
+	}
+}
+
+// seedMember seeds a member entry so heartbeat tests find an existing meta.
+func (fx *routerFixture) seedMember(t *testing.T, roomID, userID string, meta domain.MemberMeta) {
+	t.Helper()
+	if err := fx.repo.AddMember(context.Background(), roomID, userID, meta); err != nil {
+		t.Fatalf("seed member: %v", err)
+	}
+}
+
+func (fx *routerFixture) defaultRoom(roomID string) domain.Room {
+	return domain.Room{
+		ID:                      roomID,
+		CreatedAt:               fx.now.Unix(),
+		AnimeID:                 "anime-1",
+		EpisodeID:               "ep-1",
+		Player:                  domain.PlayerAnimeLib,
+		TranslationID:           "trans-1",
+		PlaybackState:           domain.StatePaused,
+		PlaybackTime:            0,
+		PlaybackTimeUpdatedAtMs: fx.now.UnixMilli(),
+		HostUserID:              "host",
+	}
+}
+
+// dispatchJSON marshals body into Envelope.Data and runs Dispatch.
+func (fx *routerFixture) dispatchJSON(t *testing.T, conn ConnectionCtx, msgType string, body interface{}) {
+	t.Helper()
+	var data json.RawMessage
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal body: %v", err)
+		}
+		data = raw
+	}
+	fx.router.Dispatch(conn, domain.Envelope{Type: msgType, Data: data})
+}
+
+func aliceConn(roomID string) ConnectionCtx {
+	return ConnectionCtx{RoomID: roomID, UserID: "alice", Username: "Alice"}
+}
+
+// ----------------------------------------------------------------------------
+// Test 1 — playback:play updates room HASH + broadcasts playback:event.
+// ----------------------------------------------------------------------------
+
+func TestRouter_PlaybackPlay_UpdatesAndBroadcasts(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-1"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackPlay, map[string]interface{}{"time": 42.5})
+
+	// Redis state.
+	room, err := fx.repo.GetRoom(context.Background(), roomID)
+	if err != nil {
+		t.Fatalf("GetRoom: %v", err)
+	}
+	if room.PlaybackState != domain.StatePlaying {
+		t.Errorf("PlaybackState = %q, want %q", room.PlaybackState, domain.StatePlaying)
+	}
+	if room.PlaybackTime != 42.5 {
+		t.Errorf("PlaybackTime = %v, want 42.5", room.PlaybackTime)
+	}
+	if room.PlaybackTimeUpdatedAtMs != fx.now.UnixMilli() {
+		t.Errorf("PlaybackTimeUpdatedAtMs = %d, want %d", room.PlaybackTimeUpdatedAtMs, fx.now.UnixMilli())
+	}
+
+	// Hub fanout.
+	call, ok := fx.hub.findFirst("Broadcast", domain.MsgPlaybackEvent)
+	if !ok {
+		t.Fatalf("no Broadcast(playback:event) recorded; calls=%v", fx.hub.snapshot())
+	}
+	if call.excludeUserID != "alice" {
+		t.Errorf("excludeUserID = %q, want alice (sender excluded)", call.excludeUserID)
+	}
+	var evt domain.PlaybackEventData
+	if err := json.Unmarshal(call.env.Data, &evt); err != nil {
+		t.Fatalf("unmarshal event: %v", err)
+	}
+	if evt.Kind != "play" || evt.Time != 42.5 || evt.ByUserID != "alice" {
+		t.Errorf("event = %+v, want kind=play time=42.5 by=alice", evt)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 2 — playback:pause sets state=paused.
+// ----------------------------------------------------------------------------
+
+func TestRouter_PlaybackPause_SetsPaused(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-2"
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	fx.seedRoom(t, r)
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackPause, map[string]interface{}{"time": 100.0})
+
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.PlaybackState != domain.StatePaused {
+		t.Fatalf("PlaybackState = %q, want paused", room.PlaybackState)
+	}
+
+	call, ok := fx.hub.findFirst("Broadcast", domain.MsgPlaybackEvent)
+	if !ok {
+		t.Fatal("no playback:event broadcast")
+	}
+	var evt domain.PlaybackEventData
+	_ = json.Unmarshal(call.env.Data, &evt)
+	if evt.Kind != "pause" {
+		t.Errorf("Kind = %q, want pause", evt.Kind)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 3 — playback:seek within rate limit updates state + broadcasts.
+// ----------------------------------------------------------------------------
+
+func TestRouter_PlaybackSeek_WithinRate_BroadcastsEvent(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-3"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackSeek, map[string]interface{}{"time": 75.0})
+
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.PlaybackTime != 75.0 {
+		t.Errorf("PlaybackTime = %v, want 75", room.PlaybackTime)
+	}
+
+	call, ok := fx.hub.findFirst("Broadcast", domain.MsgPlaybackEvent)
+	if !ok {
+		t.Fatal("no playback:event broadcast")
+	}
+	if call.excludeUserID != "alice" {
+		t.Errorf("excludeUserID = %q, want alice", call.excludeUserID)
+	}
+	var evt domain.PlaybackEventData
+	_ = json.Unmarshal(call.env.Data, &evt)
+	if evt.Kind != "seek" || evt.Time != 75.0 {
+		t.Errorf("event = %+v, want kind=seek time=75", evt)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 4 — playback:seek over 1/sec rate limit yields RATE_LIMITED error
+// to sender ONLY; no state change.
+// ----------------------------------------------------------------------------
+
+func TestRouter_PlaybackSeek_OverRate_RateLimited(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-4"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	// First seek succeeds.
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackSeek, map[string]interface{}{"time": 10.0})
+	// Second seek (no time passed) → rate-limited.
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackSeek, map[string]interface{}{"time": 20.0})
+
+	// Redis still reflects first seek only.
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.PlaybackTime != 10.0 {
+		t.Errorf("PlaybackTime = %v, want 10 (second seek should have been rejected)", room.PlaybackTime)
+	}
+
+	// Expect a SendTo(error: RATE_LIMITED) for the second seek.
+	var found bool
+	for _, c := range fx.hub.snapshot() {
+		if c.method != "SendTo" || c.env.Type != domain.MsgError {
+			continue
+		}
+		var e domain.ErrorData
+		_ = json.Unmarshal(c.env.Data, &e)
+		if e.Code == domain.ErrCodeRateLimited && c.userID == "alice" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("no RATE_LIMITED SendTo recorded; calls=%v", fx.hub.snapshot())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 5 — playback:time_tick with drift in soft band → SendTo(correction)
+// with time ≈ expected, ServerTS == fixed now.
+// ----------------------------------------------------------------------------
+
+func TestRouter_TimeTick_SoftDrift_SendsCorrection(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-5"
+
+	// Room: playing, time=100, updated 2s ago in wall-clock terms.
+	// To make wall-clock advance "real", set updatedAtMs to fx.now - 2000ms.
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	r.PlaybackTime = 100.0
+	r.PlaybackTimeUpdatedAtMs = fx.now.UnixMilli() - 2000
+	fx.seedRoom(t, r)
+
+	// Reported time = 99.5 → drift = |99.5 - 102| = 2.5 (soft band).
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackTimeTick, map[string]interface{}{"time": 99.5})
+
+	call, ok := fx.hub.findFirst("SendTo", domain.MsgPlaybackCorrection)
+	if !ok {
+		t.Fatalf("no playback:correction SendTo; calls=%v", fx.hub.snapshot())
+	}
+	if call.userID != "alice" {
+		t.Errorf("SendTo userID = %q, want alice", call.userID)
+	}
+	var c domain.PlaybackCorrectionData
+	_ = json.Unmarshal(call.env.Data, &c)
+	if c.Time < 101.9 || c.Time > 102.1 {
+		t.Errorf("correction.Time = %v, want ~102", c.Time)
+	}
+	if c.ServerTS != fx.now.UnixMilli() {
+		t.Errorf("correction.ServerTS = %d, want %d", c.ServerTS, fx.now.UnixMilli())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 6 — chat:message under cap → AppendMessage + Broadcast to ALL.
+// ----------------------------------------------------------------------------
+
+func TestRouter_ChatMessage_PersistsAndBroadcasts(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-6"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgChatMessage, map[string]interface{}{"body": "hi"})
+
+	// Redis should have the message.
+	msgs, err := fx.repo.GetMessages(context.Background(), roomID, 10)
+	if err != nil {
+		t.Fatalf("GetMessages: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("len(msgs) = %d, want 1; got=%+v", len(msgs), msgs)
+	}
+	if msgs[0].Body != "hi" || msgs[0].UserID != "alice" || msgs[0].ID != fixedChatID {
+		t.Errorf("persisted message = %+v", msgs[0])
+	}
+	if msgs[0].TS != fx.now.UnixMilli() {
+		t.Errorf("TS = %d, want %d", msgs[0].TS, fx.now.UnixMilli())
+	}
+
+	call, ok := fx.hub.findFirst("Broadcast", domain.MsgChatMessageOut)
+	if !ok {
+		t.Fatalf("no chat:message broadcast")
+	}
+	// Sender INCLUDED — excludeUserID must be "".
+	if call.excludeUserID != "" {
+		t.Errorf("chat:message excludeUserID = %q, want \"\" (sender included)", call.excludeUserID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 7 — chat:message body >500 chars → CHAT_TOO_LONG to sender; NOT
+// persisted, NOT broadcast.
+// ----------------------------------------------------------------------------
+
+func TestRouter_ChatMessage_OverCap_RejectsSenderOnly(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-7"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	longBody := strings.Repeat("a", 501)
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgChatMessage, map[string]interface{}{"body": longBody})
+
+	// No persistence.
+	msgs, _ := fx.repo.GetMessages(context.Background(), roomID, 10)
+	if len(msgs) != 0 {
+		t.Fatalf("len(msgs) = %d, want 0 (over-cap should not persist)", len(msgs))
+	}
+
+	// No broadcast.
+	if _, ok := fx.hub.findFirst("Broadcast", domain.MsgChatMessageOut); ok {
+		t.Fatal("chat:message should NOT have been broadcast")
+	}
+
+	// CHAT_TOO_LONG SendTo to sender.
+	var found bool
+	for _, c := range fx.hub.snapshot() {
+		if c.method == "SendTo" && c.env.Type == domain.MsgError {
+			var e domain.ErrorData
+			_ = json.Unmarshal(c.env.Data, &e)
+			if e.Code == domain.ErrCodeChatTooLong && c.userID == "alice" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no CHAT_TOO_LONG SendTo; calls=%v", fx.hub.snapshot())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 8 — 6 chat messages within burst window → first 5 succeed, 6th
+// gets RATE_LIMITED.
+// ----------------------------------------------------------------------------
+
+func TestRouter_ChatMessage_OverRate_RateLimited(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-8"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	for i := 0; i < 6; i++ {
+		fx.dispatchJSON(t, aliceConn(roomID), domain.MsgChatMessage, map[string]interface{}{"body": "x"})
+	}
+
+	// 5 broadcasts, 1 RATE_LIMITED.
+	broadcasts := 0
+	rateLimited := 0
+	for _, c := range fx.hub.snapshot() {
+		if c.method == "Broadcast" && c.env.Type == domain.MsgChatMessageOut {
+			broadcasts++
+		}
+		if c.method == "SendTo" && c.env.Type == domain.MsgError {
+			var e domain.ErrorData
+			_ = json.Unmarshal(c.env.Data, &e)
+			if e.Code == domain.ErrCodeRateLimited {
+				rateLimited++
+			}
+		}
+	}
+	if broadcasts != 5 {
+		t.Errorf("broadcasts = %d, want 5 (burst=5)", broadcasts)
+	}
+	if rateLimited != 1 {
+		t.Errorf("RATE_LIMITED count = %d, want 1 (6th message)", rateLimited)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 9 — chat:reaction (whitelist emoji) → Broadcast, no persistence.
+// ----------------------------------------------------------------------------
+
+func TestRouter_ChatReaction_BroadcastsNoPersist(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-9"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgChatReaction, map[string]interface{}{"emoji": "🔥"})
+
+	// No persistence — message LIST stays empty.
+	msgs, _ := fx.repo.GetMessages(context.Background(), roomID, 10)
+	if len(msgs) != 0 {
+		t.Fatalf("reactions must NOT persist; len(msgs) = %d", len(msgs))
+	}
+
+	call, ok := fx.hub.findFirst("Broadcast", domain.MsgChatReactionOut)
+	if !ok {
+		t.Fatalf("no chat:reaction broadcast; calls=%v", fx.hub.snapshot())
+	}
+	if call.excludeUserID != "" {
+		t.Errorf("excludeUserID = %q, want \"\" (sender included for own-feedback)", call.excludeUserID)
+	}
+	var rxn domain.ChatReactionOutData
+	_ = json.Unmarshal(call.env.Data, &rxn)
+	if rxn.UserID != "alice" || rxn.Emoji != "🔥" {
+		t.Errorf("reaction payload = %+v", rxn)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 9b — out-of-whitelist emoji silently dropped (no broadcast, no error).
+// ----------------------------------------------------------------------------
+
+func TestRouter_ChatReaction_NonWhitelist_Dropped(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-9b"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgChatReaction, map[string]interface{}{"emoji": "💩"})
+
+	if _, ok := fx.hub.findFirst("Broadcast", domain.MsgChatReactionOut); ok {
+		t.Fatal("non-whitelist emoji should NOT broadcast")
+	}
+	if _, ok := fx.hub.findFirst("SendTo", domain.MsgError); ok {
+		t.Fatal("non-whitelist emoji should be silently dropped, not error")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 10 — presence:heartbeat updates LastSeenAt; no broadcast.
+// ----------------------------------------------------------------------------
+
+func TestRouter_PresenceHeartbeat_UpdatesLastSeenNoBroadcast(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-10"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+	earlyJoinedAt := fx.now.Unix() - 600
+	fx.seedMember(t, roomID, "alice", domain.MemberMeta{
+		Username:   "Alice",
+		AvatarURL:  "",
+		JoinedAt:   earlyJoinedAt,
+		LastSeenAt: earlyJoinedAt,
+	})
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPresenceHeartbeat, struct{}{})
+
+	// No broadcast / no SendTo expected.
+	if len(fx.hub.snapshot()) != 0 {
+		t.Fatalf("heartbeat must not generate hub calls; got=%v", fx.hub.snapshot())
+	}
+
+	// LastSeenAt updated; JoinedAt preserved.
+	members, _ := fx.repo.ListMembers(context.Background(), roomID)
+	var found bool
+	for _, m := range members {
+		if m.UserID == "alice" {
+			found = true
+			if m.Meta.LastSeenAt != fx.now.Unix() {
+				t.Errorf("LastSeenAt = %d, want %d", m.Meta.LastSeenAt, fx.now.Unix())
+			}
+			if m.Meta.JoinedAt != earlyJoinedAt {
+				t.Errorf("JoinedAt = %d, want preserved %d", m.Meta.JoinedAt, earlyJoinedAt)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("alice not found in members after heartbeat")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 11 — state:change_episode updates the HASH (episode_id, time=0,
+// state=paused) and broadcasts room:state_changed to ALL.
+// ----------------------------------------------------------------------------
+
+func TestRouter_StateChangeEpisode_UpdatesAndBroadcastsAll(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-11"
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	r.PlaybackTime = 123.0
+	fx.seedRoom(t, r)
+
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgStateChangeEpisode, map[string]interface{}{"episode_id": "5"})
+
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.EpisodeID != "5" {
+		t.Errorf("EpisodeID = %q, want 5", room.EpisodeID)
+	}
+	if room.PlaybackTime != 0 {
+		t.Errorf("PlaybackTime = %v, want 0 (reset on episode change)", room.PlaybackTime)
+	}
+	if room.PlaybackState != domain.StatePaused {
+		t.Errorf("PlaybackState = %q, want paused", room.PlaybackState)
+	}
+
+	call, ok := fx.hub.findFirst("Broadcast", domain.MsgRoomStateChanged)
+	if !ok {
+		t.Fatalf("no room:state_changed broadcast")
+	}
+	if call.excludeUserID != "" {
+		t.Errorf("state_changed excludeUserID = %q, want \"\" (sender included)", call.excludeUserID)
+	}
+	var sc domain.RoomStateChangedData
+	_ = json.Unmarshal(call.env.Data, &sc)
+	if sc.Field != "episode_id" || sc.Value != "5" || sc.ByUserID != "alice" {
+		t.Errorf("state_changed = %+v", sc)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 12 — unknown message type → UNKNOWN_TYPE error to sender, connection
+// not crashed (the router just returns).
+// ----------------------------------------------------------------------------
+
+func TestRouter_UnknownType_SendsUnknownError(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-12"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	fx.router.Dispatch(aliceConn(roomID), domain.Envelope{Type: "bogus:not_a_real_type", Data: json.RawMessage("{}")})
+
+	var found bool
+	for _, c := range fx.hub.snapshot() {
+		if c.method == "SendTo" && c.env.Type == domain.MsgError {
+			var e domain.ErrorData
+			_ = json.Unmarshal(c.env.Data, &e)
+			if e.Code == errCodeUnknownType {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no UNKNOWN_TYPE SendTo; calls=%v", fx.hub.snapshot())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 13 — malformed payload (invalid JSON for the expected shape) →
+// BAD_PAYLOAD to sender, no state change.
+// ----------------------------------------------------------------------------
+
+func TestRouter_BadPayload_SendsBadPayloadError(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-13"
+	fx.seedRoom(t, fx.defaultRoom(roomID))
+
+	// "time" is a string instead of a number → decode fails.
+	fx.router.Dispatch(aliceConn(roomID), domain.Envelope{
+		Type: domain.MsgPlaybackPlay,
+		Data: json.RawMessage(`{"time": "not a number"}`),
+	})
+
+	room, _ := fx.repo.GetRoom(context.Background(), roomID)
+	if room.PlaybackState == domain.StatePlaying {
+		t.Fatal("PlaybackState should NOT have advanced on bad payload")
+	}
+
+	var found bool
+	for _, c := range fx.hub.snapshot() {
+		if c.method == "SendTo" && c.env.Type == domain.MsgError {
+			var e domain.ErrorData
+			_ = json.Unmarshal(c.env.Data, &e)
+			if e.Code == errCodeBadPayload {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no BAD_PAYLOAD SendTo; calls=%v", fx.hub.snapshot())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Test 14 — OnDisconnect resets the drift state + rate-limit buckets.
+// After persistent drift, OnDisconnect lets a "reconnected" sender start fresh.
+// ----------------------------------------------------------------------------
+
+func TestRouter_OnDisconnect_ClearsDriftAndRateLimit(t *testing.T) {
+	fx := newRouterFixture(t)
+	roomID := "room-14"
+	r := fx.defaultRoom(roomID)
+	r.PlaybackState = domain.StatePlaying
+	r.PlaybackTime = 100.0
+	r.PlaybackTimeUpdatedAtMs = fx.now.UnixMilli()
+	fx.seedRoom(t, r)
+
+	// Push alice into persistent drift via 5 hard ticks.
+	for i := 0; i < 5; i++ {
+		fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackTimeTick, map[string]interface{}{"time": 106.0})
+	}
+	// Consume alice's seek burst.
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackSeek, map[string]interface{}{"time": 5.0})
+
+	// Verify pre-disconnect: another seek is rate-limited.
+	prevCallCount := len(fx.hub.snapshot())
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackSeek, map[string]interface{}{"time": 6.0})
+	// Expect a RATE_LIMITED error.
+	if newCount := len(fx.hub.snapshot()); newCount <= prevCallCount {
+		t.Fatal("expected second seek to generate hub call (RATE_LIMITED)")
+	}
+
+	// Disconnect alice.
+	fx.router.OnDisconnect(roomID, "alice")
+
+	// Post-disconnect: seek succeeds (fresh bucket).
+	preSeekCalls := len(fx.hub.snapshot())
+	fx.dispatchJSON(t, aliceConn(roomID), domain.MsgPlaybackSeek, map[string]interface{}{"time": 99.0})
+	// Find the most recent Broadcast(playback:event, kind=seek).
+	var seekBroadcast bool
+	for _, c := range fx.hub.snapshot()[preSeekCalls:] {
+		if c.method == "Broadcast" && c.env.Type == domain.MsgPlaybackEvent {
+			var evt domain.PlaybackEventData
+			_ = json.Unmarshal(c.env.Data, &evt)
+			if evt.Kind == "seek" {
+				seekBroadcast = true
+			}
+		}
+	}
+	if !seekBroadcast {
+		t.Fatal("expected fresh seek broadcast after OnDisconnect")
+	}
+}

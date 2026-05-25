@@ -49,12 +49,14 @@ const closeFrameDeadline = 2 * time.Second
 // WebSocketHandler serves GET /api/watch-together/ws. Owns the Origin
 // allowlist, JWT validation, capacity gate, and the per-connection
 // lifecycle hooks (snapshot on enter, member:left + RemoveMember on exit).
-// Inbound message routing lives in 01.6 — this handler leaves
-// Connection.OnMessage at nil with a TODO marker.
+// Inbound message routing lives in 01.6 via service.InboundRouter — every
+// envelope decoded by the connection's readPump is dispatched to one of
+// 10 typed handlers (playback:*, state:change_*, chat:*, presence:*).
 type WebSocketHandler struct {
 	hub        *hub.Hub
 	repo       *repo.RoomRepo
 	roomSvc    *service.RoomService
+	router     *service.InboundRouter
 	cfg        *config.Config
 	log        *logger.Logger
 	upgrader   websocket.Upgrader
@@ -64,10 +66,16 @@ type WebSocketHandler struct {
 // NewWebSocketHandler wires the dependencies and pre-builds the Origin
 // allowlist + JWT manager so per-request work is minimal. Pass nil for log
 // to fall back to logger.Default().
+//
+// router is the inbound message dispatcher from 01.6 (service.InboundRouter).
+// Every inbound envelope arriving on Connection.OnMessage is forwarded to
+// router.Dispatch; disconnect cleanup (drift state + rate-limit buckets)
+// flows through router.OnDisconnect inside the OnClose hook.
 func NewWebSocketHandler(
 	h *hub.Hub,
 	r *repo.RoomRepo,
 	roomSvc *service.RoomService,
+	router *service.InboundRouter,
 	cfg *config.Config,
 	log *logger.Logger,
 ) *WebSocketHandler {
@@ -78,6 +86,7 @@ func NewWebSocketHandler(
 		hub:        h,
 		repo:       r,
 		roomSvc:    roomSvc,
+		router:     router,
 		cfg:        cfg,
 		log:        log,
 		upgrader:   newWSUpgrader(cfg),
@@ -215,13 +224,27 @@ func (h *WebSocketHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO(01.6): wire c.OnMessage = inboundRouter.Dispatch. For now any
-	// inbound frame is decoded by readPump and silently discarded.
-	c.OnMessage = nil
+	// Wire inbound dispatch (01.6). The hub's readPump decodes every frame
+	// into a domain.Envelope and invokes this callback; the router applies
+	// the corresponding Redis side effect and outbound fanout. A small
+	// adapter lambda translates *hub.Connection → service.ConnectionCtx so
+	// the service package doesn't have to depend on the hub package
+	// (single direction: hub → service is forbidden by import boundary).
+	if h.router != nil {
+		c.OnMessage = func(conn *hub.Connection, env domain.Envelope) {
+			h.router.Dispatch(service.ConnectionCtx{
+				RoomID:   conn.RoomID,
+				UserID:   conn.UserID,
+				Username: conn.Username,
+			}, env)
+		}
+	}
 
 	// Install the lifecycle cleanup hook BEFORE we send the snapshot so an
 	// abnormal early disconnect (TCP RST between Register and Send) still
 	// produces the proper member:left broadcast + repo.RemoveMember pair.
+	// The OnClose closure also chains into router.OnDisconnect to free
+	// the disconnected member's drift state + rate-limit buckets.
 	c.OnClose = h.makeOnClose(roomID, userID)
 
 	// Step 7: Send the room:snapshot envelope. This is the FIRST frame the
@@ -326,7 +349,9 @@ func (h *WebSocketHandler) broadcastMemberJoined(
 // makeOnClose returns a closure suitable for assigning to Connection.OnClose.
 // The closure encapsulates the "last connection for this user" check so
 // multi-tab disconnects only fire one repo.RemoveMember + member:left pair
-// (per 01.5-PLAN.md §<tasks>/Test 10).
+// (per 01.5-PLAN.md §<tasks>/Test 10). It also chains into
+// router.OnDisconnect (01.6) so the disconnected user's drift state +
+// rate-limit buckets are freed.
 //
 // The check uses hub.MemberUserIDs AFTER Unregister has already removed
 // the leaving connection — so if the user has another tab open, their
@@ -353,13 +378,23 @@ func (h *WebSocketHandler) makeOnClose(roomID, userID string) func(*hub.Connecti
 		}
 		if stillPresent {
 			// Multi-tab: another tab keeps the user present. Don't
-			// remove from Redis, don't broadcast member:left — only
-			// the LAST tab leaving counts as "the user left".
+			// remove from Redis, don't broadcast member:left, don't reset
+			// the router's drift / rate-limit state — only the LAST tab
+			// leaving counts as "the user left". The other tab is still
+			// driving those buckets and resetting them now would let the
+			// remaining tab bypass the limits.
 			h.log.Debugw("watch_together ws onclose multi-tab still present",
 				"room_id", roomID,
 				"user_id", userID,
 			)
 			return
+		}
+
+		// Last tab for this user dropped — chain into router.OnDisconnect
+		// to free drift state + rate-limit buckets (01.6 wiring). Idempotent
+		// on a member who never had state.
+		if h.router != nil {
+			h.router.OnDisconnect(roomID, userID)
 		}
 
 		if err := h.repo.RemoveMember(ctx, roomID, userID); err != nil {

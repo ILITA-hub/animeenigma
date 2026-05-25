@@ -77,12 +77,20 @@ func newWSFixture(t *testing.T, maxMembers int) *wsFixture {
 	wsHub := hub.NewHub(r, log, "test-instance-zzz")
 	t.Cleanup(wsHub.Close)
 
-	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, cfg, log)
+	// 01.6 wiring: the WS handler now requires an InboundRouter so
+	// inbound envelopes can be dispatched. Real router with real drift
+	// engine + rate limiter — tests in 01.5 only exercise the upgrade /
+	// snapshot / member-lifecycle path, so the router is exercised
+	// indirectly when inbound messages flow through.
+	drift := service.NewDriftEngine(log)
+	rl := service.NewRateLimiter()
+	inboundRouter := service.NewInboundRouter(r, wsHub, drift, rl, log)
+	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, inboundRouter, cfg, log)
 
-	router := chi.NewRouter()
-	router.Get("/api/watch-together/ws", wsHandler.Upgrade)
+	httpRouter := chi.NewRouter()
+	httpRouter.Get("/api/watch-together/ws", wsHandler.Upgrade)
 
-	server := httptest.NewServer(router)
+	server := httptest.NewServer(httpRouter)
 	t.Cleanup(server.Close)
 
 	return &wsFixture{
@@ -688,10 +696,13 @@ func TestWS_OriginAllowlist_RejectsMismatchedBrowserOrigin(t *testing.T) {
 	wsHub := hub.NewHub(r, log, "test-instance-origin")
 	t.Cleanup(wsHub.Close)
 
-	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, cfg, log)
-	router := chi.NewRouter()
-	router.Get("/api/watch-together/ws", wsHandler.Upgrade)
-	server := httptest.NewServer(router)
+	driftOrigin := service.NewDriftEngine(log)
+	rlOrigin := service.NewRateLimiter()
+	originRouter := service.NewInboundRouter(r, wsHub, driftOrigin, rlOrigin, log)
+	wsHandler := NewWebSocketHandler(wsHub, r, roomSvc, originRouter, cfg, log)
+	httpRouter := chi.NewRouter()
+	httpRouter.Get("/api/watch-together/ws", wsHandler.Upgrade)
+	server := httptest.NewServer(httpRouter)
 	t.Cleanup(server.Close)
 
 	// Seed a room.
