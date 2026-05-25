@@ -92,8 +92,10 @@ class MockWebSocket implements MockSocket {
 
   constructor(url: string) {
     this.url = url
-    lastSocket = this
-    socketsCreated.push(this)
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self: MockWebSocket = this
+    lastSocket = self
+    socketsCreated.push(self)
   }
 
   send(data: string): void {
