@@ -163,6 +163,9 @@ func (s *RoomService) Create(ctx context.Context, hostUserID, hostUsername strin
 	// Metric bump only after successful persistence — validation failures
 	// (caught above) do not contribute to the counter.
 	RoomCreateTotal.Inc()
+	// Plan 05.2 WT-NF-06 — live gauge for the Grafana panel. Inverse Dec
+	// lives in observeRoomTeardown (called from Delete + grace.fire).
+	RoomsActive.Inc()
 
 	s.log.Infow("watch_together create room",
 		"room_id", room.ID,
@@ -255,6 +258,11 @@ func (s *RoomService) Delete(ctx context.Context, requesterUserID, roomID string
 	// before their WS reads start failing. Wired here once main.go owns
 	// a *hub.Hub reference the service can hold.
 
+	// Plan 05.2 WT-NF-06 — observe session duration + chat count + Dec the
+	// active gauge BEFORE the destructive DeleteRoom call. Best-effort:
+	// observation failures must not block the delete.
+	observeRoomTeardown(ctx, s.repo, s.log, room)
+
 	if err := s.repo.DeleteRoom(ctx, roomID); err != nil {
 		return err
 	}
@@ -264,4 +272,58 @@ func (s *RoomService) Delete(ctx context.Context, requesterUserID, roomID string
 		"host_user_id", room.HostUserID,
 	)
 	return nil
+}
+
+// observeRoomTeardown is the Plan 05.2 telemetry helper shared between
+// RoomService.Delete and GraceManager.fire (05.1's territory — 05.1 may
+// wire this call into grace.go after this plan lands). It:
+//
+//  1. Observes wt_session_duration_seconds = wall-clock since room.CreatedAt.
+//  2. Observes wt_chat_messages_per_room = LLEN on the chat list (via
+//     repo.MessageCount). Zero is a valid observation (test rooms with
+//     no chat traffic still observe — the 0 bucket is meaningful).
+//  3. Decrements wt_rooms_active.
+//
+// All three observations are best-effort: a MessageCount error logs and
+// observes 0 (rather than blocking the teardown) because telemetry
+// failures must never prevent the actual room deletion. RoomsActive.Dec
+// runs unconditionally — the room exists at this call site, so the gauge
+// MUST move down to keep the live-rooms count honest.
+//
+// Pass a non-nil *domain.Room — the caller is expected to have already
+// fetched it via repo.GetRoom (skipping observation entirely if the room
+// vanished mid-teardown).
+func observeRoomTeardown(ctx context.Context, r *repo.RoomRepo, log *logger.Logger, room *domain.Room) {
+	if room == nil {
+		// Defensive: caller should have early-returned on a missing room.
+		// If we got here with nil, just decrement the gauge (room must
+		// have existed at Inc time) and skip the observations.
+		RoomsActive.Dec()
+		return
+	}
+
+	// CreatedAt is unix seconds (domain/room.go). time.Since wants a
+	// time.Time, so convert. If the clock went backwards (negative
+	// elapsed), Observe a 0 rather than a negative — histograms accept
+	// negatives but the bucket layout starts at 60s anyway, so a
+	// negative would just sit in the lowest bucket and skew the
+	// distribution.
+	createdAt := time.Unix(room.CreatedAt, 0)
+	elapsedSec := time.Since(createdAt).Seconds()
+	if elapsedSec < 0 {
+		elapsedSec = 0
+	}
+	SessionDurationSeconds.Observe(elapsedSec)
+
+	n, err := r.MessageCount(ctx, room.ID)
+	if err != nil {
+		log.Debugw("watch_together teardown observe message_count failed",
+			"room_id", room.ID,
+			"err", err,
+		)
+		n = 0
+	}
+	ChatMessagesPerRoom.Observe(float64(n))
+
+	RoomsActive.Dec()
 }

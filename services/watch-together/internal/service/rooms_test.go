@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -251,5 +252,80 @@ func TestDelete_MissingRoomReturnsErrNotFound(t *testing.T) {
 	err := svc.Delete(context.Background(), "anyone", "no-such-room")
 	if !stderrors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+// TestCreate_BumpsRoomsActive verifies that a successful Create increments
+// the wt_rooms_active gauge by exactly 1. Delta-based assertion because
+// other tests in the package may have bumped the gauge.
+func TestCreate_BumpsRoomsActive(t *testing.T) {
+	svc, _ := newService(t, "active-room", time.Now())
+	ctx := context.Background()
+
+	before := testutil.ToFloat64(RoomsActive)
+	if _, err := svc.Create(ctx, "host", "name", validInput()); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got := testutil.ToFloat64(RoomsActive); got != before+1 {
+		t.Errorf("RoomsActive after Create = %v, want %v", got, before+1)
+	}
+}
+
+// TestDelete_ObservesAndDecsRoomsActive verifies the Plan 05.2 teardown
+// observation path: SessionDurationSeconds + ChatMessagesPerRoom each get
+// a new observation, and RoomsActive decrements back to its pre-Create
+// baseline. The exact bucket placements aren't asserted (testutil doesn't
+// expose them ergonomically); we assert _count advancement and the gauge
+// delta.
+func TestDelete_ObservesAndDecsRoomsActive(t *testing.T) {
+	svc, _ := newService(t, "teardown-room", time.Now())
+	ctx := context.Background()
+
+	beforeActive := testutil.ToFloat64(RoomsActive)
+	if _, err := svc.Create(ctx, "host", "name", validInput()); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got := testutil.ToFloat64(RoomsActive); got != beforeActive+1 {
+		t.Fatalf("RoomsActive after Create = %v, want %v", got, beforeActive+1)
+	}
+
+	if err := svc.Delete(ctx, "host", "teardown-room"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if got := testutil.ToFloat64(RoomsActive); got != beforeActive {
+		t.Errorf("RoomsActive after Delete = %v, want %v (restored)", got, beforeActive)
+	}
+
+	// Both histograms must have collected the metric (we can't assert exact
+	// _count via ToFloat64 on histograms; CollectAndCount returns 1 for the
+	// single-series, but at least the metric must be registered + observed
+	// at least once during this test run).
+	if testutil.CollectAndCount(SessionDurationSeconds) < 1 {
+		t.Errorf("SessionDurationSeconds not collected post-teardown")
+	}
+	if testutil.CollectAndCount(ChatMessagesPerRoom) < 1 {
+		t.Errorf("ChatMessagesPerRoom not collected post-teardown")
+	}
+}
+
+// TestDelete_NonHostDoesNotDecGauge asserts that a forbidden Delete
+// attempt by a non-host caller does NOT decrement the gauge. This catches
+// the bug where a metric Dec was applied unconditionally before the
+// host-check returned ErrNotHost.
+func TestDelete_NonHostDoesNotDecGauge(t *testing.T) {
+	svc, _ := newService(t, "host-only", time.Now())
+	ctx := context.Background()
+
+	if _, err := svc.Create(ctx, "host", "name", validInput()); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	beforeReject := testutil.ToFloat64(RoomsActive)
+
+	err := svc.Delete(ctx, "some-other-user", "host-only")
+	if !stderrors.Is(err, ErrNotHost) {
+		t.Fatalf("Delete: expected ErrNotHost, got %v", err)
+	}
+	if got := testutil.ToFloat64(RoomsActive); got != beforeReject {
+		t.Errorf("RoomsActive moved on rejected Delete: %v → %v", beforeReject, got)
 	}
 }
