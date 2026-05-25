@@ -45,6 +45,15 @@ type Config struct {
 	// the ws_url field; see wsURLFromBase in internal/handler/rooms.go.
 	PublicBaseURL string
 
+	// CatalogURL is the base URL of the catalog service. Used by the
+	// state-change handlers (WT-STATE-02 — Plan 04.2/04.3) to validate that
+	// a requested episode / player / translation combination exists for the
+	// room's anime before broadcasting room:state_changed. Default
+	// "http://catalog:8081" (Docker Compose service DNS). NEVER include a
+	// trailing slash — Load() trims it so downstream URL construction never
+	// produces "http://catalog:8081//internal/..." double-slashes.
+	CatalogURL string
+
 	// AllowAllOrigins disables the WebSocket Origin-header allowlist on
 	// the /ws upgrade handler. Production deployments leave this `false`
 	// so only requests originating from PublicBaseURL can upgrade; local
@@ -91,6 +100,7 @@ func Load() (*Config, error) {
 		RoomTTL:         getEnvDuration("WATCH_TOGETHER_ROOM_TTL", 900*time.Second),
 		GracePeriod:     getEnvDuration("WATCH_TOGETHER_GRACE_PERIOD", 5*time.Minute),
 		PublicBaseURL:   strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.ru"), "/"),
+		CatalogURL:      strings.TrimRight(getEnv("CATALOG_URL", "http://catalog:8081"), "/"),
 		AllowAllOrigins: getEnvBool("WATCH_TOGETHER_ALLOW_ALL_ORIGINS", false),
 	}, nil
 }

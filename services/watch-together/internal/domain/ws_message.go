@@ -67,7 +67,9 @@ const (
 	ErrCodeChatTooLong         = "CHAT_TOO_LONG"
 	ErrCodePersistentDrift     = "PERSISTENT_DRIFT"
 	ErrCodeAuthExpired         = "AUTH_EXPIRED"
-	ErrCodeEpisodeUnavailable  = "EPISODE_UNAVAILABLE"
+	ErrCodeEpisodeUnavailable     = "EPISODE_UNAVAILABLE"
+	ErrCodePlayerUnavailable      = "PLAYER_UNAVAILABLE"      // Phase 4 WT-STATE-02 — sent sender-only when state:change_player references a player with no episodes for the room's anime.
+	ErrCodeTranslationUnavailable = "TRANSLATION_UNAVAILABLE" // Phase 4 WT-STATE-02 — sent sender-only when state:change_translation references a translation that yields no episodes for the room's anime+player.
 )
 
 // ----------------------------------------------------------------------------
