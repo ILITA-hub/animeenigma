@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 workstream: hero-spotlight
 milestone: v1.1-polish
 milestone_name: HeroSpotlightVisualPolish
-status: in_progress
+status: complete
 last_updated: "2026-05-25"
-last_activity: "2026-05-25 — Phases 02–09 COMPLETE + deployed. Phase 09 (NotTimeYetCard): amber/clock identity, status pill, addedAt timestamp, direct-to-watch CTA; backend NotTimeYetData.AddedAt from anime_list.updated_at (nil-safe RFC3339 parse). Extracted shared formatAgo to utils/time.ts. 319/319 spotlight+util+parity Vitest passing; tsc clean; catalog spotlight Go tests green. Phase 10 (ContinueWatchingNewCard, frontend-only) is the last remaining card."
+last_activity: "2026-05-25 — ALL 10 PHASES COMPLETE + deployed. Phase 10 (ContinueWatchingNewCard): hero ribbon across poster top, two-row episode hierarchy, canonical deep-link CTA (/anime/{id}?episode=N — pre-flight confirmed Anime.vue honors route.query.episode; no view change). 325/325 spotlight+util+parity Vitest passing; tsc clean; catalog spotlight Go tests green. v1.1-polish milestone DONE — all 9 cards + foundation refactored."
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State — `hero-spotlight` workstream
@@ -28,15 +28,15 @@ progress:
 
 ## Current Position
 
-**Status:** v1.1-polish in progress — 9 / 10 phases shipped & deployed.
-**Current Phase:** none in progress (between Phase 09 and Phase 10)
-**Next Phase to Execute:** Phase 10 — ContinueWatchingNewCard refactor (frontend-only)
+**Status:** v1.1-polish COMPLETE — 10 / 10 phases shipped & deployed.
+**Current Phase:** none — milestone done
+**Next Phase to Execute:** none (v1.1-polish closed; v1.2 backlog has deferred items)
 **Last Activity:** 2026-05-25
 
 ## Progress
 
-**Phases Complete:** 9 / 10
-**Plans Complete:** 9 / 10 (one PLAN.md per phase; all written)
+**Phases Complete:** 10 / 10 ✅
+**Plans Complete:** 10 / 10 (one PLAN.md per phase; all written)
 
 ## Phase Breakdown
 
@@ -51,13 +51,13 @@ progress:
 | 07 | LatestNewsCard refactor | **Complete (deployed)** | cards/LatestNewsCard.vue, tokens.latest_news widening | 01 |
 | 08 | PlatformStatsCard refactor | **Complete (deployed)** | cards/PlatformStatsCard.vue + Sparkline + DeltaChip + StatsMetric series/previous_value | 01 |
 | 09 | NotTimeYetCard refactor | **Complete (deployed)** | cards/NotTimeYetCard.vue + NotTimeYetData.AddedAt + utils/time.ts | 01 |
-| 10 | ContinueWatchingNewCard refactor | Planned | cards/ContinueWatchingNewCard.vue | 01 |
+| 10 | ContinueWatchingNewCard refactor | **Complete (deployed)** | cards/ContinueWatchingNewCard.vue (hero ribbon + deep-link) | 01 |
 
 ## Session Continuity
 
-**Stopped At:** Phases 01–09 shipped & deployed to https://animeenigma.ru/. Phases 08+09 worktrees branched from current HEAD → clean fast-forward merges. Phase 10 (ContinueWatchingNewCard, frontend-only) remaining, then milestone close-out.
+**Stopped At:** v1.1-polish COMPLETE — all 10 phases shipped & deployed to https://animeenigma.ru/. All 9 spotlight cards + the Phase 01 foundation refactored to the cinematic-backdrop + distinct-template direction. Phase 07 was re-applied as a clean commit (stale worktree base); Phases 08–10 used fresh-from-HEAD worktrees → clean fast-forward merges. Remaining: changelog entry + push (animeenigma-after-update), then optional human eyeball pass on the live carousel.
 **Resume File:** None
-**Next Command:** continue autonomous run — Phase 10 (ContinueWatchingNewCard, frontend-only)
+**Next Command:** /animeenigma-after-update (changelog + push); deferred items (episode thumbnail, message title/body split, per-day drill-down, now_watching opt-out) tracked for v1.2.
 
 ## Open Questions (carried from v1.0)
 
