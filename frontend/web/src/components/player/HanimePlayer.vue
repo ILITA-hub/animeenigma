@@ -285,6 +285,16 @@ const fetchEpisodes = async () => {
 }
 
 const selectEpisode = async (ep: HanimeEpisode, idx: number) => {
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click (or end-of-episode auto-advance, which calls the
+  // same function) through the room handle so the backend can validate
+  // and broadcast to all members. The room:state_changed broadcast will
+  // reactively update room.episode_id, which flows back through the
+  // existing :initial-episode prop -> programmatic re-select path.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(ep.slug))
+    return
+  }
   selectedEpisode.value = ep
   selectedEpisodeIndex.value = idx
   streamUrl.value = null

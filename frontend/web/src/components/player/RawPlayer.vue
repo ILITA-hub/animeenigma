@@ -373,6 +373,16 @@ const fetchEpisodes = async () => {
 }
 
 const selectEpisode = async (ep: RawEpisode) => {
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.episode_id, which flows back
+  // through the existing programmatic re-select path. Jimaku subtitle
+  // selection is NOT routed — that's a per-user UX choice, not room state.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(ep.id))
+    return
+  }
   selectedEpisode.value = ep
   loadingStream.value = true
   streamUrl.value = null
