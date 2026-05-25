@@ -105,3 +105,35 @@ func TestLoad_GracePeriodDefault(t *testing.T) {
 		t.Errorf("expected default GracePeriod=5m, got %s", cfg.GracePeriod)
 	}
 }
+
+// TestLoad_CatalogURLDefault — WT-STATE-02 (Plan 04.2). With CATALOG_URL unset,
+// the catalog service base URL should fall back to the in-cluster Docker
+// Compose DNS entry the catalog service registers under.
+func TestLoad_CatalogURLDefault(t *testing.T) {
+	setJWTSecret(t)
+	t.Setenv("CATALOG_URL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.CatalogURL != "http://catalog:8081" {
+		t.Errorf("expected default CatalogURL=http://catalog:8081, got %q", cfg.CatalogURL)
+	}
+}
+
+// TestLoad_CatalogURLOverride — WT-STATE-02. CATALOG_URL with a trailing
+// slash MUST be trimmed (mirrors PublicBaseURL handling) so downstream URL
+// construction doesn't produce "http://x//internal/..." double-slashes.
+func TestLoad_CatalogURLOverride(t *testing.T) {
+	setJWTSecret(t)
+	t.Setenv("CATALOG_URL", "http://catalog.test:9000/")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.CatalogURL != "http://catalog.test:9000" {
+		t.Errorf("expected trimmed CatalogURL=http://catalog.test:9000, got %q", cfg.CatalogURL)
+	}
+}
