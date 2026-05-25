@@ -39,7 +39,7 @@ func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	cfg := &config.Config{}
 	log := logger.Default()
-	return NewRouter(cfg, nil, log, getSharedCollector())
+	return NewRouter(cfg, nil, nil, log, getSharedCollector())
 }
 
 func TestRouter_Health_ReturnsOK(t *testing.T) {

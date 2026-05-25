@@ -2,8 +2,14 @@
 // service. Phase 1 plan progression:
 //
 //	01.1 — /health + /metrics (this file's original form)
-//	01.4 — /api/watch-together/rooms (added in this iteration)
-//	01.5 — /api/watch-together/ws    (lands next)
+//	01.4 — /api/watch-together/rooms (REST CRUD behind AuthMiddleware)
+//	01.5 — /api/watch-together/ws    (WebSocket upgrade, auth via ?token=)
+//
+// IMPORTANT route group structure: the /ws endpoint is NOT inside the
+// AuthMiddleware-wrapped subgroup. Browsers can't set custom headers on
+// WS upgrades (the Sec-WebSocket-* handshake is strict), so the WS
+// handler validates the JWT from a query param itself. Mounting it under
+// the same AuthMiddleware as /rooms would 401 every WS upgrade attempt.
 //
 // AuthMiddleware is exported so this file and the 01.5 WS handler share
 // one JWT-validation path (mirrors services/notifications + services/themes —
@@ -27,23 +33,26 @@ import (
 
 // NewRouter builds the chi router for the watch-together service.
 //
-// Route shape after Plan 01.4:
+// Route shape after Plan 01.5:
 //
 //	GET    /health                                 — public liveness
 //	GET    /metrics                                — Prometheus scrape target
+//	GET    /api/watch-together/ws                  — WS upgrade (auth via ?token=)
 //	POST   /api/watch-together/rooms               — JWT-protected (01.4)
 //	GET    /api/watch-together/rooms/{id}          — JWT-protected (01.4)
 //	DELETE /api/watch-together/rooms/{id}          — JWT-protected (01.4)
 //
-// Plan 01.5 will mount /api/watch-together/ws on the same /api/watch-together
-// subtree (so it shares this AuthMiddleware) but the upgrader reads its
-// JWT from a query param, not the Authorization header — see the WS plan.
+// The /ws endpoint sits OUTSIDE the AuthMiddleware-wrapped subgroup because
+// browsers can't set Authorization: Bearer on a WS upgrade (see package doc).
+// The WS handler validates the JWT itself from the ?token= query param.
 //
-// roomHandler may be nil; if so the /rooms routes are NOT mounted. Used by
-// unit tests that exercise the middleware stack without the full DI graph.
+// roomHandler / wsHandler may each be nil; if so the corresponding routes
+// are NOT mounted. Used by unit tests that exercise the middleware stack
+// without the full DI graph.
 func NewRouter(
 	cfg *config.Config,
 	roomHandler *handler.RoomHandler,
+	wsHandler *handler.WebSocketHandler,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
 ) http.Handler {
@@ -68,23 +77,30 @@ func NewRouter(
 		metrics.Handler().ServeHTTP(w, req)
 	})
 
-	// Public CRUD — Plan 01.4. All behind JWT. Mounted at /api/watch-together
-	// so the gateway can proxy the prefix verbatim and the WS endpoint in
-	// 01.5 reuses the same AuthMiddleware scope (only difference is that
-	// WS reads the JWT from a query param via a custom upgrader).
-	if roomHandler != nil {
-		r.Route("/api/watch-together", func(r chi.Router) {
-			r.Use(AuthMiddleware(cfg.JWT))
-			r.Route("/rooms", func(r chi.Router) {
-				r.Post("/", roomHandler.Create)
-				r.Get("/{id}", roomHandler.Get)
-				r.Delete("/{id}", roomHandler.Delete)
+	// /api/watch-together subtree with SPLIT auth handling:
+	//   - /ws    → no chi-level AuthMiddleware (handler does its own JWT check
+	//              from ?token= because browsers can't set Authorization on
+	//              the WS upgrade handshake).
+	//   - /rooms → wrapped in AuthMiddleware as before (REST clients can set
+	//              standard Authorization: Bearer headers).
+	r.Route("/api/watch-together", func(r chi.Router) {
+		// 01.5 — WS upgrade. Mounted OUTSIDE the AuthMiddleware group.
+		if wsHandler != nil {
+			r.Get("/ws", wsHandler.Upgrade)
+		}
+
+		// 01.4 — REST CRUD. Mounted INSIDE the AuthMiddleware group.
+		if roomHandler != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(cfg.JWT))
+				r.Route("/rooms", func(r chi.Router) {
+					r.Post("/", roomHandler.Create)
+					r.Get("/{id}", roomHandler.Get)
+					r.Delete("/{id}", roomHandler.Delete)
+				})
 			})
-			// NOTE(01.5): r.Get("/ws", wsHandler.Upgrade) lands in the next plan.
-			// Keep the route group structure as-is so 01.5 only adds a single
-			// line inside this closure.
-		})
-	}
+		}
+	})
 
 	return r
 }
