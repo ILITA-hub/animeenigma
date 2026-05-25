@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -85,6 +87,36 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 
 func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
+}
+
+// Hijack implements http.Hijacker by delegating to the underlying
+// ResponseWriter when it supports hijacking. This is REQUIRED for WebSocket
+// reverse proxies (httputil.ReverseProxy.ServeHTTP) which call Hijack on the
+// writer chain to take ownership of the TCP socket after the 101 handshake.
+// Without this, every middleware that wraps the writer (including this
+// metrics middleware, applied globally at gateway boot) blocks WS upgrades
+// with "websocket: response does not implement http.Hijacker".
+//
+// Discovered during Phase 1 plan 01.9 of workstream watch-together (the WS
+// proxy added in plan 01.7 silently returned HTTP 500 on every upgrade).
+// All shared response-writer wrappers across libs/* should forward Hijacker;
+// this fix lives in libs/metrics because the metrics middleware is the one
+// every service mounts globally.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+// Flush implements http.Flusher by delegating to the underlying writer when
+// supported. The reverse proxy uses Flush on long-lived streams (SSE, WS
+// pre-upgrade) so middleware that hides Flusher breaks streaming. Cheap to
+// forward; no-op when the inner writer doesn't support it.
+func (rw *responseWriter) Flush() {
+	if fl, ok := rw.ResponseWriter.(http.Flusher); ok {
+		fl.Flush()
+	}
 }
 
 // Middleware returns an HTTP middleware that records metrics
