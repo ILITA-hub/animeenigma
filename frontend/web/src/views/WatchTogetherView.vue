@@ -64,12 +64,18 @@ import {
   RoomGoneError,
   ERR_CAPACITY_FULL,
   ERR_AUTH_EXPIRED,
+  ERR_EPISODE_UNAVAILABLE,
+  ERR_PLAYER_UNAVAILABLE,
+  ERR_TRANSLATION_UNAVAILABLE,
+  type PlayerKind,
 } from '@/api/watch-together'
 import { useWatchTogetherRoom } from '@/composables/useWatchTogetherRoom'
+import { useToast } from '@/composables/useToast'
 import RoomSidebar from '@/components/watch-together/RoomSidebar.vue'
 import ReactionBurstOverlay from '@/components/watch-together/ReactionBurstOverlay.vue'
 import SyncToastStack from '@/components/watch-together/SyncToastStack.vue'
 import ConnectionStatusOverlay from '@/components/watch-together/ConnectionStatusOverlay.vue'
+import PlayerTabBar from '@/components/watch-together/PlayerTabBar.vue'
 
 // Lazy-load each player so the WatchTogetherView chunk stays under the
 // 30KB gz budget (WT-NF-04). Mirrors Anime.vue's defineAsyncComponent
@@ -111,9 +117,28 @@ const lastAnimeId = ref<string | null>(null)
 // (defense in depth — explicit disconnect is cheap and idempotent).
 const roomHandle = useWatchTogetherRoom(roomId)
 
+// Plan 04.4 — toast composable for sender-only state-error surfacing.
+const toast = useToast()
+
 // Subscribe to terminal events from the composable. Both unsubscribers
 // are eaten — the handle's auto-disconnect cleans up on unmount.
 roomHandle.onError((e) => {
+  // Plan 04.4 state-switching: sender-only error codes from
+  // services/watch-together's validated change_{episode,player,translation}
+  // handlers. Surface as toast, do NOT mutate local state — the broadcast
+  // for a successful change would arrive separately as room:state_changed.
+  if (e.code === ERR_EPISODE_UNAVAILABLE) {
+    toast.push(t('watch_together.state_change_episode_unavailable'), 'error')
+    return
+  }
+  if (e.code === ERR_PLAYER_UNAVAILABLE) {
+    toast.push(t('watch_together.state_change_player_unavailable'), 'error')
+    return
+  }
+  if (e.code === ERR_TRANSLATION_UNAVAILABLE) {
+    toast.push(t('watch_together.state_change_translation_unavailable'), 'error')
+    return
+  }
   if (e.code === ERR_CAPACITY_FULL) {
     errorState.value = 'capacity'
     return
@@ -176,6 +201,18 @@ bootstrap()
 onBeforeUnmount(() => {
   roomHandle.disconnect()
 })
+
+// Plan 04.4 — PlayerTabBar @select-player handler. Routes ALL user-driven
+// player changes through the room handle so the backend validates +
+// broadcasts; the composable's auto-mutation of room.value.player then
+// flips the :key on the active player branch and Vue re-mounts cleanly.
+// Defense in depth: PlayerTabBar already guards against same-kind clicks,
+// but the view re-checks here so direct programmatic emit calls (tests,
+// future shortcuts) can't accidentally fire spurious change_player.
+function onSelectPlayer(player: PlayerKind) {
+  if (player === livePlayer.value) return
+  roomHandle.emitChangePlayer(player)
+}
 
 // Navigation back to the anime page from empty/capacity states. Falls
 // back to home if we don't have an anime id (e.g. the REST pre-fetch
@@ -261,32 +298,47 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
   >
     <!-- Player column — relative so the burst overlay can `absolute inset-0` -->
     <div class="relative flex-1 min-w-0 bg-black">
+      <!-- Plan 04.4 — PlayerTabBar overlays the top-left of the player.
+           Routes user-driven player switches through roomHandle.emitChangePlayer;
+           the broadcast's room:state_changed event flips livePlayer which
+           tears down the old player (via :key) and mounts the new one. -->
+      <PlayerTabBar
+        class="absolute top-2 left-2 z-20"
+        :active-player="livePlayer"
+        @select-player="onSelectPlayer"
+      />
+
       <KodikPlayer
         v-if="livePlayer === 'kodik'"
+        :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :initial-episode="initialEpisode"
         :room="roomHandle"
       />
       <AnimeLibPlayer
         v-else-if="livePlayer === 'animelib'"
+        :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :initial-episode="initialEpisode"
         :room="roomHandle"
       />
       <OurEnglishPlayer
         v-else-if="livePlayer === 'ourenglish'"
+        :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :initial-episode="initialEpisode"
         :room="roomHandle"
       />
       <HanimePlayer
         v-else-if="livePlayer === 'hanime'"
+        :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :initial-episode="initialEpisode"
         :room="roomHandle"
       />
       <RawPlayer
         v-else-if="livePlayer === 'raw'"
+        :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :room="roomHandle"
       />
