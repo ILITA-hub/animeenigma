@@ -1012,7 +1012,11 @@
     "loading": "Загрузка комнаты…",
     "member_joined": "{username} присоединился",
     "member_left": "{username} вышел",
-    "room_id_label": "ID комнаты"
+    "room_id_label": "ID комнаты",
+    "sync_toast_played": "{username} включил(а) воспроизведение",
+    "sync_toast_paused": "{username} поставил(а) на паузу",
+    "sync_toast_seeked": "{username} перемотал(а) на {time}",
+    "connection_status_closed": "Соединение потеряно — повтор попытки…"
   },
   "spotlight": {
     "regionLabel": "Подборка дня",

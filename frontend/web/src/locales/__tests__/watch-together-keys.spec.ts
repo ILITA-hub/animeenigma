@@ -95,6 +95,10 @@ describe('watch_together i18n parity', () => {
     'member_joined',
     'member_left',
     'room_id_label',
+    'sync_toast_played',
+    'sync_toast_paused',
+    'sync_toast_seeked',
+    'connection_status_closed',
   ] as const
 
   it.each(expectedKeys)('en.json has watch_together.%s as a string', (key) => {
@@ -122,5 +126,22 @@ describe('watch_together i18n parity', () => {
   it('watch_together.member_left preserves {username} interpolation in both locales', () => {
     expect((enWT as Record<string, string>).member_left).toContain('{username}')
     expect((ruWT as Record<string, string>).member_left).toContain('{username}')
+  })
+
+  it('watch_together.sync_toast_played preserves {username} interpolation in both locales', () => {
+    expect((enWT as Record<string, string>).sync_toast_played).toContain('{username}')
+    expect((ruWT as Record<string, string>).sync_toast_played).toContain('{username}')
+  })
+
+  it('watch_together.sync_toast_paused preserves {username} interpolation in both locales', () => {
+    expect((enWT as Record<string, string>).sync_toast_paused).toContain('{username}')
+    expect((ruWT as Record<string, string>).sync_toast_paused).toContain('{username}')
+  })
+
+  it('watch_together.sync_toast_seeked preserves {username} and {time} interpolation in both locales', () => {
+    expect((enWT as Record<string, string>).sync_toast_seeked).toContain('{username}')
+    expect((enWT as Record<string, string>).sync_toast_seeked).toContain('{time}')
+    expect((ruWT as Record<string, string>).sync_toast_seeked).toContain('{username}')
+    expect((ruWT as Record<string, string>).sync_toast_seeked).toContain('{time}')
   })
 })

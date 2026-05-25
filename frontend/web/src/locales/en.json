@@ -1012,7 +1012,11 @@
     "loading": "Loading room…",
     "member_joined": "{username} joined",
     "member_left": "{username} left",
-    "room_id_label": "Room ID"
+    "room_id_label": "Room ID",
+    "sync_toast_played": "{username} played",
+    "sync_toast_paused": "{username} paused",
+    "sync_toast_seeked": "{username} seeked to {time}",
+    "connection_status_closed": "Connection lost — retrying…"
   },
   "spotlight": {
     "regionLabel": "Today's spotlight",
