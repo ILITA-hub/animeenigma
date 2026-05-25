@@ -13,12 +13,12 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig
-	Database  database.Config
-	Redis     cache.Config
-	JWT       authz.JWTConfig
-	Shikimori ShikimoriConfig
-	Jimaku    JimakuConfig
+	Server      ServerConfig
+	Database    database.Config
+	Redis       cache.Config
+	JWT         authz.JWTConfig
+	Shikimori   ShikimoriConfig
+	Jimaku      JimakuConfig
 	AnimeLib    AnimeLibConfig
 	Hanime      HanimeConfig
 	Telegram    TelegramConfig
@@ -38,6 +38,10 @@ type Config struct {
 	// a bare 404 with no body so the frontend HSB-FE-02 v-if hides
 	// the block. Default true. Env: SPOTLIGHT_ENABLED.
 	SpotlightEnabled bool
+	// Prometheus — base URL for the spotlight platform_stats card's
+	// instant queries (workstream hero-spotlight). Default mirrors the
+	// gateway's PROMETHEUS_SERVICE_URL incl. the /prometheus route-prefix.
+	Prometheus PrometheusConfig
 }
 
 type ServerConfig struct {
@@ -50,11 +54,11 @@ func (s ServerConfig) Address() string {
 }
 
 type ShikimoriConfig struct {
-	BaseURL     string
-	GraphQLURL  string
-	UserAgent   string
-	RateLimit   int
-	Timeout     time.Duration
+	BaseURL    string
+	GraphQLURL string
+	UserAgent  string
+	RateLimit  int
+	Timeout    time.Duration
 }
 
 type JimakuConfig struct {
@@ -115,6 +119,14 @@ type OpenSubtitlesConfig struct {
 type LibraryConfig struct {
 	APIURL  string
 	Timeout time.Duration
+}
+
+// PrometheusConfig configures the read-only Prometheus instant-query
+// client used by the spotlight platform_stats card (workstream
+// hero-spotlight). URL defaults to http://prometheus:9090/prometheus
+// which mirrors the gateway's PROMETHEUS_SERVICE_URL env var.
+type PrometheusConfig struct {
+	URL string
 }
 
 func Load() (*Config, error) {
@@ -191,6 +203,9 @@ func Load() (*Config, error) {
 			Timeout: getEnvDuration("LIBRARY_API_TIMEOUT", 2*time.Second),
 		},
 		SpotlightEnabled: getEnvBool("SPOTLIGHT_ENABLED", true),
+		Prometheus: PrometheusConfig{
+			URL: getEnv("PROMETHEUS_SERVICE_URL", "http://prometheus:9090/prometheus"),
+		},
 	}, nil
 }
 

@@ -424,6 +424,7 @@ services:
       HANIME_EMAIL: ${HANIME_EMAIL:-}
       HANIME_PASSWORD: ${HANIME_PASSWORD:-}
       TELEGRAM_NEWS_CHANNEL: ${TELEGRAM_NEWS_CHANNEL:-animeenigmanews}
+      PROMETHEUS_SERVICE_URL: http://prometheus:9090/prometheus
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:

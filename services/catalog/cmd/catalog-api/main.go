@@ -11,16 +11,17 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
+	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
-	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/allanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/library"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/prometheus"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -235,12 +236,13 @@ func main() {
 	spotlightWebClient := client.NewWebClient("", nil)
 	spotlightPlayerClient := client.NewPlayerClient("", nil, log)
 	spotlightRng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	prometheusClient := prometheus.NewClient(cfg.Prometheus.URL)
 	spotlightResolvers := []spotlight.Resolver{
 		// Static cards (Phase 1)
 		cards.NewAnimeOfDayResolver(animeRepo, redisCache, log),
 		cards.NewRandomTailResolver(animeRepo, redisCache, log),
 		cards.NewLatestNewsResolver(spotlightWebClient, redisCache, spotlightRng, log),
-		cards.NewPlatformStatsResolver(db.DB, redisCache, log),
+		cards.NewPlatformStatsResolver(prometheusClient, redisCache, log),
 		// Dynamic cards (Phase 3 — Plan 03-03)
 		cards.NewPersonalPickResolver(catalogService, spotlightPlayerClient, redisCache, spotlightRng, log),
 		cards.NewTelegramNewsResolver(telegramClient, redisCache, spotlightRng, log),
