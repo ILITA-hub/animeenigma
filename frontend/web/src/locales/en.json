@@ -1000,6 +1000,7 @@
     "invite_button_label": "Invite to Watch Together",
     "invite_copied_toast": "Invite link copied — share it with friends",
     "invite_copy_manual": "Copy this link to share:",
+    "kodik_sync_unavailable": "Kodik sync unavailable for this bundle version — use voice chat to coordinate",
     "room_ended_title": "This Watch Together room has ended",
     "room_ended_back_button": "Back to anime",
     "reconnecting_indicator": "Reconnecting…",

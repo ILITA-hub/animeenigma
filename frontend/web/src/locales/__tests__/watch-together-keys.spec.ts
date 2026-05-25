@@ -82,6 +82,7 @@ describe('watch_together i18n parity', () => {
     'invite_button_label',
     'invite_copied_toast',
     'invite_copy_manual',
+    'kodik_sync_unavailable',
     'room_ended_title',
     'room_ended_back_button',
     'reconnecting_indicator',
