@@ -48,6 +48,13 @@
 
     <!-- Labeled-pill dot indicators (one per card).
 
+         Lives in the parent frame's flex-col flow as a real footer row
+         (shrink-0) — NOT an absolute overlay. The card slide above is
+         flex-1, so the card occupies the full frame height minus this
+         strip instead of being cropped by a `pb-10` reservation on the
+         slide container. (display:contents on the wrapper above lets this
+         div become a direct flex child of the .spotlight-frame.)
+
          Each pill carries the card-type icon + the card's kicker label
          (i18n via cardTokens[card.type].kickerKey). Active pill picks up
          the accent background from accentDotBg[token.accent]; inactive
@@ -56,7 +63,7 @@
          data-testid is preserved verbatim for e2e selector compatibility
          (frontend/web/e2e/spotlight*.spec.ts). -->
     <div
-      class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5"
+      class="shrink-0 flex items-center justify-center gap-1.5 py-1"
       data-testid="spotlight-dots"
     >
       <!-- Each dot reads from cardTokens by card.type. If the backend

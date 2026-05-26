@@ -50,7 +50,7 @@
       class="relative glass-card rounded-2xl overflow-hidden flex flex-col spotlight-frame"
     >
       <div
-        class="relative w-full flex-1 min-h-0 pb-10"
+        class="relative w-full flex-1 min-h-0"
         role="group"
         aria-roledescription="slide"
         :aria-label="
