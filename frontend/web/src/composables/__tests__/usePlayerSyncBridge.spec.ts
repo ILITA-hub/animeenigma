@@ -166,6 +166,11 @@ function makeFakeRoom(): FakeRoom {
     }),
     onError: vi.fn(() => () => {}),
     onRoomClosed: vi.fn(() => () => {}),
+    // Phase 05 Plan 05.5 — added the onAuthExpired sugar wrapper to the
+    // composable's public surface. usePlayerSyncBridge doesn't subscribe
+    // to it (the view does), but the fake handle MUST expose it to
+    // satisfy UseWatchTogetherRoomReturn.
+    onAuthExpired: vi.fn(() => () => {}),
     connect: vi.fn(async () => {}),
     disconnect: vi.fn(),
   }

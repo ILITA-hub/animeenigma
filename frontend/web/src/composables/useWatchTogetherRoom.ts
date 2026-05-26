@@ -134,6 +134,14 @@ export interface UseWatchTogetherRoomReturn {
   onCorrection(handler: (c: PlaybackCorrectionData) => void): () => void
   onError(handler: (e: ErrorData) => void): () => void
   onRoomClosed(handler: (r: RoomClosedData) => void): () => void
+  /**
+   * Sugar over `onError` filtered for ERR_AUTH_EXPIRED — wired in Phase 05
+   * Plan 05.5 so the WatchTogetherView's auth-expired modal can subscribe
+   * to the terminal-auth channel without coupling to the broader onError
+   * surface (which also carries the state-change EPISODE/PLAYER/TRANSLATION
+   * unavailable codes routed to toasts).
+   */
+  onAuthExpired(handler: () => void): () => void
 
   // Control.
   connect(): Promise<void>
@@ -580,6 +588,16 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
   const onError = subscribe(handlers.error)
   const onRoomClosed = subscribe(handlers.roomClosed)
 
+  // Phase 05 Plan 05.5 — sugar wrapper. Subscribes to the generic error
+  // channel but only fires the supplied handler for ERR_AUTH_EXPIRED. The
+  // returned unsubscriber detaches the inner subscriber so calling it
+  // also stops further AUTH_EXPIRED dispatches.
+  function onAuthExpired(handler: () => void): () => void {
+    return onError((e) => {
+      if (e.code === ERR_AUTH_EXPIRED) handler()
+    })
+  }
+
   /* ──────── Vue lifecycle ──────── */
 
   // Auto-disconnect on component unmount. Skipped if the composable is
@@ -616,6 +634,7 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
     onCorrection,
     onError,
     onRoomClosed,
+    onAuthExpired,
     connect,
     disconnect,
   }
