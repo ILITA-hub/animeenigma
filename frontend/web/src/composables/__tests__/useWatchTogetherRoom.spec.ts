@@ -572,6 +572,68 @@ describe('useWatchTogetherRoom — disconnect + error semantics', () => {
     await flushMicrotasks()
     expect(socketsCreated.length).toBe(1)
   })
+
+  // ── Phase 05 (polish) Plan 05.5 — onAuthExpired subscriber sugar ──
+  //
+  // Three tests lock the contract that the dedicated `onAuthExpired` channel
+  // wraps onError + filters for ERR_AUTH_EXPIRED. The view code consumes
+  // this in preference to a catch-all onError branch so the auth-expired
+  // modal stays decoupled from the state-error toast trio.
+
+  it('Test 20: onAuthExpired fires when an AUTH_EXPIRED frame arrives', async () => {
+    getRoomSpy.mockResolvedValueOnce(makeSnapshot())
+    const room = useWatchTogetherRoom('room-1')
+    const authHandler = vi.fn()
+    room.onAuthExpired(authHandler)
+    await room.connect()
+    await flushMicrotasks()
+    lastSocket!.simulateOpen()
+    lastSocket!.simulateMessage({ type: 'room:snapshot', data: makeSnapshot() })
+
+    const errPayload: ErrorData = { code: 'AUTH_EXPIRED', message: 'jwt expired' }
+    lastSocket!.simulateMessage({ type: 'error', data: errPayload })
+
+    expect(authHandler).toHaveBeenCalledTimes(1)
+  })
+
+  it('Test 21: onAuthExpired does NOT fire for other error codes', async () => {
+    getRoomSpy.mockResolvedValueOnce(makeSnapshot())
+    const room = useWatchTogetherRoom('room-1')
+    const authHandler = vi.fn()
+    room.onAuthExpired(authHandler)
+    await room.connect()
+    await flushMicrotasks()
+    lastSocket!.simulateOpen()
+    lastSocket!.simulateMessage({ type: 'room:snapshot', data: makeSnapshot() })
+
+    lastSocket!.simulateMessage({
+      type: 'error',
+      data: { code: 'CAPACITY_FULL', message: 'room full' } satisfies ErrorData,
+    })
+    lastSocket!.simulateMessage({
+      type: 'error',
+      data: { code: 'EPISODE_UNAVAILABLE', message: 'no ep' } satisfies ErrorData,
+    })
+    expect(authHandler).not.toHaveBeenCalled()
+  })
+
+  it('Test 22: onAuthExpired returns an unsubscriber that prevents further calls', async () => {
+    getRoomSpy.mockResolvedValueOnce(makeSnapshot())
+    const room = useWatchTogetherRoom('room-1')
+    const authHandler = vi.fn()
+    const off = room.onAuthExpired(authHandler)
+    await room.connect()
+    await flushMicrotasks()
+    lastSocket!.simulateOpen()
+    lastSocket!.simulateMessage({ type: 'room:snapshot', data: makeSnapshot() })
+
+    off()
+    lastSocket!.simulateMessage({
+      type: 'error',
+      data: { code: 'AUTH_EXPIRED', message: 'jwt expired' } satisfies ErrorData,
+    })
+    expect(authHandler).not.toHaveBeenCalled()
+  })
 })
 
 describe('useWatchTogetherRoom — reaction prune + snapshot replay', () => {
