@@ -48,7 +48,10 @@
 //   - Pitfall 2: AJAX requires `ctk` token scraped from watch page HTML AND
 //     the PHPSESSID cookie set on the same browser session (the
 //     BaseHTTPClient cookie jar handles propagation).
-//   - Pitfall 3: TWO servers (tserver, hserver) — list both; tserver first.
+//   - Pitfall 3: AnimeFever's watch page offers two servers (tserver, hserver),
+//     but per AUTO-275 we advertise ONLY tserver — hserver embeds never expose
+//     a parseable `sources:` literal (dead-end probes). See supportedServers in
+//     client.go.
 //
 // Anti-Patterns (must NOT do):
 //
