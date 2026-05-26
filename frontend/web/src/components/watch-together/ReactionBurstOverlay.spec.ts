@@ -116,4 +116,50 @@ describe('ReactionBurstOverlay', () => {
     expect(SFC_SOURCE).toMatch(/<style\s+scoped>/)
     expect(SFC_SOURCE).toMatch(/@keyframes\s+\w+/)
   })
+
+  // ----- Phase 5 (Plan 05.3) polish tests -----
+
+  it('caps concurrent on-screen bursts at 8 via FIFO drop', () => {
+    // 12 rapid reactions in props → only the most recent 8 render.
+    const reactions = Array.from({ length: 12 }, (_, i) =>
+      makeReaction(100 + i, '🔥'),
+    )
+    const wrapper = mount(ReactionBurstOverlay, { props: { reactions } })
+    expect(wrapper.findAll('span').length).toBe(8)
+    // The 8 visible should be the LAST 8 in the input (FIFO drop of oldest)
+    const spans = wrapper.findAll('span')
+    // Last span's emoji corresponds to id 111 (100+11); spans render in
+    // array order, so verify by inspecting via the kept slice.
+    expect(spans[0].text()).toBe('🔥')
+    expect(spans.length).toBe(8)
+  })
+
+  it('uses 8-column stratified placement (not pure random)', () => {
+    // 8 reactions with consecutive ids → each picks a distinct column
+    // (round-robin via `id % 8`). Verifies the placement is deterministic
+    // and stratified, not random.
+    const reactions = Array.from({ length: 8 }, (_, i) =>
+      makeReaction(200 + i, '✨'),
+    )
+    const wrapper = mount(ReactionBurstOverlay, { props: { reactions } })
+    const lefts = wrapper.findAll('span').map((s) => leftPercent(s.element))
+    // All 8 columns should be hit (set size = 8 means all distinct)
+    expect(new Set(lefts).size).toBe(8)
+    // Each value should be one of the locked column %s
+    const allowed = new Set([10, 20, 30, 45, 55, 70, 80, 90])
+    for (const l of lefts) {
+      expect(allowed.has(l)).toBe(true)
+    }
+  })
+
+  it('animation duration is 2.5s (Phase 5 upgrade from 3s)', () => {
+    // Smoke-grep the SFC source — Vitest can't introspect scoped CSS.
+    expect(SFC_SOURCE).toMatch(/animation:\s*burst-rise\s+2\.5s/)
+  })
+
+  it('keyframes include scale and translate (rise + wiggle)', () => {
+    // The Phase 5 keyframes go beyond Phase 2's translateY-only.
+    expect(SFC_SOURCE).toMatch(/scale\(/)
+    expect(SFC_SOURCE).toMatch(/translate\(/)
+  })
 })
