@@ -81,11 +81,12 @@ vi.mock('@/api/watch-together', () => ({
 // resolves immediately. We expose the onError handler the SUT registers so
 // individual tests can fire CAPACITY_FULL / AUTH_EXPIRED.
 let lastErrorHandler: ((e: { code: string; message?: string }) => void) | null = null
-// Captured but not currently asserted on — kept around for symmetry with
-// onError (and likely needed in a future Phase 5 follow-up that exercises
-// the onRoomClosed branch directly rather than via REST 410).
+// Phase 05 Plan 05.5 — onRoomClosed is now actively driven by tests
+// (mid-session room:closed → router.push + toast). Capturing the handler.
 let lastRoomClosedHandler: (() => void) | null = null
-void lastRoomClosedHandler
+// Phase 05 Plan 05.5 — onAuthExpired channel. The view subscribes to set
+// errorState='auth-expired' instead of firing an immediate router.push.
+let lastAuthExpiredHandler: (() => void) | null = null
 
 interface FakeHandle {
   room: ReturnType<typeof ref>
@@ -108,6 +109,9 @@ interface FakeHandle {
   // Plan 04.4 Task 2 — PlayerTabBar routes select-player events through
   // roomHandle.emitChangePlayer (NOT direct local-state mutation).
   emitChangePlayer: ReturnType<typeof vi.fn>
+  // Phase 05 Plan 05.5 — terminal-auth sugar channel; view binds to this
+  // instead of branching inside onError for ERR_AUTH_EXPIRED.
+  onAuthExpired: ReturnType<typeof vi.fn>
 }
 
 function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' | 'raw' = 'kodik'): FakeHandle {
@@ -151,6 +155,15 @@ function makeFakeHandle(player: 'kodik' | 'animelib' | 'ourenglish' | 'hanime' |
     onPlaybackEvent: vi.fn(() => () => {}),
     // Plan 04.4 — captured by the PlayerTabBar @select-player handler.
     emitChangePlayer: vi.fn(),
+    // Plan 05.5 — capture the view's auth-expired handler so tests can
+    // drive errorState='auth-expired' without round-tripping through the
+    // generic onError dispatcher.
+    onAuthExpired: vi.fn((h: () => void) => {
+      lastAuthExpiredHandler = h
+      return () => {
+        lastAuthExpiredHandler = null
+      }
+    }),
   }
   return handle
 }
@@ -290,6 +303,7 @@ beforeEach(() => {
   sharedState.toastPushMock.mockReset()
   lastErrorHandler = null
   lastRoomClosedHandler = null
+  lastAuthExpiredHandler = null
   sharedState.currentHandle = makeFakeHandle()
 })
 
@@ -417,22 +431,24 @@ describe('WatchTogetherView', () => {
     expect(wrapper.text()).toContain('watch_together.capacity_full_title')
   })
 
-  it('Test 11: on AUTH_EXPIRED error, calls router.push to /auth with returnUrl preserved', async () => {
+  it('Test 11: on AUTH_EXPIRED via onAuthExpired channel, errorState becomes "auth-expired" (NO immediate router.push)', async () => {
+    // Plan 05.5: terminal AUTH_EXPIRED no longer fires an immediate
+    // router.push. Instead, the view sets errorState='auth-expired' to
+    // render the blocking modal. The user clicks Login to navigate; if
+    // they close the tab, they don't end up at an auth page they didn't
+    // ask for.
     getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
-    mountView()
+    const wrapper = mountView()
     await flushPromises()
-    expect(typeof lastErrorHandler).toBe('function')
-    lastErrorHandler?.({ code: 'AUTH_EXPIRED' })
+    expect(typeof lastAuthExpiredHandler).toBe('function')
+    lastAuthExpiredHandler?.()
     await flushPromises()
-    expect(sharedState.pushMock).toHaveBeenCalledTimes(1)
-    const arg = sharedState.pushMock.mock.calls[0][0]
-    expect(arg).toMatchObject({ path: '/auth' })
-    // Either `query.next` or `query.returnUrl` is acceptable; both encode
-    // the resume URL. The view's implementation picks one. We assert that
-    // SOME query field carries the room URL.
-    const q = arg.query as Record<string, string> | undefined
-    const flat = q ? Object.values(q).join('|') : ''
-    expect(flat).toContain('/watch/room/room-abc')
+    // No router.push during this tick — the modal is shown.
+    expect(sharedState.pushMock).not.toHaveBeenCalled()
+    // Modal title key is rendered (i18n stub echoes keys).
+    expect(wrapper.text()).toContain('watch_together.auth_expired_modal_title')
+    expect(wrapper.text()).toContain('watch_together.auth_expired_modal_body')
+    expect(wrapper.text()).toContain('watch_together.auth_expired_modal_login_button')
   })
 
   it('Test 12: on unmount, calls roomHandle.disconnect()', async () => {
@@ -533,5 +549,123 @@ describe('WatchTogetherView', () => {
       'watch_together.state_change_translation_unavailable',
       'error',
     )
+  })
+
+  // ── Phase 05 Plan 05.5 — polish branches (WT-POLISH-04..07) ──
+
+  it('Test 20: capacity_full title key resolves to a localized string in both en + ru locales', async () => {
+    // The i18n stub echoes keys, so we just assert the key is rendered.
+    // Locale-specific copy ("(10/10)" suffix) is locked by the i18n
+    // parity test in src/locales/__tests__/watch-together-keys.spec.ts.
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    const wrapper = mountView()
+    await flushPromises()
+    lastErrorHandler?.({ code: 'CAPACITY_FULL' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('watch_together.capacity_full_title')
+    expect(wrapper.text()).toContain('watch_together.capacity_full_back_button')
+  })
+
+  it('Test 21: mid-session onRoomClosed → router.push to /anime/{id}/watch + toast', async () => {
+    // WT-POLISH-05: the WS-side room:closed event (vs REST 410) should
+    // redirect to the anime watch page with a toast, NOT show the empty
+    // "room ended" page. This distinguishes "user typed stale URL" (REST
+    // 410 → empty page) from "user was watching, room ended" (WS event
+    // → redirect with toast).
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    mountView()
+    await flushPromises()
+    expect(typeof lastRoomClosedHandler).toBe('function')
+    lastRoomClosedHandler?.()
+    await flushPromises()
+    expect(sharedState.toastPushMock).toHaveBeenCalledTimes(1)
+    expect(sharedState.toastPushMock).toHaveBeenCalledWith(
+      'watch_together.room_ended_redirect_toast',
+      'info',
+    )
+    expect(sharedState.pushMock).toHaveBeenCalledTimes(1)
+    expect(sharedState.pushMock).toHaveBeenCalledWith('/anime/anime-1/watch')
+  })
+
+  it('Test 22: onRoomClosed without animeId falls back to "/"', async () => {
+    // Defensive: if the REST snapshot never resolved (e.g. WS-only delivery
+    // of a snapshot that arrived faster than getRoom returned), the view
+    // doesn't have an anime id. Falls back to home root.
+    sharedState.currentHandle = makeFakeHandle('kodik')
+    sharedState.currentHandle.room.value = null
+    sessionStorage.removeItem('wt-last-anime-id-room-abc')
+    // Throw on the REST pre-fetch so lastAnimeId never gets seeded.
+    getRoomMock.mockReset()
+    getRoomMock.mockRejectedValueOnce(new Error('network'))
+    mountView()
+    await flushPromises()
+    // The catch branch sets errorState='gone' but doesn't redirect on REST
+    // failure (Phase 2 behavior — preserved). Now drive the WS-side
+    // onRoomClosed: with no anime id, it should fall back to '/'.
+    lastRoomClosedHandler?.()
+    await flushPromises()
+    expect(sharedState.pushMock).toHaveBeenCalledWith('/')
+  })
+
+  it('Test 23: REST 410 initial bootstrap shows the "gone" empty state (no router.push)', async () => {
+    // WT-POLISH-05: distinguish REST 410 from mid-session WS room:closed.
+    // REST 410 keeps the friendlier empty page with a Back button — no
+    // redirect.
+    getRoomMock.mockRejectedValueOnce(new FakeRoomGoneError())
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('watch_together.room_ended_title')
+    expect(sharedState.pushMock).not.toHaveBeenCalled()
+    expect(sharedState.toastPushMock).not.toHaveBeenCalled()
+  })
+
+  it('Test 24: auth-expired modal renders title/body/login button with dialog role + aria-modal', async () => {
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    const wrapper = mountView()
+    await flushPromises()
+    lastAuthExpiredHandler?.()
+    await flushPromises()
+    const dialog = wrapper.find('[role="dialog"]')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.attributes('aria-modal')).toBe('true')
+    expect(wrapper.text()).toContain('watch_together.auth_expired_modal_title')
+    expect(wrapper.text()).toContain('watch_together.auth_expired_modal_body')
+    const button = wrapper.find('button[data-testid="wt-auth-expired-login"]')
+    expect(button.exists()).toBe(true)
+    expect(button.text()).toContain('watch_together.auth_expired_modal_login_button')
+  })
+
+  it('Test 25: clicking Login in auth-expired modal pushes to /auth?next=… and writes returnUrl', async () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    const wrapper = mountView()
+    await flushPromises()
+    lastAuthExpiredHandler?.()
+    await flushPromises()
+    const button = wrapper.find('button[data-testid="wt-auth-expired-login"]')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    expect(sharedState.pushMock).toHaveBeenCalledTimes(1)
+    const arg = sharedState.pushMock.mock.calls[0][0] as {
+      path: string
+      query: Record<string, string>
+    }
+    expect(arg.path).toBe('/auth')
+    expect(arg.query.next).toBe('/watch/room/room-abc')
+    // Belt-and-suspenders: returnUrl persisted to sessionStorage too.
+    expect(setItemSpy).toHaveBeenCalledWith('returnUrl', '/watch/room/room-abc')
+    setItemSpy.mockRestore()
+  })
+
+  it('Test 26: bootstrap success persists lastAnimeId to sessionStorage (survives WS-only room:closed)', async () => {
+    // WT-POLISH-05 underpinning: the WS room:closed handler needs an
+    // anime_id even when the composable's room ref has already been
+    // cleared. The view caches it on REST bootstrap success.
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
+    getRoomMock.mockResolvedValueOnce(makeSnapshot('kodik'))
+    mountView()
+    await flushPromises()
+    expect(setItemSpy).toHaveBeenCalledWith('wt-last-anime-id-room-abc', 'anime-1')
+    setItemSpy.mockRestore()
   })
 })
