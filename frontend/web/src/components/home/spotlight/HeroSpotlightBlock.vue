@@ -119,19 +119,17 @@
           />
         </transition>
       </div>
-      <CarouselControls
-        :current-index="currentIndex"
-        :cards="cards"
-        @prev="prev"
-        @next="next"
-        @goto="goTo"
-      />
+      <CarouselControls @prev="prev" @next="next" />
       <!-- SR-only pause announcement (UI-SPEC §A11y; F1.3/F6.1 resolution).
            aria-live=polite so it speaks at the screen reader's next idle. -->
       <span class="sr-only" aria-live="polite">
         {{ paused ? t('spotlight.pauseAutoplay') : '' }}
       </span>
     </div>
+
+    <!-- Dot indicators live OUTSIDE the .spotlight-frame so the card slide
+         fills the full frame height (no reserved strip cropping it). -->
+    <CarouselDots :current-index="currentIndex" :cards="cards" @goto="goTo" />
   </section>
 </template>
 
@@ -142,6 +140,7 @@ import { useIntervalFn, useMediaQuery } from '@vueuse/core'
 import { useSpotlight } from '@/composables/useSpotlight'
 import type { SpotlightCard } from '@/types/spotlight'
 import CarouselControls from './CarouselControls.vue'
+import CarouselDots from './CarouselDots.vue'
 import AnimeOfDayCard from './cards/AnimeOfDayCard.vue'
 import RandomTailCard from './cards/RandomTailCard.vue'
 import LatestNewsCard from './cards/LatestNewsCard.vue'
