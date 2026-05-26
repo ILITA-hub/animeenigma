@@ -44,6 +44,21 @@ dashboards that target a similar area.
   reason breakdown, last canary run timestamp, and top failing
   (provider, server, reason) tuples table.
 
+- **`library.json`** — Workstream raw-jp v0.2. Job status counts, active
+  vs seeding torrent gauges, download throughput, disk free, enqueue
+  rejects by reason, and lifetime job-status mix pie. Sources every
+  metric emitted by `services/library/internal/metrics/library_metrics.go`.
+
+- **`watch-together.json`** — Workstream watch-together v1.0 / WT-POLISH-08.
+  13 panels covering active rooms, active WS connections, rooms created,
+  grace recovery rate, members-per-room heatmap, chat-messages-per-room
+  heatmap, session duration percentiles, drift corrections by severity,
+  persistent drift by user role (host/member), HTTP request latency
+  percentiles, rate-limited messages, chat + reactions throughput, and
+  inbound WS message rate by type. Sources every `wt_*` metric from
+  `services/watch-together/internal/{service,hub}/metrics.go` plus the
+  grace counters from `services/watch-together/internal/service/grace.go`.
+
 ## Adding a new dashboard
 
 1. Drop the JSON into this directory using the naming convention above.
