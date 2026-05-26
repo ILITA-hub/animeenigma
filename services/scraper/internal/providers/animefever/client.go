@@ -52,6 +52,47 @@ const fuzzyThreshold = 0.85
 // BaseHTTPClient's own response-cap convention.
 const maxBodyBytes = 4 << 20
 
+// defaultServer is the AnimeFever server used when the caller does not pin
+// one. tserver is the upstream primary and — per AUTO-275 — the ONLY server
+// that yields a parseable stream.
+const defaultServer = "tserver"
+
+// supportedServers is the ordered allowlist of AnimeFever server IDs the
+// provider will resolve. hserver is intentionally EXCLUDED (AUTO-275): its
+// embeds structurally return no parseable `sources:` literal — they have never
+// produced a valid HLS URL and only generated false-positive stream_segment
+// DOWN alerts as the health probe / orchestrator walked tserver→hserver onto a
+// dead-end. Keeping hserver out of this list means neither the failover loop
+// nor the health probe ever hand an hserver embed URL to the vidstream_vip
+// extractor. tserver delivers valid HLS via am.vidstream.vip →
+// static-cdn-ca1.mofl.pro.
+var supportedServers = []string{defaultServer}
+
+// isSupportedServer reports whether serverID is in the supportedServers
+// allowlist. hserver (and any other non-tserver id) is blocked (AUTO-275).
+func isSupportedServer(serverID string) bool {
+	for _, s := range supportedServers {
+		if s == serverID {
+			return true
+		}
+	}
+	return false
+}
+
+// filterSupportedServers drops any server not in the supportedServers
+// allowlist, preserving order. Applied to cached server lists on read so a
+// pre-AUTO-275 cache entry (which still contains hserver) can never re-surface
+// a blocked server after deploy, even within the 1h servers cache TTL.
+func filterSupportedServers(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if isSupportedServer(s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // stageNames is the canonical stage list. Alias of health.AllStages so any
 // stage rename in the health package flows here automatically.
 var stageNames = health.AllStages
@@ -431,10 +472,11 @@ func materializeEpisodes(slug string, refs []episodeRef) []domain.Episode {
 }
 
 // ListServers returns the streaming servers AnimeFever exposes for one
-// episode. Per RESEARCH.md Pitfall 3, AnimeFever always offers tserver +
-// hserver (tserver primary). We do NOT probe the AJAX endpoint here — the
-// orchestrator tries GetStream(serverID="tserver") first; if that fails,
-// it falls through to "hserver".
+// episode. AnimeFever's watch page offers tserver + hserver, but per AUTO-275
+// we advertise ONLY tserver: hserver embeds structurally return no parseable
+// `sources:` literal (never a valid HLS URL) and only produced false-positive
+// stream_segment DOWN alerts when the probe/orchestrator walked onto them. See
+// supportedServers. We do NOT probe the AJAX endpoint here.
 //
 // The watch page is fetched to (a) populate the PHPSESSID cookie via the
 // BaseHTTPClient jar and (b) extract + cache the ctk token for GetStream.
@@ -455,9 +497,13 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 		return nil, err
 	}
 
-	if hit, ok := p.cache.getServers(ctx, slug, eid); ok && len(hit) >= 2 {
-		p.markStage(health.StageServers, nil)
-		return materializeServers(hit), nil
+	// Filter cached entries through the allowlist so a pre-AUTO-275 cache entry
+	// (which still contains hserver) cannot re-surface a blocked server.
+	if hit, ok := p.cache.getServers(ctx, slug, eid); ok {
+		if filtered := filterSupportedServers(hit); len(filtered) > 0 {
+			p.markStage(health.StageServers, nil)
+			return materializeServers(filtered), nil
+		}
 	}
 
 	// Fetch the watch page (populates PHPSESSID cookie + lets us cache ctk).
@@ -468,7 +514,10 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 			"slug", slug, "eid", eid, "error", err)
 	}
 
-	servers := []string{"tserver", "hserver"}
+	// AUTO-275: advertise only tserver. hserver is a dead-end; excluding it
+	// here stops the orchestrator failover loop and the health probe from ever
+	// probing it. See supportedServers.
+	servers := append([]string(nil), supportedServers...)
 	p.cache.setServers(ctx, slug, eid, servers)
 	p.markStage(health.StageServers, nil)
 	return materializeServers(servers), nil
@@ -531,11 +580,14 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		return nil, err
 	}
 	if serverID == "" {
-		serverID = "tserver"
+		serverID = defaultServer
 	}
-	if serverID != "tserver" && serverID != "hserver" {
+	if !isSupportedServer(serverID) {
+		// AUTO-275: reject hserver (and any non-tserver) BEFORE any upstream
+		// fetch, so an hserver embed URL is never handed to the vidstream_vip
+		// extractor. tserver is the sole server that yields a parseable stream.
 		err := domain.WrapExtractFailed(
-			fmt.Errorf("unknown server %q (want tserver or hserver)", serverID),
+			fmt.Errorf("server %q is not supported (only tserver yields a parseable stream; hserver blocked per AUTO-275)", serverID),
 			"animefever: GetStream")
 		p.markStage(health.StageStream, err)
 		return nil, err

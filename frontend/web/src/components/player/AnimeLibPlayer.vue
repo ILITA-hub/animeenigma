@@ -298,7 +298,9 @@ import { useWatchSession } from '@/composables/useWatchSession'
 import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import SubtitleOverlay from './SubtitleOverlay.vue'
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchCombo } from '@/types/preference'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 interface AnimeLibEpisode {
   id: number
@@ -335,6 +337,10 @@ const props = defineProps<{
   totalEpisodes?: number
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
+  // Phase 3 (03.2) — when set, the player sync bridge mirrors play/pause/seek
+  // to the room. When null/undefined the bridge is never instantiated and the
+  // player behaves exactly as it did pre-Phase-3 (zero regression).
+  room?: WatchTogetherRoomHandle | null
 }>()
 
 const emit = defineEmits<{
@@ -366,6 +372,13 @@ const usedPreferredCombo = ref(false)
 
 const translationFilter = ref<'all' | 'voice' | 'subtitles'>('all')
 const videoRef = ref<HTMLVideoElement | null>(null)
+
+// Phase 3 (03.2): wire real WatchTogether sync when a room is provided. When
+// room is null/undefined the bridge is never instantiated and the player
+// behaves exactly as it did pre-Phase-3 (zero regression).
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
 
 // Subtitle state
 const streamSubtitles = ref<AnimeLibSubtitle[]>([])
@@ -560,6 +573,16 @@ const _selectEpisode = async (ep: AnimeLibEpisode) => {
 
 // User-click episode selector — fires combo_override ('episode') BEFORE the work.
 const selectEpisode = async (ep: AnimeLibEpisode) => {
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.episode_id, which flows
+  // back through the existing :initial-episode prop -> _selectEpisode
+  // programmatic path.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(ep.id))
+    return
+  }
   tracker.recordPickerEvent('episode', { episode: parseInt(ep.number) || 0 })
   await _selectEpisode(ep)
 }
@@ -574,6 +597,13 @@ const _selectTranslation = async (tr: AnimeLibTranslation) => {
 
 // User-click translation selector — fires combo_override ('team') BEFORE the work.
 const selectTranslation = async (tr: AnimeLibTranslation) => {
+  // Phase 4 WT-STATE-04: same routing as selectEpisode — emit to room and let
+  // the inbound room:state_changed broadcast drive the local state mutation
+  // (via the existing programmatic _selectTranslation re-pick path).
+  if (props.room) {
+    props.room.emitChangeTranslation(String(tr.id))
+    return
+  }
   tracker.recordPickerEvent('team', { translation_title: tr.team_name, player: 'animelib' })
   userHasOverridden.value = true
   setPreferredWatchType(tr.type === 'voice' ? 'dub' : 'sub')

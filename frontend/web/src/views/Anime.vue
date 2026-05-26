@@ -315,6 +315,21 @@
               </span>
             </h2>
           </div>
+          <!-- Workstream watch-together / Phase 02 Plan 02.9 (WT-SHELL-05) —
+               invite-to-watch-together button. Gated to logged-in users who
+               have activated the player so we have a stable `videoProvider`
+               to pass. Translation ID intentionally empty in Phase 2; Phase 4
+               (State Switching) wires the per-provider current translation
+               back through. anime.id is the Shikimori UUID; resumeStartEpisode
+               is the parent-owned hint (falls back to 1 when undefined). -->
+          <InviteButton
+            v-if="authStore.isAuthenticated && playerActivated && anime"
+            :anime-id="anime.id"
+            :episode-id="String(resumeStartEpisode ?? 1)"
+            :player="videoProvider as PlayerKind"
+            :translation-id="''"
+            class="self-start"
+          />
           <!-- Language tabs + Provider sub-tabs -->
           <!-- UA-062 (UX-12 Phase 5): ButtonGroup wraps the RU/EN/18+ toggle
                with role="group" + aria-label; each child button binds
@@ -936,6 +951,12 @@ const rawProviderEnabled = import.meta.env.VITE_RAW_PROVIDER_ENABLED === 'true'
 // gates are green in production.
 const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
 const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
+// Workstream watch-together / Phase 02 Plan 02.9 (WT-SHELL-05) — lazy-loaded
+// invite button. Keeps Anime.vue's eager bundle clean — InviteButton pulls in
+// the watch-together api client + types + toast composable transitively, paid
+// only on first render (i.e. when a logged-in user has activated the player).
+const InviteButton = defineAsyncComponent(() => import('@/components/watch-together/InviteButton.vue'))
+import type { PlayerKind } from '@/types/watch-together'
 import ResumePill from '@/components/player/ResumePill.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'

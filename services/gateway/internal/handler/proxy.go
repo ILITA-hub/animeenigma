@@ -77,6 +77,19 @@ func (h *ProxyHandler) ProxyToNotifications(w http.ResponseWriter, r *http.Reque
 	h.proxy(w, r, "notifications")
 }
 
+// ProxyToWatchTogether proxies REST requests to the watch-together service
+// (workstream watch-together, v1.0 Phase 1). HTTP-only — the WebSocket
+// endpoint at /api/watch-together/ws is served by a dedicated WS reverse
+// proxy in transport/ws_proxy.go, NOT this handler. ProxyService.Forward
+// strips RFC 7230 §6.1 hop-by-hop headers (including Upgrade/Connection)
+// which is correct for normal HTTP but would break the WS handshake.
+// Internal forward-compat route /internal/watch-together/* is NOT exposed
+// at the gateway (Docker-network-only, mirroring the notifications D-05
+// security model).
+func (h *ProxyHandler) ProxyToWatchTogether(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "watch-together")
+}
+
 // ProxyToGrafana proxies requests to Grafana
 func (h *ProxyHandler) ProxyToGrafana(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "grafana")

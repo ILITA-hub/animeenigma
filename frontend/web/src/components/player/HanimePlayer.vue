@@ -143,6 +143,8 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import Hls from 'hls.js'
 import { hanimeApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 interface HanimeEpisode {
   name: string
@@ -161,6 +163,9 @@ const props = defineProps<{
   animeName?: string
   totalEpisodes?: number
   initialEpisode?: number
+  // Phase 3 (03.3) — room prop drives the WatchTogether sync bridge (wired below
+  // once `videoRef` is declared).
+  room?: WatchTogetherRoomHandle | null
 }>()
 
 const authStore = useAuthStore()
@@ -179,6 +184,12 @@ const error = ref<string | null>(null)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
+
+// Phase 3 (03.3): wire real sync when a room is provided. Zero behavior
+// change when room is null/undefined.
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
 
 // Progress tracking
 const currentTime = ref(0)
@@ -274,6 +285,16 @@ const fetchEpisodes = async () => {
 }
 
 const selectEpisode = async (ep: HanimeEpisode, idx: number) => {
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click (or end-of-episode auto-advance, which calls the
+  // same function) through the room handle so the backend can validate
+  // and broadcast to all members. The room:state_changed broadcast will
+  // reactively update room.episode_id, which flows back through the
+  // existing :initial-episode prop -> programmatic re-select path.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(ep.slug))
+    return
+  }
   selectedEpisode.value = ep
   selectedEpisodeIndex.value = idx
   streamUrl.value = null

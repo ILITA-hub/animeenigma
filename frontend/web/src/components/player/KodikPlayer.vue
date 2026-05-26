@@ -29,6 +29,18 @@
             </div>
           </div>
 
+          <!-- Phase 3 (03.4): Watch Together fallback banner. Shown when the
+               boot-time RPC probe timed out — outbound sync is disabled but
+               inbound progress save still works (banner is informational). -->
+          <div
+            v-if="props.room && kodikSyncAvailable === false"
+            class="absolute top-2 left-2 right-2 z-20 rounded-md bg-yellow-500/90 text-black px-3 py-2 text-sm font-medium pointer-events-auto"
+            role="status"
+            aria-live="polite"
+          >
+            {{ t('watch_together.kodik_sync_unavailable') }}
+          </div>
+
           <!-- Iframe player -->
           <iframe
             v-if="embedUrl"
@@ -228,6 +240,7 @@ import { useWatchSession } from '@/composables/useWatchSession'
 import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import type { WatchCombo } from '@/types/preference'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 // Watch progress tracking
 const currentTime = ref(0)
@@ -275,6 +288,42 @@ const saveProgressServer = async (animeId: string, episode: number, time: number
   }
 }
 
+// Template ref for the Kodik iframe. Phase 3 (03.4) — used by postCommand
+// to drive the undocumented kodik_player_api RPC.
+const playerFrame = ref<HTMLIFrameElement | null>(null)
+
+// ── Phase 3 (03.4): Watch Together sync state ──
+// kodikSyncAvailable is null while the boot probe is in flight, true on a
+// successful get_time reply, false on 2s timeout. When false: outbound
+// sync from this client is suppressed and a fallback banner renders.
+// Inbound time_update/pause are still consumed for the pre-Phase-3
+// progress-save path regardless.
+const kodikSyncAvailable = ref<boolean | null>(null)
+let bootProbeTimer: ReturnType<typeof setTimeout> | null = null
+// Re-emission guard: when we post a command to the iframe, Kodik echoes
+// the corresponding outbound event. Without this guard we'd loop the same
+// play/pause/seek back to the room.
+let applyingRemote = false
+
+/**
+ * Send a command to the Kodik iframe via the undocumented `kodik_player_api`
+ * postMessage RPC. Discovered 2026-05-25 — see memory reference
+ * `reference_kodik_inbound_postmessage_api.md`.
+ *
+ * @param method  One of 'play', 'pause', 'seek', 'volume', 'speed', 'mute',
+ *                'unmute', 'enter_pip', 'exit_pip', 'get_time'.
+ * @param payload Method-specific args merged into the value envelope. For
+ *                seek: { seconds }. For volume: { volume }. For speed: { speed }.
+ */
+function postCommand(method: string, payload?: Record<string, unknown>): void {
+  const frame = playerFrame.value
+  if (!frame || !frame.contentWindow) return
+  frame.contentWindow.postMessage(
+    { key: 'kodik_player_api', value: { method, ...payload } },
+    '*',
+  )
+}
+
 // Handle Kodik postMessage events
 const handleKodikMessage = (event: MessageEvent) => {
   // Filter only Kodik messages
@@ -312,12 +361,57 @@ const handleKodikMessage = (event: MessageEvent) => {
           data.value >= AUTO_MARK_THRESHOLD) {
         autoMarkEpisodeWatched()
       }
+
+      // Phase 3 (03.4): feed Watch Together's time_tick channel so the room
+      // can drive drift correction. Suppressed if we're applying a remote
+      // event right now (Kodik often emits a time_update immediately after
+      // a seek echo).
+      if (props.room && kodikSyncAvailable.value === true && !applyingRemote) {
+        props.room.emitTimeTick(data.value)
+      }
     }
 
     // Handle pause event (save immediately)
     if (data.key === 'kodik_player_pause') {
       saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
       saveProgressServer(props.animeId, selectedEpisode.value, currentTime.value)
+
+      // Phase 3 (03.4): also surface pause to the room so the other members
+      // pause. Guarded by applyingRemote so we don't echo an inbound pause.
+      if (props.room && kodikSyncAvailable.value === true && !applyingRemote) {
+        props.room.emitPause(currentTime.value)
+      }
+    }
+
+    // ── Phase 3 (03.4): Watch Together outbound consumption ──
+    // Reply to the boot-time smoke probe — sets kodikSyncAvailable true.
+    if (data.key === 'kodik_player_time' && typeof data.value === 'number') {
+      if (bootProbeTimer !== null) {
+        clearTimeout(bootProbeTimer)
+        bootProbeTimer = null
+      }
+      if (kodikSyncAvailable.value === null) {
+        kodikSyncAvailable.value = true
+      }
+      return
+    }
+
+    // The rest of the Phase 3 branches only emit when in a room with
+    // outbound sync enabled and we're not currently applying a remote event.
+    if (!props.room || kodikSyncAvailable.value !== true || applyingRemote) return
+
+    if (data.key === 'kodik_player_play') {
+      props.room.emitPlay(currentTime.value)
+      return
+    }
+    if (data.key === 'kodik_player_seek') {
+      const t = typeof data.value === 'number' ? data.value : currentTime.value
+      props.room.emitSeek(t)
+      return
+    }
+    if (data.key === 'kodik_player_video_started' || data.key === 'kodik_player_video_ended') {
+      // Diagnostic only. v1: no emit. Future: could feed a playback-session overlay.
+      return
     }
 
   } catch {
@@ -346,7 +440,12 @@ const props = defineProps<{
   totalEpisodes?: number
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
+  // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
+  room?: WatchTogetherRoomHandle | null
 }>()
+// Phase 3 (03.4): props.room is now consumed by handleKodikMessage + the
+// onMounted boot probe + the onPlaybackEvent/onCorrection subscriptions
+// below. The Phase-2 no-op shim is no longer needed.
 
 const translations = ref<KodikTranslation[]>([])
 const pinnedIds = ref<Set<number>>(new Set())
@@ -588,6 +687,16 @@ const setTranslationType = (type: 'voice' | 'subtitles') => {
 const selectTranslation = (translationId: number) => {
   if (selectedTranslation.value === translationId) return
 
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.translation_id, which flows
+  // back through the existing programmatic path.
+  if (props.room) {
+    props.room.emitChangeTranslation(String(translationId))
+    return
+  }
+
   // Look up the translation title for the override new_combo before mutating state.
   const tr = translations.value.find(t => t.id === translationId)
   tracker.recordPickerEvent('team', {
@@ -612,6 +721,17 @@ const selectTranslation = (translationId: number) => {
 
 const selectEpisode = (episode: number) => {
   if (selectedEpisode.value === episode) return
+
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.episode_id, which flows
+  // back through the existing programmatic path.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(episode))
+    return
+  }
+
   tracker.recordPickerEvent('episode', { episode })
 
   // Save progress of current episode before switching
@@ -789,6 +909,12 @@ watch(() => props.preferredCombo, async (newCombo) => {
   await loadVideo()
 })
 
+// ── Phase 3 (03.4): Watch Together sync unsubscribers ──
+// Held outside onMounted so onUnmounted can call them.
+let unsubPlayback: (() => void) | null = null
+let unsubCorrection: (() => void) | null = null
+let probeKickoffTimer: ReturnType<typeof setTimeout> | null = null
+
 onMounted(() => {
   // Listen for Kodik postMessage events
   window.addEventListener('message', handleKodikMessage)
@@ -799,6 +925,65 @@ onMounted(() => {
   }
   fetchTranslations()
   fetchWatchedEpisodes()
+
+  // ── Phase 3 (03.4): Watch Together sync wiring (only when in a room). ──
+  if (props.room) {
+    // Boot-time smoke probe — verify the kodik_player_api RPC is still alive
+    // in the currently-loaded Kodik bundle. Kicked off after a short delay so
+    // the iframe has had a chance to register its `window.player.api`
+    // dispatcher (inbound commands are ignored pre-boot).
+    const tryProbe = () => {
+      postCommand('get_time')
+      bootProbeTimer = setTimeout(() => {
+        if (kodikSyncAvailable.value === null) {
+          kodikSyncAvailable.value = false // probe timed out → banner + outbound off
+        }
+        bootProbeTimer = null
+      }, 2000)
+    }
+    probeKickoffTimer = setTimeout(tryProbe, 500)
+
+    // Subscribe to room playback events — translate to RPC commands.
+    unsubPlayback = props.room.onPlaybackEvent((e) => {
+      if (kodikSyncAvailable.value !== true) return
+      applyingRemote = true
+      try {
+        if (e.kind === 'play') {
+          // Realign before play to avoid an audible "starts behind" glitch.
+          if (Math.abs(currentTime.value - e.time) > 1) {
+            postCommand('seek', { seconds: e.time })
+          }
+          postCommand('play')
+        } else if (e.kind === 'pause') {
+          postCommand('pause')
+          postCommand('seek', { seconds: e.time })
+        } else if (e.kind === 'seek') {
+          postCommand('seek', { seconds: e.time })
+        }
+      } finally {
+        // Release the guard after Kodik's echo events have had time to fire.
+        // 300ms is enough headroom for the iframe's event-loop hop without
+        // trapping subsequent legitimate events from the local viewer.
+        setTimeout(() => { applyingRemote = false }, 300)
+      }
+    })
+
+    // Per-recipient drift correction (WT-SYNC-06). Soft = speed nudge,
+    // hard = silent seek. No UI feedback per spec.
+    unsubCorrection = props.room.onCorrection((c) => {
+      if (kodikSyncAvailable.value !== true) return
+      const target = c.time + (Date.now() - c.server_ts) / 1000
+      const drift = Math.abs(currentTime.value - target)
+      if (drift < 1.0) {
+        postCommand('speed', { speed: currentTime.value < target ? 1.03 : 0.97 })
+        setTimeout(() => postCommand('speed', { speed: 1.0 }), 5000)
+      } else {
+        applyingRemote = true
+        postCommand('seek', { seconds: target })
+        setTimeout(() => { applyingRemote = false }, 300)
+      }
+    })
+  }
 })
 
 onUnmounted(() => {
@@ -807,6 +992,24 @@ onUnmounted(() => {
 
   window.removeEventListener('message', handleKodikMessage)
   window.removeEventListener('beforeunload', saveBeforeLeave)
+
+  // Phase 3 (03.4): tear down Watch Together sync wiring.
+  if (probeKickoffTimer !== null) {
+    clearTimeout(probeKickoffTimer)
+    probeKickoffTimer = null
+  }
+  if (bootProbeTimer !== null) {
+    clearTimeout(bootProbeTimer)
+    bootProbeTimer = null
+  }
+  if (unsubPlayback) {
+    unsubPlayback()
+    unsubPlayback = null
+  }
+  if (unsubCorrection) {
+    unsubCorrection()
+    unsubCorrection = null
+  }
 })
 </script>
 

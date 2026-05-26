@@ -50,6 +50,13 @@ type ServiceURLs struct {
 	// (8087 was unavailable: host-native maintenance bot already bound there;
 	// same blocker that pushed library to 8089).
 	NotificationsService string
+	// WatchTogetherService — workstream watch-together, v1.0 Phase 1. Port 8091
+	// (Redis-only co-watch service; exposes REST /api/watch-together/rooms/*
+	// and WebSocket /api/watch-together/ws). The WS upgrade is proxied by a
+	// dedicated WS reverse-proxy in transport/ws_proxy.go (the standard
+	// ProxyService strips RFC 7230 §6.1 hop-by-hop headers, which is correct
+	// for HTTP but breaks the WS handshake — see ws_proxy.go for the why).
+	WatchTogetherService string
 	WebService           string
 	// Admin panel services
 	GrafanaService    string
@@ -100,6 +107,7 @@ func Load() (*Config, error) {
 			ThemesService:        getEnv("THEMES_SERVICE_URL", "http://themes:8086"),
 			LibraryService:       getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
 			NotificationsService: getEnv("NOTIFICATIONS_SERVICE_URL", "http://notifications:8090"),
+			WatchTogetherService: getEnv("WATCH_TOGETHER_SERVICE_URL", "http://watch-together:8091"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

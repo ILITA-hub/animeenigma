@@ -237,6 +237,63 @@ test.describe('hero spotlight block (Phase 2)', () => {
     await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true')
     await expect(dots.nth(0)).toHaveAttribute('aria-current', 'false')
   })
+
+  // Regression guard for the v1.1-polish cascade bug: PersonalPickCard's
+  // mobile "+ N more →" footer button (.cta-card md:hidden) used to render on
+  // DESKTOP because `.cta-card` was authored UNLAYERED and so beat the
+  // utilities-layer `md:hidden`. The full-width z-20 button then sat on top of
+  // the z-10 dot strip and intercepted every dot click (a real click navigated
+  // to /browse instead of seeking). jsdom can't resolve cascade layers, so this
+  // can only be caught at the real-CSS (e2e) layer.
+  test('personal_pick "+ more" CTA stays hidden on desktop and never blocks dot nav (HSB cascade regression)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const block = page.locator(SPOTLIGHT_SELECTOR)
+    if ((await block.count()) === 0) {
+      test.skip(true, 'Spotlight block self-hid (0 cards) — nothing to assert')
+      return
+    }
+    const dots = block.locator('[data-testid="spotlight-dots"] button')
+    const n = await dots.count()
+    if (n < 1) {
+      test.skip(true, 'No cards to navigate')
+      return
+    }
+
+    // Pause auto-cycle so seeking is deterministic.
+    await block.hover()
+    const slide = block.locator('[aria-roledescription="slide"]')
+    // The "+ N more →" footer is the only .cta-card inside a slide.
+    const moreCta = slide.locator('a.cta-card')
+
+    let foundPersonalPick = false
+    for (let i = 0; i < n; i++) {
+      // If the dot is covered by an overlay (the bug), Playwright's
+      // actionability check throws "intercepts pointer events" → test fails.
+      await dots.nth(i).click()
+      await page.waitForTimeout(500) // let the 400ms cross-fade settle
+      await expect(dots.nth(i)).toHaveAttribute('aria-current', 'true')
+
+      if ((await moreCta.count()) > 0) {
+        foundPersonalPick = true
+        // The mobile-only CTA must compute display:none at desktop width.
+        await expect(moreCta.first()).toBeHidden()
+        // And the dots must remain clickable while it's the active card.
+        const other = (i + 1) % n
+        if (other !== i) {
+          await dots.nth(other).click()
+          await page.waitForTimeout(500)
+          await expect(dots.nth(other)).toHaveAttribute('aria-current', 'true')
+        }
+        break
+      }
+    }
+
+    if (!foundPersonalPick) {
+      test.skip(true, 'personal_pick card not present in this dataset')
+    }
+  })
 })
 
 test.describe('hero spotlight block — flag off (manual gate)', () => {

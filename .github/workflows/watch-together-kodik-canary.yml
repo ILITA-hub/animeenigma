@@ -1,0 +1,99 @@
+# Watch Together — Kodik RPC Canary (WT-SYNC-10)
+#
+# Daily check that the undocumented kodik_player_api postMessage RPC
+# (see memory reference reference_kodik_inbound_postmessage_api.md) still works.
+# Hard-fails only when the dispatcher is genuinely gone (test.skip otherwise).
+#
+# Spec: frontend/web/e2e/kodik-rpc-probe.spec.ts (shipped Plan 03.4)
+# Workflow plumbing: Plan 05.8 (this file)
+#
+# On failure, alerts admin via Telegram using TELEGRAM_BOT_TOKEN +
+# TELEGRAM_ADMIN_CHAT_ID secrets (same secrets as .github/workflows/player-health.yml).
+#
+# Cron is offset from player-health.yml's 6:07 UTC to avoid fleet contention on
+# self-hosted / shared runners — we run at 7:13 UTC.
+name: Watch Together — Kodik RPC Canary
+
+on:
+  schedule:
+    # Daily at 7:13 AM UTC (offset from player-health.yml's 6:07 to avoid
+    # fleet contention on shared/self-hosted GitHub Actions runners).
+    - cron: '13 7 * * *'
+  workflow_dispatch: # Allow manual on-demand canary runs
+
+jobs:
+  canary:
+    name: Kodik RPC Canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: frontend/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install Playwright browsers (chromium only)
+        # Canary only needs one browser. If chromium fails we already know the
+        # Kodik bundle changed; firefox/webkit would add minutes for no signal.
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run Kodik RPC canary
+        run: bunx playwright test e2e/kodik-rpc-probe.spec.ts --project=chromium
+        env:
+          BASE_URL: https://animeenigma.ru
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kodik-canary-playwright-report
+          path: frontend/web/playwright-report/
+          retention-days: 7
+
+      - name: Upload raw test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kodik-canary-test-results
+          path: frontend/web/test-results/
+          retention-days: 7
+
+  notify:
+    name: Telegram Alert
+    runs-on: ubuntu-latest
+    needs: canary
+    if: failure()
+    steps:
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
+        run: |
+          MESSAGE="🚨 *Watch Together Kodik Canary FAILED*
+
+          The undocumented kodik_player_api postMessage RPC may have changed. RU watch-together sync could be degraded.
+
+          🔍 Debug recipe:
+          1. Open https://animeenigma.ru in a browser, navigate to any anime with Kodik player.
+          2. In DevTools console:
+             \`window.frames[0].postMessage({key:'kodik_player_api',value:{method:'get_time'}}, '*')\`
+          3. If no \`kodik_player_time\` response arrives within 2s, the RPC is gone.
+
+          🔗 [View Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          _Daily canary — $(date -u '+%Y-%m-%d %H:%M UTC')_"
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            -d "parse_mode=Markdown" \
+            -d "text=${MESSAGE}" \
+            -d "disable_web_page_preview=true"

@@ -162,6 +162,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import { scraperApi } from '@/api/client'
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 interface ScraperEpisode {
   id: string
@@ -205,10 +207,21 @@ interface ScraperEnvelope {
 const props = defineProps<{
   animeId: string
   initialEpisode?: number
+  // Phase 3 (03.2) — when set, the player sync bridge mirrors play/pause/seek
+  // to the room. When null/undefined the bridge is never instantiated and the
+  // player behaves exactly as it did pre-Phase-3 (zero regression).
+  room?: WatchTogetherRoomHandle | null
 }>()
 
 const playerContainer = ref<HTMLElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
+
+// Phase 3 (03.2): wire real WatchTogether sync when a room is provided. When
+// room is null/undefined the bridge is never instantiated and the player
+// behaves exactly as it did pre-Phase-3 (zero regression).
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
 
 const loadingEpisodes = ref(false)
 const loadingStream = ref(false)
@@ -351,7 +364,15 @@ async function fetchEpisodes() {
         props.initialEpisode != null
           ? eps.find(e => e.number === props.initialEpisode) ?? eps[0]
           : eps[0]
-      await selectEpisode(startEp)
+      // WT-STATE-04: a guest joining an existing room (or a host whose room
+      // already has an episode set) must load the stream directly on mount —
+      // there is no incoming room echo to react to. fromRoomSync=true bypasses
+      // the emit-to-room guard so the stream loads immediately.
+      if (props.room && props.initialEpisode != null) {
+        await selectEpisode(startEp, true)
+      } else {
+        await selectEpisode(startEp)
+      }
     }
   } catch {
     available.value = false
@@ -360,7 +381,19 @@ async function fetchEpisodes() {
   }
 }
 
-async function selectEpisode(ep: ScraperEpisode) {
+async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
+  // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
+  // route the user click through the room handle so the backend can
+  // validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.episode_id, which flows
+  // back through the existing :initial-episode prop -> the watcher below
+  // -> selectEpisode(ep, true). The fromRoomSync flag marks that
+  // programmatic re-entry so we load the stream instead of re-emitting
+  // (which would loop forever).
+  if (props.room && !fromRoomSync) {
+    props.room.emitChangeEpisode(String(ep.id))
+    return
+  }
   selectedEpisode.value = ep
   loadingStream.value = true
   streamUrl.value = null
@@ -441,6 +474,16 @@ watch(selectedServerId, (next, prev) => {
     loadingStream.value = true
     loadStream().finally(() => { loadingStream.value = false })
   }
+})
+
+// WT-STATE-04: react to room state_changed broadcasts. When the room's current
+// episode changes (this member's own click echo, or another member's change),
+// the parent updates the :initial-episode prop. Load the matching stream with
+// fromRoomSync=true so we don't re-emit to the room (which would loop forever).
+watch(() => props.initialEpisode, (epNum) => {
+  if (!props.room || !epNum || episodes.value.length === 0) return
+  const ep = episodes.value.find(e => e.number === epNum)
+  if (ep) selectEpisode(ep, true)
 })
 
 onBeforeUnmount(() => {

@@ -27,7 +27,8 @@
         <article
           v-for="(post, i) in data.posts.slice(0, 3)"
           :key="post.link ?? `tg-${i}`"
-          class="flex flex-col gap-2 p-3 rounded-xl bg-black/30 backdrop-blur-sm hover:bg-black/40 transition min-w-0"
+          class="gap-2 p-3 rounded-xl bg-black/30 backdrop-blur-sm hover:bg-black/40 transition min-w-0"
+          :class="i === 0 ? 'flex flex-col' : 'hidden md:flex md:flex-col'"
         >
           <!--
             Optional thumbnail. The Telegram scraper extracts background-
@@ -39,7 +40,7 @@
           -->
           <div
             v-if="post.image_url"
-            class="relative aspect-square overflow-hidden rounded-lg bg-white/5 flex-shrink-0"
+            class="relative h-24 md:h-28 overflow-hidden rounded-lg bg-white/5 flex-shrink-0"
           >
             <img
               :src="post.image_url"

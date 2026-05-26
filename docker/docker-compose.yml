@@ -348,6 +348,7 @@ services:
       THEMES_SERVICE_URL: http://themes:8086
       LIBRARY_SERVICE_URL: http://library:8089
       NOTIFICATIONS_SERVICE_URL: http://notifications:8090
+      WATCH_TOGETHER_SERVICE_URL: http://watch-together:8091
       GRAFANA_SERVICE_URL: http://grafana:3000
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
@@ -611,6 +612,43 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # workstream watch-together, v1.0 Phase 1 — co-watch service on port 8091.
+  # Redis-only state (no Postgres). REST endpoints for room lifecycle,
+  # WebSocket /ws for sync/chat/reactions, drift detection engine.
+  # See .planning/workstreams/watch-together/phases/01-backend-foundation/
+  watch-together:
+    build:
+      context: ..
+      dockerfile: services/watch-together/Dockerfile
+    container_name: animeenigma-watch-together
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8091
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      # WT-FOUND-02 — sliding TTL on Redis keys + 5min grace.
+      WATCH_TOGETHER_ROOM_TTL: ${WATCH_TOGETHER_ROOM_TTL:-15m}
+      WATCH_TOGETHER_GRACE_PERIOD: ${WATCH_TOGETHER_GRACE_PERIOD:-5m}
+      # WT-NF-02 — capacity per room.
+      WATCH_TOGETHER_MAX_MEMBERS: ${WATCH_TOGETHER_MAX_MEMBERS:-10}
+      # Invite URLs in POST /rooms response. Defaults to production origin;
+      # override for dev/staging via .env.
+      WATCH_TOGETHER_PUBLIC_BASE_URL: ${WATCH_TOGETHER_PUBLIC_BASE_URL:-https://animeenigma.ru}
+      # CORS / Origin allowlist gate. Set to true in dev if connecting from
+      # a non-canonical origin. Production should leave this false.
+      WATCH_TOGETHER_ALLOW_ALL_ORIGINS: ${WATCH_TOGETHER_ALLOW_ALL_ORIGINS:-false}
+    ports:
+      - "127.0.0.1:8091:8091"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8091/health"]
       interval: 30s
       timeout: 5s
       retries: 3

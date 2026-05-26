@@ -320,7 +320,11 @@ func TestListEpisodes_Frieren(t *testing.T) {
 
 // --- ListServers --------------------------------------------------------
 
-func TestListServers_BothTServerAndHServer(t *testing.T) {
+// TestListServers_OnlyTServer — AUTO-275. AnimeFever's watch page offers
+// tserver + hserver, but the provider advertises ONLY tserver: hserver is a
+// dead-end (no parseable sources literal) and exists only to produce
+// false-positive stream_segment DOWN alerts. hserver must never appear.
+func TestListServers_OnlyTServer(t *testing.T) {
 	watchHTML := readFixture(t, "watch_ep28.html")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/watch/") {
@@ -340,20 +344,47 @@ func TestListServers_BothTServerAndHServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListServers: %v", err)
 	}
-	if len(servers) != 2 {
-		t.Fatalf("ListServers returned %d servers; want exactly 2 (tserver, hserver)", len(servers))
+	if len(servers) != 1 {
+		t.Fatalf("ListServers returned %d servers; want exactly 1 (tserver only; hserver blocked per AUTO-275)", len(servers))
 	}
-	// Order matters per Pitfall 3: tserver first
 	if servers[0].ID != "tserver" {
 		t.Errorf("servers[0].ID = %q; want tserver", servers[0].ID)
 	}
-	if servers[1].ID != "hserver" {
-		t.Errorf("servers[1].ID = %q; want hserver", servers[1].ID)
-	}
 	for _, s := range servers {
+		if s.ID == "hserver" {
+			t.Errorf("hserver must NOT be advertised (AUTO-275 blocklist)")
+		}
 		if s.Type != domain.CategorySub {
 			t.Errorf("server %q Type = %v; want CategorySub", s.ID, s.Type)
 		}
+	}
+}
+
+// TestListServers_StaleCacheFiltersHServer — AUTO-275. A server list cached
+// before the blocklist shipped still contains hserver; ListServers must filter
+// it out on read so the blocked server can't re-surface for the cache TTL.
+func TestListServers_StaleCacheFiltersHServer(t *testing.T) {
+	watchHTML := readFixture(t, "watch_ep28.html")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Cache hit returns before any HTTP fetch; serve benign HTML anyway.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(watchHTML)
+	}))
+	defer srv.Close()
+
+	p, _ := newTestProvider(t, srv, nil)
+	// Pre-seed a legacy cache entry with both servers.
+	p.cache.setServers(context.Background(),
+		"frieren-beyond-journeys-end.14401", "1028", []string{"tserver", "hserver"})
+
+	servers, err := p.ListServers(context.Background(),
+		"frieren-beyond-journeys-end.14401",
+		"frieren-beyond-journeys-end.14401:1028")
+	if err != nil {
+		t.Fatalf("ListServers: %v", err)
+	}
+	if len(servers) != 1 || servers[0].ID != "tserver" {
+		t.Fatalf("stale cache must be filtered to [tserver]; got %v", servers)
 	}
 }
 
@@ -479,6 +510,38 @@ func TestGetStream_AjaxStatusFalse_ReturnsExtractFailed(t *testing.T) {
 	)
 	if !errors.Is(err, domain.ErrExtractFailed) {
 		t.Fatalf("expected ErrExtractFailed for status:false AJAX, got %v", err)
+	}
+}
+
+// TestGetStream_HServerBlocked — AUTO-275. hserver embeds never yield a
+// parseable stream; GetStream must reject the pin BEFORE any upstream fetch so
+// no hserver embed URL ever reaches the extractor (no watch-page GET, no AJAX).
+func TestGetStream_HServerBlocked(t *testing.T) {
+	var upstreamCalls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&upstreamCalls, 1)
+		// Respond benignly so that, if the guard ever leaked, a stream COULD be
+		// produced — making a leak fail loudly instead of silently passing.
+		switch {
+		case r.URL.Path == "/ajax/anime/load_episodes_v2":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"status":true,"value":"<iframe src=\"https://am.vidstream.vip/e/x\"></iframe>","embed":true}`)
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(readFixture(t, "watch_ep28.html"))
+		}
+	}))
+	defer srv.Close()
+
+	p, _ := newTestProvider(t, srv, nil)
+	_, err := p.GetStream(context.Background(),
+		"frieren-beyond-journeys-end.14401",
+		"frieren-beyond-journeys-end.14401:1028", "hserver", domain.CategorySub)
+	if !errors.Is(err, domain.ErrExtractFailed) {
+		t.Fatalf("err = %v; want ErrExtractFailed for blocked hserver", err)
+	}
+	if n := atomic.LoadInt32(&upstreamCalls); n != 0 {
+		t.Errorf("hserver must be rejected before any upstream fetch; upstream calls = %d, want 0", n)
 	}
 }
 

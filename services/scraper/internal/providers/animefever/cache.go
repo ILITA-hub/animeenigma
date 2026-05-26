@@ -32,9 +32,11 @@ const (
 	episodesCacheTTL = 6 * time.Hour
 
 	// serversCacheTTL is the 1h cache for the per-episode server list.
-	// Longer than allanime's 15min because AnimeFever's server set is static
-	// (always tserver+hserver) — what changes is the ctk token (separate
-	// cache below).
+	// Longer than allanime's 15min because AnimeFever's advertised server set
+	// is static (tserver only since AUTO-275; hserver is blocked) — what
+	// changes is the ctk token (separate cache below). Cached entries are
+	// filtered through supportedServers on read, so a pre-AUTO-275 entry
+	// containing hserver cannot re-surface a blocked server.
 	serversCacheTTL = 1 * time.Hour
 
 	// streamTTLCap is the 5min cap on resolved stream URLs (signed m3u8

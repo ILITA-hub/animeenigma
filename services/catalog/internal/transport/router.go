@@ -23,6 +23,7 @@ func NewRouter(
 	subtitlesHandler *handler.SubtitlesHandler,
 	internalCacheHandler *handler.InternalCacheHandler,
 	internalEpisodesHandler *handler.InternalEpisodesHandler,
+	internalEpisodesValidateHandler *handler.InternalEpisodesValidateHandler,
 	spotlightHandler *handler.SpotlightHandler,
 	cfg *config.Config,
 	log *logger.Logger,
@@ -62,6 +63,16 @@ func NewRouter(
 	// Same gateway-non-routing security model as InvalidateRaw above.
 	if internalEpisodesHandler != nil {
 		r.Get("/internal/anime/{shikimoriId}/episodes", internalEpisodesHandler.GetLatestEpisode)
+	}
+
+	// Watch-Together workstream / Phase 04 — WT-STATE-02.
+	// Sibling of /internal/anime/{shikimoriId}/episodes — validates a
+	// (player, episode_id, translation_id) tuple for the watch-together
+	// service's state:change_* inbound handlers. Same root-router,
+	// no-middleware security model. The notifications detector's
+	// /episodes contract is NOT modified.
+	if internalEpisodesValidateHandler != nil {
+		r.Get("/internal/anime/{shikimoriId}/episodes/validate", internalEpisodesValidateHandler.Validate)
 	}
 
 	// API routes
