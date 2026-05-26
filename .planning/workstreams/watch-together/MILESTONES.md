@@ -1,10 +1,15 @@
 # Milestones — `watch-together` workstream
 
-## v1.0 Watch Together Foundation (active)
+## v1.0 Watch Together Foundation (✅ COMPLETE)
 
-**Status:** ⏳ Planning — 0/5 phases delivered
+**Status:** ✅ Shipped — 5/5 phases delivered
 **Started:** 2026-05-25
+**Closed:** 2026-05-26
+**Plans landed:** 41 (Phase 1: 9, Phase 2: 10, Phase 3: 7, Phase 4: 6, Phase 5: 9)
+**Requirements covered:** 51 (WT-FOUND-01..10 + WT-SHELL-01..08 + WT-SYNC-01..10 + WT-STATE-01..05 + WT-POLISH-01..08 + WT-NF-01..07)
+**Phase summaries:** `phases/{01..05}-*/0[1-5]-PHASE-SUMMARY.md`
 **Source design doc:** `/data/animeenigma/docs/superpowers/specs/2026-05-25-watch-together-design.md`
+**Closure summary:** `phases/05-polish/05-PHASE-SUMMARY.md`
 
 **Scope:** A new `services/watch-together/` Go microservice on port 8091 (Redis-only, no Postgres) + WebSocket protocol for playback/state/chat/reaction sync + frontend `WatchTogetherView` with `useWatchTogetherRoom` composable + player-adapter wiring across all 5 players (Kodik via undocumented `kodik_player_api` RPC, HTML5 four via native `<video>`) + ephemeral private friend rooms (2–10 members, dies when empty + 5min grace) + invite-link only + login-required + text chat + emoji reactions + Grafana panel.
 
