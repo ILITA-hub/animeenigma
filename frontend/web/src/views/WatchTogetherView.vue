@@ -100,16 +100,35 @@ const roomId = String(route.params.roomId)
  * View states. Mutually exclusive — the template renders exactly one
  * top-level branch. `errorState` overrides `loading` and the live view;
  * `loading` overrides the live view.
+ *
+ * Plan 05.5 added the `auth-expired` branch which renders a blocking
+ * modal (vs Phase 2's immediate router.push) — gives the user a moment
+ * to read before navigating, and avoids redirecting users who close the
+ * tab without ever consenting to /auth.
  */
-type ErrorState = 'gone' | 'capacity' | null
+type ErrorState = 'gone' | 'capacity' | 'auth-expired' | null
 const loading = ref(true)
 const errorState = ref<ErrorState>(null)
 
 // Cached anime id from the snapshot — used by the back button in the
-// empty / capacity states. Captured from the REST snapshot since the
-// composable's `room` ref might already be null by the time we render
-// the empty state (room:closed clears it).
+// empty / capacity states + the mid-session room:closed redirect. We
+// also persist it to sessionStorage so a WS-only room:closed event has
+// a redirect target even after the composable's `room` ref has been
+// cleared (or on a page reload where the REST snapshot races the WS).
+//
+// Key is scoped per-room so two simultaneously-mounted views don't
+// stomp each other (defensive — the router only ever mounts one view
+// at a time, but the cost of scoping is zero).
+const LAST_ANIME_ID_STORAGE_KEY = `wt-last-anime-id-${roomId}`
 const lastAnimeId = ref<string | null>(null)
+try {
+  const cached = sessionStorage.getItem(LAST_ANIME_ID_STORAGE_KEY)
+  if (cached) lastAnimeId.value = cached
+} catch {
+  // Privacy modes can throw on sessionStorage access; silent failure.
+}
+// Static modal heading id — referenced by aria-labelledby on the dialog.
+const modalTitleId = 'wt-auth-expired-modal-title'
 
 // Instantiate the composable once. The composable's internal state lives
 // across the view's lifetime; auto-disconnect on unmount is wired both by
@@ -143,21 +162,35 @@ roomHandle.onError((e) => {
     errorState.value = 'capacity'
     return
   }
-  if (e.code === ERR_AUTH_EXPIRED) {
-    // Belt-and-suspenders: write returnUrl + explicit ?next= query so the
-    // resume target is preserved across BOTH redirect paths.
-    try {
-      sessionStorage.setItem('returnUrl', route.fullPath)
-    } catch {
-      // Privacy modes can throw; silent failure is OK.
-    }
-    router.push({ path: '/auth', query: { next: route.fullPath } })
-    return
-  }
+  // Plan 05.5: AUTH_EXPIRED handled via the dedicated onAuthExpired
+  // subscription below — keeps the modal branch decoupled from the
+  // catch-all onError dispatcher. The ERR_AUTH_EXPIRED constant is still
+  // imported as a compile-time guard against drift.
+  void ERR_AUTH_EXPIRED
+})
+
+roomHandle.onAuthExpired(() => {
+  // Plan 05.5 (WT-POLISH-06): present a blocking modal instead of an
+  // immediate router.push. The user clicks Login to navigate to /auth
+  // (preserving the resume URL); if they navigate away without clicking,
+  // they don't end up at an auth page they didn't ask for.
+  errorState.value = 'auth-expired'
 })
 
 roomHandle.onRoomClosed(() => {
-  errorState.value = 'gone'
+  // Plan 05.5 (WT-POLISH-05): mid-session room:closed event arrives via
+  // WS while the user is actively watching. Redirect to the anime watch
+  // page with a toast so the user lands somewhere useful — vs the REST
+  // 410 path (bootstrap catch block) which still shows the empty
+  // "room ended" landing page because the user typed a stale URL.
+  toast.push(t('watch_together.room_ended_redirect_toast'), 'info')
+  const target = lastAnimeId.value ? `/anime/${lastAnimeId.value}/watch` : '/'
+  try {
+    sessionStorage.removeItem(LAST_ANIME_ID_STORAGE_KEY)
+  } catch {
+    // Privacy modes can throw; silent failure is OK.
+  }
+  router.push(target)
 })
 
 // Pre-fetch REST snapshot to short-circuit 410-Gone before opening the
@@ -168,6 +201,15 @@ async function bootstrap() {
   try {
     const snap = await getRoom(roomId)
     lastAnimeId.value = snap.room.anime_id
+    // Plan 05.5: persist for WS-only room:closed events that may arrive
+    // after the composable resets its `room` ref. Privacy modes throw on
+    // sessionStorage; silent failure is OK — the in-memory ref still
+    // holds the value for the duration of THIS mount.
+    try {
+      sessionStorage.setItem(LAST_ANIME_ID_STORAGE_KEY, snap.room.anime_id)
+    } catch {
+      // ignore
+    }
     // The composable's connect() will refetch internally too — that's
     // fine; the snapshot is idempotent and the second call comes from
     // the SAME network round-trip path. (We could pre-pass it, but the
@@ -223,6 +265,19 @@ function goBackToAnime() {
     return
   }
   router.push('/')
+}
+
+// Plan 05.5 — invoked from the auth-expired modal's Login button. Writes
+// returnUrl (consumed by the router's beforeEach guard) AND passes the
+// explicit `next=` query so the auth view's own resume logic also sees
+// it (belt-and-suspenders — mirrors the Phase 2 redirect pattern).
+function onAuthExpiredLoginClick() {
+  try {
+    sessionStorage.setItem('returnUrl', route.fullPath)
+  } catch {
+    // Privacy modes can throw; silent failure is OK.
+  }
+  router.push({ path: '/auth', query: { next: route.fullPath } })
 }
 
 // Computed accessors that unwrap the composable's refs for template
@@ -288,6 +343,39 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
     >
       {{ t('watch_together.capacity_full_back_button') }}
     </button>
+  </div>
+
+  <!-- Auth-expired — composable.onAuthExpired fired (Plan 05.5,
+       WT-POLISH-06). Blocking modal; the user clicks Login to navigate
+       to /auth with the resume URL preserved. -->
+  <div
+    v-else-if="errorState === 'auth-expired'"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
+    role="dialog"
+    aria-modal="true"
+    :aria-labelledby="modalTitleId"
+  >
+    <div
+      class="max-w-md w-full p-6 rounded-lg bg-background border border-foreground/20 flex flex-col gap-4 shadow-lg"
+    >
+      <h2
+        :id="modalTitleId"
+        class="text-xl font-semibold"
+      >
+        {{ t('watch_together.auth_expired_modal_title') }}
+      </h2>
+      <p class="text-foreground/80 font-medium">
+        {{ t('watch_together.auth_expired_modal_body') }}
+      </p>
+      <button
+        type="button"
+        data-testid="wt-auth-expired-login"
+        class="px-4 py-2 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors self-end"
+        @click="onAuthExpiredLoginClick"
+      >
+        {{ t('watch_together.auth_expired_modal_login_button') }}
+      </button>
+    </div>
   </div>
 
   <!-- Live room layout — player column + sidebar column, burst overlay
