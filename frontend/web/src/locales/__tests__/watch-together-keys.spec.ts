@@ -112,6 +112,12 @@ describe('watch_together i18n parity', () => {
     // Phase 05 (polish) Plan 05.4 — mobile bottom-sheet tab labels (WT-POLISH-03).
     'bottom_sheet_tab_chat',
     'bottom_sheet_tab_reactions',
+    // Phase 05 (polish) Plan 05.5 — capacity-full / room-closed redirect /
+    // auth-expired modal copy (WT-POLISH-04..06). 4 keys, en + ru parity-locked.
+    'room_ended_redirect_toast',
+    'auth_expired_modal_title',
+    'auth_expired_modal_body',
+    'auth_expired_modal_login_button',
   ] as const
 
   it.each(expectedKeys)('en.json has watch_together.%s as a string', (key) => {

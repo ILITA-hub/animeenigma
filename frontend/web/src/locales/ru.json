@@ -1026,7 +1026,11 @@
     "state_change_player_unavailable": "Этот плеер не имеет эпизодов для этого аниме",
     "state_change_translation_unavailable": "Озвучка недоступна для этого эпизода",
     "bottom_sheet_tab_chat": "Чат",
-    "bottom_sheet_tab_reactions": "Реакции"
+    "bottom_sheet_tab_reactions": "Реакции",
+    "room_ended_redirect_toast": "Эта комната Watch Together закрыта.",
+    "auth_expired_modal_title": "Сессия истекла",
+    "auth_expired_modal_body": "Войдите снова, чтобы вернуться в комнату.",
+    "auth_expired_modal_login_button": "Войти"
   },
   "spotlight": {
     "regionLabel": "Подборка дня",
