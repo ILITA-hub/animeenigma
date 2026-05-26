@@ -109,6 +109,9 @@ describe('watch_together i18n parity', () => {
     'state_change_episode_unavailable',
     'state_change_player_unavailable',
     'state_change_translation_unavailable',
+    // Phase 05 (polish) Plan 05.4 — mobile bottom-sheet tab labels (WT-POLISH-03).
+    'bottom_sheet_tab_chat',
+    'bottom_sheet_tab_reactions',
   ] as const
 
   it.each(expectedKeys)('en.json has watch_together.%s as a string', (key) => {

@@ -1024,7 +1024,9 @@
     "player_tab_raw": "Raw (JP)",
     "state_change_episode_unavailable": "Episode unavailable for this anime / player / translation combo",
     "state_change_player_unavailable": "This player has no episodes for this anime",
-    "state_change_translation_unavailable": "Translation unavailable for this episode"
+    "state_change_translation_unavailable": "Translation unavailable for this episode",
+    "bottom_sheet_tab_chat": "Chat",
+    "bottom_sheet_tab_reactions": "Reactions"
   },
   "spotlight": {
     "regionLabel": "Today's spotlight",
