@@ -1,14 +1,14 @@
 # Roadmap: AnimeEnigma `watch-together` workstream
 
 **Workstream:** watch-together (parallel to root `v3.x` scraper work, parallel to other workstreams `notifications`, `raw-jp`, `social`, `ui-ux-audit`, `hero-spotlight`)
-**Active milestone:** v1.0 Watch Together Foundation
+**Active milestone:** None — v1.0 Watch Together Foundation shipped 2026-05-26 (5/5 phases complete)
 **Phase numbering:** Workstream-local — restarts at 1 inside each milestone (`v1.0` phases live at `phases/01-*`..`phases/05-*`; future `v1.1` phases at `milestones/v1.1-phases/01-*`).
 **Source design doc:** `/data/animeenigma/docs/superpowers/specs/2026-05-25-watch-together-design.md`
 **Requirements:** `REQUIREMENTS.md`
 
 ## Milestones
 
-- ⏳ **v1.0 Watch Together Foundation** — Active (4/5 phases shipped). Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions, validated episode/player/translation switching with sender-only error UX. Phase 1 (Backend Foundation) closed 2026-05-25; Phase 2 (Frontend Shell + Chat) closed 2026-05-25; Phase 3 (Player Sync — All 5) closed 2026-05-25; Phase 4 (State Switching) closed 2026-05-25.
+- ✅ **v1.0 Watch Together Foundation** — Complete (5/5 phases shipped 2026-05-26). Ephemeral private friend rooms (2–10), all 5 players syncable (Kodik via undocumented `kodik_player_api` RPC), text chat + emoji reactions, validated episode/player/translation switching with sender-only error UX, 5min reconnect grace, mobile bottom-sheet, capacity/room-closed/auth-expired UX, Grafana dashboard (13 panels), daily Kodik canary CI. Phase 1 (Backend Foundation) closed 2026-05-25; Phase 2 (Frontend Shell + Chat) closed 2026-05-25; Phase 3 (Player Sync — All 5) closed 2026-05-25; Phase 4 (State Switching) closed 2026-05-25; Phase 5 (Polish + Production-Ship) closed 2026-05-26. **41 plans, 51 requirements covered.**
 - ⏳ **v1.1 Per-User Player** — Deferred. Mixed-language friend groups watch in their own language while sharing the timeline. Needs its own brainstorm.
 - ⏳ **v1.2 Persistent Named Rooms** — Conditional. "Saturday Anime Night" rooms that survive past empty state. Adds Postgres + chat retention.
 - ⏳ **v1.3 Voice Piggyback** — Conditional, post v1.1 usage data.
@@ -21,7 +21,7 @@
 | 2 | Frontend Shell + Chat | ✅ Complete (2026-05-25 — 10 plans, 7/7 acceptance, two-browser Playwright smoke spec authored, chunk 6.57 kB gz / 30 kB budget — see [`02-PHASE-SUMMARY.md`](phases/02-frontend-shell/02-PHASE-SUMMARY.md)) |
 | 3 | Player Sync — All 5 | ✅ Complete (2026-05-25 — 7 plans, 9/9 acceptance, two-browser sync e2e spec authored across all 5 players + drift via CDP throttling, Kodik RPC daily canary shipped, 188 unit/component tests + 21 e2e listings — see [`03-PHASE-SUMMARY.md`](phases/03-player-sync/03-PHASE-SUMMARY.md)) |
 | 4 | State Switching | ✅ Complete (2026-05-25 — 6 plans [04.1–04.6], 5/5 acceptance, WT-STATE-01..05 covered; catalog `/internal/anime/{id}/episodes/validate` endpoint + watch-together CatalogClient (3s timeout + 5s cache) + validated `handleChangeEpisode/Player/Translation` handlers + PlayerTabBar.vue + 5-player switcher guards + sender-only error toasts + two-browser e2e spec (4 tests × 3 projects = 12 listings); 50 new backend unit tests + 27 frontend vitest cases on plan-touched specs; soft prerequisite D-04-01 (hero-spotlight `platform_stats.go`) carries to Phase 5 — see [`04-PHASE-SUMMARY.md`](phases/04-state-switching/04-PHASE-SUMMARY.md)) |
-| 5 | Polish + Production-Ship | ⏳ Not started |
+| 5 | Polish + Production-Ship | ✅ Complete (2026-05-26 — 9 plans [05.1–05.9], 9/9 acceptance, WT-POLISH-01..08 + WT-NF-05..07 + WT-SYNC-10 cron covered; GraceManager (5min reconnect window) + 5 new Prometheus metrics + ReactionBurstOverlay polish (8-cap FIFO + 8-column stratification) + RoomSidebar mobile bottom-sheet + WatchTogetherView capacity/room-closed/auth-expired UX + Grafana dashboard (13 panels) + Kodik canary CI cron + CLAUDE.md §Watch Together finalization + WT-NF-05 dep audit attestation; smoke `scripts/smoke-watch-together-v1.sh` exits 0 on 3 consecutive runs — see [`05-PHASE-SUMMARY.md`](phases/05-polish/05-PHASE-SUMMARY.md)) |
 
 ## Next
 
