@@ -29,6 +29,7 @@ export type SpotlightIconName =
   | 'shuffle'
   | 'wrench'
   | 'lightning'
+  | 'star'
 
 export interface CardToken {
   accent: SpotlightAccent

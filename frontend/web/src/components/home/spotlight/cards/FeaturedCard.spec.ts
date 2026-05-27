@@ -102,14 +102,15 @@ describe('FeaturedCard', () => {
     expect(watchLink).toBeDefined()
   })
 
-  it('links announced status CTA to anime detail (not watch)', () => {
+  it('links announced status PRIMARY CTA to anime detail (not watch)', () => {
     const w = mountCard({ data: mk('announced') })
-    const links = w.findAllComponents(RouterLinkStub)
-    const detailLink = links.find((l) => {
-      const to = l.props('to') as string
-      return typeof to === 'string' && to === '/anime/a1'
-    })
-    expect(detailLink).toBeDefined()
+    // Target the primary button specifically — secondary also links to /anime/a1
+    // so a generic link search would pass trivially.
+    const primaryBtn = w.find('.btn-primary-hero')
+    expect(primaryBtn.exists()).toBe(true)
+    const primaryLink = primaryBtn.findComponent(RouterLinkStub)
+    const to = primaryLink.props('to') as string
+    expect(to).toBe('/anime/a1')
   })
 
   it('renders the add-to-list secondary CTA', () => {

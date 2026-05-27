@@ -146,6 +146,18 @@
   >
     <path d="M13 2 3 14h7l-1 8 10-12h-7z" />
   </svg>
+
+  <svg
+    v-else-if="name === 'star'"
+    :class="forwardedClass"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    :aria-hidden="ariaHidden"
+    :aria-label="forwardedAriaLabel"
+    :role="role"
+  >
+    <path d="M12 2l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.8 6 21l1.2-6.6L2.4 9.8l6.6-.9z" />
+  </svg>
 </template>
 
 <script setup lang="ts">

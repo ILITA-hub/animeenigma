@@ -2,29 +2,27 @@
   <!--
     Workstream hero-spotlight — Neon Tokyo redesign (feat/homepage-neon-tokyo-redesign).
 
-    Full-bleed cinematic hero card for the "featured" spotlight card type.
-    Full-bleed cinematic hero for the featured spotlight card type
-    (type: 'featured') as the backend resolver was also renamed in the same
-    release. Status-aware eyebrow/CTA:
+    Full-bleed cinematic hero card for the "featured" spotlight card type
+    (type: 'featured'). Status-aware eyebrow/CTA:
       - ongoing  → "Now airing" + "Watch · ep. N" (aired+1)
       - announced → "Season announcement" + "Remind me" (links to detail)
       - released/other → "Featured today" + "Start watching"
   -->
   <article class="featured-hero">
-    <div class="featured-bg" :style="{ backgroundImage: posterBg }" />
+    <div class="featured-bg" :style="{ backgroundImage: posterBg }" aria-hidden="true" />
     <div class="featured-content">
       <p class="featured-eyebrow">
         <span class="pulse" aria-hidden="true" />
         {{ eyebrow }}
         <template v-if="data.anime.season"><span class="sep">·</span>{{ data.anime.season }}</template>
       </p>
-      <h1 class="featured-title">
+      <h3 class="featured-title">
         {{ getLocalizedTitle(data.anime.name, data.anime.name_ru, data.anime.name_jp) }}
         <span v-if="data.anime.name_jp" class="jp">{{ data.anime.name_jp }}</span>
-      </h1>
+      </h3>
       <div class="featured-meta">
         <span v-if="data.anime.score" class="score">
-          <SpotlightIcon name="play" class="w-3.5 h-3.5" /> {{ data.anime.score.toFixed(1) }}
+          <SpotlightIcon name="star" class="w-3.5 h-3.5" /> {{ data.anime.score.toFixed(1) }}
         </span>
         <span v-if="data.anime.year">{{ data.anime.year }}</span>
         <span v-if="data.anime.episodes_count" class="dot" />

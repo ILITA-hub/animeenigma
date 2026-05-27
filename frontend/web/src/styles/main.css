@@ -387,8 +387,9 @@ body {
    Three CTA hierarchies the v1.1-polish refactor needs to reuse across
    9 card SFCs:
 
-     .cta-hero  — Primary, "Watch →" type action on the FeaturedCard /
-                  ContinueWatchingNew cards. Bold, accent-filled.
+     .cta-hero  — Primary, "Watch →" type action on ContinueWatchingNew and
+                  similar cards. Bold, accent-filled. (FeaturedCard uses its
+                  own scoped .btn-primary-hero instead.)
      .cta-card  — Secondary, "Open post →" / "Resume" on cards where the
                   primary action sits elsewhere. Glass-pill.
      .cta-text  — Tertiary, inline-text "+ 2 more →" link. No background.
