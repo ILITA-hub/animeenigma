@@ -24,8 +24,16 @@ func testLogger() *logger.Logger {
 
 // fakeAnimeSearcher implements animeSearcher with handwritten state
 // recording. Pattern: services/catalog/internal/service/scraper_test.go.
+//
+// Two usage modes:
+//  1. items+err — every call returns the same items/err (original mode).
+//  2. byCall    — each element in byCall is returned for that call index
+//     (call 0 → byCall[0], call 1 → byCall[1], …). When the call index
+//     exceeds len(byCall)-1 the last element is repeated. err still applies
+//     to every call in byCall mode.
 type fakeAnimeSearcher struct {
 	items       []*domain.Anime
+	byCall      [][]*domain.Anime // per-call sequences; nil = use items
 	err         error
 	calls       int32
 	lastFilters domain.SearchFilters
@@ -33,10 +41,18 @@ type fakeAnimeSearcher struct {
 }
 
 func (f *fakeAnimeSearcher) Search(_ context.Context, filters domain.SearchFilters) ([]*domain.Anime, int64, error) {
-	atomic.AddInt32(&f.calls, 1)
+	n := int(atomic.AddInt32(&f.calls, 1)) - 1 // 0-based call index
 	f.mu.Lock()
 	f.lastFilters = filters
 	f.mu.Unlock()
+	if f.byCall != nil {
+		idx := n
+		if idx >= len(f.byCall) {
+			idx = len(f.byCall) - 1
+		}
+		items := f.byCall[idx]
+		return items, int64(len(items)), f.err
+	}
 	return f.items, int64(len(f.items)), f.err
 }
 

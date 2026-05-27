@@ -52,7 +52,7 @@ type playerRecsFetcher interface {
 // rule and matches the design doc.
 const personalPickTrendingPoolSize = 10
 
-// personalPickTTL — 24h, mirroring anime_of_day. The day-keyed cache
+// personalPickTTL — 24h, mirroring featured. The day-keyed cache
 // rotates at UTC midnight via DateKeyUTC.
 const personalPickTTL = 24 * time.Hour
 

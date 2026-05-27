@@ -221,7 +221,7 @@ func main() {
 	// aggregator wired with all 9 resolvers:
 	//
 	//   Static cards (Phase 1):
-	//     1. anime_of_day        — random anime (top-of-day, cached 24h)
+	//     1. featured            — curated-pin or daily pick (cached 24h)
 	//     2. random_tail         — random anime from the bottom of the catalog
 	//     3. latest_news         — newest changelog entries via web client
 	//     4. platform_stats      — global counters from postgres
@@ -248,7 +248,7 @@ func main() {
 	prometheusClient := prometheus.NewClient(cfg.Prometheus.URL)
 	spotlightResolvers := []spotlight.Resolver{
 		// Static cards (Phase 1)
-		cards.NewAnimeOfDayResolver(animeRepo, redisCache, log),
+		cards.NewFeaturedResolver(animeRepo, redisCache, log),
 		cards.NewRandomTailResolver(animeRepo, redisCache, log),
 		cards.NewLatestNewsResolver(spotlightWebClient, redisCache, spotlightRng, log),
 		cards.NewPlatformStatsResolver(prometheusClient, redisCache, log),

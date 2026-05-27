@@ -31,7 +31,7 @@ type ChangelogEntry struct {
 }
 
 // Card is the outer discriminated-union envelope. Each resolver produces
-// a Card with its own Type discriminator (e.g. "anime_of_day") and a
+// a Card with its own Type discriminator (e.g. "featured") and a
 // per-type Data struct embedded as `any`. The TypeScript side narrows on
 // the `type` field.
 type Card struct {
@@ -39,9 +39,9 @@ type Card struct {
 	Data any    `json:"data"`
 }
 
-// AnimeOfDayData is the payload for `Card{Type: "anime_of_day"}`.
-// ReasonI18nKey is optional — omitted from JSON when empty.
-type AnimeOfDayData struct {
+// FeaturedData is the payload for `Card{Type: "featured"}` — a single
+// hero anime. ReasonI18nKey is optional — omitted from JSON when empty.
+type FeaturedData struct {
 	Anime         domain.Anime `json:"anime"`
 	ReasonI18nKey string       `json:"reason_i18n_key,omitempty"`
 }

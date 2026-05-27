@@ -3,7 +3,7 @@ package spotlight
 import "time"
 
 // DateSeedUTC returns the date-derived integer used by deterministic
-// per-day pickers (HSB-BE-10 anime_of_day, HSB-BE-11 random_tail).
+// per-day pickers (HSB-BE-10 featured, HSB-BE-11 random_tail).
 // UTC is the source of truth so a server timezone change does not
 // shift the picked anime mid-day. Formula: YYYY*100*32 + MM*32 + DD.
 //

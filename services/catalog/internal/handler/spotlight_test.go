@@ -71,7 +71,7 @@ func TestSpotlightHandler_Get_Envelope(t *testing.T) {
 	fake := &fakeAggregator{
 		resp: &spotlight.Response{
 			Cards: []spotlight.Card{
-				{Type: "anime_of_day", Data: nil},
+				{Type: "featured", Data: nil},
 				{Type: "random_tail", Data: nil},
 			},
 			GeneratedAt: "2026-05-21T00:00:00Z",
@@ -148,7 +148,7 @@ func TestSpotlightHandler_Get_FlagOff_Returns404NoBody(t *testing.T) {
 func TestSpotlightHandler_Get_OptionalAuth_DoesNot401(t *testing.T) {
 	fake := &fakeAggregator{
 		resp: &spotlight.Response{
-			Cards:       []spotlight.Card{{Type: "anime_of_day", Data: nil}},
+			Cards:       []spotlight.Card{{Type: "featured", Data: nil}},
 			GeneratedAt: "2026-05-21T00:00:00Z",
 		},
 	}
@@ -223,7 +223,7 @@ func TestSpotlightHandler_Get_AggregatorError_Returns500EmptyCards(t *testing.T)
 func TestSpotlightHandler_Get_NoEnvelopeWrapper(t *testing.T) {
 	fake := &fakeAggregator{
 		resp: &spotlight.Response{
-			Cards:       []spotlight.Card{{Type: "anime_of_day", Data: map[string]string{"k": "v"}}},
+			Cards:       []spotlight.Card{{Type: "featured", Data: map[string]string{"k": "v"}}},
 			GeneratedAt: "2026-05-21T00:00:00Z",
 		},
 	}
@@ -247,7 +247,7 @@ func TestSpotlightHandler_Get_NoEnvelopeWrapper(t *testing.T) {
 func TestSpotlightHandler_Get_NoClaims_UserIDNil_JWTEmpty(t *testing.T) {
 	fake := &fakeAggregator{
 		resp: &spotlight.Response{
-			Cards:       []spotlight.Card{{Type: "anime_of_day"}},
+			Cards:       []spotlight.Card{{Type: "featured"}},
 			GeneratedAt: "2026-05-21T00:00:00Z",
 		},
 	}
@@ -279,7 +279,7 @@ func TestSpotlightHandler_Get_NoClaims_UserIDNil_JWTEmpty(t *testing.T) {
 func TestSpotlightHandler_Get_WithClaims_UserIDPopulated_JWTForwarded(t *testing.T) {
 	fake := &fakeAggregator{
 		resp: &spotlight.Response{
-			Cards:       []spotlight.Card{{Type: "anime_of_day"}},
+			Cards:       []spotlight.Card{{Type: "featured"}},
 			GeneratedAt: "2026-05-21T00:00:00Z",
 		},
 	}
@@ -321,7 +321,7 @@ func TestSpotlightHandler_Get_WithClaims_UserIDPopulated_JWTForwarded(t *testing
 func TestSpotlightHandler_Get_InvalidJWT_TreatedAsAnon(t *testing.T) {
 	fake := &fakeAggregator{
 		resp: &spotlight.Response{
-			Cards:       []spotlight.Card{{Type: "anime_of_day"}},
+			Cards:       []spotlight.Card{{Type: "featured"}},
 			GeneratedAt: "2026-05-21T00:00:00Z",
 		},
 	}

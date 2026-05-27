@@ -28,7 +28,7 @@ func TestRandomTail_Resolve_CallsSearch_WithPage3PageSize100(t *testing.T) {
 
 	f := repo.snapshotFilters()
 	if f.Page != 3 {
-		t.Errorf("Page = %d, want 3 (ranks 201..300, outside anime_of_day's top-200 pool)", f.Page)
+		t.Errorf("Page = %d, want 3 (ranks 201..300, outside featured's top-200 pool)", f.Page)
 	}
 	if f.PageSize != 100 {
 		t.Errorf("PageSize = %d, want 100", f.PageSize)

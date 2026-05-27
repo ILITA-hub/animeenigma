@@ -25,9 +25,9 @@ func TestTypes_JSONShape(t *testing.T) {
 		mustNotContain string // a substring that MUST NOT appear (omitempty check)
 	}{
 		{
-			name:           "anime_of_day omits reason_i18n_key when empty",
-			card:           Card{Type: "anime_of_day", Data: AnimeOfDayData{Anime: domain.Anime{Name: "X"}}},
-			wantType:       "anime_of_day",
+			name:           "featured omits reason_i18n_key when empty",
+			card:           Card{Type: "featured", Data: FeaturedData{Anime: domain.Anime{Name: "X"}}},
+			wantType:       "featured",
 			wantInnerKey:   "anime",
 			mustNotContain: "reason_i18n_key",
 		},

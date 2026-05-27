@@ -1,6 +1,6 @@
 // Package cards contains the per-card resolvers that implement the
 // spotlight.Resolver interface (Plan 01-01 types.go). Phase 1 ships
-// four resolvers: anime_of_day, random_tail, latest_news, platform_stats.
+// four resolvers: featured, random_tail, latest_news, platform_stats.
 //
 // DELIBERATE DIVERGENCE 1 (workstream-wide, baked into acceptance):
 // resolvers use manual `cache.Get` + `errors.Is(err, cache.ErrNotFound)` +
@@ -30,49 +30,53 @@ type animeSearcher interface {
 	Search(ctx context.Context, f domain.SearchFilters) ([]*domain.Anime, int64, error)
 }
 
-// minScoreAnimeOfDay is the lower-bound score filter for the daily pick.
+// minScoreFeatured is the lower-bound score filter for the daily pick.
 // Per CONTEXT.md decision: only "top-rated" anime are eligible.
-const minScoreAnimeOfDay = 8.0
+const minScoreFeatured = 8.0
 
-// animeOfDayPoolSize is the candidate pool — first 200 anime by
+// featuredPoolSize is the candidate pool — first 200 anime by
 // (sort_priority DESC, score DESC) with score >= 8.0. Date-seeded
 // modulus over this slice gives the day's pick.
-const animeOfDayPoolSize = 200
+const featuredPoolSize = 200
 
 // cardTTL is the per-card cache lifetime — one calendar day. Cards
 // roll over at UTC midnight via the date suffix in the cache key.
 const cardTTL = 24 * time.Hour
 
-// AnimeOfDayResolver implements spotlight.Resolver for the
-// `anime_of_day` card. Picks one anime per UTC calendar day from the
-// top-200 highly-rated candidates by repo.Search ordering.
-type AnimeOfDayResolver struct {
+// FeaturedResolver implements spotlight.Resolver for the `featured` card.
+// An admin-pinned anime (sort_priority > 0) takes precedence over the
+// daily-seeded pick from the top-200 highly-rated candidates.
+type FeaturedResolver struct {
 	repo  animeSearcher
 	cache cache.Cache
 	log   *logger.Logger
 }
 
-// NewAnimeOfDayResolver constructs the resolver. All deps are required;
+// NewFeaturedResolver constructs the resolver. All deps are required;
 // nil cache or repo will panic on first Resolve.
-func NewAnimeOfDayResolver(repo animeSearcher, c cache.Cache, log *logger.Logger) *AnimeOfDayResolver {
-	return &AnimeOfDayResolver{repo: repo, cache: c, log: log}
+func NewFeaturedResolver(repo animeSearcher, c cache.Cache, log *logger.Logger) *FeaturedResolver {
+	return &FeaturedResolver{repo: repo, cache: c, log: log}
 }
 
 // Type returns the card discriminator string consumed by the frontend's
 // TypeScript discriminated union.
-func (r *AnimeOfDayResolver) Type() string { return "anime_of_day" }
+func (r *FeaturedResolver) Type() string { return "featured" }
 
-// Resolve returns the day's anime_of_day card. userID is ignored — the
-// pick is global (every user sees the same anime on the same UTC day).
+// Resolve returns the featured card. userID is ignored — the pick is
+// global (every user sees the same anime on the same UTC day).
 //
-// Eligibility: card is dropped (returns nil, nil) when the candidate
-// pool is empty (e.g. fresh DB with no animes >= 8.0). The (nil, nil)
+// Priority: an admin-pinned anime (sort_priority > 0) wins over the
+// daily-seeded pick. If no pinned anime exists, falls back to the
+// date-seeded pick from the top-rated pool.
+//
+// Eligibility: card is dropped (returns nil, nil) when both the pinned
+// query and the candidate pool are empty (e.g. fresh DB). The (nil, nil)
 // path does NOT write to cache (Pitfall 5 from 01-RESEARCH.md).
-func (r *AnimeOfDayResolver) Resolve(ctx context.Context, _ *string) (*spotlight.Card, error) {
-	key := "spotlight:anime_of_day:" + spotlight.DateKeyUTC(time.Now())
+func (r *FeaturedResolver) Resolve(ctx context.Context, _ *string) (*spotlight.Card, error) {
+	key := "spotlight:featured:" + spotlight.DateKeyUTC(time.Now())
 
 	// --- Cache GET path -------------------------------------------------
-	var cached spotlight.AnimeOfDayData
+	var cached spotlight.FeaturedData
 	if err := r.cache.Get(ctx, key, &cached); err == nil {
 		return &spotlight.Card{Type: r.Type(), Data: cached}, nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
@@ -82,17 +86,34 @@ func (r *AnimeOfDayResolver) Resolve(ctx context.Context, _ *string) (*spotlight
 		r.log.Warnw("spotlight.cache_get_failed", "type", r.Type(), "key", key, "error", err)
 	}
 
-	// --- Cache MISS path: compute ---------------------------------------
-	sm := minScoreAnimeOfDay
+	// --- Curated pin (sort_priority > 0) wins when present --------------
+	// The repo orders by sort_priority DESC naturally; request 1 result
+	// and verify it actually has sort_priority > 0 (i.e. is truly pinned).
+	pinned, _, perr := r.repo.Search(ctx, domain.SearchFilters{
+		Sort:     "sort_priority",
+		Order:    "desc",
+		Page:     1,
+		PageSize: 1,
+	})
+	if perr == nil && len(pinned) > 0 && pinned[0].SortPriority > 0 {
+		data := spotlight.FeaturedData{Anime: *pinned[0]}
+		if err := r.cache.Set(ctx, key, data, cardTTL); err != nil {
+			r.log.Warnw("spotlight.cache_set_failed", "type", r.Type(), "key", key, "error", err)
+		}
+		return &spotlight.Card{Type: r.Type(), Data: data}, nil
+	}
+
+	// --- Cache MISS path: daily-seeded pick ----------------------------
+	sm := minScoreFeatured
 	items, _, err := r.repo.Search(ctx, domain.SearchFilters{
 		Sort:     "score",
 		Order:    "desc",
 		ScoreMin: &sm,
 		Page:     1,
-		PageSize: animeOfDayPoolSize,
+		PageSize: featuredPoolSize,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("anime_of_day: repo search: %w", err)
+		return nil, fmt.Errorf("featured: repo search: %w", err)
 	}
 	if len(items) == 0 {
 		// Eligibility = false. Do NOT cache empty (Pitfall 5).
@@ -101,7 +122,7 @@ func (r *AnimeOfDayResolver) Resolve(ctx context.Context, _ *string) (*spotlight
 
 	seed := spotlight.DateSeedUTC(time.Now())
 	picked := items[seed%len(items)]
-	data := spotlight.AnimeOfDayData{Anime: *picked}
+	data := spotlight.FeaturedData{Anime: *picked}
 
 	// --- Cache SET (best-effort) ----------------------------------------
 	if err := r.cache.Set(ctx, key, data, cardTTL); err != nil {

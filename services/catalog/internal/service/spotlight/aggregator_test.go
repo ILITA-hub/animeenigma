@@ -303,7 +303,7 @@ func TestAggregator_OverallTimeout_HitsOverallBudget(t *testing.T) {
 func TestAggregator_EligibilityFilter_DropsNilCardSilently(t *testing.T) {
 	ineligible := &fakeResolver{typ: "ineligible", card: nil, err: nil, sleep: 10 * time.Millisecond}
 	resolvers := []Resolver{
-		&fakeResolver{typ: "anime_of_day", card: &Card{Type: "anime_of_day"}, sleep: 10 * time.Millisecond},
+		&fakeResolver{typ: "featured", card: &Card{Type: "featured"}, sleep: 10 * time.Millisecond},
 		ineligible,
 		&fakeResolver{typ: "random_tail", card: &Card{Type: "random_tail"}, sleep: 10 * time.Millisecond},
 	}
@@ -321,8 +321,8 @@ func TestAggregator_EligibilityFilter_DropsNilCardSilently(t *testing.T) {
 	for _, c := range resp.Cards {
 		gotTypes[c.Type] = true
 	}
-	if !gotTypes["anime_of_day"] {
-		t.Fatalf("expected anime_of_day card present, got types %v", gotTypes)
+	if !gotTypes["featured"] {
+		t.Fatalf("expected featured card present, got types %v", gotTypes)
 	}
 	if !gotTypes["random_tail"] {
 		t.Fatalf("expected random_tail card present, got types %v", gotTypes)
@@ -538,7 +538,7 @@ func (f *capturingResolver) snapshot() (userID *string, jwt string, jwtOK bool, 
 // This is the regression guard for the 9-card production wiring (HSB-BE-02).
 func TestAggregator_NineCards_PassesUserIDAndJWT(t *testing.T) {
 	caps := []*capturingResolver{
-		{typ: "anime_of_day", card: &Card{Type: "anime_of_day"}},
+		{typ: "featured", card: &Card{Type: "featured"}},
 		{typ: "random_tail", card: &Card{Type: "random_tail"}},
 		{typ: "latest_news", card: &Card{Type: "latest_news"}},
 		{typ: "platform_stats", card: &Card{Type: "platform_stats"}},

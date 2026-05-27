@@ -16,7 +16,7 @@ import (
 // PageSize=100. Combined with Sort="score" Order="desc", this fetches
 // the third hundred by (sort_priority DESC, score DESC) — see GOTCHA
 // comment inside Resolve. Page 3 (not 2) so the pool does not overlap
-// `anime_of_day`'s top-200 pool, which previously caused both cards to
+// `featured`'s top-200 pool, which previously caused both cards to
 // surface the same anime on date-seed collisions (e.g. Kimetsu no Yaiba
 // at rank 180 — well-known title users perceive as "top 100").
 const randomTailPage = 3
@@ -27,7 +27,7 @@ const randomTailPageSize = 100
 // RandomTailResolver implements spotlight.Resolver for the
 // `random_tail` card. Picks one anime per UTC calendar day from ranks
 // 201..300 by score — "good but not top-rated" discovery surface that
-// excludes anime_of_day's top-200 pool.
+// excludes featured's top-200 pool.
 type RandomTailResolver struct {
 	repo  animeSearcher
 	cache cache.Cache
