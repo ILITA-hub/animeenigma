@@ -242,12 +242,16 @@ router.beforeEach((to, _from, next) => {
   next()
 })
 
-// Auto-reload when lazy-loaded chunks fail after a deploy
-// (old JS/CSS files are replaced with new hashed versions).
-// Only catches errors during route navigation; defineAsyncComponent failures
-// inside views surface as unhandledrejection — see main.ts.
-router.onError((error) => {
-  tryReloadOnChunkError(error)
+// Auto-recover when lazy-loaded route chunks fail after a deploy (old JS/CSS
+// files are replaced with new hashed versions). vue-router aborts the failed
+// navigation WITHOUT committing the URL, so we hand the intended destination
+// (`to.fullPath`) to the recovery helper — it does a full page load of that
+// route, landing the user on the page they clicked rather than reloading the
+// origin route (which dumped them back on "/"). Only catches errors during
+// route navigation; defineAsyncComponent failures inside views surface as
+// unhandledrejection — see main.ts.
+router.onError((error, to) => {
+  tryReloadOnChunkError(error, to?.fullPath)
 })
 
 export default router

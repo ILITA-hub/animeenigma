@@ -27,15 +27,24 @@ export function isChunkLoadError(err: unknown): boolean {
   return CHUNK_ERROR_RE.test(extractMessage(err))
 }
 
-// Reload the page if `err` looks like a stale-chunk error AND we haven't
-// already reloaded for the same reason in the last few seconds. The cooldown
-// breaks the infinite-reload loop that would otherwise happen if the asset
-// is genuinely missing server-side (vs. just an old hash from a previous
-// deploy that has since been replaced).
+// Recover from a stale-chunk error with a full page load (which fetches the
+// fresh index.html + new hashed asset names), AND only if we haven't already
+// recovered for the same reason in the last few seconds. The cooldown breaks
+// the infinite-reload loop that would otherwise happen if the asset is
+// genuinely missing server-side (vs. just an old hash from a previous deploy
+// that has since been replaced).
 //
-// Returns true if a reload was triggered (caller can suppress further error
-// logging in that case).
-export function tryReloadOnChunkError(err: unknown): boolean {
+// `targetUrl` is the route the user was navigating TO when the chunk failed.
+// When present we navigate there with a full load instead of reloading the
+// current URL — otherwise a failed lazy-route import during navigation (which
+// vue-router aborts WITHOUT committing the URL) would reload the *origin*
+// route, dumping the user back on the page they started from (usually "/")
+// instead of the one they clicked. The unhandledrejection path (component
+// async failures with no target route) omits it and falls back to a reload.
+//
+// Returns true if a recovery navigation was triggered (caller can suppress
+// further error logging in that case).
+export function tryReloadOnChunkError(err: unknown, targetUrl?: string): boolean {
   if (!isChunkLoadError(err)) return false
 
   try {
@@ -50,6 +59,10 @@ export function tryReloadOnChunkError(err: unknown): boolean {
     // sessionStorage unavailable (private mode, etc.) — fall through and reload anyway.
   }
 
-  window.location.reload()
+  if (targetUrl) {
+    window.location.assign(targetUrl)
+  } else {
+    window.location.reload()
+  }
   return true
 }
