@@ -127,6 +127,8 @@ func (r *NotificationRepository) Get(
 
 // UnreadCount returns the count of active+unread notifications for a user.
 // Cheap — backed by idx_user_unread partial index.
+// Applies the same relevance + invalidated_at filter as List so the bell
+// badge count always matches the dropdown list.
 func (r *NotificationRepository) UnreadCount(
 	ctx context.Context,
 	userID string,
@@ -134,7 +136,8 @@ func (r *NotificationRepository) UnreadCount(
 	var n int64
 	if err := r.db.WithContext(ctx).
 		Model(&domain.UserNotification{}).
-		Where("user_id = ? AND read_at IS NULL AND dismissed_at IS NULL", userID).
+		Where("user_id = ? AND read_at IS NULL AND dismissed_at IS NULL AND invalidated_at IS NULL", userID).
+		Where(relevanceReadClause()).
 		Count(&n).Error; err != nil {
 		return 0, apperrors.Wrap(err, apperrors.CodeInternal, "count unread notifications")
 	}

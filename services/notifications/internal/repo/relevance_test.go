@@ -232,3 +232,24 @@ func Test_List_Invalidated_Hidden(t *testing.T) {
 		t.Fatalf("want hidden (invalidated), got %d rows", n)
 	}
 }
+
+func Test_UnreadCount_ExcludesStale(t *testing.T) {
+	db := relevanceTestDB(t)
+	// relevant one
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5)
+	seedNotif(t, db, "u1", "anime-1", 7)
+	// caught-up one (should NOT count)
+	seedList(t, db, "u1", "anime-2", "watching")
+	seedWatch(t, db, "u1", "anime-2", "kodik", 9)
+	seedNotif(t, db, "u1", "anime-2", 9)
+
+	r := NewNotificationRepository(db)
+	n, err := r.UnreadCount(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("UnreadCount: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("want unread=1 (stale excluded), got %d", n)
+	}
+}
