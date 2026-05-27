@@ -566,6 +566,16 @@ func buildWSOriginCheck(cfg *config.Config) func(r *http.Request) bool {
 	if u, err := url.Parse(cfg.PublicBaseURL); err == nil && u.Host != "" {
 		allowed[u.Scheme+"://"+u.Host] = struct{}{}
 	}
+	// Hybrid dev+prod deployments expose the frontend on more than one
+	// origin (e.g. `http://localhost:3003` for the developer + the public
+	// URL via the proxy). ExtraAllowedOrigins (WATCH_TOGETHER_ALLOWED_ORIGINS,
+	// CSV) gets folded into the same allowlist so each WS upgrade is still
+	// O(1) and no malicious origin slips through.
+	for _, raw := range cfg.ExtraAllowedOrigins {
+		if u, err := url.Parse(raw); err == nil && u.Host != "" {
+			allowed[u.Scheme+"://"+u.Host] = struct{}{}
+		}
+	}
 
 	return func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")

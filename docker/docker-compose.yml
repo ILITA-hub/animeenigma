@@ -642,6 +642,10 @@ services:
       # CORS / Origin allowlist gate. Set to true in dev if connecting from
       # a non-canonical origin. Production should leave this false.
       WATCH_TOGETHER_ALLOW_ALL_ORIGINS: ${WATCH_TOGETHER_ALLOW_ALL_ORIGINS:-false}
+      # Additional WS Origin allowlist (CSV). Defaults cover both the dev
+      # localhost frontend (`http://localhost:3003`) AND the gateway-facing
+      # origin (`http://localhost:8000`). PublicBaseURL is allowed implicitly.
+      WATCH_TOGETHER_ALLOWED_ORIGINS: ${WATCH_TOGETHER_ALLOWED_ORIGINS:-http://localhost:3003,http://localhost:8000}
     ports:
       - "127.0.0.1:8091:8091"
     depends_on:

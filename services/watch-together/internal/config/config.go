@@ -60,6 +60,15 @@ type Config struct {
 	// dev (`make dev` + Vite dev server on a different port) flips it on
 	// via WATCH_TOGETHER_ALLOW_ALL_ORIGINS=true. NEVER enable in prod.
 	AllowAllOrigins bool
+
+	// ExtraAllowedOrigins is a comma-separated list of additional origins
+	// that are allowed to upgrade /ws. Set via WATCH_TOGETHER_ALLOWED_ORIGINS.
+	// Used alongside PublicBaseURL — e.g. in a hybrid local-dev + production
+	// deployment where the same docker stack serves both `localhost:3003`
+	// (developer access) and `https://animeenigma.ru` (public). The Origin
+	// header on a WS upgrade is the requesting page's origin, so this list
+	// must contain every origin the frontend is served from.
+	ExtraAllowedOrigins []string
 }
 
 type ServerConfig struct {
@@ -99,10 +108,26 @@ func Load() (*Config, error) {
 		MaxMembers:      getEnvInt("WATCH_TOGETHER_MAX_MEMBERS", 10),
 		RoomTTL:         getEnvDuration("WATCH_TOGETHER_ROOM_TTL", 900*time.Second),
 		GracePeriod:     getEnvDuration("WATCH_TOGETHER_GRACE_PERIOD", 5*time.Minute),
-		PublicBaseURL:   strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.ru"), "/"),
-		CatalogURL:      strings.TrimRight(getEnv("CATALOG_URL", "http://catalog:8081"), "/"),
-		AllowAllOrigins: getEnvBool("WATCH_TOGETHER_ALLOW_ALL_ORIGINS", false),
+		PublicBaseURL:       strings.TrimRight(getEnv("WATCH_TOGETHER_PUBLIC_BASE_URL", "https://animeenigma.ru"), "/"),
+		CatalogURL:          strings.TrimRight(getEnv("CATALOG_URL", "http://catalog:8081"), "/"),
+		AllowAllOrigins:     getEnvBool("WATCH_TOGETHER_ALLOW_ALL_ORIGINS", false),
+		ExtraAllowedOrigins: parseCSV(getEnv("WATCH_TOGETHER_ALLOWED_ORIGINS", "")),
 	}, nil
+}
+
+func parseCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(strings.TrimRight(p, "/"))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnv(key, defaultVal string) string {
