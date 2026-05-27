@@ -98,7 +98,7 @@ import HeroSpotlightBlock from './HeroSpotlightBlock.vue'
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function mockCards(n: number): SpotlightCard[] {
   return Array.from({ length: n }, (_, i) => ({
-    type: 'anime_of_day' as const,
+    type: 'featured' as const,
     data: {
       anime: {
         id: `anime-${i}`,

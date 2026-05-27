@@ -32,7 +32,7 @@ import CarouselDots from './CarouselDots.vue'
 // Build a minimal SpotlightCard array of `count` cards. Cycles through
 // a fixed list of card types so we exercise multiple accent/icon variants.
 const ROTATING_TYPES: SpotlightCard['type'][] = [
-  'anime_of_day',
+  'featured',
   'random_tail',
   'platform_stats',
   'now_watching',
@@ -43,8 +43,8 @@ function mockCards(count: number): SpotlightCard[] {
   for (let i = 0; i < count; i++) {
     const type = ROTATING_TYPES[i % ROTATING_TYPES.length]
     switch (type) {
-      case 'anime_of_day':
-        cards.push({ type, data: { anime: { id: `aod-${i}` } } })
+      case 'featured':
+        cards.push({ type, data: { anime: { id: `feat-${i}` } } })
         break
       case 'random_tail':
         cards.push({ type, data: { anime: { id: `rt-${i}` } } })
@@ -118,8 +118,8 @@ describe('CarouselDots', () => {
     })
     const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
 
-    // Dot 0 → anime_of_day → spotlight.animeOfDay.title
-    expect(dots[0].attributes('aria-label')).toBe('spotlight.animeOfDay.title')
+    // Dot 0 → featured → spotlight.featured.title
+    expect(dots[0].attributes('aria-label')).toBe('spotlight.featured.title')
     // Dot 1 → random_tail → spotlight.randomTail.title
     expect(dots[1].attributes('aria-label')).toBe('spotlight.randomTail.title')
     // Dot 2 → platform_stats → spotlight.platformStats.title
