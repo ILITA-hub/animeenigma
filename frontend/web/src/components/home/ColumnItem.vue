@@ -63,10 +63,6 @@
           </span>
         </template>
 
-        <!-- top variant: status chip -->
-        <span v-if="variant === 'top' && anime.status" class="chip" style="background:rgba(167,139,250,0.14);color:var(--violet)">
-          {{ $t(`anime.status.${anime.status}`) }}
-        </span>
       </div>
 
       <!-- next-ep line (ongoing only) -->

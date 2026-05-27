@@ -79,7 +79,7 @@
           :title="$t('home.topAnime')"
           :sub="$t('home.topAnimeSub')"
           icon-tone="gold"
-          see-all-to="/browse?sort=score&order=desc"
+          see-all-to="/browse?sort=rating"
           :loading="loadingTop"
         >
           <ColumnItem
