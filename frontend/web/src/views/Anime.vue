@@ -328,21 +328,10 @@
               </span>
             </h2>
           </div>
-          <!-- Workstream watch-together / Phase 02 Plan 02.9 (WT-SHELL-05) —
-               invite-to-watch-together button. Gated to logged-in users who
-               have activated the player so we have a stable `videoProvider`
-               to pass. Translation ID intentionally empty in Phase 2; Phase 4
-               (State Switching) wires the per-provider current translation
-               back through. anime.id is the Shikimori UUID; resumeStartEpisode
-               is the parent-owned hint (falls back to 1 when undefined). -->
-          <InviteButton
-            v-if="authStore.isAuthenticated && playerActivated && anime"
-            :anime-id="anime.id"
-            :episode-id="String(resumeStartEpisode ?? 1)"
-            :player="videoProvider as PlayerKind"
-            :translation-id="''"
-            class="self-start"
-          />
+          <!-- InviteButton is mounted ABOVE THE FOLD next to the Primary
+               Watch CTA (see line ~128). The previous mount here (gated on
+               playerActivated, adjacent to the language tabs) was removed
+               to keep a single discovery point next to Continue Watching. -->
           <!-- Language tabs + Provider sub-tabs -->
           <!-- UA-062 (UX-12 Phase 5): ButtonGroup wraps the RU/EN/18+ toggle
                with role="group" + aria-label; each child button binds
