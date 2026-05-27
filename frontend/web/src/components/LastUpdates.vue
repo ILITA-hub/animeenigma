@@ -330,6 +330,12 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   padding: 18px;
+  /* Cap height so the changelog/news list scrolls internally instead of
+     growing unbounded (~1400px) and dragging the side-by-side ActivityFeed
+     panel along with it. MUST match ActivityFeed's .activity-shell max-height
+     so the two panels stay the same height. The root already has
+     flex/flex-col + an inner flex-1 min-h-0 overflow-y-auto list. */
+  max-height: 600px;
 }
 
 /* Section header */

@@ -190,6 +190,13 @@ onMounted(() => {
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
   padding: 18px;
+  /* Cap + internal scroll so this panel stays the same height as the
+     side-by-side LastUpdates panel. MUST match LastUpdates'
+     .activity-shell max-height. The feed list below becomes the
+     flex-1 scroll region. */
+  display: flex;
+  flex-direction: column;
+  max-height: 600px;
 }
 
 /* Section header */
@@ -208,12 +215,21 @@ onMounted(() => {
   color: var(--ink);
 }
 
-/* Feed list */
+/* Feed list — flex-1 scroll region within the capped .activity-shell */
 .feed-list {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
+
+/* Scrollbar — matches HomeColumn/.col-list + LastUpdates styling */
+.feed-list::-webkit-scrollbar { width: 4px; }
+.feed-list::-webkit-scrollbar-track { background: transparent; }
+.feed-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+.feed-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 
 /* .feed-item from handoff */
 .feed-item {

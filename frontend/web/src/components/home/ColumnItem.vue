@@ -157,6 +157,12 @@ const formattedNextEp = computed(() => {
   text-decoration: none;
   color: inherit;
   overflow: hidden;
+  /* The parent .col-list is a flex column with max-height: 600px. Without
+     this, default flex-shrink:1 collapses each row to a fraction of its
+     natural height (poster/body overflow then get clipped by overflow:hidden,
+     producing squished, overlapping rows). The list is meant to SCROLL, so
+     rows must keep their intrinsic height. */
+  flex-shrink: 0;
 }
 .item:hover {
   background: rgba(255, 255, 255, 0.03);

@@ -155,6 +155,8 @@ defineProps<{
   gap: 12px;
   padding: 10px;
   animation: pulse 1.5s ease-in-out infinite;
+  /* Same as .item: don't let the flex-column .col-list shrink rows. */
+  flex-shrink: 0;
 }
 .skeleton-poster {
   width: 56px;
