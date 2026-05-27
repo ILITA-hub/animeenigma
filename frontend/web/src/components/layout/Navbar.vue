@@ -28,7 +28,8 @@
             :key="link.to"
             :to="link.to"
             class="nav-link-nt"
-            active-class="nav-link-nt--active"
+            :active-class="link.to === '/' ? '' : 'nav-link-nt--active'"
+            :exact-active-class="link.to === '/' ? 'nav-link-nt--active' : ''"
           >
             {{ $t(link.label) }}
           </router-link>
@@ -213,7 +214,8 @@
               :key="link.to"
               :to="link.to"
               class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-              active-class="text-cyan-400 bg-cyan-500/10"
+              :active-class="link.to === '/' ? '' : 'text-cyan-400 bg-cyan-500/10'"
+              :exact-active-class="link.to === '/' ? 'text-cyan-400 bg-cyan-500/10' : ''"
               @click="mobileMenuOpen = false"
             >
               {{ $t(link.label) }}
