@@ -273,10 +273,11 @@ func (r *NotificationRepository) Upsert(
 			},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"payload":    datatypes.JSON(payload),
-			"updated_at": now,
-			"read_at":    gorm.Expr("NULL"),
-			"type":       ntype, // future-proof: payload + type co-evolve
+			"payload":        datatypes.JSON(payload),
+			"updated_at":     now,
+			"read_at":        gorm.Expr("NULL"),
+			"invalidated_at": gorm.Expr("NULL"), // revive a tombstoned row on re-fire
+			"type":           ntype,             // future-proof: payload + type co-evolve
 		}),
 	}).Create(row).Error
 

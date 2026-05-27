@@ -253,3 +253,39 @@ func Test_UnreadCount_ExcludesStale(t *testing.T) {
 		t.Fatalf("want unread=1 (stale excluded), got %d", n)
 	}
 }
+
+func Test_Upsert_RevivesInvalidatedRow(t *testing.T) {
+	db := relevanceTestDB(t)
+	r := NewNotificationRepository(db)
+
+	userID := "u1"
+	dedupe := "new_episode:anime-1:kodik:ru:sub:1"
+	p7 := []byte(`{"anime_id":"anime-1","anime_title":"X","first_unwatched_episode":1,` +
+		`"latest_available_episode":7,"player":"kodik","language":"ru",` +
+		`"watch_type":"sub","translation_id":"1","watch_url":"/x"}`)
+
+	// First upsert (ep7), then tombstone it + mark read.
+	if _, err := r.Upsert(context.Background(), userID, "new_episode", dedupe, p7); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	if err := db.Exec(
+		`UPDATE user_notifications SET invalidated_at=?, read_at=? WHERE user_id=? AND dedupe_key=?`,
+		time.Now().UTC(), time.Now().UTC(), userID, dedupe).Error; err != nil {
+		t.Fatalf("tombstone: %v", err)
+	}
+
+	// Re-fire with ep8 (same dedupe) -> must revive: invalidated_at + read_at cleared.
+	p8 := []byte(`{"anime_id":"anime-1","anime_title":"X","first_unwatched_episode":8,` +
+		`"latest_available_episode":8,"player":"kodik","language":"ru",` +
+		`"watch_type":"sub","translation_id":"1","watch_url":"/x"}`)
+	out, err := r.Upsert(context.Background(), userID, "new_episode", dedupe, p8)
+	if err != nil {
+		t.Fatalf("revive upsert: %v", err)
+	}
+	if out.InvalidatedAt != nil {
+		t.Fatalf("expected invalidated_at cleared on revival, got %v", out.InvalidatedAt)
+	}
+	if out.ReadAt != nil {
+		t.Fatalf("expected read_at cleared on revival, got %v", out.ReadAt)
+	}
+}
