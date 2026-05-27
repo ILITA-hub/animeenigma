@@ -12,10 +12,13 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// Scheduler wires the detector + cleanup + unread-gauge poller into a single
-// robfig/cron instance with ±5min boot-time jitter. Start is called once at
-// boot from cmd/notifications-api/main.go; Stop is called BEFORE
-// srv.Shutdown so in-flight cron callbacks finish cleanly.
+// Scheduler wires the detector + relevance-invalidation + cleanup +
+// unread-gauge poller into a single robfig/cron instance with ±5min
+// boot-time jitter. Start is called once at boot from
+// cmd/notifications-api/main.go; Stop is called BEFORE srv.Shutdown so
+// in-flight cron callbacks finish cleanly. On each detector tick the
+// relevance-invalidation job runs immediately after, retiring notifications
+// made stale by watch-list or progress changes since the last run.
 //
 // Cron expressions come from config.DetectorConfig (defaults: detector
 // "0 * * * *", cleanup "30 3 * * *"). Boot-time jitter is computed once in

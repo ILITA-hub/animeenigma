@@ -18,7 +18,9 @@
 //  7. Wire repos → service → handlers (public + internal + Phase 2 admin).
 //  8. Phase 2 detector wiring: HTTPEpisodeChecker against CATALOG_URL +
 //     hotCombos/snapshot/maxWatched/animeView/unreadGauge repos +
-//     detectorJob + cleanupJob + scheduler.
+//     detectorJob + invalidationJob + cleanupJob + scheduler.
+//     invalidationJob is constructed and passed to the scheduler; it runs
+//     after the detector on each tick to retire stale notifications.
 //  9. transport.NewRouter
 // 10. http.Server + graceful shutdown on SIGINT/SIGTERM.
 // 11. If cfg.Detector.Enabled: scheduler.Start(ctx). Disabled mode skips
