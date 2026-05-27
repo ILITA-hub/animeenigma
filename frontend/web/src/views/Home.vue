@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black">
+  <div class="min-h-screen">
     <!-- Phase 11 / UX-24 — System status banner. Permanent mount at the
          very top; renders nothing when no incident is active (gateway env
          SYSTEM_BANNER_ACTIVE=false, the default) or when the user has

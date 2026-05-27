@@ -1,10 +1,22 @@
 @import "tailwindcss";
 
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/manrope-700.woff2') format('woff2'); }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 800; font-display: swap; src: url('/fonts/manrope-800.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/inter-400.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/inter-500.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/inter-600.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/inter-700.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/jetbrains-mono-400.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/jetbrains-mono-500.woff2') format('woff2'); }
+@font-face { font-family: 'Noto Sans JP'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/noto-sans-jp-400.woff2') format('woff2'); }
+@font-face { font-family: 'Noto Sans JP'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/noto-sans-jp-500.woff2') format('woff2'); }
+
 /* Neon Tokyo Theme */
 @theme {
   /* Colors */
-  --color-base: #121218;
-  --color-surface: #1a1a24;
+  /* was #121218 / #1a1a24 — global darken per spec D6 */
+  --color-base: #08080f;
+  --color-surface: #11111c;
   --color-cyan-400: #00d4ff;
   --color-cyan-500: #00b8e6;
   --color-cyan-600: #009dcc;
@@ -14,8 +26,11 @@
   --color-success: #00ff9d;
   --color-warning: #ffd600;
 
-  /* Fonts */
+  /* Editorial type system (self-hosted) */
   --font-sans: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+  --font-display: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-jp: 'Noto Sans JP', 'Inter', sans-serif;
 
   /* Shadows */
   --shadow-glow-cyan: 0 0 30px rgba(0, 212, 255, 0.3);
@@ -61,7 +76,11 @@ html {
 }
 
 body {
-  background-color: var(--color-base);
+  background:
+    radial-gradient(1000px 600px at 80% -200px, rgba(0, 212, 255, 0.08), transparent 60%),
+    radial-gradient(800px 500px at -10% 10%, rgba(255, 45, 124, 0.06), transparent 60%),
+    var(--color-base);
+  background-attachment: fixed;
   color: white;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -328,6 +347,28 @@ body {
    the carousel for longer than the actual fade. */
 :root {
   --spotlight-fade-ms: 400ms;
+
+  /* Semantic tokens — Neon Tokyo foundation */
+  --surface-2: #161623;
+  --elevated: #1c1c2c;
+  --line: rgba(255, 255, 255, 0.06);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --ink: #ffffff;
+  --ink-2: rgba(255, 255, 255, 0.78);
+  --ink-3: rgba(255, 255, 255, 0.56);
+  --ink-4: rgba(255, 255, 255, 0.36);
+  --accent: #00d4ff;
+  --accent-soft: rgba(0, 212, 255, 0.14);
+  --accent-line: rgba(0, 212, 255, 0.28);
+  --accent-glow: 0 0 30px rgba(0, 212, 255, 0.28);
+  --pink: #ff2d7c;
+  --pink-soft: rgba(255, 45, 124, 0.14);
+  --violet: #a78bfa;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-2xl: 28px;
+  --f-display: var(--font-display);
+  --f-ui: var(--font-sans);
+  --f-mono: var(--font-mono);
+  --f-jp: var(--font-jp);
 }
 .spotlight-fade-enter-active,
 .spotlight-fade-leave-active {
