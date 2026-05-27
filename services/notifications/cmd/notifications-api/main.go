@@ -106,8 +106,9 @@ func main() {
 		&cfg.Detector,
 		log,
 	)
+	invalidationJob := job.NewRelevanceInvalidationJob(db.DB, log)
 	cleanupJob := job.NewDismissedRetentionCleanupJob(db.DB, cfg.Detector.RetentionDays, log)
-	scheduler := job.NewScheduler(detectorJob, cleanupJob, unreadGaugeRepo, &cfg.Detector, log)
+	scheduler := job.NewScheduler(detectorJob, invalidationJob, cleanupJob, unreadGaugeRepo, &cfg.Detector, log)
 
 	// Handlers.
 	notifHandler := handler.NewNotificationHandler(notifService, log)

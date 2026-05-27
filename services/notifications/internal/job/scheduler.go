@@ -22,22 +22,24 @@ import (
 // the constructor — same value for the lifetime of the process — so log
 // lines can attribute "ran at minute X" to a specific jitter value.
 type Scheduler struct {
-	cron      *cron.Cron
-	detector  *NewEpisodeDetectorJob
-	cleanup   *DismissedRetentionCleanupJob
-	gaugeRepo *repo.UnreadGaugeRepository
-	cfg       *config.DetectorConfig
-	log       *logger.Logger
+	cron        *cron.Cron
+	detector    *NewEpisodeDetectorJob
+	invalidator *RelevanceInvalidationJob
+	cleanup     *DismissedRetentionCleanupJob
+	gaugeRepo   *repo.UnreadGaugeRepository
+	cfg         *config.DetectorConfig
+	log         *logger.Logger
 
 	jitter   time.Duration
 	pollerWG sync.WaitGroup
 	cancel   context.CancelFunc
 }
 
-// NewScheduler constructs the scheduler. The Detector + Cleanup + GaugeRepo
+// NewScheduler constructs the scheduler. The Detector + Invalidator + Cleanup + GaugeRepo
 // args are required; cfg drives schedule + worker limits.
 func NewScheduler(
 	detector *NewEpisodeDetectorJob,
+	invalidator *RelevanceInvalidationJob,
 	cleanup *DismissedRetentionCleanupJob,
 	gaugeRepo *repo.UnreadGaugeRepository,
 	cfg *config.DetectorConfig,
@@ -60,12 +62,13 @@ func NewScheduler(
 		jitter = -jitter
 	}
 	return &Scheduler{
-		detector:  detector,
-		cleanup:   cleanup,
-		gaugeRepo: gaugeRepo,
-		cfg:       cfg,
-		log:       log,
-		jitter:    jitter,
+		detector:    detector,
+		invalidator: invalidator,
+		cleanup:     cleanup,
+		gaugeRepo:   gaugeRepo,
+		cfg:         cfg,
+		log:         log,
+		jitter:      jitter,
 	}
 }
 
@@ -136,6 +139,9 @@ func (s *Scheduler) Stop() {
 
 // runDetector is the cron callback for the detector. Records metrics in
 // the same shape as services/scheduler/internal/service/job.go.
+// After the detector completes, the relevance invalidation job runs on the
+// same tick to retire notifications made stale since the last run.
+// Invalidation fires even if the detector errored — it is independent.
 func (s *Scheduler) runDetector(ctx context.Context) {
 	if s.log != nil {
 		s.log.Info("scheduled detector run starting")
@@ -143,6 +149,14 @@ func (s *Scheduler) runDetector(ctx context.Context) {
 	if _, err := s.detector.Run(ctx); err != nil {
 		// Detector logs its own structured error; nothing more to add.
 		_ = err
+	}
+	// Retire notifications made stale by watches / list changes since the
+	// last tick. Runs even if the detector errored — invalidation is
+	// independent of new-episode detection.
+	if s.invalidator != nil {
+		if _, err := s.invalidator.Run(ctx); err != nil && s.log != nil {
+			s.log.Errorw("relevance invalidation failed", "error", err)
+		}
 	}
 }
 
