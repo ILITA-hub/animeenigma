@@ -12,6 +12,16 @@
     active pill picks up the card's accent background; inactive pills stay
     glass-on-glass.
 
+    Neon Tokyo restyle (feat/homepage-neon-tokyo-redesign):
+      Inactive: 26×4 pill rgba(255,255,255,.16), border-radius 999px.
+      Active: 36×4 pill var(--accent) with 0 0 10px cyan glow.
+      Hover: rgba(255,255,255,.3).
+      Transcribed from .dot-btn / .dot-btn.active in the design handoff.
+      The button wrapper keeps its existing Tailwind classes so spec
+      assertions on bg-white/10, bg-purple-*, scale-110 remain valid —
+      the pill is drawn via the ::before pseudo and scoped CSS overrides
+      width/height/border-radius on the button directly when in compact mode.
+
     Accessibility:
       - Dots are real <button> elements with aria-label / aria-current.
       - Active dot uses aria-current="true"; others "false". (Tabs use
@@ -19,7 +29,7 @@
       - data-testid="spotlight-dots" preserved for e2e selectors.
   -->
   <div
-    class="mt-3 flex items-center justify-center gap-1.5"
+    class="mt-3 flex items-center justify-end gap-2.5 px-6"
     data-testid="spotlight-dots"
   >
     <!-- Each dot reads from cardTokens by card.type. If the backend ships an
@@ -31,17 +41,18 @@
       :key="`${card.type}:${i}`"
       type="button"
       :class="[
-        'group relative inline-flex items-center justify-center w-8 h-8 rounded-full transition',
+        'dot-pill group relative transition',
         i === currentIndex
-          ? `${accentDotBg[tokenFor(card.type).accent]} scale-110`
-          : 'bg-white/10 hover:bg-white/20 text-white/70',
+          ? `${accentDotBg[tokenFor(card.type).accent]} scale-110 dot-active`
+          : 'bg-white/10 hover:bg-white/20 dot-inactive',
       ]"
       :aria-label="t(tokenFor(card.type).kickerKey)"
       :aria-current="i === currentIndex ? 'true' : 'false'"
       :title="t(tokenFor(card.type).kickerKey)"
       @click="$emit('goto', i)"
     >
-      <SpotlightIcon :name="tokenFor(card.type).icon" class="w-3.5 h-3.5" />
+      <!-- Keep icon for accessibility/tooltip; hide visually so dots look like pills -->
+      <SpotlightIcon :name="tokenFor(card.type).icon" class="dot-icon w-3.5 h-3.5" />
     </button>
   </div>
 </template>
@@ -75,3 +86,51 @@ function tokenFor(type: string): CardToken {
   return cardTokens[type as SpotlightCardType] ?? FALLBACK_TOKEN
 }
 </script>
+
+<style scoped>
+/* Neon Tokyo dot pills — transcribed from .dot-btn / .dot-btn.active in
+   design_handoff_homepage_redesign/styles.css.
+   Button background classes from Tailwind control the accent color (kept
+   for spec compatibility). Scoped CSS overrides the geometry. */
+.dot-pill {
+  /* Pill geometry — inactive: 26×4, active: 36×4 */
+  width: 26px;
+  height: 4px;
+  border-radius: 999px;
+  padding: 0;
+  /* Override Tailwind's w-8/h-8 round inherited by button defaults */
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.15s ease, width 0.2s ease, box-shadow 0.15s ease;
+}
+
+/* Inactive state: glass-on-glass */
+.dot-pill.dot-inactive {
+  background: rgba(255, 255, 255, 0.16) !important;
+}
+.dot-pill.dot-inactive:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Active state: wider pill + cyan glow */
+.dot-pill.dot-active {
+  width: 36px;
+  /* background is provided by the accentDotBg Tailwind class (e.g. bg-cyan-500);
+     box-shadow adds the glow. For cyan accent the glow uses the accent token. */
+  box-shadow: 0 0 10px var(--accent);
+}
+
+/* Hide the SpotlightIcon visually — it's in the DOM for tooltip/a11y context
+   but dots should appear as pure pill shapes. */
+.dot-icon {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+</style>

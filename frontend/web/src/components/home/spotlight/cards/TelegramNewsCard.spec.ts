@@ -3,7 +3,7 @@
  *
  * Vitest spec for the branded TelegramNewsCard.vue. Replaces the Phase 03
  * spec which targeted the old plain `bg-white/5` post tiles — the v1.1
- * refactor swaps to `bg-black/30 backdrop-blur-sm` tiles riding on the
+ * refactor swaps to `tg-tile` scoped-CSS tiles riding on the
  * sky gradient-mesh backdrop.
  */
 
@@ -46,8 +46,8 @@ describe('TelegramNewsCard (v1.1-polish)', () => {
   it.each([1, 2, 3])('renders %i post tiles for %i entries', (n) => {
     const data = { posts: Array.from({ length: n }, (_, i) => post(i + 1)) }
     const wrapper = mountCard({ data })
-    // Inner post tiles carry the bg-black/30 class; outer wrapper does not.
-    const inner = wrapper.findAll('article.bg-black\\/30')
+    // Inner post tiles carry the tg-tile class; outer wrapper does not.
+    const inner = wrapper.findAll('article.tg-tile')
     expect(inner.length).toBe(n)
   })
 

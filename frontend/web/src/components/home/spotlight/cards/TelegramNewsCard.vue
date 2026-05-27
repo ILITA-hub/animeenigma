@@ -27,7 +27,7 @@
         <article
           v-for="(post, i) in data.posts.slice(0, 3)"
           :key="post.link ?? `tg-${i}`"
-          class="gap-2 p-3 rounded-xl bg-black/30 backdrop-blur-sm hover:bg-black/40 transition min-w-0"
+          class="tg-tile gap-2 p-3 rounded-xl backdrop-blur-sm transition min-w-0"
           :class="i === 0 ? 'flex flex-col' : 'hidden md:flex md:flex-col'"
         >
           <!--
@@ -56,7 +56,7 @@
             {{ post.title }}
           </h4>
           <p
-            class="text-xs font-medium text-gray-300 line-clamp-3 flex-1"
+            class="text-xs font-medium tg-excerpt line-clamp-3 flex-1"
           >
             {{ post.excerpt }}
           </p>
@@ -124,3 +124,15 @@ import SpotlightIcon from '../SpotlightIcon.vue'
 defineProps<{ data: TelegramNewsData }>()
 const { t } = useI18n()
 </script>
+
+<style scoped>
+/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
+.tg-tile {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+.tg-tile:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.tg-excerpt { color: var(--ink-2); }
+</style>

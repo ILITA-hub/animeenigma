@@ -89,7 +89,7 @@
             </p>
           </div>
           <p
-            class="hidden md:block text-sm text-gray-400 mb-2 font-medium"
+            class="hidden md:block text-sm rt-muted mb-2 font-medium"
             data-testid="random-tail-tagline"
           >
             {{ tagline }}
@@ -125,7 +125,7 @@
             </span>
             <p
               v-if="data.anime.episodes_count"
-              class="text-sm text-gray-400 font-medium"
+              class="text-sm rt-muted font-medium"
             >
               {{
                 t('spotlight.featured.episodesLabel', {
@@ -142,7 +142,7 @@
             <span
               v-for="g in data.anime.genres.slice(0, 3)"
               :key="g.id"
-              class="px-2 py-0.5 text-xs font-medium rounded bg-white/10 text-gray-300"
+              class="px-2 py-0.5 text-xs font-medium rounded rt-chip"
             >
               {{ locale === 'ru' ? g.russian || g.name : g.name || g.russian }}
             </span>
@@ -229,3 +229,15 @@ onBeforeUnmount(() => {
   }
 })
 </script>
+
+<style scoped>
+/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign).
+   Swap hardcoded gray values for semantic design tokens. */
+.rt-muted { color: var(--ink-3); }
+.rt-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  border-radius: var(--r-sm);
+}
+</style>

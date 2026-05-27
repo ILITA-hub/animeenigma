@@ -64,7 +64,7 @@
 
           <p
             v-if="data.anime.episodes_count"
-            class="mt-2 text-sm text-gray-400 font-medium"
+            class="mt-2 text-sm nty-muted font-medium"
           >
             {{
               t('spotlight.featured.episodesLabel', {
@@ -143,3 +143,8 @@ const addedAtLabel = computed<string | null>(() => {
   })
 })
 </script>
+
+<style scoped>
+/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
+.nty-muted { color: var(--ink-3); }
+</style>

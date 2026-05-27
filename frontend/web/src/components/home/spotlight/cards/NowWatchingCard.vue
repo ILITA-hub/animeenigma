@@ -60,7 +60,7 @@
               >
                 {{ s.username }}
               </p>
-              <p class="text-xs font-medium text-gray-300 truncate">
+              <p class="text-xs font-medium nw-subtitle truncate">
                 {{ getLocalizedTitle(s.anime_name, s.anime_name_ru) }} · ep
                 {{ s.episode_number }}
               </p>
@@ -137,3 +137,8 @@ function avatarBgClass(username: string): string {
   return PALETTE[Math.abs(hash) % PALETTE.length]
 }
 </script>
+
+<style scoped>
+/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
+.nw-subtitle { color: var(--ink-2); }
+</style>

@@ -1,71 +1,54 @@
 <template>
-  <article class="relative w-full h-full overflow-hidden">
-    <SpotlightBackdrop variant="gradient-mesh" accent="teal" />
-    <div
-      aria-hidden="true"
-      class="absolute inset-0 opacity-5"
-      style="background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,.5) 40px), repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,.5) 40px);"
-    />
-    <div
-      class="relative z-10 w-full h-full grid md:grid-cols-[2fr_3fr] gap-6 p-4 md:p-6 lg:p-8"
-    >
-      <!-- Hero (left) -->
-      <div class="flex flex-col justify-center min-w-0">
-        <div class="flex items-center gap-2 mb-3">
-          <SpotlightIcon name="chart" class="w-5 h-5 text-teal-300" />
-          <h3 class="text-base font-semibold text-white">Как дела у платформы</h3>
-        </div>
+  <article class="platform-stats-hero">
+    <!-- Neon Tokyo two-column hero-stats layout (feat/homepage-neon-tokyo-redesign).
+         Transcribed from .hero-stats, .hero-stats .left, .hero-stats .grid,
+         .stat-tile etc. in design_handoff_homepage_redesign/styles.css.
+         All data bindings are unchanged — only presentation/layout changed. -->
 
-        <p class="text-2xl md:text-3xl font-semibold text-white leading-tight">
-          Работает:
-          <span :class="hero.working_ok ? 'text-teal-300' : 'text-amber-300'">
-            {{ hero.working_ok ? 'ДА' : 'ТЕХНИЧЕСКИ ДА' }}
-          </span>
-        </p>
+    <!-- LEFT column: status headline + uptime + vibe row + tagline -->
+    <div class="stats-left">
+      <h2 class="stats-headline">
+        Работает:
+        <span :class="hero.working_ok ? 'stats-ok' : 'stats-warn'">
+          {{ hero.working_ok ? 'ДА' : 'ТЕХНИЧЕСКИ ДА' }}
+        </span>
+      </h2>
 
-        <p class="mt-2 text-lg font-medium text-teal-200">
-          Аптайм: {{ hero.uptime_quip
-          }}<template v-if="hero.uptime_percent != null"> — {{ hero.uptime_percent }}%</template>
-        </p>
+      <p class="stats-uptime">
+        Аптайм: {{ hero.uptime_quip
+        }}<template v-if="hero.uptime_percent != null"> — {{ hero.uptime_percent }}%</template>
+      </p>
 
-        <p class="mt-3 text-sm font-medium text-gray-200 break-words">
-          {{ hero.service }} — UXΔ {{ hero.ux_delta }} · CDI {{ hero.cdi }} · MVQ {{ hero.mvq }}
-        </p>
+      <p class="stats-vibe">
+        {{ hero.service }} — UXΔ {{ hero.ux_delta }} · CDI {{ hero.cdi }} · MVQ {{ hero.mvq }}
+      </p>
 
-        <p class="mt-4 text-base md:text-lg font-medium text-white/90 italic">
-          «{{ hero.tagline }}»
-        </p>
-      </div>
-
-      <!-- Tiles (right, 2×2) -->
-      <ul class="grid grid-cols-2 gap-3 content-center min-w-0">
-        <li
-          v-for="tile in tiles"
-          :key="tile.label"
-          class="flex flex-col p-3 rounded-lg bg-white/5 backdrop-blur-sm"
-        >
-          <span class="text-[10px] font-medium text-teal-300 uppercase tracking-wider">
-            {{ windowLabel(tile.window) }}
-          </span>
-          <p class="mt-1 text-2xl font-semibold text-white tabular-nums">
-            {{ formatValue(tile) }}
-          </p>
-          <p class="text-[11px] font-medium text-gray-400 truncate">{{ tile.label }}</p>
-        </li>
-      </ul>
+      <blockquote class="stats-quote">«{{ hero.tagline }}»</blockquote>
     </div>
+
+    <!-- RIGHT column: 2×2 stat tile grid -->
+    <ul class="stats-grid">
+      <li
+        v-for="tile in tiles"
+        :key="tile.label"
+        class="stat-tile"
+      >
+        <p class="stat-tile-label">{{ windowLabel(tile.window) }}</p>
+        <p class="stat-tile-value">{{ formatValue(tile) }}</p>
+        <p class="stat-tile-sub">{{ tile.label }}</p>
+      </li>
+    </ul>
   </article>
 </template>
 
 <script setup lang="ts">
-// Workstream hero-spotlight — Trump-style joke rewrite of platform_stats.
+// Workstream hero-spotlight — Neon Tokyo restyle of PlatformStatsCard
+// (feat/homepage-neon-tokyo-redesign, Task 5). Layout updated to the
+// two-column hero-stats variant from the design handoff. All data
+// bindings, computed fields, and type imports are unchanged.
 // SINGLE-ROOT <article>, NO top-level v-if (Transition mode="out-in" safety).
-// Deliberately i18n-free: chrome is fixed Russian and the joke content is
-// rendered verbatim from the backend payload (everyone sees the same).
 import { computed } from 'vue'
 import type { PlatformStatsData, StatsTile } from '@/types/spotlight'
-import SpotlightBackdrop from '../SpotlightBackdrop.vue'
-import SpotlightIcon from '../SpotlightIcon.vue'
 
 const props = defineProps<{ data: PlatformStatsData }>()
 
@@ -103,3 +86,142 @@ function formatBytes(n: number): string {
   return `${i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`
 }
 </script>
+
+<style scoped>
+/* Neon Tokyo two-column hero-stats layout.
+   Transcribed from .hero-stats, .hero-stats .left, .hero-stats .grid,
+   .stat-tile, .stat-tile::after in design_handoff_homepage_redesign/styles.css. */
+
+.platform-stats-hero {
+  position: absolute;
+  inset: 0;
+  padding: 40px 48px;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 32px;
+  background:
+    radial-gradient(700px 400px at 20% 80%, rgba(0, 212, 255, 0.1), transparent 60%),
+    linear-gradient(135deg, #0d2030 0%, #050a12 100%);
+  overflow: hidden;
+}
+
+/* LEFT column */
+.stats-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.stats-headline {
+  font-family: var(--f-display);
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.stats-ok {
+  /* success green — #00ff9d per handoff */
+  color: #00ff9d;
+}
+
+.stats-warn {
+  color: var(--color-warning);
+}
+
+.stats-uptime {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.stats-vibe {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.stats-quote {
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-2);
+  border-left: 2px solid var(--accent);
+  padding-left: 14px;
+  max-width: 380px;
+}
+
+/* RIGHT column: 2×2 tile grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-content: center;
+}
+
+.stat-tile {
+  position: relative;
+  padding: 18px 18px 16px;
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.stat-tile-label {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.stat-tile-value {
+  font-family: var(--f-display);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.stat-tile-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 6px;
+}
+
+/* Top-right radial highlight per tile */
+.stat-tile::after {
+  content: "";
+  position: absolute;
+  right: -20px;
+  top: -20px;
+  width: 80px;
+  height: 80px;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--accent-soft), transparent 70%);
+  opacity: 0.7;
+}
+
+/* Mobile: stack columns vertically */
+@media (max-width: 768px) {
+  .platform-stats-hero {
+    grid-template-columns: 1fr;
+    padding: 24px;
+    gap: 20px;
+    overflow-y: auto;
+  }
+  .stats-headline {
+    font-size: 32px;
+  }
+  .stat-tile-value {
+    font-size: 24px;
+  }
+}
+</style>

@@ -68,7 +68,7 @@
           </h3>
 
           <!-- Subdued: where you stopped -->
-          <p class="text-xs text-gray-400 font-medium">
+          <p class="text-xs cwn-muted font-medium">
             {{
               t('spotlight.continueWatchingNew.lastWatched', {
                 n: data.last_watched_episode,
@@ -134,3 +134,8 @@ const watchUrl = computed<string>(
   () => `/anime/${props.data.anime.id}?episode=${props.data.new_episode_number}`,
 )
 </script>
+
+<style scoped>
+/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
+.cwn-muted { color: var(--ink-3); }
+</style>

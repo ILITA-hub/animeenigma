@@ -36,7 +36,7 @@
         <li
           v-for="(entry, idx) in data.entries.slice(0, 3)"
           :key="entry.date + ':' + idx"
-          class="flex flex-col gap-2 p-3 rounded-xl bg-black/30 backdrop-blur-sm hover:bg-black/40 transition min-w-0"
+          class="news-tile flex flex-col gap-2 p-3 rounded-xl backdrop-blur-sm transition min-w-0"
         >
           <div class="flex items-center justify-between gap-2">
             <SpotlightIcon
@@ -52,7 +52,7 @@
               {{ t(badgeFor(entry.type)!.i18nKey) }}
             </span>
           </div>
-          <p class="text-xs font-medium text-gray-400">
+          <p class="text-xs font-medium news-date">
             {{ formatEntryDate(entry.date) }}
           </p>
           <p
@@ -142,3 +142,15 @@ function entryTitle(msg: string): string {
   return msg.length > 60 ? msg.slice(0, 60).trimEnd() + '…' : msg
 }
 </script>
+
+<style scoped>
+/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
+.news-tile {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+.news-tile:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.news-date { color: var(--ink-3); }
+</style>

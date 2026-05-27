@@ -11,12 +11,19 @@
     `display:contents` on the wrapper lets the two absolute buttons become
     direct children of the frame for positioning. Parent (HeroSpotlightBlock)
     owns carousel state and handles the prev / next events.
+
+    Neon Tokyo restyle (feat/homepage-neon-tokyo-redesign):
+      36×36 round pill, rgba(8,8,15,0.7) bg + blur(8px) backdrop filter,
+      1px solid var(--line) border, var(--ink-2) icon, hover raises to
+      rgba(255,255,255,.08) + var(--line-strong) border + var(--ink).
+      Transcribed from .arrow-btn / .arrow-l / .arrow-r in the design
+      handoff styles.css.
   -->
   <div class="contents">
-    <!-- Chevron PREV — 44×44 touch target -->
+    <!-- Chevron PREV — 44×44 touch target wraps the 36×36 visual pill -->
     <button
       type="button"
-      class="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-11 h-11 min-h-[44px] touch-target flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors focus:outline-none"
+      class="arrow-prev"
       :aria-label="t('spotlight.prevSlide')"
       @click="$emit('prev')"
     >
@@ -25,10 +32,10 @@
       </svg>
     </button>
 
-    <!-- Chevron NEXT — 44×44 touch target -->
+    <!-- Chevron NEXT — 44×44 touch target wraps the 36×36 visual pill -->
     <button
       type="button"
-      class="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-11 h-11 min-h-[44px] touch-target flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm text-white hover:bg-cyan-500/20 hover:text-cyan-400 transition-colors focus:outline-none"
+      class="arrow-next"
       :aria-label="t('spotlight.nextSlide')"
       @click="$emit('next')"
     >
@@ -49,3 +56,46 @@ defineEmits<{
 
 const { t } = useI18n()
 </script>
+
+<style scoped>
+/* Neon Tokyo arrow buttons — transcribed from .arrow-btn, .arrow-l, .arrow-r
+   in design_handoff_homepage_redesign/styles.css.
+   36×36 visual pill inside a 44×44 min-touch-target container. */
+.arrow-prev,
+.arrow-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  /* 44×44 touch target; the inner pill is visually 36×36 via padding */
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  /* Visual pill */
+  background: rgba(8, 8, 15, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+}
+.arrow-prev { left: 20px; }
+.arrow-next { right: 20px; }
+
+.arrow-prev:hover,
+.arrow-next:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.arrow-prev:focus-visible,
+.arrow-next:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+</style>
