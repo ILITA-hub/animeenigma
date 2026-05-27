@@ -119,6 +119,19 @@
               </svg>
               <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
             </button>
+            <!-- Workstream watch-together — discovery-stage Invite mount.
+                 Sibling mount inside the player chrome (line ~325) only
+                 appears AFTER playerActivated; this one is visible above
+                 the fold next to the primary watch CTA so users can start
+                 a room without clicking Continue first. Anonymous users
+                 don't see it (creating a room requires JWT). -->
+            <InviteButton
+              v-if="authStore.isAuthenticated && anime"
+              :anime-id="anime.id"
+              :episode-id="String(resumeStartEpisode ?? lastEpisode ?? 1)"
+              :player="videoProvider as PlayerKind"
+              :translation-id="''"
+            />
           </div>
 
           <!-- Actions -->
