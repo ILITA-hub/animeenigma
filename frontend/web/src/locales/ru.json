@@ -45,7 +45,8 @@
     "thisWeekToday": "Сегодня",
     "thisWeekTomorrow": "Завтра",
     "nextEpisodeLine": "Серия {n} · {when}",
-    "topAnimeSub": "По рейтингу зрителей"
+    "topAnimeSub": "По рейтингу зрителей",
+    "announcementsSub": "Что ждать в этом году"
   },
   "recs": {
     "trending": "Тренды сейчас",

@@ -107,6 +107,7 @@
         <!-- Announcements Column -->
         <HomeColumn
           :title="$t('home.announcements')"
+          :sub="$t('home.announcementsSub')"
           icon-tone="blue"
           see-all-to="/browse?status=announced"
           :loading="loadingAnnounced"

@@ -45,7 +45,8 @@
     "thisWeekToday": "Today",
     "thisWeekTomorrow": "Tomorrow",
     "nextEpisodeLine": "Episode {n} · {when}",
-    "topAnimeSub": "By viewer rating"
+    "topAnimeSub": "By viewer rating",
+    "announcementsSub": "What to expect this year"
   },
   "recs": {
     "trending": "Trending now",

@@ -2,7 +2,7 @@
   <router-link
     :to="itemRoute"
     class="item group"
-    :class="{ 'top-3': variant === 'top' && rank !== undefined && rank <= 3 }"
+    :class="{ 'is-top3': variant === 'top' && rank !== undefined && rank <= 3 }"
     @touchstart="(e: TouchEvent) => emit('touchstart', e)"
     @touchmove="emit('touchmove')"
     @touchend="emit('touchend')"
@@ -266,7 +266,10 @@ const formattedNextEp = computed(() => {
   z-index: 0;
   user-select: none;
 }
-.top-3 .rank {
+/* NOTE: class is `is-top3`, NOT `top-3` — `top-3` collides with Tailwind's
+   `top-3` utility (top: 0.75rem) and, because .item is position:relative,
+   shifted the rank-1/2/3 cards down 12px, breaking row alignment. */
+.is-top3 .rank {
   color: rgba(0, 212, 255, 0.08);
 }
 

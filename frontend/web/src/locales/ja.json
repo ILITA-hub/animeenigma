@@ -45,7 +45,8 @@
     "thisWeekToday": "今日",
     "thisWeekTomorrow": "明日",
     "nextEpisodeLine": "第{n}話 · {when}",
-    "topAnimeSub": "視聴者評価順"
+    "topAnimeSub": "視聴者評価順",
+    "announcementsSub": "今年の注目作"
   },
   "recs": {
     "trending": "Trending now",
