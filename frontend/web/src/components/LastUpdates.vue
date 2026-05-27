@@ -1,26 +1,18 @@
 <template>
-  <div class="glass-card rounded-2xl p-5 flex flex-col relative">
+  <!-- Neon Tokyo .activity shell — mirrors ActivityFeed shell -->
+  <div class="activity-shell flex flex-col relative">
     <!-- Header with tabs -->
-    <div class="flex items-center justify-between mb-5">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-          </svg>
-        </div>
-        <h2 class="text-xl font-bold text-white">{{ $t('updates.title') }}</h2>
-      </div>
+    <div class="section-head">
+      <h2 class="section-title">{{ $t('updates.title') }}</h2>
 
       <!-- Tab switcher -->
-      <div class="flex gap-1 bg-white/5 rounded-lg p-0.5">
+      <div class="tab-switcher">
         <button
           v-for="tab in tabs"
           :key="tab"
           @click="activeTab = tab"
-          class="px-3 py-1 text-xs font-medium rounded-md transition-all"
-          :class="activeTab === tab
-            ? 'bg-white/10 text-white'
-            : 'text-gray-400 hover:text-gray-300'"
+          class="tab-btn"
+          :class="{ 'tab-btn--active': activeTab === tab }"
         >
           {{ $t(`updates.${tab}`) }}
         </button>
@@ -28,55 +20,50 @@
     </div>
 
     <!-- Changelog tab -->
-    <div v-if="activeTab === 'changelog'" class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+    <div v-if="activeTab === 'changelog'" class="update-list custom-scrollbar flex-1 min-h-0 overflow-y-auto">
       <!-- Loading -->
-      <div v-if="changelogLoading" class="space-y-3">
-        <div v-for="i in 5" :key="i" class="animate-pulse flex gap-3 p-2">
-          <div class="w-12 h-4 bg-white/10 rounded flex-shrink-0"></div>
-          <div class="flex-1 space-y-2">
-            <div class="h-4 bg-white/10 rounded w-3/4"></div>
-          </div>
+      <div v-if="changelogLoading" class="update-list">
+        <div v-for="i in 5" :key="i" class="update-skeleton">
+          <div class="skeleton-badge" />
+          <div class="skeleton-line" />
         </div>
       </div>
 
       <!-- Error -->
-      <div v-else-if="changelogError" class="text-center py-8 text-gray-400">
+      <div v-else-if="changelogError" class="update-empty">
         {{ $t('updates.error') }}
       </div>
 
       <!-- Content -->
       <template v-else>
-        <div v-if="limitedChangelog.length === 0" class="text-center py-8 text-gray-400">
+        <div v-if="limitedChangelog.length === 0" class="update-empty">
           {{ $t('updates.empty') }}
         </div>
-        <div v-for="group in limitedChangelog" :key="group.date" class="mb-3">
-          <div class="text-xs text-gray-500 font-medium mb-1.5 px-2">{{ formatDate(group.date) }}</div>
+        <div v-for="group in limitedChangelog" :key="group.date" class="changelog-group">
+          <div class="changelog-date">{{ formatDate(group.date) }}</div>
           <button
             v-for="(entry, idx) in group.entries"
             :key="idx"
             type="button"
             @click="onEntryClick(group.date, idx)"
             :aria-expanded="isExpanded(group.date, idx)"
-            class="group w-full text-left flex items-start gap-2.5 p-2 rounded-xl transition-colors cursor-pointer focus:outline-none focus:bg-white/5"
-            :class="isExpanded(group.date, idx) ? 'bg-white/[0.04]' : 'hover:bg-white/5'"
+            class="update-row"
+            :class="{ 'update-row--expanded': isExpanded(group.date, idx) }"
           >
-            <span
-              class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
-              :class="typeBadgeClass(entry.type)"
-            >
+            <span class="entry-badge" :class="typeBadgeClass(entry.type)">
               {{ $t(`updates.${entry.type}`) }}
             </span>
             <div
-              class="entry-msg flex-1 min-w-0"
+              class="entry-msg"
               :class="{ 'entry-msg--open': isExpanded(group.date, idx) }"
             >
               <div class="entry-msg__inner">
-                <p class="text-sm text-gray-300 group-hover:text-white transition-colors whitespace-pre-wrap break-words select-text">{{ entry.message }}</p>
+                <p class="entry-text">{{ entry.message }}</p>
               </div>
             </div>
             <svg
-              class="w-4 h-4 text-gray-500 flex-shrink-0 mt-1 transition-transform duration-200"
-              :class="{ 'rotate-180': isExpanded(group.date, idx) }"
+              class="entry-chevron"
+              :class="{ 'entry-chevron--open': isExpanded(group.date, idx) }"
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
               aria-hidden="true"
             >
@@ -87,60 +74,52 @@
       </template>
     </div>
 
-    <!-- News tab -->
-    <div v-else class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+    <!-- News tab — .update-row layout: thumbnail + body + timestamp -->
+    <div v-else class="update-list custom-scrollbar flex-1 min-h-0 overflow-y-auto">
       <!-- Loading -->
-      <div v-if="newsLoading" class="space-y-3">
-        <div v-for="i in 5" :key="i" class="animate-pulse p-2">
-          <div class="flex gap-3">
-            <div class="w-16 h-16 bg-white/10 rounded-lg flex-shrink-0"></div>
-            <div class="flex-1 space-y-2">
-              <div class="h-4 bg-white/10 rounded w-full"></div>
-              <div class="h-4 bg-white/10 rounded w-2/3"></div>
-              <div class="h-3 bg-white/10 rounded w-1/4"></div>
-            </div>
+      <div v-if="newsLoading" class="update-list">
+        <div v-for="i in 5" :key="i" class="news-skeleton">
+          <div class="skeleton-thumb" />
+          <div class="skeleton-news-body">
+            <div class="skeleton-line w-full" />
+            <div class="skeleton-line w-2/3" />
+            <div class="skeleton-line w-1/4" />
           </div>
         </div>
       </div>
 
       <!-- Error -->
-      <div v-else-if="newsError" class="text-center py-8 text-gray-400">
+      <div v-else-if="newsError" class="update-empty">
         {{ $t('updates.error') }}
       </div>
 
       <!-- Content -->
       <template v-else>
-        <div v-if="news.length === 0" class="text-center py-8 text-gray-400">
+        <div v-if="news.length === 0" class="update-empty">
           {{ $t('updates.newsEmpty') }}
         </div>
+        <!-- .update-row: poster-sm + body (title + sub) + when -->
         <a
           v-for="item in news"
           :key="item.id"
           :href="item.link"
           target="_blank"
           rel="noopener noreferrer"
-          class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors group"
+          class="update-row"
         >
-          <img
-            v-if="item.image_url"
-            :src="item.image_url"
-            alt=""
-            class="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-            loading="lazy"
+          <div
+            class="update-thumb"
+            :style="item.image_url ? `background-image: url(${item.image_url})` : ''"
+            :class="{ 'update-thumb--empty': !item.image_url }"
           />
-          <div class="flex-1 min-w-0">
-            <p class="text-sm text-white group-hover:text-purple-400 transition-colors line-clamp-3">
-              {{ item.text }}
-            </p>
-            <p class="text-xs text-gray-500 mt-1">
-              {{ formatRelativeTime(item.date) }}
-              <span v-if="item.views" class="ml-2">{{ item.views }}</span>
-            </p>
+          <div class="update-body">
+            <div class="update-title">{{ item.text }}</div>
+            <div class="update-sub" v-if="item.views">{{ item.views }}</div>
           </div>
+          <div class="update-when">{{ formatRelativeTime(item.date) }}</div>
         </a>
       </template>
     </div>
-
   </div>
 </template>
 
@@ -296,10 +275,10 @@ async function fetchNews() {
 // --- Formatting ---
 function typeBadgeClass(type: string): string {
   switch (type) {
-    case 'feature': return 'bg-emerald-500/20 text-emerald-400'
-    case 'fix': return 'bg-amber-500/20 text-amber-400'
-    case 'perf': return 'bg-sky-500/20 text-sky-400'
-    default: return 'bg-gray-500/20 text-gray-400'
+    case 'feature': return 'badge-feature'
+    case 'fix': return 'badge-fix'
+    case 'perf': return 'badge-perf'
+    default: return 'badge-other'
   }
 }
 
@@ -338,12 +317,266 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+/* Neon Tokyo .activity shell */
+.activity-shell {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  padding: 18px;
 }
 
+/* Section header */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 12px;
+}
+
+.section-title {
+  font-family: var(--f-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+/* Tab switcher */
+.tab-switcher {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--r-sm);
+  padding: 2px;
+}
+
+.tab-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  color: var(--ink-3);
+  transition: background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+}
+
+.tab-btn:hover {
+  color: var(--ink-2);
+}
+
+.tab-btn--active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+/* Update list */
+.update-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* .update-row from handoff — shared by changelog entries and news items */
+.update-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  background: transparent;
+  border: none;
+}
+
+.update-row:hover,
+.update-row--expanded {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* News thumbnail — .poster-sm from handoff: 36×48px */
+.update-thumb {
+  width: 36px;
+  height: 48px;
+  border-radius: 6px;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+}
+
+.update-thumb--empty {
+  background: linear-gradient(135deg, #0e7490 0%, #4c1d95 100%);
+}
+
+/* Body (title + sub) */
+.update-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.update-title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+
+.update-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+/* Right-aligned mono timestamp */
+.update-when {
+  font-size: 11px;
+  color: var(--ink-4);
+  font-family: var(--f-mono);
+  flex-shrink: 0;
+}
+
+/* Empty + error states */
+.update-empty {
+  text-align: center;
+  padding: 32px 0;
+  color: var(--ink-4);
+  font-size: 13px;
+}
+
+/* Changelog group */
+.changelog-group {
+  margin-bottom: 8px;
+}
+
+.changelog-date {
+  font-size: 11px;
+  color: var(--ink-4);
+  font-weight: 500;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  font-family: var(--f-mono);
+}
+
+/* Changelog entry badge */
+.entry-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.badge-feature { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.badge-fix { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.badge-perf { background: rgba(14, 165, 233, 0.2); color: #38bdf8; }
+.badge-other { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+
+/* Entry message — inline expand/collapse */
+.entry-msg {
+  display: grid;
+  grid-template-rows: 2.5rem;
+  transition: grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-msg--open {
+  grid-template-rows: 1fr;
+}
+
+.entry-msg__inner {
+  overflow: hidden;
+}
+
+.entry-text {
+  font-size: 13px;
+  color: var(--ink-3);
+  transition: color 0.15s ease;
+  white-space: pre-wrap;
+  word-break: break-words;
+  user-select: text;
+}
+
+.update-row:hover .entry-text {
+  color: var(--ink);
+}
+
+/* Chevron */
+.entry-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-4);
+  flex-shrink: 0;
+  margin-top: 4px;
+  transition: transform 200ms ease;
+}
+
+.entry-chevron--open {
+  transform: rotate(180deg);
+}
+
+/* Loading skeletons */
+.update-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-badge {
+  width: 48px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  flex: 1;
+}
+
+.news-skeleton {
+  display: flex;
+  gap: 12px;
+  padding: 10px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-thumb {
+  width: 36px;
+  height: 48px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.skeleton-news-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+
+.w-full { width: 100%; }
+.w-2\/3 { width: 66%; }
+.w-1\/4 { width: 25%; }
+
+/* Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
@@ -361,33 +594,8 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.line-clamp-3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* Inline expand/collapse for changelog entries.
-   grid-template-rows transition between a fixed collapsed height
-   and `1fr` (auto). Works in Chrome 117+, Firefox 119+, Safari 17.4+.
-   Older browsers degrade to instant snap — acceptable. */
-.entry-msg {
-  display: grid;
-  grid-template-rows: 2.5rem;
-  transition: grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-.entry-msg--open {
-  grid-template-rows: 1fr;
-}
-.entry-msg__inner {
-  overflow: hidden;
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>

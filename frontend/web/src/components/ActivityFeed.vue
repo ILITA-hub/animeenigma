@@ -1,82 +1,75 @@
 <template>
-  <div class="glass-card rounded-2xl p-5">
-    <div class="flex items-center gap-3 mb-5">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-      </div>
-      <h2 class="text-xl font-bold text-white">{{ $t('activity.title') }}</h2>
+  <!-- .activity shell from Neon Tokyo handoff -->
+  <div class="activity-shell">
+    <!-- Section header -->
+    <div class="section-head">
+      <h2 class="section-title">{{ $t('activity.title') }}</h2>
     </div>
 
     <!-- Loading skeleton -->
-    <div v-if="loading && events.length === 0" class="space-y-3">
-      <div v-for="i in 4" :key="i" class="animate-pulse flex gap-3 p-2">
-        <div class="w-12 h-16 bg-white/10 rounded-lg flex-shrink-0"></div>
-        <div class="flex-1 space-y-2">
-          <div class="h-3 bg-white/10 rounded w-1/4"></div>
-          <div class="h-4 bg-white/10 rounded w-3/4"></div>
-          <div class="h-3 bg-white/10 rounded w-1/3"></div>
+    <div v-if="loading && events.length === 0" class="feed-list">
+      <div v-for="i in 4" :key="i" class="feed-item-skeleton">
+        <div class="skeleton-av" />
+        <div class="skeleton-body">
+          <div class="skeleton-line w-1/4" />
+          <div class="skeleton-line w-3/4" />
+          <div class="skeleton-line w-1/3" />
         </div>
       </div>
     </div>
 
     <!-- Events list -->
-    <div v-else class="space-y-2">
+    <div v-else class="feed-list">
       <div
         v-for="event in events"
         :key="event.id"
-        class="flex gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors"
+        class="feed-item"
       >
-        <!-- Anime poster -->
+        <!-- 28px avatar / poster thumbnail -->
         <router-link
           :to="`/anime/${event.anime_id}`"
-          class="flex-shrink-0"
+          class="feed-av"
+          tabindex="-1"
+          aria-hidden="true"
         >
           <img
-            :src="event.anime?.poster_url || '/placeholder.svg'"
-            :alt="getLocalizedTitle(event.anime?.name, event.anime?.name_ru) || ''"
-            class="w-12 h-16 object-cover rounded-lg"
+            v-if="event.anime?.poster_url"
+            :src="event.anime.poster_url"
+            :alt="animeName(event)"
+            class="feed-av-img"
           />
+          <span v-else class="feed-av-fallback">{{ event.username?.charAt(0)?.toUpperCase() }}</span>
         </router-link>
 
-        <!-- Event info -->
-        <div class="flex-1 min-w-0">
-          <router-link
-            :to="`/user/${event.public_id || event.user_id}`"
-            class="text-xs text-gray-400 hover:text-purple-400 transition-colors"
-          >
-            {{ event.username }}
-          </router-link>
-          <p class="text-sm text-white mt-0.5">
-            <span>{{ actionText(event) }}</span>
+        <!-- Text block -->
+        <div class="feed-text-block">
+          <div class="feed-text">
+            <router-link
+              :to="`/user/${event.public_id || event.user_id}`"
+              class="feed-who"
+            >@{{ event.username }}</router-link>
+            <span class="feed-action"> {{ actionText(event) }}</span>
             <router-link
               :to="`/anime/${event.anime_id}`"
-              class="text-purple-400 hover:text-purple-300 transition-colors"
-            >
-              {{ animeName(event) }}
-            </router-link>
-          </p>
-          <p v-if="event.content" class="text-xs text-gray-400 mt-1 line-clamp-2 italic">
-            {{ event.content }}
-          </p>
-          <p class="text-xs text-gray-500 mt-1">
-            {{ formatRelativeTime(event.created_at) }}
-          </p>
+              class="feed-ttl"
+            >{{ animeName(event) }}</router-link>
+          </div>
+          <p v-if="event.content" class="feed-excerpt">{{ event.content }}</p>
+          <div class="feed-time">{{ formatRelativeTime(event.created_at) }}</div>
         </div>
       </div>
 
       <!-- Empty state -->
-      <div v-if="events.length === 0 && !loading" class="text-center py-8 text-gray-400">
+      <div v-if="events.length === 0 && !loading" class="feed-empty">
         {{ $t('activity.empty') }}
       </div>
 
-      <!-- Load more button -->
+      <!-- Load more -->
       <button
         v-if="hasMore"
         @click="loadMore"
         :disabled="loading"
-        class="w-full mt-3 py-2.5 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-colors disabled:opacity-50"
+        class="feed-load-more"
       >
         {{ loading ? $t('common.loading') : $t('activity.loadMore') }}
       </button>
@@ -190,9 +183,196 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+/* Neon Tokyo .activity shell */
+.activity-shell {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  padding: 18px;
+}
+
+/* Section header */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-title {
+  font-family: var(--f-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* Feed list */
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* .feed-item from handoff */
+.feed-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+/* 28px avatar — uses poster as avatar thumbnail */
+.feed-av {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #1a3a4a, #0e2030);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  border: 1px solid var(--line-strong);
+  overflow: hidden;
+  text-decoration: none;
+}
+
+.feed-av-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.feed-av-fallback {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--f-display);
+}
+
+/* Text block */
+.feed-text-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+/* @username bold */
+.feed-who {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.feed-who:hover {
+  color: var(--accent);
+}
+
+.feed-action {
+  color: var(--ink-2);
+}
+
+/* Anime title in accent color */
+.feed-ttl {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.feed-ttl:hover {
+  color: var(--ink);
+}
+
+/* Optional italic excerpt */
+.feed-excerpt {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-style: italic;
+  margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Mono timestamp */
+.feed-time {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  margin-top: 2px;
+}
+
+/* Empty state */
+.feed-empty {
+  text-align: center;
+  padding: 32px 0;
+  color: var(--ink-4);
+  font-size: 13px;
+}
+
+/* Load more */
+.feed-load-more {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--ink-3);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.feed-load-more:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+.feed-load-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading skeleton */
+.feed-item-skeleton {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.skeleton-av {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.w-1\/4 { width: 25%; }
+.w-3\/4 { width: 75%; }
+.w-1\/3 { width: 33%; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 </style>

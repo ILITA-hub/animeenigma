@@ -10,20 +10,24 @@
     <!-- Search Bar -->
     <h1 class="sr-only">AnimeEnigma</h1>
     <div class="pt-24 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-      <div class="flex items-center gap-3 relative z-40">
-        <div class="flex-1">
+      <div class="search-row relative z-40">
+        <!-- Search wrapper — Neon Tokyo .search shell wrapping the SearchAutocomplete -->
+        <div class="search-shell">
           <SearchAutocomplete
             v-model="searchQuery"
             listbox-id="home-search"
             @submit="goToSearch"
           />
+          <!-- ⌘K decorative hint — no global shortcut wired (none exists); purely visual -->
+          <kbd class="search-kbd hidden sm:inline-flex" aria-hidden="true">⌘K</kbd>
         </div>
+        <!-- Schedule button — .btn-ghost-accent -->
         <router-link
           to="/schedule"
           :aria-label="$t('nav.scheduleLink')"
-          class="flex items-center gap-2 px-4 py-4 rounded-xl bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+          class="btn-ghost-accent"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <span class="hidden sm:inline">{{ $t('nav.schedule') }}</span>
@@ -286,10 +290,74 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+/* Neon Tokyo search row — grid 1fr auto, gap 12px */
+.search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* Shell around SearchAutocomplete — .search look from handoff */
+.search-shell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  color: var(--ink-3);
+  transition: border 0.15s ease, background 0.15s ease;
+  /* The inner SearchAutocomplete must fill remaining width */
+  overflow: hidden;
+}
+
+.search-shell:hover,
+.search-shell:focus-within {
+  border-color: var(--accent-line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Allow SearchAutocomplete to flex-fill the shell */
+.search-shell :deep(> *:first-child) {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ⌘K decorative kbd hint */
+.search-kbd {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-3);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Schedule link — .btn-ghost-accent from handoff */
+.btn-ghost-accent {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+  padding: 0 20px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn-ghost-accent:hover {
+  background: rgba(0, 212, 255, 0.22);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -307,12 +375,5 @@ onMounted(() => {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
-}
-
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 </style>
