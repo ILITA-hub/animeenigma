@@ -42,7 +42,9 @@
     "continueWatchingAll": "Вся история",
     "thisWeek": "На этой неделе",
     "thisWeekToday": "Сегодня",
-    "thisWeekTomorrow": "Завтра"
+    "thisWeekTomorrow": "Завтра",
+    "nextEpisodeLine": "Серия {n} · {when}",
+    "topAnimeSub": "По рейтингу зрителей"
   },
   "recs": {
     "trending": "Тренды сейчас",

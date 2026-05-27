@@ -42,7 +42,9 @@
     "continueWatchingAll": "All history",
     "thisWeek": "This Week",
     "thisWeekToday": "Today",
-    "thisWeekTomorrow": "Tomorrow"
+    "thisWeekTomorrow": "Tomorrow",
+    "nextEpisodeLine": "Episode {n} · {when}",
+    "topAnimeSub": "By viewer rating"
   },
   "recs": {
     "trending": "Trending now",
