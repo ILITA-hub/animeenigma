@@ -67,10 +67,15 @@ func NewRouter(
 	r.Use(httputil.CORS([]string{"*"}))
 	r.Use(middleware.RealIP)
 
-	// Public liveness.
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+	// Public liveness. Accepts GET (curl-style probes) and HEAD (BusyBox
+	// `wget --spider`, which is the default in our docker healthcheck
+	// stanzas — chi otherwise responds 405 to HEAD and the container
+	// flips "unhealthy" even though the service is fine).
+	healthHandler := func(w http.ResponseWriter, _ *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
-	})
+	}
+	r.Get("/health", healthHandler)
+	r.Head("/health", healthHandler)
 
 	// Prometheus metrics endpoint.
 	r.Get("/metrics", func(w http.ResponseWriter, req *http.Request) {

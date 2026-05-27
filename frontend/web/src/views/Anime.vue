@@ -121,17 +121,17 @@
             </button>
             <!-- Workstream watch-together — discovery-stage Invite mount.
                  Anonymous users don't see it (creating a room requires JWT).
-                 Backend requires a real translation_id, so we also gate on
-                 `resolvedCombo` — populated synchronously for returning users
-                 from localStorage by useWatchPreferences, or after Continue
-                 Watching triggers player mount + available-translations emit
-                 for first-timers. Empty string fails backend validation. -->
+                 Backend requires a non-empty translation_id; for first-time
+                 visitors with no cached combo we lazy-resolve it on click via
+                 `resolveTranslationId` which activates the player and waits
+                 for useWatchPreferences to populate. -->
             <InviteButton
-              v-if="authStore.isAuthenticated && anime && resolvedCombo"
+              v-if="authStore.isAuthenticated && anime"
               :anime-id="anime.id"
               :episode-id="String(resumeStartEpisode ?? lastEpisode ?? 1)"
-              :player="(resolvedCombo.player === 'english' ? 'ourenglish' : resolvedCombo.player) as PlayerKind"
-              :translation-id="resolvedCombo.translation_id"
+              :player="(resolvedCombo?.player === 'english' ? 'ourenglish' : (resolvedCombo?.player ?? 'kodik')) as PlayerKind"
+              :translation-id="resolvedCombo?.translation_id ?? ''"
+              :resolve-translation-id="resolveTranslationId"
             />
           </div>
 
@@ -1046,6 +1046,40 @@ async function activatePlayer() {
   playerActivated.value = true
   await nextTick()
   playerSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// Workstream watch-together — lazy translation_id resolver for the
+// discovery-stage InviteButton. Returning users with a cached
+// `pref:<animeId>` see resolvedCombo populated synchronously and this
+// short-circuits on the first line. First-time visitors land in the
+// activate-and-wait branch: we mount the player (which fetches available
+// translations and runs the preference resolver), then watch for
+// resolvedCombo to flip from null to truthy within 12s. The button calls
+// this BEFORE hitting the backend so the user never sees an INVALID_INPUT
+// error for missing translation_id.
+async function resolveTranslationId(): Promise<string> {
+  if (resolvedCombo.value?.translation_id) {
+    return resolvedCombo.value.translation_id
+  }
+  if (!playerActivated.value) {
+    await activatePlayer()
+  }
+  return new Promise<string>((resolve, reject) => {
+    if (resolvedCombo.value?.translation_id) {
+      return resolve(resolvedCombo.value.translation_id)
+    }
+    const stop = watch(resolvedCombo, (combo) => {
+      if (combo?.translation_id) {
+        stop()
+        clearTimeout(timer)
+        resolve(combo.translation_id)
+      }
+    })
+    const timer = setTimeout(() => {
+      stop()
+      reject(new Error('translation_resolve_timeout'))
+    }, 12_000)
+  })
 }
 
 // Phase 11 / UX-23 — Theater Mode.

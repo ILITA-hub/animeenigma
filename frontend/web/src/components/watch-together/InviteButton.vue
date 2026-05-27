@@ -50,8 +50,13 @@ const props = defineProps<{
   episodeId: string
   /** Active player kind (drives WatchTogetherView's player mount). */
   player: PlayerKind
-  /** Active translation/dub identifier. */
+  /** Active translation/dub identifier. May be empty for the discovery
+   *  mount on the anime detail page — see `resolveTranslationId`. */
   translationId: string
+  /** Optional lazy resolver. Called BEFORE createRoom when translationId
+   *  is empty (e.g. discovery mount on a fresh anime). The parent runs
+   *  player activation + waits for useWatchPreferences to populate. */
+  resolveTranslationId?: () => Promise<string>
 }>()
 
 const { t } = useI18n()
@@ -86,11 +91,23 @@ async function onClick(): Promise<void> {
   if (loading.value) return
   loading.value = true
   try {
+    // Backend requires non-empty translation_id (rooms.go:83-84). For the
+    // discovery mount on the anime detail page, translation_id may not be
+    // resolved yet — fall through to the parent's lazy resolver which
+    // activates the player and waits for useWatchPreferences to populate.
+    let translationId = props.translationId
+    if (!translationId && props.resolveTranslationId) {
+      translationId = await props.resolveTranslationId()
+    }
+    if (!translationId) {
+      toast.push(t('watch_together.invite_copied_toast'), 'error', 4000)
+      return
+    }
     const response = await createRoom({
       anime_id: props.animeId,
       episode_id: props.episodeId,
       player: props.player,
-      translation_id: props.translationId,
+      translation_id: translationId,
     })
 
     // Navigate FIRST so the address bar shows the room URL before the
