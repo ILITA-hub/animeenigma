@@ -86,12 +86,12 @@ async function findKodikBearingAnimeId(
   // Pass 1: bot's seeded watching list.
   const candidates: string[] = []
   try {
-    const resp = await request.get('/api/users/me/anime-list?status=watching', {
+    const resp = await request.get('/api/users/watchlist?status=watching', {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (resp.ok()) {
       const body = await resp.json()
-      const items = body?.data?.items ?? body?.items ?? body?.data ?? []
+      const items = body?.data ?? body?.items ?? []
       if (Array.isArray(items)) {
         for (const item of items) {
           const id: string | undefined = item?.anime_id ?? item?.anime?.id ?? item?.id

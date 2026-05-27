@@ -120,17 +120,18 @@
               <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
             </button>
             <!-- Workstream watch-together — discovery-stage Invite mount.
-                 Sibling mount inside the player chrome (line ~325) only
-                 appears AFTER playerActivated; this one is visible above
-                 the fold next to the primary watch CTA so users can start
-                 a room without clicking Continue first. Anonymous users
-                 don't see it (creating a room requires JWT). -->
+                 Anonymous users don't see it (creating a room requires JWT).
+                 Backend requires a real translation_id, so we also gate on
+                 `resolvedCombo` — populated synchronously for returning users
+                 from localStorage by useWatchPreferences, or after Continue
+                 Watching triggers player mount + available-translations emit
+                 for first-timers. Empty string fails backend validation. -->
             <InviteButton
-              v-if="authStore.isAuthenticated && anime"
+              v-if="authStore.isAuthenticated && anime && resolvedCombo"
               :anime-id="anime.id"
               :episode-id="String(resumeStartEpisode ?? lastEpisode ?? 1)"
-              :player="videoProvider as PlayerKind"
-              :translation-id="''"
+              :player="(resolvedCombo.player === 'english' ? 'ourenglish' : resolvedCombo.player) as PlayerKind"
+              :translation-id="resolvedCombo.translation_id"
             />
           </div>
 

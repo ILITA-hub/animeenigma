@@ -63,15 +63,17 @@ async function resolveSeededAnimeId(
   token: string,
 ): Promise<string> {
   if (SEEDED_ANIME_ID) return SEEDED_ANIME_ID
-  // Use the player service's anime_list endpoint with the bot's JWT.
-  const resp = await request.get('/api/users/me/anime-list?status=watching', {
+  // Use the player service's watchlist endpoint with the bot's JWT.
+  // Route is `GET /api/users/watchlist?status=...` per player router.go.
+  const resp = await request.get('/api/users/watchlist?status=watching', {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!resp.ok()) {
-    throw new Error(`could not fetch seeded anime_list: ${resp.status()}`)
+    throw new Error(`could not fetch seeded watchlist: ${resp.status()}`)
   }
   const body = await resp.json()
-  const items = body?.data?.items ?? body?.items ?? body?.data ?? []
+  // Backend envelope is { success, data: [...] } — items are flat in data.
+  const items = body?.data ?? body?.items ?? []
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error(
       'ui_audit_bot has no `watching` anime — re-run ./scripts/seed-ui-audit-user.sh',
@@ -201,27 +203,35 @@ test.describe('Watch Together — two-browser smoke (Phase 02 Plan 02.10)', () =
       const animeId = await resolveSeededAnimeId(request, authA.token)
       await registerEphemeralUser(pageB, request)
 
+      // Seed the `pref:<animeId>` localStorage cache that useWatchPreferences
+      // reads synchronously on construction. This puts the test browser in
+      // the "returning user" state: resolvedCombo is populated BEFORE the
+      // player needs to mount, so the InviteButton renders immediately.
+      // Mirrors what real returning users see (and avoids fighting the
+      // provider-resolution chain in a headless test environment where
+      // kodik/animelib/etc. round-trips can flake).
+      const seededCombo = {
+        data: {
+          player: 'kodik',
+          language: 'ru',
+          watch_type: 'sub',
+          translation_id: 'e2e-seed-translation',
+          translation_title: 'E2E Seeded',
+          tier: 'user_global',
+          tier_number: 2,
+        },
+        timestamp: Date.now(),
+      }
+      await pageA.addInitScript(
+        ({ key, value }) => {
+          localStorage.setItem(key, JSON.stringify(value))
+        },
+        { key: `pref:${animeId}`, value: seededCombo },
+      )
+
       // ── 2. Browser A visits the anime page ───────────────────────────
       await pageA.goto(`/anime/${animeId}`)
       await pageA.waitForLoadState('networkidle')
-
-      // Activate the player so the InviteButton mounts (v-if guard
-      // requires playerActivated). The Anime.vue placeholder before
-      // activation is a clickable region — click any heading/poster area
-      // first, then look for the "click to play" placeholder.
-      const playerPlaceholder = pageA
-        .locator('[data-testid*="player"], button:has-text(/Play|Загрузить|Смотреть/), .player-placeholder, [aria-label*="play" i]')
-        .first()
-      // The Anime.vue placeholder may render under many shapes — try a
-      // broad set, falling back to clicking the rough player area.
-      if (await playerPlaceholder.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await playerPlaceholder.click({ force: true }).catch(() => undefined)
-      } else {
-        // Fall back: click the bounding box of where the player should be
-        // (top-of-page large region). Anime.vue puts the player above
-        // the fold; this nudges `playerActivated.value = true`.
-        await pageA.mouse.click(640, 360).catch(() => undefined)
-      }
 
       // The InviteButton renders the i18n key `invite_button_label`. In
       // 'en' that's "Invite to Watch Together"; in 'ru' "Пригласить...";
@@ -232,20 +242,12 @@ test.describe('Watch Together — two-browser smoke (Phase 02 Plan 02.10)', () =
         )
         .first()
 
-      // The InviteButton is gated behind `playerActivated`. If it
-      // doesn't appear within 10s, force-activate by setting the ref
-      // directly via the Vue devtools-style global hook (best-effort).
-      const visible = await inviteBtn.isVisible({ timeout: 10_000 }).catch(() => false)
-      if (!visible) {
-        // Operator hint: the gating requires player activation, which
-        // varies by provider. Document in the spec output so the test
-        // operator can adjust the placeholder selector.
-        test.fail(
-          true,
-          'InviteButton did not appear within 10s — player activation gate not reached. Adjust the placeholder selector for the active provider.',
-        )
-        return
-      }
+      // The InviteButton is gated behind `resolvedCombo` (Anime.vue line 128).
+      // After clicking Continue, the player must mount, emit available-
+      // translations, and useWatchPreferences must resolve a combo before
+      // the button renders. Allow up to 25s — provider resolution + network
+      // round-trip + the resolve POST.
+      await expect(inviteBtn).toBeVisible({ timeout: 25_000 })
 
       // ── 3. A clicks Invite → URL changes + member list shows A ───────
       await inviteBtn.click()
@@ -322,10 +324,12 @@ test.describe('Watch Together — two-browser smoke (Phase 02 Plan 02.10)', () =
         ),
       ).toBeVisible({ timeout: 8_000 })
       // The back button — i18n key `watch_together.room_ended_back_button`.
+      // Use getByRole + regex name (valid Playwright API) instead of
+      // `:has-text(/regex/)` which is not valid CSS-string syntax.
       await expect(
-        page.locator(
-          'button:has-text(/Back to anime|Назад к аниме/i), a:has-text(/Back to anime|Назад к аниме/i)',
-        ),
+        page
+          .getByRole('button', { name: /Back to anime|Назад к аниме/i })
+          .or(page.getByRole('link', { name: /Back to anime|Назад к аниме/i })),
       ).toBeVisible()
     } finally {
       await ctx.close().catch(() => undefined)

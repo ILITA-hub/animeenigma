@@ -180,14 +180,16 @@ async function resolveSeededAnimeId(
   token: string,
 ): Promise<string> {
   if (cachedAnimeId) return cachedAnimeId
-  const resp = await request.get('/api/users/me/anime-list?status=watching', {
+  // Player router exposes the watchlist at `/api/users/watchlist`; the
+  // old `/me/anime-list` path was never wired up. Envelope is { success, data: [...] }.
+  const resp = await request.get('/api/users/watchlist?status=watching', {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!resp.ok()) {
-    throw new Error(`could not fetch seeded anime_list: ${resp.status()}`)
+    throw new Error(`could not fetch seeded watchlist: ${resp.status()}`)
   }
   const body = await resp.json()
-  const items = body?.data?.items ?? body?.items ?? body?.data ?? []
+  const items = body?.data ?? body?.items ?? []
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error(
       'no seeded anime found — run scripts/seed-ui-audit-user.sh to seed ui_audit_bot',
@@ -212,7 +214,10 @@ async function createRoom(
       anime_id: animeId,
       episode_id: INITIAL_EPISODE,
       player,
-      translation_id: '',
+      // Backend rejects empty translation_id (rooms.go:83-84). For state-switch
+      // tests we just need a non-empty value; the state-change events tested
+      // here override the initial value anyway.
+      translation_id: 'e2e-seeded',
     },
   })
   if (!resp.ok()) {

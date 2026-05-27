@@ -130,14 +130,16 @@ async function resolveSeededAnimeId(
   token: string,
 ): Promise<string> {
   if (cachedAnimeId) return cachedAnimeId
-  const resp = await request.get('/api/users/me/anime-list?status=watching', {
+  // Player router exposes the watchlist at `/api/users/watchlist`; the
+  // old `/me/anime-list` path was never wired up. Envelope is { success, data: [...] }.
+  const resp = await request.get('/api/users/watchlist?status=watching', {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!resp.ok()) {
-    throw new Error(`could not fetch seeded anime_list: ${resp.status()}`)
+    throw new Error(`could not fetch seeded watchlist: ${resp.status()}`)
   }
   const body = await resp.json()
-  const items = body?.data?.items ?? body?.items ?? body?.data ?? []
+  const items = body?.data ?? body?.items ?? []
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error(
       'no seeded anime found — run scripts/seed-ui-audit-user.sh to seed ui_audit_bot',
@@ -158,7 +160,10 @@ async function createRoom(
 ): Promise<RoomCreateResult> {
   const resp = await request.post('/api/watch-together/rooms', {
     headers: { Authorization: `Bearer ${token}` },
-    data: { anime_id: animeId, episode_id: '1', player, translation_id: '' },
+    // Backend rejects empty translation_id with INVALID_INPUT (rooms.go:83-84).
+    // For sync tests we just need a non-empty value — the player is the unit
+    // under test, not provider-specific translation resolution.
+    data: { anime_id: animeId, episode_id: '1', player, translation_id: 'e2e-seeded' },
   })
   if (!resp.ok()) {
     throw new Error(
