@@ -24,10 +24,15 @@
       {{ t('watch_together.members_heading') }} ({{ members.length }})
     </h3>
 
-    <ul v-if="members.length > 0" class="flex flex-col gap-1">
+    <ul
+      v-if="members.length > 0"
+      class="flex flex-col gap-1"
+      data-testid="wt-member-list"
+    >
       <li
         v-for="m in members"
         :key="m.user_id"
+        data-testid="wt-member-entry"
         class="flex items-center gap-2 p-2 rounded-md hover:bg-foreground/5"
       >
         <img

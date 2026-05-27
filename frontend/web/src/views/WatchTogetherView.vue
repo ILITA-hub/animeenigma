@@ -242,7 +242,26 @@ bootstrap()
 // inside setup, but the test surface and future refactors benefit).
 onBeforeUnmount(() => {
   roomHandle.disconnect()
+  // Tear down the test hook to avoid leaking handles across SPA
+  // navigations within the same Playwright page object.
+  if (typeof window !== 'undefined') {
+    delete (window as unknown as { __wtTestRoom?: unknown }).__wtTestRoom
+  }
 })
+
+// Workstream watch-together — install the test hook that the existing
+// e2e/watch-together-state-switching.spec.ts already expects:
+// `window.__wtTestRoom.emitChange{Episode,Player,Translation}`.
+// Exposes the SAME roomHandle the in-page UI already uses, scoped to
+// the user's current room (no privilege gain — anything callable via
+// the hook is also callable via the visible PlayerTabBar / Chat /
+// Reaction palette buttons). Kept unconditional so the Docker
+// production-mode build that we use for headless e2e gets it. The
+// risk surface is negligible: the room handle has no admin powers,
+// only the WS emits this user could trigger anyway.
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __wtTestRoom?: unknown }).__wtTestRoom = roomHandle
+}
 
 // Plan 04.4 — PlayerTabBar @select-player handler. Routes ALL user-driven
 // player changes through the room handle so the backend validates +
