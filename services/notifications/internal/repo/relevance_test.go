@@ -265,7 +265,8 @@ func Test_Upsert_RevivesInvalidatedRow(t *testing.T) {
 		`"watch_type":"sub","translation_id":"1","watch_url":"/x"}`)
 
 	// First upsert (ep7), then tombstone it + mark read.
-	if _, err := r.Upsert(context.Background(), userID, "new_episode", dedupe, p7); err != nil {
+	first, err := r.Upsert(context.Background(), userID, "new_episode", dedupe, p7)
+	if err != nil {
 		t.Fatalf("first upsert: %v", err)
 	}
 	if err := db.Exec(
@@ -287,5 +288,17 @@ func Test_Upsert_RevivesInvalidatedRow(t *testing.T) {
 	}
 	if out.ReadAt != nil {
 		t.Fatalf("expected read_at cleared on revival, got %v", out.ReadAt)
+	}
+	// Prove this was an UPDATE (revival), not a fresh INSERT:
+	if out.ID != first.ID {
+		t.Fatalf("expected same row revived, got new id %s (was %s)", out.ID, first.ID)
+	}
+	var count int64
+	if err := db.Raw(`SELECT COUNT(*) FROM user_notifications WHERE user_id=? AND dedupe_key=?`,
+		userID, dedupe).Scan(&count).Error; err != nil {
+		t.Fatalf("count rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 row after revival (UPDATE path), got %d", count)
 	}
 }
