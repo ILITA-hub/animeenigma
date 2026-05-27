@@ -96,27 +96,42 @@ The live relevance predicate (correlated subqueries, applied only to
     -- (1) still watching
     EXISTS (
       SELECT 1 FROM anime_list al
-      WHERE al.user_id = n.user_id
-        AND al.anime_id::text = n.payload->>'anime_id'
+      WHERE al.user_id = user_notifications.user_id
+        AND CAST(al.anime_id AS TEXT) = (user_notifications.payload ->> 'anime_id')
         AND al.status = 'watching'
     )
     -- (2) not caught up to the advertised latest (anime-level: any combo counts)
-    AND COALESCE((
-      SELECT MAX(wh.episode_number) FROM watch_history wh
-      WHERE wh.user_id = n.user_id
-        AND wh.anime_id::text = n.payload->>'anime_id'
-    ), -1) < (n.payload->>'latest_available_episode')::int
+    AND (
+      CAST((user_notifications.payload ->> 'latest_available_episode') AS INTEGER) IS NULL
+      OR COALESCE((
+           SELECT MAX(wh.episode_number) FROM watch_history wh
+           WHERE wh.user_id = user_notifications.user_id
+             AND CAST(wh.anime_id AS TEXT) = (user_notifications.payload ->> 'anime_id')
+         ), -1) < CAST((user_notifications.payload ->> 'latest_available_episode') AS INTEGER)
+    )
   )
 )
 ```
 
-Notes:
-- `anime_id::text = payload->>'anime_id'` (compare as text) avoids a per-row
-  `::uuid` cast that would throw on a malformed payload — **fail-open**.
-- The `::int` cast on `latest_available_episode` is guarded by a
-  `~ '^[0-9]+$'` digit check; a malformed/absent value keeps the row (fail-open).
-  Real `NewEpisodePayload` rows always carry a numeric value, so this only guards
-  against corruption.
+**Portability note (important):** the notifications service's tests run on
+**in-memory SQLite** (hand-rolled DDL; see `job/detector_test.go`), while
+production is Postgres. The predicate therefore uses only constructs valid in
+**both**:
+- The `->>` JSON operator — Postgres (jsonb) and SQLite ≥ 3.38 both support
+  `payload ->> 'key'` with a bare key.
+- Standard-SQL `CAST(x AS TEXT)` / `CAST(x AS INTEGER)` instead of Postgres-only
+  `::text` / `::int`.
+- `CAST(anime_id AS TEXT)` sidesteps the uuid-vs-text comparison (uuid in
+  Postgres, TEXT in SQLite) with no driver-specific cast.
+
+Other notes:
+- **Fail-open on a missing `latest_available_episode`:** if the key is absent,
+  `->>` yields NULL, `CAST(NULL AS INTEGER)` is NULL (no throw in either driver),
+  and the `IS NULL` branch keeps the row visible. `NewEpisodePayload` always
+  marshals `latest_available_episode` as a JSON **number** (Go `int`), so the
+  value is numeric by construction; non-numeric corruption (which would throw on
+  Postgres `CAST`) cannot occur through the validated producer and is not
+  separately defended.
 - The working set per user is tiny (single-digit unread rows), so the correlated
   subqueries are cheap; no extra index on the foreign tables is required.
 
@@ -133,13 +148,16 @@ upserted rows). It stamps `invalidated_at = NOW()` on currently-active
 `new_episode` rows that are no longer relevant:
 
 ```sql
-UPDATE user_notifications n
-SET invalidated_at = NOW()
-WHERE n.type = 'new_episode'
-  AND n.dismissed_at IS NULL
-  AND n.invalidated_at IS NULL
-  AND NOT ( <relevance predicate body, correlated to n> )
+UPDATE user_notifications
+SET invalidated_at = ?            -- bound time.Now().UTC() (portable; no NOW())
+WHERE type = 'new_episode'
+  AND dismissed_at IS NULL
+  AND invalidated_at IS NULL
+  AND NOT ( <relevance predicate body, the EXISTS-and-not-caught-up expression> )
 ```
+
+The `<relevance predicate body>` is the **same** shared SQL fragment used by the
+read filter (the part inside the `OR ( … )`), guaranteeing the two never drift.
 
 - Returns rows-affected → increments a new counter
   `notifications_stale_invalidated_total` (in `job/metrics.go`).
@@ -196,14 +214,19 @@ InvalidatedAt *time.Time `gorm:"index" json:"invalidated_at"`
 
 ### Retention (`DismissedRetentionCleanupJob`)
 
-Extend the nightly DELETE to also reap long-retired rows, keeping the pgx-safe
-`INTERVAL '1 day' * ?` form:
+Extend the nightly DELETE to also reap long-retired rows. Refactor the cutoff to
+a **Go-computed bound timestamp** (`cutoff := time.Now().UTC().AddDate(0, 0,
+-retentionDays)`) instead of the Postgres `INTERVAL '1 day' * ?` form — this
+removes the pgx-encoding workaround, is portable to SQLite, and makes the job
+unit-testable:
 
 ```sql
 DELETE FROM user_notifications
-WHERE (dismissed_at   IS NOT NULL AND dismissed_at   < NOW() - (INTERVAL '1 day' * ?))
-   OR (invalidated_at IS NOT NULL AND invalidated_at < NOW() - (INTERVAL '1 day' * ?))
+WHERE (dismissed_at   IS NOT NULL AND dismissed_at   < ?)
+   OR (invalidated_at IS NOT NULL AND invalidated_at < ?)
 ```
+
+(Both `?` bind the same `cutoff`.)
 
 ## Frontend
 
