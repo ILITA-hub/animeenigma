@@ -81,9 +81,9 @@
         <div v-for="i in 5" :key="i" class="news-skeleton">
           <div class="skeleton-thumb" />
           <div class="skeleton-news-body">
-            <div class="skeleton-line w-full" />
-            <div class="skeleton-line w-2/3" />
-            <div class="skeleton-line w-1/4" />
+            <div class="skeleton-line skel-w-full" />
+            <div class="skeleton-line skel-w-2-3" />
+            <div class="skeleton-line skel-w-1q" />
           </div>
         </div>
       </div>
@@ -109,9 +109,16 @@
         >
           <div
             class="update-thumb"
-            :style="item.image_url ? `background-image: url(${item.image_url})` : ''"
             :class="{ 'update-thumb--empty': !item.image_url }"
-          />
+          >
+            <img
+              v-if="item.image_url"
+              class="update-thumb-img"
+              :src="item.image_url"
+              alt=""
+              loading="lazy"
+            />
+          </div>
           <div class="update-body">
             <div class="update-title">{{ item.text }}</div>
             <div class="update-sub" v-if="item.views">{{ item.views }}</div>
@@ -402,12 +409,20 @@ onUnmounted(() => {
 
 /* News thumbnail — .poster-sm from handoff: 36×48px */
 .update-thumb {
+  position: relative;
   width: 36px;
   height: 48px;
   border-radius: 6px;
-  background-size: cover;
-  background-position: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Actual image — fills the container cleanly; no CSS url() injection */
+.update-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .update-thumb--empty {
@@ -423,9 +438,11 @@ onUnmounted(() => {
 .update-title {
   font-size: 13px;
   font-weight: 500;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
   color: var(--ink);
 }
 
@@ -572,9 +589,10 @@ onUnmounted(() => {
   justify-content: center;
 }
 
-.w-full { width: 100%; }
-.w-2\/3 { width: 66%; }
-.w-1\/4 { width: 25%; }
+/* Skeleton-only width helpers — prefixed skel- to avoid shadowing Tailwind utilities */
+.skel-w-full { width: 100%; }
+.skel-w-2-3  { width: 66%; }
+.skel-w-1q   { width: 25%; }
 
 /* Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {

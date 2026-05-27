@@ -310,8 +310,8 @@ onMounted(() => {
   border-radius: var(--r-lg);
   color: var(--ink-3);
   transition: border 0.15s ease, background 0.15s ease;
-  /* The inner SearchAutocomplete must fill remaining width */
-  overflow: hidden;
+  /* overflow: hidden removed — it clipped the inner input's focus ring;
+     the dropdown is absolutely-positioned so it is unaffected */
 }
 
 .search-shell:hover,
@@ -324,6 +324,20 @@ onMounted(() => {
 .search-shell :deep(> *:first-child) {
   flex: 1;
   min-width: 0;
+}
+
+/* Merge inner <input> visually into the shell so there is no nested border/
+   background peeking through; the shell's focus-within border-color change
+   remains the only visible focus affordance. */
+.search-shell :deep(input) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.search-shell :deep(input:focus) {
+  box-shadow: none;
+  outline: none;
 }
 
 /* ⌘K decorative kbd hint */

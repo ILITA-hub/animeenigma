@@ -11,9 +11,9 @@
       <div v-for="i in 4" :key="i" class="feed-item-skeleton">
         <div class="skeleton-av" />
         <div class="skeleton-body">
-          <div class="skeleton-line w-1/4" />
-          <div class="skeleton-line w-3/4" />
-          <div class="skeleton-line w-1/3" />
+          <div class="skeleton-line skel-w-1q" />
+          <div class="skeleton-line skel-w-3q" />
+          <div class="skeleton-line skel-w-1-3" />
         </div>
       </div>
     </div>
@@ -67,6 +67,7 @@
       <!-- Load more -->
       <button
         v-if="hasMore"
+        type="button"
         @click="loadMore"
         :disabled="loading"
         class="feed-load-more"
@@ -367,9 +368,10 @@ onMounted(() => {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.w-1\/4 { width: 25%; }
-.w-3\/4 { width: 75%; }
-.w-1\/3 { width: 33%; }
+/* Skeleton-only width helpers — prefixed skel- to avoid shadowing Tailwind utilities */
+.skel-w-1q   { width: 25%; }
+.skel-w-3q   { width: 75%; }
+.skel-w-1-3  { width: 33%; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
