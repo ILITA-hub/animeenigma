@@ -142,7 +142,7 @@
             <span
               v-for="g in data.anime.genres.slice(0, 3)"
               :key="g.id"
-              class="px-2 py-0.5 text-xs font-medium rounded rt-chip"
+              class="px-2 py-0.5 text-xs font-medium rt-chip"
             >
               {{ locale === 'ru' ? g.russian || g.name : g.name || g.russian }}
             </span>

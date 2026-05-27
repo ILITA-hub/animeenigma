@@ -123,8 +123,8 @@ function formatBytes(n: number): string {
 }
 
 .stats-ok {
-  /* success green — #00ff9d per handoff */
-  color: #00ff9d;
+  /* success green per handoff (--color-success) */
+  color: var(--color-success);
 }
 
 .stats-warn {

@@ -105,6 +105,13 @@ function tokenFor(type: string): CardToken {
   cursor: pointer;
   overflow: hidden;
   transition: background 0.15s ease, width 0.2s ease, box-shadow 0.15s ease;
+  /* Containing block for the absolutely-positioned clipped icon */
+  position: relative;
+  outline: none;
+}
+.dot-pill:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 3px;
 }
 
 /* Inactive state: glass-on-glass */
@@ -130,7 +137,7 @@ function tokenFor(type: string): CardToken {
   width: 1px;
   height: 1px;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 </style>
