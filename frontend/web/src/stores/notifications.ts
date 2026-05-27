@@ -31,6 +31,51 @@ import type { UserNotification, NewEpisodePayload } from '@/types/notification'
 
 const POLL_INTERVAL_MS = 60_000
 
+/** localStorage key for the persisted toast-shown id set. */
+const SHOWN_TOAST_STORAGE_KEY = 'notif:shownToasts'
+
+/**
+ * Load the persisted set of toast-shown notification ids.
+ *
+ * Persisting across reloads is the fix for the toast re-fire bug: without it,
+ * the in-memory set resets on every page load, so a still-unread notification
+ * pops a fresh toast each time the page is opened. Fails safe to an empty set
+ * on SSR / parse error / disabled storage.
+ */
+function loadShownToastIds(): Set<string> {
+  if (typeof localStorage === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(SHOWN_TOAST_STORAGE_KEY)
+    if (!raw) return new Set()
+    const arr: unknown = JSON.parse(raw)
+    return Array.isArray(arr)
+      ? new Set(arr.filter((x): x is string => typeof x === 'string'))
+      : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+/** Persist the toast-shown id set. Best-effort; storage errors are non-fatal. */
+function persistShownToastIds(ids: Set<string>): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(SHOWN_TOAST_STORAGE_KEY, JSON.stringify([...ids]))
+  } catch {
+    /* storage full / disabled — suppression degrades to session-only */
+  }
+}
+
+/** Drop the persisted toast-shown id set (called on logout). */
+function clearShownToastIds(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.removeItem(SHOWN_TOAST_STORAGE_KEY)
+  } catch {
+    /* non-fatal */
+  }
+}
+
 /**
  * Read the build-time feature flag. Defaults to TRUE (feature on) when
  * unset; only the literal string `'false'` disables the engine. The flag
@@ -96,8 +141,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   const notifications = ref<UserNotification[]>([])
   const unreadCount = ref<number>(0)
-  /** Toast-suppression set (session-only; NOT persisted). */
-  const shownToastIds = ref<Set<string>>(new Set())
+  /** Toast-suppression set. Persisted to localStorage so a page reload does
+   *  not re-toast an already-shown, still-unread notification. */
+  const shownToastIds = ref<Set<string>>(loadShownToastIds())
   const polling = ref<boolean>(false)
   const lastFetchAt = ref<number>(0)
   const error = ref<string | null>(null)
@@ -169,6 +215,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
             if (liveIds.has(id)) next.add(id)
           }
           shownToastIds.value = next
+          persistShownToastIds(next)
         }
       } catch (err) {
         // Silent-fail: a bell that occasionally goes stale is preferable
@@ -378,14 +425,16 @@ export const useNotificationsStore = defineStore('notifications', () => {
     notifications.value = []
     unreadCount.value = 0
     shownToastIds.value = new Set()
+    clearShownToastIds()
     inFlight = null
     error.value = null
     lastFetchAt.value = 0
   }
 
-  /** Mark a toast as "shown this session" without server state changes. */
+  /** Mark a toast as shown (persisted) without server state changes. */
   function markToastShown(id: string): void {
     shownToastIds.value.add(id)
+    persistShownToastIds(shownToastIds.value)
   }
 
   return {
