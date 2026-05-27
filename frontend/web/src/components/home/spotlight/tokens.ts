@@ -5,7 +5,7 @@
  *
  *   accent     — Tailwind color stem used for headers, CTAs, dot indicators.
  *   kickerKey  — i18n key for the card's small uppercase kicker (e.g.
- *                "spotlight.animeOfDay.title"). The same key doubles as the
+ *                "spotlight.featured.title"). The same key doubles as the
  *                accessible label for the labeled-pill dot indicator.
  *   icon       — name of the inline-SVG icon rendered by SpotlightIcon.vue.
  *
@@ -67,7 +67,7 @@ export type SpotlightCardType = SpotlightCard['type']
 /**
  * v1.1-polish Phase 02 (HSB-V11-AOD-04) — per-card extra tokens.
  *
- * `anime_of_day.genreColors` maps Shikimori genre IDs to Tailwind bg+text
+ * `featured.genreColors` maps Shikimori genre IDs to Tailwind bg+text
  * class pairs so each genre tag renders in a hue that matches its mood.
  * Unmapped IDs fall back to the neutral `bg-white/10 text-gray-300` pair
  * (resolved at the call site via `?? 'bg-white/10 text-gray-300'`).
@@ -99,19 +99,19 @@ const PERF_BADGE: LatestNewsTypeBadge = {
 }
 
 // Map shape preserves the parity guarantee: every variant in SpotlightCard
-// still resolves to a token with {accent, kickerKey, icon}. `anime_of_day`
+// still resolves to a token with {accent, kickerKey, icon}. `featured`
 // carries the genre-color map (Phase 02) and `latest_news` is upcast to the
 // wider LatestNewsCardToken (Phase 07) so callers can read iconByType /
 // labelByType without extra type assertions.
 type CardTokenMap = Record<SpotlightCardType, CardToken> & {
-  anime_of_day: CardToken & { genreColors: Record<string, string> }
+  featured: CardToken & { genreColors: Record<string, string> }
   latest_news: LatestNewsCardToken
 }
 
 export const cardTokens: CardTokenMap = {
-  anime_of_day:          {
+  featured:          {
     accent: 'cyan',
-    kickerKey: 'spotlight.animeOfDay.title',
+    kickerKey: 'spotlight.featured.title',
     icon: 'sparkles',
     genreColors: {
       '1':  'bg-red-500/20 text-red-200',         // Action

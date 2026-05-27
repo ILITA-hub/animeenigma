@@ -387,7 +387,7 @@ body {
    Three CTA hierarchies the v1.1-polish refactor needs to reuse across
    9 card SFCs:
 
-     .cta-hero  — Primary, "Watch →" type action on the AnimeOfDay /
+     .cta-hero  — Primary, "Watch →" type action on the FeaturedCard /
                   ContinueWatchingNew cards. Bold, accent-filled.
      .cta-card  — Secondary, "Open post →" / "Resume" on cards where the
                   primary action sits elsewhere. Glass-pill.

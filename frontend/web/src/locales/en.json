@@ -1040,11 +1040,15 @@
     "nextSlide": "Next slide",
     "goToSlide": "Go to slide {n}",
     "pauseAutoplay": "Autoplay paused",
-    "animeOfDay": {
-      "title": "Anime of the day",
-      "watchCta": "Watch",
+    "featured": {
+      "title": "Featured today",
+      "eyebrowOngoing": "Now airing",
+      "eyebrowAnnounced": "Season announcement",
+      "eyebrowDefault": "Featured today",
+      "watchEpisode": "Watch · ep. {n}",
+      "watchCta": "Start watching",
+      "remindCta": "Remind me",
       "addCta": "Add to list",
-      "addCtaComingSoon": "Coming soon — list management is being rolled out",
       "scoreLabel": "Score",
       "episodesLabel": "{n} ep."
     },

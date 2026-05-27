@@ -8,7 +8,7 @@
  *       card's poster URL — re-uses the already-fetched poster image.
  *   2.  A purple-tinted secondary overlay (from-purple-500/30) sits
  *       above the backdrop so the card reads as "discovery" rather
- *       than the cyan AnimeOfDay sibling.
+ *       than the cyan FeaturedCard sibling.
  *   3.  A <SpotlightIcon name="shuffle"> leads the kicker, both on the
  *       mobile (md:hidden) and desktop (hidden md:flex) copies.
  *   4.  The desktop tagline (hidden md:block) is one of the 4 candidates
@@ -205,7 +205,6 @@ describe('RandomTailCard', () => {
     expect(html).not.toContain('btn-ghost')
     // The legacy Add CTA must not have been added under any new key.
     expect(wrapper.text()).not.toContain('spotlight.randomTail.addCta')
-    expect(wrapper.text()).not.toContain('spotlight.animeOfDay.addCta')
   })
 
   it('does NOT mount the shuffle-deck when prefers-reduced-motion is reduce', () => {

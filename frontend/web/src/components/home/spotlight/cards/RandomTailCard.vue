@@ -23,7 +23,7 @@
       :poster-url="data.anime.poster_url"
     />
     <!-- Purple-tinted secondary overlay differentiates RandomTail from
-         the cyan AnimeOfDay backdrop without re-fetching the poster. -->
+         the cyan FeaturedCard backdrop without re-fetching the poster. -->
     <div
       aria-hidden="true"
       class="absolute inset-0 bg-gradient-to-r from-purple-500/30 via-transparent to-transparent"
@@ -128,7 +128,7 @@
               class="text-sm text-gray-400 font-medium"
             >
               {{
-                t('spotlight.animeOfDay.episodesLabel', {
+                t('spotlight.featured.episodesLabel', {
                   n: data.anime.episodes_count,
                 })
               }}
@@ -178,7 +178,7 @@ defineProps<{ data: RandomTailData }>()
 const { t, tm, locale: i18nLocale } = useI18n()
 
 // Normalize locale to a plain string for the genre-name selector (same
-// pattern as AnimeOfDayCard — useI18n's locale is Ref<string|Composer>).
+// pattern as FeaturedCard — useI18n's locale is Ref<string|Composer>).
 const locale = computed(() => {
   const v = (i18nLocale as { value?: unknown }).value
   return typeof v === 'string' ? v : 'ru'

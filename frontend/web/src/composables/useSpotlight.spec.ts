@@ -85,7 +85,7 @@ describe('useSpotlight', () => {
     apiGetSpy.mockResolvedValueOnce({
       data: {
         cards: [
-          { type: 'anime_of_day', data: { anime: { id: 'a-1' } } },
+          { type: 'featured', data: { anime: { id: 'a-1' } } },
         ],
         generated_at: '2026-05-21T03:37:10Z',
       },
@@ -99,7 +99,7 @@ describe('useSpotlight', () => {
     expect(apiGetSpy).toHaveBeenCalledTimes(1)
     expect(apiGetSpy).toHaveBeenCalledWith('/home/spotlight')
     expect(vm.cards.length).toBe(1)
-    expect(vm.cards[0].type).toBe('anime_of_day')
+    expect(vm.cards[0].type).toBe('featured')
     expect(vm.loading).toBe(false)
     expect(vm.error).toBeNull()
   })
@@ -170,7 +170,7 @@ describe('useSpotlight', () => {
     // First fetch on mount
     apiGetSpy.mockResolvedValueOnce({
       data: {
-        cards: [{ type: 'anime_of_day', data: { anime: { id: 'first' } } }],
+        cards: [{ type: 'featured', data: { anime: { id: 'first' } } }],
         generated_at: '2026-05-21T03:37:10Z',
       },
     })
@@ -185,7 +185,7 @@ describe('useSpotlight', () => {
     apiGetSpy.mockResolvedValueOnce({
       data: {
         cards: [
-          { type: 'anime_of_day', data: { anime: { id: 'second-a' } } },
+          { type: 'featured', data: { anime: { id: 'second-a' } } },
           { type: 'random_tail', data: { anime: { id: 'second-b' } } },
         ],
         generated_at: '2026-05-21T03:40:00Z',

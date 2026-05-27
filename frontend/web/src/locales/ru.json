@@ -1040,11 +1040,15 @@
     "nextSlide": "Следующий слайд",
     "goToSlide": "Перейти к слайду {n}",
     "pauseAutoplay": "Автопрокрутка приостановлена",
-    "animeOfDay": {
-      "title": "Аниме дня",
-      "watchCta": "Смотреть",
+    "featured": {
+      "title": "Рекомендуем сегодня",
+      "eyebrowOngoing": "Сейчас выходит",
+      "eyebrowAnnounced": "Анонс сезона",
+      "eyebrowDefault": "Рекомендуем сегодня",
+      "watchEpisode": "Смотреть · эп. {n}",
+      "watchCta": "Начать просмотр",
+      "remindCta": "Напомнить о выходе",
       "addCta": "В список",
-      "addCtaComingSoon": "Скоро — управление списком в разработке",
       "scoreLabel": "Рейтинг",
       "episodesLabel": "{n} эп."
     },

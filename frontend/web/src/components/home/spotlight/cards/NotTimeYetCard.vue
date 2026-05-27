@@ -6,7 +6,7 @@
       :poster-url="data.anime.poster_url"
     />
     <!-- Amber secondary overlay — the warm "nostalgia / reminder" wash that
-         distinguishes this card from AnimeOfDay's cyan. -->
+         distinguishes this card from FeaturedCard's cyan. -->
     <div
       aria-hidden="true"
       class="absolute inset-0 bg-gradient-to-r from-amber-500/30 via-transparent to-transparent"
@@ -67,7 +67,7 @@
             class="mt-2 text-sm text-gray-400 font-medium"
           >
             {{
-              t('spotlight.animeOfDay.episodesLabel', {
+              t('spotlight.featured.episodesLabel', {
                 n: data.anime.episodes_count,
               })
             }}

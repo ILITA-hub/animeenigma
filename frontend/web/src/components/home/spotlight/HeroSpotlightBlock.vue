@@ -72,9 +72,9 @@
           <!-- Per-type branches keep card prop types strictly checked under
                vue-tsc — a bare <component :is=cardFor(...)> widens the data
                prop to the union and breaks the build. -->
-          <AnimeOfDayCard
-            v-if="active.type === 'anime_of_day'"
-            :key="`anime_of_day:${currentIndex}`"
+          <FeaturedCard
+            v-if="active.type === 'featured'"
+            :key="`featured:${currentIndex}`"
             :data="active.data"
           />
           <RandomTailCard
@@ -141,7 +141,7 @@ import { useSpotlight } from '@/composables/useSpotlight'
 import type { SpotlightCard } from '@/types/spotlight'
 import CarouselControls from './CarouselControls.vue'
 import CarouselDots from './CarouselDots.vue'
-import AnimeOfDayCard from './cards/AnimeOfDayCard.vue'
+import FeaturedCard from './cards/FeaturedCard.vue'
 import RandomTailCard from './cards/RandomTailCard.vue'
 import LatestNewsCard from './cards/LatestNewsCard.vue'
 import PlatformStatsCard from './cards/PlatformStatsCard.vue'
@@ -323,7 +323,7 @@ const active = computed<SpotlightCard | null>(() => {
 // Multi-item cards fall back to their card-level title key.
 function cardTitle(card: SpotlightCard): string {
   switch (card.type) {
-    case 'anime_of_day':
+    case 'featured':
     case 'random_tail':
       return getLocalizedTitle(
         card.data.anime.name,

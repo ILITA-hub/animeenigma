@@ -79,7 +79,7 @@ describe('spotlight i18n parity', () => {
   })
 
   const expectedSubNamespaces = [
-    'animeOfDay',
+    'featured',
     'randomTail',
     'latestNews',
     'platformStats',
@@ -98,11 +98,22 @@ describe('spotlight i18n parity', () => {
     expect((ruSpotlight as Record<string, unknown>)[ns]).toBeTypeOf('object')
   })
 
-  const animeOfDayKeys = ['title', 'watchCta', 'addCta', 'scoreLabel', 'episodesLabel'] as const
+  const featuredKeys = [
+    'title',
+    'eyebrowOngoing',
+    'eyebrowAnnounced',
+    'eyebrowDefault',
+    'watchEpisode',
+    'watchCta',
+    'remindCta',
+    'addCta',
+    'scoreLabel',
+    'episodesLabel',
+  ] as const
 
-  it.each(animeOfDayKeys)('spotlight.animeOfDay.%s present in both locales', (k) => {
-    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).animeOfDay?.[k]).toBe('string')
-    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).animeOfDay?.[k]).toBe('string')
+  it.each(featuredKeys)('spotlight.featured.%s present in both locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).featured?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).featured?.[k]).toBe('string')
   })
 
   const randomTailKeys = ['title', 'subtitle', 'discoverCta'] as const

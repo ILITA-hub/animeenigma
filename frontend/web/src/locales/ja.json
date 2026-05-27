@@ -992,11 +992,15 @@
     "nextSlide": "次のスライド",
     "goToSlide": "スライド {n} へ",
     "pauseAutoplay": "自動再生を一時停止",
-    "animeOfDay": {
-      "title": "今日のアニメ",
-      "watchCta": "視聴",
+    "featured": {
+      "title": "今日のおすすめ",
+      "eyebrowOngoing": "放送中",
+      "eyebrowAnnounced": "シーズン発表",
+      "eyebrowDefault": "今日のおすすめ",
+      "watchEpisode": "視聴 · 第{n}話",
+      "watchCta": "視聴を始める",
+      "remindCta": "リマインダー設定",
       "addCta": "リストに追加",
-      "addCtaComingSoon": "近日公開 — リスト管理は順次展開中",
       "scoreLabel": "スコア",
       "episodesLabel": "{n}話"
     },

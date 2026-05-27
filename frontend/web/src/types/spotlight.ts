@@ -37,7 +37,7 @@
  */
 
 /* ──────────────────────────────────────────────────────────────────────── */
-/*  Shared anime sub-shape used by anime_of_day + random_tail card variants. */
+/*  Shared anime sub-shape used by featured + random_tail card variants.    */
 /* ──────────────────────────────────────────────────────────────────────── */
 
 export interface SpotlightAnime {
@@ -71,7 +71,7 @@ export interface SpotlightAnime {
   created_at?: string
   updated_at?: string
   // Optional — only present on some catalog rows. Card UIs that show
-  // genre chips (UI-SPEC §AnimeOfDayCard) tolerate undefined gracefully.
+  // genre chips (UI-SPEC §FeaturedCard) tolerate undefined gracefully.
   genres?: { id: string; name?: string; russian?: string }[]
 }
 
@@ -79,9 +79,9 @@ export interface SpotlightAnime {
 /*  Per-card data payloads.                                                 */
 /* ──────────────────────────────────────────────────────────────────────── */
 
-export interface AnimeOfDayData {
+export interface FeaturedData {
   anime: SpotlightAnime
-  // Phase 1 reserves an optional reason key (e.g. "anime_of_day.seasonal").
+  // Phase 1 reserves an optional reason key (e.g. "featured.seasonal").
   // Currently absent from the runtime payload but defined here so a future
   // backend bump does not require a coordinated frontend type change.
   reason_i18n_key?: string
@@ -240,7 +240,7 @@ export interface ContinueWatchingNewData {
 /* ──────────────────────────────────────────────────────────────────────── */
 
 export type SpotlightCard =
-  | { type: 'anime_of_day'; data: AnimeOfDayData }
+  | { type: 'featured'; data: FeaturedData }
   | { type: 'random_tail'; data: RandomTailData }
   | { type: 'latest_news'; data: LatestNewsData }
   | { type: 'platform_stats'; data: PlatformStatsData }
