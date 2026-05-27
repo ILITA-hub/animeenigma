@@ -3,66 +3,76 @@
        with zero in-progress rows see no degraded affordance — the
        trending row below remains the top-of-home anchor in that case.
        Anonymous users get `items.length === 0` from the composable's
-       early-return path. -->
-  <div v-if="items.length > 0" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl md:text-2xl font-bold text-white">
+       early-return path.
+       Neon Tokyo redesign (Task 6): 16:9 cinematic cards with horizontal
+       grid-scroll, play-on-hover, progress bar, and section header. -->
+  <section v-if="items.length > 0" class="cw-section px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+    <!-- Section header: .section-head pattern from design handoff -->
+    <div class="cw-section-head">
+      <h2 class="cw-title">
         {{ $t('home.continueWatching') }}
+        <span class="cw-count">{{ items.length }}</span>
       </h2>
+      <router-link to="/profile" class="cw-see-all">
+        {{ $t('home.continueWatchingAll') }}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </router-link>
     </div>
-    <div class="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-1 px-1">
+
+    <!-- Horizontal cinematic grid -->
+    <div class="cw-row">
       <router-link
         v-for="item in items"
         :key="item.anime.id + ':' + item.episode_number"
         :to="`/anime/${item.anime.id}?episode=${item.episode_number}`"
-        class="flex-shrink-0 w-32 md:w-40 lg:w-48 group"
+        class="cw-card"
       >
-        <div class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] mb-2">
-          <img
-            :src="item.anime.poster_url || '/placeholder.svg'"
-            alt=""
-            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-          />
-          <!-- Episode badge -->
-          <div class="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/70 backdrop-blur-sm text-xs font-semibold text-white">
+        <!-- Cover image with bottom scrim -->
+        <div
+          class="cw-img"
+          :style="item.anime.poster_url ? { backgroundImage: `url(${item.anime.poster_url})` } : {}"
+          :aria-label="getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp)"
+        />
+
+        <!-- Centered play button, revealed on hover -->
+        <div class="cw-play" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M5 3l14 9-14 9V3z" />
+          </svg>
+        </div>
+
+        <!-- Info overlay (bottom) -->
+        <div class="cw-info">
+          <div class="cw-ep">
             {{ $t('home.continueWatchingEpisode', { n: item.episode_number }) }}
+            <template v-if="item.anime.episodes_count"> · {{ item.anime.episodes_count }}</template>
           </div>
-          <!-- Thin progress bar at the bottom of the poster.
-               IN-01 (Phase 8): use transition-[width] instead of
-               transition-all so the cyan bar animates only on width
-               changes — not on every animatable property.
-               IN-02 (Phase 8): when progress is known and > 0 but
-               represents < ~5% of duration, the bar is visually
-               indistinguishable from 0%. Render a 4px minimum so the
-               user can tell they've started the episode. The 0% case
-               (no progress at all, or unknown duration) still renders
-               width:0% so it's invisibly hidden. -->
-          <div
-            v-if="progressPct(item) > 0"
-            class="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10"
-          >
-            <div
-              class="h-full bg-cyan-400 transition-[width]"
-              :style="progressBarStyle(item)"
-            />
+          <div class="cw-title-line">
+            {{ getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp) }}
           </div>
         </div>
-        <h3 class="text-sm font-medium text-white truncate group-hover:text-cyan-400 transition-colors">
-          {{ getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp) }}
-        </h3>
+
+        <!-- Progress bar (3px, cyan with glow) -->
+        <div v-if="progressPct(item) > 0" class="cw-progress">
+          <div
+            class="cw-progress-fill"
+            :style="progressBarStyle(item)"
+          />
+        </div>
       </router-link>
     </div>
-  </div>
-  <!-- Loading skeleton — matches the trending-row loading skeleton at
-       Home.vue lines 89-97 for visual consistency. -->
+  </section>
+
+  <!-- Loading skeleton — horizontal cinematic cards to match loaded state -->
   <div v-else-if="isLoading" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-    <div class="h-8 w-48 bg-white/10 rounded animate-pulse mb-4" />
-    <div class="flex gap-3 overflow-hidden">
+    <div class="h-8 w-52 bg-white/10 rounded animate-pulse mb-4" />
+    <div class="cw-row">
       <div
-        v-for="i in 6"
+        v-for="i in 5"
         :key="i"
-        class="flex-shrink-0 w-32 md:w-40 lg:w-48 aspect-[2/3] bg-white/10 rounded-xl animate-pulse"
+        class="cw-card-skeleton"
       />
     </div>
   </div>
@@ -83,19 +93,214 @@ function progressPct(item: ContinueWatchingItem): number {
 
 // IN-02 (Phase 8): when the user is genuinely past 0 but at a tiny
 // percentage of the episode, render the cyan bar with a min-width of 4px
-// so it's visible. Pure CSS would suffice (min-width on the inner div)
-// but inline styles are friendlier to dynamic px values that depend on
-// the parent's pixel width (which we can't easily measure here). We
-// achieve the same effect by using min(width%, 100%) with a CSS calc
-// fallback through min-width via the inline style. Width is set as a
-// percentage so the bar scales with parent width.
+// so it's visible.
 function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   const pct = progressPct(item)
-  // pct === 0 case is handled by v-if on the wrapping div, so we know pct > 0
-  // here. Use minWidth so very small percentages still render visibly.
   return {
     width: pct + '%',
     minWidth: '4px',
   }
 }
 </script>
+
+<style scoped>
+/* -----------------------------------------------------------------------
+   Section header — mirrors .section-head from design handoff styles.css
+   ----------------------------------------------------------------------- */
+.cw-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 16px;
+}
+
+.cw-title {
+  font-family: var(--f-display, "Manrope", "Inter", system-ui, sans-serif);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink, #fff);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cw-count {
+  font-family: var(--f-mono, "JetBrains Mono", ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-4, rgba(255, 255, 255, 0.36));
+  text-transform: uppercase;
+}
+
+.cw-see-all {
+  font-size: 13px;
+  color: var(--ink-3, rgba(255, 255, 255, 0.56));
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s ease;
+}
+.cw-see-all:hover {
+  color: var(--accent, #00d4ff);
+}
+
+/* -----------------------------------------------------------------------
+   Horizontal scroll grid — mirrors .cw-row from design handoff
+   ----------------------------------------------------------------------- */
+.cw-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(280px, 1fr);
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 8px;
+  /* Hide scrollbar cross-browser while keeping scroll functionality */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+.cw-row::-webkit-scrollbar {
+  height: 6px;
+}
+.cw-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cw-row::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+.cw-row::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* -----------------------------------------------------------------------
+   16:9 cinematic card — mirrors .cw-card from design handoff
+   ----------------------------------------------------------------------- */
+.cw-card {
+  position: relative;
+  scroll-snap-align: start;
+  border-radius: var(--r-lg, 16px);
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: var(--color-surface, var(--surface, #11111c));
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.06));
+  cursor: pointer;
+  display: block;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.cw-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-line, rgba(0, 212, 255, 0.28));
+  box-shadow: var(--accent-glow, 0 0 30px rgba(0, 212, 255, 0.28));
+}
+
+/* Cover image with bottom gradient scrim */
+.cw-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--surface, #11111c);
+}
+.cw-img::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 30%,
+    rgba(8, 8, 15, 0.55) 65%,
+    rgba(8, 8, 15, 0.95) 100%
+  );
+}
+
+/* Centered play button — hidden at rest, revealed on card hover */
+.cw-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: rgba(0, 212, 255, 0.95);
+  display: grid;
+  place-items: center;
+  color: #001218;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.5);
+  z-index: 1;
+}
+.cw-card:hover .cw-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+/* Info overlay at the bottom of the card */
+.cw-info {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  z-index: 1;
+}
+
+/* Episode label: mono, cyan, uppercase */
+.cw-ep {
+  font-family: var(--f-mono, "JetBrains Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--accent, #00d4ff);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+/* Title: single line, ellipsis */
+.cw-title-line {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink, #fff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* -----------------------------------------------------------------------
+   Progress bar — 3px, cyan with glow, absolute bottom
+   ----------------------------------------------------------------------- */
+.cw-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  z-index: 2;
+}
+.cw-progress-fill {
+  height: 100%;
+  background: var(--accent, #00d4ff);
+  box-shadow: 0 0 8px var(--accent, #00d4ff);
+  transition: width 0.3s ease;
+}
+
+/* -----------------------------------------------------------------------
+   Loading skeleton card
+   ----------------------------------------------------------------------- */
+.cw-card-skeleton {
+  scroll-snap-align: start;
+  border-radius: var(--r-lg, 16px);
+  aspect-ratio: 16 / 9;
+  background: rgba(255, 255, 255, 0.06);
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  min-width: 280px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+</style>

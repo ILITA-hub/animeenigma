@@ -39,6 +39,7 @@
     "episodeCount": "{count} эп.",
     "continueWatching": "Продолжить просмотр",
     "continueWatchingEpisode": "Серия {n}",
+    "continueWatchingAll": "Вся история",
     "thisWeek": "На этой неделе",
     "thisWeekToday": "Сегодня",
     "thisWeekTomorrow": "Завтра"

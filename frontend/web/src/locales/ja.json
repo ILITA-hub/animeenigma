@@ -39,6 +39,7 @@
     "episodeCount": "{count}話",
     "continueWatching": "続きから見る",
     "continueWatchingEpisode": "第{n}話",
+    "continueWatchingAll": "すべての履歴",
     "thisWeek": "今週",
     "thisWeekToday": "今日",
     "thisWeekTomorrow": "明日"

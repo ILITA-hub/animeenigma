@@ -37,6 +37,14 @@
          otherwise. -->
     <HeroSpotlightBlock />
 
+    <!-- Continue-Watching row (Phase 8 / UX-15 / UA-061). Promoted above
+         the 3-column grid (Neon Tokyo redesign Task 6) so in-progress
+         content appears at the top for logged-in users. Hidden when
+         anonymous OR when the logged-in user has no in-progress
+         watch_progress rows. The component owns its own v-if gate so
+         we just always mount it here. -->
+    <ContinueWatchingRow />
+
     <!-- Three Columns Layout -->
     <div class="px-4 lg:px-8 max-w-7xl mx-auto mb-6">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -297,14 +305,6 @@
          on items.length === 0 so the row hides entirely when no
          collections have been published yet. -->
     <CollectionsRow />
-
-    <!-- Continue-Watching row (Phase 8 / UX-15 / UA-061). Hidden when
-         anonymous OR when the logged-in user has no in-progress
-         watch_progress rows. The component owns its own v-if gate so
-         we just always mount it here. Sits above the Activity + Updates
-         grid so logged-in users still find it on the home page, but
-         below the top-of-home discovery rows. -->
-    <ContinueWatchingRow />
 
     <!-- Activity Feed + Last Updates -->
     <div id="changelog" class="px-4 lg:px-8 max-w-7xl mx-auto pb-12 scroll-mt-24">

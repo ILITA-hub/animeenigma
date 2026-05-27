@@ -39,6 +39,7 @@
     "episodeCount": "{count} ep.",
     "continueWatching": "Continue Watching",
     "continueWatchingEpisode": "Episode {n}",
+    "continueWatchingAll": "All history",
     "thisWeek": "This Week",
     "thisWeekToday": "Today",
     "thisWeekTomorrow": "Tomorrow"
