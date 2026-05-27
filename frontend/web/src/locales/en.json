@@ -24,6 +24,7 @@
   },
   "home": {
     "seeAll": "See All",
+    "seeAllFor": "See all in {title}",
     "todayAt": "Today {time}",
     "tomorrowAt": "Tomorrow {time}",
     "dayAt": "{day} {time}",

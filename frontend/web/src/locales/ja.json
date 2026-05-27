@@ -24,6 +24,7 @@
   },
   "home": {
     "seeAll": "すべて見る",
+    "seeAllFor": "{title}をすべて見る",
     "todayAt": "今日 {time}",
     "tomorrowAt": "明日 {time}",
     "dayAt": "{day} {time}",

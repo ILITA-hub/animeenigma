@@ -1,7 +1,7 @@
 <template>
   <router-link
     :to="itemRoute"
-    class="item"
+    class="item group"
     :class="{ 'top-3': variant === 'top' && rank !== undefined && rank <= 3 }"
     @touchstart="(e: TouchEvent) => emit('touchstart', e)"
     @touchmove="emit('touchmove')"

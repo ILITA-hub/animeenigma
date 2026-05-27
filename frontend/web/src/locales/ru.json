@@ -24,6 +24,7 @@
   },
   "home": {
     "seeAll": "Все",
+    "seeAllFor": "Все в разделе {title}",
     "todayAt": "Сегодня {time}",
     "tomorrowAt": "Завтра {time}",
     "dayAt": "{day} {time}",

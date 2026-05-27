@@ -29,7 +29,7 @@
         <div v-if="sub" class="sub">{{ sub }}</div>
       </div>
 
-      <router-link :to="seeAllTo" class="all">{{ $t('home.seeAll') }}</router-link>
+      <router-link :to="seeAllTo" class="all" :aria-label="$t('home.seeAllFor', { title })">{{ $t('home.seeAll') }}</router-link>
     </div>
 
     <!-- Loading skeleton -->
