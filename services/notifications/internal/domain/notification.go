@@ -41,9 +41,10 @@ type UserNotification struct {
 	Type        string         `gorm:"size:32;not null;index" json:"type"`
 	DedupeKey   string         `gorm:"size:255;not null" json:"dedupe_key"`
 	Payload     datatypes.JSON `gorm:"type:jsonb;not null" json:"payload"`
-	ReadAt      *time.Time     `json:"read_at"`
-	DismissedAt *time.Time     `gorm:"index" json:"dismissed_at"`
-	ClickedAt   *time.Time     `json:"clicked_at"`
+	ReadAt        *time.Time     `json:"read_at"`
+	DismissedAt   *time.Time     `gorm:"index" json:"dismissed_at"`
+	InvalidatedAt *time.Time     `gorm:"index" json:"invalidated_at"`
+	ClickedAt     *time.Time     `json:"clicked_at"`
 	CreatedAt   time.Time      `gorm:"index" json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
