@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,8 +84,8 @@ func TestFeaturedResolver_CacheHit_SkipsRepo(t *testing.T) {
 	}
 
 	// Repo must NOT have been touched.
-	if repo.calls != 0 {
-		t.Errorf("expected 0 repo calls on cache hit, got %d", repo.calls)
+	if atomic.LoadInt32(&repo.calls) != 0 {
+		t.Errorf("expected 0 repo calls on cache hit, got %d", atomic.LoadInt32(&repo.calls))
 	}
 
 	// Cache returned the seeded value.
@@ -155,8 +156,8 @@ func TestFeaturedResolver_CacheGetError_FallsThroughToCompute(t *testing.T) {
 		t.Fatal("expected non-nil Card despite cache outage")
 	}
 	// 2 calls: pin query + daily-pool query.
-	if repo.calls != 2 {
-		t.Errorf("expected 2 repo calls when cache.Get errors, got %d", repo.calls)
+	if atomic.LoadInt32(&repo.calls) != 2 {
+		t.Errorf("expected 2 repo calls when cache.Get errors, got %d", atomic.LoadInt32(&repo.calls))
 	}
 }
 
@@ -215,6 +216,11 @@ func TestFeaturedResolver_CuratedPinWins(t *testing.T) {
 	if got.Anime.ID != "pin-1" {
 		t.Fatalf("expected curated pin to win, got %q", got.Anime.ID)
 	}
+	// Pin short-circuits: only the pin query should have been issued (1 call),
+	// never the daily-pool query.
+	if atomic.LoadInt32(&repo.calls) != 1 {
+		t.Errorf("pin should short-circuit; want 1 Search call, got %d", atomic.LoadInt32(&repo.calls))
+	}
 }
 
 func TestFeaturedResolver_FallsBackToDailyWhenNoPin(t *testing.T) {
@@ -235,5 +241,46 @@ func TestFeaturedResolver_FallsBackToDailyWhenNoPin(t *testing.T) {
 	}
 	if got.Anime.ID != "day-1" {
 		t.Fatalf("expected daily fallback, got %q", got.Anime.ID)
+	}
+	// Both the pin query and the daily-pool query must have been issued.
+	if atomic.LoadInt32(&repo.calls) != 2 {
+		t.Errorf("fallback path should issue 2 Search calls, got %d", atomic.LoadInt32(&repo.calls))
+	}
+}
+
+// TestFeaturedResolver_ZeroPriorityTopRow_FallsThroughToDaily verifies that a
+// non-empty pin-query result with SortPriority==0 is NOT treated as a curated
+// pin and the daily-seeded pick wins instead. This is the realistic production
+// "no pin set" case — the repo always returns at least one row for a populated
+// catalog, so "empty pin result" is actually rare; the guard that matters is
+// the SortPriority > 0 check.
+//
+// Both scores are above minScoreFeatured (8.0) so the daily candidate is
+// eligible for the daily-pick path.
+func TestFeaturedResolver_ZeroPriorityTopRow_FallsThroughToDaily(t *testing.T) {
+	zeroPri := &domain.Anime{ID: "zero-pri", SortPriority: 0, Score: 9.9}
+	daily := &domain.Anime{ID: "day-1", SortPriority: 0, Score: 8.5}
+	// 1st Search call (pin query) returns zeroPri (SortPriority==0 — not a pin);
+	// 2nd Search call (daily pool) returns the daily candidate.
+	repo := &fakeAnimeSearcher{byCall: [][]*domain.Anime{{zeroPri}, {daily}}}
+	r := NewFeaturedResolver(repo, newFakeCache(), testLogger())
+
+	card, err := r.Resolve(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if card == nil {
+		t.Fatalf("expected a card")
+	}
+	got, ok := card.Data.(spotlight.FeaturedData)
+	if !ok {
+		t.Fatalf("Card.Data is not FeaturedData: %T", card.Data)
+	}
+	if got.Anime.ID != "day-1" {
+		t.Fatalf("sort_priority==0 top row must not be treated as a pin; got %q", got.Anime.ID)
+	}
+	// Both the pin query and the daily-pool query must have been issued.
+	if atomic.LoadInt32(&repo.calls) != 2 {
+		t.Errorf("zero-priority fallthrough should issue 2 Search calls, got %d", atomic.LoadInt32(&repo.calls))
 	}
 }

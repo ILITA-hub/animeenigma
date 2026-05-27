@@ -87,11 +87,15 @@ func (r *FeaturedResolver) Resolve(ctx context.Context, _ *string) (*spotlight.C
 	}
 
 	// --- Curated pin (sort_priority > 0) wins when present --------------
-	// The repo orders by sort_priority DESC naturally; request 1 result
-	// and verify it actually has sort_priority > 0 (i.e. is truly pinned).
+	// Curated pin: the repo always orders by `sort_priority DESC` first, so
+	// the single top row is the highest-priority anime. We treat it as a pin
+	// only when its SortPriority is actually > 0 (an unpinned catalog returns
+	// a sort_priority==0 row here, which must fall through to the daily pick).
+	// NOTE: we deliberately omit Sort/Order — mapSortColumn has no
+	// "sort_priority" case (it falls through to "score"), making those fields
+	// inert and misleading. An empty Sort lets the repo use its built-in
+	// "sort_priority DESC, score DESC" default, which is exactly what we need.
 	pinned, _, perr := r.repo.Search(ctx, domain.SearchFilters{
-		Sort:     "sort_priority",
-		Order:    "desc",
 		Page:     1,
 		PageSize: 1,
 	})
