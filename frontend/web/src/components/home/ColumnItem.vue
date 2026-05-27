@@ -16,11 +16,15 @@
       @open="(el: HTMLElement) => emit('openMenu', el)"
     />
 
-    <!-- poster -->
+    <!-- poster — falls back to the placeholder if the image fails to load.
+         A broken <img> would otherwise render its (long) alt text inside the
+         56px slot, ballooning the poster/card height and breaking the column. -->
     <img
-      :src="anime.poster_url || '/placeholder.svg'"
+      :src="posterSrc"
       :alt="localizedTitle"
       class="poster"
+      loading="lazy"
+      @error="onPosterError"
     />
 
     <!-- body -->
@@ -78,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle } from '@/utils/title'
 import { AnimeKebab } from '@/components/anime'
@@ -104,6 +108,15 @@ const { t } = useI18n()
 const localizedTitle = computed(() =>
   getLocalizedTitle(props.anime.name, props.anime.name_ru, props.anime.name_jp) || ''
 )
+
+// Poster with broken-image fallback to the placeholder asset.
+const posterFailed = ref(false)
+const posterSrc = computed(() =>
+  !posterFailed.value && props.anime.poster_url ? props.anime.poster_url : '/placeholder.svg'
+)
+function onPosterError() {
+  posterFailed.value = true
+}
 
 const itemRoute = computed(() => {
   if (
@@ -171,6 +184,10 @@ const formattedNextEp = computed(() => {
 .poster {
   width: 56px;
   aspect-ratio: 2 / 3;
+  /* Explicit height + clip so a broken <img> (which renders its alt text)
+     can never grow past the 56×84 slot before @error swaps the source. */
+  height: 84px;
+  overflow: hidden;
   object-fit: cover;
   border-radius: 8px; /* --r-sm */
   border: 1px solid var(--line);

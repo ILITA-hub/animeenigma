@@ -17,7 +17,7 @@
         <template v-if="data.anime.season"><span class="sep">·</span>{{ data.anime.season }}</template>
       </p>
       <h3 class="featured-title">
-        {{ getLocalizedTitle(data.anime.name, data.anime.name_ru, data.anime.name_jp) }}
+        <span class="main">{{ getLocalizedTitle(data.anime.name, data.anime.name_ru, data.anime.name_jp) }}</span>
         <span v-if="data.anime.name_jp" class="jp">{{ data.anime.name_jp }}</span>
       </h3>
       <div class="featured-meta">
@@ -117,7 +117,10 @@ const watchTo = computed(() =>
 .featured-eyebrow .sep { opacity: .5; }
 @keyframes featured-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .5; transform: scale(.8); } }
 .featured-title { font-family: var(--f-display); font-weight: 800; font-size: clamp(36px, 4vw, 56px); line-height: 1.02; letter-spacing: -.025em; text-wrap: balance; }
-.featured-title .jp { display: block; font-family: var(--f-jp); font-weight: 500; font-size: .42em; letter-spacing: .02em; color: var(--ink-3); margin-top: 8px; }
+/* Clamp long titles so they can't overflow the fixed-height hero (content is
+   bottom-anchored, so an unclamped title would push the eyebrow off the top). */
+.featured-title .main { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.featured-title .jp { display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; font-family: var(--f-jp); font-weight: 500; font-size: .42em; letter-spacing: .02em; color: var(--ink-3); margin-top: 8px; }
 .featured-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: 13px; }
 .featured-meta .dot { width: 3px; height: 3px; border-radius: 999px; background: currentColor; opacity: .4; }
 .featured-meta .score { display: inline-flex; align-items: center; gap: 6px; color: var(--color-warning); font-weight: 600; }
