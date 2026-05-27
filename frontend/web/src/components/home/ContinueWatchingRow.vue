@@ -6,7 +6,7 @@
        early-return path.
        Neon Tokyo redesign (Task 6): 16:9 cinematic cards with horizontal
        grid-scroll, play-on-hover, progress bar, and section header. -->
-  <section v-if="items.length > 0" class="cw-section px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+  <section v-if="items.length > 0" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
     <!-- Section header: .section-head pattern from design handoff -->
     <div class="cw-section-head">
       <h2 class="cw-title">
@@ -33,7 +33,6 @@
         <div
           class="cw-img"
           :style="item.anime.poster_url ? { backgroundImage: `url(${item.anime.poster_url})` } : {}"
-          :aria-label="getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp)"
         />
 
         <!-- Centered play button, revealed on hover -->
@@ -184,7 +183,7 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   border-radius: var(--r-lg, 16px);
   overflow: hidden;
   aspect-ratio: 16 / 9;
-  background: var(--color-surface, var(--surface, #11111c));
+  background: var(--color-surface, #11111c);
   border: 1px solid var(--line, rgba(255, 255, 255, 0.06));
   cursor: pointer;
   display: block;
@@ -195,6 +194,10 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   border-color: var(--accent-line, rgba(0, 212, 255, 0.28));
   box-shadow: var(--accent-glow, 0 0 30px rgba(0, 212, 255, 0.28));
 }
+.cw-card:focus-visible {
+  outline: 2px solid var(--accent, #00d4ff);
+  outline-offset: 2px;
+}
 
 /* Cover image with bottom gradient scrim */
 .cw-img {
@@ -202,7 +205,7 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   inset: 0;
   background-size: cover;
   background-position: center;
-  background-color: var(--surface, #11111c);
+  background-color: var(--color-surface, #11111c);
 }
 .cw-img::after {
   content: "";
@@ -296,7 +299,6 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   aspect-ratio: 16 / 9;
   background: rgba(255, 255, 255, 0.06);
   animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  min-width: 280px;
 }
 
 @keyframes pulse {
