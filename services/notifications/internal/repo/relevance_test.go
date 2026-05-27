@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -127,4 +128,107 @@ func Test_JSONSQLPortability(t *testing.T) {
 		t.Fatalf("CAST returned %d, want 7", ep)
 	}
 	_ = domain.TypeNewEpisode // confirm domain import is used
+}
+
+// helper: build repo + call List(unread) and return (rowCount, unread, total)
+func listUnread(t *testing.T, db *gorm.DB, userID string) (int, int64, int64) {
+	t.Helper()
+	r := NewNotificationRepository(db)
+	rows, unread, total, err := r.List(context.Background(), userID, ListUnread, 20, 0)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	return len(rows), unread, total
+}
+
+func Test_List_WatchingBehind_Shows(t *testing.T) {
+	db := relevanceTestDB(t)
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5) // watched 5, latest 7
+	seedNotif(t, db, "u1", "anime-1", 7)
+	n, unread, total := listUnread(t, db, "u1")
+	if n != 1 || unread != 1 || total != 1 {
+		t.Fatalf("want shown (1,1,1), got (%d,%d,%d)", n, unread, total)
+	}
+}
+
+func Test_List_CaughtUp_Hidden(t *testing.T) {
+	db := relevanceTestDB(t)
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 7) // watched 7 == latest 7
+	seedNotif(t, db, "u1", "anime-1", 7)
+	n, unread, total := listUnread(t, db, "u1")
+	if n != 0 || unread != 0 || total != 0 {
+		t.Fatalf("want hidden (0,0,0), got (%d,%d,%d)", n, unread, total)
+	}
+}
+
+func Test_List_CaughtUpOtherCombo_Hidden(t *testing.T) {
+	db := relevanceTestDB(t)
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "animelib", 7) // watched in a DIFFERENT player
+	seedNotif(t, db, "u1", "anime-1", 7)             // notif combo is kodik
+	n, _, _ := listUnread(t, db, "u1")
+	if n != 0 {
+		t.Fatalf("want hidden (anime-level), got %d rows", n)
+	}
+}
+
+func Test_List_Dropped_Hidden(t *testing.T) {
+	db := relevanceTestDB(t)
+	seedList(t, db, "u1", "anime-1", "dropped")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5)
+	seedNotif(t, db, "u1", "anime-1", 7)
+	n, _, _ := listUnread(t, db, "u1")
+	if n != 0 {
+		t.Fatalf("want hidden (not watching), got %d rows", n)
+	}
+}
+
+func Test_List_NotInList_Hidden(t *testing.T) {
+	db := relevanceTestDB(t)
+	// no anime_list row at all
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5)
+	seedNotif(t, db, "u1", "anime-1", 7)
+	n, _, _ := listUnread(t, db, "u1")
+	if n != 0 {
+		t.Fatalf("want hidden (not in list), got %d rows", n)
+	}
+}
+
+func Test_List_PartialRange_Shows(t *testing.T) {
+	db := relevanceTestDB(t)
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 7) // watched 7, latest 9 -> still behind
+	seedNotif(t, db, "u1", "anime-1", 9)
+	n, _, _ := listUnread(t, db, "u1")
+	if n != 1 {
+		t.Fatalf("want shown (newer eps unwatched), got %d rows", n)
+	}
+}
+
+func Test_List_NeverWatched_Shows(t *testing.T) {
+	db := relevanceTestDB(t)
+	seedList(t, db, "u1", "anime-1", "watching")
+	// no watch_history rows -> COALESCE(-1) < 7 -> show
+	seedNotif(t, db, "u1", "anime-1", 7)
+	n, _, _ := listUnread(t, db, "u1")
+	if n != 1 {
+		t.Fatalf("want shown (never watched), got %d rows", n)
+	}
+}
+
+func Test_List_Invalidated_Hidden(t *testing.T) {
+	db := relevanceTestDB(t)
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5) // would otherwise show
+	id := seedNotif(t, db, "u1", "anime-1", 7)
+	if err := db.Exec(`UPDATE user_notifications SET invalidated_at=? WHERE id=?`,
+		time.Now().UTC(), id).Error; err != nil {
+		t.Fatalf("set invalidated: %v", err)
+	}
+	n, _, _ := listUnread(t, db, "u1")
+	if n != 0 {
+		t.Fatalf("want hidden (invalidated), got %d rows", n)
+	}
 }

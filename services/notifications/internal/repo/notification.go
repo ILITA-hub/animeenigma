@@ -65,10 +65,12 @@ func (r *NotificationRepository) List(
 		offset = 0
 	}
 
-	// Base query: active rows (dismissed_at IS NULL) for this user.
+	// Base query: active, non-invalidated rows for this user, filtered to
+	// still-relevant new_episode rows (other types pass through).
 	base := r.db.WithContext(ctx).
 		Model(&domain.UserNotification{}).
-		Where("user_id = ? AND dismissed_at IS NULL", userID)
+		Where("user_id = ? AND dismissed_at IS NULL AND invalidated_at IS NULL", userID).
+		Where(relevanceReadClause())
 
 	// Branch on status — the predicate is additive on top of `base`.
 	rowsQuery := base.Session(&gorm.Session{})
