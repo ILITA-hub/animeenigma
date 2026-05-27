@@ -13,36 +13,34 @@
   >
     <nav class="max-w-7xl mx-auto px-4 lg:px-8">
       <div class="flex items-center justify-between h-16">
-        <!-- Logo -->
-        <router-link to="/" class="flex items-center gap-2 text-xl font-bold">
-          <span class="text-cyan-400">Anime</span>
-          <span class="text-white">Enigma</span>
+        <!-- Logo — BrandMark icon + wordmark -->
+        <router-link to="/" class="brand-link">
+          <BrandMark />
+          <span class="brand-wordmark">
+            <span class="brand-b1">Anime</span><span class="brand-b2">Enigma</span>
+          </span>
         </router-link>
 
         <!-- Desktop Navigation -->
-        <div class="hidden md:flex items-center gap-6">
+        <div class="hidden md:flex items-center gap-1">
           <router-link
             v-for="link in navLinks"
             :key="link.to"
             :to="link.to"
-            class="text-white/70 hover:text-white transition-colors relative py-2"
-            active-class="text-cyan-400"
+            class="nav-link-nt"
+            active-class="nav-link-nt--active"
           >
             {{ $t(link.label) }}
-            <span
-              v-if="$route.path === link.to"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 rounded-full"
-            />
           </router-link>
         </div>
 
-        <!-- Right Section -->
-        <div class="hidden md:flex items-center gap-4">
+        <!-- Right Section — Neon Tokyo tools row -->
+        <div class="hidden md:flex items-center gap-1.5">
           <!-- Search -->
           <div class="relative" ref="searchContainerRef">
             <button
               v-if="!searchOpen"
-              class="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              class="icon-btn-nt"
               :aria-label="$t('nav.search')"
               @click="openSearch"
             >
@@ -122,11 +120,11 @@
           <!-- Language Selector -->
           <div class="relative" ref="langDropdownRef">
             <button
-              class="flex items-center gap-1 px-3 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              class="lang-pill-nt"
               @click="langDropdownOpen = !langDropdownOpen"
             >
-              <span class="uppercase text-sm font-medium">{{ locale }}</span>
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span class="uppercase">{{ locale }}</span>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -157,8 +155,8 @@
           <template v-if="authStore.isAuthenticated">
             <router-link
               to="/profile"
-              class="w-10 h-10 rounded-full overflow-hidden border border-cyan-500/30 flex items-center justify-center transition-colors"
-              :class="authStore.user?.avatar ? 'bg-surface hover:ring-2 hover:ring-cyan-400/50' : 'bg-cyan-500/20 hover:bg-cyan-500/30'"
+              class="avatar-nt"
+              :aria-label="authStore.user?.username || $t('nav.profile')"
             >
               <img
                 v-if="authStore.user?.avatar"
@@ -166,7 +164,9 @@
                 :alt="authStore.user.username"
                 class="w-full h-full object-cover"
               />
-              <span v-else class="text-sm font-medium text-cyan-400">{{ userInitials }}</span>
+              <span v-else class="avatar-initials">{{ userInitials }}</span>
+              <!-- Online dot per handoff .avatar::after -->
+              <span class="avatar-online-dot" aria-hidden="true" />
             </router-link>
           </template>
           <template v-else>
@@ -320,6 +320,7 @@ import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
+import BrandMark from '@/components/layout/BrandMark.vue'
 
 const router = useRouter()
 const { locale } = useI18n()
@@ -499,6 +500,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ------------------------------------------------------------------ */
+/* Dropdown / mobile-menu transitions (unchanged)                       */
+/* ------------------------------------------------------------------ */
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: opacity 0.15s ease, transform 0.15s ease;
@@ -519,5 +523,161 @@ onUnmounted(() => {
 .mobile-menu-leave-to {
   opacity: 0;
   max-height: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Brand logo link                                                      */
+/* ------------------------------------------------------------------ */
+.brand-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.brand-wordmark {
+  font-family: var(--f-display, "Manrope", "Inter", system-ui, sans-serif);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.brand-b1 {
+  color: var(--accent, #00d4ff);
+}
+
+.brand-b2 {
+  color: var(--ink, #ffffff);
+}
+
+/* ------------------------------------------------------------------ */
+/* Desktop nav links — handoff .nav-link + .nav-link.active            */
+/* ------------------------------------------------------------------ */
+.nav-link-nt {
+  position: relative;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--f-ui, "Inter", system-ui, sans-serif);
+  color: var(--ink-3, rgba(255, 255, 255, 0.56));
+  border-radius: var(--r-sm, 8px);
+  transition: color 0.15s ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-link-nt:hover {
+  color: var(--ink, #ffffff);
+}
+
+/* Active state — colour lift + animated underline pill */
+.nav-link-nt--active {
+  color: var(--ink, #ffffff);
+}
+
+.nav-link-nt--active::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -16px;
+  height: 2px;
+  background: var(--accent, #00d4ff);
+  border-radius: 2px;
+  box-shadow: 0 0 10px var(--accent, #00d4ff);
+  /* Animate in when active class is applied */
+  transition: opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ------------------------------------------------------------------ */
+/* Icon buttons — handoff .icon-btn                                    */
+/* ------------------------------------------------------------------ */
+.icon-btn-nt {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md, 12px);
+  color: var(--ink-3, rgba(255, 255, 255, 0.56));
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.icon-btn-nt:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink, #ffffff);
+}
+
+/* ------------------------------------------------------------------ */
+/* Language pill — handoff .lang-pill                                  */
+/* ------------------------------------------------------------------ */
+.lang-pill-nt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm, 8px);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-2, rgba(255, 255, 255, 0.78));
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.lang-pill-nt:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink, #ffffff);
+}
+
+/* ------------------------------------------------------------------ */
+/* Avatar — handoff .avatar with online dot                            */
+/* ------------------------------------------------------------------ */
+.avatar-nt {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #1a3a4a 0%, #0e2030 100%);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  border: 2px solid var(--line-strong, rgba(255, 255, 255, 0.12));
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+.avatar-nt:hover {
+  border-color: var(--accent-line, rgba(0, 212, 255, 0.28));
+}
+
+.avatar-initials {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent, #00d4ff);
+  line-height: 1;
+}
+
+/* Online presence dot — bottom-right corner, 8px with green fill + base border */
+.avatar-online-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-success, #00ff9d);
+  border: 2px solid var(--color-base, #08080f);
+  pointer-events: none;
 }
 </style>
