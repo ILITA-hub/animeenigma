@@ -10,11 +10,21 @@ package repo
 // `user_notifications` so the fragment works inside both a SELECT (List,
 // Model(&UserNotification{})) and an UPDATE on the same table.
 //
+// NOTE — CAST on join columns: `CAST(al.anime_id AS TEXT)` and
+// `CAST(wh.anime_id AS TEXT)` are load-bearing on Postgres, where those
+// columns are the native `uuid` type. Without the cast the comparison
+// against the JSON-extracted text string yields no matches. Do not remove
+// these casts as "redundant".
+//
 // A new_episode notification is RELEVANT iff:
 //
 //	(1) the user still has the anime as anime_list.status = 'watching', AND
 //	(2) the user's max watched episode for the anime (ANY combo) is below the
 //	    advertised latest_available_episode (fail-open when that field is NULL).
+//
+// INVARIANT: callers must NOT alias the `user_notifications` table — this
+// fragment references it by its literal name and will break silently if an
+// alias is introduced in the surrounding query.
 const relevantBodySQL = `
 EXISTS (
 	SELECT 1 FROM anime_list al

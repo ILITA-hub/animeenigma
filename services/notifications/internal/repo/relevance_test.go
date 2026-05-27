@@ -1,8 +1,7 @@
 package repo
 
 import (
-	"context"
-	"strconv"
+	"fmt"
 	"testing"
 	"time"
 
@@ -60,9 +59,11 @@ func relevanceTestDB(t *testing.T) *gorm.DB {
 // latest episode encoded into the JSON payload.
 func seedNotif(t *testing.T, db *gorm.DB, userID, animeID string, latestEp int) string {
 	t.Helper()
-	payload := `{"anime_id":"` + animeID + `","anime_title":"X","first_unwatched_episode":1,` +
-		`"latest_available_episode":` + strconv.Itoa(latestEp) + `,"player":"kodik","language":"ru",` +
-		`"watch_type":"sub","translation_id":"1","watch_url":"/x"}`
+	payload := fmt.Sprintf(
+		`{"anime_id":%q,"anime_title":"X","first_unwatched_episode":1,`+
+			`"latest_available_episode":%d,"player":"kodik","language":"ru",`+
+			`"watch_type":"sub","translation_id":"1","watch_url":"/x"}`,
+		animeID, latestEp)
 	dedupe := "new_episode:" + animeID + ":kodik:ru:sub:1"
 	now := time.Now().UTC()
 	if err := db.Exec(
@@ -125,6 +126,5 @@ func Test_JSONSQLPortability(t *testing.T) {
 	if ep != 7 {
 		t.Fatalf("CAST returned %d, want 7", ep)
 	}
-	_ = context.Background()
 	_ = domain.TypeNewEpisode // confirm domain import is used
 }

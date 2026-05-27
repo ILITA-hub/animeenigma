@@ -36,17 +36,17 @@ const (
 //   - idx_user_unread (user_id, created_at DESC) WHERE dismissed_at IS NULL
 //     (powers the bell/dropdown query path)
 type UserNotification struct {
-	ID          string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID      string         `gorm:"type:uuid;not null;index" json:"user_id"`
-	Type        string         `gorm:"size:32;not null;index" json:"type"`
-	DedupeKey   string         `gorm:"size:255;not null" json:"dedupe_key"`
-	Payload     datatypes.JSON `gorm:"type:jsonb;not null" json:"payload"`
+	ID            string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID        string         `gorm:"type:uuid;not null;index" json:"user_id"`
+	Type          string         `gorm:"size:32;not null;index" json:"type"`
+	DedupeKey     string         `gorm:"size:255;not null" json:"dedupe_key"`
+	Payload       datatypes.JSON `gorm:"type:jsonb;not null" json:"payload"`
 	ReadAt        *time.Time     `json:"read_at"`
 	DismissedAt   *time.Time     `gorm:"index" json:"dismissed_at"`
 	InvalidatedAt *time.Time     `gorm:"index" json:"invalidated_at"`
 	ClickedAt     *time.Time     `json:"clicked_at"`
-	CreatedAt   time.Time      `gorm:"index" json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	CreatedAt     time.Time      `gorm:"index" json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 // TableName pins the table name so it does not depend on GORM's pluralization
