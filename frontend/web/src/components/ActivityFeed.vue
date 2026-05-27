@@ -25,17 +25,17 @@
         :key="event.id"
         class="feed-item"
       >
-        <!-- 28px avatar / poster thumbnail -->
+        <!-- 28px user avatar (falls back to the username initial) -->
         <router-link
-          :to="`/anime/${event.anime_id}`"
+          :to="`/user/${event.public_id || event.user_id}`"
           class="feed-av"
           tabindex="-1"
           aria-hidden="true"
         >
           <img
-            v-if="event.anime?.poster_url"
-            :src="event.anime.poster_url"
-            :alt="animeName(event)"
+            v-if="event.user_avatar"
+            :src="event.user_avatar"
+            :alt="event.username"
             class="feed-av-img"
           />
           <span v-else class="feed-av-fallback">{{ event.username?.charAt(0)?.toUpperCase() }}</span>
@@ -47,9 +47,7 @@
             <router-link
               :to="`/user/${event.public_id || event.user_id}`"
               class="feed-who"
-            >@{{ event.username }}</router-link>
-            <span class="feed-action"> {{ actionText(event) }}</span>
-            <router-link
+            >@{{ event.username }}</router-link>{{ ' ' }}<span class="feed-action">{{ actionText(event) }}</span>{{ ' ' }}<router-link
               :to="`/anime/${event.anime_id}`"
               class="feed-ttl"
             >{{ animeName(event) }}</router-link>
@@ -95,6 +93,8 @@ interface ActivityEvent {
   // this field by joining activity_events with users.
   public_id?: string
   username: string
+  // Populated by the backend feed from the users table (current avatar).
+  user_avatar?: string
   anime_id: string
   anime?: {
     id: string
@@ -154,7 +154,7 @@ const actionText = (event: ActivityEvent): string => {
     const key = event.old_value === 'new' ? 'activity.review.wrote' : 'activity.review.updated'
     return t(key, { score: event.new_value })
   }
-  return t(`activity.status.${event.new_value}`) + ' '
+  return t(`activity.status.${event.new_value}`)
 }
 
 const animeName = (event: ActivityEvent): string => {

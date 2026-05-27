@@ -10,6 +10,10 @@ type ActivityEvent struct {
 	ID        string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID    string         `gorm:"type:uuid;index" json:"user_id"`
 	Username  string         `gorm:"size:32" json:"username"`
+	// UserAvatar is not a column — it is populated at read time from the
+	// users table (see ActivityRepository.GetFeed) so the feed shows the
+	// commenter's current avatar without denormalizing (which would go stale).
+	UserAvatar string `gorm:"-" json:"user_avatar,omitempty"`
 	AnimeID   string         `gorm:"type:uuid;index" json:"anime_id"`
 	Anime     *AnimeInfo     `gorm:"foreignKey:AnimeID" json:"anime,omitempty"`
 	Type      string         `gorm:"size:20;index" json:"type"`
