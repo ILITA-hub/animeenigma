@@ -80,4 +80,14 @@ var (
 			Help: "Active + unread notification rows across all users (polled every 5m).",
 		},
 	)
+
+	// NotificationsStaleInvalidatedTotal counts notification rows the hourly
+	// RelevanceInvalidationJob tombstoned (anime no longer 'watching', or the
+	// user caught up to the advertised latest episode).
+	NotificationsStaleInvalidatedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "notifications_stale_invalidated_total",
+			Help: "new_episode notifications tombstoned by the hourly relevance invalidation job.",
+		},
+	)
 )
