@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"time"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -9,11 +10,14 @@ import (
 )
 
 // DismissedRetentionCleanupJob deletes user_notifications rows whose
-// dismissed_at is older than `retentionDays` (NOTIF-DET-09, default 30).
+// dismissed_at or invalidated_at is older than `retentionDays`
+// (NOTIF-DET-09, default 30). Reaps rows retired either by the user
+// (dismissed_at) or by the hourly RelevanceInvalidationJob (invalidated_at).
 //
-// Single DELETE statement, parameterised on retentionDays to avoid SQL
-// injection. Runs nightly via Scheduler ("30 3 * * *") plus on-demand via
-// POST /internal/cleanup/run-once.
+// Single DELETE statement with a Go-computed cutoff timestamp (portable
+// across Postgres and SQLite; removes the old pgx INTERVAL-encoding
+// workaround). Runs nightly via Scheduler ("30 3 * * *") plus on-demand
+// via POST /internal/cleanup/run-once.
 //
 // Idempotent: an empty match set returns 0 deletions without error.
 type DismissedRetentionCleanupJob struct {
@@ -34,18 +38,21 @@ func NewDismissedRetentionCleanupJob(db *gorm.DB, retentionDays int, log *logger
 // Run executes the DELETE. Returns the rows-affected count for logging /
 // metrics / the admin endpoint's JSON response.
 //
-// IMPORTANT: pgx (the Postgres driver this service uses) refuses to encode
-// an int parameter into a text-shaped slot, which broke an earlier
-// `(? || ' days')::interval` formulation. The `INTERVAL '1 day' * N` form
-// keeps the parameter as a plain integer so pgx is happy AND the math is
-// done server-side. Caught during SC6 of the Phase 2 verification gauntlet.
+// The cutoff is computed in Go (portable across Postgres + SQLite; also
+// retires the old pgx INTERVAL-encoding workaround). Reaps rows retired
+// either by the user (dismissed_at) or by the relevance invalidation job
+// (invalidated_at).
 func (j *DismissedRetentionCleanupJob) Run(ctx context.Context) (int64, error) {
+	// Go-computed cutoff (portable across Postgres + SQLite; also retires the
+	// old pgx INTERVAL-encoding workaround). Reaps rows retired either by the
+	// user (dismissed_at) or by the relevance invalidation job (invalidated_at).
+	cutoff := time.Now().UTC().AddDate(0, 0, -j.retentionDays)
 	const q = `
 		DELETE FROM user_notifications
-		WHERE dismissed_at IS NOT NULL
-		  AND dismissed_at < NOW() - (INTERVAL '1 day' * ?)
+		WHERE (dismissed_at   IS NOT NULL AND dismissed_at   < ?)
+		   OR (invalidated_at IS NOT NULL AND invalidated_at < ?)
 	`
-	res := j.db.WithContext(ctx).Exec(q, j.retentionDays)
+	res := j.db.WithContext(ctx).Exec(q, cutoff, cutoff)
 	if res.Error != nil {
 		return 0, apperrors.Wrap(res.Error, apperrors.CodeInternal, "retention cleanup delete")
 	}
