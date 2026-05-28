@@ -260,7 +260,7 @@ onBeforeUnmount(() => {
 // risk surface is negligible: the room handle has no admin powers,
 // only the WS emits this user could trigger anyway.
 if (typeof window !== 'undefined') {
-  ;(window as unknown as { __wtTestRoom?: unknown }).__wtTestRoom = roomHandle
+  (window as unknown as { __wtTestRoom?: unknown }).__wtTestRoom = roomHandle
 }
 
 // Plan 04.4 — PlayerTabBar @select-player handler. Routes ALL user-driven

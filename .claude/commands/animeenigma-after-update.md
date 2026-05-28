@@ -87,12 +87,28 @@ This file is loaded by the `LastUpdates.vue` Changelog tab to show users what's 
 
 **Language:** Always write entries in **Russian**.
 
-**Writing style:** Informative + enthusiastic with emojis. Write for anime fans, not developers.
+**Writing style — Russian Trump-mode (mandatory default):** Bombastic, self-aggrandizing, emoji-led, but factually grounded. Write for anime fans, not developers. The technical claim must stay true to what actually changed — only the *tone* is theatrical.
 
-Examples:
-- "🎉 Новая лента аниме-новостей из Telegram прямо на главной! Будьте в курсе всех анонсов"
-- "🔧 Исправлен рендеринг субтитров в AnimeLib плеере — плавные субтитры снова работают!"
-- "⚡ Ускорена загрузка страниц благодаря оптимизированному кэшированию"
+Trump-mode signature elements (use 2-4 per entry, not all at once — keep it punchy, not parody-soup):
+
+- **ALL-CAPS emphasis** on one or two key adjectives/nouns per entry: `ВЕЛИКОЛЕПНАЯ архитектура`, `ОГРОМНАЯ перемотка`, `КАТАСТРОФА была`, `НИКОГДА больше`, `БОЛЬШАЯ починка`, `ВСЁ работает`.
+- **Signature closers**, pick one per entry: `Поверьте мне.` · `Никто другой так не делает!` · `МЫ сделали. Никто другой не сделал!` · `Лучший X. Лучший!` · `ВЕЛИКОЛЕПНО.` · `Грандиозно.`
+- **Self-aggrandizing claim**: `МЫ это нашли. Никто другой не заметил.` / `Многие просили — МЫ сделали.` / `Только МЫ можем.`
+- **Bombastic comparatives**: `лучшая защита`, `лучшая перемотка`, `грандиозный фильтр`.
+- **Drama-then-fix arc** for `fix` entries: name the disaster ("КАТАСТРОФА была"), then the heroic resolution ("Теперь — ВЕЛИКОЛЕПНО").
+- **Emojis stay** at the start (🎉 🔧 ⚡ 🎌 🐛 📐 🧭 🔔 etc.) — they're the visual hook.
+- **Length cap ≈ 180 chars** per entry; longer is fine when the technical content earns it (see the 2026-05-19 AnimePahe batch in the same file as the gold-standard reference).
+
+Examples (good):
+- "🎉 AnimePahe ОЖИЛ! Английская озвучка снова идёт через animepahe — Frieren тянется все 28 эпизодов без единого 403. ВЕЛИКОЛЕПНАЯ архитектура. Никто другой так не делает!"
+- "🔧 Субтитры в AnimeLib плеере. БОЛЬШАЯ починка. Плавные субтитры снова работают. МЫ это починили. Поверьте мне."
+- "⚡ Страницы грузятся быстрее благодаря оптимизированному кэшированию. Лучшая скорость. Лучшая!"
+
+Anti-examples (do NOT ship these — old "informative + enthusiastic" tone):
+- ❌ "🎉 Новая лента аниме-новостей из Telegram прямо на главной! Будьте в курсе всех анонсов"
+- ❌ "🔧 Исправлен рендеринг субтитров в AnimeLib плеере — плавные субтитры снова работают!"
+
+If a change is too small to bear Trump-mode (one-line config tweak), prefer a short Trump-mode entry over no entry — never silently fall back to a friendly tone.
 
 **Rules:**
 - If today's date group already exists at the top, merge new entries into it

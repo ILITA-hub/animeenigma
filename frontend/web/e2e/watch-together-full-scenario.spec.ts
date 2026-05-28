@@ -1,4 +1,4 @@
-import { test, expect, type Browser, type Page, type APIRequestContext } from '@playwright/test'
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
 
 /**
  * Workstream watch-together — comprehensive 2-browser e2e scenario.
