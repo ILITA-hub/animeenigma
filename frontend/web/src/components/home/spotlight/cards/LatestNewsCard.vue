@@ -56,7 +56,7 @@
             {{ formatEntryDate(entry.date) }}
           </p>
           <p
-            class="text-sm font-semibold text-white line-clamp-3 flex-1"
+            class="text-sm font-semibold text-white news-msg flex-1"
           >
             {{ entryTitle(entry.message) }}
           </p>
@@ -134,12 +134,14 @@ function scrollToChangelog(): void {
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-// Title = first 60 chars + ellipsis if longer. The Phase 02
-// sentence-splitter regex is gone (see SUMMARY for the rationale) —
-// it produced confusing splits on emoji and ASCII colons. A proper
-// backend title/body split lives in the v1.2 backlog.
+// Show the full changelog message; visual truncation (with an ellipsis) is
+// handled by the CSS line-clamp on the tile, which is sized to the tile's
+// height. The previous hard 60-char slice cropped the 150–210 char changelog
+// entries down to ~2 lines even though each tile has room for ~11 — that was
+// the "cropped too much" the slice caused. A proper backend title/body split
+// is still in the v1.2 backlog; until then the whole message is the teaser.
 function entryTitle(msg: string): string {
-  return msg.length > 60 ? msg.slice(0, 60).trimEnd() + '…' : msg
+  return msg || ''
 }
 </script>
 
@@ -153,4 +155,17 @@ function entryTitle(msg: string): string {
   background: rgba(255, 255, 255, 0.07);
 }
 .news-date { color: var(--ink-3); }
+
+/* Show up to 7 lines of the changelog message, then truncate with an
+   ellipsis. Defined here (not via a Tailwind line-clamp-[7] utility) because
+   Tailwind v4 did not emit that arbitrary value — the explicit rule is
+   guaranteed. Each tile is tall (~11 lines fit); 7 shows the full 150–210 char
+   entries while keeping the three tiles visually balanced. */
+.news-msg {
+  display: -webkit-box;
+  -webkit-line-clamp: 7;
+  line-clamp: 7;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 </style>

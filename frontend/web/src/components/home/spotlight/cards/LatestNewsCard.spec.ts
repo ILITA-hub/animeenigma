@@ -215,25 +215,24 @@ describe('LatestNewsCard — relative date formatting', () => {
   })
 })
 
-describe('LatestNewsCard — message truncation', () => {
-  it('passes through messages <= 60 chars unchanged', () => {
+describe('LatestNewsCard — message rendering', () => {
+  it('passes through short messages unchanged', () => {
     const short = 'Phase 1 backend ships — spotlight aggregator delivered.'
-    expect(short.length).toBeLessThanOrEqual(60)
     const wrapper = mountCard({
       data: { entries: [{ date: '2026-05-21', type: 'feat', message: short }] },
     })
     expect(wrapper.text()).toContain(short)
   })
 
-  it('truncates messages > 60 chars with an ellipsis', () => {
+  it('passes through long messages in full — visual truncation is the CSS line-clamp, not a JS slice', () => {
     const long = 'A very long message that absolutely positively definitely exceeds the sixty character cutoff threshold.'
     expect(long.length).toBeGreaterThan(60)
     const wrapper = mountCard({
       data: { entries: [{ date: '2026-05-21', type: 'feat', message: long }] },
     })
-    const text = wrapper.text()
-    expect(text).toContain('…')
-    expect(text).not.toContain(long) // full message must not appear
+    // The whole message now reaches the DOM (the old 60-char slice cropped the
+    // 150–210 char changelog entries to ~2 lines while the tile fits ~11).
+    expect(wrapper.text()).toContain(long)
   })
 })
 
@@ -256,9 +255,9 @@ describe('LatestNewsCard — typography + a11y discipline', () => {
     expect(html).not.toMatch(/\bp-5\b/)
   })
 
-  it('applies line-clamp-3 on the message title (max 3 lines)', () => {
+  it('applies the multi-line clamp class on the message title (.news-msg → 7-line clamp in scoped CSS)', () => {
     const wrapper = mountCard({ data: mock5 })
-    expect(wrapper.html()).toContain('line-clamp-3')
+    expect(wrapper.html()).toContain('news-msg')
   })
 
   it('has no hardcoded English title — uses t()', () => {
