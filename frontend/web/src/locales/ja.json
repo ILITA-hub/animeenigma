@@ -72,6 +72,13 @@
     "detailsTitle": "アニメ詳細",
     "watch": "視聴する",
     "watchNow": "視聴する",
+    "notReleased": {
+      "title": "未公開",
+      "withDate": "この作品は{date}に公開予定です。まだ視聴できる話数はありません。公開後にご確認ください。",
+      "noDate": "この作品はまだ公開されていません。公開後にご確認ください。",
+      "cta": "{date} 公開予定",
+      "ctaNoDate": "近日公開"
+    },
     "languageSwitchLabel": "音声言語",
     "providerSwitchLabel": "動画プロバイダー",
     "nav": {

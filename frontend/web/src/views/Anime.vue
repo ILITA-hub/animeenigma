@@ -109,30 +109,44 @@
 
           <!-- Primary Watch CTA (visible above the fold, for everyone) -->
           <div class="flex flex-wrap items-center gap-3 mb-4">
-            <button
-              @click="activatePlayer"
-              type="button"
-              class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/20 transition-all"
+            <!-- Announced/upcoming title with no sources yet: a "Watch now"
+                 button would dead-end on a misleading "no videos" message,
+                 so show a non-actionable premiere indicator instead. -->
+            <div
+              v-if="notReleasedYet"
+              class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-white/5 text-white/70 border border-white/10 cursor-default"
             >
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
-            </button>
-            <!-- Workstream watch-together — discovery-stage Invite mount.
-                 Anonymous users don't see it (creating a room requires JWT).
-                 Backend requires a non-empty translation_id; for first-time
-                 visitors with no cached combo we lazy-resolve it on click via
-                 `resolveTranslationId` which activates the player and waits
-                 for useWatchPreferences to populate. -->
-            <InviteButton
-              v-if="authStore.isAuthenticated && anime"
-              :anime-id="anime.id"
-              :episode-id="String(resumeStartEpisode ?? lastEpisode ?? 1)"
-              :player="(resolvedCombo?.player === 'english' ? 'ourenglish' : (resolvedCombo?.player ?? 'kodik')) as PlayerKind"
-              :translation-id="resolvedCombo?.translation_id ?? ''"
-              :resolve-translation-id="resolveTranslationId"
-            />
+              <span>{{ premiereDate ? $t('anime.notReleased.cta', { date: premiereDate }) : $t('anime.notReleased.ctaNoDate') }}</span>
+            </div>
+            <template v-else>
+              <button
+                @click="activatePlayer"
+                type="button"
+                class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/20 transition-all"
+              >
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
+              </button>
+              <!-- Workstream watch-together — discovery-stage Invite mount.
+                   Anonymous users don't see it (creating a room requires JWT).
+                   Backend requires a non-empty translation_id; for first-time
+                   visitors with no cached combo we lazy-resolve it on click via
+                   `resolveTranslationId` which activates the player and waits
+                   for useWatchPreferences to populate. -->
+              <InviteButton
+                v-if="authStore.isAuthenticated && anime"
+                :anime-id="anime.id"
+                :episode-id="String(resumeStartEpisode ?? lastEpisode ?? 1)"
+                :player="(resolvedCombo?.player === 'english' ? 'ourenglish' : (resolvedCombo?.player ?? 'kodik')) as PlayerKind"
+                :translation-id="resolvedCombo?.translation_id ?? ''"
+                :resolve-translation-id="resolveTranslationId"
+              />
+            </template>
           </div>
 
           <!-- Actions -->
@@ -337,7 +351,9 @@
           <!-- UA-062 (UX-12 Phase 5): ButtonGroup wraps the RU/EN/18+ toggle
                with role="group" + aria-label; each child button binds
                aria-pressed to its selected state. -->
-          <div class="flex flex-wrap gap-2">
+          <!-- Hidden for not-yet-released titles: no sources exist to switch
+               between, so the language/provider toggles are noise. -->
+          <div v-if="!notReleasedYet" class="flex flex-wrap gap-2">
             <ButtonGroup
               :label="$t('anime.languageSwitchLabel')"
               container-class="flex gap-1 bg-white/5 rounded-lg p-1"
@@ -458,9 +474,24 @@
           </div>
         </div>
         <div class="glass-card p-4 md:p-6">
+          <!-- Not-released notice: an announced/upcoming title with no sources
+               yet. Replaces the player so users see "premieres on {date}"
+               rather than a misleading "no available videos" error. -->
+          <div
+            v-if="notReleasedYet"
+            class="w-full aspect-video rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-center gap-3 px-6"
+          >
+            <svg class="w-12 h-12 text-cyan-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p class="text-lg font-semibold text-white">{{ $t('anime.notReleased.title') }}</p>
+            <p class="text-sm text-white/60 max-w-md">
+              {{ premiereDate ? $t('anime.notReleased.withDate', { date: premiereDate }) : $t('anime.notReleased.noDate') }}
+            </p>
+          </div>
           <!-- Click-to-load placeholder (saves bandwidth / no auto-buffer) -->
           <button
-            v-if="!playerActivated"
+            v-else-if="!playerActivated"
             type="button"
             @click="activatePlayer"
             class="relative w-full aspect-video rounded-lg overflow-hidden group focus:outline-none focus:ring-2 focus:ring-cyan-400"
@@ -1469,6 +1500,17 @@ const formatDate = (dateStr: string) => {
     year: 'numeric',
   })
 }
+
+// An announced/upcoming title with no resolved sources hasn't aired yet —
+// so "no available videos" is misleading. Show a premiere notice instead.
+// hasVideo guards the rare case of an announced title with an early leak.
+const notReleasedYet = computed(() => {
+  const s = anime.value?.status?.toLowerCase()
+  return (s === 'announced' || s === 'upcoming') && !anime.value?.hasVideo
+})
+const premiereDate = computed(() =>
+  anime.value?.airedOn ? formatDate(anime.value.airedOn) : ''
+)
 
 const formatReviewStats = (review: Review): string => {
   const status = review.status || 'watching'

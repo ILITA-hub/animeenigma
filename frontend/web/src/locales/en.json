@@ -72,6 +72,13 @@
     "detailsTitle": "Anime Details",
     "watch": "Watch",
     "watchNow": "Watch",
+    "notReleased": {
+      "title": "Not released yet",
+      "withDate": "This title premieres on {date}. There's nothing to watch yet — check back after release.",
+      "noDate": "This title hasn't been released yet. There's nothing to watch yet — check back after release.",
+      "cta": "Premieres {date}",
+      "ctaNoDate": "Coming soon"
+    },
     "languageSwitchLabel": "Audio language",
     "providerSwitchLabel": "Video provider",
     "nav": {
