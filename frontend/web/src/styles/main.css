@@ -456,6 +456,23 @@ body {
 .spotlight-frame { height: 470px; }
 @media (min-width: 768px) { .spotlight-frame { height: 400px; } }
 
+/* Hover-reveal carousel arrows. The chevrons (.arrow-prev / .arrow-next) are
+   `opacity: 0` by default in CarouselControls.vue so they don't sit on top of
+   card content (the RandomTail poster, the featured padding zone, etc.).
+   Reveal them when the user is actually interacting with the spotlight —
+   hover or keyboard focus anywhere inside the frame. Touch devices that have
+   no hover capability get the arrows back via the hover: none override so
+   carousel nav stays discoverable. The dots beneath the frame are always
+   visible and provide the always-on affordance. */
+.spotlight-frame:hover .arrow-prev,
+.spotlight-frame:hover .arrow-next,
+.spotlight-frame:focus-within .arrow-prev,
+.spotlight-frame:focus-within .arrow-next { opacity: 1; }
+@media (hover: none) {
+  .spotlight-frame .arrow-prev,
+  .spotlight-frame .arrow-next { opacity: 1; }
+}
+
 /* Spotlight RandomTail (HSB-V11-RT-04)
 
    Mount-time "shuffle deck" animation rendered as a stack of 5

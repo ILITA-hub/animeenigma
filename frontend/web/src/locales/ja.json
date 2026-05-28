@@ -1091,6 +1091,7 @@
     "invite_button_label": "一緒に視聴に招待",
     "invite_copied_toast": "招待リンクをコピーしました — 友達と共有しましょう",
     "invite_copy_manual": "このリンクをコピーして共有:",
+    "invite_failed_toast": "ルームを作成できませんでした — もう一度お試しください",
     "kodik_sync_unavailable": "このバージョンではKodikの同期を利用できません — ボイスチャットで調整してください",
     "room_ended_title": "この一緒に視聴ルームは終了しました",
     "room_ended_back_button": "アニメに戻る",

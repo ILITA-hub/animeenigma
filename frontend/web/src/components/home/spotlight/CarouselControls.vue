@@ -80,7 +80,13 @@ const { t } = useI18n()
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--ink-2);
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  /* Hidden by default so the chevrons don't overlap card content (e.g. the
+     RandomTail poster on the left). Revealed on hover/focus by the global
+     `.spotlight-frame:hover .arrow-prev` rule in main.css (scoped CSS can't
+     match an ancestor in a sibling component). Touch devices that can't
+     hover get them back via @media (hover: none) in main.css. */
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   cursor: pointer;
 }
 .arrow-prev { left: 20px; }

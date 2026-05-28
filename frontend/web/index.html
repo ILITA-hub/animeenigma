@@ -23,6 +23,17 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="AnimeEnigma - Anime Streaming Platform">
     <meta name="twitter:description" content="Watch anime for free with subtitles. Stream the latest episodes and classic series in English and Russian.">
+    <script>
+      // Disable native scroll restoration as early as possible — before any
+      // module loads. Setting this inside router/index.ts (a deferred module)
+      // ran too late: the browser had often already restored a stale scroll
+      // position on refresh, then async content (ContinueWatchingRow,
+      // spotlight cards) shifted the layout under it and the page appeared to
+      // "randomly scroll". The router's scrollBehavior continues to handle
+      // back/forward via savedPosition; only the browser's auto-restore is
+      // turned off here.
+      if ('scrollRestoration' in history) { history.scrollRestoration = 'manual' }
+    </script>
   </head>
   <body>
     <div id="app"></div>

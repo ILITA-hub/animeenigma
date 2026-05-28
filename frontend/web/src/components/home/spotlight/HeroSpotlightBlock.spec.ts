@@ -263,6 +263,31 @@ describe('HeroSpotlightBlock', () => {
     expect(next).toBe((initial + 1) % 4)
   })
 
+  it('stops the auto-cycle once the user clicks a navigation control', async () => {
+    // After a manual click, the carousel is the user's — the 7s timer must
+    // NOT re-arm and surprise them with a jump. Regression for "if arrow
+    // block clicked, hero-spotlight is switching by itself".
+    vi.useFakeTimers()
+    mockState.loading.value = false
+    mockState.cards.value = []
+    const wrapper = mountBlock()
+    mockState.cards.value = mockCards(4)
+    await flushPromises()
+
+    const nextBtn = wrapper.find('[aria-label="spotlight.nextSlide"]')
+    expect(nextBtn.exists()).toBe(true)
+
+    await nextBtn.trigger('click')
+    await flushPromises()
+    const afterClick = readActiveIndex(wrapper)
+
+    // Wait well past the 7s cadence — the carousel must NOT move on its own.
+    vi.advanceTimersByTime(15_000)
+    await flushPromises()
+
+    expect(readActiveIndex(wrapper)).toBe(afterClick)
+  })
+
   it('wraps around from last card to first via the next chevron', async () => {
     vi.useFakeTimers()
     mockState.loading.value = false

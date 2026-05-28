@@ -174,6 +174,14 @@ const currentIndex = ref(0)
 // user's feet.
 let initialized = false
 
+// Once the user clicks prev/next/a dot, they've taken manual control of the
+// carousel; stop the 7s auto-cycle permanently for this mount. Previously
+// next()/prev()/goTo() called restart() which immediately re-armed the timer,
+// so 7s after a manual click the carousel jumped again — read as "switching
+// by itself" right after the user clicked. Hover-based pause/resume still
+// works freely up until the first click.
+const userInteracted = ref(false)
+
 // v1.1-polish Phase 01 Task 4 (HSB-V11-CC-05) — transition lock.
 //
 // The Phase 03 UAT surfaced a "blank-card" bug: hammering ArrowRight 10×
@@ -245,6 +253,10 @@ function startCycle(): void {
   // Single-card responses are a no-op — cycling produces a useless flicker
   // every 7s. Per UI-SPEC §State Contract.
   if (cards.value.length <= 1) return
+  // Once the user has manually navigated (clicked an arrow / dot), the
+  // carousel is theirs — never resume the auto-cycle for the rest of this
+  // mount, regardless of hover/focus state.
+  if (userInteracted.value) return
   resume()
 }
 
@@ -252,29 +264,27 @@ function stopCycle(): void {
   pause()
 }
 
-function restart(): void {
-  pause()
-  startCycle()
-}
-
 function next(): void {
   if (cards.value.length === 0 || isTransitioning.value) return
   currentIndex.value = (currentIndex.value + 1) % cards.value.length
-  restart()
+  userInteracted.value = true
+  pause()
 }
 
 function prev(): void {
   if (cards.value.length === 0 || isTransitioning.value) return
   currentIndex.value =
     (currentIndex.value - 1 + cards.value.length) % cards.value.length
-  restart()
+  userInteracted.value = true
+  pause()
 }
 
 function goTo(i: number): void {
   if (isTransitioning.value) return
   if (i < 0 || i >= cards.value.length) return
   currentIndex.value = i
-  restart()
+  userInteracted.value = true
+  pause()
 }
 
 // Pitfall 4 mitigation — randomize AFTER cards populate. The fetch is async,
