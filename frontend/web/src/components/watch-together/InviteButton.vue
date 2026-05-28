@@ -1,32 +1,34 @@
 <!--
-  Workstream watch-together — Phase 02 (frontend-shell) Plan 02.6 Task 2.
+  Workstream watch-together — InviteButton.vue.
 
-  InviteButton.vue — the watch-together entry point. Mounted into
-  WatchView.vue's player chrome area (wave 6, Plan 02.9 stitches it in).
-  Click flow per CONTEXT.md §"InviteButton":
+  The watch-together entry point. Mounted next to the "Continue ep. N" CTA
+  on the anime page (above-the-fold discovery surface).
 
-      click
-        → createRoom({anime_id, episode_id, player, translation_id})
-        → router.push('/watch/room/${response.room_id}')
-        → navigator.clipboard.writeText(response.invite_url)
-        → toast.push('Invite link copied', 'success')
+  Click flow:
+    click
+      → if no translationId prop yet, fetch first available translation
+        for the active player directly from the catalog (~100ms — does
+        NOT mount the player; no preferences-resolution chain, no 12s
+        timeout, no spurious red toast)
+      → createRoom({anime_id, episode_id, player, translation_id})
+      → router.push('/watch/room/${response.room_id}')
+      → navigator.clipboard.writeText(response.invite_url)
+      → toast.push('Invite link copied', 'success')
 
-  Failure branches:
-    - createRoom rejects → error toast; router.push is NOT fired (so the
-      user stays on the anime page to retry).
-    - navigator.clipboard absent OR writeText rejects → info toast that
-      embeds the raw invite_url so the user can manual-select-and-copy.
-      This branch is the dev/HTTP fallback (clipboard requires a secure
-      context). Per the plan, we DO still router.push in this branch —
-      navigation succeeded and the URL is in the address bar; the only
-      degraded UX is the user has to copy from the toast instead of just
-      pasting.
+  Failure branches (all use the shared `useToast` queue rendered by
+  `<Toaster />` in App.vue — same toast surface as the rest of the app):
+    - translations fetch returns []  → error toast, stay on page.
+    - createRoom rejects             → error toast, stay on page.
+    - Clipboard absent / NotAllowed  → info toast that embeds the raw
+                                       invite_url for manual copy. The
+                                       router.push still fires — the URL
+                                       in the address bar IS the invite.
 
   Loading state:
     - Local `loading` ref disables the button + shows an inline spinner
-      while the createRoom promise is in flight. The finally clause
-      guarantees re-enable on BOTH success and failure paths so a
-      transient network failure doesn't strand the button in disabled.
+      while the click promise is in flight. Typical end-to-end time
+      <500ms; the spinner exists so a slow-network click still gives
+      pressed-state feedback.
 
   UI-SPEC contract (CLAUDE.md):
     - Tailwind utility classes only
@@ -41,6 +43,7 @@ import { useRouter } from 'vue-router'
 
 import { createRoom } from '@/api/watch-together'
 import type { PlayerKind } from '@/api/watch-together'
+import { kodikApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
@@ -50,13 +53,11 @@ const props = defineProps<{
   episodeId: string
   /** Active player kind (drives WatchTogetherView's player mount). */
   player: PlayerKind
-  /** Active translation/dub identifier. May be empty for the discovery
-   *  mount on the anime detail page — see `resolveTranslationId`. */
+  /** Active translation/dub identifier — may be empty for the discovery
+   *  mount on the anime detail page. When empty, the button fetches the
+   *  first available translation from the catalog before creating the
+   *  room (sub-second; no player-mount chain). */
   translationId: string
-  /** Optional lazy resolver. Called BEFORE createRoom when translationId
-   *  is empty (e.g. discovery mount on a fresh anime). The parent runs
-   *  player activation + waits for useWatchPreferences to populate. */
-  resolveTranslationId?: () => Promise<string>
 }>()
 
 const { t } = useI18n()
@@ -65,16 +66,37 @@ const toast = useToast()
 
 const loading = ref(false)
 
+interface Translation {
+  id: number
+  pinned?: boolean
+  type?: string
+}
+
 /**
- * Attempt to write the invite URL to the clipboard. Returns true on
- * success, false when the API is unavailable OR writeText rejects
- * (locked-down browsers throw NotAllowedError on non-secure contexts).
+ * Fetch the first usable kodik translation id for this anime from the
+ * catalog. Prefers pinned translations (admin-curated default) and falls
+ * back to the first row. Returns "" if nothing is available — caller
+ * surfaces an error toast.
  *
- * Why try/catch around writeText: the Clipboard API rejects rather than
- * throws synchronously, and a bare `await` would propagate up to the
- * outer click handler's catch which would mis-toast a clipboard issue
- * as a createRoom failure.
+ * The discovery button always defaults to the kodik player because (a)
+ * every Russian-speaking user has kodik, (b) every anime that surfaces
+ * the button has `has_kodik=true`, and (c) the user can switch player
+ * inside the room via PlayerTabBar without any of this fetch cost. This
+ * keeps the click <500ms in the common case.
  */
+async function fetchFirstTranslationId(): Promise<string> {
+  try {
+    const resp = await kodikApi.getTranslations(props.animeId)
+    const rows = (resp.data?.data ?? resp.data ?? []) as Translation[]
+    if (!Array.isArray(rows) || rows.length === 0) return ''
+    const pinned = rows.find(r => r.pinned)
+    const winner = pinned ?? rows[0]
+    return winner ? String(winner.id) : ''
+  } catch {
+    return ''
+  }
+}
+
 async function tryClipboardWrite(url: string): Promise<boolean> {
   if (typeof navigator === 'undefined' || !navigator.clipboard) {
     return false
@@ -91,18 +113,15 @@ async function onClick(): Promise<void> {
   if (loading.value) return
   loading.value = true
   try {
-    // Backend requires non-empty translation_id (rooms.go:83-84). For the
-    // discovery mount on the anime detail page, translation_id may not be
-    // resolved yet — fall through to the parent's lazy resolver which
-    // activates the player and waits for useWatchPreferences to populate.
     let translationId = props.translationId
-    if (!translationId && props.resolveTranslationId) {
-      translationId = await props.resolveTranslationId()
+    if (!translationId) {
+      translationId = await fetchFirstTranslationId()
     }
     if (!translationId) {
-      toast.push(t('watch_together.invite_copied_toast'), 'error', 4000)
+      toast.push(t('watch_together.invite_failed_toast'), 'error', 4000)
       return
     }
+
     const response = await createRoom({
       anime_id: props.animeId,
       episode_id: props.episodeId,
@@ -120,9 +139,7 @@ async function onClick(): Promise<void> {
       toast.push(t('watch_together.invite_copied_toast'), 'success', 4000)
     } else {
       // Manual-copy fallback. The URL is embedded in the toast body so
-      // the user can select-and-copy without a separate modal — for the
-      // dev/HTTP context this is good-enough and avoids adding modal
-      // infrastructure in Phase 2.
+      // the user can select-and-copy without a separate modal.
       toast.push(
         `${t('watch_together.invite_copy_manual')} ${response.invite_url}`,
         'info',
@@ -130,11 +147,7 @@ async function onClick(): Promise<void> {
       )
     }
   } catch {
-    toast.push(t('watch_together.invite_copied_toast'), 'error', 4000)
-    // Note: we deliberately reuse the i18n key (it reads acceptably as a
-    // generic "couldn't share" message) rather than adding another locale
-    // key for a path users see ~0% of the time. A future plan that wants
-    // a fine-grained error message can split it out.
+    toast.push(t('watch_together.invite_failed_toast'), 'error', 4000)
   } finally {
     loading.value = false
   }
@@ -146,6 +159,7 @@ async function onClick(): Promise<void> {
     type="button"
     :disabled="loading"
     :aria-label="t('watch_together.invite_button_label')"
+    data-testid="wt-invite-button"
     class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
     @click="onClick"
   >

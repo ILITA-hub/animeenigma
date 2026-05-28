@@ -1012,6 +1012,7 @@
     "invite_button_label": "Смотреть вместе",
     "invite_copied_toast": "Ссылка скопирована — поделись с друзьями",
     "invite_copy_manual": "Скопируй эту ссылку, чтобы поделиться:",
+    "invite_failed_toast": "Не удалось создать комнату — попробуй ещё раз",
     "kodik_sync_unavailable": "Синхронизация Kodik недоступна для этой версии плеера — используйте голосовой чат для координации",
     "room_ended_title": "Эта комната Watch Together завершена",
     "room_ended_back_button": "Назад к аниме",
