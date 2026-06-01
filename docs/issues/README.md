@@ -347,6 +347,16 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Resolved Issues
 
+### ISS-019: Subtitle panel showed "opensubtitles down" for hours after one transient failure (degraded result cached 6h)
+- **Date:** 2026-06-01
+- **Severity:** Medium (subtitle panel degraded to JP-only / "providers_down" for up to 6h per affected title)
+- **Reported by:** User — `/anime/dbc95dd5-...` (That Time I Got Reincarnated as a Slime S4) showed "Некоторые источники не ответили: opensubtitles".
+- **Symptom:** The "other subs" panel reported `providers_down: ["opensubtitles"]` and showed no non-JP subtitles, persistently. Flushing the title's `subs:*` Redis keys made it immediately return 18 languages (en, ru, …) with `providers_down: null`.
+- **Root cause:** `SubsAggregator.FetchAll` (`services/catalog/internal/service/subs_aggregator.go`) cached every result for 6h **unconditionally** — including results where a provider transiently failed (momentary OpenSubtitles timeout/rate-limit, or a slow 301-normalized title-query round-trip exceeding the 10s client timeout). One blip froze a degraded `providers_down` result into the panel for 6 hours. (OpenSubtitles 301-redirects title queries to a lowercased form; Go follows it fine — that path works, it was just occasionally slow.)
+- **Fix applied:** `subs_aggregator.go` now picks the cache TTL by result quality via `subsCacheTTL(resp)`: full results (no `ProvidersDown`) cache `6h` (`fullSubsCacheTTL`); degraded results cache `60s` (`degradedSubsCacheTTL`) so a failed provider is retried within a minute and self-heals. Pure helper covered by `subs_aggregator_cache_test.go`.
+- **Verification:** Flushed + re-fetched the reported title → 18 languages, `providers_down: null`, full-success key TTL = 21600s (6h). Unit test asserts degraded < full.
+- **Status:** Fixed (2026-06-01)
+
 ### ISS-010: Search returns empty / single result for any anime not in local DB (Shikimori .one → .io migration)
 - **Date:** 2026-05-06
 - **Severity:** High (catalog effectively read-only — no new anime can be discovered)
