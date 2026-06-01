@@ -4,6 +4,17 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-018: Watch Together WebSocket 400 at public edge — host nginx `/api/` stripped the Upgrade header
+- **Date:** 2026-06-01
+- **Severity:** High (Watch Together sync, presence, chat fully broken in production)
+- **Affected:** All Watch Together rooms via `https://animeenigma.ru` (every user); not reproducible against local container ports.
+- **Symptom:** Room loads but shows "Reconnecting…" + "MEMBERS (0)"; no playback sync, no pause/seek propagation, no chat. Browser console: `WebSocket connection to 'wss://animeenigma.ru/api/watch-together/ws?...' failed: Error during WebSocket handshake: Unexpected response code: 400`, looping via the composable's reconnect backoff.
+- **Root cause:** The host edge nginx (`/etc/nginx/sites-available/animeenigma.ru`) `location /api/` includes `snippets/proxy-params.conf`, which sets `Connection ""` (kills keepalive AND strips the WS `Upgrade` header). Watch Together's WS lives under `/api/watch-together/ws`, so it fell into the generic `/api/` block and reached the gateway WITHOUT the upgrade headers → gateway 400. The dedicated `/ws/` + `/socket.io/` blocks already used `snippets/websocket.conf`, but watch-together's path is under `/api/`, so it never matched them. The in-container nginx (`frontend/web/nginx.conf`) sets the upgrade headers on `/api/`, which is why `:3003`/`:8000` worked and masked the bug in earlier testing.
+- **Diagnosis method:** Raw authenticated WS handshakes returned `101` against `:8000` and `:3003` but `400` against `https://animeenigma.ru`; Playwright browser-level `page.on('websocket')` instrumentation surfaced the 400 + reconnect loop and confirmed the token was present (ruling out the earlier token-hydration hypothesis).
+- **Fix applied:** Added a more-specific `location /api/watch-together/ws` block (declared BEFORE `/api/`) that `include`s `snippets/websocket.conf`; `nginx -t` + `systemctl reload nginx`. Public-edge handshake now returns `101 Switching Protocols`. Backup saved at `/etc/nginx/sites-available/animeenigma.ru.bak.<ts>`.
+- **Not in repo:** the host edge config is server-local (not version-controlled). If the host is ever re-provisioned, this block must be re-added.
+- **Regression guard:** new self-seeding e2e `frontend/web/e2e/watch-together-frieren-selfseed.spec.ts` (mocks the OurEnglish provider with a tiny MP4 so a real `<video>` mounts) drives a real 2-browser play/pause/seek + episode-change round-trip through the live WS.
+
 ### ISS-001: Consumet/HiAnime HLS streams blocked by Cloudflare on owocdn.top/uwucdn.top
 - **Date:** 2026-02-27
 - **Severity:** High (player unusable for affected streams)

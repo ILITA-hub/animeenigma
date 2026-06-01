@@ -254,6 +254,11 @@
         "jimaku": "Jimaku",
         "opensubtitles": "OpenSubtitles"
       },
+      "filter": {
+        "provider": "ソース",
+        "language": "言語",
+        "all": "すべて"
+      },
       "lang": {
         "ja": "日本語",
         "en": "English",
