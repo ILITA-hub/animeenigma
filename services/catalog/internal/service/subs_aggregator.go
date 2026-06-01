@@ -156,8 +156,27 @@ func (s *SubsAggregator) FetchAll(ctx context.Context, animeID string, episode i
 	}
 
 	dedupe(resp.Languages)
-	_ = s.cache.Set(ctx, cacheKey, resp, 6*time.Hour)
+	_ = s.cache.Set(ctx, cacheKey, resp, subsCacheTTL(resp))
 	return resp, nil
+}
+
+const (
+	// fullSubsCacheTTL caches a complete result (no provider failed) long enough
+	// to absorb repeat opens without re-hitting upstreams.
+	fullSubsCacheTTL = 6 * time.Hour
+	// degradedSubsCacheTTL caches a result where a provider transiently failed
+	// for only a short window, so the failed provider is retried soon instead of
+	// freezing a "providers_down" panel for hours.
+	degradedSubsCacheTTL = 60 * time.Second
+)
+
+// subsCacheTTL picks the cache lifetime: full results live long, degraded ones
+// (a provider in ProvidersDown) live briefly so transient outages self-heal.
+func subsCacheTTL(resp *AggregateResponse) time.Duration {
+	if len(resp.ProvidersDown) > 0 {
+		return degradedSubsCacheTTL
+	}
+	return fullSubsCacheTTL
 }
 
 func (s *SubsAggregator) fetchJimaku(ctx context.Context, anime *domain.Anime, episode int) ([]SubtitleTrack, error) {
