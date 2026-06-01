@@ -506,19 +506,16 @@ func iframeURLFromReqHost(r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
-// TestGetStream_YouTubeIframeRejected — 2026-05-22 upstream regression.
-// A "Naruto (Shinsaku Anime) 2026"-style stub series whose episode page
-// embeds ONLY a YouTube trailer iframe (no my.1anime.site MP4 wrapper)
-// must fail at the host-allowlist gate, not at the downstream <source>
-// regex. The error must:
+// TestGetStream_YouTubeIframeRejected — 2026-05-22 upstream regression,
+// reclassified 2026-06-01. A stub series whose episode page embeds ONLY a
+// YouTube trailer iframe (no my.1anime.site MP4, no megaplay player) must
+// fail BEFORE the downstream <source> regex. Since 2026-06-01 this gets its
+// OWN signature (selector "youtube_stub") distinct from a genuine iframe-host
+// regression, because a trailer stub is an expected upstream data-quality
+// quirk, not a shape drift the bot should chase. The error must:
 //   - be ErrExtractFailed (orchestrator continues failover)
-//   - mention "iframe host" (maintenance bot dispatch signature)
+//   - mention "stub" (the distinct youtube_stub dispatch signature)
 //   - mention "youtube.com" (operator triage clarity)
-//
-// This is a regression-lock against the pre-fix behavior where the
-// permissive iframe regex would grab the YouTube iframe and then fail
-// later with the misleading "no video source" error — misattributing
-// upstream shape regression to a packed-JS drift.
 func TestGetStream_YouTubeIframeRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -542,21 +539,19 @@ func TestGetStream_YouTubeIframeRejected(t *testing.T) {
 		t.Fatalf("GetStream error = %v; want errors.Is(err, ErrExtractFailed)", err)
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "iframe host") {
-		t.Errorf("error must mention 'iframe host' for maintenance-bot dispatch; got %q", msg)
+	if !strings.Contains(msg, "stub") {
+		t.Errorf("error must mention 'stub' for the youtube_stub dispatch signature; got %q", msg)
 	}
 	if !strings.Contains(msg, "youtube.com") {
 		t.Errorf("error must mention the actual rejected host for operator triage; got %q", msg)
 	}
 }
 
-// TestGetStream_MegaplayRedirectRejected — 2026-05-22 popular-catalog
-// migration. The upstream rewrote popular series (One Piece, AoT, Demon
-// Slayer, JJK) to embed `1anime.site/megaplay/stream/s-2/<id>/sub`
-// instead of the legacy `my.1anime.site/index.php?action=play&file=*.mp4`
-// wrapper. The new shape's downstream content (megaplay.buzz JS player)
-// is not extractable by this provider. Fail cleanly at the host gate so
-// the maintenance bot's Pattern-7 dispatch sees a stable signature.
+// TestGetStream_MegaplayRedirectRejected — nil-extractor fallback. When the
+// provider is constructed WITHOUT a Megaplay extractor (Deps.Megaplay == nil),
+// a `1anime.site/megaplay/...` iframe must still fail cleanly at the host gate
+// (NOT crash, NOT misattribute to a packed-JS drift). With an extractor wired,
+// the same iframe instead resolves to HLS — see TestGetStream_MegaplayResolvesHLS.
 func TestGetStream_MegaplayRedirectRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -581,6 +576,87 @@ func TestGetStream_MegaplayRedirectRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "iframe host") {
 		t.Errorf("error must mention 'iframe host' for maintenance-bot dispatch; got %q", err.Error())
+	}
+}
+
+// fakeMegaplay is a minimal domain.EmbedExtractor stand-in that matches the
+// 1anime.site/megaplay.buzz hosts and returns a canned HLS stream. The real
+// extraction chain is covered by embeds/megaplay_test.go; here we only assert
+// the provider ROUTES a megaplay iframe into the extractor and propagates its
+// Stream (sources + tracks + markers) unchanged.
+type fakeMegaplay struct {
+	gotURL string
+	stream *domain.Stream
+	err    error
+}
+
+func (f *fakeMegaplay) Name() string { return "megaplay" }
+func (f *fakeMegaplay) Matches(u string) bool {
+	return strings.Contains(u, "1anime.site") || strings.Contains(u, "megaplay.buzz")
+}
+func (f *fakeMegaplay) Extract(_ context.Context, embedURL string, _ http.Header) (*domain.Stream, error) {
+	f.gotURL = embedURL
+	return f.stream, f.err
+}
+
+// TestGetStream_MegaplayResolvesHLS — with a Megaplay extractor wired, a
+// 1anime.site/megaplay iframe resolves to the extractor's HLS Stream
+// (source + subtitle track + intro marker), and the result is cached so a
+// second call replays the full payload (tracks included).
+func TestGetStream_MegaplayResolvesHLS(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body>
+			<iframe src="https://1anime.site/megaplay/stream/s-2/94554/sub"
+			    width="100%" height="600" frameborder="0"></iframe>
+		</body></html>`))
+	}))
+	defer srv.Close()
+
+	fake := &fakeMegaplay{stream: &domain.Stream{
+		Sources: []domain.Source{{URL: "https://cdn.mewstream.buzz/anime/x/y/master.m3u8", Type: "hls", Quality: "auto"}},
+		Tracks:  []domain.Track{{File: "https://1oe.lostproject.club/x/eng-2.vtt", Label: "English", Kind: "captions", Default: true}},
+		Intro:   &domain.TimeRange{Start: 0, End: 130},
+		Headers: map[string]string{"Referer": "https://megaplay.buzz/"},
+	}}
+
+	log := logger.Default()
+	base := domain.NewBaseHTTPClient(log,
+		domain.WithRetryWaitMin(1*time.Millisecond),
+		domain.WithRetryWaitMax(5*time.Millisecond),
+		domain.WithMaxRetries(0),
+	)
+	c := cache.Cache(newInMemoryCache())
+	p, err := New(Deps{BaseURL: srv.URL, HTTP: base, Cache: c, Log: log, Megaplay: fake})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	epURL := srv.URL + "/one-piece-episode-1-english-subbed/"
+	got, err := p.GetStream(context.Background(), "hd-one-piece", epURL, "1anime", domain.CategorySub)
+	if err != nil {
+		t.Fatalf("GetStream: %v", err)
+	}
+	if fake.gotURL != "https://1anime.site/megaplay/stream/s-2/94554/sub" {
+		t.Errorf("extractor got URL %q; want the 1anime.site iframe URL", fake.gotURL)
+	}
+	if len(got.Sources) != 1 || got.Sources[0].Type != "hls" || !strings.HasSuffix(got.Sources[0].URL, "master.m3u8") {
+		t.Fatalf("Sources = %+v; want one hls master.m3u8", got.Sources)
+	}
+	if len(got.Tracks) != 1 || !got.Tracks[0].Default {
+		t.Errorf("Tracks = %+v; want one default caption", got.Tracks)
+	}
+	if got.Intro == nil || got.Intro.End != 130 {
+		t.Errorf("Intro = %+v; want End=130", got.Intro)
+	}
+
+	// Second call hits the cache and must replay the tracks + markers.
+	cached, err := p.GetStream(context.Background(), "hd-one-piece", epURL, "1anime", domain.CategorySub)
+	if err != nil {
+		t.Fatalf("GetStream (cached): %v", err)
+	}
+	if len(cached.Tracks) != 1 || cached.Intro == nil || cached.Intro.End != 130 {
+		t.Errorf("cached replay lost HLS payload: Tracks=%+v Intro=%+v", cached.Tracks, cached.Intro)
 	}
 }
 

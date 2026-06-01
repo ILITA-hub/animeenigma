@@ -373,6 +373,19 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	// unallowed hosts so a degraded provider can't accidentally serve
 	// content through this entry).
 	{Domain: "my.1anime.site", Reason: "9anime.me.uk MP4 embed + CDN host (Phase 28 SCRAPER-HEAL-39)", Owner: "@legacy", Added: "2026-05-20"},
+
+	// 2026-06-01 — 9anime.me.uk popular catalog migrated to the megaplay.buzz
+	// HLS player (1anime.site wrapper). The master + variant playlists live on
+	// cdn.mewstream.buzz (stable, statically allowed here so it can seed
+	// provenance tokens); subtitle .vtt tracks on *.lostproject.club. The
+	// actual .ts SEGMENTS rotate across an UNBOUNDED pool of throwaway
+	// .click/.buzz/.club domains and are therefore NOT listed — they ride the
+	// HMAC provenance token minted when the proxy rewrites a playlist fetched
+	// from one of these allowlisted origins (see provenance.go). megaplay.buzz
+	// itself is intentionally absent: getSources is fetched server-side by the
+	// scraper, never through this proxy.
+	{Domain: "mewstream.buzz", Reason: "megaplay.buzz HLS master/variant playlist origin; seeds provenance tokens for rotating segment CDNs (nineanime revival 2026-06-01)", Owner: "@0neymik0", Added: "2026-06-01"},
+	{Domain: "lostproject.club", Reason: "megaplay.buzz subtitle .vtt track host (nineanime revival 2026-06-01)", Owner: "@0neymik0", Added: "2026-06-01"},
 }
 
 // HLSProxyAllowedDomains is the flat []string view of
@@ -438,8 +451,12 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 		return fmt.Errorf("invalid source url: %w", err)
 	}
 
-	// Check if domain is allowed for HLS proxy
-	if !isHLSDomainAllowed(parsed.Host) {
+	// Check if domain is allowed for HLS proxy. A valid provenance token
+	// (minted when the proxy rewrote a playlist from an allowlisted origin)
+	// authorizes an otherwise-unlisted host — this is how rotating segment
+	// CDNs (megaplay/mewstream) are served without a static per-domain entry.
+	if !isHLSDomainAllowed(parsed.Host) &&
+		!validProvenanceToken(sourceURL, r.URL.Query().Get("exp"), r.URL.Query().Get("sig"), time.Now()) {
 		return &DomainNotAllowedError{Domain: parsed.Host}
 	}
 
@@ -657,6 +674,15 @@ func rewriteHLSURL(urlStr, basePath, referer string) string {
 	if referer != "" {
 		proxyURL += "&referer=" + url.QueryEscape(referer)
 	}
+
+	// Mint a provenance token. This URL was extracted from a playlist the
+	// proxy fetched from an allowlisted origin, so it inherits that trust:
+	// the segment/variant request may bypass the static host allowlist (see
+	// provenance.go) — essential for players whose segment CDN rotates across
+	// an unbounded pool of throwaway domains. Harmless for already-allowlisted
+	// hosts, which pass the static check regardless.
+	exp, sig := signProvenance(absoluteURL, time.Now())
+	proxyURL += "&exp=" + exp + "&sig=" + sig
 
 	return proxyURL
 }

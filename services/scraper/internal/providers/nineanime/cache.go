@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
 
 // Cache TTL constants.
@@ -158,11 +159,20 @@ func keyStream(slug, epURL, server string) string {
 }
 
 // cachedStream is what we persist in Redis for a resolved stream URL.
+//
+// Tracks/Intro/Outro are omitempty so the legacy my.1anime.site MP4 path
+// (single source, no subs) round-trips byte-identically while the megaplay
+// HLS path can persist its subtitle tracks + skip markers. Old cached
+// entries written before these fields existed deserialize cleanly (the new
+// fields stay nil).
 type cachedStream struct {
-	URL     string            `json:"url"`
-	Type    string            `json:"type"`
-	Quality string            `json:"quality"`
-	Headers map[string]string `json:"headers,omitempty"`
+	URL     string             `json:"url"`
+	Type    string             `json:"type"`
+	Quality string             `json:"quality"`
+	Headers map[string]string  `json:"headers,omitempty"`
+	Tracks  []domain.Track     `json:"tracks,omitempty"`
+	Intro   *domain.TimeRange  `json:"intro,omitempty"`
+	Outro   *domain.TimeRange  `json:"outro,omitempty"`
 }
 
 func (l *cacheLayer) getStream(ctx context.Context, slug, epURL, server string) (*cachedStream, bool) {

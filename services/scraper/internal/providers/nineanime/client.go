@@ -50,7 +50,17 @@ import (
 const (
 	selectorMy1AnimeIframe = "my_1anime_iframe"
 	selectorVideoMP4Source = "video_mp4_source"
+	// selectorYouTubeStub fires when an episode embeds a YouTube trailer
+	// placeholder instead of a real source (a known upstream data-quality
+	// quirk for stub series — NOT a regression). Distinct label keeps the
+	// maintenance bot from misclassifying it as iframe-host drift.
+	selectorYouTubeStub = "youtube_stub"
 )
+
+// youtubeStubHosts are the trailer-placeholder hosts some stub series embed.
+// They are matched (host or strict subdomain) and rejected as a non-source,
+// distinct from a real upstream-shape regression.
+var youtubeStubHosts = []string{"youtube.com", "youtu.be"}
 
 // embedAllowedHosts is the production allowlist of legitimate embed hosts
 // the upstream's HTML may legally point an iframe at. The historical contract
@@ -123,14 +133,22 @@ type Deps struct {
 	HTTP    *domain.BaseHTTPClient
 	Cache   cache.Cache
 	Log     *logger.Logger
+
+	// Megaplay resolves the megaplay.buzz HLS player that the upstream's
+	// popular catalog migrated to (1anime.site wrapper → megaplay.buzz).
+	// Typed as the EmbedExtractor interface so tests can inject a fake.
+	// Optional: when nil, 1anime.site/megaplay.buzz iframes fail at the host
+	// gate exactly as before (legacy my.1anime.site MP4 path is unaffected).
+	Megaplay domain.EmbedExtractor
 }
 
 // Provider implements domain.Provider for the 9anime.me.uk upstream.
 type Provider struct {
-	baseURL string
-	http    *domain.BaseHTTPClient
-	cache   *cacheLayer
-	log     *logger.Logger
+	baseURL  string
+	http     *domain.BaseHTTPClient
+	cache    *cacheLayer
+	log      *logger.Logger
+	megaplay domain.EmbedExtractor
 
 	stagesMu sync.Mutex
 	stages   map[string]domain.StageHealth
@@ -153,11 +171,12 @@ func New(d Deps) (*Provider, error) {
 		base = defaultBaseURL
 	}
 	p := &Provider{
-		baseURL: strings.TrimRight(base, "/"),
-		http:    d.HTTP,
-		cache:   newCacheLayer(d.Cache),
-		log:     d.Log,
-		stages:  make(map[string]domain.StageHealth, len(stageNames)),
+		baseURL:  strings.TrimRight(base, "/"),
+		http:     d.HTTP,
+		cache:    newCacheLayer(d.Cache),
+		log:      d.Log,
+		megaplay: d.Megaplay,
+		stages:   make(map[string]domain.StageHealth, len(stageNames)),
 	}
 	// Optimistic seed: stages start Up=true so the orchestrator's nil-cache
 	// backcompat path treats us as healthy before the first probe tick.
@@ -530,18 +549,31 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 		return nil, err
 	}
 
-	// (2b) Host allowlist: only my.1anime.site (production) or the
-	// provider's baseURL host (httptest same-origin) is acceptable. Any
-	// other host indicates upstream shape regression — 1anime.site/megaplay
-	// redirect, megaplay.buzz, YouTube trailer placeholder, etc. Emit a
-	// parser_zero_match_total counter so the maintenance bot's Pattern-7
-	// dispatch fires on a stable signature instead of a downstream regex
-	// miss that would otherwise misattribute the failure.
-	if !p.isAllowedIframeHost(parsedIframe.Hostname()) {
+	// (2b) Host routing. Three upstream shapes coexist as 9anime migrates:
+	//   - my.1anime.site             → legacy direct-MP4 wrapper (steps 3–6)
+	//   - 1anime.site / megaplay.buzz → megaplay HLS player (delegated extractor)
+	//   - youtube.com / youtu.be      → trailer-stub placeholder (no real source)
+	// Anything else is a genuine upstream-shape regression and emits the
+	// stable parser_zero_match_total{selector="my_1anime_iframe"} signal the
+	// maintenance bot's Pattern-7 dispatch keys on.
+	iframeHost := parsedIframe.Hostname()
+	switch {
+	case p.isAllowedIframeHost(iframeHost):
+		// Legacy my.1anime.site MP4 host — fall through to steps 3–6 below.
+	case p.megaplay != nil && p.megaplay.Matches(iframeURL):
+		return p.streamViaMegaplay(ctx, providerID, episodeURL, serverID, iframeURL)
+	case isYouTubeStubHost(iframeHost):
+		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorYouTubeStub).Inc()
+		err := domain.WrapExtractFailed(
+			fmt.Errorf("episode embeds a YouTube trailer stub (%s), not a real source", iframeHost),
+			"nineanime: youtube stub")
+		p.markStage(health.StageStream, err)
+		return nil, err
+	default:
 		metrics.ParserZeroMatchTotal.WithLabelValues(providerName, selectorMy1AnimeIframe).Inc()
 		err := domain.WrapExtractFailed(
-			fmt.Errorf("iframe host %q not in allowlist {my.1anime.site}; upstream popular catalog migrated to megaplay or stub series uses non-embed iframe (e.g. YouTube)",
-				parsedIframe.Hostname()),
+			fmt.Errorf("iframe host %q not in allowlist {my.1anime.site, 1anime.site, megaplay.buzz}; upstream shape regression",
+				iframeHost),
 			"nineanime: iframe host")
 		p.markStage(health.StageStream, err)
 		return nil, err
@@ -612,24 +644,66 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 	}
 
 	// Cache the resolved stream (5 min cap).
-	p.cache.setStream(ctx, providerID, episodeURL, serverID, &cachedStream{
-		URL:     stream.Sources[0].URL,
-		Type:    stream.Sources[0].Type,
-		Quality: stream.Sources[0].Quality,
-		Headers: stream.Headers,
-	})
+	p.cache.setStream(ctx, providerID, episodeURL, serverID, streamToCached(stream))
 	p.markStage(health.StageStream, nil)
 	return stream, nil
 }
 
-// cachedToStream rebuilds a *domain.Stream from the cached MP4-source
-// shape persisted in Redis.
+// streamViaMegaplay resolves an HLS stream off the 1anime.site/megaplay.buzz
+// player via the megaplay extractor, caches it, and marks the stream stage.
+// The master.m3u8 is stable per episode, so the 5min cache is safe; rotating
+// segment CDNs are handled downstream by the HLS proxy's provenance token.
+func (p *Provider) streamViaMegaplay(ctx context.Context, providerID, episodeURL, serverID, iframeURL string) (*domain.Stream, error) {
+	stream, err := p.megaplay.Extract(ctx, iframeURL, nil)
+	if err != nil {
+		p.markStage(health.StageStream, err)
+		return nil, err
+	}
+	p.cache.setStream(ctx, providerID, episodeURL, serverID, streamToCached(stream))
+	p.markStage(health.StageStream, nil)
+	return stream, nil
+}
+
+// isYouTubeStubHost reports whether host is a YouTube trailer-stub origin.
+func isYouTubeStubHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, h := range youtubeStubHosts {
+		if host == h || strings.HasSuffix(host, "."+h) {
+			return true
+		}
+	}
+	return false
+}
+
+// streamToCached flattens a *domain.Stream into the Redis cache shape.
+// Sources[0] is the canonical playable URL for both the MP4 and HLS paths;
+// Tracks/Intro/Outro carry through for megaplay HLS (empty for legacy MP4).
+func streamToCached(s *domain.Stream) *cachedStream {
+	if s == nil || len(s.Sources) == 0 {
+		return &cachedStream{}
+	}
+	return &cachedStream{
+		URL:     s.Sources[0].URL,
+		Type:    s.Sources[0].Type,
+		Quality: s.Sources[0].Quality,
+		Headers: s.Headers,
+		Tracks:  s.Tracks,
+		Intro:   s.Intro,
+		Outro:   s.Outro,
+	}
+}
+
+// cachedToStream rebuilds a *domain.Stream from the cached shape persisted in
+// Redis (single source + optional megaplay HLS tracks/skip markers).
 func cachedToStream(c *cachedStream) *domain.Stream {
 	return &domain.Stream{
 		Sources: []domain.Source{
 			{URL: c.URL, Type: c.Type, Quality: c.Quality},
 		},
 		Headers: c.Headers,
+		Tracks:  c.Tracks,
+		Intro:   c.Intro,
+		Outro:   c.Outro,
 	}
 }
 

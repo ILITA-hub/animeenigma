@@ -325,19 +325,24 @@ func main() {
 	// "not-worth" verdict. ~6-month half-life expected. Operator kills via
 	// SCRAPER_DEGRADED_PROVIDERS=nineanime when upstream rebrands/DMCAs.
 	//
-	// Per WR-04 — the nineanime.Deps struct INTENTIONALLY omits the Embeds
-	// field present on AnimeFever/Miruro. MP4 extraction happens inline
-	// via regex; the embed registry is not consulted at GetStream time.
-	// Adding a dead Embeds field here would mislead future maintainers.
+	// The legacy my.1anime.site direct-MP4 extraction still happens inline
+	// via regex (long-tail catalog). The popular catalog migrated to the
+	// megaplay.buzz HLS player (1anime.site wrapper), resolved via the
+	// MegaplayExtractor passed below. Both paths coexist in GetStream's host
+	// router; rotating megaplay segment CDNs are handled by the streaming
+	// proxy's HMAC provenance token, not a per-host allowlist.
 	nineAnimeBaseHTTP := domain.NewBaseHTTPClient(log,
 		domain.WithPerHostRPS("9anime.me.uk", 1.0, 2),
 		domain.WithPerHostRPS("my.1anime.site", 1.0, 2),
+		domain.WithPerHostRPS("1anime.site", 1.0, 2),
+		domain.WithPerHostRPS("megaplay.buzz", 1.0, 2),
 	)
 	nineAnimeProvider, err := nineanime.New(nineanime.Deps{
-		BaseURL: cfg.NineAnime.BaseURL,
-		HTTP:    nineAnimeBaseHTTP,
-		Cache:   redisCache,
-		Log:     log,
+		BaseURL:  cfg.NineAnime.BaseURL,
+		HTTP:     nineAnimeBaseHTTP,
+		Cache:    redisCache,
+		Log:      log,
+		Megaplay: embeds.NewMegaplayExtractor(),
 	})
 	if err != nil {
 		log.Fatalw("failed to construct NineAnime provider", "error", err)
