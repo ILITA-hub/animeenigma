@@ -212,6 +212,7 @@ func main() {
 		APIKey:    cfg.OpenSubtitles.APIKey,
 		UserAgent: cfg.OpenSubtitles.UserAgent,
 		Timeout:   cfg.OpenSubtitles.Timeout,
+		Logger:    log,
 	})
 	idMapClient := idmapping.NewClient()
 	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, log)

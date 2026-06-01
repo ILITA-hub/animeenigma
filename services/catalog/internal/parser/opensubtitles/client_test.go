@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
 
 func newTestClient(t *testing.T, mock *httptest.Server, apiKey string) *Client {
@@ -195,7 +197,7 @@ func TestClient_Download_Success(t *testing.T) {
 				t.Errorf("file_id = %d, want 42", body.FileID)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"link":%q,"file_name":"ep.srt","remaining":99}`, srv.URL+"/file")
+			fmt.Fprintf(w, `{"link":%q,"file_name":"ep.srt","requests":1,"remaining":99}`, srv.URL+"/file")
 		case r.URL.Path == "/file":
 			_, _ = w.Write([]byte("1\n00:00:01,000 --> 00:00:02,000\nhi\n"))
 		default:
@@ -204,7 +206,7 @@ func TestClient_Download_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(Config{APIKey: "k", BaseURL: srv.URL})
+	c := NewClient(Config{APIKey: "k", BaseURL: srv.URL, Logger: logger.Default()})
 	body, name, err := c.Download(context.Background(), 42)
 	if err != nil {
 		t.Fatalf("Download: %v", err)

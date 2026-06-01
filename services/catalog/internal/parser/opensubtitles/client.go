@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
 
 const defaultBaseURL = "https://api.opensubtitles.com/api/v1"
@@ -36,7 +38,8 @@ type Config struct {
 	APIKey    string
 	UserAgent string
 	Timeout   time.Duration
-	BaseURL   string // override for tests
+	BaseURL   string         // override for tests
+	Logger    *logger.Logger // optional; when set, Download logs quota usage
 }
 
 // Client is the OpenSubtitles v1 REST client.
@@ -235,6 +238,7 @@ func (c *Client) Download(ctx context.Context, fileID int) ([]byte, string, erro
 	var doc struct {
 		Link      string `json:"link"`
 		FileName  string `json:"file_name"`
+		Requests  int    `json:"requests"`
 		Remaining int    `json:"remaining"`
 	}
 	if err := json.Unmarshal(body, &doc); err != nil {
@@ -244,6 +248,12 @@ func (c *Client) Download(ctx context.Context, fileID int) ([]byte, string, erro
 	// (OpenSubtitles returns 200 with a message in that case, not a 4xx).
 	if doc.Link == "" {
 		return nil, "", ErrRateLimited
+	}
+	if c.cfg.Logger != nil {
+		c.cfg.Logger.Infow("opensubtitles download spent",
+			"file_id", fileID,
+			"requests_today", doc.Requests,
+			"remaining", doc.Remaining)
 	}
 
 	fileReq, err := http.NewRequestWithContext(ctx, http.MethodGet, doc.Link, nil)
