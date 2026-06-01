@@ -40,19 +40,33 @@ RU_KEYS=$(extract_keys "$LOCALES_DIR/ru.json")
 EN_KEYS=$(extract_keys "$LOCALES_DIR/en.json")
 JA_KEYS=$(extract_keys "$LOCALES_DIR/ja.json")
 
-# Check each locale against the others
+# Check each locale against the others.
+#
+# Implemented with `comm` over the two already-sorted key lists rather than a
+# per-key `echo "$target_keys" | grep -qxF` loop. The old pipe pattern was a
+# SIGPIPE footgun under `set -o pipefail`: `grep -q` closes the pipe the instant
+# it matches, so the feeding `echo` can die with SIGPIPE (141); pipefail then
+# reports the whole pipeline as failed, flipping a *successful* match into a
+# false "MISSING" report. That misfired intermittently under CPU contention
+# (e.g. a parallel session mid-rebase) and blocked `make redeploy-web` on keys
+# that demonstrably existed. `comm` is O(n), needs no pipe-per-key, and the
+# inputs are already sorted by extract_keys().
 check_missing() {
   local source_name="$1"
   local source_keys="$2"
   local target_name="$3"
   local target_keys="$4"
 
+  # comm -23 = lines present in source but absent from target.
+  local missing
+  missing=$(comm -23 <(printf '%s\n' "$source_keys") <(printf '%s\n' "$target_keys"))
+
+  [ -z "$missing" ] && return 0
   while IFS= read -r key; do
-    if ! echo "$target_keys" | grep -qxF "$key"; then
-      echo -e "  ${RED}MISSING${NC} key '$key' in $target_name (exists in $source_name)"
-      ERRORS=$((ERRORS + 1))
-    fi
-  done <<< "$source_keys"
+    [ -z "$key" ] && continue
+    echo -e "  ${RED}MISSING${NC} key '$key' in $target_name (exists in $source_name)"
+    ERRORS=$((ERRORS + 1))
+  done <<< "$missing"
 }
 
 check_missing "en.json" "$EN_KEYS" "ru.json" "$RU_KEYS"
