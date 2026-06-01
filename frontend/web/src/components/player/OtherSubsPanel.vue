@@ -93,7 +93,7 @@
                 {{ track.label || track.release || track.url }}
               </div>
               <div class="text-white/40 text-xs">
-                {{ track.format?.toUpperCase() || $t('player.otherSubs.unknownFormat') }}
+                {{ track.format?.toUpperCase() || $t('player.otherSubs.genericFormat') }}
               </div>
             </div>
 

@@ -247,7 +247,7 @@
       "empty": "このエピソードの代替字幕トラックはまだありません。",
       "select": "選択",
       "selected": "選択済み",
-      "unknownFormat": "形式不明",
+      "genericFormat": "字幕",
       "loadError": "字幕を読み込めませんでした: {error}",
       "providersDown": "一部のソースが応答しませんでした: {providers}",
       "providerChip": {

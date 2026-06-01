@@ -247,7 +247,7 @@
       "empty": "No alternative subtitle tracks were found for this episode yet.",
       "select": "Select",
       "selected": "Selected",
-      "unknownFormat": "Unknown format",
+      "genericFormat": "Subtitle",
       "loadError": "Couldn't load subtitles: {error}",
       "providersDown": "Some sources didn't respond: {providers}",
       "providerChip": {
