@@ -234,11 +234,11 @@ func (s *SubsAggregator) fetchOpenSubtitles(ctx context.Context, anime *domain.A
 
 	tracks := make([]SubtitleTrack, 0, len(entries))
 	for _, e := range entries {
-		if e.DownloadURL == "" {
-			continue
+		if e.FileID == 0 {
+			continue // can't resolve without a numeric file id
 		}
 		tracks = append(tracks, SubtitleTrack{
-			URL:      e.DownloadURL,
+			URL:      fmt.Sprintf("/api/anime/%s/subtitles/opensubtitles/file/%d", anime.ID, e.FileID),
 			Lang:     e.Language,
 			Label:    e.Release,
 			Format:   e.Format,
@@ -371,4 +371,35 @@ func formatFromName(name string) string {
 	default:
 		return ""
 	}
+}
+
+// cachedSubFile is the Redis-stored resolved subtitle. []byte marshals to
+// base64 in JSON, so non-UTF-8 subtitle bytes survive the round-trip.
+type cachedSubFile struct {
+	Body   []byte `json:"body"`
+	Format string `json:"format"`
+}
+
+// ResolveOpenSubtitlesFile turns a numeric OpenSubtitles file_id into the
+// actual subtitle bytes. It spends one download quota unit on a cache miss,
+// then caches the result for 24h so re-watches cost nothing (RAW-NF-01).
+func (s *SubsAggregator) ResolveOpenSubtitlesFile(ctx context.Context, fileID int) ([]byte, string, error) {
+	if s.opensubs == nil || !s.opensubs.IsConfigured() {
+		// Sentinel so the handler maps "no key" to a clean 503, not a 500.
+		return nil, "", opensubtitles.ErrUnauthorized
+	}
+	cacheKey := fmt.Sprintf("subsfile:opensubtitles:%d", fileID)
+
+	var hit cachedSubFile
+	if err := s.cache.Get(ctx, cacheKey, &hit); err == nil && len(hit.Body) > 0 {
+		return hit.Body, hit.Format, nil
+	}
+
+	body, filename, err := s.opensubs.Download(ctx, fileID)
+	if err != nil {
+		return nil, "", err
+	}
+	format := formatFromName(filename)
+	_ = s.cache.Set(ctx, cacheKey, cachedSubFile{Body: body, Format: format}, 24*time.Hour)
+	return body, format, nil
 }
