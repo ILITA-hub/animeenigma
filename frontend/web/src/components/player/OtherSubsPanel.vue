@@ -17,7 +17,7 @@
     <div v-else class="space-y-4">
       <!-- Filter bar: provider + language. Filters the already-fetched
            .all() response client-side; no extra requests, no extra quota. -->
-      <div class="space-y-3 sticky top-0 z-10 bg-black/60 backdrop-blur-sm py-2 -mx-1 px-1 rounded-lg">
+      <div class="space-y-3 sticky top-0 z-20 bg-black/60 backdrop-blur-sm py-2 -mx-1 px-1 rounded-lg">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-white/50 text-xs uppercase tracking-wide mr-1">{{ $t('player.otherSubs.filter.provider') }}</span>
           <button
@@ -25,7 +25,8 @@
             :key="p"
             type="button"
             :data-provider="p"
-            class="px-3 py-1 rounded-full text-sm transition-colors"
+            :aria-pressed="providerFilter === p"
+            class="px-3 py-1 rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
             :class="providerFilter === p ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
             @click="providerFilter = p"
           >
@@ -36,7 +37,9 @@
           <span class="text-white/50 text-xs uppercase tracking-wide mr-1">{{ $t('player.otherSubs.filter.language') }}</span>
           <button
             type="button"
-            class="px-3 py-1 rounded-full text-sm transition-colors"
+            :data-lang="'all'"
+            :aria-pressed="langFilter === 'all'"
+            class="px-3 py-1 rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
             :class="langFilter === 'all' ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
             @click="langFilter = 'all'"
           >
@@ -47,7 +50,8 @@
             :key="l.lang"
             type="button"
             :data-lang="l.lang"
-            class="px-3 py-1 rounded-full text-sm transition-colors"
+            :aria-pressed="langFilter === l.lang"
+            class="px-3 py-1 rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
             :class="langFilter === l.lang ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
             @click="langFilter = l.lang"
           >
@@ -65,7 +69,7 @@
         :key="group.lang"
         class="space-y-2"
       >
-        <header class="flex items-center gap-2 sticky top-0 bg-black/40 backdrop-blur-sm py-1">
+        <header class="flex items-center gap-2 py-1">
           <h3 class="text-white font-semibold">
             {{ languageHeader(group.lang) }} ({{ group.tracks.length }})
           </h3>
@@ -142,8 +146,8 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const data = ref<GroupedSubs | null>(null)
 
-const providerFilter = ref<'all' | string>('all')
-const langFilter = ref<'all' | string>('all')
+const providerFilter = ref<string>('all')
+const langFilter = ref<string>('all')
 
 // Preferred-order sort for language codes.
 const orderLangs = (langs: string[]): string[] => {
@@ -202,10 +206,12 @@ const filteredGroups = computed(() => {
     .filter((g) => langFilter.value === 'all' || g.lang === langFilter.value)
 })
 
-// When the provider filter changes, a previously-picked language may vanish —
-// reset to 'all' so the user never lands on a dead empty view.
+// Reset the language pin only when the new provider no longer offers it —
+// preserves a still-valid selection across provider switches.
 watch(providerFilter, () => {
-  langFilter.value = 'all'
+  if (langFilter.value !== 'all' && !languageOptions.value.some((l) => l.lang === langFilter.value)) {
+    langFilter.value = 'all'
+  }
 })
 
 const providersDown = computed(() => data.value?.providers_down ?? [])

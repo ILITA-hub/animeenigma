@@ -71,4 +71,27 @@ describe('OtherSubsPanel filters', () => {
     expect(wrapper.html()).toContain('EN rip')
     expect(wrapper.html()).not.toContain('RU rip')
   })
+
+  it('switching to a provider without the pinned language resets langFilter to all', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.find('button[data-lang="en"]').trigger('click')
+    expect(wrapper.html()).not.toContain('JP')
+    expect(wrapper.html()).not.toContain('RU rip')
+    // jimaku has only a ja track → 'en' pin is no longer valid → resets to all
+    await wrapper.find('button[data-provider="jimaku"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.html()).toContain('JP')
+  })
+
+  it('switching to a provider that still has the pinned language preserves it', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.find('button[data-lang="en"]').trigger('click')
+    // opensubtitles has an en track → 'en' pin stays → only EN rip, no RU rip
+    await wrapper.find('button[data-provider="opensubtitles"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.html()).toContain('EN rip')
+    expect(wrapper.html()).not.toContain('RU rip')
+  })
 })
