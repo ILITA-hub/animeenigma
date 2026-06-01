@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
@@ -119,15 +120,13 @@ func (h *SubtitlesHandler) GetOpenSubtitlesFile(w http.ResponseWriter, r *http.R
 	if err != nil {
 		switch {
 		case errors.Is(err, opensubtitles.ErrRateLimited):
-			httputil.JSON(w, http.StatusTooManyRequests, map[string]string{
-				"error": "OpenSubtitles daily download limit reached — try again later or pick a different subtitle.",
-			})
+			// CodeRateLimited maps to HTTP 429 (libs/errors codeToHTTPStatus).
+			httputil.Error(w, liberrors.New(liberrors.CodeRateLimited,
+				"OpenSubtitles daily download limit reached — try again later or pick a different subtitle."))
 		case errors.Is(err, opensubtitles.ErrUnauthorized):
-			httputil.JSON(w, http.StatusServiceUnavailable, map[string]string{
-				"error": "OpenSubtitles is currently unavailable.",
-			})
+			httputil.Error(w, liberrors.ServiceUnavailable("OpenSubtitles is currently unavailable."))
 		default:
-			h.log.Warnw("opensubtitles file resolve failed", "file_id", fileID, "error", err)
+			h.log.Errorw("opensubtitles file resolve failed", "file_id", fileID, "error", err)
 			httputil.Error(w, err)
 		}
 		return

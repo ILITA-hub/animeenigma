@@ -21,3 +21,27 @@ func TestGetOpenSubtitlesFile_BadID(t *testing.T) {
 		t.Fatalf("status = %d, want 400", w.Code)
 	}
 }
+
+func TestGetOpenSubtitlesFile_ZeroID(t *testing.T) {
+	h := &SubtitlesHandler{}
+	r := chi.NewRouter()
+	r.Get("/{animeId}/subtitles/opensubtitles/file/{fileID}", h.GetOpenSubtitlesFile)
+	req := httptest.NewRequest(http.MethodGet, "/x/subtitles/opensubtitles/file/0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestGetOpenSubtitlesFile_NegativeID(t *testing.T) {
+	h := &SubtitlesHandler{}
+	r := chi.NewRouter()
+	r.Get("/{animeId}/subtitles/opensubtitles/file/{fileID}", h.GetOpenSubtitlesFile)
+	req := httptest.NewRequest(http.MethodGet, "/x/subtitles/opensubtitles/file/-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
