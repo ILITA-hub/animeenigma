@@ -640,6 +640,45 @@ func TestGetStream_DefaultsToPreferredServer(t *testing.T) {
 	}
 }
 
+// TestGetStream_SendsAniListID is a regression-lock for the 2026-06 upstream
+// contract change: the secure-pipe `sources` endpoint now REQUIRES anilistId
+// (returns HTTP 400 {"error":"anilistId is required"} without it). The query
+// builder must carry the AniList ID (providerID), not just use it for the
+// cache key. This was the real cause of miruro.stream DOWN (misattributed to
+// a "Kwik packed-JS drift").
+func TestGetStream_SendsAniListID(t *testing.T) {
+	gotAniList := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := r.URL.Query().Get("e")
+		if pad := len(raw) % 4; pad != 0 {
+			raw += strings.Repeat("=", 4-pad)
+		}
+		raw = strings.ReplaceAll(raw, "-", "+")
+		raw = strings.ReplaceAll(raw, "_", "/")
+		desc, _ := base64.StdEncoding.DecodeString(raw)
+		var d struct {
+			Path  string         `json:"path"`
+			Query map[string]any `json:"query"`
+		}
+		_ = json.Unmarshal(desc, &d)
+		if d.Path == "sources" {
+			if v, ok := d.Query["anilistId"].(string); ok {
+				gotAniList = v
+			}
+		}
+		w.Header().Set("x-obfuscated", "1")
+		_, _ = w.Write(encodeObfuscatedBody(t, loadFixture(t, "sources_154587_ep1.json")))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv, &stubIDMapper{})
+	if _, err := p.GetStream(context.Background(), "154587", "ep1_id", "kiwi", domain.CategorySub); err != nil {
+		t.Fatalf("GetStream: %v", err)
+	}
+	if gotAniList != "154587" {
+		t.Errorf("sources query anilistId = %q; want 154587 (the providerID/AniList ID)", gotAniList)
+	}
+}
+
 // --- HealthCheck + markStage ---------------------------------------------
 
 func TestMarkStage_SuccessAndFailure(t *testing.T) {

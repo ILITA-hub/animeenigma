@@ -502,10 +502,14 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		return cachedToStream(hit), nil
 	}
 
-	// Build the sources query. Category is optional; upstream defaults
-	// to whatever audio track the episode block exposes for the given
-	// (provider, episodeID) tuple.
+	// Build the sources query. anilistId is REQUIRED by upstream as of
+	// 2026-06 — the secure-pipe `sources` endpoint returns HTTP 400
+	// {"error":"anilistId is required"} without it (the `episodes` endpoint
+	// already sends it; this one regressed). Category is optional; upstream
+	// defaults to whatever audio track the episode block exposes for the
+	// given (provider, episodeID) tuple.
 	q := map[string]any{
+		"anilistId": aniListID,
 		"episodeId": episodeID,
 		"provider":  serverID,
 	}
