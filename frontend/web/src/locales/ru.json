@@ -266,6 +266,11 @@
         "pt": "Português",
         "it": "Italiano",
         "ar": "العربية"
+      },
+      "filter": {
+        "provider": "Источник",
+        "language": "Язык",
+        "all": "Все"
       }
     },
     "error": {

@@ -2,7 +2,7 @@
   <Modal
     :model-value="modelValue"
     :title="$t('player.otherSubs.title')"
-    size="lg"
+    size="full"
     @update:model-value="(v) => emit('update:modelValue', v)"
     @close="emit('close')"
   >
@@ -14,13 +14,54 @@
       {{ error }}
     </div>
 
-    <div v-else-if="languageGroups.length === 0" class="py-12 text-center text-white/60 text-sm">
-      {{ $t('player.otherSubs.empty') }}
-    </div>
+    <div v-else class="space-y-4">
+      <!-- Filter bar: provider + language. Filters the already-fetched
+           .all() response client-side; no extra requests, no extra quota. -->
+      <div class="space-y-3 sticky top-0 z-10 bg-black/60 backdrop-blur-sm py-2 -mx-1 px-1 rounded-lg">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-white/50 text-xs uppercase tracking-wide mr-1">{{ $t('player.otherSubs.filter.provider') }}</span>
+          <button
+            v-for="p in providerOptions"
+            :key="p"
+            type="button"
+            :data-provider="p"
+            class="px-3 py-1 rounded-full text-sm transition-colors"
+            :class="providerFilter === p ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
+            @click="providerFilter = p"
+          >
+            {{ p === 'all' ? $t('player.otherSubs.filter.all') : providerLabel(p) }}
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-white/50 text-xs uppercase tracking-wide mr-1">{{ $t('player.otherSubs.filter.language') }}</span>
+          <button
+            type="button"
+            class="px-3 py-1 rounded-full text-sm transition-colors"
+            :class="langFilter === 'all' ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
+            @click="langFilter = 'all'"
+          >
+            {{ $t('player.otherSubs.filter.all') }}
+          </button>
+          <button
+            v-for="l in languageOptions"
+            :key="l.lang"
+            type="button"
+            :data-lang="l.lang"
+            class="px-3 py-1 rounded-full text-sm transition-colors"
+            :class="langFilter === l.lang ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
+            @click="langFilter = l.lang"
+          >
+            {{ languageHeader(l.lang) }} ({{ l.count }})
+          </button>
+        </div>
+      </div>
 
-    <div v-else class="space-y-6">
+      <p v-if="filteredGroups.length === 0" class="py-12 text-center text-white/60 text-sm">
+        {{ $t('player.otherSubs.empty') }}
+      </p>
+
       <section
-        v-for="group in languageGroups"
+        v-for="group in filteredGroups"
         :key="group.lang"
         class="space-y-2"
       >
@@ -101,22 +142,70 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const data = ref<GroupedSubs | null>(null)
 
-const languageGroups = computed(() => {
-  if (!data.value) return []
-  const out = Object.entries(data.value.languages).map(([lang, tracks]) => ({
-    lang,
-    tracks: tracks ?? [],
-  }))
-  // Preferred order: user's UI locale first, then ja, en, ru, then alphabetical.
+const providerFilter = ref<'all' | string>('all')
+const langFilter = ref<'all' | string>('all')
+
+// Preferred-order sort for language codes.
+const orderLangs = (langs: string[]): string[] => {
   const preferred = [locale.value, 'ja', 'en', 'ru']
-  return out.sort((a, b) => {
-    const ai = preferred.indexOf(a.lang)
-    const bi = preferred.indexOf(b.lang)
+  return [...langs].sort((a, b) => {
+    const ai = preferred.indexOf(a)
+    const bi = preferred.indexOf(b)
     if (ai !== -1 && bi === -1) return -1
     if (bi !== -1 && ai === -1) return 1
     if (ai !== -1 && bi !== -1) return ai - bi
-    return a.lang.localeCompare(b.lang)
+    return a.localeCompare(b)
   })
+}
+
+const languageGroups = computed(() => {
+  if (!data.value) return []
+  return orderLangs(Object.keys(data.value.languages)).map((lang) => ({
+    lang,
+    tracks: data.value!.languages[lang] ?? [],
+  }))
+})
+
+// Provider chips: 'all' + whichever providers actually returned tracks.
+const providerOptions = computed<string[]>(() => {
+  if (!data.value) return ['all']
+  const set = new Set<string>()
+  for (const tracks of Object.values(data.value.languages)) {
+    for (const t of tracks ?? []) set.add(t.provider)
+  }
+  return ['all', ...[...set].sort()]
+})
+
+// Language chips with counts, honoring the active provider filter.
+const languageOptions = computed<{ lang: string; count: number }[]>(() => {
+  if (!data.value) return []
+  const counts: Record<string, number> = {}
+  for (const [lang, tracks] of Object.entries(data.value.languages)) {
+    for (const t of tracks ?? []) {
+      if (providerFilter.value !== 'all' && t.provider !== providerFilter.value) continue
+      counts[lang] = (counts[lang] ?? 0) + 1
+    }
+  }
+  return orderLangs(Object.keys(counts)).map((lang) => ({ lang, count: counts[lang] }))
+})
+
+// Groups after BOTH filters are applied.
+const filteredGroups = computed(() => {
+  return languageGroups.value
+    .map((g) => ({
+      lang: g.lang,
+      tracks: g.tracks.filter(
+        (t) => providerFilter.value === 'all' || t.provider === providerFilter.value,
+      ),
+    }))
+    .filter((g) => g.tracks.length > 0)
+    .filter((g) => langFilter.value === 'all' || g.lang === langFilter.value)
+})
+
+// When the provider filter changes, a previously-picked language may vanish —
+// reset to 'all' so the user never lands on a dead empty view.
+watch(providerFilter, () => {
+  langFilter.value = 'all'
 })
 
 const providersDown = computed(() => data.value?.providers_down ?? [])
@@ -159,6 +248,8 @@ const fetchAll = async () => {
   try {
     const resp = await subtitlesApi.all(props.animeId, props.episode)
     data.value = resp.data?.data ?? resp.data
+    providerFilter.value = 'all'
+    langFilter.value = 'all'
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     error.value = t('player.otherSubs.loadError', { error: msg })
