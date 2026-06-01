@@ -126,4 +126,17 @@ describe('PlayerTabBar', () => {
     expect(emits).toHaveLength(4)
     expect(emits!.map((e) => e[0])).toEqual(expectations)
   })
+
+  it('Test 9: hiddenKinds omits those tabs (AniLib hidden → 4 tabs, no animelib)', () => {
+    const wrapper = mount(PlayerTabBar, {
+      props: { activePlayer: 'kodik' as PlayerKind, hiddenKinds: ['animelib'] as PlayerKind[] },
+    })
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs).toHaveLength(4)
+    expect(tabs.find((t) => t.attributes('data-player') === 'animelib')).toBeUndefined()
+    // The remaining four are still present.
+    for (const kind of ['kodik', 'ourenglish', 'hanime', 'raw']) {
+      expect(tabs.find((t) => t.attributes('data-player') === kind)).toBeDefined()
+    }
+  })
 })

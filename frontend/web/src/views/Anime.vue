@@ -422,6 +422,7 @@
                 Kodik
               </button>
               <button
+                v-if="animeLibEnabled"
                 @click="onUserPickedProvider('animelib')"
                 :aria-pressed="videoProvider === 'animelib'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -530,7 +531,7 @@
             </KodikPlayer>
             <!-- AnimeLib Player -->
             <AnimeLibPlayer
-              v-else-if="videoProvider === 'animelib'"
+              v-else-if="videoProvider === 'animelib' && animeLibEnabled"
               :anime-id="anime.id"
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
@@ -983,6 +984,15 @@ const rawProviderEnabled = import.meta.env.VITE_RAW_PROVIDER_ENABLED === 'true'
 // gates are green in production.
 const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
 const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
+// AniLib direct-MP4 hidden 2026-06-01: AnimeLib's upstream API
+// (hapi.hentaicdn.org) now returns Kodik-only players for every title — zero
+// "Animelib" direct-MP4 sources — so the AniLib path resolves to empty
+// translations for ALL anime (verified across 11 titles incl. Frieren/One
+// Piece, even with a valid ANIMELIB_TOKEN). Since the no-Kodik-fallback rule
+// drops Kodik-only translations, the chip would always dead-end on "no
+// sources". Default OFF; flip VITE_ANIMELIB_ENABLED=true to restore the chip
+// if upstream brings direct video back.
+const animeLibEnabled = import.meta.env.VITE_ANIMELIB_ENABLED === 'true'
 // Workstream watch-together / Phase 02 Plan 02.9 (WT-SHELL-05) — lazy-loaded
 // invite button. Keeps Anime.vue's eager bundle clean — InviteButton pulls in
 // the watch-together api client + types + toast composable transitively, paid
@@ -1126,8 +1136,12 @@ const videoLanguage = ref<VideoLanguage>(
 const VALID_PROVIDERS = ['kodik', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
 type VideoProvider = (typeof VALID_PROVIDERS)[number]
 const _savedProv = localStorage.getItem('preferred_video_provider')
-const videoProvider = ref<VideoProvider>(
+// Coerce a pinned-but-disabled 'animelib' back to 'kodik' so users who last
+// watched on AniLib don't boot into a hidden tab with no player mounted.
+const _initialProv =
   (VALID_PROVIDERS as readonly string[]).includes(_savedProv ?? '') ? (_savedProv as VideoProvider) : 'kodik'
+const videoProvider = ref<VideoProvider>(
+  _initialProv === 'animelib' && !animeLibEnabled ? 'kodik' : _initialProv
 )
 
 // Last-watched episode. For authenticated users this comes from server-side
@@ -1372,7 +1386,9 @@ function applyResolvedCombo(combo: WatchCombo) {
     videoLanguage.value = combo.language
   }
   if (combo.player === 'kodik' || combo.player === 'animelib' || combo.player === 'hanime') {
-    videoProvider.value = combo.player
+    // AniLib hidden (see animeLibEnabled): never auto-resolve onto the disabled
+    // provider — fall back to Kodik, which carries the same RU translations.
+    videoProvider.value = combo.player === 'animelib' && !animeLibEnabled ? 'kodik' : combo.player
   }
 }
 
@@ -2001,7 +2017,7 @@ const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
   // Auto-select first provider in the group
   if (lang === 'ru') {
     const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'animelib' | null
-    videoProvider.value = savedRu || 'kodik'
+    videoProvider.value = savedRu && (savedRu !== 'animelib' || animeLibEnabled) ? savedRu : 'kodik'
   } else if (lang === 'en') {
     // Phase 24-28 — single-provider group; the in-player source dropdown
     // pins the failover preference inside OurEnglishPlayer itself.

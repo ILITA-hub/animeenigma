@@ -87,6 +87,12 @@ const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
 const RawPlayer = defineAsyncComponent(() => import('@/components/player/RawPlayer.vue'))
 
+// AniLib hidden 2026-06-01 (see Anime.vue animeLibEnabled): AnimeLib upstream
+// serves Kodik-only players for every title now, so the AniLib path dead-ends
+// on "no sources". Drop its in-room tab unless explicitly re-enabled.
+const hiddenPlayerKinds: readonly PlayerKind[] =
+  import.meta.env.VITE_ANIMELIB_ENABLED === 'true' ? [] : ['animelib']
+
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
@@ -412,6 +418,7 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
       <PlayerTabBar
         class="absolute top-2 left-2 z-20"
         :active-player="livePlayer"
+        :hidden-kinds="hiddenPlayerKinds"
         @select-player="onSelectPlayer"
       />
 

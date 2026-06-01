@@ -26,6 +26,7 @@
 -->
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PlayerKind } from '@/api/watch-together'
 
@@ -35,9 +36,16 @@ const props = withDefaults(
     activePlayer: PlayerKind | null
     /** When true: aria-disabled on every tab, no emits. */
     disabled?: boolean
+    /**
+     * Player kinds to omit from the bar entirely. Defaults to none, preserving
+     * the original 5-tab contract. WatchTogetherView passes `['animelib']`
+     * while the AniLib provider is hidden (see Anime.vue animeLibEnabled).
+     */
+    hiddenKinds?: readonly PlayerKind[]
   }>(),
   {
     disabled: false,
+    hiddenKinds: () => [],
   },
 )
 
@@ -51,7 +59,8 @@ const { t } = useI18n()
  * Stable iteration order — matches the 5-way dispatch order in
  * WatchTogetherView.vue and the PlayerKind union order in types/.
  */
-const PLAYERS: readonly PlayerKind[] = ['kodik', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
+const ALL_PLAYERS: readonly PlayerKind[] = ['kodik', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
+const PLAYERS = computed(() => ALL_PLAYERS.filter((p) => !props.hiddenKinds.includes(p)))
 
 function onTabClick(kind: PlayerKind) {
   if (props.disabled) return
