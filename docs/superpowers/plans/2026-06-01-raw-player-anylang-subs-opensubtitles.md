@@ -111,7 +111,7 @@ func TestClient_Download_Unauthorized(t *testing.T) {
 }
 ```
 
-Ensure the test file imports include `encoding/json`, `errors`, `fmt`, `net/http`, `net/http/httptest`, `strings`, `context` (add any missing).
+The existing `client_test.go` already imports `context`, `errors`, `fmt`, `net/http`, `net/http/httptest`, `strings`, `testing` — but **NOT `encoding/json`**, which `TestClient_Download_Success` uses (`json.NewDecoder`). You MUST add `"encoding/json"` to the import block or Task 1 won't compile.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -156,7 +156,9 @@ func (c *Client) Download(ctx context.Context, fileID int) ([]byte, string, erro
 		return nil, "", ErrUnauthorized
 	case resp.StatusCode == http.StatusTooManyRequests:
 		return nil, "", ErrRateLimited
-	case strings.Contains(string(body), "download limit"), strings.Contains(string(body), "Reached download limit"):
+	case strings.Contains(string(body), "download limit"),
+		strings.Contains(string(body), "Reached download limit"),
+		strings.Contains(string(body), "maximum number"):
 		return nil, "", ErrRateLimited
 	case resp.StatusCode >= 400:
 		return nil, "", fmt.Errorf("opensubtitles: download %d: %s", resp.StatusCode, truncate(string(body), 200))
@@ -170,8 +172,10 @@ func (c *Client) Download(ctx context.Context, fileID int) ([]byte, string, erro
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return nil, "", fmt.Errorf("opensubtitles: parse download: %w", err)
 	}
+	// Spec rule: exhausted quota presents as remaining<=0 and/or no usable link
+	// (OpenSubtitles returns 200 with a message in that case, not a 4xx).
 	if doc.Link == "" {
-		return nil, "", ErrRateLimited // no link + non-error status == quota in practice
+		return nil, "", ErrRateLimited
 	}
 
 	fileReq, err := http.NewRequestWithContext(ctx, http.MethodGet, doc.Link, nil)
@@ -262,18 +266,20 @@ func TestResolveOpenSubtitlesFile_CachesAfterFirstHit(t *testing.T) {
 			fmt.Fprintf(w, `{"link":%q,"file_name":"ep.srt","remaining":99}`, srv.URL+"/file")
 			return
 		}
-		_, _ = w.Write([]byte("WEBVTT\n\n00:00.000 --> 00:01.000\nhi\n"))
+		_, _ = w.Write([]byte("1\n00:00:01,000 --> 00:00:02,000\nhi\n"))
 	}))
 	defer srv.Close()
 
 	osc := opensubtitles.NewClient(opensubtitles.Config{APIKey: "k", BaseURL: srv.URL})
-	agg := NewSubsAggregator(nil, osc, nil, nil, resolveTestRedis(t), logger.New("test"))
+	agg := NewSubsAggregator(nil, osc, nil, nil, resolveTestRedis(t), logger.Default())
 
 	body, format, err := agg.ResolveOpenSubtitlesFile(context.Background(), 42)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if string(body) == "" || format != "vtt" {
+	// Format is derived from file_name ("ep.srt") via formatFromName, NOT the
+	// body content — so it must be "srt" here.
+	if string(body) == "" || format != "srt" {
 		t.Fatalf("body=%q format=%q", string(body), format)
 	}
 	// Second call must be served from cache — no new /download hit.
@@ -291,7 +297,7 @@ func TestResolveOpenSubtitlesFile_QuotaPropagates(t *testing.T) {
 	}))
 	defer srv.Close()
 	osc := opensubtitles.NewClient(opensubtitles.Config{APIKey: "k", BaseURL: srv.URL})
-	agg := NewSubsAggregator(nil, osc, nil, nil, resolveTestRedis(t), logger.New("test"))
+	agg := NewSubsAggregator(nil, osc, nil, nil, resolveTestRedis(t), logger.Default())
 	_, _, err := agg.ResolveOpenSubtitlesFile(context.Background(), 7)
 	if err == nil {
 		t.Fatal("want quota error, got nil")
@@ -299,7 +305,7 @@ func TestResolveOpenSubtitlesFile_QuotaPropagates(t *testing.T) {
 }
 ```
 
-> Note: confirm `logger.New("test")` matches the package's constructor; if the signature differs, mirror what `raw_resolver_test.go` uses for the logger.
+> Note: `logger.Default()` is the no-arg constructor used across catalog tests (`logger.New` takes a `logger.Config` and returns `(*Logger, error)` — do NOT pass a string).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -343,7 +349,8 @@ type cachedSubFile struct {
 // then caches the result for 24h so re-watches cost nothing (RAW-NF-01).
 func (s *SubsAggregator) ResolveOpenSubtitlesFile(ctx context.Context, fileID int) ([]byte, string, error) {
 	if s.opensubs == nil || !s.opensubs.IsConfigured() {
-		return nil, "", errors.New("opensubtitles not configured")
+		// Sentinel so the handler maps "no key" to a clean 503, not a 500.
+		return nil, "", opensubtitles.ErrUnauthorized
 	}
 	cacheKey := fmt.Sprintf("subsfile:opensubtitles:%d", fileID)
 
@@ -362,7 +369,7 @@ func (s *SubsAggregator) ResolveOpenSubtitlesFile(ctx context.Context, fileID in
 }
 ```
 
-(`errors`, `fmt`, `time` are already imported in this file.)
+(`fmt`, `time`, and the `opensubtitles` package are already imported in this file; `errors` too, still used by `fetchJimaku`.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -480,7 +487,7 @@ func (h *SubtitlesHandler) GetOpenSubtitlesFile(w http.ResponseWriter, r *http.R
 }
 ```
 
-> The "not configured" case returns `errors.New("opensubtitles not configured")` from the aggregator, which is NOT `ErrUnauthorized`; it falls through to `httputil.Error`. That's acceptable (500-class). If you want it as 503, also check `strings.Contains(err.Error(), "not configured")` before the default — optional, keep it simple unless verification shows otherwise. `strings` is already imported by this file.
+> The aggregator now returns `opensubtitles.ErrUnauthorized` on the not-configured path (Task 2), so both "no key" and a rejected key land in the `ErrUnauthorized` → 503 branch with the "not configured" message — matching the spec. `strings` is already imported by this file and stays used by `splitTrimLower`.
 
 - [ ] **Step 4: Add the route**
 
@@ -518,7 +525,7 @@ Create `frontend/web/src/components/player/SubtitleOverlay.spec.ts`:
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 
 function mockFetchText(text: string) {
@@ -545,7 +552,7 @@ describe('SubtitleOverlay URL fetching', () => {
         fullscreenContainer: null,
       },
     })
-    await Promise.resolve()
+    await flushPromises()
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(fetchSpy.mock.calls[0][0]).toBe('/api/anime/abc/subtitles/opensubtitles/file/42')
   })
@@ -648,6 +655,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import OtherSubsPanel from './OtherSubsPanel.vue'
 
+// The component reads `useI18n().t`/`locale` in <script> (providerLabel,
+// languageHeader, orderLangs) AND `$t` in <template> (filter labels), so BOTH
+// mocks below are intentional — do not "dedupe" them. With t:(k)=>k, label
+// lookups fall back to provider key / uppercased lang code, which is why the
+// chip selectors below target data-* attributes, not rendered text.
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k, locale: { value: 'en' } }),
+}))
+
 vi.mock('@/api/client', () => ({
   subtitlesApi: {
     all: vi.fn().mockResolvedValue({
@@ -677,10 +693,6 @@ const mountPanel = () =>
     },
   })
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (k: string) => k, locale: { value: 'en' } }),
-}))
-
 describe('OtherSubsPanel filters', () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -695,9 +707,9 @@ describe('OtherSubsPanel filters', () => {
   it('provider filter = opensubtitles hides the Jimaku (ja) track', async () => {
     const wrapper = mountPanel()
     await flushPromises()
-    const osBtn = wrapper.findAll('button').find((b) => b.text().includes('opensubtitles'))
-    expect(osBtn).toBeTruthy()
-    await osBtn!.trigger('click')
+    const osBtn = wrapper.find('button[data-provider="opensubtitles"]')
+    expect(osBtn.exists()).toBe(true)
+    await osBtn.trigger('click')
     expect(wrapper.html()).not.toContain('JP')
     expect(wrapper.html()).toContain('EN rip')
     expect(wrapper.html()).toContain('RU rip')
@@ -706,16 +718,16 @@ describe('OtherSubsPanel filters', () => {
   it('language filter = en narrows to the English track only', async () => {
     const wrapper = mountPanel()
     await flushPromises()
-    const enChip = wrapper.findAll('button').find((b) => b.text().startsWith('en') || b.text().includes('en'))
-    expect(enChip).toBeTruthy()
-    await enChip!.trigger('click')
+    const enChip = wrapper.find('button[data-lang="en"]')
+    expect(enChip.exists()).toBe(true)
+    await enChip.trigger('click')
     expect(wrapper.html()).toContain('EN rip')
     expect(wrapper.html()).not.toContain('RU rip')
   })
 })
 ```
 
-> The exact selector for the chips depends on how you render them in Step 3. Keep the chip's accessible text equal to the provider key (`opensubtitles`) / the language code (`en`) so these selectors hold. Adjust the selectors only if your markup names them differently — but do not weaken the assertions.
+> The chips carry `data-provider` / `data-lang` attributes (Step 4), so these selectors are decoupled from i18n rendering. If you restructure the markup, keep those attributes — don't weaken the assertions.
 
 - [ ] **Step 3: Run test to verify it fails**
 
@@ -739,6 +751,7 @@ Edit `OtherSubsPanel.vue`. **(a)** Change the Modal to full size — line 5, `si
             v-for="p in providerOptions"
             :key="p"
             type="button"
+            :data-provider="p"
             class="px-3 py-1 rounded-full text-sm transition-colors"
             :class="providerFilter === p ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
             @click="providerFilter = p"
@@ -760,6 +773,7 @@ Edit `OtherSubsPanel.vue`. **(a)** Change the Modal to full size — line 5, `si
             v-for="l in languageOptions"
             :key="l.lang"
             type="button"
+            :data-lang="l.lang"
             class="px-3 py-1 rounded-full text-sm transition-colors"
             :class="langFilter === l.lang ? 'bg-cyan-500/30 text-cyan-100 ring-1 ring-cyan-400/40' : 'bg-white/5 text-white/70 hover:bg-white/10'"
             @click="langFilter = l.lang"
