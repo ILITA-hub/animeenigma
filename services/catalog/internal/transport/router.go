@@ -142,6 +142,9 @@ func NewRouter(
 			// + OpenSubtitles merged via /service/subs_aggregator.go.
 			r.Get("/{animeId}/subtitles", subtitlesHandler.Get)
 			r.Get("/{animeId}/subtitles/all", subtitlesHandler.GetAll)
+			// Lazy OpenSubtitles file resolve — spends 1 download quota unit
+			// per cache miss, then cached 24h (workstream raw-jp follow-on).
+			r.Get("/{animeId}/subtitles/opensubtitles/file/{fileID}", subtitlesHandler.GetOpenSubtitlesFile)
 			// Hanime video sources
 			r.Get("/{animeId}/hanime/episodes", catalogHandler.GetHanimeEpisodes)
 			r.Get("/{animeId}/hanime/stream", catalogHandler.GetHanimeStream)

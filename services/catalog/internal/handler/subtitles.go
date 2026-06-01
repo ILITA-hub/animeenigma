@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/opensubtitles"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
 	"github.com/go-chi/chi/v5"
 )
@@ -97,4 +99,42 @@ func splitTrimLower(s string) []string {
 		}
 	}
 	return out
+}
+
+// GetOpenSubtitlesFile — GET /api/anime/{animeId}/subtitles/opensubtitles/file/{fileID}.
+//
+// Resolves a numeric OpenSubtitles file_id to the actual subtitle text,
+// spending one download quota unit on a cache miss. Returns text/plain so the
+// frontend SubtitleOverlay can parse SRT/ASS/VTT directly. Quota exhaustion is
+// surfaced as 429 (clear message, not a silent failure); an unconfigured or
+// rejected key as 503.
+func (h *SubtitlesHandler) GetOpenSubtitlesFile(w http.ResponseWriter, r *http.Request) {
+	fileID, err := strconv.Atoi(chi.URLParam(r, "fileID"))
+	if err != nil || fileID <= 0 {
+		httputil.BadRequest(w, "fileID must be a positive integer")
+		return
+	}
+
+	body, _, err := h.aggregator.ResolveOpenSubtitlesFile(r.Context(), fileID)
+	if err != nil {
+		switch {
+		case errors.Is(err, opensubtitles.ErrRateLimited):
+			httputil.JSON(w, http.StatusTooManyRequests, map[string]string{
+				"error": "OpenSubtitles daily download limit reached — try again later or pick a different subtitle.",
+			})
+		case errors.Is(err, opensubtitles.ErrUnauthorized):
+			httputil.JSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error": "OpenSubtitles is currently unavailable.",
+			})
+		default:
+			h.log.Warnw("opensubtitles file resolve failed", "file_id", fileID, "error", err)
+			httputil.Error(w, err)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
 }
