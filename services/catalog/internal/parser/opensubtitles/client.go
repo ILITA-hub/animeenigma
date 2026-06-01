@@ -191,6 +191,80 @@ func (c *Client) Search(ctx context.Context, p SearchParams) ([]SubtitleEntry, e
 	return out, nil
 }
 
+// Download resolves a subtitle file_id to its actual content. It spends one
+// unit of the OpenSubtitles daily download quota per call (per RAW-NF-01 the
+// caller is expected to cache the result). Returns the raw bytes plus the
+// server-provided file name (used for format detection).
+//
+// On quota exhaustion returns ErrRateLimited; on 401/403 ErrUnauthorized.
+func (c *Client) Download(ctx context.Context, fileID int) ([]byte, string, error) {
+	if !c.IsConfigured() {
+		return nil, "", ErrUnauthorized
+	}
+
+	reqBody, _ := json.Marshal(map[string]int{"file_id": fileID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.BaseURL+"/download", strings.NewReader(string(reqBody)))
+	if err != nil {
+		return nil, "", fmt.Errorf("opensubtitles: build download request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Api-Key", c.cfg.APIKey)
+	req.Header.Set("User-Agent", c.cfg.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("opensubtitles: download request: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return nil, "", ErrUnauthorized
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return nil, "", ErrRateLimited
+	case strings.Contains(string(body), "download limit"),
+		strings.Contains(string(body), "Reached download limit"),
+		strings.Contains(string(body), "maximum number"):
+		return nil, "", ErrRateLimited
+	case resp.StatusCode >= 400:
+		return nil, "", fmt.Errorf("opensubtitles: download %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+
+	var doc struct {
+		Link      string `json:"link"`
+		FileName  string `json:"file_name"`
+		Remaining int    `json:"remaining"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, "", fmt.Errorf("opensubtitles: parse download: %w", err)
+	}
+	// Spec rule: exhausted quota presents as remaining<=0 and/or no usable link
+	// (OpenSubtitles returns 200 with a message in that case, not a 4xx).
+	if doc.Link == "" {
+		return nil, "", ErrRateLimited
+	}
+
+	fileReq, err := http.NewRequestWithContext(ctx, http.MethodGet, doc.Link, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("opensubtitles: build file request: %w", err)
+	}
+	fileResp, err := c.httpClient.Do(fileReq)
+	if err != nil {
+		return nil, "", fmt.Errorf("opensubtitles: fetch file: %w", err)
+	}
+	defer fileResp.Body.Close()
+	if fileResp.StatusCode >= 400 {
+		return nil, "", fmt.Errorf("opensubtitles: fetch file %d", fileResp.StatusCode)
+	}
+	content, err := io.ReadAll(fileResp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("opensubtitles: read file: %w", err)
+	}
+	return content, doc.FileName, nil
+}
+
 // normalizeLang collapses common 3-letter and full-word codes to ISO 639-1.
 func normalizeLang(code string) string {
 	code = strings.ToLower(strings.TrimSpace(code))

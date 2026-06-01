@@ -2,6 +2,7 @@ package opensubtitles
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -175,5 +176,68 @@ func TestFormatFromFilename(t *testing.T) {
 	}
 	if formatFromFilename("x") != "" {
 		t.Error("empty fallback")
+	}
+}
+
+func TestClient_Download_Success(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/download":
+			if r.Header.Get("Api-Key") != "k" {
+				t.Errorf("missing api key header")
+			}
+			var body struct {
+				FileID int `json:"file_id"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.FileID != 42 {
+				t.Errorf("file_id = %d, want 42", body.FileID)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"link":%q,"file_name":"ep.srt","remaining":99}`, srv.URL+"/file")
+		case r.URL.Path == "/file":
+			_, _ = w.Write([]byte("1\n00:00:01,000 --> 00:00:02,000\nhi\n"))
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{APIKey: "k", BaseURL: srv.URL})
+	body, name, err := c.Download(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	if name != "ep.srt" {
+		t.Errorf("name = %q, want ep.srt", name)
+	}
+	if !strings.Contains(string(body), "hi") {
+		t.Errorf("body = %q, want subtitle text", string(body))
+	}
+}
+
+func TestClient_Download_QuotaExceeded(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message":"You have reached download limit","remaining":0}`))
+	}))
+	defer srv.Close()
+	c := NewClient(Config{APIKey: "k", BaseURL: srv.URL})
+	_, _, err := c.Download(context.Background(), 7)
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("err = %v, want ErrRateLimited", err)
+	}
+}
+
+func TestClient_Download_Unauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	c := NewClient(Config{APIKey: "bad", BaseURL: srv.URL})
+	_, _, err := c.Download(context.Background(), 7)
+	if !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
 }
