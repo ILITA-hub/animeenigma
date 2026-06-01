@@ -246,9 +246,12 @@ async function loadSubtitles(url: string, format: string) {
   cues.value = []
 
   try {
-    // Proxy through streaming service for CORS
-    const proxyUrl = `/api/streaming/hls-proxy?url=${encodeURIComponent(url)}`
-    const resp = await fetch(proxyUrl, { signal: subtitleAbortController.signal })
+    // Same-origin backend URLs (e.g. our OpenSubtitles resolve endpoint) are
+    // fetched directly; external provider URLs go through the CORS proxy.
+    const fetchUrl = url.startsWith('/')
+      ? url
+      : `/api/streaming/hls-proxy?url=${encodeURIComponent(url)}`
+    const resp = await fetch(fetchUrl, { signal: subtitleAbortController.signal })
     if (!resp.ok) throw new Error(`Failed to fetch subtitle file: ${resp.status}`)
 
     const content = await resp.text()
