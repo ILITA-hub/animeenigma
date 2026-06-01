@@ -148,17 +148,25 @@ func (r *ProgressRepository) GetByUserAnimeEpisode(ctx context.Context, userID, 
 	return &p, err
 }
 
-// ListContinueWatching returns the user's most-recent in-progress episode per
-// anime (one row per anime), ordered by last_watched_at DESC. Uses a window
-// function (ROW_NUMBER() OVER (PARTITION BY anime_id ORDER BY
-// last_watched_at DESC)) so the JOIN against animes is one-shot.
+// ListContinueWatching returns the "continue watching" rail for the user.
 //
-// "In-progress" for MVP = watch_progress.completed = false. The
-// "completed-but-next-episode-exists" Crunchyroll case is deferred to Phase 9.
+// Semantics (rewritten 2026-06-01): the rail is driven by the user's LIST
+// (anime_list.status = 'watching') intersected with REAL available episodes —
+// not by stale watch_progress.completed flags alone. For each watching-list
+// anime the user has started, we take their most-recent watch_progress row and:
+//
+//   - if that row is still in progress (completed=false) → resume that episode
+//     with its saved progress/duration;
+//   - if that row is completed → advance to the next episode (progress 0), but
+//     ONLY when a real next episode exists (next <= available episodes, where
+//     available = episodes_aired for ongoing shows, else episodes_count).
+//
+// This means: anime the user dropped/completed (status != 'watching'), anime
+// they never added to a list, and anime they've fully caught up on are all
+// excluded — which is what users expect from a "continue watching" rail.
+// One row per anime, ordered by last_watched_at DESC.
 //
 // limit is clamped to [1, 20]; default (limit<=0) is 10.
-//
-// Phase 8 (UX-15 / UA-061).
 func (r *ProgressRepository) ListContinueWatching(
 	ctx context.Context, userID string, limit int,
 ) ([]*domain.ContinueWatchingItem, error) {
@@ -184,12 +192,13 @@ func (r *ProgressRepository) ListContinueWatching(
 	}
 
 	sqlStr := `
-        WITH ranked AS (
+        WITH latest AS (
             SELECT
                 wp.anime_id,
                 wp.episode_number,
                 wp.progress,
                 wp.duration,
+                wp.completed,
                 wp.last_watched_at,
                 wp.dropped_off_at,
                 ROW_NUMBER() OVER (
@@ -198,76 +207,42 @@ func (r *ProgressRepository) ListContinueWatching(
                 ) AS rn
             FROM watch_progress wp
             WHERE wp.user_id = ?
-              AND wp.completed = false
         )
         SELECT
-            r.anime_id,
-            r.episode_number,
-            r.progress,
-            r.duration,
-            r.last_watched_at,
-            r.dropped_off_at,
+            l.anime_id,
+            CASE WHEN l.completed THEN l.episode_number + 1 ELSE l.episode_number END AS episode_number,
+            CASE WHEN l.completed THEN 0 ELSE l.progress END                          AS progress,
+            CASE WHEN l.completed THEN 0 ELSE l.duration END                          AS duration,
+            l.last_watched_at,
+            CASE WHEN l.completed THEN NULL ELSE l.dropped_off_at END                 AS dropped_off_at,
             a.name           AS anime_name,
             a.name_ru        AS anime_name_ru,
             a.name_jp        AS anime_name_jp,
             a.poster_url     AS anime_poster,
             a.episodes_count AS anime_episodes
-        FROM ranked r
-        JOIN animes a ON a.id = r.anime_id
-        WHERE r.rn = 1
-          AND a.deleted_at IS NULL
-        ORDER BY r.last_watched_at DESC
+        FROM anime_list al
+        JOIN animes a ON a.id = al.anime_id AND a.deleted_at IS NULL
+        JOIN latest l ON l.anime_id = al.anime_id AND l.rn = 1
+        WHERE al.user_id = ?
+          AND al.status = 'watching'
+          AND (
+                l.completed = false
+                OR (
+                    (CASE WHEN COALESCE(a.episodes_aired, 0) > 0
+                          THEN a.episodes_aired ELSE COALESCE(a.episodes_count, 0) END) > 0
+                    AND (l.episode_number + 1) <=
+                        (CASE WHEN COALESCE(a.episodes_aired, 0) > 0
+                              THEN a.episodes_aired ELSE COALESCE(a.episodes_count, 0) END)
+                )
+              )
+        ORDER BY l.last_watched_at DESC
         LIMIT ?`
 
 	var rows []scanRow
 	if err := r.db.WithContext(ctx).
-		Raw(sqlStr, userID, limit).
+		Raw(sqlStr, userID, userID, limit).
 		Scan(&rows).Error; err != nil {
 		return nil, err
-	}
-
-	// WR-02 (Phase 8): the INNER JOIN against animes silently drops any
-	// in-progress watch_progress rows whose anime row is missing or
-	// soft-deleted (a.deleted_at IS NOT NULL). User-facing impact is small
-	// (missing cards the user can't act on anyway) but the silent filter
-	// masks data-integrity issues — a real bug elsewhere could be losing
-	// watch_progress entries and this query would hide the symptom.
-	//
-	// Compare the JOIN result to the underlying "distinct anime_id in
-	// watch_progress" count for this user; warn on drift. This is a
-	// separate count query rather than a CTE-on-CTE rewrite because the
-	// observability check must succeed even when the main query returns
-	// fewer rows than expected — wrapping it inside the same statement
-	// would hide the symptom we're trying to surface.
-	if r.log != nil {
-		var distinctAnimeCount int64
-		// Count animes that the user has any in-progress (completed=false)
-		// progress against. This is the upper bound for ListContinueWatching
-		// output before the JOIN-induced filtering.
-		countErr := r.db.WithContext(ctx).Raw(
-			`SELECT COUNT(DISTINCT anime_id)
-             FROM watch_progress
-             WHERE user_id = ? AND completed = false`,
-			userID,
-		).Scan(&distinctAnimeCount).Error
-		if countErr == nil {
-			// Cap the upper bound at the request limit — the query was
-			// asked for at most `limit` rows, so dropping below `limit`
-			// when the upper bound is < limit is not "drift".
-			expected := distinctAnimeCount
-			if expected > int64(limit) {
-				expected = int64(limit)
-			}
-			if int64(len(rows)) < expected {
-				r.log.Warnw(
-					"continue-watching INNER JOIN dropped rows; orphaned or soft-deleted anime in watch_progress",
-					"user_id", userID,
-					"expected", expected,
-					"returned", len(rows),
-					"dropped", expected-int64(len(rows)),
-				)
-			}
-		}
 	}
 
 	items := make([]*domain.ContinueWatchingItem, 0, len(rows))

@@ -110,6 +110,18 @@ func seedProgressRowWithCount(t *testing.T, db *gorm.DB, userID, animeID string,
 	require.NoError(t, err)
 }
 
+// insertProgressAt seeds a watch_progress row with an explicit last_watched_at
+// (and matching created_at/updated_at) so ordering-sensitive tests can control
+// recency deterministically. Bypasses UpsertProgress's GREATEST() (Postgres-only).
+func insertProgressAt(t *testing.T, db *gorm.DB, id, userID, animeID string, episode, progress, duration int, completed bool, ts time.Time) {
+	t.Helper()
+	err := db.Exec(`INSERT INTO watch_progress
+		(id, user_id, anime_id, episode_number, progress, duration, completed, watch_count, last_watched_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, userID, animeID, episode, progress, duration, completed, 1, ts, ts, ts).Error
+	require.NoError(t, err)
+}
+
 // itoa: tiny stdlib-free int-to-string for test seed IDs.
 func itoa(n int) string {
 	if n == 0 {
@@ -327,97 +339,131 @@ func TestProgressRepository_MarkDropOff_PreservesCompletedTrue(t *testing.T) {
 	assert.Equal(t, 1440, p.Progress, "progress must not regress on drop-off")
 }
 
-// TestProgressRepository_ListContinueWatching covers the happy path
-// (multiple anime, latest in-progress row per anime returned, completed=true
-// rows skipped, other users' rows ignored) and the empty case. Also smoke-
-// tests the limit clamp branches (0 -> default 10, 999 -> clamp 20).
-// Phase 8 (UX-15 / UA-061).
+// TestProgressRepository_ListContinueWatching covers the rewritten
+// list-driven semantics (2026-06-01): the rail is driven by anime_list
+// status='watching' intersected with REAL available episodes.
+//
+//   - in-progress latest row   -> resume that episode (saved progress)
+//   - completed latest row      -> advance to next episode IF it exists
+//   - caught up to aired/total   -> excluded (nothing left to continue)
+//   - status != 'watching'       -> excluded (dropped / completed / etc.)
+//   - not in any list            -> excluded (the reported "random anime" bug)
+//   - cross-user isolation, empty case, limit clamp.
 func TestProgressRepository_ListContinueWatching(t *testing.T) {
 	r, db := setupProgressTestDB(t)
 	ctx := context.Background()
 
-	// Create a minimal animes table the JOIN can reference. No FK constraint
-	// (SQLite-style minimal columns matching the SELECT list in the repo).
+	// animes table now needs episodes_aired (the real-episode cap for ongoing).
 	require.NoError(t, db.Exec(`CREATE TABLE animes (
         id TEXT PRIMARY KEY,
         name TEXT, name_ru TEXT, name_jp TEXT,
         poster_url TEXT,
         episodes_count INTEGER DEFAULT 0,
+        episodes_aired INTEGER DEFAULT 0,
         deleted_at DATETIME
     )`).Error)
 
-	require.NoError(t, db.Exec(
-		`INSERT INTO animes (id, name, poster_url, episodes_count) VALUES (?, ?, ?, ?)`,
-		"anime-A", "Anime A", "/a.jpg", 12).Error)
-	require.NoError(t, db.Exec(
-		`INSERT INTO animes (id, name, poster_url, episodes_count) VALUES (?, ?, ?, ?)`,
-		"anime-B", "Anime B", "/b.jpg", 24).Error)
+	// anime_list now drives the rail.
+	require.NoError(t, db.Exec(`CREATE TABLE anime_list (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        anime_id TEXT,
+        status TEXT,
+        deleted_at DATETIME
+    )`).Error)
+
+	seedAnime := func(id, name string, count, aired int) {
+		require.NoError(t, db.Exec(
+			`INSERT INTO animes (id, name, poster_url, episodes_count, episodes_aired) VALUES (?, ?, ?, ?, ?)`,
+			id, name, "/"+id+".jpg", count, aired).Error)
+	}
+	seedList := func(user, animeID, status string) {
+		require.NoError(t, db.Exec(
+			`INSERT INTO anime_list (id, user_id, anime_id, status) VALUES (?, ?, ?, ?)`,
+			"al-"+user+"-"+animeID, user, animeID, status).Error)
+	}
 
 	now := time.Now()
-	older := now.Add(-1 * time.Hour)
 
-	// Anime A E1: completed=true (must be excluded from the "in-progress" filter)
-	seedProgressRow(t, db, "user-1", "anime-A", 1, 1200, 1400, true)
-	// Anime A E2: in-progress, most recent last_watched_at.
-	require.NoError(t, db.Exec(
-		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number,
-            progress, duration, completed, watch_count, last_watched_at,
-            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"seed-A2", "user-1", "anime-A", 2, 600, 1400, false, 1,
-		now, now, now).Error)
+	// A: watching, E1 completed (older) + E2 in-progress (newest) -> resume E2.
+	seedAnime("anime-A", "Anime A", 12, 0)
+	seedList("user-1", "anime-A", "watching")
+	insertProgressAt(t, db, "seed-A1", "user-1", "anime-A", 1, 1200, 1400, true, now.Add(-10*time.Minute))
+	insertProgressAt(t, db, "seed-A2", "user-1", "anime-A", 2, 600, 1400, false, now)
 
-	// Anime B E5: in-progress, OLDER last_watched_at — should sort second.
-	require.NoError(t, db.Exec(
-		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number,
-            progress, duration, completed, watch_count, last_watched_at,
-            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"seed-B5", "user-1", "anime-B", 5, 300, 1500, false, 1,
-		older, older, older).Error)
+	// C: watching, latest E3 completed, 3<12 -> advance to E4 (progress 0).
+	seedAnime("anime-C", "Anime C", 12, 0)
+	seedList("user-1", "anime-C", "watching")
+	insertProgressAt(t, db, "seed-C3", "user-1", "anime-C", 3, 1400, 1400, true, now.Add(-30*time.Minute))
+
+	// B: watching, E5 in-progress (oldest) -> resume E5, sorts last.
+	seedAnime("anime-B", "Anime B", 24, 0)
+	seedList("user-1", "anime-B", "watching")
+	insertProgressAt(t, db, "seed-B5", "user-1", "anime-B", 5, 300, 1500, false, now.Add(-1*time.Hour))
+
+	// D: watching, finished all 12 (latest E12 completed). next 13>12 -> EXCLUDE.
+	seedAnime("anime-D", "Anime D", 12, 0)
+	seedList("user-1", "anime-D", "watching")
+	insertProgressAt(t, db, "seed-D12", "user-1", "anime-D", 12, 1400, 1400, true, now)
+
+	// G: ongoing, aired=5, latest E5 completed. next 6>aired 5 -> EXCLUDE.
+	seedAnime("anime-G", "Anime G", 24, 5)
+	seedList("user-1", "anime-G", "watching")
+	insertProgressAt(t, db, "seed-G5", "user-1", "anime-G", 5, 1400, 1400, true, now)
+
+	// E: NOT in any list, has in-progress E1 -> EXCLUDE (the reported bug).
+	seedAnime("anime-E", "Anime E", 12, 0)
+	insertProgressAt(t, db, "seed-E1", "user-1", "anime-E", 1, 600, 1400, false, now)
+
+	// F: list status='dropped', in-progress E2 -> EXCLUDE (the dropped case).
+	seedAnime("anime-F", "Anime F", 12, 0)
+	seedList("user-1", "anime-F", "dropped")
+	insertProgressAt(t, db, "seed-F2", "user-1", "anime-F", 2, 553, 553, false, now)
 
 	// Different user — must NOT leak into user-1's rows.
-	require.NoError(t, db.Exec(
-		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number,
-            progress, duration, completed, watch_count, last_watched_at,
-            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"seed-X", "user-2", "anime-A", 3, 100, 1400, false, 1,
-		now, now, now).Error)
+	seedAnime("anime-Z", "Anime Z", 12, 0)
+	seedList("user-2", "anime-Z", "watching")
+	insertProgressAt(t, db, "seed-Z1", "user-2", "anime-Z", 1, 100, 1400, false, now)
 
-	// --- Happy path ---
+	// --- Happy path: only A, C, B in last_watched DESC order ---
 	items, err := r.ListContinueWatching(ctx, "user-1", 10)
 	require.NoError(t, err)
-	require.Len(t, items, 2, "expected one row per anime (A then B)")
+	require.Len(t, items, 3, "only watching-list anime with a real next episode")
 
-	// Anime A first — most recent last_watched_at.
 	assert.Equal(t, "anime-A", items[0].Anime.ID)
-	assert.Equal(t, 2, items[0].EpisodeNumber,
-		"should be latest in-progress episode (E2), not completed E1")
+	assert.Equal(t, 2, items[0].EpisodeNumber, "resume in-progress E2")
 	assert.Equal(t, 600, items[0].Progress)
 	assert.Equal(t, 1400, items[0].Duration)
 	assert.Equal(t, "Anime A", items[0].Anime.Name)
-	assert.Equal(t, "/a.jpg", items[0].Anime.PosterURL)
 	assert.Equal(t, 12, items[0].Anime.EpisodesCount)
 
-	// Anime B second — older last_watched_at.
-	assert.Equal(t, "anime-B", items[1].Anime.ID)
-	assert.Equal(t, 5, items[1].EpisodeNumber)
+	assert.Equal(t, "anime-C", items[1].Anime.ID)
+	assert.Equal(t, 4, items[1].EpisodeNumber, "advance past completed E3 -> E4")
+	assert.Equal(t, 0, items[1].Progress, "advanced episode starts at progress 0")
+
+	assert.Equal(t, "anime-B", items[2].Anime.ID)
+	assert.Equal(t, 5, items[2].EpisodeNumber)
+
+	// Explicitly assert the excluded anime never appear.
+	for _, it := range items {
+		switch it.Anime.ID {
+		case "anime-D", "anime-G", "anime-E", "anime-F", "anime-Z":
+			t.Fatalf("anime %s must be excluded from continue-watching", it.Anime.ID)
+		}
+	}
 
 	// --- Empty path ---
 	empty, err := r.ListContinueWatching(ctx, "user-no-rows", 10)
 	require.NoError(t, err)
 	assert.Empty(t, empty)
 
-	// --- Limit clamp (smoke) ---
-	// limit=0 -> default 10, limit=999 -> clamp to 20. Both should still
-	// return the same two rows here.
+	// --- Limit clamp (smoke): 0 -> default 10, 999 -> clamp 20. ---
 	itemsZero, err := r.ListContinueWatching(ctx, "user-1", 0)
 	require.NoError(t, err)
-	assert.Len(t, itemsZero, 2)
+	assert.Len(t, itemsZero, 3)
 	itemsHuge, err := r.ListContinueWatching(ctx, "user-1", 999)
 	require.NoError(t, err)
-	assert.Len(t, itemsHuge, 2)
+	assert.Len(t, itemsHuge, 3)
 }
 
 // TestProgressRepository_GetBulkProgress covers the happy path (mixed in-progress
