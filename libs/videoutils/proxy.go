@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -67,6 +68,7 @@ func NewVideoProxy(cfg ProxyConfig) *VideoProxy {
 		client: &http.Client{
 			// No timeout on client level — context cancellation handles timeouts.
 			// A global timeout breaks streaming of large MP4 files (100s of MB).
+			Transport: newIPv4Transport(),
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				// Follow redirects but preserve headers
 				if len(via) >= 10 {
@@ -77,6 +79,33 @@ func NewVideoProxy(cfg ProxyConfig) *VideoProxy {
 		},
 		config: cfg,
 	}
+}
+
+// newIPv4Transport returns an http.Transport whose dialer forces IPv4 ("tcp4").
+//
+// Several upstream CDNs (e.g. AnimePahe/Kwik's vault-*.owocdn.top edges) are
+// dual-stack and return AAAA records, but our containers have no working IPv6
+// egress. Go's default dual-stack dialer intermittently races the IPv6 address,
+// which black-holes (no RST/ICMP) and stalls each connection until the upstream
+// timeout fires — manifests/keys are tiny and usually slip through on the IPv4
+// fallback, but the steady flood of HLS segments keeps landing on the dead IPv6
+// path, so episodes load but never play. Forcing "tcp4" removes the IPv6 attempt
+// entirely and makes segment fetches deterministic.
+func newIPv4Transport() *http.Transport {
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		// Coerce any TCP dial to IPv4-only.
+		switch network {
+		case "tcp", "tcp6":
+			network = "tcp4"
+		}
+		return dialer.DialContext(ctx, network, addr)
+	}
+	return t
 }
 
 // ProxyStream proxies a video stream from an external URL
