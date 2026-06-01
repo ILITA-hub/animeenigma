@@ -391,7 +391,7 @@ async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
   // programmatic re-entry so we load the stream instead of re-emitting
   // (which would loop forever).
   if (props.room && !fromRoomSync) {
-    props.room.emitChangeEpisode(String(ep.id))
+    props.room.emitChangeEpisode(String(ep.number))
     return
   }
   selectedEpisode.value = ep

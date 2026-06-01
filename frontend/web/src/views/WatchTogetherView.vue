@@ -401,7 +401,7 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
        absolute over the player. -->
   <div
     v-else
-    class="flex flex-col lg:flex-row min-h-screen w-full"
+    class="flex flex-col lg:flex-row min-h-screen w-full pt-16"
   >
     <!-- Player column — relative so the burst overlay can `absolute inset-0` -->
     <div class="relative flex-1 min-w-0 bg-black">

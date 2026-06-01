@@ -572,6 +572,19 @@ const _selectEpisode = async (ep: AnimeLibEpisode) => {
 }
 
 // User-click episode selector — fires combo_override ('episode') BEFORE the work.
+// WT-STATE-04: react to room episode broadcasts (own echo or another
+// member's change). Map the 1-based number to our episode object and apply
+// via the programmatic _selectEpisode path (no re-emit). Without this the
+// click only emits and the player never actually switches in a room.
+watch(
+  () => props.initialEpisode,
+  (epNum) => {
+    if (!props.room || epNum == null || episodes.value.length === 0) return
+    const ep = episodes.value.find(e => parseInt(e.number) === epNum)
+    if (ep && ep.id !== selectedEpisode.value?.id) _selectEpisode(ep)
+  },
+)
+
 const selectEpisode = async (ep: AnimeLibEpisode) => {
   // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
   // route the user click through the room handle so the backend can
@@ -580,7 +593,7 @@ const selectEpisode = async (ep: AnimeLibEpisode) => {
   // back through the existing :initial-episode prop -> _selectEpisode
   // programmatic path.
   if (props.room) {
-    props.room.emitChangeEpisode(String(ep.id))
+    props.room.emitChangeEpisode(String(ep.number))
     return
   }
   tracker.recordPickerEvent('episode', { episode: parseInt(ep.number) || 0 })

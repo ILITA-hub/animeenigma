@@ -260,6 +260,19 @@ const initHlsPlayer = (url: string) => {
   }
 }
 
+// WT-STATE-04: react to room episode broadcasts (own echo or another
+// member's change). props.initialEpisode is the 1-based ordinal; map it
+// back to an index and re-select with fromRoomSync=true to avoid re-emitting.
+watch(
+  () => props.initialEpisode,
+  (epNum) => {
+    if (!props.room || epNum == null || episodes.value.length === 0) return
+    const idx = Math.min(epNum - 1, episodes.value.length - 1)
+    if (idx < 0 || selectedEpisodeIndex.value === idx) return
+    selectEpisode(episodes.value[idx], idx, true)
+  },
+)
+
 const fetchEpisodes = async () => {
   loadingEpisodes.value = true
   error.value = null
@@ -284,15 +297,15 @@ const fetchEpisodes = async () => {
   }
 }
 
-const selectEpisode = async (ep: HanimeEpisode, idx: number) => {
+const selectEpisode = async (ep: HanimeEpisode, idx: number, fromRoomSync = false) => {
   // Phase 4 WT-STATE-04: when mounted inside a Watch Together room,
   // route the user click (or end-of-episode auto-advance, which calls the
   // same function) through the room handle so the backend can validate
   // and broadcast to all members. The room:state_changed broadcast will
   // reactively update room.episode_id, which flows back through the
   // existing :initial-episode prop -> programmatic re-select path.
-  if (props.room) {
-    props.room.emitChangeEpisode(String(ep.slug))
+  if (props.room && !fromRoomSync) {
+    props.room.emitChangeEpisode(String(idx + 1))
     return
   }
   selectedEpisode.value = ep
