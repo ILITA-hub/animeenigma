@@ -13,10 +13,12 @@ import (
 
 // NewRouter builds the analytics chi router.
 //
-//	GET  /health                 (public)
-//	GET  /metrics                 (public, prom format)
-//	POST /collect                 (public — anonymous users tracked)
-//	POST /internal/erase          (internal — gateway never proxies /internal/*)
+//	GET  /health                  (public)
+//	GET  /metrics                  (public, prom format)
+//	POST /api/analytics/collect    (public — anonymous users tracked; gateway
+//	                                forwards the full path UNCHANGED, same as
+//	                                every other service serves /api/<name>/...)
+//	POST /internal/erase           (internal — gateway never proxies /internal/*)
 func NewRouter(
 	collect *handler.CollectHandler,
 	admin *handler.AdminHandler,
@@ -39,7 +41,11 @@ func NewRouter(
 		metrics.Handler().ServeHTTP(w, req)
 	})
 
-	r.Post("/collect", collect.ServeHTTP)
+	// The gateway forwards the full request path unchanged, so the public
+	// ingestion route must be the full /api/analytics/collect (mirrors how
+	// notifications serves /api/notifications/...). /internal/* is hit
+	// directly inside the Docker network and is never gateway-proxied.
+	r.Post("/api/analytics/collect", collect.ServeHTTP)
 	r.Post("/internal/erase", admin.Erase)
 
 	return r
