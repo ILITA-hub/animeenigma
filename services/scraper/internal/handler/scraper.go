@@ -321,9 +321,67 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 
 // GetHealth handles GET /scraper/health. Returns the orchestrator's live
 // HealthSnapshot keyed by provider name.
+// playabilityFreshTTL bounds how old a probe-cache entry may be before its
+// stream_segment oracle is treated as "no recent data" in the public view.
+// The probe ticks every ~15 min (health.probeBaseInterval); 2× tolerates one
+// missed tick. (Distinct from the orchestrator's cacheStaleTTL=60s fail-open
+// window, which — being far shorter than the probe interval — is a separate
+// known issue tracked in ISS-021 and intentionally NOT changed here.)
+const playabilityFreshTTL = 30 * time.Minute
+
+// GetHealth handles GET /scraper/health — the public per-provider snapshot.
+//
+// ISS-021: each provider's HealthCheck() self-report only reflects API liveness
+// (search/episodes/servers/stream); its stream_segment is never validated
+// (providers don't fetch segments), so the raw table reported all-green even
+// when playback was broken. We overlay the probe's real byte-oracle
+// (stream_segment, from the cache fetchSegment now follows to an actual media
+// segment) onto each provider and expose a per-provider `playable` summary so
+// the table reflects real playability. Providers with no fresh oracle data are
+// OMITTED from `playable` (absent = unknown, not a fake green/red).
 func (h *ScraperHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	snap := h.svc.HealthSnapshot(r.Context())
-	httputil.OK(w, map[string]any{"providers": snap})
+
+	playable := map[string]bool{}
+	if h.cache != nil {
+		now := time.Now
+		if h.now != nil {
+			now = h.now
+		}
+		cacheSnap := h.cache.AdminSnapshot()
+		for prov, ph := range snap {
+			ch, ok := cacheSnap[prov]
+			fresh := ok && now().Sub(ch.LastUpdated) <= playabilityFreshTTL
+			var seg health.StageStatus
+			hasSeg := false
+			if fresh {
+				seg, hasSeg = ch.Stages[health.StageStreamSegment]
+			}
+			if hasSeg {
+				// Overlay the REAL oracle result onto the public stage map.
+				ph.Stages[health.StageStreamSegment] = domain.StageHealth{
+					Up:      seg.Up,
+					LastOK:  seg.LastOK,
+					LastErr: seg.LastErr,
+				}
+				playable[prov] = seg.Up
+			} else {
+				// No fresh real-bytes confirmation → never claim a green
+				// stream_segment. Mark it explicitly and leave `playable`
+				// unset (unknown) rather than asserting true or false.
+				ph.Stages[health.StageStreamSegment] = domain.StageHealth{
+					Up:      false,
+					LastErr: "no recent playability probe",
+				}
+			}
+			snap[prov] = ph
+		}
+	}
+
+	httputil.OK(w, map[string]any{
+		"providers": snap,
+		"playable":  playable,
+	})
 }
 
 // GetAdminHealth handles GET /scraper/health/admin. Returns the orchestrator's

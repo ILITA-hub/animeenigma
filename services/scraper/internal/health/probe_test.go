@@ -466,6 +466,67 @@ func TestProbe_HTTPClientRefusesRedirects(t *testing.T) {
 	}
 }
 
+// TestProbe_FetchSegmentFollowsPlaylistToRealSegment — ISS-021 regression.
+// fetchSegment must FOLLOW an HLS playlist (master→variant→segment) and
+// validate that a real media segment downloads, not merely that the (often
+// always-200) playlist loads. A playlist whose underlying segment 502s MUST
+// surface as a failure (this is the animefever false-green case).
+func TestProbe_FetchSegmentFollowsPlaylistToRealSegment(t *testing.T) {
+	name := "tp-follow"
+	defer resetProviderMetrics(name)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/master.m3u8":
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nvariant.m3u8\n"))
+		case "/variant.m3u8":
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:5\n#EXTINF:5.0,\nseg1.ts\n"))
+		case "/seg1.ts":
+			_, _ = w.Write([]byte("\x47\x40\x00\x10 real media segment bytes"))
+		case "/broken.m3u8":
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:5\n#EXTINF:5.0,\nseg-502.ts\n"))
+		case "/seg-502.ts":
+			w.WriteHeader(http.StatusBadGateway)
+		case "/empty.m3u8":
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:5\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	cache := NewInMemoryHealthCache()
+	log := newProbeTestLogger(t)
+	t0 := time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC)
+	nowFn, _ := freshClock(t0)
+	r := NewProbeRunner(&FakeProvider{NameVal: name}, DefaultGoldenPool, cache, log,
+		WithNow(nowFn),
+		WithRNG(rand.New(rand.NewPCG(42, 0))),
+	)
+	allowPrivateHostsForTest(r) // httptest binds 127.0.0.1
+
+	// master → variant → real segment: success.
+	if err := r.fetchSegment(context.Background(), srv.URL+"/master.m3u8", nil); err != nil {
+		t.Errorf("master→variant→segment: got err %v; want nil (real segment downloads)", err)
+	}
+	// media playlist → segment that 502s: must surface as failure.
+	err := r.fetchSegment(context.Background(), srv.URL+"/broken.m3u8", nil)
+	if err == nil {
+		t.Fatal("broken segment: got nil; want failure (segment 502)")
+	}
+	if !strings.Contains(err.Error(), "status 502") {
+		t.Errorf("broken segment err = %v; want 'status 502'", err)
+	}
+	// playlist with no media URI: failure.
+	if err := r.fetchSegment(context.Background(), srv.URL+"/empty.m3u8", nil); err == nil {
+		t.Error("empty playlist: got nil; want 'no media URI' failure")
+	}
+}
+
 // TestProbe_FatalPanicDoesNotRespawn — BLK-03 regression, hardened per
 // REVIEW.md iter-2 WR-NEW-01. The previous version of this test ran a
 // synthetic anonymous goroutine that panicked + recovered, then counted

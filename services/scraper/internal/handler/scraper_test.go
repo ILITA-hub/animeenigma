@@ -912,6 +912,67 @@ func TestScraperHandler_GetHealth_ReflectsRegisteredProvider(t *testing.T) {
 	}
 }
 
+// TestScraperHandler_GetHealth_OverlaysRealOracleAndPlayable — ISS-021. The
+// public table must reflect the probe's real stream_segment oracle, not the
+// provider's API-liveness self-report, and expose a per-provider `playable`
+// summary (omitted when there's no fresh oracle data).
+func TestScraperHandler_GetHealth_OverlaysRealOracleAndPlayable(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
+
+	// Self-report falsely shows stream_segment UP for both providers.
+	fever := &fakeProvider{name: "animefever", health: domain.Health{
+		Provider: "animefever",
+		Stages:   map[string]domain.StageHealth{"stream": {Up: true}, "stream_segment": {Up: true}},
+	}}
+	kai := &fakeProvider{name: "animekai", health: domain.Health{
+		Provider: "animekai",
+		Stages:   map[string]domain.StageHealth{"stream_segment": {Up: true}},
+	}}
+
+	cache := health.NewInMemoryHealthCacheWithNow(func() time.Time { return now })
+	// Real oracle: animefever's segment actually 502s. (animekai: no entry.)
+	cache.Update("animefever", health.ProviderHealth{
+		LastUpdated: now.Add(-2 * time.Minute), // fresh
+		Stages: map[string]health.StageStatus{
+			health.StageStreamSegment: {Up: false, LastErr: "stream_segment: status 502 (depth 1)"},
+		},
+	})
+
+	h := newTestHandlerWithCache(t, cache, fever, kai)
+	h.SetNow(func() time.Time { return now })
+
+	rec := httptest.NewRecorder()
+	h.GetHealth(rec, httptest.NewRequest(http.MethodGet, "/scraper/health", nil))
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	var wrapper struct {
+		Data struct {
+			Providers map[string]domain.Health `json:"providers"`
+			Playable  map[string]bool          `json:"playable"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// animefever: fake-green self-report overlaid with the real DOWN oracle.
+	if seg := wrapper.Data.Providers["animefever"].Stages["stream_segment"]; seg.Up {
+		t.Errorf("animefever stream_segment Up=true; want false (real oracle overlay)")
+	}
+	if v, ok := wrapper.Data.Playable["animefever"]; !ok || v {
+		t.Errorf("playable[animefever] = (%v, present=%v); want (false, true)", v, ok)
+	}
+	// animekai: no fresh oracle → omitted from playable; stage not claimed up.
+	if _, ok := wrapper.Data.Playable["animekai"]; ok {
+		t.Error("playable[animekai] present; want omitted (unknown — no fresh oracle)")
+	}
+	if seg := wrapper.Data.Providers["animekai"].Stages["stream_segment"]; seg.Up {
+		t.Error("animekai stream_segment Up=true; want false (no recent playability probe)")
+	}
+}
+
 // TestOrchestrator_OrderedProviderNames — orchestrator exposes registered
 // provider names in failover order; honors prefer; ignores unknown prefer.
 func TestOrchestrator_OrderedProviderNames(t *testing.T) {

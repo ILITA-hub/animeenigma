@@ -37,6 +37,8 @@
 package health
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -82,6 +84,16 @@ const (
 	proxyBaseURLEnvVar  = "SCRAPER_PROBE_PROXY_BASE_URL"
 	defaultProxyBaseURL = "http://streaming:8082"
 	hlsProxyPath        = "/api/v1/hls-proxy"
+
+	// maxSegmentFollowDepth bounds how many HLS playlist hops fetchSegment
+	// follows before giving up. A master→variant→segment chain needs 2; the
+	// cap also defends against a malicious self-referential playlist (ISS-021).
+	maxSegmentFollowDepth = 2
+
+	// maxPlaylistReadBytes caps the body we buffer when sniffing/parsing a
+	// playlist. Real HLS playlists are well under this; segment bodies are
+	// only read far enough to confirm non-empty bytes.
+	maxPlaylistReadBytes = 1 << 16 // 64 KiB
 )
 
 // ProbeRunner is a per-provider liveness probe goroutine. Construct one
@@ -490,23 +502,28 @@ func (r *ProbeRunner) commit(name string, stages map[string]StageStatus, now tim
 	metrics.ProviderProbeLastTick.WithLabelValues(name).Set(float64(now.Unix()))
 }
 
-// fetchSegment issues a bounded GET of the first 4 KiB of the source URL.
-// Counts as success only if HTTP 2xx + at least one non-empty byte.
-// Empty URL is treated as failure (the upstream pipeline returned a stream
-// with no playable source — that's a broken stage, not "nothing to test").
+// fetchSegment validates that a REAL media segment downloads for the given
+// source URL. Counts as success only if a non-playlist body (an actual media
+// segment / progressive file) returns HTTP 2xx + non-empty bytes.
 //
-// SSRF mitigation (REVIEW.md BLK-01): validate scheme + host BEFORE issuing
-// any I/O. The URL ultimately originates from an extractor pipeline
-// (provider.GetStream → embed extractor → packed JS), any link of which an
-// attacker who compromises the upstream may poison. Reject:
-//   - non-http(s) schemes
-//   - empty host
-//   - loopback / link-local / RFC-1918 / RFC-4193 / unspecified destinations
+// ISS-021: the old oracle GET-ed only Sources[0].URL and accepted any 2xx
+// body — but for HLS that URL is the master/media PLAYLIST, which stays 200
+// even when the underlying .ts segments 502 (animefever). So it reported
+// stream_segment=UP while playback was broken. fetchSegment now FOLLOWS the
+// playlist (master→variant→segment, up to maxSegmentFollowDepth hops) until it
+// reaches and downloads a real media segment.
 //
-// The CheckRedirect policy installed in NewProbeRunner also refuses to follow
-// 3xx Location bounces, so even an allow-listed origin cannot trampoline the
-// probe at an internal service.
+// SSRF mitigation (REVIEW.md BLK-01) is re-applied on EVERY hop (the per-hop
+// validation lives at the top of fetchSegmentDepth): non-http(s) schemes,
+// empty hosts, and loopback/link-local/RFC-1918/RFC-4193/unspecified
+// destinations are rejected; allowlisted hosts route through the local HLS
+// proxy; the CheckRedirect policy still refuses 3xx bounces. The depth cap
+// bounds a malicious self-referential playlist.
 func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string, headers map[string]string) error {
+	return r.fetchSegmentDepth(ctx, urlStr, headers, 0)
+}
+
+func (r *ProbeRunner) fetchSegmentDepth(ctx context.Context, urlStr string, headers map[string]string, depth int) error {
 	if urlStr == "" {
 		return errors.New("stream_segment: empty source URL")
 	}
@@ -575,23 +592,79 @@ func (r *ProbeRunner) fetchSegment(ctx context.Context, urlStr string, headers m
 	// surface (BLK-01): a 302 to postgres:5432 would otherwise be a TCP
 	// reach test even without following the bounce.
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("stream_segment: status %d", resp.StatusCode)
+		return fmt.Errorf("stream_segment: status %d (depth %d)", resp.StatusCode, depth)
 	}
-	buf := make([]byte, 4096)
-	n, readErr := io.ReadFull(resp.Body, buf)
-	if n == 0 {
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxPlaylistReadBytes))
+	if len(body) == 0 {
 		return errors.New("stream_segment: empty body")
 	}
-	// WR-08: distinguish three cases.
-	//   n>0, err==nil           → full 4 KiB read, success.
-	//   n>0, err=ErrUnexpectedEOF → real short body, success (e.g. a small
-	//                               m3u8 manifest fits in <4 KiB).
-	//   n>0, any other err       → partial read aborted mid-stream
-	//                               (connection reset, etc.) → fail.
-	if readErr != nil && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+	if readErr != nil {
 		return fmt.Errorf("stream_segment: read body: %w", readErr)
 	}
+
+	// HLS playlist → follow the first media/variant URI one hop deeper so we
+	// validate a real segment, not just the (often always-200) playlist.
+	if looksLikeM3U8(body) {
+		if depth >= maxSegmentFollowDepth {
+			return fmt.Errorf("stream_segment: still a playlist after %d hop(s); no media segment reached", depth)
+		}
+		next, perr := firstMediaUpstreamURI(body, urlStr)
+		if perr != nil {
+			return fmt.Errorf("stream_segment: %w", perr)
+		}
+		return r.fetchSegmentDepth(ctx, next, headers, depth+1)
+	}
+	// Non-playlist body with bytes → a real media segment downloaded. Success.
 	return nil
+}
+
+// looksLikeM3U8 reports whether body is an HLS playlist (starts with #EXTM3U
+// after an optional UTF-8 BOM + leading whitespace).
+func looksLikeM3U8(body []byte) bool {
+	b := bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF}) // optional UTF-8 BOM
+	b = bytes.TrimLeft(b, " \t\r\n")
+	return bytes.HasPrefix(b, []byte("#EXTM3U"))
+}
+
+// firstMediaUpstreamURI returns the UPSTREAM URL of the first media/variant URI
+// in an HLS playlist. URIs the HLS proxy already rewrote to its own
+// "…hls-proxy?url=<upstream>&…" form are unwrapped back to <upstream> — we must
+// NOT fetch the rewritten path verbatim because its prefix (/api/streaming/…)
+// differs from the probe's internal proxy route (/api/v1/hls-proxy); the next
+// hop re-probes the real CDN through a freshly-built proxy URL. Absolute
+// non-proxy URIs are returned as-is; relative URIs resolve against playlistURL.
+func firstMediaUpstreamURI(body []byte, playlistURL string) (string, error) {
+	sc := bufio.NewScanner(bytes.NewReader(body))
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue // tag or blank line, not a URI
+		}
+		ref, err := url.Parse(line)
+		if err != nil {
+			return "", fmt.Errorf("parse media URI %q: %w", line, err)
+		}
+		// Proxy-rewritten form → unwrap the upstream from the `url` param.
+		if strings.Contains(ref.Path, "hls-proxy") {
+			if up := ref.Query().Get("url"); up != "" {
+				return up, nil
+			}
+		}
+		if ref.IsAbs() {
+			return line, nil
+		}
+		// Relative URI → resolve against the playlist's own URL.
+		base, err := url.Parse(playlistURL)
+		if err != nil {
+			return "", fmt.Errorf("resolve relative URI: bad base: %w", err)
+		}
+		return base.ResolveReference(ref).String(), nil
+	}
+	if err := sc.Err(); err != nil {
+		return "", fmt.Errorf("scan playlist: %w", err)
+	}
+	return "", errors.New("playlist has no media URI")
 }
 
 // isHLSAllowlistedHost reports whether `host` matches the shared HLS proxy
