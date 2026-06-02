@@ -1,12 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
 import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
 
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string) => k }),
+}))
+
 const mountMenu = (hasActiveSub = true) =>
   mount(SubtitleSettingsMenu, {
     props: { hasActiveSub },
-    global: { mocks: { $t: (k: string) => k } },
   })
 
 beforeEach(() => {
@@ -49,5 +52,12 @@ describe('SubtitleSettingsMenu', () => {
     await w.get('[data-test="sub-timing-gear"]').trigger('click')
     await w.get('[data-test="nudge-plus-01"]').trigger('click')
     expect(localStorage.getItem('aenigma_subtitle_timing_offset')).toBe('0.1')
+  })
+
+  it('nudges the offset earlier by a fine step (-0.1s)', async () => {
+    const w = mountMenu(true)
+    await w.get('[data-test="sub-timing-gear"]').trigger('click')
+    await w.get('[data-test="nudge-minus-01"]').trigger('click')
+    expect(w.get('[data-test="readout"]').text()).toBe('-0.1s')
   })
 })
