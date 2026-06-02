@@ -105,6 +105,10 @@ docker-compose.local.yml
 **/player-api
 **/rooms-api
 **/scheduler-api
+**/scraper-api
+**/watch-together-api
+**/notifications-api
+**/library-api
 
 # Playwright test artifacts
 frontend/web/playwright-report/
@@ -115,3 +119,10 @@ docker/backup/
 Trace-*.json.gz
 services/maintenance/maintenance
 /scraper-api
+
+# Agent/session-local scratch (never commit — prevents `git add -A` sweeps during
+# autonomous runs; see memory feedback_worktree_from_head)
+.claude/worktrees/
+.claude/plans/
+tmp/
+.planning/.active-workstream
