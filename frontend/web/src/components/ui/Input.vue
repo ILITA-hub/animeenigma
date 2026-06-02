@@ -15,7 +15,7 @@
         :placeholder="placeholder"
         :disabled="disabled"
         :readonly="readonly"
-        :class="[inputClasses, $slots.prefix ? 'pl-10' : '', (clearable || $slots.suffix) ? 'pr-10' : '']"
+        :class="cn(inputClasses, $slots.prefix ? 'pl-10' : '', (clearable || $slots.suffix) ? 'pr-10' : '')"
         @focus="focused = true"
         @blur="focused = false"
       />
@@ -40,6 +40,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { cn } from '@/lib/utils'
 
 defineOptions({ inheritAttrs: false })
 
@@ -94,12 +95,12 @@ const inputClasses = computed(() => {
     ? 'border-pink-500 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20'
     : 'border-white/10 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20'
 
-  return [
+  return cn(
     base,
     sizes[props.size],
     states,
     props.disabled ? 'opacity-50 cursor-not-allowed' : '',
-  ].join(' ')
+  )
 })
 </script>
 
