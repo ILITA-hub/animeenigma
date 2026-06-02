@@ -13,7 +13,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/pagination v0.0.0
 	github.com/PuerkitoBio/goquery v1.10.3
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
 	github.com/hasura/go-graphql-client v0.12.1
 	github.com/mattn/go-sqlite3 v1.14.22
@@ -72,4 +72,5 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
 	github.com/ILITA-hub/animeenigma/libs/pagination => ../../libs/pagination
+	github.com/ILITA-hub/animeenigma/libs/videoutils => ../../libs/videoutils
 )

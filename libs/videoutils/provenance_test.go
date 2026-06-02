@@ -114,3 +114,39 @@ func TestProxyWithReferer_TokenBypassesAllowlist(t *testing.T) {
 		}
 	}
 }
+
+// TestSignStreamURL_SurvivesQueryRoundTrip locks the critical invariant: a URL
+// signed by the catalog (SignStreamURL) still validates after the frontend
+// places it in the `url` query param and the proxy reads it back via
+// url.Values. Uses reserved chars (% & = + space) that exercise the encoder.
+func TestSignStreamURL_SurvivesQueryRoundTrip(t *testing.T) {
+	raw := "https://cdn.example.com/path with space/master.m3u8?token=a+b%2Fc&exp=1&q=x=y"
+	exp, sig := SignStreamURL(raw)
+	if exp == "" || sig == "" {
+		t.Fatal("SignStreamURL returned empty exp/sig")
+	}
+
+	// Frontend side: place raw into the `url` param with standard encoding.
+	out := url.Values{}
+	out.Set("url", raw)
+	out.Set("exp", exp)
+	out.Set("sig", sig)
+	encoded := out.Encode()
+
+	// Proxy side: parse the query back and validate over the decoded url.
+	parsed, err := url.ParseQuery(encoded)
+	if err != nil {
+		t.Fatalf("ParseQuery: %v", err)
+	}
+	gotURL := parsed.Get("url")
+	if gotURL != raw {
+		t.Fatalf("url round-trip changed the string:\n got:  %q\n want: %q", gotURL, raw)
+	}
+	if !validProvenanceToken(gotURL, parsed.Get("exp"), parsed.Get("sig"), time.Now()) {
+		t.Fatal("token rejected after query round-trip (encoding-invariant broken)")
+	}
+	// Tampered sig must fail.
+	if validProvenanceToken(gotURL, parsed.Get("exp"), "deadbeef"+parsed.Get("sig")[8:], time.Now()) {
+		t.Fatal("tampered sig validated; want reject")
+	}
+}

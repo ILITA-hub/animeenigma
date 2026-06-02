@@ -419,6 +419,12 @@ services:
       REDIS_HOST: redis
       SHIKIMORI_USER_AGENT: AnimeEnigma/1.0
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      # Catalog signs stream/subtitle URLs with the HLS provenance HMAC; the
+      # streaming proxy verifies them. Both MUST resolve the SAME key, so this
+      # mirrors streaming's STREAM_TOKEN_SECRET (same default literal) — without
+      # it, loadProvenanceSecret falls back to JWT_SECRET here while streaming
+      # uses STREAM_TOKEN_SECRET, and every token is rejected.
+      STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:-stream-secret-change-in-production}
       SCRAPER_API_URL: http://scraper:8088
       JIMAKU_API_KEY: ${JIMAKU_API_KEY:-}
       OPENSUBTITLES_API_KEY: ${OPENSUBTITLES_API_KEY:-}

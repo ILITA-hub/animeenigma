@@ -81,6 +81,21 @@ func signProvenance(rawURL string, now time.Time) (exp, sig string) {
 	return exp, provenanceMAC(rawURL, exp)
 }
 
+// SignStreamURL signs an entry-point stream/subtitle URL that the backend
+// resolved, returning the (exp, sig) pair the frontend appends as &exp=&sig= so
+// the HLS proxy trusts it WITHOUT a host allowlist. It is the public
+// counterpart of the internal segment-rewrite minting and verifies against the
+// same validProvenanceToken the proxy uses.
+//
+// INVARIANT: the caller must sign the EXACT byte string that ends up in the
+// proxy's `url` query parameter. The proxy validates over
+// `r.URL.Query().Get("url")` (URL-decoded), so as long as the frontend places
+// this same string into `url` with standard query encoding (encode→decode is
+// identity), the MAC matches. See TestSignStreamURL_SurvivesQueryRoundTrip.
+func SignStreamURL(rawURL string) (exp, sig string) {
+	return signProvenance(rawURL, time.Now())
+}
+
 // validProvenanceToken reports whether (expStr, sig) authenticate rawURL and
 // the token is unexpired. Constant-time over the signature. Missing/garbled
 // tokens return false (caller then falls back to the static allowlist).

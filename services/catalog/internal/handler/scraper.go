@@ -17,6 +17,7 @@ import (
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/streamsign"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -119,6 +120,9 @@ func (h *ScraperEndpointsHandler) GetScraperStream(w http.ResponseWriter, r *htt
 		h.writeScraperError(w, err)
 		return
 	}
+	// Sign external stream/subtitle URLs so the HLS proxy trusts them without a
+	// host allowlist. No-op on error/non-200 bodies; preserves the envelope shape.
+	body = streamsign.SignScraperStreamBody(status, body)
 	writePassthrough(w, status, body)
 }
 
