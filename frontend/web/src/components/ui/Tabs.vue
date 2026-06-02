@@ -37,6 +37,7 @@
 
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
+import { cn } from '@/lib/utils'
 
 interface Tab {
   value: string
@@ -71,11 +72,11 @@ const tabListClasses = computed(() => {
     underline: 'border-b border-white/10 gap-4',
   }
 
-  return [
+  return cn(
     base,
     variants[props.variant],
     props.fullWidth ? 'w-full' : 'w-fit',
-  ].join(' ')
+  )
 })
 
 const getTabClasses = (value: string) => {
@@ -102,11 +103,11 @@ const getTabClasses = (value: string) => {
 
   const disabled = 'opacity-50 cursor-not-allowed pointer-events-none'
 
-  return [
+  return cn(
     base,
     isActive ? variants[props.variant].active : variants[props.variant].inactive,
     props.fullWidth ? 'flex-1 justify-center' : '',
     isDisabled ? disabled : '',
-  ].join(' ')
+  )
 }
 </script>
