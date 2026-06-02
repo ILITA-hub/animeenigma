@@ -398,16 +398,16 @@ body {
   --elevated: #1c1c2c;
   --line: rgba(255, 255, 255, 0.06);
   --line-strong: rgba(255, 255, 255, 0.12);
-  --ink: #ffffff;
+  --ink: var(--foreground); /* deprecated → --foreground */
   --ink-2: rgba(255, 255, 255, 0.78);
-  --ink-3: rgba(255, 255, 255, 0.56);
+  --ink-3: var(--muted-foreground); /* deprecated → --muted-foreground */
   --ink-4: rgba(255, 255, 255, 0.36);
-  --accent: #00d4ff;
+  --accent: var(--brand-cyan); /* deprecated → --brand-cyan (P2 flips to shadcn hover surface) */
   --accent-soft: rgba(0, 212, 255, 0.14);
   --accent-line: rgba(0, 212, 255, 0.28);
   --accent-glow: 0 0 30px rgba(0, 212, 255, 0.28);
-  --pink: #ff2d7c;
-  --pink-soft: rgba(255, 45, 124, 0.14);
+  --pink: var(--brand-pink); /* deprecated → --brand-pink */
+  --pink-soft: var(--brand-pink-soft); /* deprecated → --brand-pink-soft */
   --violet: #a78bfa;
 
   /* ============================================================
