@@ -196,6 +196,23 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, resp.ToPublicResponse())
 }
 
+// GuestSession mints an ephemeral guest identity for joining a Watch Together
+// room via invite link. Public (no auth). Returns {access_token, expires_at,
+// user:{id,username,role:"guest"}} with NO refresh cookie — guests re-mint a
+// fresh token client-side when this one nears expiry. The guest JWT carries
+// RoleGuest, which the gateway rejects everywhere except the Watch Together
+// routes (see gateway BlockGuestRoleMiddleware).
+func (h *AuthHandler) GuestSession(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.authService.GuestSession(r.Context())
+	if err != nil {
+		metrics.AuthEventsTotal.WithLabelValues("guest", "error").Inc()
+		httputil.Error(w, err)
+		return
+	}
+	metrics.AuthEventsTotal.WithLabelValues("guest", "success").Inc()
+	httputil.OK(w, resp)
+}
+
 // RefreshToken handles token refresh
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Read refresh token from cookie

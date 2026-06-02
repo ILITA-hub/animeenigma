@@ -225,6 +225,19 @@ vi.mock('vue-i18n', async (importOriginal) => {
   }
 })
 
+// auth store stub — the view calls useAuthStore() for the guest-join flow.
+// Default: an authenticated user, so isGuest is false (guest banner hidden)
+// and bootstrap() skips ensureGuestToken — existing tests are unaffected.
+// Mocking the store also keeps its real @/i18n import out of this graph.
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: vi.fn(() => ({
+    isAuthenticated: true,
+    token: 'jwt.fake',
+    wtGuestToken: null,
+    ensureGuestToken: vi.fn().mockResolvedValue('guest.jwt'),
+  })),
+}))
+
 // SUT — must be imported AFTER all vi.mock calls.
 import WatchTogetherView from './WatchTogetherView.vue'
 

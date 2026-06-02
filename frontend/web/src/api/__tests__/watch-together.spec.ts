@@ -201,3 +201,31 @@ describe('deleteRoom', () => {
     await expect(deleteRoom('r1')).rejects.toBe(err)
   })
 })
+
+describe('guest auth header (logged-out invite-link join)', () => {
+  it('getRoom attaches a Bearer header when a guest token is passed', async () => {
+    getSpy.mockResolvedValueOnce({ data: { data: sampleSnapshot() } })
+
+    await getRoom('r1', 'guest.jwt.token')
+
+    expect(getSpy).toHaveBeenCalledWith('/watch-together/rooms/r1', {
+      headers: { Authorization: 'Bearer guest.jwt.token' },
+    })
+  })
+
+  it('getRoom sends NO explicit config when no token is passed (authenticated path)', async () => {
+    getSpy.mockResolvedValueOnce({ data: { data: sampleSnapshot() } })
+
+    await getRoom('r1')
+
+    expect(getSpy).toHaveBeenCalledWith('/watch-together/rooms/r1')
+  })
+
+  it('getRoom sends NO explicit config for a null/undefined token (guest without a token yet)', async () => {
+    getSpy.mockResolvedValueOnce({ data: { data: sampleSnapshot() } })
+
+    await getRoom('r1', null)
+
+    expect(getSpy).toHaveBeenCalledWith('/watch-together/rooms/r1')
+  })
+})

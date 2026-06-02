@@ -47,6 +47,94 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
 
+  // ── Watch Together guest identity ──
+  // DELIBERATELY separate from `token` / isAuthenticated: a guest holds a
+  // role=guest JWT used ONLY for the Watch Together WS + WT REST calls.
+  // Keeping it out of `token` means isAuthenticated stays false, so every
+  // existing `v-if="isAuthenticated"` gate (lists, comments, reviews, the
+  // Invite/create-room button) stays correctly hidden for guests — no
+  // app-wide audit. sessionStorage-backed so a same-tab reload preserves the
+  // guest's identity (and therefore their room member id).
+  const GUEST_TOKEN_KEY = 'wt_guest_token'
+  const GUEST_USER_KEY = 'wt_guest_user'
+
+  function safeSessionGet(key: string): string | null {
+    try {
+      return sessionStorage.getItem(key)
+    } catch {
+      return null
+    }
+  }
+  function safeSessionSet(key: string, val: string) {
+    try {
+      sessionStorage.setItem(key, val)
+    } catch {
+      // Privacy modes can throw — the guest identity just won't survive a reload.
+    }
+  }
+  function loadGuestUser(): { id: string; username: string } | null {
+    try {
+      const s = sessionStorage.getItem(GUEST_USER_KEY)
+      if (s) return JSON.parse(s)
+    } catch {
+      // ignore parse / access errors
+    }
+    return null
+  }
+
+  const wtGuestToken = ref<string | null>(safeSessionGet(GUEST_TOKEN_KEY))
+  const wtGuestUser = ref<{ id: string; username: string } | null>(loadGuestUser())
+
+  // Decode the guest JWT `exp` (seconds) and report whether it's within
+  // `skewSeconds` of expiry. Mirrors the composable's tokenExpiringSoon so a
+  // re-mint fires before a reconnect presents a stale token (ISS-019 family).
+  function guestTokenExpiringSoon(skewSeconds = 60): boolean {
+    const t = wtGuestToken.value
+    if (!t) return true
+    const parts = t.split('.')
+    if (parts.length !== 3) return false
+    try {
+      const payload = JSON.parse(
+        atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')),
+      ) as { exp?: number }
+      if (typeof payload.exp !== 'number') return false
+      return payload.exp * 1000 <= Date.now() + skewSeconds * 1000
+    } catch {
+      return false
+    }
+  }
+
+  // Returns a valid Watch Together guest JWT, minting a fresh one via
+  // POST /auth/guest when absent or near expiry. Stored in `wtGuestToken`
+  // (NOT `token`) so isAuthenticated stays false. Returns null on failure so
+  // the caller can surface a connect error instead of looping. NOTE: a
+  // re-mint creates a NEW guest identity (the server has no refresh path for
+  // guests) — acceptable for the MVP given the 6h default TTL.
+  async function ensureGuestToken(): Promise<string | null> {
+    if (wtGuestToken.value && !guestTokenExpiringSoon()) {
+      return wtGuestToken.value
+    }
+    try {
+      const response = await apiClient.post('/auth/guest')
+      const data = response.data?.data || response.data
+      const tok = data?.access_token as string | undefined
+      if (!tok) return null
+      wtGuestToken.value = tok
+      safeSessionSet(GUEST_TOKEN_KEY, tok)
+      if (data.user?.id) {
+        const gu = {
+          id: String(data.user.id),
+          username: String(data.user.username ?? 'Guest'),
+        }
+        wtGuestUser.value = gu
+        safeSessionSet(GUEST_USER_KEY, JSON.stringify(gu))
+      }
+      return tok
+    } catch {
+      return null
+    }
+  }
+
   const setUser = (userData: User | null) => {
     user.value = userData
     if (userData) {
@@ -270,6 +358,9 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isAdmin,
     isRefreshing,
+    wtGuestToken,
+    wtGuestUser,
+    ensureGuestToken,
     login,
     register,
     requestDeepLink,

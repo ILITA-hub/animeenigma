@@ -222,6 +222,7 @@ func NewRouterWithCleanup(
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
+			r.Use(BlockGuestRoleMiddleware)
 			r.Post("/anime/{animeId}/comments", proxyHandler.ProxyToPlayer)
 			r.Patch("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
 			r.Delete("/anime/{animeId}/comments/{commentId}", proxyHandler.ProxyToPlayer)
@@ -340,6 +341,7 @@ func NewRouterWithCleanup(
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
+			r.Use(BlockGuestRoleMiddleware)
 			r.HandleFunc("/users/*", proxyHandler.ProxyToPlayer)
 		})
 
@@ -347,6 +349,7 @@ func NewRouterWithCleanup(
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
+			r.Use(BlockGuestRoleMiddleware)
 			r.HandleFunc("/rooms/*", proxyHandler.ProxyToRooms)
 			r.HandleFunc("/game/*", proxyHandler.ProxyToRooms)
 		})
@@ -364,6 +367,7 @@ func NewRouterWithCleanup(
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 				r.Use(userRateLimit)
+				r.Use(BlockGuestRoleMiddleware)
 				r.Post("/{id}/rate", proxyHandler.ProxyToThemes)
 				r.Delete("/{id}/rate", proxyHandler.ProxyToThemes)
 				r.Get("/my-ratings", proxyHandler.ProxyToThemes)
@@ -390,6 +394,7 @@ func NewRouterWithCleanup(
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 				r.Use(userRateLimit)
+				r.Use(BlockGuestRoleMiddleware)
 				r.Get("/", proxyHandler.ProxyToNotifications)
 				r.Get("/unread-count", proxyHandler.ProxyToNotifications)
 				r.Post("/mark-all-read", proxyHandler.ProxyToNotifications)
@@ -761,6 +766,27 @@ func MaxBodySizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 func AdminRoleMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !authz.IsAdmin(r.Context()) {
+			httputil.Forbidden(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// BlockGuestRoleMiddleware rejects requests carrying a Watch Together guest
+// JWT (role=guest) with 403. A guest token is a syntactically valid bearer
+// token, so this is the gateway-side containment that keeps the ephemeral
+// guest identity scoped to the Watch Together routes ONLY (guest join via
+// invite link). It MUST run AFTER JWTValidationMiddleware (claims are read
+// from the request context) and is applied inside every non-admin protected
+// group EXCEPT the /api/watch-together group, where guests legitimately call
+// GET /rooms/{id} + the WS. Admin-gated groups don't need it — AdminRoleMiddleware
+// already 403s any non-admin (guests included). The watch-together SERVICE
+// separately rejects guest POST /rooms (room creation) — see
+// services/watch-together RoomHandler.Create.
+func BlockGuestRoleMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if authz.RoleFromContext(r.Context()) == authz.RoleGuest {
 			httputil.Forbidden(w)
 			return
 		}

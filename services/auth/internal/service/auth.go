@@ -26,6 +26,7 @@ type AuthService struct {
 	cache            *cache.RedisCache
 	jwtManager       *authz.JWTManager
 	telegramBotToken string
+	guestTokenTTL    time.Duration
 	log              *logger.Logger
 }
 
@@ -35,6 +36,7 @@ func NewAuthService(
 	cache *cache.RedisCache,
 	jwtConfig authz.JWTConfig,
 	telegramBotToken string,
+	guestTokenTTL time.Duration,
 	log *logger.Logger,
 ) *AuthService {
 	return &AuthService{
@@ -43,8 +45,46 @@ func NewAuthService(
 		cache:            cache,
 		jwtManager:       authz.NewJWTManager(jwtConfig),
 		telegramBotToken: telegramBotToken,
+		guestTokenTTL:    guestTokenTTL,
 		log:              log,
 	}
+}
+
+// GuestSession mints an ephemeral, login-less guest identity used ONLY to
+// JOIN a Watch Together room via invite link. It creates no DB user row and
+// no refresh token — the returned access-only JWT carries authz.RoleGuest,
+// which the gateway rejects on every protected route except the Watch
+// Together routes (defense-in-depth; see gateway BlockGuestRoleMiddleware).
+//
+// The identity is throwaway: uid = "guest_" + uuid, username = "Guest-NNNN".
+// A re-mint (when the token nears expiry) produces a NEW identity — acceptable
+// for the MVP since the 6h default TTL makes mid-session churn rare.
+func (s *AuthService) GuestSession(ctx context.Context) (*domain.PublicAuthResponse, error) {
+	uid := "guest_" + uuid.NewString()
+
+	// 4-digit display suffix → "Guest-1234". crypto/rand keeps it
+	// collision-resistant across concurrent joins without seeding.
+	b := make([]byte, 2)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("guest suffix: %w", err)
+	}
+	suffix := (int(b[0])<<8|int(b[1]))%9000 + 1000 // 1000..9999
+	username := fmt.Sprintf("Guest-%d", suffix)
+
+	token, err := s.jwtManager.GenerateGuestToken(uid, username, s.guestTokenTTL)
+	if err != nil {
+		return nil, fmt.Errorf("generate guest token: %w", err)
+	}
+
+	return &domain.PublicAuthResponse{
+		AccessToken: token,
+		ExpiresAt:   time.Now().Add(s.guestTokenTTL),
+		User: &domain.User{
+			ID:       uid,
+			Username: username,
+			Role:     authz.RoleGuest,
+		},
+	}, nil
 }
 
 // SessionContext carries per-request context the service needs to create a

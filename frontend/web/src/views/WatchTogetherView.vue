@@ -71,6 +71,7 @@ import {
 } from '@/api/watch-together'
 import { useWatchTogetherRoom } from '@/composables/useWatchTogetherRoom'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 import RoomSidebar from '@/components/watch-together/RoomSidebar.vue'
 import ReactionBurstOverlay from '@/components/watch-together/ReactionBurstOverlay.vue'
 import SyncToastStack from '@/components/watch-together/SyncToastStack.vue'
@@ -96,6 +97,13 @@ const hiddenPlayerKinds: readonly PlayerKind[] =
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const auth = useAuthStore()
+
+// True when the viewer joined via invite link without logging in. Drives the
+// "watching as a guest" banner. isAuthenticated stays false for guests by
+// design (the guest JWT lives in auth.wtGuestToken, not auth.token), so this
+// is simply the negation.
+const isGuest = computed(() => !auth.isAuthenticated)
 
 // roomId is treated as a string; the router parameter is guaranteed by
 // the route definition (`/watch/room/:roomId`). encodeURIComponent in the
@@ -205,7 +213,20 @@ roomHandle.onRoomClosed(() => {
 async function bootstrap() {
   loading.value = true
   try {
-    const snap = await getRoom(roomId)
+    // Guest (logged-out invite-link) join: mint an ephemeral Watch Together
+    // identity BEFORE the REST pre-fetch, because GET /rooms/{id} requires a
+    // JWT at the gateway. Authenticated users skip this — their global token
+    // is attached by the apiClient interceptor. On mint failure we fall
+    // through to the generic "ended" state (same single-back-button UX as a
+    // 410), since without an identity the guest can't connect at all.
+    if (!auth.isAuthenticated) {
+      const guestToken = await auth.ensureGuestToken()
+      if (!guestToken) {
+        errorState.value = 'gone'
+        return
+      }
+    }
+    const snap = await getRoom(roomId, auth.isAuthenticated ? undefined : auth.wtGuestToken)
     lastAnimeId.value = snap.room.anime_id
     // Plan 05.5: persist for WS-only room:closed events that may arrive
     // after the composable resets its `room` ref. Privacy modes throw on
@@ -297,6 +318,19 @@ function goBackToAnime() {
 // explicit `next=` query so the auth view's own resume logic also sees
 // it (belt-and-suspenders — mirrors the Phase 2 redirect pattern).
 function onAuthExpiredLoginClick() {
+  try {
+    sessionStorage.setItem('returnUrl', route.fullPath)
+  } catch {
+    // Privacy modes can throw; silent failure is OK.
+  }
+  router.push({ path: '/auth', query: { next: route.fullPath } })
+}
+
+// Guest banner "Log in" click. Same resume mechanism as the auth-expired
+// modal: stash returnUrl (consumed by the router beforeEach guard) + pass
+// the explicit next= query so the user lands back in this room after login
+// (where they'll rejoin as their real identity instead of Guest-NNNN).
+function onGuestLoginClick() {
   try {
     sessionStorage.setItem('returnUrl', route.fullPath)
   } catch {
@@ -421,6 +455,24 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
         :hidden-kinds="hiddenPlayerKinds"
         @select-player="onSelectPlayer"
       />
+
+      <!-- Guest nudge — only when the viewer joined without logging in.
+           Centered so it never collides with the left-aligned PlayerTabBar.
+           "Log in" preserves the room URL so the user rejoins as themselves. -->
+      <div
+        v-if="isGuest"
+        class="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-foreground/20 text-sm font-medium text-foreground/90"
+        data-testid="wt-guest-banner"
+      >
+        <span>{{ t('watch_together.guest_banner_text') }}</span>
+        <button
+          type="button"
+          class="text-primary font-semibold hover:underline"
+          @click="onGuestLoginClick"
+        >
+          {{ t('watch_together.guest_banner_login') }}
+        </button>
+      </div>
 
       <KodikPlayer
         v-if="livePlayer === 'kodik'"

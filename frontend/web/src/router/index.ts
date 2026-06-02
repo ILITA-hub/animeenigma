@@ -88,13 +88,13 @@ const routes: RouteRecordRaw[] = [
     // useWatchTogetherRoom composable, and dispatches to one of the 5
     // existing <*Player> components based on room.player.
     //
-    // requiresAuth via meta is honored by the global beforeEach guard
-    // below: unauthenticated users are written into
-    // sessionStorage.returnUrl and redirected to /auth, which restores
-    // them to the room URL after successful login. This satisfies
-    // CONTEXT.md §"Routing"'s "redirect to /login?next=…" requirement
-    // using the project's existing convention (sessionStorage.returnUrl,
-    // NOT a ?next= query param) — same as every other requiresAuth route.
+    // NOT requiresAuth: a logged-out user opening an invite link must be able
+    // to JOIN the room as a guest. WatchTogetherView mints an ephemeral guest
+    // identity (auth.ensureGuestToken → POST /auth/guest) before connecting;
+    // the guest token is kept out of the global auth.token so isAuthenticated
+    // stays false (guests can sync + chat + react, but can't create rooms —
+    // the create/Invite button stays gated on isAuthenticated). The room host
+    // still logs in to create the room in the first place.
     //
     // Lazy-loaded so the WatchTogether dependency graph (composable +
     // sidebar + 5 player components via defineAsyncComponent) is
@@ -102,7 +102,7 @@ const routes: RouteRecordRaw[] = [
     path: '/watch/room/:roomId',
     name: 'watch-together-room',
     component: () => import('@/views/WatchTogetherView.vue'),
-    meta: { titleKey: 'watch_together.title', requiresAuth: true }
+    meta: { titleKey: 'watch_together.title' }
   },
   {
     path: '/user/:publicId',

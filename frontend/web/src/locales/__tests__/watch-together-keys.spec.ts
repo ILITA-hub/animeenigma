@@ -118,6 +118,9 @@ describe('watch_together i18n parity', () => {
     'auth_expired_modal_title',
     'auth_expired_modal_body',
     'auth_expired_modal_login_button',
+    // Guest (logged-out invite-link) join — "watching as a guest" banner copy.
+    'guest_banner_text',
+    'guest_banner_login',
   ] as const
 
   it.each(expectedKeys)('en.json has watch_together.%s as a string', (key) => {

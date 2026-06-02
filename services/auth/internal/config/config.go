@@ -18,6 +18,12 @@ type Config struct {
 	JWT      authz.JWTConfig
 	Cookie   CookieConfig
 	Telegram TelegramConfig
+
+	// GuestTokenTTL is the lifetime of an ephemeral Watch Together guest
+	// JWT minted by POST /api/auth/guest (AUTH_GUEST_TOKEN_TTL, default 6h).
+	// Guest tokens are access-only (no refresh), so a longer-than-access TTL
+	// keeps mid-session re-mint churn rare. See libs/authz GenerateGuestToken.
+	GuestTokenTTL time.Duration
 }
 
 type TelegramConfig struct {
@@ -83,6 +89,7 @@ func Load() (*Config, error) {
 			WebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 			WebhookURL:    getEnv("TELEGRAM_WEBHOOK_URL", ""),
 		},
+		GuestTokenTTL: getEnvDuration("AUTH_GUEST_TOKEN_TTL", 6*time.Hour),
 	}, nil
 }
 

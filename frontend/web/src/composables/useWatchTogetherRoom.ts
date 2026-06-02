@@ -194,10 +194,22 @@ export type WatchTogetherRoomHandle = UseWatchTogetherRoomReturn
 
 export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn {
   const auth = useAuthStore()
-  // Captured once: the auth ID is stable for the room's lifetime. If it
-  // expires mid-session, the server emits AUTH_EXPIRED and the composable
-  // transitions to 'failed' (no reconnect, view redirects to /login).
-  const ownUserId: string | null = auth.user?.id ?? null
+  // Effective WT identity id, read LAZILY (not captured once) because for a
+  // guest it's populated by auth.ensureGuestToken() — minted in the view /
+  // openSocket AFTER this composable is constructed. Authenticated users →
+  // auth.user.id; guests → the guest user id from /auth/guest
+  // (auth.wtGuestUser.id). Used by the echo guard so a member's own
+  // playback / state-change echo isn't re-applied locally.
+  function ownUserId(): string | null {
+    return auth.user?.id ?? auth.wtGuestUser?.id ?? null
+  }
+
+  // The token presented on the WS upgrade URL + WT REST calls. Authenticated
+  // users use the global access token; guests use the WT-only guest token
+  // (kept out of `auth.token` so isAuthenticated stays false app-wide).
+  function effectiveToken(): string | null {
+    return auth.isAuthenticated ? auth.token : auth.wtGuestToken ?? null
+  }
 
   // ── Reactive state ──
   const room = ref<Room | null>(null)
@@ -243,7 +255,7 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
 
   function buildWsUrl(): string {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const token = encodeURIComponent(auth.token ?? '')
+    const token = encodeURIComponent(effectiveToken() ?? '')
     const id = encodeURIComponent(roomId)
     return `${proto}//${location.host}/api/watch-together/ws?token=${token}&room=${id}`
   }
@@ -254,7 +266,7 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
   // the backoff loop hammers forever (ISS-019). Detect imminent expiry so the
   // caller can refresh before building the URL.
   function tokenExpiringSoon(skewSeconds = 60): boolean {
-    const t = auth.token
+    const t = effectiveToken()
     if (!t) return true
     const parts = t.split('.')
     if (parts.length !== 3) return false // non-JWT (e.g. api key) — can't introspect, trust it
@@ -356,7 +368,7 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
             room.value.translation_id = payload.value
           }
         }
-        if (ownUserId && payload.by_user_id === ownUserId) {
+        if (ownUserId() && payload.by_user_id === ownUserId()) {
           // Echo of our own change — state already updated locally before emit.
           return
         }
@@ -376,7 +388,7 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
           room.value.playback_time = payload.time
           room.value.playback_time_updated_at = payload.server_ts
         }
-        if (ownUserId && payload.by_user_id === ownUserId) {
+        if (ownUserId() && payload.by_user_id === ownUserId()) {
           return
         }
         handlers.playbackEvent.forEach((h) => h(payload))
@@ -473,7 +485,12 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
     // it is missing or about to expire; otherwise an expired token 401s and the
     // reconnect loop never recovers (ISS-019).
     if (tokenExpiringSoon()) {
-      const ok = await auth.refreshAccessToken()
+      // Authenticated users refresh via the httpOnly refresh cookie; guests
+      // have no refresh token, so re-mint a fresh guest JWT via /auth/guest
+      // (a NEW guest identity — acceptable per the MVP's 6h TTL).
+      const ok = auth.isAuthenticated
+        ? await auth.refreshAccessToken()
+        : (await auth.ensureGuestToken()) !== null
       if (stopped) return
       if (!ok) {
         // Refresh genuinely failed (server rejected the refresh cookie). The
@@ -534,7 +551,10 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
       // The snapshot from REST is ALSO mirrored into our refs so the UI
       // can render immediately; the WS will deliver an authoritative
       // `room:snapshot` shortly after, which simply replaces these values.
-      const snap = await getRoom(roomId)
+      // Guests pass their WT token explicitly (it's not in the global token /
+      // apiClient interceptor); authenticated callers pass undefined and let
+      // the interceptor attach the global token.
+      const snap = await getRoom(roomId, auth.isAuthenticated ? undefined : auth.wtGuestToken)
       applySnapshot(snap)
     } catch (err) {
       connectionStatus.value = 'failed'

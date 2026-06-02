@@ -15,6 +15,11 @@ type Role string
 const (
 	RoleUser  Role = "user"
 	RoleAdmin Role = "admin"
+	// RoleGuest is an ephemeral, login-less identity used only to JOIN Watch
+	// Together rooms via an invite link. Guest tokens are access-only (no
+	// refresh token, no DB user row) and MUST be rejected by every protected
+	// endpoint except the Watch Together routes (see gateway BlockGuestRole).
+	RoleGuest Role = "guest"
 )
 
 // Claims represents JWT claims
@@ -103,6 +108,30 @@ func (m *JWTManager) GenerateTokenPair(userID, username string, role Role, sessi
 		RefreshToken: refreshTokenString,
 		ExpiresAt:    now.Add(m.config.AccessTokenTTL),
 	}, nil
+}
+
+// GenerateGuestToken mints an access-only JWT for an ephemeral guest identity.
+// No refresh token is issued — guests re-mint a fresh token when this one nears
+// expiry. `ttl` controls the lifetime (caller supplies its configured value).
+func (m *JWTManager) GenerateGuestToken(userID, username string, ttl time.Duration) (string, error) {
+	now := time.Now()
+	claims := Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.config.Issuer,
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+		},
+		UserID:   userID,
+		Username: username,
+		Role:     RoleGuest,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(m.config.Secret))
+	if err != nil {
+		return "", fmt.Errorf("sign guest token: %w", err)
+	}
+	return signed, nil
 }
 
 // ValidateAccessToken validates an access token and returns claims

@@ -1054,7 +1054,9 @@
     "room_ended_redirect_toast": "This Watch Together room has ended.",
     "auth_expired_modal_title": "Your session has expired",
     "auth_expired_modal_body": "Log in again to rejoin the room.",
-    "auth_expired_modal_login_button": "Log in"
+    "auth_expired_modal_login_button": "Log in",
+    "guest_banner_text": "You're watching as a guest.",
+    "guest_banner_login": "Log in to save progress"
   },
   "spotlight": {
     "regionLabel": "Today's spotlight",

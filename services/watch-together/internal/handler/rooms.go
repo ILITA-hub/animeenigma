@@ -97,6 +97,16 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.Unauthorized(w)
 		return
 	}
+	// Guest containment: a Watch Together guest (ephemeral invite-link
+	// identity, role=guest) may JOIN a room — GET /rooms/{id} + the WS —
+	// but MUST NOT create one. The gateway intentionally lets guest tokens
+	// reach the WT routes (so join works), so room-creation is gated here
+	// at the service. Mirrors the gateway's BlockGuestRoleMiddleware which
+	// rejects guests on every OTHER protected route.
+	if authz.RoleFromContext(r.Context()) == authz.RoleGuest {
+		httputil.Forbidden(w)
+		return
+	}
 	username := ""
 	if claims, ok := authz.ClaimsFromContext(r.Context()); ok {
 		username = claims.Username

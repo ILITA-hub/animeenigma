@@ -53,6 +53,7 @@ func NewRouter(
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
+			r.Post("/guest", authHandler.GuestSession)
 			r.Post("/telegram/deeplink", authHandler.DeepLink)
 			r.Get("/telegram/check", authHandler.CheckDeepLink)
 			r.Post("/telegram/webhook", telegramBotHandler.HandleWebhook)

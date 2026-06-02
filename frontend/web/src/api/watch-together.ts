@@ -27,6 +27,28 @@ import {
 } from '@/types/watch-together'
 
 /**
+ * Build an axios config that attaches an explicit Bearer token, or undefined
+ * when no token is supplied.
+ *
+ * Used by the Watch Together guest (logged-out invite-link) join: the guest's
+ * JWT lives in the auth store's `wtGuestToken`, DELIBERATELY kept out of the
+ * global `token`/localStorage so isAuthenticated stays false (no app-wide UI
+ * leak). But the shared apiClient request interceptor only attaches
+ * `localStorage['token']` — null for a guest — so the GET /rooms/{id} pre-fetch
+ * would go out unauthenticated and 401 at the gateway. Callers (the room view +
+ * composable) pass the guest token here for guests and undefined for
+ * authenticated users (whose token the interceptor attaches). The interceptor
+ * never overwrites our explicit header when localStorage['token'] is absent.
+ *
+ * Kept as an explicit param rather than reading the Pinia store inside this
+ * module: importing the store here would pull the whole store + i18n bootstrap
+ * graph into every consumer of this thin api layer (e.g. InviteButton).
+ */
+function bearerConfig(authToken?: string | null): { headers: Record<string, string> } | undefined {
+  return authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined
+}
+
+/**
  * Unwrap the standard `{success, data}` envelope. Backends sometimes return
  * the bare payload when the envelope helper is bypassed (tests, internal
  * callers); the fallback `?? raw` keeps the helper robust against either
@@ -72,9 +94,13 @@ export async function createRoom(payload: CreateRoomRequest): Promise<CreateRoom
  * IDs from `createRoom` are URL-safe UUIDs in practice, but a forged or
  * fuzzed input shouldn't break path routing.
  */
-export async function getRoom(id: string): Promise<RoomSnapshot> {
+export async function getRoom(id: string, authToken?: string | null): Promise<RoomSnapshot> {
+  const url = `/watch-together/rooms/${encodeURIComponent(id)}`
+  const cfg = bearerConfig(authToken)
   try {
-    const response = await apiClient.get(`/watch-together/rooms/${encodeURIComponent(id)}`)
+    // Only pass an explicit config for guests (authToken supplied);
+    // authenticated callers go through the apiClient interceptor.
+    const response = cfg ? await apiClient.get(url, cfg) : await apiClient.get(url)
     return unwrap<RoomSnapshot>(response.data)
   } catch (err) {
     if (axios.isAxiosError(err) && err.response?.status === 410) {

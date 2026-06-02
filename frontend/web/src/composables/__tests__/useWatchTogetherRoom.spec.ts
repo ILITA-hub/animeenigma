@@ -31,11 +31,19 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: vi.fn(() => ({
     token: 'jwt.fake',
     user: { id: 'self-uuid' },
+    isAuthenticated: true,
+    // Guest-WT fields (logged-out invite-link join). Authenticated path is the
+    // default for these tests; guest-specific behavior is covered separately.
+    wtGuestToken: null,
+    wtGuestUser: null,
+    refreshAccessToken: vi.fn().mockResolvedValue(true),
+    ensureGuestToken: vi.fn().mockResolvedValue('guest.jwt.fake'),
   })),
 }))
 
 // Imported AFTER vi.mock so the alias resolves to the stubs.
 import { getRoom } from '@/api/watch-together'
+import { useAuthStore } from '@/stores/auth'
 import { useWatchTogetherRoom } from '../useWatchTogetherRoom'
 import type {
   RoomSnapshot,
@@ -200,12 +208,37 @@ describe('useWatchTogetherRoom — connect + handshake', () => {
     await flushMicrotasks()
 
     expect(getRoomSpy).toHaveBeenCalledTimes(1)
-    expect(getRoomSpy).toHaveBeenCalledWith('room-1')
+    // Authenticated path passes undefined as the token arg (the apiClient
+    // interceptor attaches the global token); guests pass their wtGuestToken.
+    expect(getRoomSpy).toHaveBeenCalledWith('room-1', undefined)
     expect(lastSocket).not.toBeNull()
     expect(lastSocket!.url).toContain('/api/watch-together/ws')
     expect(lastSocket!.url).toContain('token=jwt.fake')
     expect(lastSocket!.url).toContain('room=room-1')
     expect(lastSocket!.url.startsWith('wss://')).toBe(true)
+  })
+
+  it('Test 1b: guest (logged-out) opens the WS with the guest token, not the global token', async () => {
+    // Guest identity: the WT-only guest token lives in wtGuestToken; the
+    // global `token` is null and isAuthenticated is false (no app-wide leak).
+    const authMock = useAuthStore as unknown as ReturnType<typeof vi.fn>
+    authMock.mockReturnValueOnce({
+      token: null,
+      user: null,
+      isAuthenticated: false,
+      wtGuestToken: 'guest.jwt.token',
+      wtGuestUser: { id: 'guest-uuid', username: 'Guest-1234' },
+      refreshAccessToken: vi.fn().mockResolvedValue(true),
+      ensureGuestToken: vi.fn().mockResolvedValue('guest.jwt.token'),
+    })
+    getRoomSpy.mockResolvedValueOnce(makeSnapshot())
+    const room = useWatchTogetherRoom('room-1')
+    await room.connect()
+    await flushMicrotasks()
+
+    expect(lastSocket).not.toBeNull()
+    expect(lastSocket!.url).toContain('token=guest.jwt.token')
+    expect(lastSocket!.url).not.toContain('token=jwt.fake')
   })
 
   it('Test 2: first inbound room:snapshot populates room/members/messages', async () => {

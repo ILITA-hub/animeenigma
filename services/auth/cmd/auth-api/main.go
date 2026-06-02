@@ -61,7 +61,7 @@ func main() {
 	sessionRepo := repo.NewSessionRepository(db.DB)
 
 	// Initialize services
-	authService := service.NewAuthService(userRepo, sessionRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, log)
+	authService := service.NewAuthService(userRepo, sessionRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, cfg.GuestTokenTTL, log)
 	userService := service.NewUserService(userRepo, log)
 
 	// Initialize handlers

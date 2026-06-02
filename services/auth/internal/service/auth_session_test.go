@@ -51,7 +51,7 @@ func newTestService(t *testing.T) (*service.AuthService, *repo.UserRepository, *
 		RefreshTokenTTL: 7 * 24 * time.Hour,
 	}
 	logr := logger.Default()
-	return service.NewAuthService(uRepo, sRepo, c, jwtCfg, "", logr), uRepo, sRepo
+	return service.NewAuthService(uRepo, sRepo, c, jwtCfg, "", 6*time.Hour, logr), uRepo, sRepo
 }
 
 func TestRefreshToken_PersistentPath_RotatesAndReturnsNewRT(t *testing.T) {

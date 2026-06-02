@@ -1054,7 +1054,9 @@
     "room_ended_redirect_toast": "Эта комната Watch Together закрыта.",
     "auth_expired_modal_title": "Сессия истекла",
     "auth_expired_modal_body": "Войдите снова, чтобы вернуться в комнату.",
-    "auth_expired_modal_login_button": "Войти"
+    "auth_expired_modal_login_button": "Войти",
+    "guest_banner_text": "Вы смотрите как гость.",
+    "guest_banner_login": "Войдите, чтобы сохранять прогресс"
   },
   "spotlight": {
     "regionLabel": "Подборка дня",
