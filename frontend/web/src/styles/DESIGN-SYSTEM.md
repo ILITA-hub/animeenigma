@@ -6,9 +6,10 @@ Implemented in `./main.css`. Full rationale: `docs/superpowers/specs/2026-06-02-
 ## Token tiers
 
 **Tier 1 — primitives (raw values, never reference these directly in components).**
-`--color-base #08080f`, `--color-surface #11111c`, `--surface-2 #161623`, `--elevated #1c1c2c`,
+Defined in the `@theme` block: `--color-base #08080f`, `--color-surface #11111c`,
 `--color-cyan-400 #00d4ff / -500 #00b8e6 / -600 #009dcc`, `--color-pink-400 #ff4d8d / -500 #ff2d7c / -600 #e6196b`,
-`--color-success #00ff9d`, `--color-warning #ffd600`, `--violet #a78bfa`.
+`--color-success #00ff9d`, `--color-warning #ffd600`.
+Defined as `:root` foundation vars (not in `@theme`): `--surface-2 #161623`, `--elevated #1c1c2c`, `--violet #a78bfa`.
 
 **Tier 2 — shadcn-vue semantic slots (use these in components).**
 
