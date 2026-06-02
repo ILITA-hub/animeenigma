@@ -32,6 +32,8 @@ COPY services/notifications/go.mod services/notifications/go.sum* ./services/not
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
 COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
+COPY services/watch-together/go.mod services/watch-together/go.sum* ./services/watch-together/
+COPY services/analytics/go.mod services/analytics/go.sum* ./services/analytics/
 
 RUN cd services/library && go mod download
 

@@ -14,6 +14,7 @@ use (
 	./libs/streamprobe
 	./libs/tracing
 	./libs/videoutils
+	./services/analytics
 	./services/auth
 	./services/catalog
 	./services/gateway

@@ -31,6 +31,7 @@ COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 COPY services/themes/go.mod services/themes/go.sum* ./services/themes/
 COPY services/notifications/go.mod services/notifications/go.sum* ./services/notifications/
 COPY services/watch-together/go.mod services/watch-together/go.sum* ./services/watch-together/
+COPY services/analytics/go.mod services/analytics/go.sum* ./services/analytics/
 COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/maintenance/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 
