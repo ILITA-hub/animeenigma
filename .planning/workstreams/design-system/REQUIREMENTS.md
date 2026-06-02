@@ -27,8 +27,9 @@ Requirement IDs are workstream-local. Status: ✅ done · ⏳ planned.
 | DS-LIB-02 | Configure shadcn-vue (CLI `components.json` or equivalent) to emit into `components/ui/`, wired to the canonical token names. | ⏳ |
 | DS-LIB-03 | Convert `Button` to a token-driven `cva` variant API (`default`/`brand`(pink)/`ghost`/`outline`/`destructive`; sizes `sm/md/lg/icon`) — variant map per the design doc. | ⏳ |
 | DS-LIB-04 | Convert `Card` (+ `CardHeader/Content/Footer`) to shadcn-vue, token-driven (`bg-card`). | ⏳ |
-| DS-LIB-05 | Bring remaining `components/ui/` primitives onto shadcn-vue **behind the same import paths**: Badge, Input, Select, `Modal→Dialog`, Tabs, `ContextMenu→DropdownMenu`. | ⏳ |
+| DS-LIB-05 | Bring the **shadcn-vue-equivalent** `components/ui/` primitives onto shadcn-vue **behind the same import paths**: Badge, Input, Select, `Modal→Dialog`, Tabs, `ContextMenu→DropdownMenu`. | ⏳ |
 | DS-LIB-06 | Add the primitives currently hand-rolled: Tooltip, Popover, Switch, Checkbox. | ⏳ |
+| DS-LIB-07 | The 6 **app-specific composites** in `components/ui/` (`ButtonGroup`, `GenreFilterPopup`, `PaginationBar`, `SearchAutocomplete`, `Skeleton`, `Toaster`) are NOT shadcn-vue primitives — they stay as-is in Phase 3, but must be re-pointed to canonical tokens during the migration phases (4–5) like any other component. Explicitly out of scope for the primitive *swap*. | ⏳ |
 | DS-NF-03 | No npm dependency added beyond the shadcn-vue toolchain (Reka UI, cva, clsx, tailwind-merge); all MIT/BSD/Apache-compatible. | ⏳ |
 | DS-NF-04 | Each primitive keeps its existing import path + a back-compatible prop surface (or a documented codemod) so consumers don't break on swap. | ⏳ |
 

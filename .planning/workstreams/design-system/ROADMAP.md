@@ -16,7 +16,7 @@
 
 | Phase | Title | Status |
 |-------|-------|--------|
-| 1 | Token Foundation + Reference | ✅ Complete (2026-06-02 — 6 commits `ba8e4e83`..`d2baa16d`; tsc clean, 686 vitest pass, 5-surface in-browser smoke, opus final review *approve-with-minors* fixed. See plan `docs/superpowers/plans/2026-06-02-design-system-consolidation-p1.md`) |
+| 1 | Token Foundation + Reference | ✅ Complete (2026-06-02 — 6 commits, listed individually below [the `ba8e4e83`→`d2baa16d` span is non-contiguous: 2 unrelated parallel-session commits are interleaved, so don't `git diff` the range]; tsc clean, 686 vitest pass, 5-surface in-browser smoke, opus final review *approve-with-minors* fixed. **Already pushed to `origin/main`** via a parallel session's push. See plan `docs/superpowers/plans/2026-06-02-design-system-consolidation-p1.md`) |
 | 2 | shadcn-vue Install + Button/Card Proof | ⏳ Planned |
 | 3 | Primitive Set Swap | ⏳ Planned |
 | 4 | High-Traffic Surface Migration | ⏳ Planned |
@@ -42,6 +42,18 @@ Six phases, each independently shippable and reversible, deliberately ordered to
 
 The `--accent` semantic flip (DS-MIGRATE-05) is intentionally late: it can only happen once every `var(--accent)` brand usage has been repointed (Phase 4–5), otherwise it would silently shift 12 components' accent color.
 
+## Standing visual-regression smoke set
+
+Because the whole milestone's premise is "zero rendered change," every phase that touches CSS/components MUST in-browser-smoke the **same 5 surfaces** established in Phase 1, at desktop + mobile widths, and confirm no rendered diff (jsdom can't catch cascade bugs — DS-NF-06):
+
+1. **Home** — spotlight carousel (stats joke card + RandomTail purple `cta-hero` — the `@layer components` cascade-footgun zone), Онгоинги/Топ rails
+2. **Browse / catalog** — filter sidebar, star badges, cards, pagination
+3. **Anime detail** — cyan `.btn-primary` ("Смотреть"), status badge, schedule pill, language pills + green OurEnglish button
+4. **A watch/player surface** — one of the 5 players loads + styled controls
+5. **404** — muted styling + the "На главную" button
+
+Phases 2–5 reference this set in their success criteria as "smoke the standing 5-surface set."
+
 ## Phases
 
 ### Phase 1: Token Foundation + Reference  ✅ COMPLETE (2026-06-02)
@@ -64,22 +76,23 @@ The `--accent` semantic flip (DS-MIGRATE-05) is intentionally late: it can only 
 - co-located `.spec.ts` for each
 **Success criteria:**
 1. `bun install` + `bun run build` clean; no new lint/tsc errors.
-2. Every existing `<Button>`/`Card` usage renders identically (in-browser smoke on Home + anime detail).
+2. Every existing `<Button>`/`Card` usage renders identically — smoke the standing 5-surface set.
 3. Button exposes `default`(cyan)/`brand`(pink)/`ghost`/`outline`/`destructive` variants + `sm/md/lg/icon` sizes, all token-driven.
 4. Vitest covers variant→class mapping for both.
 5. DS-NF-03 attested: no deps beyond the named toolchain; licenses compatible.
 
 ### Phase 3: Primitive Set Swap
 
-**Goal:** Bring the rest of `components/ui/` onto shadcn-vue behind unchanged import paths, and add the four hand-rolled-today primitives. End-state: `@/components/ui` exports shadcn-vue-based Badge, Input, Select, Dialog (was Modal), Tabs, DropdownMenu (was ContextMenu), Tooltip, Popover, Switch, Checkbox — all token-driven.
+**Goal:** Bring the shadcn-vue-equivalent `components/ui/` primitives onto shadcn-vue behind unchanged import paths, and add the four hand-rolled-today primitives. End-state: `@/components/ui` exports shadcn-vue-based Badge, Input, Select, Dialog (was Modal), Tabs, DropdownMenu (was ContextMenu), Tooltip, Popover, Switch, Checkbox — all token-driven. The 6 app-specific composites (`ButtonGroup`, `GenreFilterPopup`, `PaginationBar`, `SearchAutocomplete`, `Skeleton`, `Toaster`) are explicitly OUT of this swap (DS-LIB-07) — they're not shadcn-vue primitives; they get token-migrated in Phases 4–5 like any other component.
 **Depends on:** Phase 2 (`cn()`/`cva` + components.json in place).
-**Requirements:** DS-LIB-05, DS-LIB-06, DS-NF-04
+**Requirements:** DS-LIB-05, DS-LIB-06, DS-LIB-07, DS-NF-04
 **Touches:** `frontend/web/src/components/ui/*` (rewrites + new primitives), `index.ts` barrel, co-located specs.
 **Success criteria:**
 1. Each swapped primitive renders identically on its current consumers (in-browser smoke per primitive's busiest surface).
 2. Import paths + prop surfaces unchanged (or a documented codemod applied across consumers in the same phase).
 3. New primitives (Tooltip/Popover/Switch/Checkbox) have at least one real consumer wired or a Vitest mount test.
-4. Full vitest + tsc green.
+4. The 6 composites are confirmed untouched-but-still-rendering (no accidental swap).
+5. Full vitest + tsc green.
 
 ### Phase 4: High-Traffic Surface Migration
 
@@ -89,7 +102,7 @@ The `--accent` semantic flip (DS-MIGRATE-05) is intentionally late: it can only 
 **Touches:** `views/Home.vue`, `views/Browse.vue`, `views/Watch*.vue`, the 5 player components, `components/layout/*` nav, anime-detail components + their children.
 **Success criteria:**
 1. Grep shows zero off-palette color classes + zero `#hex` in the migrated files.
-2. In-browser smoke confirms no rendered regression on each surface (desktop + mobile widths).
+2. In-browser smoke confirms no rendered regression — the standing 5-surface set, at desktop + mobile widths.
 3. Status colors on these surfaces come from `--success/-warning/-info/-destructive`.
 4. Full vitest + tsc green; e2e (spotlight, player) specs still pass.
 

@@ -17,9 +17,11 @@ Consolidated the three overlapping token vocabularies in `frontend/web/src/style
 - Canonical `frontend/web/src/styles/DESIGN-SYSTEM.md` reference.
 - Vitest guards: built-CSS utility emission + token/alias/`.btn-*` assertions.
 
-## Commits (on `main`, not yet pushed)
+## Commits (on `main`, already pushed to `origin/main`)
 
 `ba8e4e83` doc · `2e028562` tokens · `76d12a62` @theme inline + guard · `a9a6a76a` aliases · `9d2bd6fe` .btn-* re-point · `d2baa16d` review polish
+
+> These 6 are non-contiguous in `git log` (2 unrelated parallel-session commits are interleaved) — use the explicit SHA list, not a `ba8e4e83..d2baa16d` range diff. Verified pushed to `origin/main` 2026-06-02.
 
 ## Verification
 
@@ -31,7 +33,7 @@ Consolidated the three overlapping token vocabularies in `frontend/web/src/style
 ## Carry-forward
 
 - The `--accent` semantic flip is deferred to **Phase 5** (DS-MIGRATE-05) — must not flip until all `var(--accent)` brand usages are repointed.
-- Phase 1 commits await explicit ship / `/animeenigma-after-update` before push.
+- Phase 1 commits are already on `origin/main` (pushed by a parallel session). No separate ship step needed for P1 code; a changelog entry was deliberately skipped (UXΔ = 0, zero user-facing change).
 
 ## References
 
