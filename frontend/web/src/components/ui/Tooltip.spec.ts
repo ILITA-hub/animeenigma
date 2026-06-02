@@ -8,7 +8,7 @@ import Tooltip from './Tooltip.vue'
 // open. Polyfill a no-op locally. Scoped to this spec — no shared infra change.
 beforeAll(() => {
   if (!('ResizeObserver' in globalThis)) {
-    ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
       observe() {}
       unobserve() {}
       disconnect() {}

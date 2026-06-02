@@ -7,7 +7,7 @@ import Popover from './Popover.vue'
 // null out wrapper.vm. Scoped to this spec — does NOT touch shared test infra.
 beforeAll(() => {
   if (!('ResizeObserver' in globalThis)) {
-    ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
       observe() {}
       unobserve() {}
       disconnect() {}
