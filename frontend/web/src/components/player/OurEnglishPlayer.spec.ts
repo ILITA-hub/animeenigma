@@ -20,11 +20,14 @@ vi.mock('@/api/client', () => ({
   },
 }))
 
-// hls.js is constructed in loadStream(); stub it so no real media engine runs.
+// hls.js stub. isSupported()=true so attachStream takes the MSE branch and
+// calls loadSource — the loadSourceSpy lets us assert the stream actually
+// attached (i.e. attachStream did NOT early-return on a null videoRef).
+const loadSourceSpy = vi.fn()
 vi.mock('hls.js', () => ({
   default: class {
-    static isSupported() { return false }
-    loadSource() {}
+    static isSupported() { return true }
+    loadSource(...a: unknown[]) { loadSourceSpy(...a) }
     attachMedia() {}
     on() {}
     destroy() {}
@@ -109,5 +112,23 @@ describe('OurEnglishPlayer provider pinning', () => {
     const serversPrefer = getServers.mock.calls[0][2]
     expect(serversPrefer).toBeUndefined()
     expect(serversPrefer).not.toBe('nineanime')
+  })
+
+  // Regression guard for the "controls visible, frozen at 0:00" bug: on the
+  // initial auto-load, loadingEpisodes was still true while selectEpisode ran,
+  // so the <video> (in the v-else branch) wasn't mounted, videoRef was null,
+  // and attachStream early-returned — the stream resolved but never attached.
+  // The fix defers auto-select until after loadingEpisodes is false + nextTick,
+  // so attachStream reaches hls.loadSource.
+  it('attaches the stream on initial auto-load (reaches hls.loadSource)', async () => {
+    mountPlayer()
+    await flushPromises()
+    await flushPromises()
+    await flushPromises()
+
+    expect(getStream).toHaveBeenCalled()
+    // loadSource being called proves attachStream did NOT early-return on a
+    // null videoRef — i.e. the <video> was mounted by the time it ran.
+    expect(loadSourceSpy).toHaveBeenCalled()
   })
 })

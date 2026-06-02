@@ -161,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
@@ -327,7 +327,12 @@ function disposePlayer() {
   }
 }
 
-function attachStream(url: string, type: 'hls' | 'mp4', referer: string) {
+async function attachStream(url: string, type: 'hls' | 'mp4', referer: string) {
+  // Defense-in-depth: the <video> may not be mounted yet on the first load
+  // (it lives behind v-else / v-show). Wait one render tick for the ref before
+  // giving up — a null ref here means the stream silently never attaches and
+  // the player freezes at 0:00.
+  if (!videoRef.value) await nextTick()
   const v = videoRef.value
   if (!v) return
   disposePlayer()
@@ -356,6 +361,8 @@ function attachStream(url: string, type: 'hls' | 'mp4', referer: string) {
 
 async function fetchEpisodes() {
   loadingEpisodes.value = true
+  let startEp: ScraperEpisode | null = null
+  let fromRoomSync = false
   try {
     const prefer = preferredProvider.value || undefined
     const resp = await scraperApi.getEpisodes(props.animeId, prefer)
@@ -372,7 +379,7 @@ async function fetchEpisodes() {
     activeProvider.value = env?.meta?.provider ?? ''
 
     if (available.value) {
-      const startEp =
+      startEp =
         props.initialEpisode != null
           ? eps.find(e => e.number === props.initialEpisode) ?? eps[0]
           : eps[0]
@@ -380,16 +387,24 @@ async function fetchEpisodes() {
       // already has an episode set) must load the stream directly on mount —
       // there is no incoming room echo to react to. fromRoomSync=true bypasses
       // the emit-to-room guard so the stream loads immediately.
-      if (props.room && props.initialEpisode != null) {
-        await selectEpisode(startEp, true)
-      } else {
-        await selectEpisode(startEp)
-      }
+      fromRoomSync = !!(props.room && props.initialEpisode != null)
     }
   } catch {
     available.value = false
   } finally {
     loadingEpisodes.value = false
+  }
+
+  // CRITICAL: auto-select AFTER loadingEpisodes is false + a render tick.
+  // The <video> element lives in the v-else branch that only renders once
+  // loadingEpisodes is false. If we select (and attachStream) while
+  // loadingEpisodes is still true, videoRef is null, attachStream early-returns,
+  // and the stream never attaches — the player sits frozen at 0:00 even though
+  // the stream resolved. Deferring past nextTick guarantees the element + ref
+  // exist before attachStream runs.
+  if (startEp) {
+    await nextTick()
+    await selectEpisode(startEp, fromRoomSync)
   }
 }
 
@@ -454,7 +469,7 @@ async function loadStream() {
     activeTracks.value = stream.tracks ?? []
     const referer = stream.headers?.Referer || stream.headers?.referer || ''
     const type: 'hls' | 'mp4' = source.type === 'mp4' ? 'mp4' : 'hls'
-    attachStream(source.url, type, referer)
+    await attachStream(source.url, type, referer)
     // Auto-pick a default subtitle track if upstream marked one
     const def = activeTracks.value.find(t => t.default)
     if (def) selectedSubKey.value = def.file
