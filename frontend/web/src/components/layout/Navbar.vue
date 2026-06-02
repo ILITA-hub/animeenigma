@@ -547,11 +547,11 @@ onUnmounted(() => {
 }
 
 .brand-b1 {
-  color: var(--accent, #00d4ff);
+  color: var(--brand-cyan);
 }
 
 .brand-b2 {
-  color: var(--ink, #ffffff);
+  color: var(--foreground);
 }
 
 /* ------------------------------------------------------------------ */
@@ -563,7 +563,7 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 500;
   font-family: var(--f-ui, "Inter", system-ui, sans-serif);
-  color: var(--ink-3, rgba(255, 255, 255, 0.56));
+  color: var(--muted-foreground);
   border-radius: var(--r-sm, 8px);
   transition: color 0.15s ease;
   text-decoration: none;
@@ -571,12 +571,12 @@ onUnmounted(() => {
 }
 
 .nav-link-nt:hover {
-  color: var(--ink, #ffffff);
+  color: var(--foreground);
 }
 
 /* Active state — colour lift + animated underline pill */
 .nav-link-nt--active {
-  color: var(--ink, #ffffff);
+  color: var(--foreground);
 }
 
 .nav-link-nt--active::after {
@@ -586,9 +586,9 @@ onUnmounted(() => {
   right: 14px;
   bottom: -16px;
   height: 2px;
-  background: var(--accent, #00d4ff);
+  background: var(--brand-cyan);
   border-radius: 2px;
-  box-shadow: 0 0 10px var(--accent, #00d4ff);
+  box-shadow: 0 0 10px var(--brand-cyan);
   /* Animate in when active class is applied */
   transition: opacity 0.2s ease, box-shadow 0.2s ease;
 }
@@ -602,7 +602,7 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   border-radius: var(--r-md, 12px);
-  color: var(--ink-3, rgba(255, 255, 255, 0.56));
+  color: var(--muted-foreground);
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -612,7 +612,7 @@ onUnmounted(() => {
 
 .icon-btn-nt:hover {
   background: rgba(255, 255, 255, 0.05);
-  color: var(--ink, #ffffff);
+  color: var(--foreground);
 }
 
 /* ------------------------------------------------------------------ */
@@ -637,7 +637,7 @@ onUnmounted(() => {
 
 .lang-pill-nt:hover {
   background: rgba(255, 255, 255, 0.05);
-  color: var(--ink, #ffffff);
+  color: var(--foreground);
 }
 
 /* ------------------------------------------------------------------ */
@@ -666,7 +666,7 @@ onUnmounted(() => {
 .avatar-initials {
   font-size: 13px;
   font-weight: 600;
-  color: var(--accent, #00d4ff);
+  color: var(--brand-cyan);
   line-height: 1;
 }
 

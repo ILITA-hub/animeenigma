@@ -10,7 +10,7 @@
   width: 28px;
   height: 28px;
   border-radius: var(--r-sm, 8px);
-  background: linear-gradient(135deg, var(--accent, #00d4ff) 0%, var(--pink, #ff2d7c) 100%);
+  background: linear-gradient(135deg, var(--brand-cyan) 0%, var(--brand-pink) 100%);
   box-shadow: var(--accent-glow, 0 0 30px rgba(0, 212, 255, 0.28));
   position: relative;
   flex-shrink: 0;
@@ -35,7 +35,7 @@
   font-family: var(--f-display, "Manrope", "Inter", system-ui, sans-serif);
   font-weight: 800;
   font-size: 11px;
-  color: var(--accent, #00d4ff);
+  color: var(--brand-cyan);
   z-index: 1;
   line-height: 1;
 }
