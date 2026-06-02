@@ -42,6 +42,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/sourceprobe"
 )
 
 // providerName is the stable identifier returned by Name() and used as the
@@ -293,16 +294,8 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	}
 
 	if hit, ok := p.cache.getServers(ctx, showID, ep); ok {
-		servers := materializeServers(hit)
-		if len(servers) == 0 {
-			err := domain.WrapExtractFailed(
-				fmt.Errorf("no playable (non-embed) sources for %s ep %s", showID, ep),
-				"allanime: ListServers")
-			p.markStage(health.StageServers, err)
-			return nil, err
-		}
 		p.markStage(health.StageServers, nil)
-		return servers, nil
+		return materializeServers(hit), nil
 	}
 
 	sources, err := p.fetchSources(ctx, showID, ep)
@@ -319,36 +312,13 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	}
 
 	p.cache.setServers(ctx, showID, ep, sources)
-
-	servers := materializeServers(sources)
-	if len(servers) == 0 {
-		// Every source was an embed-page host (e.g. all ok.ru) — none playable.
-		// Return ErrExtractFailed so the orchestrator fails over to the next
-		// provider instead of handing the FE an empty server list.
-		err := domain.WrapExtractFailed(
-			fmt.Errorf("no playable (non-embed) sources for %s ep %s", showID, ep),
-			"allanime: ListServers")
-		p.markStage(health.StageServers, err)
-		return nil, err
-	}
 	p.markStage(health.StageServers, nil)
-	return servers, nil
+	return materializeServers(sources), nil
 }
 
 func materializeServers(sources []sourceURL) []domain.Server {
 	out := make([]domain.Server, 0, len(sources))
 	for _, s := range sources {
-		// Skip sources that resolve to an HTML embed-page host (e.g. ok.ru):
-		// they are not playable through the HLS proxy, so they must not be
-		// offered as servers — otherwise the FE pins one and dead-ends on a 502
-		// instead of falling over to a playable source/provider.
-		u := decodeSourceURL(s.SourceURL)
-		if strings.HasPrefix(u, "//") {
-			u = "https:" + u
-		}
-		if isEmbedPageHost(u) {
-			continue
-		}
 		name := s.SourceName
 		if name == "" {
 			name = "Default"
@@ -391,58 +361,30 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 		p.cache.setServers(ctx, showID, ep, sources)
 	}
 
-	// Pick the matching server by name; if serverID empty/unknown, take the
-	// highest-priority source.
+	// Build the candidate order: the caller-pinned serverID first (a hint), then
+	// the remaining sources by priority. Probe each candidate's actual content
+	// and use the first that is a real stream — skipping HTML embed pages
+	// (ok.ru, uns.bio, vidnest.io, …) DYNAMICALLY, with no host list. If the
+	// pinned server turns out to be an embed, we transparently fall back to the
+	// best playable source rather than dead-ending.
+	candidates := orderCandidates(sources, serverID)
 	var pick *sourceURL
-	if serverID == "" {
-		sort.SliceStable(sources, func(i, j int) bool { return sources[i].Priority > sources[j].Priority })
-		// Pick the highest-priority source that is NOT an embed-page host, so
-		// the auto path uses a playable stream instead of dead-ending on (and
-		// failing over from) e.g. an ok.ru embed.
-		for i := range sources {
-			u := decodeSourceURL(sources[i].SourceURL)
-			if strings.HasPrefix(u, "//") {
-				u = "https:" + u
-			}
-			if isEmbedPageHost(u) {
-				continue
-			}
-			pick = &sources[i]
-			break
+	var streamURL string
+	for i := range candidates {
+		u := resolveSourceURL(candidates[i])
+		if u == "" {
+			continue // not a fully-qualified http(s) URL
 		}
-	} else {
-		for i := range sources {
-			if strings.EqualFold(sources[i].SourceName, serverID) {
-				pick = &sources[i]
-				break
-			}
+		if p.classify(ctx, u) != sourceprobe.Stream {
+			continue // embed page / unprobeable — skip
 		}
+		pick = &candidates[i]
+		streamURL = u
+		break
 	}
 	if pick == nil {
 		err := domain.WrapExtractFailed(
-			fmt.Errorf("no source matching server %q", serverID),
-			"allanime: GetStream")
-		p.markStage(health.StageStream, err)
-		return nil, err
-	}
-
-	streamURL := decodeSourceURL(pick.SourceURL)
-	// Normalize protocol-relative URLs (//host/path → https://host/path).
-	if strings.HasPrefix(streamURL, "//") {
-		streamURL = "https:" + streamURL
-	}
-	if !strings.HasPrefix(streamURL, "http") {
-		err := domain.WrapExtractFailed(
-			fmt.Errorf("source %q is not a fully-qualified URL (got %q)", pick.SourceName, streamURL),
-			"allanime: GetStream")
-		p.markStage(health.StageStream, err)
-		return nil, err
-	}
-	// Reject known embed page hosts — they serve an HTML player, not a direct
-	// HLS/MP4 stream. ErrExtractFailed lets the orchestrator try the next server.
-	if isEmbedPageHost(streamURL) {
-		err := domain.WrapExtractFailed(
-			fmt.Errorf("source %q resolves to embed page host %q", pick.SourceName, streamURL),
+			fmt.Errorf("no playable source for server %q (all embed/unresolvable)", serverID),
 			"allanime: GetStream")
 		p.markStage(health.StageStream, err)
 		return nil, err
@@ -501,6 +443,51 @@ func cachedToStream(c *cachedStream) *domain.Stream {
 		})
 	}
 	return out
+}
+
+// resolveSourceURL decodes a source's (possibly obfuscated, possibly
+// protocol-relative) URL into a fully-qualified http(s) URL, or "" if it is
+// not one.
+func resolveSourceURL(s sourceURL) string {
+	u := decodeSourceURL(s.SourceURL)
+	if strings.HasPrefix(u, "//") {
+		u = "https:" + u
+	}
+	if !strings.HasPrefix(u, "http") {
+		return ""
+	}
+	return u
+}
+
+// orderCandidates returns sources ordered for stream resolution: the
+// caller-pinned serverID first (a hint), then the rest by descending priority.
+func orderCandidates(sources []sourceURL, serverID string) []sourceURL {
+	pinned := make([]sourceURL, 0, 2)
+	rest := make([]sourceURL, 0, len(sources))
+	for _, s := range sources {
+		if serverID != "" && strings.EqualFold(s.SourceName, serverID) {
+			pinned = append(pinned, s)
+		} else {
+			rest = append(rest, s)
+		}
+	}
+	sort.SliceStable(rest, func(i, j int) bool { return rest[i].Priority > rest[j].Priority })
+	sort.SliceStable(pinned, func(i, j int) bool { return pinned[i].Priority > pinned[j].Priority })
+	return append(pinned, rest...)
+}
+
+// classify probes a resolved URL (cached) and reports whether it is a real
+// stream, an HTML embed page, or unknown. Stream/Embed verdicts are cached;
+// Unknown (transient probe failure) is not, so a later retry can re-probe.
+func (p *Provider) classify(ctx context.Context, rawURL string) sourceprobe.Kind {
+	if k, ok := p.cache.getClassification(ctx, rawURL); ok {
+		return sourceprobe.Kind(k)
+	}
+	k := sourceprobe.Classify(ctx, p.http, rawURL, apiReferer)
+	if k != sourceprobe.Unknown {
+		p.cache.setClassification(ctx, rawURL, int(k))
+	}
+	return k
 }
 
 // fetchSources POSTs the SourceUrls APQ and returns the (decrypted, if
@@ -661,59 +648,9 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// embedPageHosts lists known hosts that serve an HTML embed player rather than
-// a direct HLS/MP4 stream. AllAnime's sourceUrls for Vid-mp4 and similar
-// server types frequently point here. Returning ErrExtractFailed for these
-// causes the orchestrator to try the next server instead of marking the whole
-// stream stage DOWN with an unplayable URL.
-var embedPageHosts = map[string]bool{
-	"vidstreaming.io":     true,
-	"www.vidstreaming.io": true,
-	"gogo-stream.com":     true,
-	"www.gogo-stream.com": true,
-	"gogo-play.net":       true,
-	"www.gogo-play.net":   true,
-	"streamsb.net":        true,
-	"www.streamsb.net":    true,
-	"streamlare.com":      true,
-	"www.streamlare.com":  true,
-	"bysekoze.com":        true,
-	// The hosts below serve an HTML embed player, NOT a direct HLS/MP4 stream.
-	// They are not in the HLS proxy allowlist and have no embed extractor, so
-	// feeding them to hls.js dead-ends on a 502. Rejecting them (and not
-	// offering them as servers) makes the FE pick a direct source — e.g.
-	// AllAnime's "Yt-mp4" on the allowlisted fast4speed.rsvp CDN — or fail over
-	// to the next provider. Confirmed text/html via direct fetch 2026-06-02:
-	//   - ok.ru        (AllAnime "Ok"     → /videoembed/<id>)
-	//   - uns.bio      (AllAnime "Uni",   e.g. allanime.uns.bio)
-	//   - vidnest.io   (AllAnime "Vn-Hls")
-	//   - mp4upload.com
-	// Matching is suffix-based (see isEmbedPageHost) so CDN subdomain churn
-	// (allanime.uns.bio, edge.vidnest.io, …) stays covered.
-	"ok.ru":         true,
-	"uns.bio":       true,
-	"vidnest.io":    true,
-	"mp4upload.com": true,
-}
-
-// isEmbedPageHost reports whether the URL's host is (or is a subdomain of) a
-// known HTML-embed-page host. Suffix matching keeps subdomain churn covered.
-func isEmbedPageHost(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	h := strings.ToLower(u.Hostname())
-	if embedPageHosts[h] {
-		return true
-	}
-	for host := range embedPageHosts {
-		if strings.HasSuffix(h, "."+host) {
-			return true
-		}
-	}
-	return false
-}
+// Embed-vs-stream classification is no longer a hardcoded host list — it is
+// determined dynamically by probing the actual response content. See
+// Provider.classify (above) and internal/sourceprobe.
 
 // Compile-time assertion: Provider satisfies domain.Provider. Failing this
 // assertion is a build error — the strongest possible interface-conformance

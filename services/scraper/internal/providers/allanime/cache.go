@@ -128,3 +128,26 @@ func (l *cacheLayer) setStream(ctx context.Context, showID, ep, server string, s
 	}
 	_ = l.c.Set(ctx, keyStream(showID, ep, server), s, streamTTLCap)
 }
+
+// --- source classification (stream vs embed page) ------------------------
+//
+// Keyed by the exact resolved URL. AllAnime URLs rotate, so entries are
+// naturally short-lived; the TTL just amortizes repeated probes within a
+// server-list window.
+
+func keyClassification(rawURL string) string {
+	return fmt.Sprintf("scraper:allanime:classify:%s", rawURL)
+}
+
+// getClassification returns the cached sourceprobe.Kind (as int) for a URL.
+func (l *cacheLayer) getClassification(ctx context.Context, rawURL string) (int, bool) {
+	var k int
+	if err := l.c.Get(ctx, keyClassification(rawURL), &k); err == nil {
+		return k, true
+	}
+	return 0, false
+}
+
+func (l *cacheLayer) setClassification(ctx context.Context, rawURL string, kind int) {
+	_ = l.c.Set(ctx, keyClassification(rawURL), kind, serversCacheTTL)
+}

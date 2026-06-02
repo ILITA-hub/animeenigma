@@ -249,11 +249,34 @@ func TestListServers_Frieren_Ep1(t *testing.T) {
 	}
 }
 
-func TestGetStream_HappyPath(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.example.com/frieren-ep1.m3u8","sourceName":"Default","type":"iframe","priority":9,"fileExtenstion":"m3u8"}]}}}`))
+// allanimeTestServer serves both the GraphQL API (any non-.m3u8/.embed path)
+// and the source URLs the provider then probes: a *.m3u8 path returns an HLS
+// manifest (→ Stream), an *.embed path returns an HTML page (→ Embed). The
+// sourceUrls in the API JSON point back at this same server so GetStream's
+// content-probe sees deterministic, in-process content (no real network).
+func allanimeTestServer(t *testing.T, sourcesJSONf func(base string) string) *httptest.Server {
+	t.Helper()
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, ".m3u8"):
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-VERSION:3\n"))
+		case strings.HasSuffix(r.URL.Path, ".embed"):
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte("<!doctype html><html><body>embed player</body></html>"))
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(sourcesJSONf(srv.URL)))
+		}
 	}))
+	return srv
+}
+
+func TestGetStream_HappyPath(t *testing.T) {
+	srv := allanimeTestServer(t, func(base string) string {
+		return `{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"` + base + `/s.m3u8","sourceName":"Default","type":"iframe","priority":9,"fileExtenstion":"m3u8"}]}}}`
+	})
 	defer srv.Close()
 
 	p := newTestProvider(t, srv)
@@ -269,17 +292,40 @@ func TestGetStream_HappyPath(t *testing.T) {
 	}
 }
 
-func TestGetStream_NoMatchingServer(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"https://cdn.example.com/x.m3u8","sourceName":"Default","priority":5}]}}}`))
-	}))
+// TestGetStream_AllEmbeds_FailsOver — when every source is an HTML embed page,
+// GetStream returns ErrExtractFailed so the orchestrator fails over.
+func TestGetStream_AllEmbeds_FailsOver(t *testing.T) {
+	srv := allanimeTestServer(t, func(base string) string {
+		return `{"data":{"episode":{"episodeString":"1","sourceUrls":[{"sourceUrl":"` + base + `/ok.embed","sourceName":"Ok","priority":9}]}}}`
+	})
 	defer srv.Close()
 
 	p := newTestProvider(t, srv)
-	_, err := p.GetStream(context.Background(), "", "frieren_show_id:1", "Nonexistent-Server", domain.CategorySub)
+	_, err := p.GetStream(context.Background(), "", "frieren_show_id:1", "Ok", domain.CategorySub)
 	if !errors.Is(err, domain.ErrExtractFailed) {
-		t.Fatalf("expected ErrExtractFailed, got %v", err)
+		t.Fatalf("expected ErrExtractFailed for all-embed sources, got %v", err)
+	}
+}
+
+// TestGetStream_SkipsEmbedPicksStream — even when the caller pins an embed
+// server, GetStream transparently falls back to the playable source (dynamic
+// classification, no host list).
+func TestGetStream_SkipsEmbedPicksStream(t *testing.T) {
+	srv := allanimeTestServer(t, func(base string) string {
+		return `{"data":{"episode":{"episodeString":"1","sourceUrls":[` +
+			`{"sourceUrl":"` + base + `/ok.embed","sourceName":"Ok","priority":9},` +
+			`{"sourceUrl":"` + base + `/good.m3u8","sourceName":"Default","priority":5,"fileExtenstion":"m3u8"}]}}}`
+	})
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	// Pin the embed server "Ok"; expect fallback to the playable "Default".
+	stream, err := p.GetStream(context.Background(), "", "frieren_show_id:1", "Ok", domain.CategorySub)
+	if err != nil {
+		t.Fatalf("GetStream: %v", err)
+	}
+	if len(stream.Sources) == 0 || !strings.HasSuffix(stream.Sources[0].URL, "/good.m3u8") {
+		t.Fatalf("expected fallback to /good.m3u8 stream, got %+v", stream.Sources)
 	}
 }
 
@@ -359,10 +405,9 @@ func TestDecodeSourceURL_Passthrough(t *testing.T) {
 	}
 }
 
-// TestIsEmbedPageHost_OkRu locks in that ok.ru (Odnoklassniki) is treated as an
-// unplayable embed-page host. AllAnime's "Ok" source serves /videoembed/<id>
-// HTML, not a stream — feeding it to hls.js dead-ends on a 502 (ISS: EN player
-// frozen at 0:00 via allmanga.to → ok.ru).
+/* removed: host-list tests (TestIsEmbedPageHost_OkRu, TestMaterializeServers_*)
+   — embed detection is now content-probe-based; see sourceprobe + the
+   GetStream classifier tests above.
 func TestIsEmbedPageHost_OkRu(t *testing.T) {
 	cases := map[string]bool{
 		"https://ok.ru/videoembed/14469506337426": true,
@@ -414,3 +459,4 @@ func TestMaterializeServers_AllEmbeds_ReturnsEmpty(t *testing.T) {
 		t.Errorf("materializeServers(all embeds) = %d servers; want 0", len(got))
 	}
 }
+*/
