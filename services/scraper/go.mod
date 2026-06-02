@@ -12,7 +12,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/videoutils v0.0.0-00010101000000-000000000000
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/prometheus/client_golang v1.19.0
 	github.com/sebdah/goldie/v2 v2.5.5
@@ -96,8 +96,3 @@ exclude (
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/genproto v0.0.0-20240123012728-ef4313101c80
 )
-
-// Pin the modular genproto sub-module forward so it always wins resolution
-// against any other legacy genproto top-level versions transitively required
-// by anacrolix/torrent / anacrolix/dht via the workspace.
-require google.golang.org/genproto v0.0.0-20240213162025-012b6fc9bca9

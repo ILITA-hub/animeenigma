@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/render v1.0.3
 )
 

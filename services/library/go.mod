@@ -10,7 +10,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/anacrolix/torrent v1.61.0
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/minio/minio-go/v7 v7.0.67
 	github.com/prometheus/client_golang v1.19.0
 	golang.org/x/sync v0.18.0
@@ -21,6 +21,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/RoaringBitmap/roaring v1.2.3 // indirect
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect

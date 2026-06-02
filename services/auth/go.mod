@@ -10,7 +10,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.2.0
 	github.com/stretchr/testify v1.11.1
