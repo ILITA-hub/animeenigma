@@ -280,7 +280,7 @@
             {{ showSubtitleOverlay ? $t('player.hideSubtitles') : $t('player.showSubtitles') }}
           </button>
 
-          <div v-if="subtitleError" class="mt-1 text-xs text-red-400/70">{{ subtitleError }}</div>
+          <div v-if="subtitleError" class="mt-1 text-xs text-destructive/70">{{ subtitleError }}</div>
         </div>
       </div>
     </div>
