@@ -367,6 +367,52 @@ body {
   --pink: #ff2d7c;
   --pink-soft: rgba(255, 45, 124, 0.14);
   --violet: #a78bfa;
+
+  /* ============================================================
+     CANONICAL TOKENS (P1 consolidation — 2026-06-02)
+     Tier 2 = shadcn-vue semantic slots. Tier 3 = brand extension.
+     Components consume THESE, not the Tier-1 primitives above.
+     Ref: ./DESIGN-SYSTEM.md
+     ============================================================ */
+
+  /* Tier 2 — shadcn-vue semantic slots */
+  --background: var(--color-base);
+  --foreground: #ffffff;
+  --card: var(--color-surface);
+  --card-foreground: #ffffff;
+  --popover: var(--elevated);
+  --popover-foreground: #ffffff;
+  --primary: var(--color-cyan-500);
+  --primary-foreground: var(--color-base);
+  --secondary: var(--elevated);
+  --secondary-foreground: #ffffff;
+  --muted: var(--surface-2);
+  --muted-foreground: rgba(255, 255, 255, 0.56);
+  --border: rgba(255, 255, 255, 0.10);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: var(--color-cyan-400);
+  /* NOTE: shadcn --accent (hover surface) is deferred to P2 — see DESIGN-SYSTEM.md.
+     --accent stays brand-cyan below for back-compat. */
+
+  /* Tier 3 — brand extension (Neon Tokyo) */
+  --brand-cyan: var(--color-cyan-400);
+  --brand-pink: var(--color-pink-500);
+  --brand-pink-foreground: #ffffff;
+  --brand-violet: var(--violet);
+  --success-foreground: var(--color-base);
+  --warning-foreground: var(--color-base);
+  --info: #5ab8ff;
+  --info-foreground: var(--color-base);
+  --destructive: #ff4d4d;
+  --destructive-foreground: #ffffff;
+  /* soft (chip/badge) backgrounds @ ~14% */
+  --primary-soft: rgba(0, 184, 230, 0.14);
+  --brand-pink-soft: rgba(255, 45, 124, 0.14);
+  --success-soft: rgba(0, 255, 157, 0.14);
+  --warning-soft: rgba(255, 214, 0, 0.14);
+  --info-soft: rgba(90, 184, 255, 0.14);
+  --destructive-soft: rgba(255, 77, 77, 0.14);
+
   --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-2xl: 28px;
   --f-display: var(--font-display);
   --f-ui: var(--font-sans);
