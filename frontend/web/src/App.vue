@@ -1,5 +1,11 @@
 <template>
   <div id="app" class="min-h-screen bg-base">
+    <!-- Design-system Phase 3 / Wave 3: a single app-root TooltipProvider so any
+         <Tooltip> primitive has its required ancestor app-wide. Reka's
+         TooltipProvider renders as a transparent Slot (no extra DOM node), so it
+         does NOT introduce a wrapper element or shift layout — #app stays the
+         single root. -->
+    <TooltipProvider :delay-duration="300">
     <!-- Desktop Navbar -->
     <Navbar />
 
@@ -71,11 +77,13 @@
       </div>
     </footer>
 
+    </TooltipProvider>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onErrorCaptured, ref, watch } from 'vue'
+import { TooltipProvider } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
