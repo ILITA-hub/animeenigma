@@ -6,7 +6,7 @@ wave: 1
 depends_on: []
 files_modified:
   - frontend/web/package.json
-  - frontend/web/bun.lockb
+  - frontend/web/bun.lock
   - frontend/web/components.json
   - frontend/web/src/lib/utils.ts
   - frontend/web/src/lib/utils.spec.ts
@@ -30,7 +30,7 @@ must_haves:
     - "Button exposes default(cyan)/brand(pink)/ghost/outline/destructive variants and sm/md/lg/icon sizes via cva."
     - "Card root still renders the Neon-Tokyo glass look; Card subcomponents (Header/Title/Content/Footer) exist and render token-driven base classes."
     - "cn() merges class lists and de-dupes conflicting Tailwind utilities (last wins)."
-    - "Only reka-ui + class-variance-authority + clsx + tailwind-merge were added; no package-lock.json appeared; bun.lockb updated."
+    - "Only reka-ui + class-variance-authority + clsx + tailwind-merge were added; no package-lock.json appeared; bun.lock updated."
   artifacts:
     - path: "frontend/web/src/lib/utils.ts"
       provides: "cn() helper (clsx + tailwind-merge)"
@@ -135,7 +135,7 @@ CANONICAL shadcn-vue Button shape (reka-ui Primitive) — adapt, don't copy verb
 
 <task type="auto" tdd="true">
   <name>Task 1: Install the 4 deps, write cn(), TDD the cn() helper</name>
-  <files>frontend/web/package.json, frontend/web/bun.lockb, frontend/web/src/lib/utils.ts, frontend/web/src/lib/utils.spec.ts</files>
+  <files>frontend/web/package.json, frontend/web/bun.lock, frontend/web/src/lib/utils.ts, frontend/web/src/lib/utils.spec.ts</files>
   <behavior>
     cn() (frontend/web/src/lib/utils.ts):
     - Test 1: cn('a', 'b') === 'a b' (concatenates).
@@ -149,7 +149,7 @@ Implements DS-LIB-01 + DS-NF-03 (deps + cn).
 
 Step 1 — install deps via bun (NEVER the shadcn CLI; NEVER `shadcn-vue init`). From `frontend/web/`:
   `bun add reka-ui@2.9.8 class-variance-authority@0.7.1 clsx@2.1.1 tailwind-merge@3.6.0`
-These are runtime dependencies (cn + components execute at render time), so they belong in `dependencies`, not `devDependencies` — `bun add` (no `-d`) places them there. Expected: package.json gains the 4 entries; bun.lockb updates; NO `package-lock.json` is created (if one appears, delete it and re-run — Pitfall 2).
+These are runtime dependencies (cn + components execute at render time), so they belong in `dependencies`, not `devDependencies` — `bun add` (no `-d`) places them there. Expected: package.json gains the 4 entries; bun.lock updates; NO `package-lock.json` is created (if one appears, delete it and re-run — Pitfall 2).
 
 Step 2 — write the cn() helper at frontend/web/src/lib/utils.ts (exact canonical template):
   import { type ClassValue, clsx } from 'clsx'
@@ -359,7 +359,7 @@ Per RESEARCH.md "Security Domain": this is a pure client-side component refactor
 
 | Threat ID | Category | Component | Disposition | Mitigation Plan |
 |-----------|----------|-----------|-------------|-----------------|
-| T-02-01 | Tampering | new npm deps (reka-ui/cva/clsx/tailwind-merge) | accept | Versions pinned + licenses verified MIT/Apache (DS-NF-03); bun.lockb committed; no `package-lock.json` (Pitfall 2 guard in Task 1 verify). Low-value, well-known libs. |
+| T-02-01 | Tampering | new npm deps (reka-ui/cva/clsx/tailwind-merge) | accept | Versions pinned + licenses verified MIT/Apache (DS-NF-03); bun.lock committed; no `package-lock.json` (Pitfall 2 guard in Task 1 verify). Low-value, well-known libs. |
 | T-02-02 | Information disclosure | `cn()` passes caller `class` through | accept | `cn()` only string-merges Tailwind classes for trusted internal callers; no user input reaches it; tailwind-merge is render-time string ops, no eval. |
 </threat_model>
 
