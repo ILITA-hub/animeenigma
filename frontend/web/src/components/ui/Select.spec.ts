@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import Select, { type SelectOption } from './Select.vue'
+import Select from './Select.vue'
+import type { SelectOption } from './index'
 
 // NOTE on jsdom portal limitation (RESEARCH Pitfall 6): Reka SelectContent
 // portals to body and jsdom won't fully render it. We assert on the trigger +
