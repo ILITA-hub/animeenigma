@@ -6,17 +6,17 @@ created: 2026-06-02
 # Project State
 
 ## Current Position
-**Status:** In progress — v1.0 Design System Consolidation
-**Current Phase:** Phase 1 complete; Phase 2 not yet planned
+**Status:** In progress — v1.0 Design System Consolidation (autonomous run, phases 2→6)
+**Current Phase:** Phase 2 complete + verified live; Phase 3 next
 **Last Activity:** 2026-06-02
-**Last Activity Description:** Workstream seeded from approved design doc; PROJECT/REQUIREMENTS/ROADMAP/MILESTONES authored. Phase 1 (Token Foundation) was implemented + shipped on `main` (commits ba8e4e83..d2baa16d) prior to workstream creation; recorded as complete.
+**Last Activity Description:** Phase 2 (shadcn-vue Install + Button/Card Proof) executed end-to-end (research→plan→plan-check→execute→verify). Toolchain installed (reka-ui@2.9.8, cva@0.7.1, clsx@2.1.1, tailwind-merge@3.6.0), Button+Card on cn()/cva with back-compat aliases, 714 vitest, vue-tsc clean (9 consumers unchanged), main.css untouched. A2 white-text decision confirmed live; standing 5-surface smoke = zero rendered diff. Commits 7083bbca, d0a68c15, bd975bfa (+SUMMARY ab4a26e2), unpushed.
 
 ## Progress
-**Phases Complete:** 1 / 6
-**Current Plan:** N/A (Phase 2 awaiting `/gsd-plan-phase --ws design-system`)
+**Phases Complete:** 2 / 6
+**Current Plan:** Phase 3 (Primitive Set Swap) — awaiting research→plan→execute
 
 ## Session Continuity
-**Stopped At:** Workstream review (pre–Phase-2 planning)
+**Stopped At:** Phase 2 complete; entering Phase 3
 **Resume File:** None
 
 ## Notes

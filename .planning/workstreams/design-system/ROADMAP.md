@@ -17,7 +17,7 @@
 | Phase | Title | Status |
 |-------|-------|--------|
 | 1 | Token Foundation + Reference | ✅ Complete (2026-06-02 — 6 commits, listed individually below [the `ba8e4e83`→`d2baa16d` span is non-contiguous: 2 unrelated parallel-session commits are interleaved, so don't `git diff` the range]; tsc clean, 686 vitest pass, 5-surface in-browser smoke, opus final review *approve-with-minors* fixed. **Already pushed to `origin/main`** via a parallel session's push. See plan `docs/superpowers/plans/2026-06-02-design-system-consolidation-p1.md`) |
-| 2 | shadcn-vue Install + Button/Card Proof | ⏳ Planned (1 plan) |
+| 2 | shadcn-vue Install + Button/Card Proof | ✅ Complete (2026-06-02 — 4 commits 7083bbca..bd975bfa; reka-ui+cva+clsx+tailwind-merge installed, Button+Card on cn()/cva, 714 vitest, vue-tsc clean = 9 consumers unchanged, main.css untouched, A2 white-text confirmed live, 5-surface smoke zero-diff) |
 | 3 | Primitive Set Swap | ⏳ Planned |
 | 4 | High-Traffic Surface Migration | ⏳ Planned |
 | 5 | Tail Sweep + Lint Enforcement | ⏳ Planned |
