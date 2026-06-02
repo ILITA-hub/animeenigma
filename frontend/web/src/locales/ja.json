@@ -1112,6 +1112,8 @@
     "capacity_full_title": "ルームが満員です (10/10)",
     "capacity_full_back_button": "アニメに戻る",
     "auth_expired_error": "セッションの有効期限が切れました — 再度ログインしてください",
+    "guest_banner_text": "ゲストとして視聴しています。",
+    "guest_banner_login": "ログインして進捗を保存",
     "loading": "ルームを読み込み中…",
     "member_joined": "{username} が参加しました",
     "member_left": "{username} が退出しました",
