@@ -4,6 +4,27 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-020: OurEnglish (EN) player "only allanime works" / freezes at 0:00 — hls.js 1.6.x `bufferAddCodecError`
+- **Date:** 2026-06-02
+- **Severity:** High (every HLS provider unplayable in-browser; only the single direct-MP4 provider worked)
+- **Symptom:** EN player froze at 0:00 with no error for the default/auto path and for animepahe/miruro; only allanime (and only when manually pinned) played.
+- **Root cause:** AnimePahe/miruro serve **owocdn HLS media playlists with no `CODECS` attribute**. hls.js sniffs the audio from the ADTS header (profile bits = 0) → derives codec string **`mp4a.40.1` (AAC Main)**. Chrome MSE **rejects `mp4a.40.1`** (supports `mp4a.40.2`/`.5`) → fatal `bufferAddCodecError` at `addSourceBuffer`. The **entire hls.js 1.6.x line (1.6.0→1.6.16)** has this regression; **1.5.x tolerated it and played**. allanime worked only because it's the sole **direct-MP4** provider (no MSE codec path). The player also had **no `Hls.Events.ERROR` handler**, so the fatal error was swallowed → silent 0:00 freeze.
+- **Diagnosis:** headless Playwright (real Chromium + live prod proxy). Version matrix on the exact failing stream: 1.6.16 ❌, 1.6.0 ❌, **1.5.20 ✅** (currentTime 17.9s). Driving the *deployed* player reproduced the freeze and showed it fetched playlist→key→segment-1 then stalled `readyState=0`. Config workarounds (`defaultAudioCodec`, `swapAudioCodec`+`recoverMediaError`) do NOT fix it (parsed codec, not manifest codec, reaches the TS-transmux buffer).
+- **Fix:** pin `hls.js` to `~1.5.20` in `frontend/web/package.json` (caret `^` re-allows the broken 1.6.x — must NOT use caret). Added a guarded `Hls.Events.ERROR` handler in `OurEnglishPlayer.vue` (single network/media recovery attempt, then surfaces `player.sourceUnavailable` instead of a silent 0:00 freeze; MP4 path gets an `error` listener too).
+- **Status:** Fixed in source + verified (vite build clean, player spec passes, 1.5.20 plays animepahe+miruro in real Chromium). **Web deploy pending** — blocked by an unrelated parallel design-system session's untracked `DropdownMenu.*` WIP that fails `vue-tsc` (the web Docker build runs `vue-tsc && vite build`). Deploy once that clears.
+
+### ISS-021: Scraper health table "lies" — public `/scraper/health` reflects API liveness, not real playability
+- **Date:** 2026-06-02
+- **Severity:** Medium (operator/visibility; masks provider rot — surfaced while investigating ISS-020)
+- **Symptom:** `GET /api/anime/_/scraper/health` shows all providers green even when only some actually play.
+- **Root cause (multi-layer):** (1) The public endpoint is `GetHealth` → `Orchestrator.HealthSnapshot` → each `provider.HealthCheck()` = an in-memory `p.stages` **self-report** updated by `markStage()` during real FindID/ListEpisodes/ListServers/GetStream calls. It reflects **API liveness**, never real playback. `stream_segment` is never validated here (providers don't fetch segments) → seeded/absent → fake green. (2) A separate **real byte-oracle probe** (`ProbeRunner` + `InMemoryHealthCache`) exists but is only exposed at the admin endpoint `/scraper/health/admin`, and `IsHealthy` **fail-opens** on missing/stale/no-oracle (`cache.go`). (3) The oracle itself is **shallow**: `fetchSegment` GETs only `Sources[0].URL` (often the **master playlist**, which 200s) and never follows master→variant→segment — so e.g. **animefever reports `stream_segment=1` while its real `.ts` segments 502**.
+- **Fundamental limit:** a Go server-side probe **cannot** detect the ISS-020 class of bug (hls.js/MSE browser-codec rejection) — it would download the bytes and report green while every browser fails to decode. Real playability needs a **headless-browser canary**.
+- **Planned fix (NOT yet implemented — agreed for a focused follow-up):**
+  1. `fetchSegment` (probe.go): for m3u8 responses, follow master→variant→first real segment and validate a **media segment** downloads (note: proxy rewrites URIs to the `/api/streaming` public path while the probe uses the internal `/api/v1/hls-proxy` base — needs path reconciliation).
+  2. `GetHealth`: overlay the probe cache's real `stream_segment`/`stream` status onto the public per-provider view (+ honest per-provider `playable` flag) so the user-visible table reflects real-bytes validation, not API liveness.
+  3. **Headless-browser playability canary** (reuse the ISS-020 Playwright repro harness) — the only signal that catches browser-codec regressions; surface to health + Telegram alert.
+- **Status:** Root-caused & documented; fix planned (probe honesty + canary).
+
 ### ISS-019: Watch Together WebSocket reconnect loop after 15min — stale access token in `?token=`
 - **Date:** 2026-06-02
 - **Severity:** High (sync silently dies mid-session; endless `WebSocket connection failed` console spam, "Reconnecting…/MEMBERS(0)")

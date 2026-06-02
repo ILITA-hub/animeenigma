@@ -43,9 +43,22 @@
           @timeupdate="handleTimeUpdate"
         />
 
+        <!-- Stream failed (unrecoverable hls.js error / no playable source) -->
+        <div
+          v-if="streamFailed && !loadingStream"
+          class="absolute inset-0 flex items-center justify-center text-white/70 px-6"
+        >
+          <div class="text-center max-w-sm">
+            <svg class="w-14 h-14 mx-auto mb-3 text-amber-400/80" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <p>{{ $t('player.sourceUnavailable') }}</p>
+          </div>
+        </div>
+
         <!-- Placeholder when nothing loaded -->
         <div
-          v-if="!streamUrl && !loadingStream"
+          v-if="!streamUrl && !loadingStream && !streamFailed"
           class="absolute inset-0 flex items-center justify-center text-white/40"
         >
           <div class="text-center">
@@ -242,6 +255,11 @@ const selectedServerId = ref<string>('')
 
 const streamUrl = ref<string | null>(null)
 const activeTracks = ref<ScraperTrack[]>([])
+// True when hls.js hit an unrecoverable fatal error. Without this the player
+// swallowed every hls.js error and sat frozen at 0:00 with no feedback (part of
+// the "only allanime works" symptom). Surfaces player.sourceUnavailable so the
+// user knows to pick another Source instead of staring at a dead 0:00.
+const streamFailed = ref(false)
 
 // Empty string = auto (orchestrator picks); else pin to a specific provider
 const preferredProvider = ref<string>('')
@@ -293,6 +311,10 @@ const activeSubFormat = computed(() => {
 })
 
 let hls: Hls | null = null
+// Per-attach single-shot recovery guards so a flapping stream can't spin
+// recoverMediaError()/startLoad() into an OOM loop (observed in testing).
+let netRecoverDone = false
+let mediaRecoverDone = false
 
 function capitalizeProvider(name: string): string {
   switch (name) {
@@ -336,9 +358,14 @@ async function attachStream(url: string, type: 'hls' | 'mp4', referer: string) {
   const v = videoRef.value
   if (!v) return
   disposePlayer()
+  streamFailed.value = false
+  netRecoverDone = false
+  mediaRecoverDone = false
 
   if (type === 'mp4') {
     v.src = buildProxyUrl(url, referer, 'mp4')
+    // Surface a hard MP4 failure (e.g. upstream 502) instead of a silent 0:00.
+    v.addEventListener('error', () => { streamFailed.value = true }, { once: true })
     v.play().catch(() => { /* user-gesture required */ })
     return
   }
@@ -350,6 +377,24 @@ async function attachStream(url: string, type: 'hls' | 'mp4', referer: string) {
     hls.attachMedia(v)
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       v.play().catch(() => { /* ignore */ })
+    })
+    // Without this handler hls.js fatal errors are swallowed and the player
+    // freezes at 0:00 with no feedback. Attempt ONE network/media recovery,
+    // then give up and surface the failure so the user can switch Source.
+    hls.on(Hls.Events.ERROR, (_evt, data) => {
+      if (!data.fatal) return
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !netRecoverDone) {
+        netRecoverDone = true
+        hls?.startLoad()
+        return
+      }
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecoverDone) {
+        mediaRecoverDone = true
+        hls?.recoverMediaError()
+        return
+      }
+      streamFailed.value = true
+      disposePlayer()
     })
   } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
     v.src = proxyUrl
@@ -424,6 +469,7 @@ async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
   selectedEpisode.value = ep
   loadingStream.value = true
   streamUrl.value = null
+  streamFailed.value = false
   servers.value = []
   selectedServerId.value = ''
   selectedSubKey.value = ''
@@ -437,6 +483,7 @@ async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
     servers.value = srvs
     if (srvs.length === 0) {
       streamUrl.value = null
+      streamFailed.value = true
       return
     }
     // Prefer sub > raw > dub for initial pick
@@ -445,6 +492,7 @@ async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
     await loadStream()
   } catch {
     streamUrl.value = null
+    streamFailed.value = true
   } finally {
     loadingStream.value = false
   }
@@ -462,6 +510,7 @@ async function loadStream() {
     const stream = env?.stream
     if (!stream || !stream.sources?.length) {
       streamUrl.value = null
+      streamFailed.value = true
       return
     }
     const source = stream.sources[0]
@@ -475,6 +524,7 @@ async function loadStream() {
     if (def) selectedSubKey.value = def.file
   } catch {
     streamUrl.value = null
+    streamFailed.value = true
   }
 }
 
