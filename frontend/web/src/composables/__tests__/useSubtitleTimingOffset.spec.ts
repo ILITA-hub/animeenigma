@@ -12,19 +12,25 @@ describe('useSubtitleTimingOffset', () => {
   })
 
   it('loads an existing stored value on init', async () => {
-    localStorage.setItem('subtitle_timing_offset', '2.5')
+    localStorage.setItem('aenigma_subtitle_timing_offset', '2.5')
     const { useSubtitleTimingOffset } = await import('../useSubtitleTimingOffset')
     expect(useSubtitleTimingOffset().offset.value).toBe(2.5)
   })
 
   it('clamps an out-of-range stored value to MAX', async () => {
-    localStorage.setItem('subtitle_timing_offset', '999')
+    localStorage.setItem('aenigma_subtitle_timing_offset', '999')
     const { useSubtitleTimingOffset } = await import('../useSubtitleTimingOffset')
     expect(useSubtitleTimingOffset().offset.value).toBe(30)
   })
 
+  it('clamps an out-of-range negative stored value to MIN', async () => {
+    localStorage.setItem('aenigma_subtitle_timing_offset', '-999')
+    const { useSubtitleTimingOffset } = await import('../useSubtitleTimingOffset')
+    expect(useSubtitleTimingOffset().offset.value).toBe(-30)
+  })
+
   it('falls back to 0 on a corrupt stored value', async () => {
-    localStorage.setItem('subtitle_timing_offset', 'not-a-number')
+    localStorage.setItem('aenigma_subtitle_timing_offset', 'not-a-number')
     const { useSubtitleTimingOffset } = await import('../useSubtitleTimingOffset')
     expect(useSubtitleTimingOffset().offset.value).toBe(0)
   })
@@ -54,6 +60,6 @@ describe('useSubtitleTimingOffset', () => {
   it('writes through to localStorage synchronously on change', async () => {
     const { useSubtitleTimingOffset } = await import('../useSubtitleTimingOffset')
     useSubtitleTimingOffset().nudge(1)
-    expect(localStorage.getItem('subtitle_timing_offset')).toBe('1')
+    expect(localStorage.getItem('aenigma_subtitle_timing_offset')).toBe('1')
   })
 })
