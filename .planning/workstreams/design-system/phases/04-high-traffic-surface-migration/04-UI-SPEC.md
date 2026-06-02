@@ -1,7 +1,8 @@
 ---
 phase: 4
 slug: high-traffic-surface-migration
-status: draft
+status: approved
+reviewed_at: 2026-06-02
 shadcn_initialized: true
 preset: "shadcn-vue (new-york, baseColor neutral, cssVariables) — components.json present"
 created: 2026-06-02
