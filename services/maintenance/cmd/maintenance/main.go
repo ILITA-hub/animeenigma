@@ -605,12 +605,33 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Build the same 🚨 report message format the player service used
+	// Footer "Обратная связь" feedback (player_type=feedback) is user commentary
+	// with no player context — render it by category instead of the player-error
+	// layout, and skip the player/anime lines that would just print blanks.
+	isFeedback := report.PlayerType == "feedback"
+
 	var b strings.Builder
-	b.WriteString("🚨 <b>Player Error Report</b>\n\n")
+	if isFeedback {
+		emoji, label := "📨", "User Feedback"
+		switch report.Category {
+		case "bug":
+			emoji, label = "🐛", "Bug Report"
+		case "issue":
+			emoji, label = "❓", "Issue Report"
+		case "feature":
+			emoji, label = "💡", "Feature Request"
+		}
+		b.WriteString(fmt.Sprintf("%s <b>%s</b>\n\n", emoji, label))
+	} else {
+		b.WriteString("🚨 <b>Player Error Report</b>\n\n")
+	}
 	b.WriteString(fmt.Sprintf("👤 <b>User:</b> %s (ID: %s)\n", escTelegram(report.Username), escTelegram(report.UserID)))
-	b.WriteString(fmt.Sprintf("🎬 <b>Player:</b> %s\n", escTelegram(report.PlayerType)))
-	b.WriteString(fmt.Sprintf("📺 <b>Anime:</b> %s\n", escTelegram(report.AnimeName)))
+	if !isFeedback {
+		b.WriteString(fmt.Sprintf("🎬 <b>Player:</b> %s\n", escTelegram(report.PlayerType)))
+	}
+	if report.AnimeName != "" {
+		b.WriteString(fmt.Sprintf("📺 <b>Anime:</b> %s\n", escTelegram(report.AnimeName)))
+	}
 	if report.EpisodeNumber != nil {
 		b.WriteString(fmt.Sprintf("📋 <b>Episode:</b> %d\n", *report.EpisodeNumber))
 	}
@@ -657,6 +678,12 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 			"emoji", "👀",
 			"message_id", msgID,
 		)
+	}
+
+	// Footer feedback is user commentary, not a diagnosable alert — it's now
+	// delivered to Telegram, so stop before invoking Claude root-cause analysis.
+	if isFeedback {
+		return
 	}
 
 	// Build ClassifiedMessage for Claude analysis

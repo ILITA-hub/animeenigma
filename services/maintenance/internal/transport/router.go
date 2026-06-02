@@ -32,20 +32,34 @@ func NewRouter(submitReport ReportSubmitFunc, submitAlert AlertEventFunc, webhoo
 		r.Post("/api/grafana-webhook", webhookHandler(submitAlert, webhookUser, webhookPass))
 	}
 
-	r.Post("/api/reports", func(w http.ResponseWriter, r *http.Request) {
+	r.Post("/api/reports", reportsHandler(submitReport))
+
+	return r
+}
+
+// reportsHandler accepts user-submitted reports from the player service: per-player
+// error reports (which carry anime context) and footer "Обратная связь" feedback
+// (player_type=feedback, no anime context).
+func reportsHandler(submitReport ReportSubmitFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		var report domain.ReportRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&report); err != nil {
 			http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
 			return
 		}
-		if report.PlayerType == "" || report.AnimeName == "" {
-			http.Error(w, `{"error":"player_type and anime_name required"}`, http.StatusBadRequest)
+		if report.PlayerType == "" {
+			http.Error(w, `{"error":"player_type required"}`, http.StatusBadRequest)
+			return
+		}
+		// anime_name is only meaningful for per-player error reports. Footer
+		// feedback carries no anime context, so requiring it here silently
+		// dropped every feedback message before it could reach Telegram.
+		if report.PlayerType != "feedback" && report.AnimeName == "" {
+			http.Error(w, `{"error":"anime_name required"}`, http.StatusBadRequest)
 			return
 		}
 		submitReport(report)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
-	})
-
-	return r
+	}
 }

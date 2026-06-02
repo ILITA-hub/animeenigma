@@ -151,6 +151,7 @@ type ReportRequest struct {
 	Username      string `json:"username"`
 	UserID        string `json:"user_id"`
 	PlayerType    string `json:"player_type"`
+	Category      string `json:"category,omitempty"` // bug | issue | feature (footer feedback)
 	AnimeName     string `json:"anime_name"`
 	EpisodeNumber *int   `json:"episode_number,omitempty"`
 	ServerName    string `json:"server_name"`
