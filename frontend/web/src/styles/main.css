@@ -214,7 +214,7 @@ body {
 
 .btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-cyan-400);
+  box-shadow: 0 0 0 2px var(--ring);
 }
 
 .btn:disabled {
@@ -229,14 +229,14 @@ body {
   justify-content: center;
   font-weight: 500;
   padding: 0.75rem 1.5rem;
-  background-color: var(--color-cyan-500);
-  color: var(--color-base);
+  background-color: var(--primary);
+  color: var(--primary-foreground);
   border-radius: 0.75rem;
   transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .btn-primary:hover {
-  background-color: var(--color-cyan-400);
+  background-color: var(--brand-cyan);
   box-shadow: var(--shadow-glow-cyan);
 }
 
@@ -251,8 +251,8 @@ body {
   justify-content: center;
   font-weight: 500;
   padding: 0.75rem 1.5rem;
-  background-color: var(--color-pink-500);
-  color: white;
+  background-color: var(--brand-pink);
+  color: var(--brand-pink-foreground);
   border-radius: 0.75rem;
   transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
