@@ -17,7 +17,7 @@
 | Phase | Title | Status |
 |-------|-------|--------|
 | 1 | Token Foundation + Reference | ✅ Complete (2026-06-02 — 6 commits, listed individually below [the `ba8e4e83`→`d2baa16d` span is non-contiguous: 2 unrelated parallel-session commits are interleaved, so don't `git diff` the range]; tsc clean, 686 vitest pass, 5-surface in-browser smoke, opus final review *approve-with-minors* fixed. **Already pushed to `origin/main`** via a parallel session's push. See plan `docs/superpowers/plans/2026-06-02-design-system-consolidation-p1.md`) |
-| 2 | shadcn-vue Install + Button/Card Proof | ⏳ Planned |
+| 2 | shadcn-vue Install + Button/Card Proof | ⏳ Planned (1 plan) |
 | 3 | Primitive Set Swap | ⏳ Planned |
 | 4 | High-Traffic Surface Migration | ⏳ Planned |
 | 5 | Tail Sweep + Lint Enforcement | ⏳ Planned |
@@ -74,6 +74,8 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 - `frontend/web/components.json` (new — shadcn-vue config) or equivalent
 - `frontend/web/src/components/ui/Button.vue`, `Card.vue` (rewrite, same import path)
 - co-located `.spec.ts` for each
+**Plans:** 1 plan
+- [ ] `02-01-PLAN.md` — install toolchain + cn(); Button → cva/cn (back-compat aliases) + components.json; A2 text-color in-browser gate; Card → cn() + glass preserved + subcomponents; full verification gate
 **Success criteria:**
 1. `bun install` + `bun run build` clean; no new lint/tsc errors.
 2. Every existing `<Button>`/`Card` usage renders identically — smoke the standing 5-surface set.
@@ -133,5 +135,5 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 ## Next
 
 ```
-/gsd-plan-phase --ws design-system        # plan Phase 2 (smallest next step)
+/gsd-execute-phase 02 --ws design-system        # execute Phase 2 (1 plan, 5 tasks, 2 checkpoints)
 ```
