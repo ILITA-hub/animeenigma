@@ -73,7 +73,7 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="ongoingAnime.length === 0" class="text-center py-8 text-gray-400">
+          <div v-if="ongoingAnime.length === 0" class="text-center py-8 text-muted-foreground">
             {{ $t('home.noOngoing') }}
           </div>
         </HomeColumn>
@@ -99,7 +99,7 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="topAnime.length === 0" class="text-center py-8 text-gray-400">
+          <div v-if="topAnime.length === 0" class="text-center py-8 text-muted-foreground">
             {{ $t('home.noData') }}
           </div>
         </HomeColumn>
@@ -123,7 +123,7 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="announcedAnime.length === 0" class="text-center py-8 text-gray-400">
+          <div v-if="announcedAnime.length === 0" class="text-center py-8 text-muted-foreground">
             {{ $t('home.noAnnounced') }}
           </div>
         </HomeColumn>
@@ -310,7 +310,7 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   transition: border 0.15s ease, background 0.15s ease;
   /* overflow: hidden removed — it clipped the inner input's focus ring;
      the dropdown is absolutely-positioned so it is unaffected */
@@ -349,7 +349,7 @@ onMounted(() => {
   padding: 3px 6px;
   border-radius: 4px;
   border: 1px solid var(--line-strong);
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -364,7 +364,7 @@ onMounted(() => {
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
   border-radius: var(--r-lg);
-  color: var(--accent);
+  color: var(--brand-cyan);
   font-size: 14px;
   font-weight: 600;
   transition: background 0.15s ease;
