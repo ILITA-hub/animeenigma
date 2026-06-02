@@ -79,7 +79,7 @@
           <div class="flex flex-wrap items-center gap-4 mb-4">
             <!-- Shikimori Rating -->
             <div v-if="anime.rating" class="flex items-center gap-2">
-              <div class="flex items-center gap-1 text-amber-400">
+              <div class="flex items-center gap-1 text-warning">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
@@ -246,7 +246,7 @@
               @click="toggleHidden"
               class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all"
               :class="isHidden
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30'
+                ? 'bg-warning-soft text-warning border border-warning/30 hover:bg-warning/30'
                 : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -439,7 +439,7 @@
                 :aria-pressed="videoProvider === 'ourenglish'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                 :class="videoProvider === 'ourenglish'
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
+                  ? 'bg-success-soft text-success border border-success/50'
                   : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
               >
                 {{ $t('player.ourenglish.label') }}
@@ -625,7 +625,7 @@
               >
                 <svg
                   class="w-6 h-6 sm:w-8 sm:h-8 transition-colors"
-                  :class="star <= reviewForm.score ? 'text-amber-400' : 'text-white/30'"
+                  :class="star <= reviewForm.score ? 'text-warning' : 'text-white/30'"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                   aria-hidden="true"
@@ -693,7 +693,7 @@
                 <div>
                   <router-link
                     :to="`/user/${review.user_id}`"
-                    class="font-medium text-white hover:text-purple-400 transition-colors"
+                    class="font-medium text-white hover:text-brand-violet transition-colors"
                   >
                     {{ review.username || $t('anime.user') }}
                   </router-link>
@@ -701,12 +701,12 @@
                     {{ formatDate(review.created_at) }}
                     <template v-if="review.status">
                       <span class="text-white/30 mx-1">·</span>
-                      <span :class="isReviewFlagged(review) ? 'text-amber-400' : 'text-white/60'">{{ formatReviewStats(review) }}</span>
+                      <span :class="isReviewFlagged(review) ? 'text-warning' : 'text-white/60'">{{ formatReviewStats(review) }}</span>
                     </template>
                   </p>
                 </div>
               </div>
-              <div class="flex items-center gap-1 text-amber-400">
+              <div class="flex items-center gap-1 text-warning">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
@@ -802,7 +802,7 @@
                     <div>
                       <router-link
                         :to="`/user/${c.user_id}`"
-                        class="font-semibold text-white hover:text-purple-400 transition-colors"
+                        class="font-semibold text-white hover:text-brand-violet transition-colors"
                       >
                         {{ c.username || $t('anime.user') }}
                       </router-link>
