@@ -293,8 +293,16 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	}
 
 	if hit, ok := p.cache.getServers(ctx, showID, ep); ok {
+		servers := materializeServers(hit)
+		if len(servers) == 0 {
+			err := domain.WrapExtractFailed(
+				fmt.Errorf("no playable (non-embed) sources for %s ep %s", showID, ep),
+				"allanime: ListServers")
+			p.markStage(health.StageServers, err)
+			return nil, err
+		}
 		p.markStage(health.StageServers, nil)
-		return materializeServers(hit), nil
+		return servers, nil
 	}
 
 	sources, err := p.fetchSources(ctx, showID, ep)
@@ -311,13 +319,36 @@ func (p *Provider) ListServers(ctx context.Context, providerID, episodeID string
 	}
 
 	p.cache.setServers(ctx, showID, ep, sources)
+
+	servers := materializeServers(sources)
+	if len(servers) == 0 {
+		// Every source was an embed-page host (e.g. all ok.ru) — none playable.
+		// Return ErrExtractFailed so the orchestrator fails over to the next
+		// provider instead of handing the FE an empty server list.
+		err := domain.WrapExtractFailed(
+			fmt.Errorf("no playable (non-embed) sources for %s ep %s", showID, ep),
+			"allanime: ListServers")
+		p.markStage(health.StageServers, err)
+		return nil, err
+	}
 	p.markStage(health.StageServers, nil)
-	return materializeServers(sources), nil
+	return servers, nil
 }
 
 func materializeServers(sources []sourceURL) []domain.Server {
 	out := make([]domain.Server, 0, len(sources))
 	for _, s := range sources {
+		// Skip sources that resolve to an HTML embed-page host (e.g. ok.ru):
+		// they are not playable through the HLS proxy, so they must not be
+		// offered as servers — otherwise the FE pins one and dead-ends on a 502
+		// instead of falling over to a playable source/provider.
+		u := decodeSourceURL(s.SourceURL)
+		if strings.HasPrefix(u, "//") {
+			u = "https:" + u
+		}
+		if isEmbedPageHost(u) {
+			continue
+		}
 		name := s.SourceName
 		if name == "" {
 			name = "Default"
@@ -365,8 +396,19 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeID, serverI
 	var pick *sourceURL
 	if serverID == "" {
 		sort.SliceStable(sources, func(i, j int) bool { return sources[i].Priority > sources[j].Priority })
-		if len(sources) > 0 {
-			pick = &sources[0]
+		// Pick the highest-priority source that is NOT an embed-page host, so
+		// the auto path uses a playable stream instead of dead-ending on (and
+		// failing over from) e.g. an ok.ru embed.
+		for i := range sources {
+			u := decodeSourceURL(sources[i].SourceURL)
+			if strings.HasPrefix(u, "//") {
+				u = "https:" + u
+			}
+			if isEmbedPageHost(u) {
+				continue
+			}
+			pick = &sources[i]
+			break
 		}
 	} else {
 		for i := range sources {
@@ -636,14 +678,41 @@ var embedPageHosts = map[string]bool{
 	"streamlare.com":      true,
 	"www.streamlare.com":  true,
 	"bysekoze.com":        true,
+	// The hosts below serve an HTML embed player, NOT a direct HLS/MP4 stream.
+	// They are not in the HLS proxy allowlist and have no embed extractor, so
+	// feeding them to hls.js dead-ends on a 502. Rejecting them (and not
+	// offering them as servers) makes the FE pick a direct source — e.g.
+	// AllAnime's "Yt-mp4" on the allowlisted fast4speed.rsvp CDN — or fail over
+	// to the next provider. Confirmed text/html via direct fetch 2026-06-02:
+	//   - ok.ru        (AllAnime "Ok"     → /videoembed/<id>)
+	//   - uns.bio      (AllAnime "Uni",   e.g. allanime.uns.bio)
+	//   - vidnest.io   (AllAnime "Vn-Hls")
+	//   - mp4upload.com
+	// Matching is suffix-based (see isEmbedPageHost) so CDN subdomain churn
+	// (allanime.uns.bio, edge.vidnest.io, …) stays covered.
+	"ok.ru":         true,
+	"uns.bio":       true,
+	"vidnest.io":    true,
+	"mp4upload.com": true,
 }
 
+// isEmbedPageHost reports whether the URL's host is (or is a subdomain of) a
+// known HTML-embed-page host. Suffix matching keeps subdomain churn covered.
 func isEmbedPageHost(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return false
 	}
-	return embedPageHosts[u.Hostname()]
+	h := strings.ToLower(u.Hostname())
+	if embedPageHosts[h] {
+		return true
+	}
+	for host := range embedPageHosts {
+		if strings.HasSuffix(h, "."+host) {
+			return true
+		}
+	}
+	return false
 }
 
 // Compile-time assertion: Provider satisfies domain.Provider. Failing this

@@ -358,3 +358,59 @@ func TestDecodeSourceURL_Passthrough(t *testing.T) {
 		t.Fatalf("expected passthrough, got %q", out)
 	}
 }
+
+// TestIsEmbedPageHost_OkRu locks in that ok.ru (Odnoklassniki) is treated as an
+// unplayable embed-page host. AllAnime's "Ok" source serves /videoembed/<id>
+// HTML, not a stream — feeding it to hls.js dead-ends on a 502 (ISS: EN player
+// frozen at 0:00 via allmanga.to → ok.ru).
+func TestIsEmbedPageHost_OkRu(t *testing.T) {
+	cases := map[string]bool{
+		"https://ok.ru/videoembed/14469506337426": true,
+		"https://www.ok.ru/videoembed/123":        true,
+		"https://m.ok.ru/videoembed/123":          true,
+		"https://www.mp4upload.com/embed-x.html":   true,
+		// Subdomain churn must stay covered (suffix match).
+		"https://allanime.uns.bio/embed/abc": true,
+		"https://uns.bio/embed/abc":          true,
+		"https://vidnest.io/e/xyz":           true,
+		"https://edge.vidnest.io/e/xyz":      true,
+		// Playable direct streams must NOT be flagged.
+		"https://wixmp-ed30a86b8c4ca887773594c2.appspot.com/v.m3u8": false,
+		"https://tools.fast4speed.rsvp/file/x/master.m3u8":          false,
+	}
+	for u, want := range cases {
+		if got := isEmbedPageHost(u); got != want {
+			t.Errorf("isEmbedPageHost(%q) = %v; want %v", u, got, want)
+		}
+	}
+}
+
+// TestMaterializeServers_FiltersEmbedHosts verifies embed-page sources (ok.ru)
+// are NOT offered as servers, while playable ones are kept.
+func TestMaterializeServers_FiltersEmbedHosts(t *testing.T) {
+	sources := []sourceURL{
+		{SourceName: "Ok", SourceURL: "https://ok.ru/videoembed/14469506337426", Priority: 9},
+		{SourceName: "Default", SourceURL: "https://cdn.example.com/master.m3u8", Priority: 5},
+		{SourceName: "Mp4", SourceURL: "https://www.mp4upload.com/embed-abc.html", Priority: 8},
+	}
+	servers := materializeServers(sources)
+	if len(servers) != 1 {
+		t.Fatalf("materializeServers kept %d servers; want 1 (only Default)", len(servers))
+	}
+	if servers[0].ID != "Default" {
+		t.Errorf("kept server = %q; want Default (embed hosts must be dropped)", servers[0].ID)
+	}
+}
+
+// TestMaterializeServers_AllEmbeds_ReturnsEmpty — when every source is an embed
+// host, no servers are offered (ListServers then fails over to the next
+// provider rather than handing the FE an empty list).
+func TestMaterializeServers_AllEmbeds_ReturnsEmpty(t *testing.T) {
+	sources := []sourceURL{
+		{SourceName: "Ok", SourceURL: "https://ok.ru/videoembed/1"},
+		{SourceName: "Ok2", SourceURL: "https://m.ok.ru/videoembed/2"},
+	}
+	if got := materializeServers(sources); len(got) != 0 {
+		t.Errorf("materializeServers(all embeds) = %d servers; want 0", len(got))
+	}
+}
