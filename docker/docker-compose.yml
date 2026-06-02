@@ -349,6 +349,7 @@ services:
       LIBRARY_SERVICE_URL: http://library:8089
       NOTIFICATIONS_SERVICE_URL: http://notifications:8090
       WATCH_TOGETHER_SERVICE_URL: http://watch-together:8091
+      ANALYTICS_SERVICE_URL: http://analytics:8092
       GRAFANA_SERVICE_URL: http://grafana:3000
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
@@ -661,6 +662,35 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8091/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Clickstream analytics ingestion (Plan 1). Postgres-backed events +
+  # identity stitching; ClickHouse consolidation deferred. Port 8092.
+  analytics:
+    build:
+      context: ..
+      dockerfile: services/analytics/Dockerfile
+    container_name: animeenigma-analytics
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8092
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: animeenigma
+      ANALYTICS_IP_SALT: ${ANALYTICS_IP_SALT:-dev-salt-change-in-production}
+      ANALYTICS_RETENTION_DAYS: "90"
+      ANALYTICS_PURGE_CRON: "17 3 * * *"
+    ports:
+      - "127.0.0.1:8092:8092"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8092/health"]
       interval: 30s
       timeout: 5s
       retries: 3
