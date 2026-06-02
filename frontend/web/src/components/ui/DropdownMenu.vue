@@ -25,6 +25,10 @@
         :side="side"
         :side-offset="sideOffset"
         :class="contentClasses"
+        @open-auto-focus="onOpenAutoFocus"
+        @pointer-down-outside="onAutoDismiss"
+        @focus-outside="onAutoDismiss"
+        @interact-outside="onAutoDismiss"
       >
         <slot />
       </DropdownMenuContent>
@@ -33,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import {
   DropdownMenuRoot,
   DropdownMenuTrigger,
@@ -84,6 +88,42 @@ const contentClasses = computed(() =>
 // Bridge Reka's open-change back onto the controlled v-model:open contract.
 const onOpenUpdate = (value: boolean) => {
   emit('update:open', value)
+}
+
+// --- Anchored-mode dismiss guard ---------------------------------------
+// In anchored mode (external kebab trigger, no Reka <DropdownMenuTrigger>), the
+// menu is opened by setting `open` from an outside button. Immediately after
+// open, Reka's content sees focus still on the kebab (focus-outside) and any
+// hover-reveal layout-shift scroll, which would dismiss the just-opened menu.
+// Ignore auto-dismiss within a short grace window after open; genuine
+// outside interactions after that still close the menu normally.
+let openedAt = 0
+watch(
+  () => props.open,
+  (o) => {
+    if (o) openedAt = typeof performance !== 'undefined' ? performance.now() : 0
+  },
+)
+
+function onOpenAutoFocus(_e: Event) {
+  // Keep Reka's default (focus first item) so focus lands inside the content —
+  // do NOT preventDefault, or focus stays on the kebab and focus-outside fires.
+}
+
+function onAutoDismiss(e: Event) {
+  const since = (typeof performance !== 'undefined' ? performance.now() : 0) - openedAt
+  if (since < 300) {
+    e.preventDefault()
+    return
+  }
+  // Also ignore dismisses originating on the reference element itself (the kebab).
+  const refEl =
+    props.reference && typeof (props.reference as HTMLElement).contains === 'function'
+      ? (props.reference as HTMLElement)
+      : null
+  const orig = (e as CustomEvent).detail?.originalEvent as Event | undefined
+  const target = (orig && (orig.target as Node | null)) || null
+  if (refEl && target && refEl.contains(target)) e.preventDefault()
 }
 
 // Exposed so the co-located spec can drive the open bridge + assert the

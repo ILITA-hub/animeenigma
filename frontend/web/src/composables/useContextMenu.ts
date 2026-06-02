@@ -71,9 +71,11 @@ export function useContextMenu() {
     contextMenu.episodesWatched = opts?.episodesWatched ?? null
     contextMenu.episodesTotal = opts?.episodesTotal ?? null
     contextMenu.visible = true
-    // capture phase on document so nested scroll containers (Home column max-h
-    // overflow-y-auto) also dismiss the menu — scroll events do not bubble.
-    document.addEventListener('scroll', close, { passive: true, once: true, capture: true })
+    // NOTE: no manual scroll-dismiss listener. The Reka DropdownMenu keeps the
+    // menu anchored to the kebab on scroll and handles outside/escape dismissal
+    // itself. A `{once,capture}` scroll listener fired on the card's
+    // hover-reveal layout shift and instantly closed the just-opened menu
+    // (regression caught in the Phase-3 live gate).
   }
 
   // Long-press helpers for mobile
