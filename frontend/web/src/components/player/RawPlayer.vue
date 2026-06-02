@@ -63,6 +63,7 @@
           :format="activeSubFormat"
           :visible="!!activeSubUrl"
           :fullscreen-container="playerContainer"
+          :offset="subtitleOffset"
         />
       </div>
 
@@ -92,16 +93,19 @@
           </select>
         </div>
 
-        <button
-          type="button"
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-100 border border-cyan-400/30 transition-colors"
-          @click="otherSubsOpen = true"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h10M4 18h6" />
-          </svg>
-          {{ $t('player.otherSubs.openButton') }}
-        </button>
+        <div class="flex items-center gap-2">
+          <SubtitleSettingsMenu :has-active-sub="!!activeSubUrl" />
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-100 border border-cyan-400/30 transition-colors"
+            @click="otherSubsOpen = true"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h10M4 18h6" />
+            </svg>
+            {{ $t('player.otherSubs.openButton') }}
+          </button>
+        </div>
       </div>
 
       <!-- Episode list -->
@@ -148,6 +152,8 @@ import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import OtherSubsPanel from './OtherSubsPanel.vue'
+import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
+import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
 import { rawApi, subtitlesApi } from '@/api/client'
 import type {
   GroupedSubs,
@@ -169,6 +175,7 @@ const props = defineProps<{
 const { locale } = useI18n()
 
 const playerContainer = ref<HTMLElement | null>(null)
+const { offset: subtitleOffset } = useSubtitleTimingOffset()
 const videoRef = ref<HTMLVideoElement | null>(null)
 
 // Phase 3 (03.3): wire real sync when a room is provided. Zero behavior
