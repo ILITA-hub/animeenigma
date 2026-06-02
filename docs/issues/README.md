@@ -4,6 +4,15 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-019: Watch Together WebSocket reconnect loop after 15min — stale access token in `?token=`
+- **Date:** 2026-06-02
+- **Severity:** High (sync silently dies mid-session; endless `WebSocket connection failed` console spam, "Reconnecting…/MEMBERS(0)")
+- **Symptom:** After ~15 minutes in a Watch Together room (or any reconnect past token expiry), the WS to `wss://animeenigma.ru/api/watch-together/ws?token=…` fails repeatedly forever.
+- **Root cause:** WS auth uses a short-lived **15-minute** JWT in the `?token=` query param (locked design — browsers can't set `Authorization` on a WS upgrade). `useWatchTogetherRoom.openSocket()` built the URL from `auth.token`, but the **reconnect path (`scheduleReconnect → openSocket`) never refreshed it** — `connect()`'s REST pre-fetch refreshes via the apiClient 401-interceptor, but reconnects bypass REST. Once the access token expired, every (re)connect 401'd at the gateway (pre-upgrade rejection) and the exponential-backoff loop hammered a dead token indefinitely.
+- **Diagnosis:** No-token WS upgrade returns **401 identically at gateway (`:8000`) and public edge** (NOT 400) → the ISS-018 nginx edge fix is healthy and the Upgrade header propagates; purely an auth-freshness bug. Replaying the exact expired token from the user's console against the edge reproduced the 401.
+- **Fix:** `openSocket()` is now async and calls `auth.refreshAccessToken()` (existing `/auth/refresh` httpOnly-cookie flow) before building the WS URL whenever the token is missing or within 60s of `exp` (decoded client-side from the JWT). If refresh genuinely fails, it stops the loop and surfaces a terminal `ERR_AUTH_EXPIRED` so the view redirects to `/login` instead of hammering. `frontend/web/src/composables/useWatchTogetherRoom.ts` (`tokenExpiringSoon` + `openSocket`).
+- **Status:** Fixed. Verified tsc clean, 56 composable unit tests pass, web redeployed, edge WS plumbing re-confirmed healthy (401 without token).
+
 ### ISS-018: Watch Together WebSocket 400 at public edge — host nginx `/api/` stripped the Upgrade header
 - **Date:** 2026-06-01
 - **Severity:** High (Watch Together sync, presence, chat fully broken in production)

@@ -293,13 +293,35 @@ const saveProgressServer = async (animeId: string, episode: number, time: number
 const playerFrame = ref<HTMLIFrameElement | null>(null)
 
 // ── Phase 3 (03.4): Watch Together sync state ──
-// kodikSyncAvailable is null while the boot probe is in flight, true on a
-// successful get_time reply, false on 2s timeout. When false: outbound
-// sync from this client is suppressed and a fallback banner renders.
-// Inbound time_update/pause are still consumed for the pre-Phase-3
-// progress-save path regardless.
+// kodikSyncAvailable is null while we're determining readiness, true once the
+// kodik_player_api RPC is confirmed live, false only after we've exhausted the
+// readiness window. When false: outbound sync from this client is suppressed
+// and a fallback banner renders. Inbound time_update/pause are still consumed
+// for the pre-Phase-3 progress-save path regardless.
+//
+// 2026-06-02 fix (Kodik kodikplayer.com bundle): the RPC is intact, but the
+// `get_time` reply (kodik_player_time) only fires once window.player.api +
+// flowApi.video exist — i.e. AFTER the pre-roll ad finishes and real playback
+// begins. The original probe (get_time at +500ms, give up at 2s) raced the ad
+// and produced a FALSE "sync unavailable" banner. Fix: treat ANY genuine
+// playback signal the bundle emits autonomously (time_update / video_started /
+// play / pause) as proof the RPC channel is alive, and keep the get_time probe
+// as a fast-path only. See bundle handler `app.player_single.*.js`
+// (`if(window.player && window.player.api){...get_time...}`).
 const kodikSyncAvailable = ref<boolean | null>(null)
 let bootProbeTimer: ReturnType<typeof setTimeout> | null = null
+
+// Flip sync to available exactly once, cancelling the pending probe-timeout so
+// it can't later stomp us back to false. Safe to call from any inbound signal.
+function markKodikSyncReady() {
+  if (bootProbeTimer !== null) {
+    clearTimeout(bootProbeTimer)
+    bootProbeTimer = null
+  }
+  if (kodikSyncAvailable.value !== true) {
+    kodikSyncAvailable.value = true
+  }
+}
 // Re-emission guard: when we post a command to the iframe, Kodik echoes
 // the corresponding outbound event. Without this guard we'd loop the same
 // play/pause/seek back to the room.
@@ -334,6 +356,10 @@ const handleKodikMessage = (event: MessageEvent) => {
 
     // Handle time update: { key: "kodik_player_time_update", value: 1331 }
     if (data.key === 'kodik_player_time_update' && typeof data.value === 'number') {
+      // The bundle only emits time_update once real playback is running, which
+      // means window.player.api is live — i.e. the RPC channel works. This is
+      // the reliable readiness signal the early get_time probe was racing.
+      if (props.room) markKodikSyncReady()
       currentTime.value = data.value
 
       // Track max time reached (approximate duration)
@@ -384,16 +410,19 @@ const handleKodikMessage = (event: MessageEvent) => {
     }
 
     // ── Phase 3 (03.4): Watch Together outbound consumption ──
-    // Reply to the boot-time smoke probe — sets kodikSyncAvailable true.
+    // Fast-path readiness: reply to the boot-time get_time probe. (Kept as an
+    // optimization; time_update above is the dependable signal once the ad ends.)
     if (data.key === 'kodik_player_time' && typeof data.value === 'number') {
-      if (bootProbeTimer !== null) {
-        clearTimeout(bootProbeTimer)
-        bootProbeTimer = null
-      }
-      if (kodikSyncAvailable.value === null) {
-        kodikSyncAvailable.value = true
-      }
+      if (props.room) markKodikSyncReady()
       return
+    }
+
+    // video_started is the bundle's "real playback began" signal — another
+    // proof the RPC channel is live. Mark ready BEFORE the guard below so a
+    // first user action right after the ad isn't dropped.
+    if (data.key === 'kodik_player_video_started') {
+      if (props.room) markKodikSyncReady()
+      // No outbound emit in v1 (diagnostic); fall through to the guard.
     }
 
     // The rest of the Phase 3 branches only emit when in a room with
@@ -409,7 +438,7 @@ const handleKodikMessage = (event: MessageEvent) => {
       props.room.emitSeek(t)
       return
     }
-    if (data.key === 'kodik_player_video_started' || data.key === 'kodik_player_video_ended') {
+    if (data.key === 'kodik_player_video_ended') {
       // Diagnostic only. v1: no emit. Future: could feed a playback-session overlay.
       return
     }
@@ -942,20 +971,36 @@ onMounted(() => {
 
   // ── Phase 3 (03.4): Watch Together sync wiring (only when in a room). ──
   if (props.room) {
-    // Boot-time smoke probe — verify the kodik_player_api RPC is still alive
-    // in the currently-loaded Kodik bundle. Kicked off after a short delay so
-    // the iframe has had a chance to register its `window.player.api`
-    // dispatcher (inbound commands are ignored pre-boot).
-    const tryProbe = () => {
+    // Readiness window — verify the kodik_player_api RPC is alive in the
+    // currently-loaded Kodik bundle. The RPC dispatcher only services get_time
+    // once `window.player.api` + `flowApi.video` exist, which is AFTER the
+    // pre-roll ad finishes and real playback starts (can be 15-30s). So we
+    // POLL get_time every 3s rather than give up after one 2s timeout, and we
+    // ALSO flip ready on any autonomous playback signal (handled in
+    // handleKodikMessage via markKodikSyncReady). Only after the full window
+    // elapses with zero signal do we show the "sync unavailable" banner.
+    //
+    // This replaces the original single-shot probe that raced the ad and
+    // produced a false-positive banner on the kodikplayer.com bundle
+    // (diagnosed 2026-06-02 — RPC intact, probe just fired too early).
+    const READINESS_WINDOW_MS = 30000
+    const PROBE_INTERVAL_MS = 3000
+    const readinessDeadline = Date.now() + READINESS_WINDOW_MS
+    const pollProbe = () => {
+      bootProbeTimer = null
+      if (kodikSyncAvailable.value !== null) return // already resolved (ready or torn down)
       postCommand('get_time')
-      bootProbeTimer = setTimeout(() => {
-        if (kodikSyncAvailable.value === null) {
-          kodikSyncAvailable.value = false // probe timed out → banner + outbound off
-        }
-        bootProbeTimer = null
-      }, 2000)
+      if (Date.now() >= readinessDeadline) {
+        // Window exhausted with no playback signal at all → genuinely no RPC.
+        kodikSyncAvailable.value = false
+        return
+      }
+      bootProbeTimer = setTimeout(pollProbe, PROBE_INTERVAL_MS)
     }
-    probeKickoffTimer = setTimeout(tryProbe, 500)
+    // First probe shortly after mount; the iframe ignores commands pre-boot,
+    // but the autonomous time_update/video_started signals will mark us ready
+    // independently once playback begins.
+    probeKickoffTimer = setTimeout(pollProbe, 800)
 
     // Subscribe to room playback events — translate to RPC commands.
     unsubPlayback = props.room.onPlaybackEvent((e) => {

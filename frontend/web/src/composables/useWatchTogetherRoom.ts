@@ -248,6 +248,27 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
     return `${proto}//${location.host}/api/watch-together/ws?token=${token}&room=${id}`
   }
 
+  // The WS access token (?token=) is a short-lived (~15min) JWT. An already-open
+  // socket is never re-authed, but every (re)connect re-presents the token in the
+  // upgrade URL — so a reconnect AFTER the token expired 401s at the gateway and
+  // the backoff loop hammers forever (ISS-019). Detect imminent expiry so the
+  // caller can refresh before building the URL.
+  function tokenExpiringSoon(skewSeconds = 60): boolean {
+    const t = auth.token
+    if (!t) return true
+    const parts = t.split('.')
+    if (parts.length !== 3) return false // non-JWT (e.g. api key) — can't introspect, trust it
+    try {
+      const payload = JSON.parse(
+        atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')),
+      ) as { exp?: number }
+      if (typeof payload.exp !== 'number') return false
+      return payload.exp * 1000 <= Date.now() + skewSeconds * 1000
+    } catch {
+      return false
+    }
+  }
+
   function clearReconnectTimer() {
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer)
@@ -446,8 +467,27 @@ export function useWatchTogetherRoom(roomId: string): UseWatchTogetherRoomReturn
 
   /* ──────── Socket lifecycle ──────── */
 
-  function openSocket() {
+  async function openSocket() {
     if (stopped) return
+    // Refresh the access token before presenting it in the WS upgrade URL when
+    // it is missing or about to expire; otherwise an expired token 401s and the
+    // reconnect loop never recovers (ISS-019).
+    if (tokenExpiringSoon()) {
+      const ok = await auth.refreshAccessToken()
+      if (stopped) return
+      if (!ok) {
+        // Refresh genuinely failed (server rejected the refresh cookie). The
+        // session is dead — stop hammering and surface a terminal auth error so
+        // the view redirects to /login (mirrors ERR_AUTH_EXPIRED handling).
+        stopped = true
+        clearReconnectTimer()
+        connectionStatus.value = 'failed'
+        const errPayload: ErrorData = { code: ERR_AUTH_EXPIRED, message: 'session expired' }
+        lastError.value = errPayload
+        handlers.error.forEach((h) => h(errPayload))
+        return
+      }
+    }
     connectionStatus.value = 'connecting'
     const ws = new WebSocket(buildWsUrl())
     socket = ws
