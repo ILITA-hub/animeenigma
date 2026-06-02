@@ -34,7 +34,7 @@
                inbound progress save still works (banner is informational). -->
           <div
             v-if="props.room && kodikSyncAvailable === false"
-            class="absolute top-2 left-2 right-2 z-20 rounded-md bg-yellow-500/90 text-black px-3 py-2 text-sm font-medium pointer-events-auto"
+            class="absolute top-2 left-2 right-2 z-20 rounded-md bg-warning/90 text-black px-3 py-2 text-sm font-medium pointer-events-auto"
             role="status"
             aria-live="polite"
           >
@@ -129,7 +129,7 @@
             @click="setTranslationType('voice')"
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
             :class="translationType === 'voice'
-              ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+              ? 'bg-success/20 text-success border border-success/50'
               : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,7 +142,7 @@
             @click="setTranslationType('subtitles')"
             class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
             :class="translationType === 'subtitles'
-              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+              ? 'bg-info/20 text-info border border-info/50'
               : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,9 +166,9 @@
                 class="w-full text-left p-3 rounded-lg transition-all"
                 :class="[
                   selectedTranslation === t.id
-                    ? (translationType === 'voice' ? 'bg-green-500/20 border border-green-500/50' : 'bg-blue-500/20 border border-blue-500/50')
+                    ? (translationType === 'voice' ? 'bg-success/20 border border-success/50' : 'bg-info/20 border border-info/50')
                     : 'bg-white/5 border border-transparent hover:bg-white/10',
-                  t.pinned ? 'ring-1 ring-amber-500/30' : ''
+                  t.pinned ? 'ring-1 ring-warning/30' : ''
                 ]"
               >
                 <div class="flex items-center justify-between gap-2">
@@ -177,7 +177,7 @@
                       <!-- Pinned badge -->
                       <span
                         v-if="t.pinned"
-                        class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400"
+                        class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-warning/20 text-warning"
                         :title="$t('player.recommendedVoice')"
                       >
                         <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -191,7 +191,7 @@
                   <div
                     v-if="selectedTranslation === t.id"
                     class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                    :class="translationType === 'voice' ? 'bg-green-500' : 'bg-blue-500'"
+                    :class="translationType === 'voice' ? 'bg-success' : 'bg-info'"
                   >
                     <svg class="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
                       <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -205,7 +205,7 @@
                 @click.stop="togglePin(t)"
                 class="absolute top-2 right-2 p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                 :class="t.pinned
-                  ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
+                  ? 'bg-warning/20 text-warning hover:bg-warning/30'
                   : 'bg-white/10 text-white/40 hover:bg-white/20 hover:text-white'"
                 :title="t.pinned ? $t('player.unpin') : $t('player.pin')"
               >

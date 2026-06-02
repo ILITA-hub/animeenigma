@@ -21,7 +21,7 @@
     <div
       v-if="open"
       data-test="sub-timing-popover"
-      class="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-white/10 bg-zinc-900/95 p-3 shadow-xl backdrop-blur"
+      class="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-white/10 bg-popover/95 p-3 shadow-xl backdrop-blur"
     >
       <p class="text-white/80 text-sm font-medium mb-1">{{ t('player.subtitleSettings.title') }}</p>
       <p class="text-white/40 text-xs mb-3">{{ t('player.subtitleSettings.offsetHint') }}</p>

@@ -10,7 +10,7 @@
       <div class="w-8 h-8 border-2 accent-border border-t-transparent rounded-full animate-spin" />
     </div>
 
-    <div v-else-if="error" class="py-8 text-center text-red-400 text-sm">
+    <div v-else-if="error" class="py-8 text-center text-destructive text-sm">
       {{ error }}
     </div>
 
@@ -112,7 +112,7 @@
         </ul>
       </section>
 
-      <p v-if="providersDown.length > 0" class="text-amber-400/80 text-xs text-center pt-2 border-t border-white/10">
+      <p v-if="providersDown.length > 0" class="text-warning/80 text-xs text-center pt-2 border-t border-white/10">
         {{ $t('player.otherSubs.providersDown', { providers: providersDown.join(', ') }) }}
       </p>
     </div>
