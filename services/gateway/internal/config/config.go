@@ -57,6 +57,11 @@ type ServiceURLs struct {
 	// ProxyService strips RFC 7230 §6.1 hop-by-hop headers, which is correct
 	// for HTTP but breaks the WS handshake — see ws_proxy.go for the why).
 	WatchTogetherService string
+	// AnalyticsService — clickstream ingestion service. Port 8092.
+	// Only POST /collect is gateway-routable (public, no JWT). The internal
+	// erasure endpoint (/internal/erase) is Docker-network-only and is
+	// intentionally never registered at the gateway (D-05 security model).
+	AnalyticsService string
 	WebService           string
 	// Admin panel services
 	GrafanaService    string
@@ -108,6 +113,7 @@ func Load() (*Config, error) {
 			LibraryService:       getEnv("LIBRARY_SERVICE_URL", "http://library:8089"),
 			NotificationsService: getEnv("NOTIFICATIONS_SERVICE_URL", "http://notifications:8090"),
 			WatchTogetherService: getEnv("WATCH_TOGETHER_SERVICE_URL", "http://watch-together:8091"),
+			AnalyticsService:     getEnv("ANALYTICS_SERVICE_URL", "http://analytics:8092"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

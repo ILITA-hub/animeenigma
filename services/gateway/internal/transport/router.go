@@ -198,6 +198,11 @@ func NewRouterWithCleanup(
 		sysStatusHandler := handler.NewSystemStatusHandler(cfg)
 		r.Get("/system/status", sysStatusHandler.GetStatus)
 
+		// Clickstream ingestion (Plan 1). PUBLIC — anonymous visitors tracked.
+		// Per-IP rate limiting already applies to all /api/* paths. Only
+		// /collect is exposed; /internal/erase is Docker-network-only.
+		r.Post("/analytics/collect", proxyHandler.ProxyToAnalytics)
+
 		// Player service routes - reviews (must be before /anime/* catch-all)
 		r.Post("/anime/ratings/batch", proxyHandler.ProxyToPlayer)
 		r.Get("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)

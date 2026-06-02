@@ -118,3 +118,29 @@ func boolStr(b bool) string {
 	}
 	return "false"
 }
+
+// TestConfig_LoadAnalyticsServiceFromEnv asserts ANALYTICS_SERVICE_URL maps
+// to ServiceURLs.AnalyticsService, with the docker default fallback.
+func TestConfig_LoadAnalyticsServiceFromEnv(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+	t.Setenv("ANALYTICS_SERVICE_URL", "http://test-an:9999")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.Services.AnalyticsService, "http://test-an:9999"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestConfig_AnalyticsServiceDefault(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-do-not-use-in-prod")
+	t.Setenv("ANALYTICS_SERVICE_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.Services.AnalyticsService, "http://analytics:8092"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}

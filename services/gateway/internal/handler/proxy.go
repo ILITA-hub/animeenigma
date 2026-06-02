@@ -77,6 +77,14 @@ func (h *ProxyHandler) ProxyToNotifications(w http.ResponseWriter, r *http.Reque
 	h.proxy(w, r, "notifications")
 }
 
+// ProxyToAnalytics proxies clickstream ingestion to the analytics service
+// (Plan 1). Only POST /api/analytics/collect is exposed — it is PUBLIC (no
+// JWT) so anonymous visitors are tracked. The internal erasure endpoint
+// (/internal/erase) is Docker-network-only and never routed here.
+func (h *ProxyHandler) ProxyToAnalytics(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "analytics")
+}
+
 // ProxyToWatchTogether proxies REST requests to the watch-together service
 // (workstream watch-together, v1.0 Phase 1). HTTP-only — the WebSocket
 // endpoint at /api/watch-together/ws is served by a dedicated WS reverse

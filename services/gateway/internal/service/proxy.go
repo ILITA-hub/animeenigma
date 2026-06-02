@@ -209,6 +209,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.LibraryService, nil
 	case "notifications":
 		return s.serviceURLs.NotificationsService, nil
+	case "analytics":
+		return s.serviceURLs.AnalyticsService, nil
 	case "watch-together":
 		// workstream watch-together, v1.0 Phase 1 — REST passthrough only.
 		// The WebSocket /ws endpoint is NOT routed through this Forward path:
