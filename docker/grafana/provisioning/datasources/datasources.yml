@@ -13,3 +13,18 @@ datasources:
     access: proxy
     url: http://loki:3100
     editable: false
+
+  - name: PostgreSQL
+    uid: aenigma-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: postgres
+    jsonData:
+      database: animeenigma
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: postgres
+    editable: false
