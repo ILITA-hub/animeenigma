@@ -63,6 +63,7 @@
           :format="activeSubFormat"
           :visible="!!activeSubUrl"
           :fullscreen-container="playerContainer"
+          :offset="subtitleOffset"
         />
       </div>
 
@@ -119,6 +120,8 @@
               {{ choice.label }}
             </option>
           </select>
+
+          <SubtitleSettingsMenu :has-active-sub="!!activeSubUrl" />
         </div>
 
         <!-- Active provider chip -->
@@ -161,6 +164,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
+import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
+import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
 import { scraperApi } from '@/api/client'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
@@ -212,6 +217,8 @@ const props = defineProps<{
   // player behaves exactly as it did pre-Phase-3 (zero regression).
   room?: WatchTogetherRoomHandle | null
 }>()
+
+const { offset: subtitleOffset } = useSubtitleTimingOffset()
 
 const playerContainer = ref<HTMLElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)

@@ -42,7 +42,10 @@ const mountPlayer = () =>
     props: { animeId: 'anime-uuid' },
     global: {
       mocks: { $t: (k: string) => k },
-      stubs: { SubtitleOverlay: { template: '<div />' } },
+      stubs: {
+        SubtitleOverlay: { template: '<div />' },
+        SubtitleSettingsMenu: true,
+      },
     },
   })
 
