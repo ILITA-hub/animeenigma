@@ -1,9 +1,11 @@
 <template>
-  <ContextMenu
-    :visible="visible"
-    :x="x"
-    :y="y"
-    @update:visible="$emit('update:visible', $event)"
+  <DropdownMenu
+    :open="visible"
+    :reference="anchorEl ?? undefined"
+    align="start"
+    side="right"
+    :side-offset="4"
+    @update:open="$emit('update:visible', $event)"
   >
     <div v-if="anime" class="p-3">
       <!-- Header: poster + info -->
@@ -44,17 +46,13 @@
         {{ $t('anime.loginToManage') }}
       </p>
 
-      <!-- Menu items (single v-for so roving tabindex stays dense) -->
+      <!-- Menu items — Reka DropdownMenuItem provides roving focus + keyboard nav. -->
       <div class="border-t border-white/10 pt-2">
-        <button
-          v-for="(action, i) in actions"
+        <DropdownMenuItem
+          v-for="action in actions"
           :key="action.key"
-          :ref="(el: any) => setItemRef(el, i)"
-          role="menuitem"
-          :tabindex="focusedIndex === i ? 0 : -1"
           :class="itemClasses(action)"
-          @click="activate(action)"
-          @keydown="onItemKeydown"
+          @select="activate(action)"
         >
           <!-- icon -->
           <svg
@@ -132,17 +130,18 @@
           </svg>
 
           {{ action.label }}
-        </button>
+        </DropdownMenuItem>
       </div>
     </div>
-  </ContextMenu>
+  </DropdownMenu>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, inject, watch } from 'vue'
+import { computed } from 'vue'
+import type { ReferenceElement } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import ContextMenu from '@/components/ui/ContextMenu.vue'
+import { DropdownMenu, DropdownMenuItem } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { userApi } from '@/api/client'
@@ -177,8 +176,11 @@ interface MenuAction {
 
 const props = defineProps<{
   visible: boolean
+  // x/y retained for back-compat with the existing view bindings; positioning
+  // now flows through anchorEl (Reka anchored mode).
   x: number
   y: number
+  anchorEl?: ReferenceElement | null
   anime: Anime | null
   listStatus: string | null
   siteRating?: { average_score: number; total_reviews: number } | null
@@ -199,8 +201,11 @@ const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const toast = useToast()
 
-// Provided by ContextMenu wrapper so we can mark close-reason='item' on activation.
-const closeWithReason = inject<(reason: 'item') => void>('ctxMenuClose', () => emit('update:visible', false))
+// Close the anchored DropdownMenu after an action (replaces the old
+// ContextMenu `closeWithReason('item')` provide/inject contract).
+function closeMenu() {
+  emit('update:visible', false)
+}
 
 const localizedTitle = computed(() => {
   if (!props.anime) return ''
@@ -259,69 +264,15 @@ const actions = computed<MenuAction[]>(() => {
 })
 
 function itemClasses(action: MenuAction) {
-  const base = 'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left'
+  const base = 'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left cursor-pointer outline-none data-[highlighted]:bg-white/5'
   if (action.kind === 'status' && action.current) {
     return `${base} bg-cyan-500/20 text-cyan-400`
   }
   if (action.kind === 'remove' || action.danger) {
-    return `${base} text-pink-400 hover:bg-pink-500/10 mt-1`
+    return `${base} text-pink-400 hover:bg-pink-500/10 data-[highlighted]:bg-pink-500/10 mt-1`
   }
-  return `${base} text-white/70 hover:bg-white/5 hover:text-white`
+  return `${base} text-white/70 hover:bg-white/5 hover:text-white data-[highlighted]:text-white`
 }
-
-// --- Roving tabindex ---
-const itemEls = ref<HTMLButtonElement[]>([])
-const focusedIndex = ref(0)
-
-function setItemRef(el: any, i: number) {
-  if (el) itemEls.value[i] = el as HTMLButtonElement
-}
-
-function moveFocus(delta: number) {
-  const items = itemEls.value.filter(Boolean)
-  if (!items.length) return
-  focusedIndex.value = (focusedIndex.value + delta + items.length) % items.length
-  items[focusedIndex.value]?.focus()
-}
-
-function onItemKeydown(e: KeyboardEvent) {
-  switch (e.key) {
-    case 'ArrowDown':
-      e.preventDefault()
-      moveFocus(1)
-      break
-    case 'ArrowUp':
-      e.preventDefault()
-      moveFocus(-1)
-      break
-    case 'Home':
-      e.preventDefault()
-      focusedIndex.value = 0
-      itemEls.value[0]?.focus()
-      break
-    case 'End': {
-      e.preventDefault()
-      const last = itemEls.value.filter(Boolean).length - 1
-      focusedIndex.value = last
-      itemEls.value[last]?.focus()
-      break
-    }
-  }
-}
-
-watch(() => props.visible, (now) => {
-  if (now) {
-    focusedIndex.value = 0
-  } else {
-    itemEls.value = []
-  }
-})
-
-// Reset roving index when the action set itself changes (e.g. listStatus flips
-// while menu is open and the remove/mark-next items appear/disappear).
-watch(() => actions.value.length, () => {
-  if (focusedIndex.value >= actions.value.length) focusedIndex.value = 0
-})
 
 async function activate(action: MenuAction) {
   await action.onActivate()
@@ -333,7 +284,7 @@ async function setStatus(status: string) {
   // Optimistic: mutate store first so any subscribed UI flips immediately.
   // Emit before the await so callers (cards/grids) sync their local mirrors.
   emit('statusChange', animeId, status)
-  closeWithReason('item')
+  closeMenu()
   try {
     await watchlistStore.setStatusOptimistic(animeId, status)
   } catch (e) {
@@ -348,7 +299,7 @@ async function removeFromList() {
   // Optimistic: drop locally + emit so parent grids re-render before the
   // network round-trip resolves.
   emit('removeFromList', animeId)
-  closeWithReason('item')
+  closeMenu()
   try {
     await watchlistStore.removeEntryOptimistic(animeId)
   } catch (e) {
@@ -373,18 +324,18 @@ async function markNextWatched() {
   } catch (e) {
     console.error('Failed to mark next episode:', e)
   }
-  closeWithReason('item')
+  closeMenu()
 }
 
 function goToPage() {
   if (!props.anime) return
   router.push(`/anime/${props.anime.id}`)
-  closeWithReason('item')
+  closeMenu()
 }
 
 function openInNewTab() {
   if (!props.anime) return
   window.open(`/anime/${props.anime.id}`, '_blank', 'noopener,noreferrer')
-  closeWithReason('item')
+  closeMenu()
 }
 </script>
