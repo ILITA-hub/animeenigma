@@ -1,4 +1,5 @@
 export { default as Badge } from './Badge.vue'
+export { badgeVariants, type BadgeVariants } from './badge-variants'
 export { default as Button } from './Button.vue'
 export { buttonVariants, type ButtonVariants } from './button-variants'
 export { default as ButtonGroup } from './ButtonGroup.vue'
