@@ -197,6 +197,7 @@
     :visible="contextMenu.visible"
     :x="contextMenu.x"
     :y="contextMenu.y"
+    :anchor-el="contextMenu.anchorEl"
     :anime="contextMenu.anime"
     :list-status="contextMenu.listStatus"
     :site-rating="contextMenu.siteRating"

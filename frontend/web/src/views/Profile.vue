@@ -1015,6 +1015,7 @@
     :visible="profileContextMenu.visible"
     :x="profileContextMenu.x"
     :y="profileContextMenu.y"
+    :anchor-el="profileContextMenu.anchorEl"
     :anime="profileContextMenu.anime"
     :list-status="profileContextMenu.listStatus"
     :site-rating="profileContextMenu.siteRating"
