@@ -14,7 +14,7 @@
 
     <Modal v-model="showModal" :title="$t('footer.feedback.title')" size="lg">
       <div v-if="submitted" class="text-center py-4">
-        <svg class="w-12 h-12 mx-auto mb-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <svg class="w-12 h-12 mx-auto mb-3 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <p class="text-white text-lg font-medium">{{ $t('footer.feedback.sent') }}</p>
@@ -31,7 +31,7 @@
               class="flex flex-col items-center gap-1 px-3 py-3 rounded-lg border cursor-pointer transition-colors"
               :class="
                 category === opt.value
-                  ? 'bg-purple-500/20 border-purple-400/50 text-white'
+                  ? 'bg-brand-violet/20 border-brand-violet/50 text-white'
                   : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/80'
               "
             >
@@ -73,7 +73,7 @@
         </button>
         <button
           v-if="!submitted"
-          class="px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+          class="px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 bg-brand-violet/20 text-brand-violet hover:bg-brand-violet/30"
           :disabled="submitting"
           @click="submitReport"
         >

@@ -26,27 +26,27 @@ useI18n()
 
 .content h1 {
   font-size: 8rem;
-  color: #ff6b6b;
+  color: var(--destructive);
   margin-bottom: 1rem;
   font-weight: bold;
 }
 
 .content h2 {
   font-size: 2rem;
-  color: #fff;
+  color: var(--foreground);
   margin-bottom: 1rem;
 }
 
 .content p {
   font-size: 1.2rem;
-  color: #999;
+  color: var(--muted-foreground);
   margin-bottom: 2rem;
 }
 
 .btn {
   display: inline-block;
   padding: 1rem 2rem;
-  background: #ff6b6b;
+  background: var(--destructive);
   color: white;
   text-decoration: none;
   border-radius: 8px;
@@ -55,6 +55,6 @@ useI18n()
 }
 
 .btn:hover {
-  background: #ff5252;
+  background: var(--destructive);
 }
 </style>
