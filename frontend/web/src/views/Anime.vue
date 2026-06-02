@@ -303,7 +303,7 @@
 
       <!-- Synopsis -->
       <!-- Phase 11 / UX-22 — section-overview anchor for AnimeQuickNav. -->
-      <section id="section-overview" class="mt-8 non-player-content">
+      <section v-if="anime.description" id="section-overview" class="mt-8 non-player-content">
         <h2 class="text-xl font-semibold text-white mb-3">{{ $t('anime.synopsis') }}</h2>
         <div class="glass-card p-4">
           <p
