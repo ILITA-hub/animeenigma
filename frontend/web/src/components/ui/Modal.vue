@@ -1,32 +1,27 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div
-        v-if="modelValue"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
-        @keydown.esc="handleClose"
-      >
-        <!-- Backdrop -->
-        <div
-          class="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          @click="closeOnBackdrop && handleClose()"
-        />
-
-        <!-- Modal Content -->
-        <div
-          ref="modalRef"
+  <DialogRoot :open="modelValue" @update:open="onOpenUpdate">
+    <DialogPortal>
+      <DialogOverlay
+        class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-200 data-[state=open]:opacity-100 data-[state=closed]:opacity-0"
+      />
+      <!-- Fixed flex wrapper reproduces the legacy centered layout. The wrapper
+           itself is non-interactive (pointer-events-none) so Reka's
+           pointer-down-outside still fires on the overlay; DialogContent re-enables
+           pointer events on itself. -->
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <DialogContent
           :class="modalClasses"
-          role="dialog"
-          aria-modal="true"
-          :aria-labelledby="titleId"
-          tabindex="-1"
+          :aria-labelledby="title ? titleId : undefined"
+          @escape-key-down="onEscapeKeyDown"
+          @pointer-down-outside="onPointerDownOutside"
+          @interact-outside="onInteractOutside"
         >
           <!-- Header -->
           <div v-if="title || $slots.header || closable" class="flex items-center justify-between mb-4">
             <slot name="header">
-              <h2 v-if="title" :id="titleId" class="text-xl font-semibold text-white">
+              <DialogTitle v-if="title" :id="titleId" class="text-xl font-semibold text-white">
                 {{ title }}
-              </h2>
+              </DialogTitle>
             </slot>
             <button
               v-if="closable"
@@ -50,14 +45,22 @@
           <div v-if="$slots.footer" class="mt-6 flex justify-end gap-3">
             <slot name="footer" />
           </div>
-        </div>
+        </DialogContent>
       </div>
-    </Transition>
-  </Teleport>
+    </DialogPortal>
+  </DialogRoot>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef, watch, onMounted, onUnmounted } from 'vue'
+import { computed, toRef } from 'vue'
+import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogTitle,
+} from 'reka-ui'
+import { cn } from '@/lib/utils'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 
 interface Props {
@@ -81,11 +84,14 @@ const emit = defineEmits<{
   'close': []
 }>()
 
-const modalRef = ref<HTMLElement | null>(null)
 const titleId = `modal-title-${Math.random().toString(36).slice(2, 9)}`
 
 const modalClasses = computed(() => {
-  const base = 'relative glass-elevated rounded-2xl p-4 sm:p-6 w-full max-h-[90vh] overflow-y-auto'
+  // pointer-events-auto re-enables interaction on the content (the wrapper is
+  // pointer-events-none so outside-clicks still register on the overlay).
+  // data-[state] utilities replicate the legacy .modal-* scale+fade transition
+  // (visually-equivalent; pixel-parity verified in the in-browser gate).
+  const base = 'relative glass-elevated rounded-2xl p-4 sm:p-6 w-full max-h-[90vh] overflow-y-auto pointer-events-auto transition-all duration-200 data-[state=open]:opacity-100 data-[state=open]:scale-100 data-[state=closed]:opacity-0 data-[state=closed]:scale-95'
 
   const sizes = {
     sm: 'max-w-sm',
@@ -95,63 +101,40 @@ const modalClasses = computed(() => {
     full: 'max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)]',
   }
 
-  return [base, sizes[props.size]].join(' ')
+  return cn(base, sizes[props.size])
 })
 
+// modelValue <-> open bridge: emit update:modelValue always, emit close on close.
+const onOpenUpdate = (value: boolean) => {
+  emit('update:modelValue', value)
+  if (!value) emit('close')
+}
+
+// Legacy close button path — mirrors the previous handleClose() semantics.
 const handleClose = () => {
-  if (props.closeOnEsc || props.closable) {
-    emit('update:modelValue', false)
-    emit('close')
-  }
+  emit('update:modelValue', false)
+  emit('close')
+}
+
+// closeOnEsc=false opts out of Reka's escape close by preventing the default.
+const onEscapeKeyDown = (e: Event) => {
+  if (!props.closeOnEsc) e.preventDefault()
+}
+
+// closeOnBackdrop=false opts out of outside-click close.
+const onPointerDownOutside = (e: Event) => {
+  if (!props.closeOnBackdrop) e.preventDefault()
+}
+const onInteractOutside = (e: Event) => {
+  if (!props.closeOnBackdrop) e.preventDefault()
 }
 
 // Refcount-based body scroll lock — cooperates with other consumers
-// (e.g. Navbar mobile drawer) instead of stomping their state.
+// (e.g. Navbar mobile drawer) instead of stomping their state. Reka's Dialog
+// does NOT auto scroll-lock (RESEARCH Pitfall 7), so we keep this EXACTLY.
 useBodyScrollLock(toRef(props, 'modelValue'))
 
-// Focus the modal for keyboard navigation when opening.
-watch(() => props.modelValue, (isOpen) => {
-  if (isOpen) {
-    setTimeout(() => modalRef.value?.focus(), 0)
-  }
-})
-
-// Handle escape key globally
-const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && props.modelValue && props.closeOnEsc) {
-    handleClose()
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown)
-  // Scroll lock is released automatically by useBodyScrollLock's onScopeDispose.
-})
+// Exposed so the co-located spec can drive the bridge handlers without relying
+// on portaled/focus-trapped DOM that jsdom cannot fully simulate.
+defineExpose({ onOpenUpdate, onEscapeKeyDown, onPointerDownOutside })
 </script>
-
-<style scoped>
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.modal-enter-active > div:last-child,
-.modal-leave-active > div:last-child {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-
-.modal-enter-from > div:last-child,
-.modal-leave-to > div:last-child {
-  transform: scale(0.95);
-  opacity: 0;
-}
-</style>
