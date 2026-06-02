@@ -35,7 +35,8 @@
           {{ locale === 'ru' ? (g.russian || g.name) : (g.name || g.russian) }}
         </span>
       </div>
-      <p v-if="data.anime.description" class="featured-desc">{{ data.anime.description }}</p>
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <p v-if="data.anime.description" class="featured-desc" v-html="parsedDescription" />
       <div class="featured-actions">
         <router-link :to="watchTo" class="btn-primary-hero">
           <SpotlightIcon name="play" class="w-4 h-4" /> {{ primaryCta }}
@@ -52,6 +53,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle } from '@/utils/title'
+import { parseDescription } from '@/utils/description-parser'
 import type { FeaturedData } from '@/types/spotlight'
 import SpotlightIcon from '../SpotlightIcon.vue'
 
@@ -65,6 +67,10 @@ const locale = computed(() => {
 
 const posterBg = computed(() =>
   props.data.anime.poster_url ? `url("${props.data.anime.poster_url}")` : 'none',
+)
+
+const parsedDescription = computed(() =>
+  props.data.anime.description ? parseDescription(props.data.anime.description) : '',
 )
 
 const eyebrow = computed(() => {

@@ -56,6 +56,7 @@ function mk(status: string, episodes_aired = 0) {
       score: 8.4,
       year: 2026,
       episodes_count: 12,
+      description: undefined as string | undefined,
       genres: [] as { id: string; name?: string; russian?: string }[],
     },
   }
@@ -116,5 +117,22 @@ describe('FeaturedCard', () => {
   it('renders the add-to-list secondary CTA', () => {
     const w = mountCard({ data: mk('released') })
     expect(w.text()).toContain('spotlight.featured.addCta')
+  })
+
+  it('parses Shikimori [character=ID] BBCode in the description instead of leaking raw tags', () => {
+    const data = mk('released')
+    data.anime.description =
+      '[character=210882]Цукаса Акэурадзи[/character] мечтал бороться за медали.'
+    const w = mountCard({ data })
+    const desc = w.find('.featured-desc')
+    expect(desc.exists()).toBe(true)
+    // Must NOT leak the raw BBCode tag (regression: was bound via {{ }} before).
+    expect(desc.text()).not.toContain('[character=')
+    expect(desc.text()).not.toContain('[/character]')
+    // The display name survives, rendered inside a Shikimori link.
+    expect(desc.text()).toContain('Цукаса Акэурадзи')
+    const link = desc.find('a.shiki-link')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toBe('https://shikimori.one/characters/210882')
   })
 })
