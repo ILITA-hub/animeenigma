@@ -64,8 +64,16 @@ func AutoMigrateAll(db *gorm.DB) error {
 // EnsureView creates analytics_events_resolved, which adds resolved_user_id
 // and person_id (canonical identity: user if known, else anonymous). Uses a
 // correlated subquery so it runs identically on sqlite and postgres.
+//
+// DROP + CREATE (two statements) is used instead of "CREATE VIEW IF NOT
+// EXISTS" (sqlite-only — invalid in postgres) or "CREATE OR REPLACE VIEW"
+// (postgres-only — invalid in sqlite). DROP IF EXISTS + CREATE is valid in
+// BOTH, and makes EnsureView idempotent across boots.
 func EnsureView(db *gorm.DB) error {
-	return db.Exec(`CREATE VIEW IF NOT EXISTS analytics_events_resolved AS
+	if err := db.Exec(`DROP VIEW IF EXISTS analytics_events_resolved`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`CREATE VIEW analytics_events_resolved AS
 SELECT e.*,
   COALESCE(e.user_id,
     (SELECT i.user_id FROM analytics_identities i

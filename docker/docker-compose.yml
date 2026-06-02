@@ -681,7 +681,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: animeenigma
-      ANALYTICS_IP_SALT: ${ANALYTICS_IP_SALT:-dev-salt-change-in-production}
+      ANALYTICS_IP_SALT: ${ANALYTICS_IP_SALT:-change-me-in-production}
       ANALYTICS_RETENTION_DAYS: "90"
       ANALYTICS_PURGE_CRON: "17 3 * * *"
     ports:

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -125,10 +126,10 @@ func clientIP(r *http.Request) string {
 	// The gateway sets X-Forwarded-For / X-Real-IP (chi middleware.RealIP
 	// is applied upstream); fall back to RemoteAddr.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if comma := indexByte(xff, ','); comma > 0 {
-			return trimSpace(xff[:comma])
+		if comma := strings.IndexByte(xff, ','); comma > 0 {
+			return strings.TrimSpace(xff[:comma])
 		}
-		return trimSpace(xff)
+		return strings.TrimSpace(xff)
 	}
 	if rip := r.Header.Get("X-Real-IP"); rip != "" {
 		return rip
@@ -138,23 +139,4 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
-}
-
-func indexByte(s string, b byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == b {
-			return i
-		}
-	}
-	return -1
-}
-
-func trimSpace(s string) string {
-	for len(s) > 0 && s[0] == ' ' {
-		s = s[1:]
-	}
-	for len(s) > 0 && s[len(s)-1] == ' ' {
-		s = s[:len(s)-1]
-	}
-	return s
 }

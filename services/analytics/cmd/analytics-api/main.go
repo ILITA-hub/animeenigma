@@ -37,6 +37,10 @@ func main() {
 		log.Fatalw("config load failed", "error", err)
 	}
 
+	if cfg.IPSalt == "" || cfg.IPSalt == "change-me-in-production" || cfg.IPSalt == "dev-salt-change-in-production" {
+		log.Warnw("ANALYTICS_IP_SALT is unset or a placeholder — IP hashes are guessable; set a strong secret in docker/.env")
+	}
+
 	db, err := database.New(cfg.Database)
 	if err != nil {
 		log.Fatalw("db connect failed", "error", err)
