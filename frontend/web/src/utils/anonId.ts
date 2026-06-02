@@ -36,3 +36,16 @@ export function getOrCreateAnonId(): string {
     return ephemeral
   }
 }
+
+// resetAnonId clears the cached + persisted anonymous id and generates a
+// fresh one. Called on logout so a logged-out visitor becomes a new
+// anonymous identity (also rotates the X-Anon-ID header). Returns the new id.
+export function resetAnonId(): string {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+  cached = null
+  return getOrCreateAnonId()
+}
