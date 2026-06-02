@@ -1,7 +1,7 @@
 <template>
   <DropdownMenu
     :open="visible"
-    :reference="anchorEl ?? undefined"
+    :anchor-point="{ x, y }"
     align="start"
     side="right"
     :side-offset="4"

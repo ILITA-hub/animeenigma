@@ -1,26 +1,23 @@
 <template>
   <DropdownMenuRoot :open="open" @update:open="onOpenUpdate">
-    <!-- #trigger is OPTIONAL: in anchored mode (Plan 04 kebab) the menu is
-         positioned via the `reference` virtual-element prop instead of a literal
-         trigger child. When a trigger slot IS provided it wraps in the Reka
-         DropdownMenuTrigger so keyboard/click open semantics work normally. -->
+    <!-- Trigger modes:
+         1. #trigger slot  → normal trigger-anchored menu (keyboard/click open).
+         2. anchorPoint    → an invisible zero-size trigger positioned at the
+            given viewport point. Reka anchors the popper to a REAL trigger
+            element (the only reliable anchor — a bare `reference` prop on
+            Content is NOT honored by reka-ui@2.9.8's DropdownMenuContent, which
+            left the menu unanchored at 0,0). `open` stays controlled; the
+            invisible trigger is never interacted with — it exists only as the
+            popper anchor at the kebab/touch coordinates. -->
     <DropdownMenuTrigger v-if="$slots.trigger" as-child>
       <slot name="trigger" />
     </DropdownMenuTrigger>
+    <DropdownMenuTrigger v-else-if="anchorPoint" as-child>
+      <span aria-hidden="true" :style="anchorStyle" />
+    </DropdownMenuTrigger>
 
     <DropdownMenuPortal>
-      <!--
-        Plan 04 anchored-mode usage:
-          <DropdownMenu :open="open" :reference="virtualEl" @update:open="...">
-            <DropdownMenuItem .../>
-          </DropdownMenu>
-        `reference` is forwarded to DropdownMenuContent's :reference (Reka
-        PopperContent virtual-element anchor). With a reference set, no #trigger
-        child is required — the menu anchors to the supplied bounding-rect source
-        (e.g. the anime-card kebab button).
-      -->
       <DropdownMenuContent
-        :reference="reference"
         :align="align"
         :side="side"
         :side-offset="sideOffset"
@@ -51,11 +48,18 @@ interface Props {
   /** Controlled open state. Pair with @update:open for v-model:open. */
   open?: boolean
   /**
-   * Anchored mode: a virtual element / HTMLElement bounding-rect source
-   * forwarded to DropdownMenuContent's :reference. Lets Plan 04 anchor the menu
-   * to the anime-card kebab WITHOUT a literal trigger child.
+   * @deprecated reka-ui@2.9.8's DropdownMenuContent does NOT honor a bare
+   * `reference` prop (menu rendered unanchored at 0,0). Use `anchorPoint`
+   * instead — it renders an invisible zero-size DropdownMenuTrigger at the
+   * point, which IS a real popper anchor. Kept only for type compat.
    */
   reference?: ReferenceElement
+  /**
+   * Anchored mode: viewport coordinates to anchor the menu at (e.g. the
+   * anime-card kebab's rect, or a touch point). Renders an invisible trigger
+   * there so Reka's popper anchors correctly without a visible trigger child.
+   */
+  anchorPoint?: { x: number; y: number } | null
   align?: 'start' | 'center' | 'end'
   side?: 'top' | 'right' | 'bottom' | 'left'
   sideOffset?: number
@@ -67,6 +71,21 @@ const props = withDefaults(defineProps<Props>(), {
   side: 'bottom',
   sideOffset: 4,
 })
+
+// Invisible-anchor style for anchorPoint mode — a fixed zero-size box at the
+// viewport coordinates; the menu (side/align/offset) positions relative to it.
+const anchorStyle = computed(() =>
+  props.anchorPoint
+    ? {
+        position: 'fixed' as const,
+        left: `${props.anchorPoint.x}px`,
+        top: `${props.anchorPoint.y}px`,
+        width: '0px',
+        height: '0px',
+        pointerEvents: 'none' as const,
+      }
+    : {},
+)
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
