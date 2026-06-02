@@ -241,6 +241,12 @@
       "label": "Subtitles",
       "none": "Off"
     },
+    "subtitleSettings": {
+      "label": "Subtitle timing",
+      "title": "Subtitle timing",
+      "offsetHint": "Shift subtitles earlier or later to match the audio.",
+      "reset": "Reset"
+    },
     "otherSubs": {
       "title": "Other subtitles",
       "openButton": "Other subs",
