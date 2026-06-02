@@ -139,6 +139,8 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = userData
     if (userData) {
       localStorage.setItem('user', JSON.stringify(userData))
+      // Clickstream identify (Plan 2) — tie subsequent events to this user.
+      import('@/analytics').then(({ analytics }) => analytics.identify(userData.id)).catch(() => undefined)
     } else {
       localStorage.removeItem('user')
     }
@@ -269,6 +271,8 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
     // Phase 7 D-03 — wipe pref:* + prefs_version on logout
     clearPreferenceCache()
+    // Clickstream reset (Plan 2) — drop user id + rotate anon id.
+    import('@/analytics').then(({ analytics }) => analytics.reset()).catch(() => undefined)
   }
 
   const fetchUser = async () => {

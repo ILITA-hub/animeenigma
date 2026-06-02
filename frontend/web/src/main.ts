@@ -31,3 +31,14 @@ const deferInit = window.requestIdleCallback || ((cb: () => void) => setTimeout(
 deferInit(() => {
   import('./utils/diagnostics').then(({ initDiagnostics }) => initDiagnostics())
 })
+
+// Defer analytics (clickstream) init too — flag-gated, default on (only the
+// string 'false' disables it). Lazy import keeps it off the critical path.
+deferInit(() => {
+  if (import.meta.env.VITE_ANALYTICS_ENABLED !== 'false') {
+    import('./analytics').then(({ analytics }) => {
+      const base = import.meta.env.VITE_API_URL || '/api'
+      analytics.init({ endpoint: `${base}/analytics/collect` })
+    })
+  }
+})

@@ -254,4 +254,13 @@ router.onError((error, to) => {
   tryReloadOnChunkError(error, to?.fullPath)
 })
 
+// Clickstream pageview on every successful navigation (Plan 2). Lazy import
+// keeps analytics out of the router's critical path.
+router.afterEach((to) => {
+  if (import.meta.env.VITE_ANALYTICS_ENABLED === 'false') return
+  import('@/analytics').then(({ analytics }) => {
+    analytics.page({ route: typeof to.name === 'string' ? to.name : undefined })
+  }).catch(() => undefined)
+})
+
 export default router
