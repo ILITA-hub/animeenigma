@@ -85,16 +85,17 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 
 ### Phase 3: Primitive Set Swap
 
-**Goal:** Bring the shadcn-vue-equivalent `components/ui/` primitives onto shadcn-vue behind unchanged import paths, and add the four hand-rolled-today primitives. End-state: `@/components/ui` exports shadcn-vue-based Badge, Input, Select, Dialog (was Modal), Tabs, DropdownMenu (was ContextMenu), Tooltip, Popover, Switch, Checkbox — all token-driven. The 6 app-specific composites (`ButtonGroup`, `GenreFilterPopup`, `PaginationBar`, `SearchAutocomplete`, `Skeleton`, `Toaster`) are explicitly OUT of this swap (DS-LIB-07) — they're not shadcn-vue primitives; they get token-migrated in Phases 4–5 like any other component.
+**Goal:** Bring the shadcn-vue-equivalent `components/ui/` primitives onto shadcn-vue behind unchanged import paths, add the four hand-rolled-today primitives, and (per the 2026-06-02 user decision) replace the custom right-click menu with native right-click + a trigger-anchored Reka `DropdownMenu`. End-state: `@/components/ui` exports shadcn-vue-based Badge, Input, Select, Dialog (was Modal), Tabs, DropdownMenu, Tooltip, Popover, Switch, Checkbox — all token-driven. The 6 app-specific composites (`ButtonGroup`, `GenreFilterPopup`, `PaginationBar`, `SearchAutocomplete`, `Skeleton`, `Toaster`) are explicitly OUT of this swap (DS-LIB-07).
 **Depends on:** Phase 2 (`cn()`/`cva` + components.json in place).
-**Requirements:** DS-LIB-05, DS-LIB-06, DS-LIB-07, DS-NF-04
-**Touches:** `frontend/web/src/components/ui/*` (rewrites + new primitives), `index.ts` barrel, co-located specs.
+**Requirements:** DS-LIB-05, DS-LIB-06, DS-LIB-07, DS-LIB-08, DS-NF-04
+**Touches:** `frontend/web/src/components/ui/*` (rewrites + new primitives), `index.ts` barrel, `composables/useContextMenu.ts` (drop cursor path), `components/anime/{AnimeContextMenu,AnimeKebab}.vue` + consumers (Home/Browse/Schedule), `OtherSubsPanel`, `App.vue` (TooltipProvider), co-located specs.
 **Success criteria:**
-1. Each swapped primitive renders identically on its current consumers (in-browser smoke per primitive's busiest surface).
-2. Import paths + prop surfaces unchanged (or a documented codemod applied across consumers in the same phase).
-3. New primitives (Tooltip/Popover/Switch/Checkbox) have at least one real consumer wired or a Vitest mount test.
-4. The 6 composites are confirmed untouched-but-still-rendering (no accidental swap).
-5. Full vitest + tsc green.
+1. Each *swapped* primitive (Badge/Input/Select/Dialog/Tabs) renders identically on its current consumers — in-browser smoke per primitive's busiest surface.
+2. Import paths + prop/event/slot surfaces unchanged (rename via barrel alias: `Modal`/`Dialog` both exported) so the ~18 consumers need no edits; `vue-tsc --noEmit` proves it.
+3. New primitives (Tooltip/Popover/Switch/Checkbox) exist + have a Vitest mount test; `TooltipProvider` mounted in `App.vue`.
+4. **DS-LIB-08:** native browser right-click works on anime cards (no `preventDefault`); the kebab (`AnimeKebab`) opens a Reka `DropdownMenu` with the same list-management actions + auth-gating; `ContextMenu.vue` retired. Verified live (right-click shows the browser menu; kebab shows the action menu).
+5. The 6 composites confirmed untouched-but-still-rendering.
+6. Full vitest + tsc green; standing 5-surface smoke clean (note Phase 3 intentionally CHANGES the right-click/kebab UX — that surface is verified against the new intended behavior, not the old).
 
 ### Phase 4: High-Traffic Surface Migration
 
