@@ -46,7 +46,7 @@ defineProps<{
 <style scoped>
 .anime-card {
   display: block;
-  background: #1a1a1a;
+  background: var(--card);
   border-radius: 12px;
   overflow: hidden;
   text-decoration: none;
@@ -65,7 +65,7 @@ defineProps<{
   width: 100%;
   padding-top: 140%;
   overflow: hidden;
-  background: #111;
+  background: var(--card);
 }
 
 .card-image img {
@@ -101,7 +101,7 @@ defineProps<{
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: #ff6b6b;
+  background: var(--destructive);
   border: none;
   color: white;
   font-size: 1.5rem;
@@ -123,7 +123,7 @@ defineProps<{
   background: rgba(0, 0, 0, 0.8);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  color: #ffd700;
+  color: var(--warning);
   font-size: 0.9rem;
   font-weight: bold;
 }
@@ -136,7 +136,7 @@ defineProps<{
   font-size: 1.1rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: #fff;
+  color: var(--foreground);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -152,12 +152,12 @@ defineProps<{
 }
 
 .year {
-  color: #999;
+  color: var(--muted-foreground);
 }
 
 .status {
   padding: 0.15rem 0.5rem;
-  background: #ff6b6b;
+  background: var(--destructive);
   border-radius: 12px;
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -171,9 +171,9 @@ defineProps<{
 
 .genre {
   padding: 0.15rem 0.5rem;
-  background: #333;
+  background: var(--border);
   border-radius: 4px;
   font-size: 0.75rem;
-  color: #aaa;
+  color: var(--muted-foreground);
 }
 </style>

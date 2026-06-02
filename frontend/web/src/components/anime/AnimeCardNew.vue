@@ -38,7 +38,7 @@
             </Badge>
             <span
               v-if="anime.hasDub"
-              class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500/90 text-white"
+              class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded bg-warning/90 text-white"
             >
               {{ $t('card.dubBadge') }}
             </span>
@@ -86,7 +86,7 @@
           </span>
           <span
             v-if="progressBadgeText"
-            class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/80 text-white"
+            class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-brand-violet/80 text-white"
           >
             {{ progressBadgeText }}
           </span>
@@ -215,9 +215,9 @@ const statusToI18nKey: Record<string, string> = {
 const statusColors: Record<string, string> = {
   watching: 'bg-cyan-500/80 text-white',
   plan_to_watch: 'bg-white/20 text-white/90 backdrop-blur-sm',
-  completed: 'bg-emerald-500/80 text-white',
-  on_hold: 'bg-amber-500/80 text-white',
-  dropped: 'bg-red-500/80 text-white',
+  completed: 'bg-success/80 text-white',
+  on_hold: 'bg-warning/80 text-white',
+  dropped: 'bg-destructive/80 text-white',
 }
 
 const listStatusLabel = computed(() => {
