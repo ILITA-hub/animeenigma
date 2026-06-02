@@ -97,6 +97,12 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 5. The 6 composites confirmed untouched-but-still-rendering.
 6. Full vitest + tsc green; standing 5-surface smoke clean (note Phase 3 intentionally CHANGES the right-click/kebab UX — that surface is verified against the new intended behavior, not the old).
 
+**Plans:** 4 plans (4 waves)
+- [ ] 03-01-PLAN.md — Badge (cva) + Input + Tabs (cn() SFCs) behind same paths + specs (LOW risk; no Reka)
+- [ ] 03-02-PLAN.md — Select + Modal→Dialog on Reka, Dialog barrel alias, useBodyScrollLock kept (MEDIUM; in-browser gate)
+- [ ] 03-03-PLAN.md — new primitives: DropdownMenu + Tooltip (+TooltipProvider in App.vue) + Popover + Switch + Checkbox + specs
+- [ ] 03-04-PLAN.md — DS-LIB-08 right-click rework: drop cursor path, retire ContextMenu.vue, rebuild AnimeContextMenu on Reka DropdownMenu across 5 views + final gate
+
 ### Phase 4: High-Traffic Surface Migration
 
 **Goal:** Migrate the heaviest-used surfaces to tokens-only + `ui/` primitives — Home, Browse, Watch/player, nav, anime detail. End-state: those surfaces contain zero off-palette colors and zero hardcoded hex; their buttons/cards/badges use the primitives.
