@@ -354,10 +354,15 @@ async function fetchEpisodes() {
     const resp = await scraperApi.getEpisodes(props.animeId, prefer)
     const env = resp.data?.data as ScraperEnvelope | undefined
     const eps = env?.episodes ?? []
-    const tried = env?.meta?.tried ?? []
     episodes.value = eps
     available.value = eps.length > 0
-    activeProvider.value = tried.length > 0 ? tried[tried.length - 1] : ''
+    // Pin the provider that ACTUALLY produced this episode list (meta.provider).
+    // Episode/server IDs are opaque + provider-specific, so servers/stream MUST
+    // hit the same provider. meta.tried is only the ordered candidate list — its
+    // last entry is NOT the winner (it's the lowest-priority fallback), which is
+    // why the previous `tried[tried.length - 1]` pin broke playback by forcing a
+    // mismatched provider. Empty => fall back to auto (also correct).
+    activeProvider.value = env?.meta?.provider ?? ''
 
     if (available.value) {
       const startEp =

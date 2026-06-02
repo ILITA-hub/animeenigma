@@ -930,3 +930,71 @@ func TestOrchestrator_StaleCache_DoesNotSkip(t *testing.T) {
 		t.Errorf("stale_provider was called %d times; want 1 (stale = fail-open, no skip)", got)
 	}
 }
+
+// TestOrchestrator_ListEpisodesNamed_ReturnsWinner verifies the winner name is
+// the single registered provider on the happy path. The handler surfaces this
+// as meta.provider so the client pins servers/stream to the same provider.
+func TestOrchestrator_ListEpisodesNamed_ReturnsWinner(t *testing.T) {
+	t.Parallel()
+	p := &fakeProvider{
+		nameVal: "animepahe",
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "deadbeef", Number: 1}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, p)
+	eps, winner, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	if err != nil {
+		t.Fatalf("ListEpisodesNamed err = %v; want nil", err)
+	}
+	if winner != "animepahe" {
+		t.Errorf("winner = %q; want %q", winner, "animepahe")
+	}
+	if len(eps) != 1 || eps[0].ID != "deadbeef" {
+		t.Errorf("episodes = %+v; want the single fake episode", eps)
+	}
+}
+
+// TestOrchestrator_ListEpisodesNamed_WinnerAfterFailover verifies the winner is
+// the provider that actually SUCCEEDED, not the first one tried. This is the
+// crux of the OurEnglish-player fix: meta.provider must name the producer of
+// the (opaque) episode IDs so the client pins the correct provider downstream.
+func TestOrchestrator_ListEpisodesNamed_WinnerAfterFailover(t *testing.T) {
+	t.Parallel()
+	first := "first_down_" + t.Name()
+	winnerName := "second_ok_" + t.Name()
+	pa := &fakeProvider{
+		nameVal: first,
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return nil, domain.WrapProviderDown(errors.New("conn refused"), first)
+		},
+	}
+	pb := &fakeProvider{
+		nameVal: winnerName,
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "ep1"}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, pa, pb)
+	_, winner, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	if err != nil {
+		t.Fatalf("ListEpisodesNamed err = %v; want nil after failover", err)
+	}
+	if winner != winnerName {
+		t.Errorf("winner = %q; want %q (the provider that succeeded, not the first tried)", winner, winnerName)
+	}
+}
+
+// TestOrchestrator_ListEpisodesNamed_NoWinnerOnFailure verifies the winner is
+// empty when the whole chain fails, so the handler omits meta.provider.
+func TestOrchestrator_ListEpisodesNamed_NoWinnerOnFailure(t *testing.T) {
+	t.Parallel()
+	o := newTestOrchestrator(t)
+	_, winner, err := o.ListEpisodesNamed(context.Background(), "x", "")
+	if err == nil {
+		t.Fatal("ListEpisodesNamed err = nil; want error on zero providers")
+	}
+	if winner != "" {
+		t.Errorf("winner = %q; want empty on failure", winner)
+	}
+}

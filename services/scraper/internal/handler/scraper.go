@@ -219,7 +219,7 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eps, err := h.svc.ListEpisodes(r.Context(), providerID, qp.prefer)
+	eps, winner, err := h.svc.ListEpisodesNamed(r.Context(), providerID, qp.prefer)
 	if err != nil {
 		h.writeOrchestratorError(w, err, tried)
 		return
@@ -228,7 +228,11 @@ func (h *ScraperHandler) GetEpisodes(w http.ResponseWriter, r *http.Request) {
 		eps = []domain.Episode{}
 	}
 	// gated=false: GetEpisodes does not run the playability gate.
-	h.writeSuccess(w, map[string]any{"episodes": eps}, tried, false)
+	// winner = the provider whose ListEpisodes succeeded; surfaced as
+	// meta.provider so the client pins servers/stream to the SAME provider
+	// (episode IDs are opaque + provider-specific — pinning the wrong one
+	// breaks the whole servers/stream chain).
+	h.writeSuccess(w, map[string]any{"episodes": eps}, tried, false, winner)
 }
 
 // GetServers handles GET /scraper/servers?mal_id=...&episode=...&prefer=....
@@ -400,13 +404,22 @@ func (h *ScraperHandler) resolveProviderID(ctx context.Context, malID, title str
 // NOTE: in Wave 1 (Plan 21-02) all three call sites pass gated=false
 // literally; Plan 21-03 wires the real bool from a new orchestrator return
 // signature in the GetStream path. SCRAPER-HEAL-07.
-func (h *ScraperHandler) writeSuccess(w http.ResponseWriter, data map[string]any, tried []string, gated bool) {
+// The optional `provider` variadic carries the name of the provider that
+// actually served the request (the failover winner). When non-empty it is
+// emitted as meta.provider so the client can pin subsequent calls to the same
+// provider — opaque, provider-specific episode/server IDs only resolve on the
+// provider that produced them. Omitted when empty so responses that don't
+// resolve a single winner stay shape-stable.
+func (h *ScraperHandler) writeSuccess(w http.ResponseWriter, data map[string]any, tried []string, gated bool, provider ...string) {
 	if tried == nil {
 		tried = []string{}
 	}
 	meta := map[string]any{"tried": tried}
 	if gated {
 		meta["gated"] = true
+	}
+	if len(provider) > 0 && provider[0] != "" {
+		meta["provider"] = provider[0]
 	}
 	data["meta"] = meta
 	httputil.OK(w, data)

@@ -182,16 +182,33 @@ func runFailover[T any](
 	cache *health.InMemoryHealthCache,
 	call func(p domain.Provider) (T, error),
 ) (T, error) {
+	v, _, err := runFailoverNamed(ctx, log, providers, cache, call)
+	return v, err
+}
+
+// runFailoverNamed is runFailover that also returns the name of the provider
+// whose call succeeded. The winner name lets the HTTP handler surface
+// `meta.provider` so the client can pin subsequent calls (servers/stream) to
+// the SAME provider — essential because provider episode/server IDs are opaque
+// and only resolve on the provider that produced them. On failure the returned
+// name is "".
+func runFailoverNamed[T any](
+	ctx context.Context,
+	log *logger.Logger,
+	providers []domain.Provider,
+	cache *health.InMemoryHealthCache,
+	call func(p domain.Provider) (T, error),
+) (T, string, error) {
 	var zero T
 	if len(providers) == 0 {
-		return zero, domain.ErrNotFound
+		return zero, "", domain.ErrNotFound
 	}
 
 	errs := make([]error, 0, len(providers))
 	for i, p := range providers {
 		// Context check before each attempt — fast bail on cancellation.
 		if err := ctx.Err(); err != nil {
-			return zero, err
+			return zero, "", err
 		}
 
 		// SCRAPER-OBS-03: skip providers flagged DOWN by the in-memory health
@@ -218,13 +235,13 @@ func runFailover[T any](
 
 		result, err := call(p)
 		if err == nil {
-			return result, nil
+			return result, p.Name(), nil
 		}
 
 		retry, kind := failoverDecision(err)
 		if !retry {
 			// Terminal error (ctx canceled / deadline) — surface as-is.
-			return zero, err
+			return zero, "", err
 		}
 
 		// Retryable: emit fallback metric (to = next provider name, or "" if last).
@@ -244,7 +261,7 @@ func runFailover[T any](
 		errs = append(errs, err)
 	}
 
-	return zero, summarizeFailover(errs)
+	return zero, "", summarizeFailover(errs)
 }
 
 // OrderedProviderNames returns the names of registered providers in the
@@ -287,7 +304,18 @@ func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer s
 
 // ListEpisodes runs the provider chain for episode listing.
 func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer string) ([]domain.Episode, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
+	eps, _, err := o.ListEpisodesNamed(ctx, providerID, prefer)
+	return eps, err
+}
+
+// ListEpisodesNamed is ListEpisodes that also returns the name of the provider
+// that produced the episode list. The episode IDs in the result are opaque and
+// provider-specific, so the caller must pin subsequent servers/stream calls to
+// this same provider (surfaced to the client via meta.provider) — otherwise a
+// different provider re-resolved from the failover order would receive episode
+// IDs it cannot parse.
+func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer string) ([]domain.Episode, string, error) {
+	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache,
 		func(p domain.Provider) ([]domain.Episode, error) {
 			return p.ListEpisodes(ctx, providerID)
 		})

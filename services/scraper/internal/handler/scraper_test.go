@@ -1260,3 +1260,68 @@ func TestParseAltTitles(t *testing.T) {
 		})
 	}
 }
+
+// metaProvider extracts data.meta.provider from a decoded success body.
+// Returns "" when absent (the omitted-on-empty case).
+func metaProvider(t *testing.T, body map[string]any) string {
+	t.Helper()
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	meta, ok := data["meta"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	s, _ := meta["provider"].(string)
+	return s
+}
+
+// TestScraperHandler_GetEpisodes_MetaProvider — the episodes response surfaces
+// the winning provider as data.meta.provider so the FE pins servers/stream to
+// the same provider (opaque episode IDs only resolve on their producer). This
+// is the backend half of the OurEnglish-player fix.
+func TestScraperHandler_GetEpisodes_MetaProvider(t *testing.T) {
+	t.Parallel()
+	fp := &fakeProvider{
+		name:               "animepahe",
+		listEpisodesResult: []domain.Episode{{ID: "deadbeefhash", Number: 1}},
+	}
+	h := newTestHandler(t, fp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?mal_id=1234", nil)
+	h.GetEpisodes(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+	body := requireJSON(t, resp)
+	if got := metaProvider(t, body); got != "animepahe" {
+		t.Errorf("data.meta.provider = %q; want %q", got, "animepahe")
+	}
+}
+
+// TestScraperHandler_GetEpisodes_MetaProviderOmittedOnFailure — when the chain
+// fails the error envelope carries no winner, so meta.provider must be absent.
+func TestScraperHandler_GetEpisodes_MetaProviderOmittedOnFailure(t *testing.T) {
+	t.Parallel()
+	fp := &fakeProvider{
+		name:            "animepahe",
+		listEpisodesErr: domain.ErrNotFound,
+	}
+	h := newTestHandler(t, fp)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/scraper/episodes?mal_id=1234", nil)
+	h.GetEpisodes(rec, req)
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	body := requireJSON(t, resp)
+	if got := metaProvider(t, body); got != "" {
+		t.Errorf("data.meta.provider = %q; want empty (omitted) on failure", got)
+	}
+}
