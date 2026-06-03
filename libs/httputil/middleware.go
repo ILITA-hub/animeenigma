@@ -20,7 +20,12 @@ func RequestLogger(log *logger.Logger) func(http.Handler) http.Handler {
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 			defer func() {
-				log.Infow("request completed",
+				// WithContext stamps trace_id/span_id when a span is active in
+				// the request context. tracing.HTTPMiddleware wraps the router
+				// outermost, so by the time this deferred access-log fires the
+				// span is present — giving every request line a trace_id for
+				// Grafana's trace↔logs correlation. No-op when tracing is off.
+				log.WithContext(r.Context()).Infow("request completed",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"status", ww.Status(),
