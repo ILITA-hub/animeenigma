@@ -25,6 +25,7 @@ package service
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -77,10 +78,12 @@ type episodesLookupAdapter interface {
 }
 
 // animeRepoAdapter is the narrow surface needed for the
-// translation-omitted (player-change) mode. The production
-// *repo.AnimeRepository satisfies it structurally.
+// translation-omitted (player-change) mode and for resolving a
+// Watch-Together-supplied catalog UUID to its shikimori_id. The
+// production *repo.AnimeRepository satisfies it structurally.
 type animeRepoAdapter interface {
 	GetByShikimoriID(ctx context.Context, shikimoriID string) (*domain.Anime, error)
+	GetByID(ctx context.Context, id string) (*domain.Anime, error)
 }
 
 // EpisodesValidateService is a pure-Go validation engine. No HTTP, no
@@ -153,6 +156,42 @@ func (s *EpisodesValidateService) ValidateEpisode(
 	}
 }
 
+// resolveShikimoriID maps the incoming anime identifier to the canonical
+// shikimori_id the Kodik/AnimeLib parsers key off.
+//
+// Watch Together creates rooms with the internal catalog UUID as anime_id
+// (InviteButton passes anime.id) and forwards that UUID here as the
+// {shikimoriId} path segment. The Kodik/AnimeLib lookups, however, query
+// upstream by the real shikimori_id — so a raw UUID never matched and
+// every in-room dub/episode/player switch was rejected as
+// TRANSLATION_UNAVAILABLE / PLAYER_UNAVAILABLE (ISS-024). This mirrors the
+// resolution CatalogService.GetKodikTranslations already does for the
+// player's own /anime/{id}/kodik/translations route.
+//
+// A raw shikimori_id (digits only — what the unit tests and any direct
+// caller pass) is used as-is. A UUID (contains a hyphen; shikimori_ids
+// never do) is resolved via GetByID. Returns "" when the UUID matches no
+// anime row, so the caller can short-circuit to a clean negative answer
+// instead of a misleading parser miss.
+func (s *EpisodesValidateService) resolveShikimoriID(ctx context.Context, idOrShikimori string) (string, error) {
+	if !strings.Contains(idOrShikimori, "-") {
+		return idOrShikimori, nil
+	}
+	anime, err := s.animeRepo.GetByID(ctx, idOrShikimori)
+	if err != nil {
+		// GetByID returns apperrors.NotFound on a miss — treat an unknown
+		// UUID as "no such anime" (empty result), not infrastructure.
+		if appErr, ok := apperrors.IsAppError(err); ok && appErr.Code == apperrors.CodeNotFound {
+			return "", nil
+		}
+		return "", apperrors.Wrap(err, apperrors.CodeInternal, "resolve anime uuid")
+	}
+	if anime == nil || anime.ShikimoriID == "" {
+		return "", nil
+	}
+	return anime.ShikimoriID, nil
+}
+
 // validateKodikOrAnimeLib runs the strict kodik|animelib path: catalog
 // row exists + EpisodesLookupService confirms episode_id within the
 // available range.
@@ -160,6 +199,19 @@ func (s *EpisodesValidateService) validateKodikOrAnimeLib(
 	ctx context.Context,
 	shikimoriID, player, episodeID, translationID, watchType string,
 ) (ValidateResult, error) {
+	// Resolve a Watch-Together-supplied catalog UUID to the real
+	// shikimori_id before any parser lookup. An unknown/unresolvable id
+	// short-circuits to PLAYER_UNAVAILABLE (the anime simply isn't
+	// playable on this surface).
+	resolved, err := s.resolveShikimoriID(ctx, shikimoriID)
+	if err != nil {
+		return ValidateResult{}, err
+	}
+	if resolved == "" {
+		return ValidateResult{Valid: false, Reason: ReasonPlayerUnavailable}, nil
+	}
+	shikimoriID = resolved
+
 	// Translation-omitted (player-change) mode: only verify the anime
 	// row exists. We do NOT call LatestAvailable because that path
 	// requires translation_id (it returns InvalidInput otherwise).

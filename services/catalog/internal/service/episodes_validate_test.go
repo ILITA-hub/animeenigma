@@ -39,6 +39,7 @@ func (f *fakeLookup) LatestAvailable(
 // fakeAnimeRepo implements animeRepoAdapter.
 type fakeAnimeRepoValidate struct {
 	byShikimori map[string]*domain.Anime
+	byID        map[string]*domain.Anime
 	err         error
 }
 
@@ -49,6 +50,19 @@ func (f *fakeAnimeRepoValidate) GetByShikimoriID(_ context.Context, sid string) 
 	a, ok := f.byShikimori[sid]
 	if !ok {
 		return nil, nil
+	}
+	return a, nil
+}
+
+// GetByID mirrors the real *repo.AnimeRepository: a miss returns an
+// apperrors.NotFound error (NOT (nil, nil) like GetByShikimoriID).
+func (f *fakeAnimeRepoValidate) GetByID(_ context.Context, id string) (*domain.Anime, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	a, ok := f.byID[id]
+	if !ok {
+		return nil, apperrors.NotFound("anime")
 	}
 	return a, nil
 }
@@ -235,6 +249,78 @@ func TestValidateEpisode_AnimeLib_TranslationNotFound(t *testing.T) {
 	}
 	if got.Valid || got.Reason != ReasonTranslationUnavailable {
 		t.Fatalf("want Valid=false Reason=%q, got %+v", ReasonTranslationUnavailable, got)
+	}
+}
+
+// -----------------------------------------------------------------
+// UUID resolution — Watch Together passes the internal catalog UUID as
+// anime_id; the validate path must resolve it to the real shikimori_id
+// before hitting the Kodik/AnimeLib parser. Regression guard for ISS-024
+// ("Озвучка не доступна" on every in-room dub switch).
+// -----------------------------------------------------------------
+
+func TestValidateEpisode_Kodik_ResolvesUUIDToShikimori(t *testing.T) {
+	const uuid = "11111111-2222-3333-4444-555555555555"
+	var sawShikimori string
+	lookup := &fakeLookup{t: t, script: []func(string, string, string, string, string) (EpisodesLookupResult, error){
+		func(sid, _, _, _, _ string) (EpisodesLookupResult, error) {
+			sawShikimori = sid
+			return EpisodesLookupResult{LatestAvailableEpisode: 12}, nil
+		},
+	}}
+	repo := &fakeAnimeRepoValidate{
+		byID: map[string]*domain.Anime{uuid: {ID: uuid, ShikimoriID: "57466"}},
+	}
+	svc := NewEpisodesValidateService(lookup, repo, nil)
+
+	got, err := svc.ValidateEpisode(context.Background(), uuid, "kodik", "5", "42", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.Valid || got.Reason != "" {
+		t.Fatalf("UUID anime_id must resolve and validate: want Valid=true, got %+v", got)
+	}
+	if sawShikimori != "57466" {
+		t.Fatalf("lookup must receive resolved shikimori_id 57466, got %q", sawShikimori)
+	}
+}
+
+func TestValidateEpisode_PlayerChange_Kodik_ResolvesUUID(t *testing.T) {
+	const uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	repo := &fakeAnimeRepoValidate{
+		byID:        map[string]*domain.Anime{uuid: {ID: uuid, ShikimoriID: "57466"}},
+		byShikimori: map[string]*domain.Anime{"57466": {ID: uuid, ShikimoriID: "57466"}},
+	}
+	// LatestAvailable MUST NOT be called in translation-omitted mode.
+	lookup := &fakeLookup{t: t}
+	svc := NewEpisodesValidateService(lookup, repo, nil)
+
+	got, err := svc.ValidateEpisode(context.Background(), uuid, "kodik", "1", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.Valid {
+		t.Fatalf("player-change via UUID: want Valid=true, got %+v", got)
+	}
+}
+
+func TestValidateEpisode_UnknownUUID(t *testing.T) {
+	// Resolvable-shaped (has hyphens) but no matching anime row → the
+	// parser would never match it, so short-circuit to PlayerUnavailable
+	// rather than emit a misleading TRANSLATION_UNAVAILABLE.
+	lookup := &fakeLookup{t: t} // must not be called
+	svc := NewEpisodesValidateService(lookup, &fakeAnimeRepoValidate{}, nil)
+
+	got, err := svc.ValidateEpisode(context.Background(),
+		"deadbeef-0000-0000-0000-000000000000", "kodik", "1", "42", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Valid || got.Reason != ReasonPlayerUnavailable {
+		t.Fatalf("unknown uuid: want Valid=false Reason=%q, got %+v", ReasonPlayerUnavailable, got)
+	}
+	if lookup.calls != 0 {
+		t.Fatalf("unknown uuid must not consult lookup, got %d calls", lookup.calls)
 	}
 }
 
