@@ -154,6 +154,20 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 **Plans:** 1 plan (1 wave)
 - [ ] `06-01-PLAN.md` — CLAUDE.md "Design System" subsection (enforced vs governance-only labeled) + project-memory governance entry + MEMORY.md pointer + SC#3 consistency verification + DS-NF-05 ack (Wave 1, autonomous) [DS-GOV-03, DS-NF-05, DS-NF-06]
 
+### Phase 7: Structural Primitive Swap
+
+**Goal:** Close the structural half of the migration — replace the remaining hand-rolled `<button>` (and any hand-rolled card/badge that has a `ui/` analog) with the `@/components/ui` primitives **where the primitive's API genuinely fits**, completing DS-MIGRATE-06 and the primitive half of DS-MIGRATE-01. This is a deliberate post-audit addition (2026-06-03) — unlike Phases 4-5 it is NOT zero-diff (swapping `<button>`→`<Button>` changes markup/props/events), so every swap is per-element adjudicated and the result is build+test+visually verified.
+**Depends on:** Phase 6 (primitives + tokens + lint gate + governance all in place; migration is the last structural step).
+**Requirements:** DS-MIGRATE-06, DS-MIGRATE-01 (primitive half)
+**Touches:** the 10 remaining raw `<button>` sites — `components/player/SubtitleSettingsMenu.vue` (×5), `views/Themes.vue`, `views/Browse.vue`, `components/home/spotlight/SpotlightIcon.vue`, `components/home/spotlight/CarouselDots.vue`, `components/anime/AnimeCard.vue` — plus any hand-rolled badge with a `Badge` analog. `<Card>` is currently used nowhere by design; bespoke card layouts that don't fit the `Card` API are left + documented (the requirement is "where they exist/fit").
+**Success criteria:**
+1. Each remaining hand-rolled `<button>` is EITHER swapped to `<Button>` (correct variant/size, events + a11y preserved, visually identical) OR explicitly documented as a justified bespoke control (e.g. carousel dot / tiny icon toggle that doesn't fit the Button variant API), with the reason recorded.
+2. No behavioral or visual regression: `bunx vue-tsc --noEmit` + `bunx vite build` clean; `bunx vitest run` green (no NEW failures beyond the known pre-existing AnimeContextMenu.spec.ts:227); affected-surface in-browser smoke (deferred → HUMAN-UAT, per the standing rule).
+3. The design-system lint gate still passes (`make lint-design` exit 0) — no off-palette/hex/alias reintroduced by the swaps.
+4. DS-MIGRATE-06 + DS-MIGRATE-01 marked ✅ (or the residual bespoke controls explicitly accepted as governance-only).
+
+**Plans:** TBD (planned next)
+
 ## Next
 
 ```
