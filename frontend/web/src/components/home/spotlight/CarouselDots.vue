@@ -36,6 +36,14 @@
          unknown variant the frontend doesn't yet know about (forward-compat
          scenario), we fall back to FALLBACK_TOKEN so the dot still renders
          rather than throwing on an undefined property access. -->
+    <!--
+      Kept bespoke (07-02): 4px pill geometry forced by scoped CSS (.dot-pill 26×4
+      / 36×4, !important glass bg, cyan glow) + a spec contract asserting raw
+      bg-white/10 / bg-purple-* / scale-110 classes. The <Button> primitive's
+      smallest size (icon = 40×40, rounded-xl, variant bg) cannot express a 4px
+      pill and would change the rendered class set → break both visuals and spec.
+      Canonical "specialized control the Button API doesn't model" keep.
+    -->
     <button
       v-for="(card, i) in cards"
       :key="`${card.type}:${i}`"
