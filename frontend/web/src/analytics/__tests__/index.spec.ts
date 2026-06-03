@@ -50,6 +50,17 @@ describe('analytics singleton', () => {
     expect(env.user_id).toBeNull()
   })
 
+  it('identify is deduped — same user id emits only one identify event', async () => {
+    const { analytics } = await import('../index')
+    analytics.init({ endpoint: '/x', flushMs: 999999 })
+    analytics.identify('u1')
+    analytics.identify('u1') // duplicate — should NOT emit a second identify
+    analytics.flushNow()
+    const env = JSON.parse(await (beacon.mock.calls.at(-1)![1] as Blob).text())
+    const identifies = env.events.filter((e: { event_type: string }) => e.event_type === 'identify')
+    expect(identifies).toHaveLength(1)
+  })
+
   it('a click on the document is autocaptured after init', async () => {
     const { analytics } = await import('../index')
     analytics.init({ endpoint: '/x', flushMs: 999999 })

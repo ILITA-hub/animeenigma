@@ -4,7 +4,7 @@
 import type { AnalyticsConfig, AnalyticsEvent, EventType } from './types'
 import { Transport } from './transport'
 import { extractClick } from './autocapture'
-import { setUserId, clearUserId, resetAnon } from './identity'
+import { getUserId, setUserId, clearUserId, resetAnon } from './identity'
 
 class Analytics {
   private transport: Transport | null = null
@@ -69,7 +69,7 @@ class Analytics {
   }
 
   identify(userId: string): void {
-    if (!userId) return
+    if (!userId || userId === getUserId()) return
     setUserId(userId)
     this.enqueue({ event_type: 'identify', timestamp: nowISO(), path: location.pathname })
   }
