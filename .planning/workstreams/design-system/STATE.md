@@ -4,16 +4,16 @@ milestone: v3.1
 milestone_name: Scraper Self-Healing
 current_phase: 05
 current_plan: 5
-status: phase-complete
+status: ready_to_plan
 stopped_at: Phase 05 Plan 05 complete (build-failing design-system lint gate + adjudicated allowlist, wired into make lint-frontend + redeploy-web; full-suite green [DS-GOV-01, DS-GOV-02]) — Phase 05 complete (5/5)
 last_updated: "2026-06-03T05:00:00.000Z"
 last_activity: 2026-06-03
 progress:
   total_phases: 14
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 53
   completed_plans: 46
-  percent: 87
+  percent: 71
 ---
 
 # Project State
@@ -22,15 +22,15 @@ progress:
 
 Phase: 05 (tail-sweep-lint-enforcement) — COMPLETE (5/5 plans)
 Plan: 5 of 5 (complete)
-**Status:** Phase complete
-**Current Phase:** 05
+**Status:** Ready to plan
+**Current Phase:** 6
 **Last Activity:** 2026-06-03
 **Last Activity Description:** Phase 05 Plan 05 complete (build-failing design-system lint gate + adjudicated allowlist, wired into make lint-frontend + redeploy-web; --selftest fail-path; DESIGN-SYSTEM.md docs; SC#5 full-suite green [DS-GOV-01, DS-GOV-02])
 
 ## Progress
 
 **Phases Complete:** 3 / 6
-**Current Plan:** 5 (complete)
+**Current Plan:** Not started
 
 ## Performance Metrics
 
