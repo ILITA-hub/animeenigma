@@ -83,6 +83,7 @@ import PlayerTabBar from '@/components/watch-together/PlayerTabBar.vue'
 // pattern; Vite emits one chunk per dynamic import → players load only
 // when their branch is rendered.
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
+const KodikAdFreePlayer = defineAsyncComponent(() => import('@/components/player/KodikAdFreePlayer.vue'))
 const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
 const OurEnglishPlayer = defineAsyncComponent(() => import('@/components/player/OurEnglishPlayer.vue'))
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
@@ -476,6 +477,13 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
 
       <KodikPlayer
         v-if="livePlayer === 'kodik'"
+        :key="`player-${livePlayer}`"
+        :anime-id="animeId"
+        :initial-episode="initialEpisode"
+        :room="roomHandle"
+      />
+      <KodikAdFreePlayer
+        v-else-if="livePlayer === 'kodik-adfree'"
         :key="`player-${livePlayer}`"
         :anime-id="animeId"
         :initial-episode="initialEpisode"

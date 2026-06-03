@@ -56,6 +56,12 @@ vi.mock('@/composables/useWatchedEpisodes', () => ({
   }),
 }))
 
+// usePlayerSyncBridge is a side-effect-only composable; stub it so it doesn't
+// try to attach real event listeners in jsdom.
+vi.mock('@/composables/usePlayerSyncBridge', () => ({
+  usePlayerSyncBridge: vi.fn(),
+}))
+
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAuthenticated: true,
@@ -306,5 +312,45 @@ describe('KodikAdFreePlayer', () => {
       expect.anything(),
       expect.anything(),
     )
+  })
+
+  // ── Assertion 12: Watch Together room mode — episode selection emits via room ─
+  it('in room mode, selectEpisode calls room.emitChangeEpisode and does NOT call loadStream', async () => {
+    const emitChangeEpisode = vi.fn()
+    const emitChangeTranslation = vi.fn()
+    const mockRoom = {
+      emitChangeEpisode,
+      emitChangeTranslation,
+      emitChangePlayer: vi.fn(),
+      sendChat: vi.fn(),
+      sendReaction: vi.fn(),
+      onError: vi.fn(),
+      onAuthExpired: vi.fn(),
+      onRoomClosed: vi.fn(),
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      room: { value: null },
+      members: { value: [] },
+      messages: { value: [] },
+      reactions: { value: [] },
+      connectionStatus: { value: 'connected' },
+    }
+
+    const wrapper = mountPlayer({ room: mockRoom })
+    await flushPromises()
+
+    // Reset getStream call count from initial mount (auto-select fires without room)
+    getStream.mockClear()
+
+    // Trigger episode selection (calls wrapper.vm.selectEpisode via EpisodeSelector @select)
+    // Access via the component's exposed selectEpisode function
+    const vm = wrapper.vm as unknown as { selectEpisode: (n: number) => void }
+    vm.selectEpisode(3)
+    await flushPromises()
+
+    // In room mode: emitChangeEpisode called with the episode number as string
+    expect(emitChangeEpisode).toHaveBeenCalledWith('3')
+    // Local loadStream must NOT be triggered
+    expect(getStream).not.toHaveBeenCalled()
   })
 })

@@ -1,14 +1,14 @@
 <!--
   Workstream watch-together — Phase 04 (state-switching) Plan 04.4 Task 1.
 
-  PlayerTabBar.vue — a small horizontal 5-tab switcher mounted inside
+  PlayerTabBar.vue — a small horizontal 6-tab switcher mounted inside
   WatchTogetherView so users can request a player swap (kodik → animelib
   etc.) from inside the room. The Anime.vue tabs aren't mounted under
   `/watch/room/:roomId`, so without this component there is no in-room
   way to drive `state:change_player`.
 
   Behavior contract (locked in Plan 04.4 Task 1):
-    - Renders 5 tabs, one per PlayerKind, labels via i18n
+    - Renders 6 tabs, one per PlayerKind, labels via i18n
       (watch_together.player_tab_<kind>).
     - The tab whose data-player matches `activePlayer` carries
       aria-selected="true" and an active-state class set.
@@ -56,10 +56,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 /**
- * Stable iteration order — matches the 5-way dispatch order in
+ * Stable iteration order — matches the 6-way dispatch order in
  * WatchTogetherView.vue and the PlayerKind union order in types/.
+ * Keep in sync with the PlayerKind union in src/types/watch-together.ts.
  */
-const ALL_PLAYERS: readonly PlayerKind[] = ['kodik', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
+const ALL_PLAYERS: readonly PlayerKind[] = ['kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
 const PLAYERS = computed(() => ALL_PLAYERS.filter((p) => !props.hiddenKinds.includes(p)))
 
 function onTabClick(kind: PlayerKind) {

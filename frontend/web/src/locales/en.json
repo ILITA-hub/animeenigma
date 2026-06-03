@@ -1052,6 +1052,7 @@
     "sync_toast_seeked": "{username} seeked to {time}",
     "connection_status_closed": "Connection lost — retrying…",
     "player_tab_kodik": "Kodik",
+    "player_tab_kodik-adfree": "AE Player",
     "player_tab_animelib": "AniLib",
     "player_tab_ourenglish": "English",
     "player_tab_hanime": "Hanime",

@@ -235,10 +235,12 @@ import Hls from 'hls.js'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchSession } from '@/composables/useWatchSession'
+import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import EpisodeSelector from './EpisodeSelector.vue'
 import type { EpisodeOption } from './EpisodeSelector.types'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import type { WatchCombo } from '@/types/preference'
+import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 
 const { t } = useI18n()
 
@@ -262,6 +264,10 @@ const props = defineProps<{
   totalEpisodes?: number
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
+  // When set, the player sync bridge mirrors play/pause/seek to the room.
+  // When null/undefined the bridge is never instantiated and the player
+  // behaves exactly as it did pre-WT wiring (zero regression).
+  room?: WatchTogetherRoomHandle | null
 }>()
 
 // ── Emits (mirror KodikPlayer.vue) ──────────────────────────────────────────
@@ -397,6 +403,14 @@ const autoMarkEpisodeWatched = async () => {
 const videoRef = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
 
+// ── Watch Together sync bridge ───────────────────────────────────────────────
+// Mirror AnimeLibPlayer's wiring: when a room is provided, the bridge handles
+// play/pause/seek/time-tick/drift automatically for the real <video> element.
+// When room is null/undefined the bridge is never instantiated (zero regression).
+if (props.room) {
+  usePlayerSyncBridge(videoRef, props.room)
+}
+
 // Remember the active selection so we can re-extract once if the signed CDN
 // URL expires mid-session (spec §5).
 let current: { episode: number; translationID: number } | null = null
@@ -461,6 +475,9 @@ function attachStream(streamUrl: string, referer: string) {
 
 // ── playWithIntro (Task 9, from plan verbatim) ───────────────────────────────
 function playWithIntro(streamUrl: string, referer: string, episodeKey: string) {
+  // Skip the branded intro in a Watch Together room — synced members must not
+  // each play a 5s pre-roll (it desyncs them). Proceed straight to attachStream.
+  if (props.room) { attachStream(streamUrl, referer); return }
   if (skipTimer) { clearTimeout(skipTimer); skipTimer = null }
   const v = videoRef.value
   if (!v) return
@@ -633,6 +650,21 @@ const fetchTranslations = async () => {
   }
 }
 
+// ── Watch Together inbound episode sync ──────────────────────────────────────
+// React to room episode broadcasts (own echo or another member's change).
+// Map the 1-based number to our selectedEpisode and apply via the programmatic
+// selectEpisodeLocal path (no re-emit). Mirror AnimeLibPlayer ~572.
+watch(
+  () => props.initialEpisode,
+  (epNum) => {
+    if (!props.room || epNum == null || translations.value.length === 0) return
+    if (selectedEpisode.value === epNum) return
+    selectedEpisode.value = epNum
+    episodeMarkedWatched.value = epNum <= watchedUpTo.value
+    if (selectedTranslation.value) void loadStream(epNum, selectedTranslation.value)
+  },
+)
+
 // ── Translation UI handlers ──────────────────────────────────────────────────
 function setTranslationType(type: 'voice' | 'subtitles') {
   if (translationType.value === type) return
@@ -640,6 +672,13 @@ function setTranslationType(type: 'voice' | 'subtitles') {
 }
 
 function selectTranslation(translationId: number) {
+  // Phase WT: when in a room, route through the room handle so the backend
+  // validates and broadcasts to all members. The broadcast's room:state_changed
+  // event will drive the local state mutation via the initialEpisode watcher.
+  if (props.room) {
+    props.room.emitChangeTranslation(String(translationId))
+    return
+  }
   if (selectedTranslation.value === translationId) return
 
   selectedTranslation.value = translationId
@@ -651,6 +690,14 @@ function selectTranslation(translationId: number) {
 }
 
 function selectEpisode(episode: number) {
+  // Phase WT: when in a room, route the user click through the room handle so
+  // the backend can validate and broadcast to all members. The room:state_changed
+  // broadcast will reactively update room.episode_id, which flows back through
+  // the existing :initial-episode prop -> inbound watcher programmatic path.
+  if (props.room) {
+    props.room.emitChangeEpisode(String(episode))
+    return
+  }
   if (selectedEpisode.value === episode) return
   // Save progress of current episode before switching
   if (currentTime.value > 0) {

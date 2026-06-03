@@ -1052,6 +1052,7 @@
     "sync_toast_seeked": "{username} перемотал(а) на {time}",
     "connection_status_closed": "Соединение потеряно — повтор попытки…",
     "player_tab_kodik": "Кодик",
+    "player_tab_kodik-adfree": "AEПлеер",
     "player_tab_animelib": "АниЛиб",
     "player_tab_ourenglish": "Английский",
     "player_tab_hanime": "Ханиме",

@@ -140,12 +140,12 @@ describe('watch-together REACTION_WHITELIST', () => {
 })
 
 describe('watch-together PlayerKind', () => {
-  it('admits exactly the 5 frontend player IDs at the type level', () => {
+  it('admits exactly the 6 frontend player IDs at the type level', () => {
     // Runtime tuple that MUST type-check against PlayerKind[] — if a string
     // is added/removed/typo'd in the union, this stops compiling and the
     // tsc step in the verify gate trips.
-    const all = ['kodik', 'animelib', 'ourenglish', 'hanime', 'raw'] as const satisfies readonly PlayerKind[]
-    expect(all).toHaveLength(5)
+    const all = ['kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'raw'] as const satisfies readonly PlayerKind[]
+    expect(all).toHaveLength(6)
   })
 })
 
