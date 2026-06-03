@@ -128,6 +128,18 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 4. Allowlist/escape-hatch documented.
 5. Full vitest + tsc + e2e green.
 
+**Plans:** 5 plans (3 waves)
+- [ ] 05-01-PLAN.md — tail sweep: 11 spotlight SFCs + 5 home-rail SFCs to semantic tokens (Wave 1, autonomous)
+- [ ] 05-02-PLAN.md — tail sweep: 4 admin views + Profile/Game/StatusPage/Themes to semantic tokens (Wave 1, autonomous)
+- [ ] 05-03-PLAN.md — tail sweep: 3 ui/ composites + App + LastUpdates + themes/browse/profile/WT to semantic tokens (Wave 1, autonomous; ActivityFeed.vue deferred — analytics-workstream uncommitted changes)
+- [ ] 05-04-PLAN.md — `--accent` flip to shadcn hover surface + temp brand-cyan alias deletion in main.css [DS-MIGRATE-05] (Wave 2, human-verify in-browser smoke)
+- [ ] 05-05-PLAN.md — `design-system-lint.sh` gate (3 color/token rules) + allowlist + make wiring + `--selftest` + DESIGN-SYSTEM.md docs [DS-GOV-01, DS-GOV-02] (Wave 3, autonomous)
+
+> Note: DS-MIGRATE-06 (hand-rolled buttons/cards/badges to `ui/` primitives) is NOT addressed by these
+> color-only plans — Phase 4 treated it as structurally deferred (a primitive swap shifts pixels, violating
+> zero-rendered-change). It remains tracked in REQUIREMENTS.md; this phase's scope (per 05-CONTEXT) is the
+> color/token tail sweep + `--accent` flip + lint gate only.
+
 ### Phase 6: Governance into Memory
 
 **Goal:** Write the design-system rules where every future session will see them.
