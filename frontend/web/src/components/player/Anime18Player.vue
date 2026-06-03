@@ -80,20 +80,12 @@
             </h3>
             <slot name="header-middle" />
           </div>
-          <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
-            <button
-              v-for="(ep, idx) in episodes"
-              :key="ep.slug"
-              @click="selectEpisode(ep, idx)"
-              class="relative px-3 h-10 rounded-lg text-sm font-medium transition-all"
-              :class="selectedEpisode?.slug === ep.slug
-                ? 'accent-bg text-white'
-                : 'bg-white/10 text-white hover:bg-white/20'"
-              :title="`${$t('player.anime18.label')} ${ep.number}`"
-            >
-              {{ ep.number }}
-            </button>
-          </div>
+          <EpisodeSelector
+            :episodes="episodeOptions"
+            :selected-key="selectedEpisode?.slug ?? null"
+            :watched-up-to="watchedUpTo"
+            @select="onEpisodePicked"
+          />
         </div>
       </div>
 
@@ -131,12 +123,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Hls from 'hls.js'
 import { anime18Api, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
+import EpisodeSelector from './EpisodeSelector.vue'
+import type { EpisodeOption } from './EpisodeSelector.types'
+import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 
 interface Anime18Episode {
   slug: string
@@ -164,6 +159,28 @@ const authStore = useAuthStore()
 
 // State
 const episodes = ref<Anime18Episode[]>([])
+
+// Watched-episode state
+const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.animeId)
+
+// Normalized episode list for EpisodeSelector
+const episodeOptions = computed<EpisodeOption[]>(() =>
+  episodes.value.map((ep) => ({
+    key: ep.slug,
+    label: ep.number,
+    number: ep.number,
+  })),
+)
+
+// Bridge: resolve the slug key back to episode + index, then delegate to
+// the existing selectEpisode(ep, idx) which owns the room-sync logic.
+const onEpisodePicked = async (key: string | number) => {
+  const idx = episodes.value.findIndex((e) => e.slug === String(key))
+  if (idx === -1) return
+  await selectEpisode(episodes.value[idx], idx)
+  await refreshWatched()
+}
+// (episodes declared above with composables)
 const selectedEpisode = ref<Anime18Episode | null>(null)
 const selectedEpisodeIndex = ref<number | null>(null)
 const currentSource = ref<Anime18Source | null>(null)
@@ -362,10 +379,11 @@ const handlePause = () => {
   saveProgress()
 }
 
-const handleEnded = () => {
+const handleEnded = async () => {
   if (!selectedEpisode.value) return
   saveProgress()
-  markEpisodeWatched()
+  await markEpisodeWatched()
+  await refreshWatched()
   if (selectedEpisodeIndex.value !== null && selectedEpisodeIndex.value < episodes.value.length - 1) {
     const nextIdx = selectedEpisodeIndex.value + 1
     selectEpisode(episodes.value[nextIdx], nextIdx)
@@ -427,6 +445,7 @@ watch(() => props.animeId, () => {
 
 onMounted(async () => {
   await fetchEpisodes()
+  await refreshWatched()
 })
 
 onBeforeUnmount(() => {
