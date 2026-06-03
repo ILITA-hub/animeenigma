@@ -56,6 +56,31 @@ func TestLoadProviders_UnknownName(t *testing.T) {
 	}
 }
 
+func TestLoadProviders_DuplicateName(t *testing.T) {
+	path := writeTempYAML(t, "providers:\n  - { name: allanime, enabled: true }\n  - { name: allanime, enabled: false }\n")
+	if _, err := LoadProviders(path); err == nil {
+		t.Fatal("LoadProviders err = nil; want error on duplicate provider")
+	}
+}
+
+func TestLoadProviders_MalformedYAML(t *testing.T) {
+	path := writeTempYAML(t, "providers: [unclosed flow sequence\n")
+	if _, err := LoadProviders(path); err == nil {
+		t.Fatal("LoadProviders err = nil; want error on malformed yaml")
+	}
+}
+
+// TestLoad_InvalidFile_FailsFast: a present-but-invalid providers file must
+// fail the scraper at boot, NOT silently fall back to the env (spec: missing
+// file = fallback; invalid file = fail-fast).
+func TestLoad_InvalidFile_FailsFast(t *testing.T) {
+	path := writeTempYAML(t, "providers:\n  - { name: bogus_provider, enabled: false }\n")
+	t.Setenv("SCRAPER_PROVIDERS_FILE", path)
+	if _, err := Load(); err == nil {
+		t.Fatal("Load err = nil; want fail-fast on an invalid providers file")
+	}
+}
+
 func TestLoadProviders_EnabledRequired(t *testing.T) {
 	path := writeTempYAML(t, "providers:\n  - { name: allanime }\n")
 	if _, err := LoadProviders(path); err == nil {

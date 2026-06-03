@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -244,16 +245,23 @@ func Load() (*Config, error) {
 	// Falls back to the legacy SCRAPER_DEGRADED_PROVIDERS env when the file path
 	// is unset or the file is missing (zero-break migration). ISS-023.
 	if providersPath := getEnv("SCRAPER_PROVIDERS_FILE", ""); providersPath != "" {
-		if _, statErr := os.Stat(providersPath); statErr == nil {
+		_, statErr := os.Stat(providersPath)
+		switch {
+		case statErr == nil:
 			pc, err := LoadProviders(providersPath)
 			if err != nil {
 				return nil, fmt.Errorf("scraper providers file: %w", err)
 			}
 			cfg.Providers = pc
 			cfg.DegradedProviders = pc.toDegradedConfig()
-		} else {
+		case errors.Is(statErr, os.ErrNotExist):
+			// Missing file → env fallback (zero-break migration).
 			cfg.DegradedProviders = parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", ""))
 			cfg.Providers = providersFromDegraded(cfg.DegradedProviders, "env-fallback")
+		default:
+			// Path set but unreadable (permission/IO/is-a-directory) — fail fast
+			// rather than silently abandon the operator's explicit source of truth.
+			return nil, fmt.Errorf("scraper providers file %q: %w", providersPath, statErr)
 		}
 	} else {
 		cfg.DegradedProviders = parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", ""))

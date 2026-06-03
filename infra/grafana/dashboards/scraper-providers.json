@@ -14,18 +14,18 @@
       "type": "table",
       "title": "Provider Management",
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_enabled", "format": "table", "instant": true },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "max by (provider) (provider_health_up)", "format": "table", "instant": true },
-        { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_info", "format": "table", "instant": true }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }, "expr": "provider_enabled", "format": "table", "instant": true },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }, "expr": "max by (provider) (provider_health_up)", "format": "table", "instant": true },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }, "expr": "provider_info", "format": "table", "instant": true }
       ],
       "transformations": [
         { "id": "joinByField", "options": { "byField": "provider", "mode": "outer" } },
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "__name__": true, "__name__ 1": true, "__name__ 2": true, "__name__ 3": true, "job": true, "job 1": true, "job 2": true, "job 3": true, "instance": true, "instance 1": true, "instance 2": true, "instance 3": true },
+            "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "__name__": true, "__name__ 1": true, "__name__ 2": true, "__name__ 3": true, "job": true, "job 1": true, "job 2": true, "job 3": true, "instance": true, "instance 1": true, "instance 2": true, "instance 3": true, "Value #C": true },
             "renameByName": { "provider": "Provider", "Value #A": "Enabled", "Value #B": "Live Up", "reason": "Reason", "description": "Description" },
             "indexByName": { "Provider": 0, "Enabled": 1, "Live Up": 2, "Reason": 3, "Description": 4 }
           }
@@ -45,9 +45,9 @@
       "type": "state-timeline",
       "title": "Connect / Disconnect History",
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_enabled", "legendFormat": "{{provider}}", "format": "time_series" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }, "expr": "provider_enabled", "legendFormat": "{{provider}}", "format": "time_series" }
       ],
       "options": { "mergeValues": true, "showValue": "never", "alignValue": "left", "rowHeight": 0.9, "legend": { "displayMode": "list", "placement": "bottom" } },
       "fieldConfig": {
