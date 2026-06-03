@@ -133,10 +133,10 @@ describe('RandomTailCard', () => {
   it('renders the purple-tinted secondary overlay', () => {
     const wrapper = mountCard({ data: baseMockData })
     const html = wrapper.html()
-    // The overlay is a div with from-purple-500/30 in its bg-gradient
+    // The overlay is a div with from-brand-violet/30 in its bg-gradient
     // utility chain. The Tailwind class string survives unchanged in the
     // rendered HTML so a substring match is reliable here.
-    expect(html).toContain('from-purple-500/30')
+    expect(html).toContain('from-brand-violet/30')
   })
 
   it('renders a SpotlightIcon name="shuffle" in the header (both layouts)', () => {

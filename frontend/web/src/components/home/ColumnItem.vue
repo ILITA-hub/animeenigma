@@ -211,12 +211,12 @@ const formattedNextEp = computed(() => {
   overflow: hidden;
 }
 .item:hover .title {
-  color: var(--accent);
+  color: var(--brand-cyan);
 }
 
 .meta {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -241,7 +241,7 @@ const formattedNextEp = computed(() => {
   text-transform: uppercase;
 }
 .chip.airing    { background: rgba(0, 255, 157, 0.14); color: var(--color-success); }
-.chip.announced { background: rgba(0, 212, 255, 0.14); color: var(--accent); }
+.chip.announced { background: rgba(0, 212, 255, 0.14); color: var(--brand-cyan); }
 .chip.season    { background: rgba(167, 139, 250, 0.14); color: var(--violet); }
 .chip.score {
   background: rgba(255, 214, 0, 0.14);
@@ -253,13 +253,13 @@ const formattedNextEp = computed(() => {
 /* Site score chip is cyan to distinguish from shikimori score */
 .chip.site-score {
   background: rgba(0, 212, 255, 0.14);
-  color: var(--accent);
+  color: var(--brand-cyan);
 }
 
 .next-ep {
   font-family: var(--f-mono);
   font-size: 10px;
-  color: var(--accent);
+  color: var(--brand-cyan);
   letter-spacing: 0.04em;
   display: inline-flex;
   align-items: center;

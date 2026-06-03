@@ -64,9 +64,9 @@ describe('NotTimeYetCard — root + backdrop', () => {
     expect(wrapper.element.tagName).toBe('ARTICLE')
   })
 
-  it('renders the amber secondary gradient overlay', () => {
+  it('renders the warning secondary gradient overlay', () => {
     const wrapper = mountCard({ data: baseData })
-    expect(wrapper.html()).toContain('from-amber-500/30')
+    expect(wrapper.html()).toContain('from-warning/30')
   })
 
   it('renders a poster-blur backdrop driven by the poster url', () => {
@@ -88,20 +88,20 @@ describe('NotTimeYetCard — header + status pill', () => {
     expect(wrapper.text()).toContain('spotlight.notTimeYet.title')
   })
 
-  it('shows the planned status label + yellow pill class', () => {
+  it('shows the planned status label + warning pill class', () => {
     const wrapper = mountCard({ data: { ...baseData, status: 'planned' } })
     expect(wrapper.text()).toContain('spotlight.notTimeYet.statusPlanned')
     expect(wrapper.text()).not.toContain('spotlight.notTimeYet.statusPostponed')
-    expect(wrapper.html()).toContain('bg-yellow-500/20')
-    expect(wrapper.html()).toContain('text-yellow-200')
+    expect(wrapper.html()).toContain('bg-warning/20')
+    expect(wrapper.html()).toContain('text-warning')
   })
 
-  it('shows the postponed status label + slate pill class', () => {
+  it('shows the postponed status label + muted pill class', () => {
     const wrapper = mountCard({ data: { ...baseData, status: 'postponed' } })
     expect(wrapper.text()).toContain('spotlight.notTimeYet.statusPostponed')
     expect(wrapper.text()).not.toContain('spotlight.notTimeYet.statusPlanned')
-    expect(wrapper.html()).toContain('bg-slate-500/20')
-    expect(wrapper.html()).toContain('text-slate-300')
+    expect(wrapper.html()).toContain('bg-muted/20')
+    expect(wrapper.html()).toContain('text-muted-foreground')
   })
 })
 

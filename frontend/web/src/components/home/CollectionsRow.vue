@@ -98,7 +98,7 @@ onMounted(load)
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 /* Horizontal scroll row */
@@ -177,7 +177,7 @@ onMounted(load)
 }
 
 .collection-card-title {
-  color: var(--ink);
+  color: var(--foreground);
   font-weight: 600;
   font-size: 13px;
   line-height: 1.3;

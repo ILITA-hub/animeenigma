@@ -47,13 +47,13 @@ import NowWatchingCard from './NowWatchingCard.vue'
 // 8-color avatar palette — kept in sync with the SFC's const PALETTE.
 // Used by the "class belongs to palette" assertions below.
 const PALETTE = [
-  'bg-red-500',
+  'bg-destructive',
   'bg-orange-500',
-  'bg-amber-500',
-  'bg-emerald-500',
+  'bg-warning',
+  'bg-success',
   'bg-cyan-500',
-  'bg-sky-500',
-  'bg-violet-500',
+  'bg-info',
+  'bg-brand-violet',
   'bg-pink-500',
 ] as const
 
@@ -226,9 +226,9 @@ describe('NowWatchingCard (v1.1-polish social-identity layout)', () => {
   it('each row renders a pulsing green LIVE dot adjacent to the avatar', () => {
     const data = { sessions: [session(1), session(2), session(3)] }
     const wrapper = mountCard({ data })
-    // The dot is a <span> with bg-green-400 + animate-pulse INSIDE the
+    // The dot is a <span> with bg-success + animate-pulse INSIDE the
     // avatar circle. Three rows = three dots.
-    const dots = wrapper.findAll('span.bg-green-400.animate-pulse')
+    const dots = wrapper.findAll('span.bg-success.animate-pulse')
     expect(dots.length).toBe(3)
   })
 

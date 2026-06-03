@@ -15,27 +15,27 @@ describe('DeltaChip', () => {
     const wrapper = mount(DeltaChip, { props: { current: 120, previous: 100 } })
     expect(wrapper.text()).toContain('↑')
     expect(wrapper.text()).toContain('20%')
-    expect(wrapper.html()).toContain('text-green-200')
+    expect(wrapper.html()).toContain('text-success')
   })
 
   it('renders ↓ and red when current < previous', () => {
     const wrapper = mount(DeltaChip, { props: { current: 50, previous: 100 } })
     expect(wrapper.text()).toContain('↓')
     expect(wrapper.text()).toContain('50%')
-    expect(wrapper.html()).toContain('text-red-200')
+    expect(wrapper.html()).toContain('text-destructive')
   })
 
   it('renders — and gray when current === previous', () => {
     const wrapper = mount(DeltaChip, { props: { current: 100, previous: 100 } })
     expect(wrapper.text()).toContain('—')
-    expect(wrapper.html()).toContain('text-gray-300')
+    expect(wrapper.html()).toContain('text-muted-foreground')
   })
 
   it('renders — and gray with empty pct when previous is null (no baseline)', () => {
     const wrapper = mount(DeltaChip, { props: { current: 42, previous: null } })
     expect(wrapper.text()).toContain('—')
     expect(wrapper.text()).not.toContain('%')
-    expect(wrapper.html()).toContain('text-gray-300')
+    expect(wrapper.html()).toContain('text-muted-foreground')
   })
 
   it('treats previous <= 0 as no baseline (—, no division)', () => {

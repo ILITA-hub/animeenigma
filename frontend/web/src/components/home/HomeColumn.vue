@@ -95,7 +95,7 @@ defineProps<{
 }
 .col-head .icon.blue {
   background: rgba(0, 212, 255, 0.12);
-  color: var(--accent);
+  color: var(--brand-cyan);
   border: 1px solid var(--accent-line);
 }
 
@@ -121,7 +121,7 @@ defineProps<{
 .col-head .all {
   margin-left: auto;
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -131,7 +131,7 @@ defineProps<{
   flex-shrink: 0;
 }
 .col-head .all:hover {
-  color: var(--accent);
+  color: var(--brand-cyan);
   border-color: var(--accent-line);
 }
 

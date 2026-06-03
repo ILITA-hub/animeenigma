@@ -161,7 +161,7 @@ describe('LatestNewsCard — per-entry type icon + pill', () => {
       data: { entries: [{ date: '2026-05-21', type: 'wat', message: 'Mystery entry.' }] },
     })
     const html = wrapper.html()
-    expect(html).toContain('text-gray-300')
+    expect(html).toContain('text-muted-foreground')
     // No type pill labels should render
     expect(wrapper.text()).not.toContain('spotlight.latestNews.typeFeat')
     expect(wrapper.text()).not.toContain('spotlight.latestNews.typeFix')
@@ -174,7 +174,7 @@ describe('LatestNewsCard — per-entry type icon + pill', () => {
     })
     const html = wrapper.html()
     expect(html).toMatch(/M12 3v3M12 18v3/) // sparkles fallback
-    expect(html).toContain('text-gray-300')
+    expect(html).toContain('text-muted-foreground')
   })
 
   it('covers long-form "feature"/"improvement" synonyms emitted by changelog.json today', () => {

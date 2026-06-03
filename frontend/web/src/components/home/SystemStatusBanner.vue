@@ -8,7 +8,7 @@
   <div
     v-if="visibleIncident"
     role="alert"
-    class="bg-red-500/90 text-white text-sm px-4 py-2 flex items-center justify-between gap-3"
+    class="bg-destructive/90 text-white text-sm px-4 py-2 flex items-center justify-between gap-3"
   >
     <span class="flex-1 text-center">{{ visibleIncident.title }}</span>
     <button

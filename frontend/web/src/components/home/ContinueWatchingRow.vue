@@ -119,7 +119,7 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--ink, #fff);
+  color: var(--foreground, #fff);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -135,14 +135,14 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
 
 .cw-see-all {
   font-size: 13px;
-  color: var(--ink-3, rgba(255, 255, 255, 0.56));
+  color: var(--muted-foreground, rgba(255, 255, 255, 0.56));
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s ease;
 }
 .cw-see-all:hover {
-  color: var(--accent, #00d4ff);
+  color: var(--brand-cyan, #00d4ff);
 }
 
 /* -----------------------------------------------------------------------
@@ -195,7 +195,7 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   box-shadow: var(--accent-glow, 0 0 30px rgba(0, 212, 255, 0.28));
 }
 .cw-card:focus-visible {
-  outline: 2px solid var(--accent, #00d4ff);
+  outline: 2px solid var(--brand-cyan, #00d4ff);
   outline-offset: 2px;
 }
 
@@ -256,7 +256,7 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
   font-family: var(--f-mono, "JetBrains Mono", ui-monospace, monospace);
   font-size: 10px;
   letter-spacing: 0.1em;
-  color: var(--accent, #00d4ff);
+  color: var(--brand-cyan, #00d4ff);
   text-transform: uppercase;
   margin-bottom: 4px;
 }
@@ -265,7 +265,7 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
 .cw-title-line {
   font-weight: 600;
   font-size: 14px;
-  color: var(--ink, #fff);
+  color: var(--foreground, #fff);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -285,8 +285,8 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
 }
 .cw-progress-fill {
   height: 100%;
-  background: var(--accent, #00d4ff);
-  box-shadow: 0 0 8px var(--accent, #00d4ff);
+  background: var(--brand-cyan, #00d4ff);
+  box-shadow: 0 0 8px var(--brand-cyan, #00d4ff);
   transition: width 0.3s ease;
 }
 

@@ -62,8 +62,8 @@ describe('ContinueWatchingNewCard', () => {
           d.classes().includes('inset-x-0') && d.classes().includes('top-0'),
       )
     expect(ribbon).toBeDefined()
-    // Ribbon carries the purple->fuchsia gradient identity.
-    expect(ribbon!.classes()).toContain('from-purple-600')
+    // Ribbon carries the brand-violet->fuchsia gradient identity.
+    expect(ribbon!.classes()).toContain('from-brand-violet')
     expect(ribbon!.classes()).toContain('to-fuchsia-500')
   })
 
@@ -111,9 +111,9 @@ describe('ContinueWatchingNewCard', () => {
     expect(cta).toBeDefined()
   })
 
-  it('backdrop secondary overlay carries the from-purple-500/30 wash', () => {
+  it('backdrop secondary overlay carries the from-brand-violet/30 wash', () => {
     const wrapper = mountCard({ data: baseData })
-    expect(wrapper.html()).toContain('from-purple-500/30')
+    expect(wrapper.html()).toContain('from-brand-violet/30')
   })
 
   it('uses only font-medium and font-semibold typography weights', () => {
