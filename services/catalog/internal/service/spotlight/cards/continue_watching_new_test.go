@@ -95,7 +95,10 @@ func TestContinueWatchingNew_FilterRule_StrictGreaterThan(t *testing.T) {
 	if data.Anime.ID != "is-new" {
 		t.Errorf("expected the strictly-greater item, got %q", data.Anime.ID)
 	}
-	if data.LastWatchedEpisode != 5 || data.NewEpisodeNumber != 7 {
+	// NewEpisodeNumber is the NEXT unwatched episode (LastWatchedEpisode+1),
+	// not the latest aired — the CTA must resume the user at ep 6, not skip
+	// them forward to ep 7 (AUTO-349).
+	if data.LastWatchedEpisode != 5 || data.NewEpisodeNumber != 6 {
 		t.Errorf("episode fields wrong: %+v", data)
 	}
 }

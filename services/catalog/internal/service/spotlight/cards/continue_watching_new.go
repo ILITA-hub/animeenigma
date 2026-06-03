@@ -115,7 +115,7 @@ func (r *ContinueWatchingNewResolver) Resolve(ctx context.Context, userID *strin
 	data := spotlight.ContinueWatchingNewData{
 		Anime:              anime,
 		LastWatchedEpisode: picked.LastWatchedEpisode,
-		NewEpisodeNumber:   picked.EpisodesAired,
+		NewEpisodeNumber:   picked.LastWatchedEpisode + 1,
 	}
 
 	if err := r.cache.Set(ctx, key, data, continueWatchingNewTTL); err != nil {
