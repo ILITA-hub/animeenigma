@@ -20,6 +20,7 @@ COPY libs/streamprobe/go.mod libs/streamprobe/go.sum* ./libs/streamprobe/
 COPY libs/animeparser/go.mod libs/animeparser/go.sum* ./libs/animeparser/
 COPY libs/videoutils/go.mod libs/videoutils/go.sum* ./libs/videoutils/
 COPY libs/idmapping/go.mod libs/idmapping/go.sum* ./libs/idmapping/
+COPY libs/kodikextract/go.mod libs/kodikextract/go.sum* ./libs/kodikextract/
 COPY libs/metrics/go.mod libs/metrics/go.sum* ./libs/metrics/
 COPY services/auth/go.mod services/auth/go.sum* ./services/auth/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
