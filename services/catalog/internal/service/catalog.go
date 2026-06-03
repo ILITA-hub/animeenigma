@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/idmapping"
+	"github.com/ILITA-hub/animeenigma/libs/kodikextract"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
@@ -1538,6 +1539,73 @@ func (s *CatalogService) GetKodikVideoSource(ctx context.Context, animeID string
 	_ = s.cache.Set(ctx, cacheKey, result, time.Hour)
 
 	return result, nil
+}
+
+// GetKodikStreamSource resolves the ad-free HLS stream for a Kodik episode.
+// quality<=0 means "use the provider default / highest".
+func (s *CatalogService) GetKodikStreamSource(ctx context.Context, animeID string, episode, translationID, quality int) (_ *domain.KodikStreamSource, retErr error) {
+	start := time.Now()
+	defer metrics.ObserveParser("kodik", "get_adfree_stream", start, &retErr)
+	metrics.EpisodeStreamRequestsTotal.WithLabelValues("kodik-adfree").Inc()
+	if s.kodikClient == nil {
+		return nil, errors.NotFound("kodik not available")
+	}
+
+	anime, err := s.animeRepo.GetByID(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+	if anime.ShikimoriID == "" {
+		return nil, errors.NotFound("anime does not have shikimori_id")
+	}
+
+	cacheKey := fmt.Sprintf("kodik:stream:%s:%d:%d:%d", animeID, episode, translationID, quality)
+	var cached domain.KodikStreamSource
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil {
+		return &cached, nil
+	}
+
+	embedLink, err := s.kodikClient.GetEpisodeLink(anime.ShikimoriID, episode, translationID)
+	if err != nil {
+		s.log.Warnw("kodik adfree: embed link failed", "anime_id", animeID, "episode", episode, "translation_id", translationID, "error", err)
+		return nil, errors.NotFound("video not found on kodik")
+	}
+
+	resolved, err := kodikextract.Resolve(ctx, embedLink)
+	if err != nil {
+		s.log.Warnw("kodik adfree: extraction failed", "anime_id", animeID, "embed", embedLink, "error", err)
+		return nil, errors.NotFound("could not extract kodik stream")
+	}
+	chosen := resolved.PickQuality(quality)
+
+	qualities := make([]int, 0, len(resolved.Streams))
+	for _, st := range resolved.Streams {
+		qualities = append(qualities, st.Quality)
+	}
+
+	translationName := ""
+	if translations, terr := s.kodikClient.GetTranslations(anime.ShikimoriID); terr == nil {
+		for _, t := range translations {
+			if t.ID == translationID {
+				translationName = t.Title
+				break
+			}
+		}
+	}
+
+	source := &domain.KodikStreamSource{
+		StreamURL:     chosen.M3U8URL,
+		Referer:       resolved.Referer,
+		Quality:       chosen.Quality,
+		Qualities:     qualities,
+		Episode:       episode,
+		TranslationID: translationID,
+		Translation:   translationName,
+	}
+
+	// Cache <1h — the CDN URL carries an expiry token.
+	_ = s.cache.Set(ctx, cacheKey, source, 30*time.Minute)
+	return source, nil
 }
 
 // SearchKodik searches for anime on Kodik by title

@@ -266,6 +266,19 @@ type KodikVideoSource struct {
 	Quality       string `json:"quality,omitempty"`
 }
 
+// KodikStreamSource is the decoded, ad-free HLS stream for a Kodik episode.
+// Unlike KodikVideoSource (an iframe embed link), this carries a direct .m3u8
+// URL that the frontend proxies through /api/streaming/hls-proxy.
+type KodikStreamSource struct {
+	StreamURL     string `json:"stream_url"`     // raw .m3u8 on the Kodik CDN
+	Referer       string `json:"referer"`        // Referer to send to the CDN
+	Quality       int    `json:"quality"`        // chosen quality
+	Qualities     []int  `json:"qualities"`      // all available qualities
+	Episode       int    `json:"episode"`
+	TranslationID int    `json:"translation_id"`
+	Translation   string `json:"translation"`
+}
+
 // KodikSearchResult represents a search result from Kodik
 type KodikSearchResult struct {
 	ID            string            `json:"id"`

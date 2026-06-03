@@ -9,6 +9,7 @@ require (
 	github.com/ILITA-hub/animeenigma/libs/errors v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/idmapping v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/kodikextract v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/pagination v0.0.0
