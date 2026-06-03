@@ -58,6 +58,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/watch-together/internal/hub"
@@ -73,6 +74,21 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalw("failed to load config", "error", err)
+	}
+
+	// Distributed tracing. No-op unless TRACING_ENABLED=true. Spans export to
+	// OTLP_ENDPOINT (default otel-collector:4317); failures are dropped, never
+	// fatal, so an unreachable collector cannot take the service down.
+	var tracer *tracing.Tracer
+	tracer, err = tracing.InitFromEnv(context.Background(), "watch-together")
+	if err != nil {
+		log.Warnw("tracing init failed; continuing without tracing", "error", err)
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tracer.Shutdown(ctx)
+		}()
 	}
 
 	metricsCollector := metrics.NewCollector("watch-together")
@@ -136,7 +152,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
-		Handler:      router,
+		Handler:      tracing.HTTPMiddleware("watch-together")(router),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

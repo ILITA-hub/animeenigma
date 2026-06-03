@@ -11,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/handler"
@@ -25,6 +26,21 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalw("failed to load config", "error", err)
+	}
+
+	// Distributed tracing. No-op unless TRACING_ENABLED=true. Spans export to
+	// OTLP_ENDPOINT (default otel-collector:4317); failures are dropped, never
+	// fatal, so an unreachable collector cannot take the service down.
+	var tracer *tracing.Tracer
+	tracer, err = tracing.InitFromEnv(context.Background(), "streaming")
+	if err != nil {
+		log.Warnw("tracing init failed; continuing without tracing", "error", err)
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tracer.Shutdown(ctx)
+		}()
 	}
 
 	ctx := context.Background()
@@ -69,7 +85,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
-		Handler:      router,
+		Handler:      tracing.HTTPMiddleware("streaming")(router),
 		ReadTimeout:  5 * time.Minute,  // Long timeout for video uploads
 		WriteTimeout: 5 * time.Minute,
 		IdleTimeout:  60 * time.Second,

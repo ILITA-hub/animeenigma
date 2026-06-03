@@ -177,6 +177,7 @@ services:
       # rot). Flip off by removing names + `docker compose restart scraper`
       # (no rebuild needed).
       SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-gogoanime}
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8088:8088"
     depends_on:
@@ -511,6 +512,7 @@ services:
       MINIO_USE_SSL: "false"
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:-stream-secret-change-in-production}
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8082:8082"
     depends_on:
@@ -561,6 +563,7 @@ services:
       SERVER_PORT: 8084
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8084:8084"
     depends_on:
@@ -709,6 +712,7 @@ services:
       # localhost frontend (`http://localhost:3003`) AND the gateway-facing
       # origin (`http://localhost:8000`). PublicBaseURL is allowed implicitly.
       WATCH_TOGETHER_ALLOWED_ORIGINS: ${WATCH_TOGETHER_ALLOWED_ORIGINS:-http://localhost:3003,http://localhost:8000}
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8091:8091"
     depends_on:
