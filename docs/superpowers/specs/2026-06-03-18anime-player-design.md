@@ -46,6 +46,21 @@ breaks on upstream outages (e.g. `search.htv-services.com` returning Cloudflare 
 This matches the project's existing **OurEnglish scraper** model: a source site that yields embed
 links, plus extractors that turn embed URLs into playable streams.
 
+> **⚠️ SUPERSEDED (2026-06-03, post-ship): 18anime moved into the scraper microservice as a
+> separate adult provider group.** The original ship placed the parser in the **catalog** service
+> (Approach A below). Per a follow-up request, the extraction was ported to
+> `services/scraper/internal/providers/eighteenanime/` (implements `domain.Provider`) and
+> registered into a **second, dedicated `Orchestrator`** (the "adult group") served on the
+> `/anime18/{episodes,servers,stream}` route family. The EN (OurEnglish) orchestrator NEVER
+> registers it, so the "no hentai in the EN failover chain" guarantee is now *structural* (two
+> separate orchestrators) rather than "EN-untouched". Provider group is intrinsic
+> (`config.GroupOf`, validated — a YAML typo cannot move it into EN). 18anime appears in
+> `scraper-providers.yaml` + the Grafana provider-management dashboard; enable/disable there only
+> affects the 18+ player. The catalog keeps its `/api/anime/{id}/anime18/*` routes +
+> `Anime18Player.vue` unchanged but now **forwards** to the scraper; the catalog parser package was
+> deleted. mp4upload/turbovid are exposed as selectable **servers** (turbovid now directly
+> reachable). No automated golden probe for 18anime (no 18+ golden pool) — health is seeded.
+
 ## 3. Architecture & Data Flow
 
 Mirrors the Hanime provider — a self-contained path through the **catalog** service (Approach A;
