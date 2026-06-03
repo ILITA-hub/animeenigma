@@ -329,6 +329,12 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	{Domain: "turboviplay.com", Reason: "18anime turbovid master m3u8 host (cdnN.turboviplay.com) — no Referer needed", Owner: "@18anime", Added: "2026-06-03"},
 	{Domain: "turbosplayer.com", Reason: "18anime turbovid nested variant/segment host — no Referer needed", Owner: "@18anime", Added: "2026-06-03"},
 
+	// Kodik ad-free HLS CDN (kodikextract). Manifest on cloud.solodcdn.com
+	// 302-redirects to node hosts (draco.cloud.solodcdn.com, ...); the eTLD+1
+	// entry covers those via the HasSuffix(host, "."+allowed) match.
+	{Domain: "solodcdn.com", Reason: "Kodik ad-free HLS manifest + segments (node subdomains)", Owner: "@0neymik0", Added: "2026-06-03"},
+	{Domain: "cloud.solodcdn.com", Reason: "Kodik ad-free HLS manifest + relative segment base", Owner: "@0neymik0", Added: "2026-06-03"},
+
 	// Phase 18 — Anitaku/Gogoanime CDN entries.
 	// Rotating subdomains match via strings.HasSuffix(host, "."+allowed) in isHLSDomainAllowed.
 	{Domain: "anitaku.to", Reason: "Anitaku poster + future-proxy host (Phase 18)", Owner: "@legacy", Added: "2026-05-20"},

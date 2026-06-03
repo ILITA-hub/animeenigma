@@ -263,6 +263,27 @@ func TestIsHLSDomainAllowed_Hls3Hosts(t *testing.T) {
 	}
 }
 
+// TestSolodcdnAllowed locks in the two solodcdn.com entries required by the
+// Kodik ad-free HLS player (kodikextract). The manifest lives on
+// cloud.solodcdn.com and 302-redirects to node subdomains such as
+// draco.cloud.solodcdn.com — the eTLD+1 entry "solodcdn.com" covers those via
+// the strings.HasSuffix(host, "."+allowed) gate in isHLSDomainAllowed.
+// Hosts are extracted from the target URLs (isHLSDomainAllowed receives Host,
+// not the full URL, matching how ProxyWithReferer calls it):
+//   - https://cloud.solodcdn.com/useruploads/x/y:1/720.mp4:hls:manifest.m3u8
+//   - https://draco.cloud.solodcdn.com/useruploads/x/y:1/720.mp4:hls:seg-1-v1-a1.ts
+func TestSolodcdnAllowed(t *testing.T) {
+	cases := []string{
+		"cloud.solodcdn.com",       // manifest host (from .m3u8 URL above)
+		"draco.cloud.solodcdn.com", // node subdomain (from .ts segment URL above)
+	}
+	for _, u := range cases {
+		if !isHLSDomainAllowed(u) {
+			t.Errorf("expected %s to be allowed", u)
+		}
+	}
+}
+
 // TestIsHLSDomainAllowed_RotatingSubdomains exercises the rotating-subdomain
 // match policy needed by the new StreamHG + Earnvids CDNs (e.g.
 // OkqtSs1gBbNcA8e.premilkyway.com per segment fetch). The existing
