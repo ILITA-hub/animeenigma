@@ -131,3 +131,46 @@ providers:
 		t.Errorf("animepahe row wrong: %+v", rows[1])
 	}
 }
+
+func TestGroupOf(t *testing.T) {
+	if GroupOf("18anime") != GroupAdult {
+		t.Fatalf("18anime group = %q, want adult", GroupOf("18anime"))
+	}
+	if GroupOf("allanime") != GroupEN {
+		t.Fatalf("allanime group = %q, want en", GroupOf("allanime"))
+	}
+}
+
+func TestKnownProvidersInGroup(t *testing.T) {
+	adult := KnownProvidersInGroup(GroupAdult)
+	if len(adult) != 1 || adult[0] != "18anime" {
+		t.Fatalf("adult group = %v, want [18anime]", adult)
+	}
+	en := KnownProvidersInGroup(GroupEN)
+	for _, n := range en {
+		if n == "18anime" {
+			t.Fatal("18anime must NOT be in the EN group")
+		}
+	}
+}
+
+func TestLoadProviders_GroupIntrinsic(t *testing.T) {
+	// Correct explicit group is accepted and reflected.
+	path := writeTempYAML(t, "providers:\n  - {name: 18anime, enabled: true, group: adult}\n  - {name: allanime, enabled: true}\n")
+	pc, err := LoadProviders(path)
+	if err != nil {
+		t.Fatalf("LoadProviders err = %v", err)
+	}
+	if pc.Meta("18anime").Group != GroupAdult {
+		t.Fatalf("18anime meta group = %q", pc.Meta("18anime").Group)
+	}
+	if pc.Meta("allanime").Group != GroupEN {
+		t.Fatalf("allanime meta group = %q", pc.Meta("allanime").Group)
+	}
+
+	// A typo'd group (trying to move 18anime into EN) MUST fail at load.
+	bad := writeTempYAML(t, "providers:\n  - {name: 18anime, enabled: true, group: en}\n")
+	if _, err := LoadProviders(bad); err == nil {
+		t.Fatal("expected error when explicit group != intrinsic group")
+	}
+}

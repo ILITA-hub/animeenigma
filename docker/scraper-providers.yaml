@@ -7,12 +7,26 @@
 # the dashboard state-timeline = when each provider was disconnected/reconnected.
 #
 # Every entry REQUIRES name + enabled. Known names: gogoanime, animepahe, allanime,
-# animefever, miruro, nineanime, animekai. An unknown name fails the scraper at boot.
+# animefever, miruro, nineanime, animekai, 18anime. An unknown name fails the scraper at boot.
+#
+# `group` is OPTIONAL and INTRINSIC (validated, not freely editable): EN providers
+# default to group "en"; "18anime" is group "adult". The "adult" group runs in a
+# SEPARATE orchestrator on /anime18/* routes and is NEVER part of the EN failover
+# chain — so enabling/disabling 18anime here only affects the 18+ player.
 providers:
   - { name: allanime,  enabled: true }
   - { name: animefever, enabled: true }
   - { name: miruro,    enabled: true }
   - { name: nineanime, enabled: true }
+
+  # 18+ group — separate orchestrator, not in the EN chain.
+  - name: 18anime
+    enabled: true
+    group: adult
+    reason: "18+ provider (separate group)"
+    description: >
+      18anime.me hentai source for the 18+ player. Runs in its own orchestrator
+      on /anime18/* — NEVER part of the EN (OurEnglish) failover chain.
 
   - name: animepahe
     enabled: false

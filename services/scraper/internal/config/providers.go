@@ -13,6 +13,44 @@ import (
 // Must match the registration names in cmd/scraper-api/main.go.
 var KnownProviders = []string{
 	"gogoanime", "animepahe", "allanime", "animefever", "miruro", "nineanime", "animekai",
+	"18anime",
+}
+
+// Provider groups. The EN failover chain serves GroupEN providers; GroupAdult
+// providers (18+) are served by a SEPARATE orchestrator on /anime18/* routes
+// and are NEVER part of the EN chain (no 18+ leakage into OurEnglish).
+const (
+	GroupEN    = "en"
+	GroupAdult = "adult"
+)
+
+// providerGroups assigns each known provider to its group. Group is INTRINSIC
+// to the provider (a hentai source is always adult) — it is NOT operator-
+// editable via YAML, so a typo can't move 18anime into the EN chain. Absent
+// entries default to GroupEN.
+var providerGroups = map[string]string{
+	"18anime": GroupAdult,
+}
+
+// GroupOf returns the canonical group for a provider name (GroupEN by default).
+func GroupOf(name string) string {
+	if g, ok := providerGroups[name]; ok {
+		return g
+	}
+	return GroupEN
+}
+
+// KnownProvidersInGroup returns the KnownProviders belonging to the given group,
+// preserving KnownProviders order. main.go uses this to build the EN vs adult
+// candidate lists (metrics seeding + boot-count split).
+func KnownProvidersInGroup(group string) []string {
+	out := []string{}
+	for _, name := range KnownProviders {
+		if GroupOf(name) == group {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // ProviderMeta is one resolved provider entry.
@@ -21,15 +59,17 @@ type ProviderMeta struct {
 	Enabled     bool
 	Reason      string
 	Description string
+	Group       string // "en" (default) or "adult" — intrinsic, from GroupOf(name)
 }
 
 // providerEntry is the raw YAML shape. Enabled is a pointer so an omitted
 // `enabled:` is distinguishable from an explicit `false` (we require it).
 type providerEntry struct {
-	Name        string `yaml:"name"`
-	Enabled     *bool  `yaml:"enabled"`
-	Reason      string `yaml:"reason"`
-	Description string `yaml:"description"`
+	Name        string  `yaml:"name"`
+	Enabled     *bool   `yaml:"enabled"`
+	Reason      string  `yaml:"reason"`
+	Description string  `yaml:"description"`
+	Group       *string `yaml:"group"` // optional; if present MUST equal GroupOf(name)
 }
 
 type providersFile struct {
@@ -118,11 +158,17 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 		if _, dup := metas[e.Name]; dup {
 			return ProvidersConfig{}, fmt.Errorf("providers file: duplicate provider %q", e.Name)
 		}
+		// Group is intrinsic; an explicit YAML group must match the canonical
+		// assignment (defense against typo-moving 18anime into the EN chain).
+		if e.Group != nil && *e.Group != GroupOf(e.Name) {
+			return ProvidersConfig{}, fmt.Errorf("providers file: provider %q group %q != intrinsic %q", e.Name, *e.Group, GroupOf(e.Name))
+		}
 		metas[e.Name] = ProviderMeta{
 			Name:        e.Name,
 			Enabled:     *e.Enabled,
 			Reason:      e.Reason,
 			Description: e.Description,
+			Group:       GroupOf(e.Name),
 		}
 	}
 	return ProvidersConfig{metas: metas, Source: "file"}, nil
@@ -133,7 +179,7 @@ func LoadProviders(path string) (ProvidersConfig, error) {
 func providersFromDegraded(d DegradedProvidersConfig, source string) ProvidersConfig {
 	metas := make(map[string]ProviderMeta, len(KnownProviders))
 	for _, name := range KnownProviders {
-		metas[name] = ProviderMeta{Name: name, Enabled: !d.IsDegraded(name)}
+		metas[name] = ProviderMeta{Name: name, Enabled: !d.IsDegraded(name), Group: GroupOf(name)}
 	}
 	return ProvidersConfig{metas: metas, Source: source}
 }
