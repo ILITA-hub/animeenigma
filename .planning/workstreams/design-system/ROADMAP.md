@@ -8,7 +8,7 @@
 
 ## Milestones
 
-- ⏳ **v1.0 Design System Consolidation** — 6 phases. One layered, shadcn-vue-anchored token system + the app migrated onto it, with a lint gate so it stays consolidated. Phase 1 (foundation) complete; Phases 2–6 remain.
+- ✅ **v1.0 Design System Consolidation** — 7 phases (6 planned + Phase 7 post-audit). One layered, shadcn-vue-anchored token system + the app migrated onto it, with a lint gate so it stays consolidated. **COMPLETE 2026-06-03 — audit passed, 32/32 requirements.**
 - ⏳ **v1.1 Living styleguide route** — Conditional. An in-app `/styleguide` gallery rendering every token + primitive live. Deferred; needs its own brainstorm.
 - ⏳ **v1.2 Multi-theme** — Conditional. Light theme / per-user themes, enabled by the token model. Deferred.
 
