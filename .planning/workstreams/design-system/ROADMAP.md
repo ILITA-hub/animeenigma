@@ -20,7 +20,7 @@
 | 2 | shadcn-vue Install + Button/Card Proof | ✅ Complete (2026-06-02 — 4 commits 7083bbca..bd975bfa; reka-ui+cva+clsx+tailwind-merge installed, Button+Card on cn()/cva, 714 vitest, vue-tsc clean = 9 consumers unchanged, main.css untouched, A2 white-text confirmed live, 5-surface smoke zero-diff) |
 | 3 | Primitive Set Swap | ✅ Complete (2026-06-02 — 4 waves; Badge/Input/Tabs+Select/Dialog+5 new primitives on Reka, native right-click restored + kebab→anchored DropdownMenu [DS-LIB-08]; 799 vitest, vue-tsc clean, main.css untouched; live-verified: Select popper, Dialog scroll-lock/focus/escape, kebab menu anchor+actions+auth-gating, native right-click) |
 | 4 | High-Traffic Surface Migration | ✅ Complete (4/4 plans — Home+Browse+anime-card family (01), nav/layout (02), anime detail (03), 5 players + chrome helpers (04). All high-traffic surfaces token-clean of off-palette; player-accent + subtitle render hex allowlisted verbatim; DS-MIGRATE-01 proven on real player surfaces; DS-MIGRATE-02/03/06 partial-this-phase. `--accent` flip + tail sweep remain Phase 5) |
-| 5 | Tail Sweep + Lint Enforcement | ⏳ Planned |
+| 5 | Tail Sweep + Lint Enforcement | 🔄 In Progress (1/5 plans — spotlight + home-rail tail sweep (01) done) |
 | 6 | Governance into Memory | ⏳ Planned |
 
 ## Goal (v1.0)
@@ -129,7 +129,7 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 5. Full vitest + tsc + e2e green.
 
 **Plans:** 5 plans (3 waves)
-- [ ] 05-01-PLAN.md — tail sweep: 11 spotlight SFCs + 5 home-rail SFCs to semantic tokens (Wave 1, autonomous)
+- [x] 05-01-PLAN.md — tail sweep: 11 spotlight SFCs + 5 home-rail SFCs to semantic tokens (Wave 1, autonomous) ✅ `87a4afec`, `058eb4a6`
 - [ ] 05-02-PLAN.md — tail sweep: 4 admin views + Profile/Game/StatusPage/Themes to semantic tokens (Wave 1, autonomous)
 - [ ] 05-03-PLAN.md — tail sweep: 3 ui/ composites + App + LastUpdates + themes/browse/profile/WT to semantic tokens (Wave 1, autonomous; ActivityFeed.vue deferred — analytics-workstream uncommitted changes)
 - [ ] 05-04-PLAN.md — `--accent` flip to shadcn hover surface + temp brand-cyan alias deletion in main.css [DS-MIGRATE-05] (Wave 2, human-verify in-browser smoke)
