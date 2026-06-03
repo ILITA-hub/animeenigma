@@ -40,6 +40,14 @@ vi.mock('@/composables/usePlayerSyncBridge', () => ({
   usePlayerSyncBridge: () => {},
 }))
 
+// Stub watched-episodes composable so tests don't require Pinia wiring.
+vi.mock('@/composables/useWatchedEpisodes', () => ({
+  useWatchedEpisodes: () => ({
+    watchedUpTo: { value: 0 },
+    refresh: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 const mountPlayer = () =>
   mount(OurEnglishPlayer, {
     props: { animeId: 'anime-uuid' },
@@ -48,6 +56,7 @@ const mountPlayer = () =>
       stubs: {
         SubtitleOverlay: { template: '<div />' },
         SubtitleSettingsMenu: true,
+        EpisodeSelector: { template: '<div />' },
       },
     },
   })

@@ -154,31 +154,26 @@
           </h3>
           <slot name="header-middle" />
         </div>
-        <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
-          <button
-            v-for="ep in episodes"
-            :key="ep.id"
-            class="w-12 h-10 rounded-lg text-sm font-medium transition-all"
-            :class="selectedEpisode?.id === ep.id
-              ? 'accent-bg text-white'
-              : 'bg-white/10 text-white hover:bg-white/20'"
-            :title="ep.title || `Episode ${ep.number}`"
-            @click="selectEpisode(ep)"
-          >
-            {{ ep.number }}
-          </button>
-        </div>
+        <EpisodeSelector
+          :episodes="episodeOptions"
+          :selected-key="selectedEpisode?.id ?? null"
+          :watched-up-to="watchedUpTo"
+          @select="onEpisodePicked"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
+import EpisodeSelector from './EpisodeSelector.vue'
+import type { EpisodeOption } from './EpisodeSelector.types'
 import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
+import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import { scraperApi } from '@/api/client'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
@@ -232,6 +227,7 @@ const props = defineProps<{
 }>()
 
 const { offset: subtitleOffset } = useSubtitleTimingOffset()
+const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.animeId)
 
 const playerContainer = ref<HTMLElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -249,6 +245,20 @@ const available = ref(true)
 
 const episodes = ref<ScraperEpisode[]>([])
 const selectedEpisode = ref<ScraperEpisode | null>(null)
+
+const episodeOptions = computed<EpisodeOption[]>(() =>
+  episodes.value.map((ep) => ({
+    key: ep.id,
+    label: ep.number,
+    number: Number(ep.number),
+    isFiller: ep.is_filler,
+  })),
+)
+
+function onEpisodePicked(key: string | number) {
+  const ep = episodes.value.find((e) => e.id === key)
+  if (ep) selectEpisode(ep)
+}
 
 const servers = ref<ScraperServer[]>([])
 const selectedServerId = ref<string>('')
@@ -467,6 +477,7 @@ async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
     return
   }
   selectedEpisode.value = ep
+  void refreshWatched()
   loadingStream.value = true
   streamUrl.value = null
   streamFailed.value = false
@@ -563,14 +574,22 @@ watch(() => props.initialEpisode, (epNum) => {
   if (ep) selectEpisode(ep, true)
 })
 
+onMounted(() => {
+  void refreshWatched()
+})
+
 onBeforeUnmount(() => {
   disposePlayer()
 })
 </script>
 
 <style scoped>
+.ourenglish-player {
+  --player-accent: #22d3ee;
+  --player-accent-rgb: 34, 211, 238;
+}
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 3px; }
-.accent-bg { background-color: rgb(34, 211, 238); }
-.accent-border { border-color: rgb(34, 211, 238); }
+.accent-bg { background-color: var(--player-accent); }
+.accent-border { border-color: var(--player-accent); }
 </style>
