@@ -1198,7 +1198,7 @@ const _savedProv = localStorage.getItem('preferred_video_provider')
 const _initialProv =
   (VALID_PROVIDERS as readonly string[]).includes(_savedProv ?? '') ? (_savedProv as VideoProvider) : 'kodik'
 const videoProvider = ref<VideoProvider>(
-  _initialProv === 'animelib' && !animeLibEnabled ? 'kodik' : _initialProv
+  (_initialProv === 'animelib' && !animeLibEnabled) || (_initialProv === 'kodik-adfree' && !kodikAdfreeEnabled) ? 'kodik' : _initialProv
 )
 
 // Last-watched episode. For authenticated users this comes from server-side
@@ -2076,7 +2076,7 @@ const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
   // Auto-select first provider in the group
   if (lang === 'ru') {
     const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'kodik-adfree' | 'animelib' | null
-    videoProvider.value = savedRu && (savedRu !== 'animelib' || animeLibEnabled) ? savedRu : 'kodik'
+    videoProvider.value = savedRu && (savedRu !== 'animelib' || animeLibEnabled) && (savedRu !== 'kodik-adfree' || kodikAdfreeEnabled) ? savedRu : 'kodik'
   } else if (lang === 'en') {
     // Phase 24-28 — single-provider group; the in-player source dropdown
     // pins the failover preference inside OurEnglishPlayer itself.
