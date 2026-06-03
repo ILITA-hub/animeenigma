@@ -92,32 +92,12 @@
               <span class="hidden sm:inline">{{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}</span>
             </button>
           </div>
-          <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
-            <button
-              v-for="ep in episodeRange"
-              :key="ep"
-              @click="selectEpisode(ep)"
-              class="relative w-12 h-10 rounded-lg text-sm font-medium transition-all"
-              :class="[
-                selectedEpisode === ep
-                  ? 'accent-bg text-white'
-                  : isEpisodeWatched(ep)
-                    ? 'accent-bg-muted accent-text border accent-border hover:brightness-125'
-                    : 'bg-white/10 text-white hover:bg-white/20'
-              ]"
-            >
-              {{ ep }}
-              <!-- Watched indicator -->
-              <span
-                v-if="isEpisodeWatched(ep) && selectedEpisode !== ep"
-                class="absolute -top-1 -right-1 w-3 h-3 accent-bg rounded-full flex items-center justify-center"
-              >
-                <svg class="w-2 h-2 text-black" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                </svg>
-              </span>
-            </button>
-          </div>
+          <EpisodeSelector
+            :episodes="episodeOptions"
+            :selected-key="selectedEpisode"
+            :watched-up-to="watchedUpTo"
+            @select="(k) => selectEpisode(Number(k))"
+          />
         </div>
       </div>
 
@@ -241,6 +221,9 @@ import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useW
 import { findRecentClick, emitRecWatched } from '@/utils/recsAnalytics'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
+import EpisodeSelector from './EpisodeSelector.vue'
+import type { EpisodeOption } from './EpisodeSelector.types'
+import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 
 // Watch progress tracking
 const currentTime = ref(0)
@@ -254,7 +237,6 @@ const { t } = useI18n()
 // Mark episode as watched
 const markingWatched = ref(false)
 const episodeMarkedWatched = ref(false)
-const watchedEpisodes = ref(0) // Number of episodes user has watched
 
 const emit = defineEmits<{
   (e: 'progress', data: { episode: number; time: number; maxTime: number }): void
@@ -539,6 +521,12 @@ const episodeRange = computed(() => {
   return Array.from({ length: count }, (_, i) => i + 1)
 })
 
+const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.animeId)
+
+const episodeOptions = computed<EpisodeOption[]>(() =>
+  episodeRange.value.map((n) => ({ key: n, label: n, number: n })),
+)
+
 const fetchPinnedTranslations = async () => {
   try {
     const response = await kodikApi.getPinnedTranslations(props.animeId)
@@ -788,33 +776,12 @@ const selectEpisode = (episode: number) => {
   maxTime.value = 0
   lastSaveTime.value = 0
   // Check if new episode is already watched
-  episodeMarkedWatched.value = isEpisodeWatched(episode)
+  episodeMarkedWatched.value = episode <= watchedUpTo.value
 
   selectedEpisode.value = episode
   if (selectedTranslation.value) {
     loadVideo()
   }
-}
-
-// Fetch watched episodes count from user's watchlist
-const fetchWatchedEpisodes = async () => {
-  if (!authStore.isAuthenticated) {
-    watchedEpisodes.value = 0
-    return
-  }
-
-  try {
-    const response = await userApi.getWatchlistEntry(props.animeId)
-    const entry = response.data?.data || response.data
-    watchedEpisodes.value = entry?.episodes || 0
-  } catch {
-    watchedEpisodes.value = 0
-  }
-}
-
-// Check if episode is watched
-const isEpisodeWatched = (episode: number): boolean => {
-  return episode <= watchedEpisodes.value
 }
 
 // Mark current episode as watched
@@ -825,10 +792,7 @@ const markCurrentEpisodeWatched = async () => {
   try {
     await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
-    // Update watched episodes count
-    if (selectedEpisode.value > watchedEpisodes.value) {
-      watchedEpisodes.value = selectedEpisode.value
-    }
+    await refreshWatched()
     emit('episodeWatched', { episode: selectedEpisode.value })
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
@@ -845,10 +809,7 @@ const autoMarkEpisodeWatched = async () => {
   try {
     await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined, sessionId.value)
     episodeMarkedWatched.value = true
-    // Update watched episodes count
-    if (selectedEpisode.value > watchedEpisodes.value) {
-      watchedEpisodes.value = selectedEpisode.value
-    }
+    await refreshWatched()
     emit('episodeWatched', { episode: selectedEpisode.value })
     // Phase 14 (REC-EVAL-01): emit rec_watched if a click for this anime
     // landed in the last hour. Strict click→watched correlation.
@@ -919,12 +880,11 @@ watch(() => props.animeId, () => {
   currentTime.value = 0
   maxTime.value = 0
   lastSaveTime.value = 0
-  watchedEpisodes.value = 0
   episodeMarkedWatched.value = false
   userHasOverridden.value = false
   usedPreferredCombo.value = false
   fetchTranslations()
-  fetchWatchedEpisodes()
+  void refreshWatched()
 })
 
 // Late-arriving preferredCombo. When /api/preferences/resolve returns after
@@ -967,7 +927,7 @@ onMounted(() => {
     selectedEpisode.value = props.initialEpisode
   }
   fetchTranslations()
-  fetchWatchedEpisodes()
+  void refreshWatched()
 
   // ── Phase 3 (03.4): Watch Together sync wiring (only when in a room). ──
   if (props.room) {
