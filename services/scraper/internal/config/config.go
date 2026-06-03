@@ -40,6 +40,10 @@ type Config struct {
 	// in well under 1s, so 8s is generous headroom while staying under the 15s
 	// caller budget). Set 0 to disable the per-provider cap.
 	ProviderTimeout time.Duration
+
+	// Providers is the resolved provider-management config (scraper-providers.yaml,
+	// or env fallback). Source of truth for enable/disable + reason/description.
+	Providers ProvidersConfig
 }
 
 // DegradedProvidersConfig is the global kill-switch for providers known to be
@@ -234,8 +238,26 @@ func Load() (*Config, error) {
 		NineAnime: NineAnimeConfig{
 			BaseURL: getEnv("SCRAPER_NINEANIME_BASE_URL", "https://9anime.me.uk"),
 		},
-		DegradedProviders: parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", "")),
-		ProviderTimeout:   getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
+		ProviderTimeout: getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
+	}
+	// Provider management config: scraper-providers.yaml is the source of truth.
+	// Falls back to the legacy SCRAPER_DEGRADED_PROVIDERS env when the file path
+	// is unset or the file is missing (zero-break migration). ISS-023.
+	if providersPath := getEnv("SCRAPER_PROVIDERS_FILE", ""); providersPath != "" {
+		if _, statErr := os.Stat(providersPath); statErr == nil {
+			pc, err := LoadProviders(providersPath)
+			if err != nil {
+				return nil, fmt.Errorf("scraper providers file: %w", err)
+			}
+			cfg.Providers = pc
+			cfg.DegradedProviders = pc.toDegradedConfig()
+		} else {
+			cfg.DegradedProviders = parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", ""))
+			cfg.Providers = providersFromDegraded(cfg.DegradedProviders, "env-fallback")
+		}
+	} else {
+		cfg.DegradedProviders = parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", ""))
+		cfg.Providers = providersFromDegraded(cfg.DegradedProviders, "env")
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
 		parsed, err := url.Parse(u)

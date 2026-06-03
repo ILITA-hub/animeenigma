@@ -629,3 +629,59 @@ func TestLoad_NineAnimeInvalidBaseURL(t *testing.T) {
 		t.Fatalf("error %q must mention SCRAPER_NINEANIME_BASE_URL so operators can grep", err.Error())
 	}
 }
+
+func TestLoad_ProvidersFile_WinsOverEnv(t *testing.T) {
+	path := writeTempYAML(t, `
+providers:
+  - { name: animepahe, enabled: false, reason: "CF", description: "d" }
+  - { name: allanime, enabled: true }
+`)
+	t.Setenv("SCRAPER_PROVIDERS_FILE", path)
+	t.Setenv("SCRAPER_DEGRADED_PROVIDERS", "miruro")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load err = %v; want nil", err)
+	}
+	if cfg.Providers.Source != "file" {
+		t.Errorf("Providers.Source = %q; want file", cfg.Providers.Source)
+	}
+	if !cfg.DegradedProviders.IsDegraded("animepahe") {
+		t.Errorf("animepahe must be degraded (from file)")
+	}
+	if cfg.DegradedProviders.IsDegraded("miruro") {
+		t.Errorf("miruro must NOT be degraded — env ignored when file present")
+	}
+}
+
+func TestLoad_NoProvidersFile_FallsBackToEnv(t *testing.T) {
+	t.Setenv("SCRAPER_PROVIDERS_FILE", "")
+	t.Setenv("SCRAPER_DEGRADED_PROVIDERS", "gogoanime,animepahe")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load err = %v; want nil", err)
+	}
+	if cfg.Providers.Source != "env" {
+		t.Errorf("Providers.Source = %q; want env", cfg.Providers.Source)
+	}
+	if !cfg.DegradedProviders.IsDegraded("gogoanime") || !cfg.DegradedProviders.IsDegraded("animepahe") {
+		t.Errorf("env degraded set not applied")
+	}
+}
+
+func TestLoad_ProvidersFileMissing_FallsBackWithSource(t *testing.T) {
+	t.Setenv("SCRAPER_PROVIDERS_FILE", "/no/such/providers.yaml")
+	t.Setenv("SCRAPER_DEGRADED_PROVIDERS", "nineanime")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load err = %v; want nil (missing file must fall back, not fail)", err)
+	}
+	if cfg.Providers.Source != "env-fallback" {
+		t.Errorf("Providers.Source = %q; want env-fallback", cfg.Providers.Source)
+	}
+	if !cfg.DegradedProviders.IsDegraded("nineanime") {
+		t.Errorf("env fallback degraded set not applied")
+	}
+}
