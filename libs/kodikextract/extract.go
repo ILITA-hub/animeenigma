@@ -42,7 +42,8 @@ type embedParams struct {
 }
 
 var (
-	reJSVar = regexp.MustCompile(`\.(type|hash|id)\s*=\s*'([^']*)'`)
+	// Fix 7: quote-tolerant — accept both single and double quotes around the value.
+	reJSVar = regexp.MustCompile(`\.(type|hash|id)\s*=\s*['"]([^'"]*)['"]`)
 	// ref_sign BEFORE ref so the longer name wins; \b stops href= matching ref=.
 	reGoVar = regexp.MustCompile(`(?m)\b(domain|d_sign|pd_sign|ref_sign|ref)\s*=\s*"([^"]*)"`)
 )
@@ -74,7 +75,8 @@ func parseEmbedParams(html string) (*embedParams, error) {
 			p.RefSign = m[2]
 		}
 	}
-	if p.Type == "" || p.Hash == "" || p.ID == "" || p.DSign == "" || p.RefSign == "" {
+	// Fix 2: validate Domain in addition to the existing required fields.
+	if p.Type == "" || p.Hash == "" || p.ID == "" || p.Domain == "" || p.DSign == "" || p.RefSign == "" {
 		return nil, fmt.Errorf("kodikextract: embed page missing required params")
 	}
 	return p, nil
@@ -83,6 +85,7 @@ func parseEmbedParams(html string) (*embedParams, error) {
 // newClient builds an HTTP client with a cookie jar (to carry __ddg* DDoS-Guard
 // cookies from the GET into the /ftor POST) and an IPv4-forced dialer
 // (containers have no IPv6 egress; matches libs/videoutils).
+// The client and jar are intentionally per-call so session cookies don't leak across users.
 func newClient() *http.Client {
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{
@@ -104,6 +107,31 @@ type ftorResponse struct {
 	} `json:"links"`
 }
 
+// buildStreams decodes the /ftor response into a Result. Extracted from Resolve
+// so it can be unit-tested offline against a fixture without network calls.
+func buildStreams(fr ftorResponse, referer string) (*Result, error) {
+	res := &Result{Default: fr.Default, Referer: referer}
+	for qStr, links := range fr.Links {
+		if len(links) == 0 {
+			continue
+		}
+		dec, ok := DecodeSrc(links[0].Src)
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(dec, "//") {
+			dec = "https:" + dec
+		}
+		q, _ := strconv.Atoi(qStr)
+		res.Streams = append(res.Streams, Stream{Quality: q, M3U8URL: dec})
+	}
+	if len(res.Streams) == 0 {
+		return nil, fmt.Errorf("kodikextract: no decodable streams")
+	}
+	sort.Slice(res.Streams, func(i, j int) bool { return res.Streams[i].Quality < res.Streams[j].Quality })
+	return res, nil
+}
+
 // Resolve fetches a Kodik embed URL and returns the decoded HLS streams.
 func Resolve(ctx context.Context, embedURL string) (*Result, error) {
 	if !strings.HasPrefix(embedURL, "http") {
@@ -122,8 +150,12 @@ func Resolve(ctx context.Context, embedURL string) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kodikextract: embed GET: %w", err)
 	}
-	body, _ := io.ReadAll(resp.Body)
+	// Fix 6: check io.ReadAll error for embed body.
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("kodikextract: reading embed body: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("kodikextract: embed GET status %d", resp.StatusCode)
 	}
@@ -161,8 +193,12 @@ func Resolve(ctx context.Context, embedURL string) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kodikextract: /ftor POST: %w", err)
 	}
-	pbody, _ := io.ReadAll(presp.Body)
+	// Fix 6: check io.ReadAll error for /ftor body.
+	pbody, err := io.ReadAll(presp.Body)
 	presp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("kodikextract: reading /ftor body: %w", err)
+	}
 	if presp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("kodikextract: /ftor status %d", presp.StatusCode)
 	}
@@ -172,32 +208,17 @@ func Resolve(ctx context.Context, embedURL string) (*Result, error) {
 		return nil, fmt.Errorf("kodikextract: /ftor decode: %w", err)
 	}
 
-	// 3. Decode each quality's src.
-	res := &Result{Default: fr.Default, Referer: baseOrigin + "/"}
-	for qStr, links := range fr.Links {
-		if len(links) == 0 {
-			continue
-		}
-		dec, ok := DecodeSrc(links[0].Src)
-		if !ok {
-			continue
-		}
-		if strings.HasPrefix(dec, "//") {
-			dec = "https:" + dec
-		}
-		q, _ := strconv.Atoi(qStr)
-		res.Streams = append(res.Streams, Stream{Quality: q, M3U8URL: dec})
-	}
-	if len(res.Streams) == 0 {
-		return nil, fmt.Errorf("kodikextract: no decodable streams")
-	}
-	sort.Slice(res.Streams, func(i, j int) bool { return res.Streams[i].Quality < res.Streams[j].Quality })
-	return res, nil
+	// 3. Decode each quality's src via the testable helper.
+	return buildStreams(fr, baseOrigin+"/")
 }
 
 // PickQuality returns the stream matching want, or the highest <= want, or the
 // highest available. want==0 means "use Default / highest".
 func (r *Result) PickQuality(want int) Stream {
+	// Fix 1: guard against empty Streams to prevent panic.
+	if len(r.Streams) == 0 {
+		return Stream{}
+	}
 	best := r.Streams[len(r.Streams)-1] // highest
 	if want <= 0 {
 		for _, s := range r.Streams {

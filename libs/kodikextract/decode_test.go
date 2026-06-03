@@ -1,6 +1,9 @@
 package kodikextract
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDecodeSrc(t *testing.T) {
 	// Real encoded src captured from /ftor (Quintessential Quintuplets ep1, 720p).
@@ -11,19 +14,7 @@ func TestDecodeSrc(t *testing.T) {
 	if !ok {
 		t.Fatal("DecodeSrc returned ok=false, want true")
 	}
-	if !contains(got, "cloud.solodcdn.com") || !contains(got, "mp4:hls:manifest.m3u8") {
+	if !strings.Contains(got, "cloud.solodcdn.com") || !strings.Contains(got, "mp4:hls:manifest.m3u8") {
 		t.Fatalf("decoded URL unexpected: %q", got)
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || indexOf(s, sub) >= 0)
-}
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
 }

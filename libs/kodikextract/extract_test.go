@@ -1,6 +1,11 @@
 package kodikextract
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+)
 
 const sampleEmbed = `
 <script>
@@ -33,5 +38,79 @@ func TestParseEmbedParams(t *testing.T) {
 func TestParseEmbedParamsMissing(t *testing.T) {
 	if _, err := parseEmbedParams("<html>nope</html>"); err == nil {
 		t.Fatal("expected error for embed with no params")
+	}
+}
+
+// TestBuildStreamsFixture tests the /ftor decode path offline using a captured fixture.
+func TestBuildStreamsFixture(t *testing.T) {
+	data, err := os.ReadFile("testdata/ftor.json")
+	if err != nil {
+		t.Fatalf("reading fixture: %v", err)
+	}
+	var fr ftorResponse
+	if err := json.Unmarshal(data, &fr); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+
+	res, err := buildStreams(fr, "https://kodikplayer.com/")
+	if err != nil {
+		t.Fatalf("buildStreams err: %v", err)
+	}
+
+	if len(res.Streams) != 1 {
+		t.Fatalf("want 1 stream, got %d: %+v", len(res.Streams), res.Streams)
+	}
+	s := res.Streams[0]
+	if s.Quality != 720 {
+		t.Errorf("want Quality=720, got %d", s.Quality)
+	}
+	if !strings.HasPrefix(s.M3U8URL, "https://cloud.solodcdn.com") {
+		t.Errorf("M3U8URL should start with https://cloud.solodcdn.com, got %q", s.M3U8URL)
+	}
+	if !strings.Contains(s.M3U8URL, "mp4:hls:manifest.m3u8") {
+		t.Errorf("M3U8URL should contain mp4:hls:manifest.m3u8, got %q", s.M3U8URL)
+	}
+	if res.Referer != "https://kodikplayer.com/" {
+		t.Errorf("Referer want %q, got %q", "https://kodikplayer.com/", res.Referer)
+	}
+}
+
+// TestPickQuality verifies quality selection logic across boundary cases.
+func TestPickQuality(t *testing.T) {
+	streams := []Stream{
+		{Quality: 360, M3U8URL: "https://cdn.example.com/360.m3u8"},
+		{Quality: 480, M3U8URL: "https://cdn.example.com/480.m3u8"},
+		{Quality: 720, M3U8URL: "https://cdn.example.com/720.m3u8"},
+	}
+	r := &Result{Default: 360, Streams: streams}
+
+	tests := []struct {
+		name  string
+		want  int
+		wantQ int
+	}{
+		{"want=0 returns default (360)", 0, 360},
+		{"want=720 exact match", 720, 720},
+		{"want=500 returns highest<=500 (480)", 500, 480},
+		{"want=1080 no>=1080 returns highest (720)", 1080, 720},
+		{"want=240 no<=240 returns highest (720)", 240, 720},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := r.PickQuality(tc.want)
+			if got.Quality != tc.wantQ {
+				t.Errorf("PickQuality(%d): got Quality=%d, want %d", tc.want, got.Quality, tc.wantQ)
+			}
+		})
+	}
+}
+
+// TestPickQualityEmpty verifies that PickQuality on an empty Result returns zero Stream without panic.
+func TestPickQualityEmpty(t *testing.T) {
+	r := &Result{}
+	got := r.PickQuality(720)
+	if got.Quality != 0 {
+		t.Errorf("empty PickQuality: want Quality=0, got %d", got.Quality)
 	}
 }
