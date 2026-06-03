@@ -9,6 +9,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/config"
 )
 
@@ -95,7 +96,11 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 		serviceURLs: serviceURLs,
 		client: &http.Client{
 			Timeout: 15 * time.Second,
-			Transport: &http.Transport{
+			// tracing.WrapTransport injects the active span's W3C traceparent
+			// into the forwarded request so downstream services continue the
+			// same trace. This is the core FE→BE propagation fix — the gateway
+			// previously propagated nothing. No-op when tracing is disabled.
+			Transport: tracing.WrapTransport(&http.Transport{
 				DialContext: (&net.Dialer{
 					Timeout:   3 * time.Second,
 					KeepAlive: 30 * time.Second,
@@ -103,7 +108,7 @@ func NewProxyService(serviceURLs config.ServiceURLs, log *logger.Logger) *ProxyS
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 10,
 				IdleConnTimeout:     90 * time.Second,
-			},
+			}),
 		},
 		log:         log,
 	}

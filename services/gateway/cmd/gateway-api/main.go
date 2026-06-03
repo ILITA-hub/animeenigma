@@ -10,6 +10,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/service"
@@ -26,6 +27,17 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalw("failed to load config", "error", err)
+	}
+
+	// Distributed tracing. No-op unless TRACING_ENABLED=true. Spans export to
+	// OTLP_ENDPOINT (default otel-collector:4317); failures are dropped, never
+	// fatal, so an unreachable collector cannot take the gateway down.
+	var tracer *tracing.Tracer
+	tracer, err = tracing.InitFromEnv(context.Background(), "gateway")
+	if err != nil {
+		log.Warnw("tracing init failed; continuing without tracing", "error", err)
+	} else {
+		defer func() { _ = tracer.Shutdown(context.Background()) }()
 	}
 
 	// Initialize services
@@ -73,7 +85,7 @@ func main() {
 	// Create HTTP server
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
-		Handler:      router,
+		Handler:      tracing.HTTPMiddleware("gateway")(router),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
