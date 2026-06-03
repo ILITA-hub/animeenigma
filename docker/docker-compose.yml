@@ -444,6 +444,7 @@ services:
       TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
@@ -483,6 +484,7 @@ services:
       HANIME_PASSWORD: ${HANIME_PASSWORD:-}
       TELEGRAM_NEWS_CHANNEL: ${TELEGRAM_NEWS_CHANNEL:-animeenigmanews}
       PROMETHEUS_SERVICE_URL: http://prometheus:9090/prometheus
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:
@@ -536,6 +538,7 @@ services:
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
       REPORTS_DIR: /data/reports
       MAINTENANCE_URL: http://host-gateway:8087
+      TRACING_ENABLED: "true"
     extra_hosts:
       - "host-gateway:host-gateway"
     volumes:
@@ -585,6 +588,7 @@ services:
       SCRAPER_PLAYABILITY_CANARY_CRON: "0 3 * * *"
       SCRAPER_BASE_URL: http://scraper:8088
       CANARY_REPORT_DIR: /data/reports/canary-runs
+      TRACING_ENABLED: "true"
     volumes:
       - player_reports:/data/reports
     ports:
@@ -613,6 +617,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: animeenigma
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8086:8086"
     depends_on:
@@ -658,6 +663,7 @@ services:
       NOTIFICATIONS_DETECTOR_WORKER_LIMIT: "5"
       NOTIFICATIONS_PARSER_TIMEOUT: "10s"
       NOTIFICATIONS_UNREAD_GAUGE_INTERVAL: "5m"
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8090:8090"
     depends_on:
@@ -778,6 +784,7 @@ services:
       LIBRARY_FFMPEG_BIN: /usr/bin/ffmpeg
       LIBRARY_FFPROBE_BIN: /usr/bin/ffprobe
       LIBRARY_ENCODE_MAX_BITRATE_KBPS: ${LIBRARY_ENCODE_MAX_BITRATE_KBPS:-5000}
+      TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8089:8089"
     volumes:

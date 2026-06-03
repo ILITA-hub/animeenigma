@@ -11,6 +11,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
+	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
 	"github.com/ILITA-hub/animeenigma/services/themes/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/themes/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/themes/internal/handler"
@@ -31,12 +33,31 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
+	// Distributed tracing. No-op unless TRACING_ENABLED=true. Spans export to
+	// OTLP_ENDPOINT (default otel-collector:4317); failures are dropped, never
+	// fatal, so an unreachable collector cannot take the service down.
+	var tracer *tracing.Tracer
+	tracer, err = tracing.InitFromEnv(context.Background(), "themes")
+	if err != nil {
+		log.Warnw("tracing init failed; continuing without tracing", "error", err)
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tracer.Shutdown(ctx)
+		}()
+	}
+
 	// Initialize database
 	db, err := database.New(cfg.Database)
 	if err != nil {
 		log.Fatalw("failed to connect to database", "error", err)
 	}
 	defer db.Close()
+
+	if err := gormtrace.InstrumentGORM(db.DB); err != nil {
+		log.Warnw("gorm tracing disabled", "error", err)
+	}
 
 	// Start DB pool metrics collector
 	if sqlDB, err := db.DB.DB(); err == nil {
@@ -86,7 +107,7 @@ func main() {
 	// Create HTTP server
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
-		Handler:      router,
+		Handler:      tracing.HTTPMiddleware("themes")(router),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 120 * time.Second, // Large for video proxy
 		IdleTimeout:  60 * time.Second,

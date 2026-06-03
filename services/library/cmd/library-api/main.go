@@ -11,6 +11,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
+	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/library/internal/ffmpeg"
@@ -75,6 +77,21 @@ func main() {
 		log.Fatalw("failed to load config", "error", err)
 	}
 
+	// Distributed tracing. No-op unless TRACING_ENABLED=true. Spans export to
+	// OTLP_ENDPOINT (default otel-collector:4317); failures are dropped, never
+	// fatal, so an unreachable collector cannot take the service down.
+	var tracer *tracing.Tracer
+	tracer, err = tracing.InitFromEnv(context.Background(), "library")
+	if err != nil {
+		log.Warnw("tracing init failed; continuing without tracing", "error", err)
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tracer.Shutdown(ctx)
+		}()
+	}
+
 	// Root context — propagates SIGTERM down to workers + disk guard.
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
@@ -86,6 +103,10 @@ func main() {
 		log.Fatalw("failed to connect to database", "error", err)
 	}
 	defer db.Close()
+
+	if err := gormtrace.InstrumentGORM(db.DB); err != nil {
+		log.Warnw("gorm tracing disabled", "error", err)
+	}
 
 	// Apply the Phase-3 migration (job_source / job_status enums +
 	// library_jobs table + partial index). Idempotent thanks to the
@@ -301,7 +322,7 @@ func main() {
 	// parity with the themes service.
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
-		Handler:      router,
+		Handler:      tracing.HTTPMiddleware("library")(router),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,
