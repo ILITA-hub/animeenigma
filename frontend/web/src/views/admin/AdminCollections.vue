@@ -18,11 +18,11 @@
       </div>
 
       <!-- Error states -->
-      <div v-if="error === '403'" class="glass-card p-4 mb-6 border border-red-500/40">
-        <p class="text-red-300">{{ $t('admin.recs.error403') }}</p>
+      <div v-if="error === '403'" class="glass-card p-4 mb-6 border border-destructive/40">
+        <p class="text-destructive">{{ $t('admin.recs.error403') }}</p>
       </div>
-      <div v-else-if="error" class="glass-card p-4 mb-6 border border-red-500/40">
-        <p class="text-red-300">{{ error }}</p>
+      <div v-else-if="error" class="glass-card p-4 mb-6 border border-destructive/40">
+        <p class="text-destructive">{{ error }}</p>
       </div>
 
       <!-- Loading -->
@@ -57,7 +57,7 @@
                 <span>{{ c.title }}</span>
                 <span
                   v-if="!c.published"
-                  class="ml-2 px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-300"
+                  class="ml-2 px-2 py-0.5 rounded text-[10px] font-mono bg-warning/20 text-warning"
                 >{{ $t('admin.collections.draftPill') }}</span>
               </td>
               <td class="px-3 py-2 font-mono text-white/70 text-xs">{{ c.slug }}</td>
@@ -70,7 +70,7 @@
                 >{{ $t('admin.collections.edit') }}</router-link>
                 <button
                   type="button"
-                  class="px-3 py-1 rounded bg-red-500/30 hover:bg-red-500/50 text-xs text-red-200"
+                  class="px-3 py-1 rounded bg-destructive/30 hover:bg-destructive/50 text-xs text-destructive"
                   @click="onDelete(c)"
                 >{{ $t('admin.collections.delete') }}</button>
               </td>

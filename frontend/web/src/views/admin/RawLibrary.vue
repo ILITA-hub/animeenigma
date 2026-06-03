@@ -7,8 +7,8 @@
       </div>
 
       <!-- Error banner -->
-      <div v-if="errorBanner" class="glass-card p-4 mb-6 border border-red-500/40">
-        <p class="text-red-300">{{ errorBanner }}</p>
+      <div v-if="errorBanner" class="glass-card p-4 mb-6 border border-destructive/40">
+        <p class="text-destructive">{{ errorBanner }}</p>
       </div>
 
       <!-- 1. Stats strip -->
@@ -166,7 +166,7 @@
               </span>
               <button
                 type="button"
-                class="px-2 py-1 rounded bg-white/10 hover:bg-red-500/40 text-white/80 hover:text-white text-xs transition"
+                class="px-2 py-1 rounded bg-white/10 hover:bg-destructive/40 text-white/80 hover:text-white text-xs transition"
                 :aria-label="$t('player.adminLibrary.jobs.cancel')"
                 @click="cancelJob(job)"
               >
@@ -178,21 +178,21 @@
 
         <!-- Failed sub-section -->
         <div v-if="failedJobs.length > 0" class="mb-6">
-          <h3 class="text-sm font-semibold text-red-300 mb-2 uppercase tracking-wide">
+          <h3 class="text-sm font-semibold text-destructive mb-2 uppercase tracking-wide">
             {{ $t('player.adminLibrary.jobs.failed.title') }}
           </h3>
           <ul class="space-y-2">
             <li
               v-for="job in failedJobs"
               :key="job.id"
-              class="glass-card p-3 border border-red-500/20"
+              class="glass-card p-3 border border-destructive/20"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
                   <div class="text-white text-sm font-medium truncate" :title="job.title">{{ job.title }}</div>
                   <div
                     v-if="job.error_text"
-                    class="text-xs text-red-300 mt-1 truncate"
+                    class="text-xs text-destructive mt-1 truncate"
                     :title="job.error_text"
                   >
                     {{ $t('player.adminLibrary.jobs.failed.errorText') }}: {{ job.error_text }}
@@ -200,7 +200,7 @@
                 </div>
                 <button
                   type="button"
-                  class="px-3 py-1 rounded bg-amber-500/30 hover:bg-amber-500/60 text-amber-100 text-xs font-medium transition"
+                  class="px-3 py-1 rounded bg-warning/30 hover:bg-warning/60 text-warning text-xs font-medium transition"
                   :aria-label="$t('player.adminLibrary.jobs.retry')"
                   @click="retryJob(job)"
                 >
@@ -213,14 +213,14 @@
 
         <!-- Pending-link sub-section -->
         <div v-if="pendingLinkJobs.length > 0">
-          <h3 class="text-sm font-semibold text-amber-300 mb-2 uppercase tracking-wide">
+          <h3 class="text-sm font-semibold text-warning mb-2 uppercase tracking-wide">
             {{ $t('player.adminLibrary.jobs.pendingLink.title') }}
           </h3>
           <ul class="space-y-2">
             <li
               v-for="job in pendingLinkJobs"
               :key="job.id"
-              class="glass-card p-3 border border-amber-500/30"
+              class="glass-card p-3 border border-warning/30"
             >
               <div class="text-white text-sm font-medium truncate mb-2" :title="job.title">{{ job.title }}</div>
               <div class="relative">
@@ -229,7 +229,7 @@
                   type="text"
                   :placeholder="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
                   :aria-label="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
-                  class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-warning"
                   @input="onPendingLinkInput(job.id)"
                 />
                 <ul

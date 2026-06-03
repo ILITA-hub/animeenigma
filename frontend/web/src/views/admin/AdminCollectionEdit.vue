@@ -32,8 +32,8 @@
       </div>
 
       <!-- Error -->
-      <div v-if="error" class="glass-card p-4 mb-6 border border-red-500/40">
-        <p class="text-red-300">{{ error }}</p>
+      <div v-if="error" class="glass-card p-4 mb-6 border border-destructive/40">
+        <p class="text-destructive">{{ error }}</p>
       </div>
 
       <!-- Loading -->
@@ -155,7 +155,7 @@
             </label>
           </div>
 
-          <p v-if="savedAt" class="text-emerald-400 text-xs">{{ $t('admin.collections.saved') }} ✓</p>
+          <p v-if="savedAt" class="text-success text-xs">{{ $t('admin.collections.saved') }} ✓</p>
         </form>
 
         <!-- Items section (only after save) -->
@@ -222,7 +222,7 @@
                 />
                 <button
                   type="button"
-                  class="px-3 py-1 rounded bg-red-500/30 hover:bg-red-500/50 text-xs text-red-200"
+                  class="px-3 py-1 rounded bg-destructive/30 hover:bg-destructive/50 text-xs text-destructive"
                   @click="onRemoveItem(item)"
                 >{{ $t('admin.collections.itemRemove') }}</button>
               </div>

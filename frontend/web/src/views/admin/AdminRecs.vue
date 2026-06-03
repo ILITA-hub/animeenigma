@@ -31,11 +31,11 @@
       </div>
 
       <!-- Error states -->
-      <div v-if="error === '403'" class="glass-card p-4 mb-6 border border-red-500/40">
-        <p class="text-red-300">{{ $t('admin.recs.error403') }}</p>
+      <div v-if="error === '403'" class="glass-card p-4 mb-6 border border-destructive/40">
+        <p class="text-destructive">{{ $t('admin.recs.error403') }}</p>
       </div>
-      <div v-else-if="error" class="glass-card p-4 mb-6 border border-red-500/40">
-        <p class="text-red-300">{{ $t('admin.recs.errorGeneric') }}: {{ error }}</p>
+      <div v-else-if="error" class="glass-card p-4 mb-6 border border-destructive/40">
+        <p class="text-destructive">{{ $t('admin.recs.errorGeneric') }}: {{ error }}</p>
       </div>
 
       <!-- Loading -->
@@ -138,7 +138,7 @@
                       <p v-if="row.pin_reason" class="text-white/50 italic">{{ row.pin_reason }}</p>
                     </div>
                     <div v-else-if="row.top_contributor === 's5' && s5TermsFor(row).length > 0" class="space-y-1 text-sm">
-                      <p class="text-purple-300 font-medium">
+                      <p class="text-brand-violet font-medium">
                         {{ $t('admin.recs.contributorDetailS5Title') }}
                       </p>
                       <ul class="space-y-0.5">
@@ -249,15 +249,15 @@ function formatBd(n: number | undefined | null): string {
 function topContributorClass(sig: string): string {
   switch (sig) {
     case 's1':
-      return 'bg-blue-500/20 text-blue-300'
+      return 'bg-info/20 text-info'
     case 's2':
-      return 'bg-emerald-500/20 text-emerald-300'
+      return 'bg-success/20 text-success'
     case 's3':
-      return 'bg-yellow-500/20 text-yellow-300'
+      return 'bg-warning/20 text-warning'
     case 's4':
       return 'bg-orange-500/20 text-orange-300'
     case 's5':
-      return 'bg-purple-500/20 text-purple-300'
+      return 'bg-brand-violet/20 text-brand-violet'
     case 's6_pin':
       return 'bg-cyan-500/20 text-cyan-300'
     default:
@@ -275,11 +275,11 @@ function reasonKey(reason: string): string {
 function reasonBadgeClass(reason: string): string {
   switch (reason) {
     case 'status=completed':
-      return 'bg-emerald-500/20 text-emerald-300'
+      return 'bg-success/20 text-success'
     case 'status=dropped':
-      return 'bg-red-500/20 text-red-300'
+      return 'bg-destructive/20 text-destructive'
     case 'hidden=true':
-      return 'bg-amber-500/20 text-amber-300'
+      return 'bg-warning/20 text-warning'
     default:
       return 'bg-white/10 text-white/70'
   }
