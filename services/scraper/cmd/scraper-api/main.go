@@ -536,6 +536,23 @@ func main() {
 			"registered", names)
 	}
 
+	// ISS-023: reflect the provider-management config into Prometheus so the
+	// Grafana dashboard shows EVERY provider (enabled and disabled) with its
+	// reason/description. Disabled providers are not Register()-ed, so without
+	// this they would vanish from all metrics.
+	for _, row := range cfg.Providers.Rows(candidateProviders) {
+		enabled := 0.0
+		if row.Enabled {
+			enabled = 1.0
+		}
+		metrics.ProviderEnabled.WithLabelValues(row.Name).Set(enabled)
+		metrics.ProviderInfo.WithLabelValues(row.Name, row.Reason, row.Description).Set(1)
+	}
+	log.Infow("provider management config loaded",
+		"source", cfg.Providers.Source,
+		"disabled", cfg.Providers.DisabledNames(),
+	)
+
 	go func() {
 		log.Infow("scraper service ready",
 			"port", cfg.Server.Port,
