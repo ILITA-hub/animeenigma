@@ -4,6 +4,16 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-026: `rec_watched_total` never observed — recommendation→watch conversions not reported by the frontend
+- **Date:** 2026-06-03
+- **Severity:** Low (observability gap, not an outage — recommendations still work; only the closed-loop CTR/conversion metric is blind).
+- **Symptom:** In Prometheus, `rec_click_total` has series but `rec_watched_total` has **zero** series. Three panels on the Recs dashboard (now the "Recommendations" row of *Recs & Preferences*) stay empty: Per-signal CTR (`rate(rec_watched_total)/rate(rec_click_total)`), Watch rate by signal, and Pin CTR (s6_pin). Surfaced during the 2026-06-03 dashboard audit.
+- **Root cause:** The **backend is correct** — `RecWatchedTotal.WithLabelValues(signal_id, pinned).Inc()` fires at `services/player/internal/handler/rec_events.go:81`, right beside the working `RecClickTotal.Inc()` (line 79), both off the same `POST /api/users/rec-events` endpoint. The counter has simply never been incremented because the **frontend emits the `click` rec-event but not the `watched` rec-event** — i.e. when a user actually watches an anime that originated from a recommendation row, no `{type:"watched", signal_id, ...}` event is POSTed. So the conversion half of the closed loop is uninstrumented client-side. (`RecWatchedTotal` is defined in `libs/metrics/recs.go:42`; its doc-comment expects "auto-mark events for anime that originated from recs".)
+- **Fix options (not started — needs a decision):**
+  1. **Instrument the frontend** — when the player auto-marks an episode complete (or the watch threshold is hit) for an anime whose origin is a recs row (origin already tracked in `localStorage.recentRecClicks` per the click path), POST a `watched` rec-event with the originating `signal_id`. Closes the loop; the 3 panels light up. Most correct.
+  2. **Drop the 3 dependent panels** — if recommendation→watch conversion isn't a metric we want to track, remove them. Lowest effort.
+- **Status:** Open (diagnosed, not started). Backend instrumentation verified present; gap is purely frontend. Files: `services/player/internal/handler/rec_events.go:81`, `libs/metrics/recs.go:42`, and (for the fix) the recs-origin tracking in the frontend player/recs composables.
+
 ### ISS-025: Watch Together — in-room player switch to OurEnglish/Hanime/Raw always rejected (EPISODE_UNAVAILABLE)
 - **Date:** 2026-06-03
 - **Severity:** High (player switching is dead for the permissive trio; with AniLib hidden in-room, the only working in-room players were Kodik → kodik, i.e. no switch worked at all).

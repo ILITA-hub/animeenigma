@@ -5,7 +5,7 @@
   "graphTooltip": 0,
   "id": null,
   "links": [],
-  "description": "Notifications engine observability. Covers the unread backlog (notifications_active_unread_gauge), the new-episode detector (run outcomes, scan breadth via notifications_detector_combos_scanned, run duration histogram), the hourly stale-relevance invalidation job (notifications_stale_invalidated_total), and the service DB pool. All metrics emitted by services/notifications. The notifications job is scraped via docker/prometheus/prometheus.yml.",
+  "description": "Clickstream collector (ingest) ops for the analytics service. The product-facing funnel lives in the Postgres-backed 'Product Analytics (Clickstream)' dashboard; THIS dashboard watches the pipe itself: accept throughput (analytics_events_received_total), back-pressure drops when the in-process buffer is full (analytics_events_dropped_total), the resulting drop rate, and the writer's DB pool. Sustained drops mean the batched writer can't keep up. The analytics job is scraped via docker/prometheus/prometheus.yml.",
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
@@ -32,13 +32,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "notifications_active_unread_gauge",
+          "expr": "sum(increase(analytics_events_received_total[24h]))",
           "format": "time_series",
-          "legendFormat": "unread",
+          "legendFormat": "received",
           "refId": "A"
         }
       ],
-      "title": "Active unread (backlog)",
+      "title": "Events received (24h)",
       "type": "stat"
     },
     {
@@ -47,7 +47,14 @@
         "defaults": {
           "color": { "mode": "thresholds" },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 100 }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
@@ -66,13 +73,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "notifications_detector_combos_scanned",
+          "expr": "sum(increase(analytics_events_dropped_total[24h]))",
           "format": "time_series",
-          "legendFormat": "combos",
+          "legendFormat": "dropped",
           "refId": "A"
         }
       ],
-      "title": "Hot combos scanned (last run)",
+      "title": "Events dropped (24h)",
       "type": "stat"
     },
     {
@@ -81,8 +88,15 @@
         "defaults": {
           "color": { "mode": "thresholds" },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -100,13 +114,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(notifications_stale_invalidated_total[24h]))",
+          "expr": "100 * sum(rate(analytics_events_dropped_total[1h])) / clamp_min(sum(rate(analytics_events_received_total[1h])) + sum(rate(analytics_events_dropped_total[1h])), 1)",
           "format": "time_series",
-          "legendFormat": "invalidated",
+          "legendFormat": "drop rate",
           "refId": "A"
         }
       ],
-      "title": "Stale invalidated (24h)",
+      "title": "Drop rate (1h)",
       "type": "stat"
     },
     {
@@ -134,13 +148,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(notifications_detector_runs_total[24h]))",
+          "expr": "db_pool_open_connections{job=\"analytics\"}",
           "format": "time_series",
-          "legendFormat": "runs",
+          "legendFormat": "open",
           "refId": "A"
         }
       ],
-      "title": "Detector runs (24h)",
+      "title": "DB pool open (writer)",
       "type": "stat"
     },
     {
@@ -154,45 +168,54 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "fillOpacity": 80,
-            "gradientMode": "none",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineWidth": 1,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
+          "unit": "reqps"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "dropped" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "id": 5,
       "options": {
-        "barRadius": 0,
-        "barWidth": 0.85,
-        "fullHighlight": false,
-        "groupWidth": 0.7,
-        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true },
-        "orientation": "auto",
-        "showValue": "auto",
-        "stacking": "normal",
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "xTickLabelRotation": 0,
-        "xTickLabelSpacing": 0
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "pluginVersion": "10.3.3",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (outcome) (increase(notifications_detector_runs_total[1h]))",
+          "expr": "sum(rate(analytics_events_received_total[5m]))",
           "format": "time_series",
-          "legendFormat": "{{outcome}}",
+          "legendFormat": "received",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(analytics_events_dropped_total[5m]))",
+          "format": "time_series",
+          "legendFormat": "dropped",
+          "refId": "B"
         }
       ],
-      "title": "Detector runs by outcome (1h)",
+      "title": "Ingest throughput (events/s)",
       "type": "timeseries"
     },
     {
@@ -221,117 +244,12 @@
           },
           "mappings": [],
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "s"
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "id": 6,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.5, sum(rate(notifications_detector_duration_seconds_bucket[5m])) by (le))",
-          "format": "time_series",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, sum(rate(notifications_detector_duration_seconds_bucket[5m])) by (le))",
-          "format": "time_series",
-          "legendFormat": "p95",
-          "refId": "B"
-        }
-      ],
-      "title": "Detector run duration p50 / p95",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "opacity",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
-      "id": 7,
-      "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "single", "sort": "none" }
-      },
-      "pluginVersion": "10.3.3",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "notifications_active_unread_gauge",
-          "format": "time_series",
-          "legendFormat": "unread backlog",
-          "refId": "A"
-        }
-      ],
-      "title": "Unread backlog over time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "opacity",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
-      "id": 8,
       "options": {
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "none" }
@@ -340,27 +258,34 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "db_pool_open_connections{job=\"notifications\"}",
+          "expr": "db_pool_open_connections{job=\"analytics\"}",
           "format": "time_series",
           "legendFormat": "open",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "db_pool_idle_connections{job=\"notifications\"}",
+          "expr": "db_pool_idle_connections{job=\"analytics\"}",
           "format": "time_series",
           "legendFormat": "idle",
           "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(db_pool_wait_total{job=\"analytics\"}[5m])",
+          "format": "time_series",
+          "legendFormat": "wait/s",
+          "refId": "C"
         }
       ],
-      "title": "DB pool (open / idle)",
+      "title": "Writer DB pool (open / idle / wait)",
       "type": "timeseries"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["notifications", "observability"],
+  "tags": ["analytics", "clickstream", "ingest"],
   "templating": {
     "list": [
       {
@@ -377,8 +302,8 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Notifications Engine",
-  "uid": "notifications-engine",
+  "title": "Analytics Ingest (Clickstream Collector)",
+  "uid": "analytics-ingest",
   "version": 1,
   "weekStart": "",
   "__inputs": [

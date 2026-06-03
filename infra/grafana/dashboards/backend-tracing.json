@@ -1,43 +1,20 @@
 {
   "annotations": { "list": [] },
   "editable": true,
-  "title": "Backend Tracing & Latency",
+  "title": "Backend Tracing",
   "uid": "backend-tracing",
   "tags": ["tracing", "backend"],
+  "description": "Tempo trace explorer (distributed tracing, OTel → Tempo). The per-service latency-p95 and 5xx-rate timeseries that used to live here were exact duplicates of the 'Service Overview' row in 'Services / Overview' (animeenigma-services) — removed 2026-06-03 to de-duplicate. Use that dashboard for RED metrics; use this one to drill into individual slow traces.",
   "timezone": "",
   "schemaVersion": 39,
   "time": { "from": "now-6h", "to": "now" },
   "templating": { "list": [] },
   "panels": [
     {
-      "type": "timeseries",
-      "title": "Request latency p95 by service (s)",
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))",
-          "legendFormat": "{{service}}"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "5xx error rate by service (req/s)",
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (service)",
-          "legendFormat": "{{service}}"
-        }
-      ]
-    },
-    {
       "type": "traces",
       "title": "Recent slow traces (>1s)",
       "datasource": { "type": "tempo", "uid": "aenigma-tempo" },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 9 },
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 0 },
       "targets": [
         { "queryType": "traceqlSearch", "query": "{ duration > 1s }", "limit": 50 }
       ]
