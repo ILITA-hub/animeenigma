@@ -60,21 +60,6 @@
             </template>
           </div>
 
-          <!-- Next Episode Info -->
-          <div v-if="anime.nextEpisodeAt && anime.status === 'ongoing'" class="mb-4">
-            <div class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20">
-              <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span class="text-cyan-400 font-medium">
-                {{ $t('anime.nextEpisode', { episode: (anime.episodesAired || 0) + 1 }) }}
-              </span>
-              <span class="text-white">
-                {{ formatNextEpisode(anime.nextEpisodeAt) }}
-              </span>
-            </div>
-          </div>
-
           <!-- Ratings -->
           <div class="flex flex-wrap items-center gap-4 mb-4">
             <!-- Shikimori Rating -->
@@ -145,6 +130,22 @@
                 :translation-id="resolvedCombo?.translation_id ?? ''"
               />
             </template>
+
+            <!-- Next Episode Info — shares the CTA row -->
+            <div
+              v-if="anime.nextEpisodeAt && anime.status === 'ongoing'"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20"
+            >
+              <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-cyan-400 font-medium">
+                {{ $t('anime.nextEpisode', { episode: (anime.episodesAired || 0) + 1 }) }}
+              </span>
+              <span class="text-white">
+                {{ formatNextEpisode(anime.nextEpisodeAt) }}
+              </span>
+            </div>
           </div>
 
           <!-- Actions -->

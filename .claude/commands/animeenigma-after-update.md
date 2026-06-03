@@ -7,6 +7,10 @@ description: After any implementation — redeploy services, update changelog, c
 
 Run this after any implementation work to deploy, update the user-facing changelog, commit, and push.
 
+**Run end-to-end without stopping for confirmation.** This skill is non-interactive: it lints, deploys, changelogs, commits, and pushes in one uninterrupted pass. Do NOT ask the user "want me to run this?" or "confirm the redeploy list?" — the user invoking after-update (or the assistant auto-invoking it after finishing an update) IS the confirmation. The ONLY reasons to pause are a hard failure: a lint error you can't auto-fix, a failed redeploy, or a failed health check. Surface those; otherwise drive all the way to a pushed commit.
+
+**Auto-invoke:** After completing any implementation work (feature, fix, refactor, UI tweak), the assistant should run this skill automatically without being asked. The user should not have to call it every time. (Batching exception still applies: for a run of several small planned changes, do them all, then ONE after-update at the end — no changelog spam.)
+
 ## Steps
 
 ### 1. Gather context
@@ -53,7 +57,7 @@ If any lint check fails, fix the issues before proceeding.
 
 ### 3. Deploy
 
-Present the list of services to redeploy and why. Ask the user to confirm.
+List the services to redeploy and why (one line, for the record), then redeploy them immediately — do NOT pause for confirmation.
 
 Run `make redeploy-<service>` for each service sequentially from `/data/animeenigma`. For frontend, use `make redeploy-web`.
 
