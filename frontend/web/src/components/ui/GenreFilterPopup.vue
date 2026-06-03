@@ -50,7 +50,7 @@
     >
       <div
         v-if="isOpen"
-        class="absolute z-50 mt-1 w-64 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/20"
+        class="absolute z-50 mt-1 w-64 bg-popover/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/20"
       >
         <!-- Search Input -->
         <div class="p-2 border-b border-white/10">

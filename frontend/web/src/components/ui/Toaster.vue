@@ -35,9 +35,9 @@ function toastClasses(type: ToastType): string {
     'pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg text-white'
   switch (type) {
     case 'error':
-      return `${base} bg-red-500/90`
+      return `${base} bg-destructive/90`
     case 'success':
-      return `${base} bg-emerald-500/90`
+      return `${base} bg-success/90`
     case 'info':
     default:
       return `${base} bg-cyan-500/90`

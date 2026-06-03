@@ -137,7 +137,7 @@ const dropdownClasses = computed(() => {
   }
 
   return cn(
-    'z-50 mt-1 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/20 max-h-60 overflow-auto',
+    'z-50 mt-1 bg-popover/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/20 max-h-60 overflow-auto',
     sizes[props.size],
   )
 })

@@ -19,7 +19,7 @@
         <p class="text-white/60 text-sm mb-6">{{ appError.message }}</p>
         <button
           @click="reloadPage"
-          class="px-6 py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors"
+          class="px-6 py-2.5 bg-brand-violet hover:bg-brand-violet/90 text-white rounded-lg font-medium transition-colors"
         >
           Reload
         </button>
@@ -33,7 +33,7 @@
     <div
       v-if="adminRedirectKey"
       role="alert"
-      class="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)] bg-red-500/90 text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3"
+      class="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)] bg-destructive/90 text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3"
     >
       <span class="flex-1 text-sm">{{ $t(adminRedirectKey) }}</span>
       <button
