@@ -37,7 +37,13 @@ func main() {
 	if err != nil {
 		log.Warnw("tracing init failed; continuing without tracing", "error", err)
 	} else {
-		defer func() { _ = tracer.Shutdown(context.Background()) }()
+		defer func() {
+			// Bounded so a SIGTERM during a collector outage can't hang the
+			// graceful shutdown on a blocked OTLP flush.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = tracer.Shutdown(ctx)
+		}()
 	}
 
 	// Initialize services
