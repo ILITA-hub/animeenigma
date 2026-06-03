@@ -231,8 +231,8 @@
       "label": "18anime"
     },
     "kodikAdfree": {
-      "tab": "Kodik（広告なし）",
-      "label": "Kodik · 広告なし",
+      "tab": "AEプレーヤー",
+      "label": "AEプレーヤー",
       "skipIntro": "スキップ",
       "extractError": "広告なしストリームを読み込めませんでした。通常のKodikプレーヤーをお試しいただくか、問題をご報告ください。"
     },
