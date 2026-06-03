@@ -88,4 +88,28 @@ var (
 		},
 		[]string{"provider", "server"},
 	)
+
+	// ProviderEnabled is the config-driven management gauge: 1 = enabled
+	// (registered in the failover chain), 0 = disabled. Emitted for ALL known
+	// providers so disabled ones remain visible in Grafana. Source:
+	// scraper-providers.yaml. ISS-023.
+	ProviderEnabled = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "provider_enabled",
+			Help: "Whether a scraper provider is enabled in the failover chain (1=enabled, 0=disabled), per scraper-providers.yaml",
+		},
+		[]string{"provider"},
+	)
+
+	// ProviderInfo is an info-style gauge (always 1) carrying per-provider
+	// management metadata (reason, description) for the Grafana table. Values
+	// change only on a config edit + scraper restart, so cardinality is bounded
+	// (~7 providers). ISS-023.
+	ProviderInfo = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "provider_info",
+			Help: "Info gauge (always 1) exposing per-provider management metadata (reason, description) for Grafana",
+		},
+		[]string{"provider", "reason", "description"},
+	)
 )

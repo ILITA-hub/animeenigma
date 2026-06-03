@@ -211,6 +211,22 @@ func TestParserUnplayableTotal_AllReasonsAccepted(t *testing.T) {
 	}
 }
 
+func TestProviderEnabledAndInfo_Exist(t *testing.T) {
+	ProviderEnabled.WithLabelValues("animepahe").Set(0)
+	ProviderEnabled.WithLabelValues("allanime").Set(1)
+	if got := testutil.ToFloat64(ProviderEnabled.WithLabelValues("animepahe")); got != 0 {
+		t.Errorf("provider_enabled{animepahe} = %v; want 0", got)
+	}
+	if got := testutil.ToFloat64(ProviderEnabled.WithLabelValues("allanime")); got != 1 {
+		t.Errorf("provider_enabled{allanime} = %v; want 1", got)
+	}
+
+	ProviderInfo.WithLabelValues("animepahe", "Cloudflare challenge", "moved to CF").Set(1)
+	if got := testutil.ToFloat64(ProviderInfo.WithLabelValues("animepahe", "Cloudflare challenge", "moved to CF")); got != 1 {
+		t.Errorf("provider_info{...} = %v; want 1", got)
+	}
+}
+
 // --- helpers ----------------------------------------------------------------
 
 // descMeta extracts (FQName, labelNames) from any collector via Describe().
