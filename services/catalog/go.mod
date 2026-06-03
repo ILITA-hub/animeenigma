@@ -98,6 +98,7 @@ replace (
 	github.com/ILITA-hub/animeenigma/libs/errors => ../../libs/errors
 	github.com/ILITA-hub/animeenigma/libs/httputil => ../../libs/httputil
 	github.com/ILITA-hub/animeenigma/libs/idmapping => ../../libs/idmapping
+	github.com/ILITA-hub/animeenigma/libs/kodikextract => ../../libs/kodikextract
 	github.com/ILITA-hub/animeenigma/libs/logger => ../../libs/logger
 	github.com/ILITA-hub/animeenigma/libs/metrics => ../../libs/metrics
 	github.com/ILITA-hub/animeenigma/libs/pagination => ../../libs/pagination
