@@ -11,6 +11,7 @@
         </div>
 
         <!-- Admin sync button -->
+        <!-- KEPT bespoke: borderless two-state soft-bg pill (idle cyan-soft / syncing warning-soft, no border). The closest variant `ghost` adds `border border-white/10` + a `bg-white/5` base that tailwind-merge can't strip cleanly, introducing a visible border diff. Behavior (@click, :disabled, inline svg/spinner, label) stays as-is. -->
         <button
           v-if="authStore.isAdmin"
           class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -39,6 +40,7 @@
           :label="$t('themes.typeFilterLabel')"
           container-class="flex rounded-lg overflow-hidden border border-white/10"
         >
+          <!-- KEPT bespoke: segmented-control item inside <ButtonGroup> (overflow-hidden border container). Items must be square-cornered/seamless; every Button variant forces rounded-lg/rounded-xl, breaking the seamless segmented look. :aria-pressed + two-state bg preserved as-is. -->
           <button
             v-for="opt in typeOptions"
             :key="opt.value"
@@ -85,6 +87,7 @@
       <!-- Error -->
       <div v-else-if="error" class="text-center py-20">
         <p class="text-white/60">{{ error }}</p>
+        <!-- KEPT bespoke: bare text-link affordance (cyan text, no bg/border). Button has no text-only variant; `ghost`/`outline` would add a filled/bordered box — a visible diff. -->
         <button class="mt-4 text-cyan-400 hover:text-cyan-300" @click="fetchThemes">Retry</button>
       </div>
 

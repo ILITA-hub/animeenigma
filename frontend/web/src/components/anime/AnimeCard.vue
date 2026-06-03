@@ -3,6 +3,7 @@
     <div class="card-image">
       <img :src="anime.coverImage" :alt="anime.title" loading="lazy" decoding="async" @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.coverImage) } }" />
       <div class="overlay">
+        <!-- KEPT bespoke: decorative 60px circular play affordance (scoped .play-btn: border-radius:50%, 60x60, var(--destructive)); no Button variant/size models a round 60px icon (icon size is 40x40 square). No @click — the whole card is the router-link. -->
         <button class="play-btn">▶</button>
       </div>
       <div class="rating" v-if="anime.rating">
