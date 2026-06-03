@@ -179,6 +179,27 @@ log.Errorw("failed to proxy video stream",
 )
 ```
 
+### Design System (Neon Tokyo, shadcn-vue)
+
+Canonical reference: **`frontend/web/src/styles/DESIGN-SYSTEM.md`** (token tiers, usage rules, component inventory). Do NOT duplicate it — read it before touching frontend styling. Bind to semantic tokens; never hardcode colors.
+
+**Lint gate (build-ENFORCED).** `frontend/web/scripts/design-system-lint.sh` runs as a prerequisite of `make lint-frontend` (→ `make lint` / CI) AND `make redeploy-web` (deploy gate). `ERRORS>0 ⇒ exit 1` — these FAIL THE BUILD. It enforces EXACTLY 3 color/token rules over `frontend/web/src/**/*.vue` (excludes `*.spec.*` / `__tests__`):
+
+1. **No off-palette Tailwind color classes** — `(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50…900)`. Migrate to a semantic token (`text-destructive`, `bg-warning`, `text-success`, `text-info`, `text-muted-foreground`, …). **EXEMPT brand/provider identity hues** (deliberately absent from the set, NOT forbidden): `cyan`, `pink`, `orange`, `rose`, `indigo`, `teal`, `lime` (Neon-Tokyo brand + per-provider accents — Kodik cyan, AniLib orange, Hanime pink, Raw rose).
+2. **No hardcoded hex outside the allowlist** — any raw `#[0-9a-fA-F]{3,8}` in a `.vue` not listed (per `(file,hex)`) in `frontend/web/scripts/design-system-allowlist.txt`.
+3. **No deprecated brand-alias `var()` usages** — `var(--ink)` / `var(--accent)` / `var(--pink)`. (Survivors `--ink-2`, `--ink-4`, `--accent-soft`, `--accent-line`, `--accent-glow`, `--pink-soft` are kept.)
+
+**Escape-hatch:** prefer migrating to a token; only when no token reproduces the value, add a justified `path:hex:reason` line to `frontend/web/scripts/design-system-allowlist.txt` — never disable the gate. Prove the fail-path with `bash frontend/web/scripts/design-system-lint.sh --selftest`. Since 05-04, `--accent` is the shadcn hover surface — use `--brand-cyan` for brand cyan.
+
+**Structural rules (GOVERNANCE-ONLY — human/AI-followed, NOT build-enforced;** a grep can't AST-distinguish them):
+
+- Reuse `@/components/ui` primitives before building new (Button/Card/Badge/Input/Select/Dialog/Tabs/DropdownMenu/Tooltip/Popover/Switch/Checkbox).
+- Only `font-medium` / `font-semibold` weights.
+- Padding scale (card `p-4 md:p-6 lg:p-8`).
+- `cva` variants for component variation.
+
+**Verify visual changes in a real browser (DS-NF-06, standing rule).** jsdom/vitest CANNOT catch Tailwind-v4 cascade bugs (unlayered custom classes beat utilities). Any rendered change gets an in-browser smoke at desktop + mobile, not just a passing unit test.
+
 ## Key Flows
 
 ### Search Flow
