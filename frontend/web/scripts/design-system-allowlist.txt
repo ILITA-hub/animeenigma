@@ -16,6 +16,7 @@
 
 # --- Per-provider / player accent identity hues (Phase-4 documented) -----------
 src/components/player/OurEnglishPlayer.vue:#22d3ee:OurEnglish player-accent (cyan-400) provider-identity hue declared as --player-accent CSS var on root, not a token
+src/components/player/RawPlayer.vue:#22d3ee:Raw player-accent (cyan-400) provider-identity hue declared as --player-accent CSS var on root
 src/components/player/KodikPlayer.vue:#06b6d4:Kodik player-accent (cyan) provider-identity hue, not a token
 src/components/player/AnimeLibPlayer.vue:#f97316:AniLib player-accent (orange) provider-identity hue, not a token
 src/components/player/HanimePlayer.vue:#ec4899:Hanime player-accent (pink) provider-identity hue, not a token

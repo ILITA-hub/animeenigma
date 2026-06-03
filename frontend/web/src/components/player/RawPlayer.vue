@@ -1,5 +1,5 @@
 <template>
-  <div class="raw-player">
+  <div class="raw-player" style="--player-accent: #22d3ee; --player-accent-rgb: 34, 211, 238;">
     <!-- Loading episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
       <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
@@ -119,20 +119,12 @@
           </h3>
           <slot name="header-middle" />
         </div>
-        <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
-          <button
-            v-for="ep in episodes"
-            :key="ep.id"
-            class="w-12 h-10 rounded-lg text-sm font-medium transition-all"
-            :class="selectedEpisode?.id === ep.id
-              ? 'accent-bg text-white'
-              : 'bg-white/10 text-white hover:bg-white/20'"
-            :title="ep.title || `Episode ${ep.number}`"
-            @click="selectEpisode(ep)"
-          >
-            {{ ep.number }}
-          </button>
-        </div>
+        <EpisodeSelector
+          :episodes="episodeOptions"
+          :selected-key="selectedEpisode?.id ?? null"
+          :watched-up-to="watchedUpTo"
+          @select="onEpisodePicked"
+        />
       </div>
     </div>
 
@@ -147,12 +139,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import OtherSubsPanel from './OtherSubsPanel.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
+import EpisodeSelector from './EpisodeSelector.vue'
+import type { EpisodeOption } from './EpisodeSelector.types'
+import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
 import { rawApi, subtitlesApi } from '@/api/client'
 import type {
@@ -174,6 +169,8 @@ const props = defineProps<{
 
 const { locale } = useI18n()
 
+const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.animeId)
+
 const playerContainer = ref<HTMLElement | null>(null)
 const { offset: subtitleOffset } = useSubtitleTimingOffset()
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -191,6 +188,15 @@ const episodes = ref<RawEpisode[]>([])
 const selectedEpisode = ref<RawEpisode | null>(null)
 const streamUrl = ref<string | null>(null)
 const otherSubsOpen = ref(false)
+
+const episodeOptions = computed<EpisodeOption[]>(() =>
+  episodes.value.map((ep) => ({ key: ep.id, label: ep.number, number: Number(ep.number) })),
+)
+
+function onEpisodePicked(key: string | number) {
+  const ep = episodes.value.find((e) => e.id === key)
+  if (ep) void selectEpisode(ep)
+}
 
 const subsByLang = ref<GroupedSubs | null>(null)
 // Composite key: "lang:url" so duplicate-language tracks remain selectable.
@@ -424,9 +430,14 @@ const selectEpisode = async (ep: RawEpisode) => {
   } finally {
     loadingStream.value = false
   }
+  void refreshWatched()
 }
 
 const handleTimeUpdate = () => { /* placeholder for future watch-progress tracking */ }
+
+onMounted(() => {
+  void refreshWatched()
+})
 
 watch(() => props.animeId, () => {
   episodes.value = []
@@ -444,6 +455,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 3px; }
-.accent-bg { background-color: rgb(34, 211, 238); }
-.accent-border { border-color: rgb(34, 211, 238); }
+.accent-bg { background-color: var(--player-accent); }
+.accent-border { border-color: var(--player-accent); }
 </style>
