@@ -374,6 +374,7 @@ function playWithIntro(streamUrl: string, referer: string, episodeKey: string) {
     if (!introPlaying.value) return
     introPlaying.value = false
     showSkip.value = false
+    proceedFn = null
     if (skipTimer) { clearTimeout(skipTimer); skipTimer = null }
     v.onended = null; v.onerror = null
     attachStream(streamUrl, referer)
@@ -571,7 +572,11 @@ watch(() => props.animeId, () => {
   error.value = null
   introPlaying.value = false
   showSkip.value = false
+  proceedFn = null
   if (skipTimer) { clearTimeout(skipTimer); skipTimer = null }
+  // Clear the per-session intro guard so the branded intro plays once per
+  // anime across the session — not permanently suppressed on anime switch.
+  introShownFor.clear()
   void fetchTranslations()
   void refreshWatched()
 })
