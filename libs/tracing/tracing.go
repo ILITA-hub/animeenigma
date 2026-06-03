@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
@@ -34,6 +34,15 @@ type Tracer struct {
 
 // New creates a new tracer
 func New(ctx context.Context, cfg Config) (*Tracer, error) {
+	// Always register the W3C propagator, even when disabled, so inbound
+	// trace context is still extracted and re-injected downstream. Only span
+	// EXPORT is gated by Enabled — context propagation is free and keeps
+	// traces from splitting at a service that has tracing turned off.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
 	if !cfg.Enabled {
 		return &Tracer{
 			tracer: noop.NewTracerProvider().Tracer(cfg.ServiceName),
@@ -84,10 +93,6 @@ func New(ctx context.Context, cfg Config) (*Tracer, error) {
 
 	// Set global provider
 	otel.SetTracerProvider(provider)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 
 	return &Tracer{
 		tracer:   provider.Tracer(cfg.ServiceName),
