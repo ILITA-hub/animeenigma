@@ -25,11 +25,11 @@
           >
             <span
               class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              :class="svc.status === 'up' ? 'bg-emerald-500' : 'bg-red-500'"
+              :class="svc.status === 'up' ? 'bg-success' : 'bg-destructive'"
             ></span>
             <div class="flex-1 min-w-0">
               <p class="text-white text-sm font-medium">{{ $t(`status.services.${svc.name}`) }}</p>
-              <p v-if="svc.error" class="text-red-400 text-xs truncate mt-0.5">{{ svc.error }}</p>
+              <p v-if="svc.error" class="text-destructive text-xs truncate mt-0.5">{{ svc.error }}</p>
             </div>
             <span class="text-white/40 text-xs flex-shrink-0">
               {{ svc.status === 'up' ? `${svc.response_time_ms}ms` : $t('status.serviceDown') }}
@@ -47,11 +47,11 @@
           >
             <span
               class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              :class="svc.status === 'up' ? 'bg-emerald-500' : 'bg-red-500'"
+              :class="svc.status === 'up' ? 'bg-success' : 'bg-destructive'"
             ></span>
             <div class="flex-1 min-w-0">
               <p class="text-white text-sm font-medium">{{ $t(`status.services.${svc.name}`) }}</p>
-              <p v-if="svc.error" class="text-red-400 text-xs truncate mt-0.5">{{ svc.error }}</p>
+              <p v-if="svc.error" class="text-destructive text-xs truncate mt-0.5">{{ svc.error }}</p>
             </div>
             <span class="text-white/40 text-xs flex-shrink-0">
               {{ svc.status === 'up' ? `${svc.response_time_ms}ms` : $t('status.serviceDown') }}
@@ -76,7 +76,7 @@
 
       <!-- Error -->
       <div v-else class="text-center py-12">
-        <p class="text-red-400">{{ $t('status.down') }}</p>
+        <p class="text-destructive">{{ $t('status.down') }}</p>
       </div>
     </div>
   </div>
@@ -116,20 +116,20 @@ const infraServices = computed(() =>
 )
 
 const overallDotClass = computed(() => {
-  if (!status.value) return 'bg-red-500'
+  if (!status.value) return 'bg-destructive'
   switch (status.value.overall) {
-    case 'operational': return 'bg-emerald-500'
-    case 'degraded': return 'bg-amber-500'
-    default: return 'bg-red-500'
+    case 'operational': return 'bg-success'
+    case 'degraded': return 'bg-warning'
+    default: return 'bg-destructive'
   }
 })
 
 const overallBorderClass = computed(() => {
-  if (!status.value) return 'border-l-4 border-red-500'
+  if (!status.value) return 'border-l-4 border-destructive'
   switch (status.value.overall) {
-    case 'operational': return 'border-l-4 border-emerald-500'
-    case 'degraded': return 'border-l-4 border-amber-500'
-    default: return 'border-l-4 border-red-500'
+    case 'operational': return 'border-l-4 border-success'
+    case 'degraded': return 'border-l-4 border-warning'
+    default: return 'border-l-4 border-destructive'
   }
 })
 

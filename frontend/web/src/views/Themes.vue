@@ -15,7 +15,7 @@
           v-if="authStore.isAdmin"
           class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           :class="syncing
-            ? 'bg-yellow-500/20 text-yellow-400 cursor-wait'
+            ? 'bg-warning/20 text-warning cursor-wait'
             : 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'"
           :disabled="syncing"
           @click="triggerSync"

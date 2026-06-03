@@ -108,15 +108,15 @@
                   <div class="text-xs text-white/50">{{ $t('profile.stats.totalAnime') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-yellow-400">{{ watchlistStats.avgScore }}</div>
+                  <div class="text-2xl font-bold text-warning">{{ watchlistStats.avgScore }}</div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.avgScore') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-green-400">{{ watchlistStats.totalEpisodes }}</div>
+                  <div class="text-2xl font-bold text-success">{{ watchlistStats.totalEpisodes }}</div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.episodesWatched') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-blue-400">{{ watchlistStats.completed }}</div>
+                  <div class="text-2xl font-bold text-info">{{ watchlistStats.completed }}</div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.completed') }}</div>
                 </div>
               </div>
@@ -339,7 +339,7 @@
                       <td v-if="isOwnProfile" class="py-3 pl-2">
                         <button
                           @click="removeFromWatchlist(anime.anime_id)"
-                          class="p-1.5 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors"
+                          class="p-1.5 rounded hover:bg-destructive/20 text-white/30 hover:text-destructive transition-colors"
                           :title="$t('profile.actions.removeFromList')"
                         >
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -381,7 +381,7 @@
                            Click-to-edit on own profile still works after mouse-leave. -->
                       <div
                         v-if="anime.score && anime.score > 0"
-                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-yellow-400 text-sm font-bold transition-opacity duration-200 group-hover:opacity-0"
+                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-warning text-sm font-bold transition-opacity duration-200 group-hover:opacity-0"
                         :class="{ 'cursor-pointer hover:bg-black/80': isOwnProfile }"
                         @click.prevent="isOwnProfile && (editingScoreGrid = anime.anime_id)"
                       >
@@ -401,7 +401,7 @@
                           @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
                           @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
                           @keydown.escape="editingScoreGrid = null"
-                          class="w-14 h-8 text-center bg-black/80 border border-cyan-500/50 rounded text-yellow-400 font-bold text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          class="w-14 h-8 text-center bg-black/80 border border-cyan-500/50 rounded text-warning font-bold text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         />
                       </div>
 
@@ -531,7 +531,7 @@
                       </div>
                       <p class="text-sm text-white/60 mt-1">
                         {{ malSync.progress.imported + malSync.progress.skipped }} / {{ malSync.progress.total }}
-                        <span v-if="malSync.progress.status === 'completed'" class="text-green-400 ml-2">
+                        <span v-if="malSync.progress.status === 'completed'" class="text-success ml-2">
                           {{ $t('profile.import.imported') }}: {{ malSync.progress.imported }} | {{ $t('profile.import.skipped') }}: {{ malSync.progress.skipped }}
                         </span>
                       </p>
@@ -582,7 +582,7 @@
                       </div>
                       <p class="text-sm text-white/60 mt-1">
                         {{ shikimoriSync.progress.imported + shikimoriSync.progress.skipped }} / {{ shikimoriSync.progress.total }}
-                        <span v-if="shikimoriSync.progress.status === 'completed'" class="text-green-400 ml-2">
+                        <span v-if="shikimoriSync.progress.status === 'completed'" class="text-success ml-2">
                           {{ $t('profile.import.imported') }}: {{ shikimoriSync.progress.imported }} | {{ $t('profile.import.skipped') }}: {{ shikimoriSync.progress.skipped }}
                         </span>
                       </p>
@@ -653,7 +653,7 @@
                       </Button>
                     </div>
                     <p v-if="publicIdError" class="text-pink-400 text-xs mt-2">{{ publicIdError }}</p>
-                    <p v-else-if="publicIdSuccess" class="text-green-400 text-xs mt-2">{{ $t('profile.linkUpdated') }}</p>
+                    <p v-else-if="publicIdSuccess" class="text-success text-xs mt-2">{{ $t('profile.linkUpdated') }}</p>
                     <p class="text-white/60 text-xs mt-2">
                       {{ $t('profile.linkValidation') }}
                     </p>
@@ -712,7 +712,7 @@
                         </svg>
                         {{ $t('profile.savePrivacy') }}
                       </Button>
-                      <p v-if="privacySuccess" class="text-green-400 text-xs mt-2">{{ $t('profile.privacySaved') }}</p>
+                      <p v-if="privacySuccess" class="text-success text-xs mt-2">{{ $t('profile.privacySaved') }}</p>
                     </div>
                   </div>
                 </div>
@@ -761,7 +761,7 @@
                 <template v-else>
                   <!-- Show generated key (once) -->
                   <div v-if="generatedApiKey" class="space-y-3">
-                    <p class="text-sm text-yellow-400 font-medium">{{ $t('profile.settings.apiKeyGenerated') }}</p>
+                    <p class="text-sm text-warning font-medium">{{ $t('profile.settings.apiKeyGenerated') }}</p>
                     <div class="flex items-center gap-2 p-3 bg-white/5 rounded-lg font-mono text-sm text-white break-all">
                       <span class="flex-1">{{ generatedApiKey }}</span>
                       <button
@@ -769,7 +769,7 @@
                         :aria-label="$t('profile.settings.apiKeyCopy')"
                         class="flex-shrink-0 p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
                       >
-                        <svg v-if="apiKeyCopied" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg v-if="apiKeyCopied" class="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
                         <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -777,7 +777,7 @@
                         </svg>
                       </button>
                     </div>
-                    <p v-if="apiKeyCopied" class="text-green-400 text-xs">{{ $t('profile.settings.apiKeyCopied') }}</p>
+                    <p v-if="apiKeyCopied" class="text-success text-xs">{{ $t('profile.settings.apiKeyCopied') }}</p>
                     <div class="p-3 bg-white/5 rounded-lg">
                       <p class="text-white/60 text-xs mb-1">{{ $t('profile.settings.apiKeyUsageHint') }}</p>
                       <code class="text-xs text-cyan-400 break-all">curl -H "Authorization: Bearer {{ generatedApiKey }}" {{ siteOrigin }}/api/users/import/mal -d '{"username":"..."}'</code>
@@ -786,7 +786,7 @@
 
                   <!-- Has key state -->
                   <div v-else-if="hasApiKey" class="space-y-3">
-                    <p class="text-sm text-green-400">{{ $t('profile.settings.apiKeyHasKey') }}</p>
+                    <p class="text-sm text-success">{{ $t('profile.settings.apiKeyHasKey') }}</p>
                     <div class="flex gap-2">
                       <Button variant="primary" size="sm" :disabled="apiKeyActioning" @click="regenerateApiKey">
                         {{ $t('profile.settings.regenerateApiKey') }}
@@ -808,7 +808,7 @@
                   <div v-if="apiKeyError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
                     <p class="text-sm text-pink-400">{{ apiKeyError }}</p>
                   </div>
-                  <p v-if="apiKeyRevoked" class="text-green-400 text-xs mt-2">{{ $t('profile.settings.apiKeyRevoked') }}</p>
+                  <p v-if="apiKeyRevoked" class="text-success text-xs mt-2">{{ $t('profile.settings.apiKeyRevoked') }}</p>
                 </template>
               </div>
 
@@ -842,7 +842,7 @@
                 </div>
                 <div v-else class="space-y-5">
                   <!-- Lock summary -->
-                  <div class="rounded-lg p-4" :class="tier2View.lock ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-amber-500/10 border border-amber-500/30'">
+                  <div class="rounded-lg p-4" :class="tier2View.lock ? 'bg-success/10 border border-success/30' : 'bg-warning/10 border border-warning/30'">
                     <div class="flex items-start gap-3">
                       <span class="text-2xl">{{ tier2View.lock ? '🎯' : '🛟' }}</span>
                       <div class="flex-1">
@@ -952,7 +952,7 @@
                     {{ $t('profile.advanced.refresh') }}
                   </Button>
                 </div>
-                <p v-if="resetMessage" class="text-emerald-400 text-sm mt-3">{{ resetMessage }}</p>
+                <p v-if="resetMessage" class="text-success text-sm mt-3">{{ resetMessage }}</p>
               </div>
             </div>
           </template>
@@ -1327,11 +1327,11 @@ const statusLabels = computed<Record<string, string>>(() => ({
 }))
 
 const statusColors: Record<string, string> = {
-  watching: 'bg-green-500/80 text-white',
-  completed: 'bg-blue-500/80 text-white',
-  plan_to_watch: 'bg-purple-500/80 text-white',
-  on_hold: 'bg-yellow-500/80 text-black',
-  dropped: 'bg-red-500/80 text-white'
+  watching: 'bg-success/80 text-white',
+  completed: 'bg-info/80 text-white',
+  plan_to_watch: 'bg-brand-violet/80 text-white',
+  on_hold: 'bg-warning/80 text-black',
+  dropped: 'bg-destructive/80 text-white'
 }
 
 const statusOptions = computed<SelectOption[]>(() => [

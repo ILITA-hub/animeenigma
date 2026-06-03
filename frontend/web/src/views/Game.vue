@@ -101,7 +101,7 @@
                     </div>
                     <span class="text-white text-sm">{{ player.username }}</span>
                   </div>
-                  <span class="text-amber-400 font-bold">{{ player.score || 0 }}</span>
+                  <span class="text-warning font-bold">{{ player.score || 0 }}</span>
                 </div>
               </div>
 
@@ -114,11 +114,11 @@
                     :key="player.id"
                     class="flex items-center gap-2"
                   >
-                    <span class="w-5 text-center" :class="index === 0 ? 'text-amber-400' : 'text-white/60'">
+                    <span class="w-5 text-center" :class="index === 0 ? 'text-warning' : 'text-white/60'">
                       {{ index + 1 }}
                     </span>
                     <span class="flex-1 text-white/70 truncate">{{ player.username }}</span>
-                    <span class="text-amber-400 font-bold">{{ player.score }}</span>
+                    <span class="text-warning font-bold">{{ player.score }}</span>
                   </div>
                 </div>
               </div>
