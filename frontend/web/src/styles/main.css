@@ -402,7 +402,7 @@ body {
   --ink-2: rgba(255, 255, 255, 0.78);
   --ink-3: var(--muted-foreground); /* deprecated → --muted-foreground */
   --ink-4: rgba(255, 255, 255, 0.36);
-  --accent: var(--brand-cyan); /* deprecated → --brand-cyan (P2 flips to shadcn hover surface) */
+  --accent: var(--elevated); /* shadcn hover surface (neutral elevated) — flipped from brand-cyan P5 */
   --accent-soft: rgba(0, 212, 255, 0.14);
   --accent-line: rgba(0, 212, 255, 0.28);
   --accent-glow: 0 0 30px rgba(0, 212, 255, 0.28);
@@ -433,8 +433,6 @@ body {
   --border: rgba(255, 255, 255, 0.10);
   --input: rgba(255, 255, 255, 0.12);
   --ring: var(--color-cyan-400);
-  /* NOTE: shadcn --accent (hover surface) is deferred to P2 — see DESIGN-SYSTEM.md.
-     --accent stays brand-cyan below for back-compat. */
 
   /* Tier 3 — brand extension (Neon Tokyo) */
   --brand-cyan: var(--color-cyan-400);
