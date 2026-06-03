@@ -1445,6 +1445,14 @@ function applyResolvedCombo(combo: WatchCombo) {
     videoLanguage.value = combo.language
   }
   if (combo.player === 'kodik' || combo.player === 'animelib' || combo.player === 'hanime') {
+    // 'kodik-adfree' is our ad-free player surface for the SAME RU Kodik source
+    // as 'kodik'. The watch-preference resolver only knows 'kodik', so when a
+    // user has explicitly picked the ad-free variant, don't let auto-resolve
+    // clobber them back to the iframe Kodik (the bug: pick ad-free → its
+    // available-translations emit triggers resolve → snaps back to 'kodik').
+    if (combo.player === 'kodik' && videoProvider.value === 'kodik-adfree') {
+      return
+    }
     // AniLib hidden (see animeLibEnabled): never auto-resolve onto the disabled
     // provider — fall back to Kodik, which carries the same RU translations.
     videoProvider.value = combo.player === 'animelib' && !animeLibEnabled ? 'kodik' : combo.player
