@@ -130,6 +130,34 @@ func (c *Client) GetHealth(ctx context.Context) (int, []byte, error) {
 	return c.doGET(ctx, "/scraper/health", nil)
 }
 
+// --- 18+ group (/anime18/*) — title-searched, no mal_id (18anime.me is not
+// MAL-indexed). Served by the scraper's separate adult orchestrator. ---
+
+// GetAnime18Episodes forwards GET /anime18/episodes?title=&title_alt=.
+func (c *Client) GetAnime18Episodes(ctx context.Context, title string, altTitles []string) (int, []byte, error) {
+	q := url.Values{}
+	if title != "" {
+		q.Set("title", title)
+	}
+	setAltTitles(q, altTitles)
+	return c.doGET(ctx, "/anime18/episodes", q)
+}
+
+// GetAnime18Stream forwards GET /anime18/stream?title=&title_alt=&episode=&server=.
+// An empty serverID lets the provider failover mp4upload->turbovid.
+func (c *Client) GetAnime18Stream(ctx context.Context, title string, altTitles []string, episodeSlug, serverID string) (int, []byte, error) {
+	q := url.Values{}
+	if title != "" {
+		q.Set("title", title)
+	}
+	setAltTitles(q, altTitles)
+	q.Set("episode", episodeSlug)
+	if serverID != "" {
+		q.Set("server", serverID)
+	}
+	return c.doGET(ctx, "/anime18/stream", q)
+}
+
 // doGET issues a single GET and returns (status, body, err).
 //
 // Error semantics:
