@@ -1022,9 +1022,9 @@
     :episodes-watched="profileContextMenu.episodesWatched"
     :episodes-total="profileContextMenu.episodesTotal"
     @update:visible="profileContextMenu.visible = $event"
-    @status-change="fetchWatchlistPage()"
-    @remove-from-list="fetchWatchlistPage()"
-    @episodes-change="fetchWatchlistPage()"
+    @status-change="onContextMenuStatusChange"
+    @remove-from-list="onContextMenuRemove"
+    @episodes-change="onContextMenuEpisodesChange"
   />
 </template>
 
@@ -1898,6 +1898,35 @@ const removeFromWatchlist = async (animeId: string) => {
     }
     toast.push(t('watchlist.errors.removeFailed'))
   }
+}
+
+// Grid context-menu handlers. AnimeContextMenu already performs the store
+// mutation + API call itself, so these only sync Profile's local `watchlist`
+// mirror for an immediate re-render. We must NOT refetch here: the menu emits
+// these events *before* awaiting its own network call, so a refetch would race
+// ahead of the pending mutation and repopulate the just-changed row (the cause
+// of "deleted anime only disappears after reload"). We also must NOT call the
+// store/API again or the DELETE/PATCH would double-fire.
+const onContextMenuRemove = (animeId: string) => {
+  watchlist.value = watchlist.value.filter(a => a.anime_id !== animeId)
+  clearPageCache()
+}
+
+const onContextMenuStatusChange = (animeId: string, status: string) => {
+  const row = watchlist.value.find(a => a.anime_id === animeId)
+  if (row) row.status = status
+  // When a specific status tab is active, an item whose status no longer
+  // matches the filter should drop out of the visible list.
+  if (watchlistFilter.value !== 'all' && status !== watchlistFilter.value) {
+    watchlist.value = watchlist.value.filter(a => a.anime_id !== animeId)
+  }
+  clearPageCache()
+}
+
+const onContextMenuEpisodesChange = (animeId: string, episodes: number) => {
+  const row = watchlist.value.find(a => a.anime_id === animeId)
+  if (row) row.episodes = episodes
+  clearPageCache()
 }
 
 const copyProfileLink = async () => {
