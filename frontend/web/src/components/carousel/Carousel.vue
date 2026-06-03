@@ -1,5 +1,5 @@
 <template>
-  <div class="relative group">
+  <div class="relative group/carousel">
     <!-- Header -->
     <div v-if="title || $slots.header" class="flex items-center justify-between mb-4 px-4 lg:px-0">
       <slot name="header">
@@ -22,7 +22,7 @@
       <!-- Left Arrow (Desktop only) -->
       <button
         v-if="canScrollLeft && !prefersReducedMotion"
-        class="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 items-center justify-center bg-base/80 backdrop-blur-sm rounded-full border border-white/10 text-white/70 hover:text-white hover:bg-base/90 transition-all opacity-0 group-hover:opacity-100 -ml-6"
+        class="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 items-center justify-center bg-base/80 backdrop-blur-sm rounded-full border border-white/10 text-white/70 hover:text-white hover:bg-base/90 transition-all opacity-0 group-hover/carousel:opacity-100 -ml-6"
         @click="scrollLeft"
         :aria-label="$t('common.back')"
       >
@@ -55,7 +55,7 @@
       <!-- Right Arrow (Desktop only) -->
       <button
         v-if="canScrollRight && !prefersReducedMotion"
-        class="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 items-center justify-center bg-base/80 backdrop-blur-sm rounded-full border border-white/10 text-white/70 hover:text-white hover:bg-base/90 transition-all opacity-0 group-hover:opacity-100 -mr-6"
+        class="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 items-center justify-center bg-base/80 backdrop-blur-sm rounded-full border border-white/10 text-white/70 hover:text-white hover:bg-base/90 transition-all opacity-0 group-hover/carousel:opacity-100 -mr-6"
         @click="scrollRight"
         :aria-label="$t('common.next')"
       >

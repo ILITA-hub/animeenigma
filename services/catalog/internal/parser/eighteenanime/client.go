@@ -1,8 +1,14 @@
 package eighteenanime
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -13,11 +19,17 @@ const (
 )
 
 // Client is an HTTP client for the 18anime.me provider.
-type Client struct{ httpClient *http.Client }
+type Client struct {
+	httpClient *http.Client
+	searchBase string // base URL for search requests; defaults to baseURL
+}
 
 // NewClient returns a Client with a sensible default timeout.
 func NewClient() *Client {
-	return &Client{httpClient: &http.Client{Timeout: 8 * time.Second}}
+	return &Client{
+		httpClient: &http.Client{Timeout: 8 * time.Second},
+		searchBase: baseURL,
+	}
 }
 
 // SearchHit represents a single parsed result from the search results page.
@@ -130,4 +142,162 @@ func supportedMirrors(all []Mirror) []Mirror {
 		}
 	}
 	return out
+}
+
+// Episode represents a single episode of a series on 18anime.me.
+type Episode struct {
+	Slug   string `json:"slug"` // full slug including numeric id, e.g. "1167-...-episode-2"
+	URL    string `json:"url"`
+	Number int    `json:"number"` // 1-based episode number
+}
+
+// fetch GETs a URL with UA + optional Referer; caps body at 2 MiB.
+func (c *Client) fetch(ctx context.Context, u, referer string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("eighteenanime: GET %s -> %d", u, resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	return string(b), err
+}
+
+// searchHTML POSTs the DataLife Engine search form.
+func (c *Client) searchHTML(ctx context.Context, query string) (string, error) {
+	form := url.Values{
+		"do":        {"search"},
+		"subaction": {"search"},
+		"story":     {query},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.searchBase+"/index.php?do=search", strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("eighteenanime: search -> %d", resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	return string(b), err
+}
+
+var idPrefixRe = regexp.MustCompile(`^[0-9]+-`)
+var epSuffixRe = regexp.MustCompile(`-(?:episode-)?([0-9]+)$`)
+
+// baseSlugAndEpisode splits a hit slug into (baseSlug, episodeNumber).
+// The numeric id prefix (e.g. "1167-") and trailing episode suffix are stripped.
+// If no episode suffix is found, number defaults to 1.
+func baseSlugAndEpisode(slug string) (string, int) {
+	s := idPrefixRe.ReplaceAllString(slug, "")
+	ep := 1
+	if m := epSuffixRe.FindStringSubmatch(s); m != nil {
+		if n, err := strconv.Atoi(m[1]); err == nil {
+			ep = n
+		}
+		s = strings.TrimSuffix(s, m[0])
+	}
+	return s, ep
+}
+
+// extractorFor picks an extractor function by embed host.
+func extractorFor(link string) func(string) (*ExtractedSource, error) {
+	switch {
+	case strings.Contains(link, "mp4upload"):
+		return extractMP4Upload
+	case strings.Contains(link, "turbovid"):
+		return extractTurbovid
+	default:
+		return nil
+	}
+}
+
+// resolveStream tries supported mirrors in order; first success wins.
+func (c *Client) resolveStream(ctx context.Context, mirrors []Mirror) (*ExtractedSource, error) {
+	supported := supportedMirrors(mirrors)
+	if len(supported) == 0 {
+		return nil, fmt.Errorf("eighteenanime: no supported mirrors")
+	}
+	var lastErr error
+	for _, m := range supported {
+		ex := extractorFor(m.Link)
+		if ex == nil {
+			continue
+		}
+		page, err := c.fetch(ctx, m.Link, baseURL+"/")
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		src, err := ex(page)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return src, nil
+	}
+	return nil, fmt.Errorf("eighteenanime: all mirrors failed: %w", lastErr)
+}
+
+// Search returns the best-matching hit for a title query.
+func (c *Client) Search(ctx context.Context, title string) (*SearchHit, error) {
+	page, err := c.searchHTML(ctx, title)
+	if err != nil {
+		return nil, err
+	}
+	hit := bestMatch(title, parseSearchResults(page))
+	if hit == nil {
+		return nil, fmt.Errorf("eighteenanime: no match for %q", title)
+	}
+	return hit, nil
+}
+
+// ListEpisodes returns all episodes belonging to the matched series, sorted ascending.
+func (c *Client) ListEpisodes(ctx context.Context, title string) ([]Episode, error) {
+	page, err := c.searchHTML(ctx, title)
+	if err != nil {
+		return nil, err
+	}
+	hits := parseSearchResults(page)
+	best := bestMatch(title, hits)
+	if best == nil {
+		return nil, fmt.Errorf("eighteenanime: no match for %q", title)
+	}
+	wantBase, _ := baseSlugAndEpisode(best.Slug)
+	var eps []Episode
+	for _, h := range hits {
+		base, num := baseSlugAndEpisode(h.Slug)
+		if base != wantBase {
+			continue
+		}
+		eps = append(eps, Episode{Slug: h.Slug, URL: h.URL, Number: num})
+	}
+	sort.Slice(eps, func(i, j int) bool { return eps[i].Number < eps[j].Number })
+	return eps, nil
+}
+
+// GetStream resolves a playable stream URL for an episode page URL.
+func (c *Client) GetStream(ctx context.Context, episodeURL string) (*ExtractedSource, error) {
+	page, err := c.fetch(ctx, episodeURL, baseURL+"/")
+	if err != nil {
+		return nil, err
+	}
+	return c.resolveStream(ctx, parseEpisodeMirrors(page))
 }
