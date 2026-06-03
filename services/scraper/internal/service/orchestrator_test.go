@@ -315,6 +315,101 @@ func TestOrchestrator_ContextCancelStopsLoop(t *testing.T) {
 	}
 }
 
+// TestOrchestrator_PerProviderTimeout_FailsOverPastHung is the core ISS-022
+// regression: a hung FIRST provider must NOT consume the whole request budget.
+// With a per-provider timeout set, the orchestrator caps the hung provider at
+// the budget, classifies it as down, and fails over to the healthy provider —
+// all while the (generous) parent context is still alive.
+//
+// Without the per-provider budget, provider A (which blocks until ctx death)
+// would hold the loop until the parent 5s deadline, then return a terminal ctx
+// error and NEVER reach B — exactly the production starvation that took the EN
+// player down when animepahe (first in the live chain) hung ~55s.
+func TestOrchestrator_PerProviderTimeout_FailsOverPastHung(t *testing.T) {
+	t.Parallel()
+
+	var hungCtxErr atomic.Bool
+	hung := &fakeProvider{
+		nameVal: "hung_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			// Simulate a provider that hangs — it only returns when its context
+			// (the per-provider sub-context) is cancelled.
+			<-ctx.Done()
+			hungCtxErr.Store(true)
+			return nil, ctx.Err()
+		},
+	}
+	fast := &fakeProvider{
+		nameVal: "fast_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "ep_fast"}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, hung, fast)
+	o.SetProviderTimeout(50 * time.Millisecond)
+
+	// Parent budget is generous — the per-provider cap, not the parent, must be
+	// what bounds the hung provider.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	got, err := o.ListEpisodes(ctx, "x", "")
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("ListEpisodes err = %v; want nil (should fail over to fast)", err)
+	}
+	if len(got) != 1 || got[0].ID != "ep_fast" {
+		t.Errorf("ListEpisodes = %+v; want fast provider's result", got)
+	}
+	if !hungCtxErr.Load() {
+		t.Errorf("hung provider's context was never cancelled; per-provider budget not applied")
+	}
+	// Must bail near the 50ms budget, NOT the 5s parent deadline.
+	if elapsed > 1*time.Second {
+		t.Errorf("ListEpisodes took %v; per-provider budget should fail over in ~50ms, not wait on parent", elapsed)
+	}
+}
+
+// TestOrchestrator_PerProviderTimeout_ParentCancelStillTerminal verifies the
+// budget does NOT mask a genuine parent-context cancellation: when the PARENT
+// deadline fires (shorter than the per-provider budget), the loop returns the
+// ctx error terminally and does NOT spuriously fail over to the next provider.
+func TestOrchestrator_PerProviderTimeout_ParentCancelStillTerminal(t *testing.T) {
+	t.Parallel()
+
+	hung := &fakeProvider{
+		nameVal: "phung_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+	next := &fakeProvider{
+		nameVal: "pnext_" + t.Name(),
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "should_not_reach"}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, hung, next)
+	o.SetProviderTimeout(10 * time.Second) // budget >> parent deadline
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := o.ListEpisodes(ctx, "x", "")
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v; want a context error (parent cancel is terminal)", err)
+	}
+	if errors.Is(err, domain.ErrProviderDown) {
+		t.Errorf("err matched ErrProviderDown; parent cancel must surface as a pure ctx error")
+	}
+	if n := atomic.LoadInt32(&next.listEpisodeCalls); n != 0 {
+		t.Errorf("next provider called %d times; want 0 (parent cancel must not fail over)", n)
+	}
+}
+
 // TestOrchestrator_HealthSnapshotReflectsLatest verifies that HealthSnapshot
 // calls HealthCheck on every registered provider on each invocation and
 // returns the latest values (no stale cache).
@@ -584,10 +679,14 @@ func TestOrchestrator_NilCache_Backcompat(t *testing.T) {
 	t.Parallel()
 
 	p := &fakeProvider{
-		nameVal:        "back_compat",
-		findIDFn:       func(ctx context.Context, ref domain.AnimeRef) (string, error) { return "id-1", nil },
-		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) { return []domain.Episode{{ID: "ep1"}}, nil },
-		listServersFn:  func(ctx context.Context, pid, eid string) ([]domain.Server, error) { return []domain.Server{{ID: "srv1"}}, nil },
+		nameVal:  "back_compat",
+		findIDFn: func(ctx context.Context, ref domain.AnimeRef) (string, error) { return "id-1", nil },
+		listEpisodesFn: func(ctx context.Context, id string) ([]domain.Episode, error) {
+			return []domain.Episode{{ID: "ep1"}}, nil
+		},
+		listServersFn: func(ctx context.Context, pid, eid string) ([]domain.Server, error) {
+			return []domain.Server{{ID: "srv1"}}, nil
+		},
 		getStreamFn: func(ctx context.Context, pid, eid, sid string, c domain.Category) (*domain.Stream, error) {
 			return &domain.Stream{Sources: []domain.Source{{URL: "u"}}}, nil
 		},

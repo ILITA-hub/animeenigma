@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -37,6 +38,12 @@ type Orchestrator struct {
 	registry  *domain.Registry
 	log       *logger.Logger
 	cache     *health.InMemoryHealthCache
+
+	// providerTimeout bounds how long the failover loop waits on a SINGLE
+	// provider before moving on. Zero disables the cap (preserving the original
+	// behaviour for tests constructed via NewOrchestrator without a setter).
+	// Set via SetProviderTimeout from config (SCRAPER_PROVIDER_TIMEOUT). ISS-022.
+	providerTimeout time.Duration
 }
 
 // NewOrchestrator builds an orchestrator with zero providers. Use Register
@@ -64,6 +71,25 @@ func (o *Orchestrator) Register(p domain.Provider) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.providers = append(o.providers, p)
+}
+
+// SetProviderTimeout sets the per-provider failover budget (ISS-022). When
+// d > 0, each provider call in the failover chain runs under a sub-context
+// deadline of d; a provider that blows its budget is treated as down and the
+// loop fails over to the next provider (instead of letting one hung provider
+// consume the whole request budget). d <= 0 disables the cap. Safe to call
+// once at startup before serving traffic.
+func (o *Orchestrator) SetProviderTimeout(d time.Duration) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.providerTimeout = d
+}
+
+// providerBudget returns the current per-provider timeout under the read lock.
+func (o *Orchestrator) providerBudget() time.Duration {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.providerTimeout
 }
 
 // EmbedRegistry exposes the embed extractor registry for callers that need
@@ -180,10 +206,46 @@ func runFailover[T any](
 	log *logger.Logger,
 	providers []domain.Provider,
 	cache *health.InMemoryHealthCache,
-	call func(p domain.Provider) (T, error),
+	providerTimeout time.Duration,
+	call func(ctx context.Context, p domain.Provider) (T, error),
 ) (T, error) {
-	v, _, err := runFailoverNamed(ctx, log, providers, cache, call)
+	v, _, err := runFailoverNamed(ctx, log, providers, cache, providerTimeout, call)
 	return v, err
+}
+
+// providerCall runs fn under a per-provider deadline when budget > 0, or under
+// the parent ctx directly when budget <= 0 (preserving the original uncapped
+// behaviour). The sub-context is always cancelled before returning. ISS-022.
+func providerCall[T any](ctx context.Context, budget time.Duration, fn func(context.Context) (T, error)) (T, error) {
+	if budget <= 0 {
+		return fn(ctx)
+	}
+	pctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	return fn(pctx)
+}
+
+// classifyProviderErr decides whether the failover loop should advance after a
+// provider returned a non-nil err, accounting for the per-provider budget.
+//
+//   - retry == false → stop the loop and surface terminalErr (never nil here).
+//   - retry == true  → advance to the next provider (kind labels the reason).
+//
+// ISS-022 subtlety: a per-provider budget timeout surfaces as a bare
+// context.DeadlineExceeded, which failoverDecision would (correctly, in the
+// uncapped world) call terminal. But when the PARENT ctx is still alive, that
+// deadline is the per-provider cap firing — NOT caller cancellation — so we
+// re-classify it as a retryable "provider_timeout" and fail over. Only a
+// genuinely cancelled/expired PARENT ctx is terminal.
+func classifyProviderErr(parent context.Context, err error) (retry bool, kind string, terminalErr error) {
+	if parent.Err() != nil {
+		return false, "", parent.Err()
+	}
+	retry, kind = failoverDecision(err)
+	if !retry && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+		return true, "provider_timeout", nil
+	}
+	return retry, kind, err
 }
 
 // runFailoverNamed is runFailover that also returns the name of the provider
@@ -197,7 +259,8 @@ func runFailoverNamed[T any](
 	log *logger.Logger,
 	providers []domain.Provider,
 	cache *health.InMemoryHealthCache,
-	call func(p domain.Provider) (T, error),
+	providerTimeout time.Duration,
+	call func(ctx context.Context, p domain.Provider) (T, error),
 ) (T, string, error) {
 	var zero T
 	if len(providers) == 0 {
@@ -233,15 +296,17 @@ func runFailoverNamed[T any](
 			continue
 		}
 
-		result, err := call(p)
+		result, err := providerCall(ctx, providerTimeout, func(c context.Context) (T, error) {
+			return call(c, p)
+		})
 		if err == nil {
 			return result, p.Name(), nil
 		}
 
-		retry, kind := failoverDecision(err)
+		retry, kind, terminalErr := classifyProviderErr(ctx, err)
 		if !retry {
-			// Terminal error (ctx canceled / deadline) — surface as-is.
-			return zero, "", err
+			// Terminal: parent ctx canceled/expired — surface that error.
+			return zero, "", terminalErr
 		}
 
 		// Retryable: emit fallback metric (to = next provider name, or "" if last).
@@ -296,9 +361,9 @@ func (o *Orchestrator) OrderedProviderNames(prefer string) []string {
 // per-method business calls so the catalog can pass `mal_id` and the
 // orchestrator resolves it through the registered provider chain.
 func (o *Orchestrator) FindID(ctx context.Context, ref domain.AnimeRef, prefer string) (string, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
-		func(p domain.Provider) (string, error) {
-			return p.FindID(ctx, ref)
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+		func(c context.Context, p domain.Provider) (string, error) {
+			return p.FindID(c, ref)
 		})
 }
 
@@ -315,25 +380,25 @@ func (o *Orchestrator) ListEpisodes(ctx context.Context, providerID, prefer stri
 // different provider re-resolved from the failover order would receive episode
 // IDs it cannot parse.
 func (o *Orchestrator) ListEpisodesNamed(ctx context.Context, providerID, prefer string) ([]domain.Episode, string, error) {
-	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache,
-		func(p domain.Provider) ([]domain.Episode, error) {
-			return p.ListEpisodes(ctx, providerID)
+	return runFailoverNamed(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+		func(c context.Context, p domain.Provider) ([]domain.Episode, error) {
+			return p.ListEpisodes(c, providerID)
 		})
 }
 
 // ListServers runs the provider chain for server listing for one episode.
 func (o *Orchestrator) ListServers(ctx context.Context, providerID, episodeID, prefer string) ([]domain.Server, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
-		func(p domain.Provider) ([]domain.Server, error) {
-			return p.ListServers(ctx, providerID, episodeID)
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+		func(c context.Context, p domain.Provider) ([]domain.Server, error) {
+			return p.ListServers(c, providerID, episodeID)
 		})
 }
 
 // GetStream runs the provider chain to pull a playable Stream.
 func (o *Orchestrator) GetStream(ctx context.Context, providerID, episodeID, serverID string, cat domain.Category, prefer string) (*domain.Stream, error) {
-	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache,
-		func(p domain.Provider) (*domain.Stream, error) {
-			return p.GetStream(ctx, providerID, episodeID, serverID, cat)
+	return runFailover(ctx, o.log, o.orderedProviders(prefer), o.cache, o.providerBudget(),
+		func(c context.Context, p domain.Provider) (*domain.Stream, error) {
+			return p.GetStream(c, providerID, episodeID, serverID, cat)
 		})
 }
 
@@ -377,6 +442,7 @@ func (o *Orchestrator) GetStreamGated(
 		return nil, false, domain.ErrNotFound
 	}
 
+	budget := o.providerBudget()
 	errs := make([]error, 0, len(providers))
 	for i, p := range providers {
 		if err := ctx.Err(); err != nil {
@@ -395,48 +461,18 @@ func (o *Orchestrator) GetStreamGated(
 			continue
 		}
 
-		if gp, ok := p.(gatedProvider); ok {
-			// Gated path: list servers first so the provider can iterate
-			// priority + probe internally.
-			servers, err := gp.ListServers(ctx, providerID, episodeID)
-			if err != nil {
-				retry, _ := failoverDecision(err)
-				if !retry {
-					return nil, false, err
-				}
-				next := ""
-				if i+1 < len(providers) {
-					next = providers[i+1].Name()
-				}
-				metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
-				errs = append(errs, err)
-				continue
-			}
-			stream, gated, err := gp.GetStreamWithGate(ctx, providerID, episodeID, serverID, cat, servers)
-			if err == nil {
-				return stream, gated, nil
-			}
-			retry, _ := failoverDecision(err)
-			if !retry {
-				return nil, false, err
-			}
-			next := ""
-			if i+1 < len(providers) {
-				next = providers[i+1].Name()
-			}
-			metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
-			errs = append(errs, err)
-			continue
+		// Per-provider budget (ISS-022): cap each provider so one hung provider
+		// cannot starve the chain past the caller's timeout. A budget timeout
+		// while the parent ctx is alive is reclassified as a failover, not a
+		// terminal error, by classifyProviderErr below.
+		stream, gated, err := o.attemptGatedStream(ctx, budget, p, providerID, episodeID, serverID, cat)
+		if err == nil {
+			return stream, gated, nil
 		}
 
-		// Non-gated provider fallback (animepahe / animekai).
-		stream, err := p.GetStream(ctx, providerID, episodeID, serverID, cat)
-		if err == nil {
-			return stream, false, nil
-		}
-		retry, _ := failoverDecision(err)
+		retry, _, terminalErr := classifyProviderErr(ctx, err)
 		if !retry {
-			return nil, false, err
+			return nil, false, terminalErr
 		}
 		next := ""
 		if i+1 < len(providers) {
@@ -447,6 +483,37 @@ func (o *Orchestrator) GetStreamGated(
 	}
 
 	return nil, false, summarizeFailover(errs)
+}
+
+// attemptGatedStream runs ONE provider's gated (or plain) stream resolution
+// under an optional per-provider deadline (budget > 0). Gated providers
+// (gogoanime today) list servers then run GetStreamWithGate; plain providers
+// fall back to GetStream with gated=false. The per-provider sub-context is
+// always cancelled before returning. ISS-022.
+func (o *Orchestrator) attemptGatedStream(
+	ctx context.Context, budget time.Duration, p domain.Provider,
+	providerID, episodeID, serverID string, cat domain.Category,
+) (*domain.Stream, bool, error) {
+	pctx := ctx
+	if budget > 0 {
+		var cancel context.CancelFunc
+		pctx, cancel = context.WithTimeout(ctx, budget)
+		defer cancel()
+	}
+
+	if gp, ok := p.(gatedProvider); ok {
+		// Gated path: list servers first so the provider can iterate
+		// priority + probe internally.
+		servers, err := gp.ListServers(pctx, providerID, episodeID)
+		if err != nil {
+			return nil, false, err
+		}
+		return gp.GetStreamWithGate(pctx, providerID, episodeID, serverID, cat, servers)
+	}
+
+	// Non-gated provider fallback (animepahe / animekai).
+	stream, err := p.GetStream(pctx, providerID, episodeID, serverID, cat)
+	return stream, false, err
 }
 
 // HealthSnapshot calls HealthCheck on every registered provider and returns

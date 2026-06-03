@@ -177,6 +177,12 @@ services:
       # rot). Flip off by removing names + `docker compose restart scraper`
       # (no rebuild needed).
       SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-gogoanime}
+      # ISS-022: per-provider failover budget. Without it, one hung provider
+      # early in the chain (animepahe when animepahe.pw is down, ~55s of retries)
+      # consumes the whole request budget so catalog's 15s SCRAPER_TIMEOUT kills
+      # the request before failover reaches a healthy provider. 8s is generous
+      # for a working provider (<1s typical) yet under the 15s caller budget.
+      SCRAPER_PROVIDER_TIMEOUT: ${SCRAPER_PROVIDER_TIMEOUT:-8s}
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8088:8088"

@@ -28,6 +28,18 @@ type Config struct {
 	Miruro             MiruroConfig
 	NineAnime          NineAnimeConfig
 	DegradedProviders  DegradedProvidersConfig
+
+	// ProviderTimeout bounds how long the failover orchestrator waits on a
+	// SINGLE provider before moving to the next one. Without it, one slow/hung
+	// provider early in the chain (e.g. animepahe when animepahe.pw is down and
+	// its resolver 502s through ~5 retries ≈ 55s) consumes the ENTIRE request
+	// budget — so the catalog's SCRAPER_TIMEOUT (15s) kills the request before
+	// failover ever reaches a healthy provider (allanime/miruro answer in <1s).
+	// Bounding per-provider time lets the chain degrade gracefully. ISS-022.
+	// Read from SCRAPER_PROVIDER_TIMEOUT; default 8s (a working provider answers
+	// in well under 1s, so 8s is generous headroom while staying under the 15s
+	// caller budget). Set 0 to disable the per-provider cap.
+	ProviderTimeout time.Duration
 }
 
 // DegradedProvidersConfig is the global kill-switch for providers known to be
@@ -223,6 +235,7 @@ func Load() (*Config, error) {
 			BaseURL: getEnv("SCRAPER_NINEANIME_BASE_URL", "https://9anime.me.uk"),
 		},
 		DegradedProviders: parseDegradedProviders(getEnv("SCRAPER_DEGRADED_PROVIDERS", "")),
+		ProviderTimeout:   getEnvDuration("SCRAPER_PROVIDER_TIMEOUT", 8*time.Second),
 	}
 	if u := cfg.MegacloudExtractor.URL; u != "" {
 		parsed, err := url.Parse(u)

@@ -159,6 +159,11 @@ func main() {
 	// runner (spawned below) populates the cache on each tick.
 	cache := health.NewInMemoryHealthCache()
 	orchestrator := service.NewOrchestrator(log, registry, cache)
+	// ISS-022: bound per-provider failover time so one hung provider (e.g.
+	// animepahe when animepahe.pw is down) cannot consume the whole request
+	// budget and starve the chain before failover reaches a healthy provider.
+	orchestrator.SetProviderTimeout(cfg.ProviderTimeout)
+	log.Infow("per-provider failover budget configured", "timeout", cfg.ProviderTimeout.String())
 
 	// Gogoanime/Anitaku — PRIMARY EN provider (Phase 18 + 2026-05-13 reorder).
 	// Pivoted from "9anime" since the entire 9anime mirror chain is dead per
