@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/config"
 )
@@ -213,5 +214,81 @@ func TestProxyService_PathRewrite_OtherAdminScraper(t *testing.T) {
 	// Defensive: ensure no /admin segment slipped through.
 	if strings.Contains(got, "/admin") {
 		t.Errorf("backend received path = %q; must not contain /admin", got)
+	}
+}
+
+// newTestGrafanaProxy points the grafana service URL at a test backend.
+func newTestGrafanaProxy(grafanaURL string) *ProxyService {
+	return NewProxyService(config.ServiceURLs{
+		GrafanaService: grafanaURL,
+	}, logger.Default())
+}
+
+// TestProxyService_Forward_GrafanaAuthProxy_OverwritesForgedIdentity is the
+// UA-115 forgery guard. The gateway asserts the authenticated admin's identity
+// to Grafana via X-WEBAUTH-* (auth-proxy SSO). A client MUST NOT be able to
+// spoof that identity: any client-supplied X-WEBAUTH-* is wiped and replaced
+// with the value from the validated JWT claims, on the final outbound request.
+func TestProxyService_Forward_GrafanaAuthProxy_OverwritesForgedIdentity(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestGrafanaProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/admin/grafana/api/user", nil)
+	// Attacker tries to spoof identity + privilege via client headers.
+	req.Header.Set("X-Webauth-User", "attacker")
+	req.Header.Set("X-Webauth-Role", "Viewer")
+	// The gateway's admin middleware put the real, validated claims in context.
+	req = req.WithContext(authz.ContextWithClaims(req.Context(), &authz.Claims{
+		Username: "realadmin",
+		Role:     authz.RoleAdmin,
+	}))
+
+	resp, err := p.Forward(req, "grafana")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	if got := headers.Get("X-Webauth-User"); got != "realadmin" {
+		t.Errorf("Grafana received X-Webauth-User = %q; want realadmin (forged value must be overwritten)", got)
+	}
+	if got := headers.Get("X-Webauth-Role"); got != "Admin" {
+		t.Errorf("Grafana received X-Webauth-Role = %q; want Admin", got)
+	}
+}
+
+// TestProxyService_Forward_GrafanaAuthProxy_NoClaimsStripsForgedHeader: with no
+// claims in context (should never happen past AdminRoleMiddleware, but defense
+// in depth), a client-supplied X-WEBAUTH-* is stripped and NOT replaced — so no
+// identity is ever asserted from client input alone.
+func TestProxyService_Forward_GrafanaAuthProxy_NoClaimsStripsForgedHeader(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestGrafanaProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/admin/grafana/api/user", nil)
+	req.Header.Set("X-Webauth-User", "attacker")
+
+	resp, err := p.Forward(req, "grafana")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	if got := headers.Get("X-Webauth-User"); got != "" {
+		t.Errorf("Grafana received X-Webauth-User = %q with no claims; forged header must be stripped", got)
 	}
 }
