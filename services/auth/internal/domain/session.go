@@ -14,6 +14,7 @@ type UserSession struct {
 	RefreshTokenHash         string     `gorm:"type:char(64);not null;uniqueIndex:idx_user_sessions_rt_hash" json:"-"`
 	PreviousRefreshTokenHash *string    `gorm:"type:char(64);index:idx_user_sessions_prev_rt_hash" json:"-"`
 	GraceUntil               *time.Time `json:"-"` // nil = no grace window active; set on rotation, cleared when window expires
+	GraceOpenedAt            *time.Time `json:"-"` // when the current grace window first opened (last real rotation); bounds how far the window can slide
 	UserAgent                string     `gorm:"type:text;not null;default:''" json:"user_agent"`
 	IP                       string     `gorm:"type:text;not null;default:''" json:"ip"` // text not inet — keeps GORM portable; valid IPv4/IPv6 strings only
 	CreatedAt                time.Time  `json:"created_at"`

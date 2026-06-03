@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
@@ -176,6 +177,30 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 	// client Authorization so the backend never sees two values.
 	copyForwardHeaders(req.Header, r.Header)
 
+	// Grafana auth-proxy SSO: the /admin/grafana route already passed
+	// JWTValidationMiddleware + AdminRoleMiddleware, so the request carries
+	// validated admin claims. Assert that identity to Grafana via X-WEBAUTH-*
+	// headers (GF_AUTH_PROXY_*), so an authenticated admin lands in Grafana as
+	// Admin with no second login — without reopening the anonymous-Admin hole
+	// closed in UA-115.
+	//
+	// Done HERE, on the final outbound request AFTER copyForwardHeaders, so no
+	// client-controlled header can influence it: Del wipes any client-supplied
+	// value (canonical keys — Go canonicalizes inbound r.Header, which
+	// copyForwardHeaders re-adds verbatim), and because this runs post-copy a
+	// smuggled `Connection: X-WEBAUTH-USER` cannot drop the injected value.
+	// Grafana additionally only trusts these headers from the gateway's network
+	// (GF_AUTH_PROXY_WHITELIST). Every request reaching here is an admin, so
+	// asserting Role=Admin is correct.
+	if service == "grafana" {
+		req.Header.Del("X-Webauth-User")
+		req.Header.Del("X-Webauth-Role")
+		if claims, ok := authz.ClaimsFromContext(r.Context()); ok && claims != nil && claims.Username != "" {
+			req.Header.Set("X-Webauth-User", claims.Username)
+			req.Header.Set("X-Webauth-Role", "Admin")
+		}
+	}
+
 	// For auth service only: selectively re-forward the refresh_token
 	// cookie so that /api/auth/refresh and /api/auth/logout can read it.
 	// Other services MUST NOT receive browser cookies (REVIEW.md BLK-02).
@@ -185,9 +210,17 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 		}
 	}
 
-	// Forward request
+	// Forward request. On a transport error Go's client returns resp==nil —
+	// EXCEPT the rare redirect-policy case where a non-nil response accompanies
+	// the error. If the upstream actually produced a response, relay it (status
+	// + headers, including Set-Cookie) rather than letting the handler
+	// synthesize a 500 that would silently drop the upstream's rotated
+	// refresh-token cookie.
 	resp, err := s.client.Do(req)
 	if err != nil {
+		if resp != nil {
+			return resp, nil
+		}
 		return nil, errors.Internal(fmt.Sprintf("forward request: %v", err))
 	}
 

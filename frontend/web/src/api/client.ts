@@ -22,6 +22,11 @@ export const apiClient: AxiosInstance = axios.create({
 // Flag to prevent multiple refresh attempts
 let isRefreshing = false
 let refreshPromise: Promise<string | null> | null = null
+// Latched once a refresh has confirmed the session is dead (401/403). The
+// httpOnly refresh cookie survives a client-side logout, so without this latch
+// a queued/duplicate refresh would re-POST the now-dead token and earn a second
+// spurious 401. Cleared when a fresh token is written (e.g. after re-login).
+let authExpired = false
 let failedQueue: Array<{
   resolve: (token: string) => void
   reject: (error: AxiosError) => void
@@ -81,6 +86,7 @@ async function performRefresh(): Promise<string | null> {
     const data = response.data?.data || response.data
     const newAccessToken = data.access_token
     localStorage.setItem('token', newAccessToken)
+    authExpired = false // a fresh token re-enables refresh after any prior logout
     processQueue(null, newAccessToken)
     return newAccessToken as string
   } catch (refreshError) {
@@ -92,6 +98,7 @@ async function performRefresh(): Promise<string | null> {
       // Soft logout: clear storage + notify the Pinia store. No
       // window.location redirect — that interrupts mid-action recovery
       // and races with the cross-tab listener.
+      authExpired = true // stop further refreshes re-POSTing the dead httpOnly cookie
       clearAuthLocalStorage()
       dispatchAuthExpired()
     }
@@ -106,6 +113,14 @@ async function performRefresh(): Promise<string | null> {
 // blacklisted by the first → spurious 401 → logout.
 async function doTokenRefresh(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
+  // Session already confirmed dead — don't re-POST the surviving httpOnly
+  // refresh cookie (it would just earn another 401). Returning null makes the
+  // caller reject the original request; the response interceptor only queues
+  // waiters while a refresh is in flight, so none can be stranded here. A
+  // successful login re-enables refresh by clearing the latch in performRefresh.
+  if (authExpired) {
+    return null
+  }
 
   isRefreshing = true
   refreshPromise = (async () => {
@@ -142,6 +157,12 @@ apiClient.interceptors.request.use(
     }
 
     let token = localStorage.getItem('token')
+    if (token && !isTokenExpired(token)) {
+      // A present, still-valid token (e.g. a just-completed login that wrote it
+      // directly, not via performRefresh) means the session is live again —
+      // clear any prior dead-session latch so refresh works for the new session.
+      authExpired = false
+    }
     if (token && isTokenExpired(token)) {
       const newToken = await doTokenRefresh()
       token = newToken

@@ -100,11 +100,110 @@ func TestSessionRepo_RotateCASWinAndGracePath(t *testing.T) {
 	require.True(t, res1.Rotated)
 	require.Equal(t, newHash, res1.Session.RefreshTokenHash)
 
+	// A real rotation opens a fresh grace window: grace_opened_at is stamped and
+	// grace_until is ~now + GraceWindow.
+	var afterRotate domain.UserSession
+	require.NoError(t, db.First(&afterRotate, "id = ?", s.ID).Error)
+	require.NotNil(t, afterRotate.GraceOpenedAt, "rotation should stamp grace_opened_at")
+	require.NotNil(t, afterRotate.GraceUntil)
+	require.WithinDuration(t, time.Now().Add(repo.GraceWindow), *afterRotate.GraceUntil, time.Minute,
+		"grace_until should be ~now + GraceWindow after a rotation")
+
 	// Loser CAS with the same oldHash — should hit the grace path, not rotate.
 	res2, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("loser"), "5.6.7.8", time.Now().Add(30*24*time.Hour))
 	require.NoError(t, err)
 	require.False(t, res2.Rotated, "expected grace path (no rotation) on second CAS with same oldHash")
 	require.Equal(t, newHash, res2.Session.RefreshTokenHash, "row hash should still be the winner's")
+}
+
+// A grace window that is about to lapse must SLIDE forward when the previous
+// hash is presented again, so an active browser stuck on the previous token
+// (the lost-rotation desync) keeps riding the grace path across refreshes far
+// beyond the original near-lapse instead of getting a hard 401.
+func TestSessionRepo_GraceSlides_SurvivesBeyondOriginalWindow(t *testing.T) {
+	db := dbForTest(t)
+	r := repo.NewSessionRepository(db)
+	userID := seedUser(t, db)
+
+	hashLen64 := func(prefix string) string {
+		raw := prefix + uuid.NewString()
+		for len(raw) < 64 {
+			raw += "0"
+		}
+		return raw[:64]
+	}
+
+	oldHash := hashLen64("old")
+	newHash := hashLen64("new")
+	now := time.Now()
+	openedAt := now.Add(-90 * time.Second) // window opened well within MaxGraceLifetime
+	graceUntil := now.Add(5 * time.Second) // about to lapse
+	s := &domain.UserSession{
+		UserID:                   userID,
+		RefreshTokenHash:         newHash,
+		PreviousRefreshTokenHash: &oldHash,
+		GraceUntil:               &graceUntil,
+		GraceOpenedAt:            &openedAt,
+		ExpiresAt:                now.Add(time.Hour),
+		LastSeenAt:               now,
+	}
+	require.NoError(t, r.Create(context.Background(), s))
+
+	res, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("loser"), "1.1.1.1", now.Add(30*24*time.Hour))
+	require.NoError(t, err)
+	require.False(t, res.Rotated, "previous-hash presentation must stay on the grace path")
+
+	var reread domain.UserSession
+	require.NoError(t, db.First(&reread, "id = ?", s.ID).Error)
+	require.NotNil(t, reread.GraceUntil)
+	require.WithinDuration(t, time.Now().Add(repo.GraceWindow), *reread.GraceUntil, time.Minute,
+		"grace_until should have slid to ~now + GraceWindow, well past the original near-lapse")
+}
+
+// The slide must NOT extend a window past grace_opened_at + MaxGraceLifetime —
+// this is the hard bound on how long a stolen previous-token can be replayed.
+func TestSessionRepo_GraceSlide_BoundedCap(t *testing.T) {
+	db := dbForTest(t)
+	r := repo.NewSessionRepository(db)
+	userID := seedUser(t, db)
+
+	hashLen64 := func(prefix string) string {
+		raw := prefix + uuid.NewString()
+		for len(raw) < 64 {
+			raw += "0"
+		}
+		return raw[:64]
+	}
+
+	oldHash := hashLen64("old")
+	newHash := hashLen64("new")
+	now := time.Now()
+	// Window opened almost MaxGraceLifetime ago: only ~1 min of cap remains, so a
+	// fresh now+GraceWindow slide must be clamped down to the cap.
+	openedAt := now.Add(-(repo.MaxGraceLifetime - time.Minute))
+	graceUntil := now.Add(5 * time.Second)
+	s := &domain.UserSession{
+		UserID:                   userID,
+		RefreshTokenHash:         newHash,
+		PreviousRefreshTokenHash: &oldHash,
+		GraceUntil:               &graceUntil,
+		GraceOpenedAt:            &openedAt,
+		ExpiresAt:                now.Add(time.Hour),
+		LastSeenAt:               now,
+	}
+	require.NoError(t, r.Create(context.Background(), s))
+
+	res, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("loser"), "1.1.1.1", now.Add(30*24*time.Hour))
+	require.NoError(t, err)
+	require.False(t, res.Rotated)
+
+	var reread domain.UserSession
+	require.NoError(t, db.First(&reread, "id = ?", s.ID).Error)
+	require.NotNil(t, reread.GraceUntil)
+	require.WithinDuration(t, openedAt.Add(repo.MaxGraceLifetime), *reread.GraceUntil, 30*time.Second,
+		"grace_until should be clamped to grace_opened_at + MaxGraceLifetime")
+	require.True(t, reread.GraceUntil.Before(time.Now().Add(repo.GraceWindow).Add(-2*time.Minute)),
+		"clamped grace_until must be well below an uncapped now + GraceWindow slide")
 }
 
 func TestSessionRepo_RevokeAndRevokeOthers(t *testing.T) {

@@ -86,3 +86,48 @@ func bestMatch(title string, hits []SearchHit) *SearchHit {
 	}
 	return best
 }
+
+// Mirror is a single playback mirror for an episode.
+type Mirror struct {
+	Link    string
+	Quality string
+}
+
+// mirrorRe matches multi-line pretty-printed mirror JSON objects of the form:
+//
+//	"link": "https://...",
+//	"quality": "FullHD"
+//
+// Go's regexp \s matches newlines, so \s* bridges the two fields across lines.
+var mirrorRe = regexp.MustCompile(`"link"\s*:\s*"([^"]+)"\s*,?\s*"quality"\s*:\s*"([^"]*)"`)
+
+// parseEpisodeMirrors extracts Mirror values from an episode page HTML.
+// Duplicate links (each entry typically appears twice in the page) are dropped.
+func parseEpisodeMirrors(html string) []Mirror {
+	seen := map[string]bool{}
+	var out []Mirror
+	for _, m := range mirrorRe.FindAllStringSubmatch(html, -1) {
+		link := strings.ReplaceAll(m[1], `\/`, `/`)
+		if seen[link] {
+			continue
+		}
+		seen[link] = true
+		out = append(out, Mirror{Link: link, Quality: m[2]})
+	}
+	return out
+}
+
+// supportedMirrors filters all mirrors down to only those whose links contain a
+// supported embed host, returned in failover order (mp4upload first, turbovid second).
+func supportedMirrors(all []Mirror) []Mirror {
+	order := []string{"mp4upload", "turbovid"}
+	var out []Mirror
+	for _, host := range order {
+		for _, m := range all {
+			if strings.Contains(m.Link, host) {
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}

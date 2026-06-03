@@ -236,7 +236,12 @@ func (s *AuthService) RefreshToken(
 		return resp, true, nil
 	}
 
-	// 3) Both paths failed.
+	// 3) Both paths failed. Distinguish a lapsed-grace desync (this hash WAS a
+	// session's previous token but its grace window has since expired — the
+	// "random logout" symptom) from a genuinely unknown token, for observability.
+	if s.sessionRepo.PreviousHashExists(ctx, hash) {
+		metrics.AuthEventsTotal.WithLabelValues("refresh_grace_lapsed", "error").Inc()
+	}
 	return nil, false, errors.Unauthorized("invalid refresh token")
 }
 

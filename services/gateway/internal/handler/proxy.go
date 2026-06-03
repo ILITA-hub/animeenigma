@@ -3,9 +3,11 @@ package handler
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/gateway/internal/service"
 )
 
@@ -124,10 +126,20 @@ func (h *ProxyHandler) proxy(w http.ResponseWriter, r *http.Request, service str
 	resp, err := h.proxyService.Forward(r, service)
 	if err != nil {
 		h.log.Errorw("proxy failed", "service", service, "error", err)
+		// Make upstream failures observable per backend domain. This counter
+		// had zero call sites, which is why a dropped-rotation refresh
+		// (domain="auth") that logged users out was previously invisible.
+		metrics.ProxyUpstreamErrors.WithLabelValues("forward_error", service).Inc()
 		httputil.Error(w, err)
 		return
 	}
 	defer resp.Body.Close()
+
+	// An upstream 5xx that still produced a response — count it too, so the
+	// auth-refresh failure mode is queryable as proxy_upstream_errors_total{domain="auth"}.
+	if resp.StatusCode >= 500 {
+		metrics.ProxyUpstreamErrors.WithLabelValues(strconv.Itoa(resp.StatusCode), service).Inc()
+	}
 
 	// Copy response headers, skipping CORS headers (gateway middleware handles CORS)
 	for key, values := range resp.Header {

@@ -329,6 +329,29 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
       GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
+      # Auth-proxy SSO (replaces the UA-115 anonymous-Admin hole): the gateway
+      # authenticates the admin (JWT + AdminRoleMiddleware) and asserts identity
+      # via X-WEBAUTH-USER / X-WEBAUTH-ROLE on the /admin/grafana proxy, so an
+      # AnimeEnigma admin lands in Grafana as Org Admin with no second login.
+      # Grafana trusts these headers ONLY from the docker bridge range (the
+      # proxying container's direct peer IP); the gateway is the sole injector
+      # and strips any client-supplied X-WEBAUTH-* (see gateway proxy.go).
+      # Form login (admin/admin) stays available as a fallback. Anonymous stays
+      # OFF — UA-115 remains fixed.
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: "X-WEBAUTH-USER"
+      GF_AUTH_PROXY_HEADER_PROPERTY: "username"
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_HEADERS: "Role:X-WEBAUTH-ROLE"
+      GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN: "true"
+      # Deliberately the broad docker bridge range, NOT the live 172.18.0.0/16
+      # literal: the network has no pinned ipam, so the exact /16 is a Docker
+      # allocation accident. If it ever reallocates, a narrow literal would
+      # silently break SSO. Failure mode here is fail-CLOSED (Grafana falls back
+      # to the login form), never a privilege escalation.
+      GF_AUTH_PROXY_WHITELIST: "172.16.0.0/12,192.168.0.0/16"
+      GF_AUTH_PROXY_SYNC_TTL: "60"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: "Admin"
       GF_UNIFIED_ALERTING_ENABLED: "true"
       GRAFANA_WEBHOOK_PASS: ${GRAFANA_WEBHOOK_PASS:-}
     extra_hosts:
@@ -446,8 +469,11 @@ services:
       DB_NAME: animeenigma
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
-      COOKIE_SECURE: "false"
-      COOKIE_SAMESITE: Lax
+      # Set COOKIE_SECURE=true in docker/.env for any HTTPS deployment so the
+      # refresh_token / access_token cookies carry the Secure attribute. Default
+      # stays false so local `make dev` over http://localhost can still set them.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-Lax}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}

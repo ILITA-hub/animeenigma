@@ -79,6 +79,16 @@ func TestRefreshToken_PersistentPath_RotatesAndReturnsNewRT(t *testing.T) {
 	require.False(t, rotated2)
 	require.Empty(t, resp3.RefreshToken, "grace path should not return a new RT")
 	require.NotEmpty(t, resp3.AccessToken, "grace path should still mint a fresh access token")
+
+	// Reusing the original RT AGAIN must still succeed on the grace path (the
+	// window slides on each hit), proving a desynced browser stuck on the
+	// previous token keeps working across repeated refreshes instead of being
+	// logged out — the core of the random-logout fix.
+	resp4, rotated3, err := svc.RefreshToken(ctx, &domain.RefreshRequest{RefreshToken: first}, sc)
+	require.NoError(t, err)
+	require.False(t, rotated3, "repeated previous-token reuse must stay on the grace path")
+	require.Empty(t, resp4.RefreshToken)
+	require.NotEmpty(t, resp4.AccessToken, "repeated grace hit should still mint a fresh access token")
 }
 
 func TestRefreshToken_LegacyJWT_UpgradesToSession(t *testing.T) {

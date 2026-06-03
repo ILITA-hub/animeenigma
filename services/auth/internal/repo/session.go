@@ -12,10 +12,44 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
 )
 
-// GraceWindow is how long the previous refresh-token hash stays accepted
-// after a successful rotation. Long enough to absorb cross-tab races,
-// short enough that a stolen previous-token can't be reused indefinitely.
-const GraceWindow = 30 * time.Second
+// GraceWindow is how long the previous refresh-token hash stays accepted after
+// a successful rotation. It MUST exceed the access-token TTL (JWT_ACCESS_TTL,
+// 15m by default): the browser only refreshes when its access token nears
+// expiry, so consecutive refreshes are ~15m apart. A window shorter than that
+// lapses before the next refresh and provides no benefit. At 20m it outlasts
+// the 15m cadence (with margin), so an active browser that lost a rotation's
+// Set-Cookie (e.g. a transient gateway/proxy 5xx) self-heals on its next
+// refresh by riding the grace path instead of getting a hard 401 → logout. The
+// window SLIDES on each grace hit (see Rotate), but never past MaxGraceLifetime
+// from when it first opened — bounding how long a stolen previous-token can be
+// replayed. Keep GraceWindow > JWT_ACCESS_TTL if either is retuned.
+const GraceWindow = 20 * time.Minute
+
+// MaxGraceLifetime caps how long a single grace window can be kept alive by
+// sliding, measured from the rotation that opened it. Past this the previous
+// hash is refused (the window is allowed to lapse) so a desynced client must
+// re-authenticate once — this is the hard bound on previous-token replay.
+const MaxGraceLifetime = 30 * time.Minute
+
+// slideGraceUntil computes the next grace_until for a grace-path hit: now +
+// GraceWindow, clamped to graceOpenedAt + MaxGraceLifetime. Returns ok=false
+// when the absolute lifetime cap is reached, or when graceOpenedAt is unknown
+// (legacy rows rotated before the column existed) — in both cases the caller
+// leaves grace_until untouched and lets the window lapse naturally.
+func slideGraceUntil(graceOpenedAt *time.Time, now time.Time) (time.Time, bool) {
+	if graceOpenedAt == nil {
+		return time.Time{}, false
+	}
+	lifetimeCap := graceOpenedAt.Add(MaxGraceLifetime)
+	if !now.Before(lifetimeCap) {
+		return time.Time{}, false
+	}
+	candidate := now.Add(GraceWindow)
+	if candidate.After(lifetimeCap) {
+		candidate = lifetimeCap
+	}
+	return candidate, true
+}
 
 type SessionRepository struct {
 	db *gorm.DB
@@ -81,6 +115,7 @@ func (r *SessionRepository) Rotate(
 			"previous_refresh_token_hash": oldHash,
 			"refresh_token_hash":          newHash,
 			"grace_until":                 graceUntil,
+			"grace_opened_at":             now,
 			"last_seen_at":                now,
 			"expires_at":                  extendUntil,
 			"ip":                          ip,
@@ -118,13 +153,35 @@ func (r *SessionRepository) Rotate(
 		return RotateResult{}, fmt.Errorf("read grace session: %w", err)
 	}
 
-	// Best-effort touch of last_seen + ip; ignore conflicts.
+	// Best-effort touch of last_seen + ip; ignore conflicts. Also SLIDE the
+	// grace window forward so an active browser stuck on the previous token
+	// (a lost-rotation desync) keeps riding the grace path instead of lapsing
+	// between its ~15-min refreshes — bounded by MaxGraceLifetime from when
+	// the window first opened so a stolen previous-token can't be replayed
+	// indefinitely.
+	touch := map[string]any{"last_seen_at": now, "ip": ip}
+	if newGrace, ok := slideGraceUntil(s.GraceOpenedAt, now); ok {
+		touch["grace_until"] = newGrace
+	}
 	_ = r.db.WithContext(ctx).
 		Model(&s).
 		Where("id = ?", s.ID).
-		Updates(map[string]any{"last_seen_at": now, "ip": ip}).Error
+		Updates(touch).Error
 
 	return RotateResult{Session: &s, Rotated: false}, nil
+}
+
+// PreviousHashExists reports whether ANY session currently holds `hash` as its
+// previous_refresh_token_hash — i.e. the token was valid within living memory
+// but its grace window has since lapsed. Used only for observability, to tell a
+// lost-rotation desync apart from a genuinely unknown/garbage refresh token.
+func (r *SessionRepository) PreviousHashExists(ctx context.Context, hash string) bool {
+	var count int64
+	r.db.WithContext(ctx).
+		Model(&domain.UserSession{}).
+		Where("previous_refresh_token_hash = ?", hash).
+		Count(&count)
+	return count > 0
 }
 
 // Revoke marks one session revoked iff it belongs to userID and is alive.
