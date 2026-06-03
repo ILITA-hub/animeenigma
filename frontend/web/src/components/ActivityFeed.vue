@@ -212,7 +212,7 @@ onMounted(() => {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 /* Feed list — flex-1 scroll region within the capped .activity-shell */
@@ -261,7 +261,7 @@ onMounted(() => {
 }
 
 .feed-av-fallback {
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   font-size: 11px;
   font-weight: 600;
   font-family: var(--f-display);
@@ -282,12 +282,12 @@ onMounted(() => {
 /* @username bold */
 .feed-who {
   font-weight: 600;
-  color: var(--ink);
+  color: var(--foreground);
   text-decoration: none;
   transition: color 0.15s ease;
 }
 .feed-who:hover {
-  color: var(--accent);
+  color: var(--brand-cyan);
 }
 
 .feed-action {
@@ -296,18 +296,18 @@ onMounted(() => {
 
 /* Anime title in accent color */
 .feed-ttl {
-  color: var(--accent);
+  color: var(--brand-cyan);
   text-decoration: none;
   transition: color 0.15s ease;
 }
 .feed-ttl:hover {
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 /* Optional italic excerpt */
 .feed-excerpt {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   font-style: italic;
   margin-top: 4px;
   display: -webkit-box;
@@ -338,7 +338,7 @@ onMounted(() => {
   margin-top: 4px;
   padding: 8px 0;
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -347,7 +347,7 @@ onMounted(() => {
 }
 .feed-load-more:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: var(--ink);
+  color: var(--foreground);
 }
 .feed-load-more:disabled {
   opacity: 0.5;
