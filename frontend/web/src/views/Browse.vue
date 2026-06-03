@@ -10,6 +10,7 @@
 
       <!-- Mobile filter toggle (visible below md) -->
       <div class="md:hidden mb-4">
+        <!-- KEPT bespoke: this button is the useFocusTrap `returnFocusTo` target (toggleButtonRef -> .focus()). A template ref on <Button> resolves to the component instance, not the DOM element, which would break the drawer focus-return path. -->
         <button
           ref="toggleButtonRef"
           type="button"
@@ -53,11 +54,13 @@
           <div v-if="!searchQuery && recentSearches.length > 0" class="mb-6">
             <div class="flex items-center justify-between mb-3">
               <h2 class="text-lg font-semibold text-white">{{ $t('search.recent') }}</h2>
+              <!-- KEPT bespoke: bare text-link (pink text, no bg/border). Button has no text-only variant; ghost/outline would add a filled/bordered box. -->
               <button class="text-sm text-pink-400 hover:text-pink-300" @click="clearRecentSearches">
                 {{ $t('search.clearAll') }}
               </button>
             </div>
             <div class="flex flex-wrap gap-2">
+              <!-- KEPT bespoke: rounded-full chip with bespoke text (text-white/70) and a hover that changes bg only (no border-color shift). ghost's rounded-lg + border-white/20 hover differ; reproducing the chip would require contorting away ghost's hover-border. -->
               <button
                 v-for="search in recentSearches"
                 :key="search"
@@ -104,6 +107,7 @@
           <template v-else>
             <!-- Search on Shikimori (when results exist but user wants fresh data) -->
             <div v-if="searchQuery && animeList.length > 0" class="mb-4 flex justify-end">
+              <!-- KEPT bespoke: bare text-link (cyan text, no bg/border) with an inline spinner/icon swap. Button has no text-only variant; ghost/outline would add a filled/bordered box. -->
               <button
                 class="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors"
                 :disabled="loadingShikimori"
@@ -175,6 +179,7 @@
         <div class="relative w-[85%] max-w-[320px] h-full bg-slate-950 border-r border-white/10 overflow-y-auto p-4">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-lg font-semibold text-white">{{ $t('browse.filters.title') }}</h2>
+            <!-- KEPT bespoke: bare icon-only close (p-1 ~28px hit area, no bg/border). Button size="icon" is 40x40 and ghost adds bg+border — a visible enlargement/box diff for an inline header close affordance. -->
             <button
               type="button"
               class="p-1 rounded text-white/60 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
