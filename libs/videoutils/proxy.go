@@ -324,6 +324,11 @@ var HLSProxyAllowedDomainsWithProvenance = []AllowedDomain{
 	{Domain: "hydaelyn-*", Reason: "Hanime hydaelyn-25x-00.top through 19.top (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
 	{Domain: "zodiark-*", Reason: "Hanime zodiark-25x-00.top through 09.top (prefix wildcard)", Owner: "@legacy", Added: "2026-05-20"},
 
+	// 18anime (18+) embed CDN families — resolved stream hosts, NOT 18anime.me itself.
+	{Domain: "mp4upload.com", Reason: "18anime mp4upload progressive-MP4 mirror (aN.mp4upload.com:183) — requires Referer https://www.mp4upload.com/", Owner: "@18anime", Added: "2026-06-03"},
+	{Domain: "turboviplay.com", Reason: "18anime turbovid master m3u8 host (cdnN.turboviplay.com) — no Referer needed", Owner: "@18anime", Added: "2026-06-03"},
+	{Domain: "turbosplayer.com", Reason: "18anime turbovid nested variant/segment host — no Referer needed", Owner: "@18anime", Added: "2026-06-03"},
+
 	// Phase 18 — Anitaku/Gogoanime CDN entries.
 	// Rotating subdomains match via strings.HasSuffix(host, "."+allowed) in isHLSDomainAllowed.
 	{Domain: "anitaku.to", Reason: "Anitaku poster + future-proxy host (Phase 18)", Owner: "@legacy", Added: "2026-05-20"},
