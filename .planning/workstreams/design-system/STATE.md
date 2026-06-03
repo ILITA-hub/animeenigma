@@ -4,16 +4,16 @@ milestone: v3.1
 milestone_name: Scraper Self-Healing
 current_phase: 04
 current_plan: 4
-status: verifying
+status: ready_to_plan
 stopped_at: Phase 04 Plan 04 complete (final Wave-1 plan) — ready for verification
 last_updated: "2026-06-02T13:01:39.542Z"
 last_activity: 2026-06-02
 progress:
   total_phases: 14
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 53
   completed_plans: 42
-  percent: 79
+  percent: 64
 ---
 
 # Project State
@@ -22,15 +22,15 @@ progress:
 
 Phase: 04 (high-traffic-surface-migration) — EXECUTING
 Plan: 4 of 4
-**Status:** Phase complete — ready for verification
-**Current Phase:** 04
-**Last Activity:** 2026-06-02
+**Status:** Ready to plan
+**Current Phase:** 5
+**Last Activity:** 2026-06-03
 **Last Activity Description:** Plan 04-04 complete (FINAL Wave-1 plan) — all 5 players (Kodik/AnimeLib/Hanime/OurEnglish/Raw) + chrome helpers (OtherSubsPanel/ResumePill/SubtitleSettingsMenu/SubtitleOverlay) migrated off off-palette classes to semantic tokens (yellow/amber→warning, green→success, blue→info, red→destructive, zinc-900→popover). Per-player `--player-accent` hues (#06b6d4 Kodik cyan, #f97316 AnimeLib orange, #ec4899 Hanime pink) + SubtitleOverlay render defaults (#ffffff, #ffcccc) kept VERBATIM + allowlisted (no main.css token — Phase 5). RawPlayer re-grepped clean (no edit). Commits 1b32c4ff (Task1: 5 files) + f7f8d466 (Task2: AnimeLib). Off-palette grep zero hits across all 9 files; hex grep only the 5 allowlisted; vitest 830 pass (1 pre-existing AnimeContextMenu fail, deferred), vue-tsc exit 0, vite build clean. human-verify checkpoint auto-approved (auto mode). Phase 04 now Complete (4/4).
 
 ## Progress
 
 **Phases Complete:** 2 / 6
-**Current Plan:** 4
+**Current Plan:** Not started
 
 ## Performance Metrics
 
