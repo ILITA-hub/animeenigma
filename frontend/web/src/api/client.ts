@@ -603,6 +603,10 @@ export const kodikApi = {
     apiClient.get(`/anime/${animeId}/kodik/video`, {
       params: { episode, translation: translationId }
     }),
+  getStream: (animeId: string, episode: number, translation: number, quality?: number) =>
+    apiClient.get(`/anime/${animeId}/kodik/stream`, {
+      params: { episode, translation, ...(quality ? { quality } : {}) },
+    }),
   search: (query: string) => apiClient.get('/kodik/search', { params: { q: query } }),
   getPinnedTranslations: (animeId: string) => apiClient.get(`/anime/${animeId}/pinned-translations`),
   pinTranslation: (animeId: string, translationId: number, title: string, type: string) =>

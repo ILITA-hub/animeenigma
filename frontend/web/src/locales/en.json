@@ -230,6 +230,12 @@
       "tab": "18anime",
       "label": "18anime"
     },
+    "kodikAdfree": {
+      "tab": "Kodik (ad-free)",
+      "label": "Kodik · ad-free",
+      "skipIntro": "Skip",
+      "extractError": "Couldn't load the ad-free stream. Try the standard Kodik player or report it."
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",

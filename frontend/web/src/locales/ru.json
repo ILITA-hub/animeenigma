@@ -230,6 +230,12 @@
       "tab": "18anime",
       "label": "18anime"
     },
+    "kodikAdfree": {
+      "tab": "Кодик (без рекламы)",
+      "label": "Кодик · без рекламы",
+      "skipIntro": "Пропустить",
+      "extractError": "Не удалось загрузить поток без рекламы. Попробуйте обычный плеер Кодик или сообщите об ошибке."
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",
