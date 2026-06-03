@@ -51,6 +51,6 @@ Requirement IDs are workstream-local. Status: ✅ done · ⏳ planned.
 |----|-------------|--------|
 | DS-GOV-01 | Lint rule (stylelint or custom check) that FAILS the build on hardcoded hex / off-palette Tailwind colors in `.vue`; wired into the `redeploy-web` deploy gate. | ✅ (05-05 — `scripts/design-system-lint.sh`, 3 rules, `--selftest` fail-path; wired into `make lint-frontend` + `redeploy-web`) |
 | DS-GOV-02 | Allowlist/escape-hatch documented for legitimate exceptions (e.g. third-party embed colors) so the lint rule is livable. | ✅ (05-05 — `scripts/design-system-allowlist.txt` `path:hex:reason` + DESIGN-SYSTEM.md "Lint gate (enforced)" docs; out-of-scope hex adjudicated) |
-| DS-GOV-03 | Governance rules ("use tokens, never hardcode, reuse `ui/` primitives before building new") written into project memory + `CLAUDE.md`. | ⏳ |
-| DS-NF-05 | Every phase independently shippable with zero breakage between phases; the app builds, tests pass, and renders correctly after each. | ⏳ |
-| DS-NF-06 | Visual changes verified in a real browser (jsdom can't catch cascade bugs), per the project's standing rule. | ⏳ |
+| DS-GOV-03 | Governance rules ("use tokens, never hardcode, reuse `ui/` primitives before building new") written into project memory + `CLAUDE.md`. | ✅ (06-01 — CLAUDE.md `### Design System` subsection + project-memory `project_design_system_governance.md` + MEMORY.md pointer; enforced-vs-governance-only labeled per SC#3) |
+| DS-NF-05 | Every phase independently shippable with zero breakage between phases; the app builds, tests pass, and renders correctly after each. | ✅ (06-01 ack — satisfied by each phase's green build [vue-tsc + vitest + 5-surface in-browser smoke]; no new machinery) |
+| DS-NF-06 | Visual changes verified in a real browser (jsdom can't catch cascade bugs), per the project's standing rule. | ✅ (06-01 — codified as a standing governance bullet on both CLAUDE.md + project-memory surfaces) |
