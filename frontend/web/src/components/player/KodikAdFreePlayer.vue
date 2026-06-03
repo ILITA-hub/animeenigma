@@ -59,6 +59,7 @@
             controls
             playsinline
             v-show="!streamError"
+            @timeupdate="handleTimeUpdate"
           />
 
           <!-- Skip intro button -->
@@ -94,6 +95,21 @@
               {{ $t('player.episodesCount', { count: episodeRange.length }) }}
             </h3>
             <slot name="header-middle" />
+            <!-- Mark as watched button -->
+            <button
+              v-if="authStore.isAuthenticated"
+              @click="markCurrentEpisodeWatched"
+              :disabled="markingWatched"
+              class="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              :class="episodeMarkedWatched
+                ? 'accent-bg-muted accent-text border accent-border'
+                : 'bg-white/10 text-white hover:bg-white/20'"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span class="hidden sm:inline">{{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}</span>
+            </button>
           </div>
           <EpisodeSelector
             :episodes="episodeOptions"
@@ -217,12 +233,27 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import { kodikApi, userApi } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
+import { useWatchSession } from '@/composables/useWatchSession'
 import EpisodeSelector from './EpisodeSelector.vue'
 import type { EpisodeOption } from './EpisodeSelector.types'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import type { WatchCombo } from '@/types/preference'
 
 const { t } = useI18n()
+
+// ── Watch progress tracking ─────────────────────────────────────────────────
+const currentTime = ref(0)
+const maxTime = ref(0)
+const lastSaveTime = ref(0)
+const SAVE_INTERVAL = 30
+const AUTO_MARK_THRESHOLD = 20 * 60
+const authStore = useAuthStore()
+const { sessionId } = useWatchSession()
+
+// Mark episode as watched
+const markingWatched = ref(false)
+const episodeMarkedWatched = ref(false)
 
 // ── Props (mirror KodikPlayer.vue exactly) ──────────────────────────────────
 const props = defineProps<{
@@ -292,6 +323,75 @@ const episodeRange = computed(() => {
 const episodeOptions = computed<EpisodeOption[]>(() =>
   episodeRange.value.map((n) => ({ key: n, label: n, number: n })),
 )
+
+// ── currentCombo (player:'kodik' so progress merges with iframe player's) ───
+const currentCombo = computed((): WatchCombo | null => {
+  if (!selectedTranslation.value) return null
+  const tr = translations.value.find(t => t.id === selectedTranslation.value)
+  if (!tr) return null
+  return {
+    player: 'kodik',
+    language: 'ru',
+    watch_type: tr.type === 'voice' ? 'dub' : 'sub',
+    translation_id: String(tr.id),
+    translation_title: tr.title,
+  }
+})
+
+// Save progress to localStorage (works without auth)
+const saveProgressLocal = (animeId: string, episode: number, time: number) => {
+  const key = `watch_progress:${animeId}`
+  const data = JSON.parse(localStorage.getItem(key) || '{}')
+  data[episode] = { time, maxTime: maxTime.value, updatedAt: Date.now() }
+  localStorage.setItem(key, JSON.stringify(data))
+}
+
+// Save progress to server (requires auth)
+const saveProgressServer = async (animeId: string, episode: number, time: number) => {
+  if (!authStore.isAuthenticated) return
+  try {
+    await userApi.updateProgress({
+      anime_id: animeId,
+      episode_number: episode,
+      progress: Math.floor(time),
+      duration: Math.floor(maxTime.value) || null,
+      session_id: sessionId.value,
+      ...currentCombo.value,
+    })
+  } catch (err) {
+    console.warn('Failed to save progress to server:', err)
+  }
+}
+
+// Mark current episode as watched (manual button)
+const markCurrentEpisodeWatched = async () => {
+  if (!authStore.isAuthenticated || markingWatched.value) return
+  markingWatched.value = true
+  try {
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined, sessionId.value)
+    episodeMarkedWatched.value = true
+    await refreshWatched()
+    emit('episodeWatched', { episode: selectedEpisode.value })
+  } catch (err: unknown) {
+    const e = err as { response?: { data?: { message?: string } } }
+    error.value = e.response?.data?.message || t('player.error.markWatched')
+  } finally {
+    markingWatched.value = false
+  }
+}
+
+// Auto-mark episode as watched (silent, no UI feedback on error)
+const autoMarkEpisodeWatched = async () => {
+  if (!authStore.isAuthenticated || episodeMarkedWatched.value) return
+  try {
+    await userApi.markEpisodeWatched(props.animeId, selectedEpisode.value, currentCombo.value ?? undefined, sessionId.value)
+    episodeMarkedWatched.value = true
+    await refreshWatched()
+    emit('episodeWatched', { episode: selectedEpisode.value })
+  } catch {
+    // Silent fail for auto-mark
+  }
+}
 
 // ── HLS + stream state (mirrored from RawPlayer) ────────────────────────────
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -391,6 +491,27 @@ function playWithIntro(streamUrl: string, referer: string, episodeKey: string) {
 
 // ── skipIntro (Task 9, from plan verbatim) ───────────────────────────────────
 function skipIntro() { proceedFn?.() }
+
+// ── handleTimeUpdate — drives progress saving and auto-mark ─────────────────
+function handleTimeUpdate() {
+  const v = videoRef.value
+  if (!v || introPlaying.value) return  // never track during branded intro
+  const time = v.currentTime
+  currentTime.value = time
+  if (Number.isFinite(v.duration) && v.duration > 0) maxTime.value = v.duration
+  else if (time > maxTime.value) maxTime.value = time
+  emit('progress', { episode: selectedEpisode.value, time, maxTime: maxTime.value })
+  if (time - lastSaveTime.value >= SAVE_INTERVAL) {
+    lastSaveTime.value = time
+    saveProgressLocal(props.animeId, selectedEpisode.value, time)
+    saveProgressServer(props.animeId, selectedEpisode.value, time)
+  }
+  // Auto-mark: near the end (real duration) OR the 20-min rule (covers short eps)
+  const nearEnd = Number.isFinite(v.duration) && v.duration > 0 && time >= 0.9 * v.duration
+  if (authStore.isAuthenticated && !episodeMarkedWatched.value && (nearEnd || time >= AUTO_MARK_THRESHOLD)) {
+    autoMarkEpisodeWatched()
+  }
+}
 
 // ── loadStream (from plan, verbatim) ─────────────────────────────────────────
 async function loadStream(episode: number, translationID: number) {
@@ -531,6 +652,16 @@ function selectTranslation(translationId: number) {
 
 function selectEpisode(episode: number) {
   if (selectedEpisode.value === episode) return
+  // Save progress of current episode before switching
+  if (currentTime.value > 0) {
+    saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
+    saveProgressServer(props.animeId, selectedEpisode.value, currentTime.value)
+  }
+  // Reset progress tracking for new episode
+  currentTime.value = 0
+  maxTime.value = 0
+  lastSaveTime.value = 0
+  episodeMarkedWatched.value = episode <= watchedUpTo.value
   selectedEpisode.value = episode
   if (selectedTranslation.value) {
     void loadStream(episode, selectedTranslation.value)
@@ -561,17 +692,31 @@ onMounted(() => {
   if (props.initialEpisode) {
     selectedEpisode.value = props.initialEpisode
   }
+  // episodeMarkedWatched seeded after refreshWatched resolves; reset for now
+  episodeMarkedWatched.value = false
   void fetchTranslations()
   void refreshWatched()
 })
 
 onBeforeUnmount(() => {
+  // Save progress when component unmounts
+  if (currentTime.value > 0) {
+    saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
+  }
   disposePlayer()
   if (skipTimer) { clearTimeout(skipTimer); skipTimer = null }
 })
 
 watch(() => props.animeId, () => {
+  // Save current progress before switching anime
+  if (currentTime.value > 0) {
+    saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
+  }
   selectedEpisode.value = 1
+  currentTime.value = 0
+  maxTime.value = 0
+  lastSaveTime.value = 0
+  episodeMarkedWatched.value = false
   streamError.value = false
   error.value = null
   introPlaying.value = false

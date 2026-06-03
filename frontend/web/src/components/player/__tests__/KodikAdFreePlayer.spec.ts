@@ -15,6 +15,8 @@ const getPinnedTranslations = vi.fn()
 const pinTranslation = vi.fn()
 const unpinTranslation = vi.fn()
 const reportError = vi.fn()
+const markEpisodeWatched = vi.fn()
+const updateProgress = vi.fn()
 
 vi.mock('@/api/client', () => ({
   kodikApi: {
@@ -26,6 +28,8 @@ vi.mock('@/api/client', () => ({
   },
   userApi: {
     reportError: (...a: unknown[]) => reportError(...a),
+    markEpisodeWatched: (...a: unknown[]) => markEpisodeWatched(...a),
+    updateProgress: (...a: unknown[]) => updateProgress(...a),
   },
 }))
 
@@ -44,10 +48,24 @@ vi.mock('hls.js', () => ({
 }))
 
 // ── composable stubs ─────────────────────────────────────────────────────────
+const refreshWatched = vi.fn().mockResolvedValue(undefined)
 vi.mock('@/composables/useWatchedEpisodes', () => ({
   useWatchedEpisodes: () => ({
     watchedUpTo: { value: 0 },
-    refresh: vi.fn().mockResolvedValue(undefined),
+    refresh: refreshWatched,
+  }),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    isAuthenticated: true,
+  }),
+}))
+
+vi.mock('@/composables/useWatchSession', () => ({
+  useWatchSession: () => ({
+    sessionId: { value: 'test-session-id' },
+    newSession: vi.fn(),
   }),
 }))
 
@@ -81,6 +99,9 @@ describe('KodikAdFreePlayer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     loadSourceSpy.mockReset()
+    refreshWatched.mockReset().mockResolvedValue(undefined)
+    markEpisodeWatched.mockReset().mockResolvedValue(undefined)
+    updateProgress.mockReset().mockResolvedValue(undefined)
     // jsdom does not implement media playback.
     Object.defineProperty(HTMLMediaElement.prototype, 'play', {
       configurable: true,
@@ -237,5 +258,53 @@ describe('KodikAdFreePlayer', () => {
     expect(video.src).not.toContain('/branding/intro.mp4')
     // Total calls: just the stream load, not the intro
     void firstLoadCount
+  })
+
+  // ── Assertion 10: timeupdate past 0.9*duration calls markEpisodeWatched ───
+  it('timeupdate past 0.9*duration triggers markEpisodeWatched and refreshWatched', async () => {
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await flushPromises()
+
+    const video = wrapper.find('video').element as HTMLVideoElement
+
+    // End the intro so introPlaying=false (handleTimeUpdate guards on introPlaying)
+    video.dispatchEvent(new Event('ended'))
+    await flushPromises()
+
+    // Simulate real video with duration=1000s, currentTime at 95% (past 0.9*duration)
+    Object.defineProperty(video, 'currentTime', { configurable: true, get: () => 950 })
+    Object.defineProperty(video, 'duration', { configurable: true, get: () => 1000 })
+
+    video.dispatchEvent(new Event('timeupdate'))
+    await flushPromises()
+
+    expect(markEpisodeWatched).toHaveBeenCalledWith(
+      'anime-uuid',
+      1,
+      expect.anything(),
+      expect.anything(),
+    )
+    expect(refreshWatched).toHaveBeenCalled()
+  })
+
+  // ── Assertion 11: clicking the mark-watched button calls markEpisodeWatched
+  it('clicking the mark-watched button calls userApi.markEpisodeWatched', async () => {
+    const wrapper = mountPlayer()
+    await flushPromises()
+
+    // The mark-watched button is rendered when isAuthenticated=true (mocked)
+    const btn = wrapper.find('button.ml-auto')
+    expect(btn.exists()).toBe(true)
+
+    await btn.trigger('click')
+    await flushPromises()
+
+    expect(markEpisodeWatched).toHaveBeenCalledWith(
+      'anime-uuid',
+      1,
+      expect.anything(),
+      expect.anything(),
+    )
   })
 })
