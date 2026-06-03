@@ -20,7 +20,7 @@
 | 2 | shadcn-vue Install + Button/Card Proof | ✅ Complete (2026-06-02 — 4 commits 7083bbca..bd975bfa; reka-ui+cva+clsx+tailwind-merge installed, Button+Card on cn()/cva, 714 vitest, vue-tsc clean = 9 consumers unchanged, main.css untouched, A2 white-text confirmed live, 5-surface smoke zero-diff) |
 | 3 | Primitive Set Swap | ✅ Complete (2026-06-02 — 4 waves; Badge/Input/Tabs+Select/Dialog+5 new primitives on Reka, native right-click restored + kebab→anchored DropdownMenu [DS-LIB-08]; 799 vitest, vue-tsc clean, main.css untouched; live-verified: Select popper, Dialog scroll-lock/focus/escape, kebab menu anchor+actions+auth-gating, native right-click) |
 | 4 | High-Traffic Surface Migration | ✅ Complete (4/4 plans — Home+Browse+anime-card family (01), nav/layout (02), anime detail (03), 5 players + chrome helpers (04). All high-traffic surfaces token-clean of off-palette; player-accent + subtitle render hex allowlisted verbatim; DS-MIGRATE-01 proven on real player surfaces; DS-MIGRATE-02/03/06 partial-this-phase. `--accent` flip + tail sweep remain Phase 5) |
-| 5 | Tail Sweep + Lint Enforcement | 🔄 In Progress (4/5 plans — spotlight + home-rail (01), admin + standalone views (02), ui composites + App/themes/browse/WT + ActivityFeed (03), `--accent` flip to shadcn hover surface + temp-alias deletion (04, DS-MIGRATE-05) done; lint-gate wiring (05) remains) |
+| 5 | Tail Sweep + Lint Enforcement | ✅ Complete (5/5 plans — spotlight + home-rail (01), admin + standalone views (02), ui composites + App/themes/browse/WT + ActivityFeed (03), `--accent` flip to shadcn hover surface + temp-alias deletion (04, DS-MIGRATE-05), build-failing color/token lint gate + adjudicated allowlist wired into make lint-frontend + redeploy-web; --selftest fail-path; SC#5 full-suite green (05, DS-GOV-01 + DS-GOV-02). All `src/**/*.vue` off-palette/brand-alias clean and gate-locked) |
 | 6 | Governance into Memory | ⏳ Planned |
 
 ## Goal (v1.0)
@@ -130,10 +130,10 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 
 **Plans:** 5 plans (3 waves)
 - [x] 05-01-PLAN.md — tail sweep: 11 spotlight SFCs + 5 home-rail SFCs to semantic tokens (Wave 1, autonomous) ✅ `87a4afec`, `058eb4a6`
-- [ ] 05-02-PLAN.md — tail sweep: 4 admin views + Profile/Game/StatusPage/Themes to semantic tokens (Wave 1, autonomous)
+- [x] 05-02-PLAN.md — tail sweep: 4 admin views + Profile/Game/StatusPage/Themes to semantic tokens (Wave 1, autonomous) ✅ `e9080e23`, `2a9cdec9`
 - [x] 05-03-PLAN.md — tail sweep: 3 ui/ composites + App + LastUpdates + themes/browse/profile/WT to semantic tokens + ActivityFeed.vue color repoint via stash-isolation (Wave 1, autonomous) ✅ `9b820ab3`, `a09c915b`, `b61b0c4f`
-- [ ] 05-04-PLAN.md — `--accent` flip to shadcn hover surface + temp brand-cyan alias deletion in main.css [DS-MIGRATE-05] (Wave 2, human-verify in-browser smoke)
-- [ ] 05-05-PLAN.md — `design-system-lint.sh` gate (3 color/token rules) + allowlist + make wiring + `--selftest` + DESIGN-SYSTEM.md docs [DS-GOV-01, DS-GOV-02] (Wave 3, autonomous)
+- [x] 05-04-PLAN.md — `--accent` flip to shadcn hover surface + temp brand-cyan alias deletion in main.css [DS-MIGRATE-05] (Wave 2, human-verify in-browser smoke) ✅ `7127275f`
+- [x] 05-05-PLAN.md — `design-system-lint.sh` gate (3 color/token rules) + adjudicated allowlist + make wiring (`lint-frontend` + `redeploy-web`) + `--selftest` + DESIGN-SYSTEM.md docs + SC#5 full-suite green [DS-GOV-01, DS-GOV-02] (Wave 3, autonomous) ✅ `4701f8bc`, `e969c9ec`
 
 > Note: DS-MIGRATE-06 (hand-rolled buttons/cards/badges to `ui/` primitives) is NOT addressed by these
 > color-only plans — Phase 4 treated it as structurally deferred (a primitive swap shifts pixels, violating
