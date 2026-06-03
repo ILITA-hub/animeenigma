@@ -1394,7 +1394,7 @@ const playerSwitchTracker = useOverrideTracker({
   // Phase 24-28 — 'ourenglish' maps to 'english' (the existing analytics
   // bucket for EN providers, preserved across the HiAnime→Consumet→OurEnglish
   // generation rollover).
-  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw' || videoProvider.value === 'anime18'
+  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw' || videoProvider.value === 'anime18' || videoProvider.value === 'kodik-adfree'
     ? 'kodik'
     : videoProvider.value === 'ourenglish'
       ? 'english'
