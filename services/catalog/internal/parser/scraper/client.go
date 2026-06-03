@@ -130,12 +130,15 @@ func (c *Client) GetHealth(ctx context.Context) (int, []byte, error) {
 	return c.doGET(ctx, "/scraper/health", nil)
 }
 
-// --- 18+ group (/anime18/*) — title-searched, no mal_id (18anime.me is not
-// MAL-indexed). Served by the scraper's separate adult orchestrator. ---
+// --- 18+ group (/anime18/*) — title-searched (the 18anime provider matches by
+// title, not MAL id). The scraper handler still requires a non-empty mal_id
+// query param for shape parity, so callers pass the catalog's ShikimoriID
+// (the provider ignores it). Served by the scraper's separate adult orchestrator. ---
 
-// GetAnime18Episodes forwards GET /anime18/episodes?title=&title_alt=.
-func (c *Client) GetAnime18Episodes(ctx context.Context, title string, altTitles []string) (int, []byte, error) {
+// GetAnime18Episodes forwards GET /anime18/episodes?mal_id=&title=&title_alt=.
+func (c *Client) GetAnime18Episodes(ctx context.Context, malID, title string, altTitles []string) (int, []byte, error) {
 	q := url.Values{}
+	q.Set("mal_id", malID)
 	if title != "" {
 		q.Set("title", title)
 	}
@@ -143,10 +146,11 @@ func (c *Client) GetAnime18Episodes(ctx context.Context, title string, altTitles
 	return c.doGET(ctx, "/anime18/episodes", q)
 }
 
-// GetAnime18Stream forwards GET /anime18/stream?title=&title_alt=&episode=&server=.
+// GetAnime18Stream forwards GET /anime18/stream?mal_id=&title=&title_alt=&episode=&server=.
 // An empty serverID lets the provider failover mp4upload->turbovid.
-func (c *Client) GetAnime18Stream(ctx context.Context, title string, altTitles []string, episodeSlug, serverID string) (int, []byte, error) {
+func (c *Client) GetAnime18Stream(ctx context.Context, malID, title string, altTitles []string, episodeSlug, serverID string) (int, []byte, error) {
 	q := url.Values{}
+	q.Set("mal_id", malID)
 	if title != "" {
 		q.Set("title", title)
 	}

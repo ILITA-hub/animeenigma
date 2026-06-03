@@ -17,6 +17,19 @@ import (
 // envelopes back to the frontend's domain.Anime18Episode / Anime18Stream shapes
 // so the Anime18Player contract is unchanged.
 
+// anime18MalID returns a non-empty mal_id for the scraper handler's shape gate.
+// The 18anime provider matches by title and ignores this value; we pass the
+// catalog's ShikimoriID (== MAL id) when present, else a "0" sentinel.
+func anime18MalID(a *domain.Anime) string {
+	if a.ShikimoriID != "" {
+		return a.ShikimoriID
+	}
+	if a.MALID != "" {
+		return a.MALID
+	}
+	return "0"
+}
+
 // anime18Titles picks a primary title + alternate forms for the title search.
 func anime18Titles(a *domain.Anime) (string, []string) {
 	title := a.NameEN
@@ -56,7 +69,7 @@ func (s *CatalogService) Get18AnimeEpisodes(ctx context.Context, animeID string)
 	}
 
 	title, altTitles := anime18Titles(anime)
-	status, body, err := s.scraperClient.GetAnime18Episodes(ctx, title, altTitles)
+	status, body, err := s.scraperClient.GetAnime18Episodes(ctx, anime18MalID(anime), title, altTitles)
 	if err != nil || status != 200 {
 		_ = s.cache.Set(ctx, cacheKey, []domain.Anime18Episode{}, 30*time.Minute)
 		return []domain.Anime18Episode{}, nil
@@ -110,7 +123,7 @@ func (s *CatalogService) Get18AnimeStream(ctx context.Context, animeID, episodeS
 	}
 
 	title, altTitles := anime18Titles(anime)
-	status, body, err := s.scraperClient.GetAnime18Stream(ctx, title, altTitles, episodeSlug, "")
+	status, body, err := s.scraperClient.GetAnime18Stream(ctx, anime18MalID(anime), title, altTitles, episodeSlug, "")
 	if err != nil || status != 200 {
 		return nil, errors.ServiceUnavailable("18anime source unavailable")
 	}

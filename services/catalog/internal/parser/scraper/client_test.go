@@ -240,3 +240,51 @@ func TestClient_BaseURLOverridable(t *testing.T) {
 		t.Fatal("NewClient returned nil for zero-timeout case")
 	}
 }
+
+func TestClient_GetAnime18Episodes_BuildsURL(t *testing.T) {
+	var path, query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true,"data":{"episodes":[]}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, time.Second)
+	if _, _, err := c.GetAnime18Episodes(context.Background(), "57", "Akiba Girls", []string{"Akibakei Kanojo"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != "/anime18/episodes" {
+		t.Fatalf("path = %q, want /anime18/episodes", path)
+	}
+	// mal_id MUST be present (the scraper handler hard-requires it).
+	if !strings.Contains(query, "mal_id=57") {
+		t.Errorf("query = %q, missing mal_id=57", query)
+	}
+	if !strings.Contains(query, "title=Akiba") {
+		t.Errorf("query = %q, missing title", query)
+	}
+}
+
+func TestClient_GetAnime18Stream_BuildsURL(t *testing.T) {
+	var path, query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true,"data":{"stream":{"sources":[]}}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, time.Second)
+	if _, _, err := c.GetAnime18Stream(context.Background(), "0", "Akiba Girls", nil, "472-akiba-girls-episode-1", "turbovid"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != "/anime18/stream" {
+		t.Fatalf("path = %q, want /anime18/stream", path)
+	}
+	for _, want := range []string{"mal_id=0", "episode=472-akiba-girls-episode-1", "server=turbovid"} {
+		if !strings.Contains(query, want) {
+			t.Errorf("query = %q, missing %q", query, want)
+		}
+	}
+}
