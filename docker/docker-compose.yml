@@ -273,7 +273,7 @@ services:
       - ../infra/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
-      - "127.0.0.1:3200:3200" # Tempo API (Grafana datasource target)
+      - "127.0.0.1:3201:3200" # Tempo API on host (host-side debug only; host 3200 is taken by megacloud-extractor). Grafana + collector reach Tempo in-network at tempo:3200.
     depends_on:
       tempo-init:
         condition: service_completed_successfully
