@@ -23,6 +23,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animefever"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animekai"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/animepahe"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/eighteenanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/gogoanime"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/miruro"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/providers/nineanime"
@@ -420,6 +421,21 @@ func main() {
 			"flag", "SCRAPER_ANIMEKAI_ENABLED=false")
 	}
 
+	// 18+ group — a SEPARATE orchestrator (adultOrch) that is NEVER given any
+	// EN provider, so 18+ content cannot leak into the OurEnglish failover.
+	// Served on the /anime18/* route family. The 18anime provider needs no
+	// credentials/sidecar — a plain HTTP client + the real 18anime.me base.
+	adultOrch := service.NewOrchestrator(log, registry, cache)
+	adultOrch.SetProviderTimeout(cfg.ProviderTimeout)
+	anime18Provider := eighteenanime.New(eighteenanime.Deps{Log: log})
+	if cfg.Providers.IsEnabled(anime18Provider.Name()) {
+		adultOrch.Register(anime18Provider)
+		log.Infow("registered provider (adult group)", "name", anime18Provider.Name())
+	} else {
+		log.Warnw("provider SKIPPED (disabled in scraper-providers.yaml)",
+			"name", anime18Provider.Name(), "group", config.GroupAdult)
+	}
+
 	// Phase 17 Plan 01: seed the provider_health_up gauge family with zero-
 	// initialized children for every (provider, stage) pair so the HELP/TYPE
 	// lines appear in /metrics from boot. The probe runner (Plan 17-02) will
@@ -444,7 +460,12 @@ func main() {
 	// a Register() between the two and the seeded metric set diverges from
 	// the spawned probe set.
 	providers := orchestrator.RegisteredProviders()
-	for _, p := range providers {
+	adultProviders := adultOrch.RegisteredProviders()
+	// Seed metrics for BOTH groups so adult providers appear in Grafana, but
+	// only EN providers get a liveness probe spawned below (the golden pool is
+	// mainstream anime — no 18+ golden, so 18anime health stays at the seed).
+	seedProviders := append(append([]domain.Provider{}, providers...), adultProviders...)
+	for _, p := range seedProviders {
 		seedValue := bootHealthSeedValue(p.Name())
 		for _, stage := range health.AllStages {
 			metrics.ProviderHealthUp.WithLabelValues(p.Name(), stage).Set(seedValue)
@@ -485,7 +506,8 @@ func main() {
 	// runner writes to so /scraper/health/admin can read the enriched
 	// per-stage snapshot.
 	scraperHandler := handler.NewScraperHandler(orchestrator, cache, log)
-	router := transport.NewRouter(scraperHandler, cfg, log, metricsCollector)
+	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
+	router := transport.NewRouter(scraperHandler, anime18Handler, cfg, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -536,11 +558,25 @@ func main() {
 			"registered", names)
 	}
 
+	// Adult-group wiring invariant — the adult orchestrator holds exactly the
+	// enabled adult providers (1 when 18anime is enabled, 0 when disabled).
+	adultCandidates := config.KnownProvidersInGroup(config.GroupAdult)
+	expectedAdult := 0
+	for _, name := range adultCandidates {
+		if cfg.Providers.IsEnabled(name) {
+			expectedAdult++
+		}
+	}
+	if got := len(adultOrch.RegisteredProviders()); got != expectedAdult {
+		log.Fatalw("adult-group wiring invariant broken", "got", got, "want", expectedAdult)
+	}
+
 	// ISS-023: reflect the provider-management config into Prometheus so the
 	// Grafana dashboard shows EVERY provider (enabled and disabled) with its
 	// reason/description. Disabled providers are not Register()-ed, so without
-	// this they would vanish from all metrics.
-	for _, row := range cfg.Providers.Rows(candidateProviders) {
+	// this they would vanish from all metrics. Includes the adult group so
+	// 18anime appears in the provider-management dashboard.
+	for _, row := range cfg.Providers.Rows(append(append([]string{}, candidateProviders...), adultCandidates...)) {
 		enabled := 0.0
 		if row.Enabled {
 			enabled = 1.0

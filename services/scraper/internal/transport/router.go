@@ -69,6 +69,7 @@ func privateOnlyMiddleware(log *logger.Logger) func(http.Handler) http.Handler {
 // which is the docker-compose healthcheck target.
 func NewRouter(
 	scraperHandler *handler.ScraperHandler,
+	anime18Handler *handler.ScraperHandler,
 	cfg *config.Config,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -126,6 +127,20 @@ func NewRouter(
 		r.Group(func(r chi.Router) {
 			r.Use(privateOnlyMiddleware(log))
 			r.Get("/health/admin", scraperHandler.GetAdminHealth)
+		})
+	})
+
+	// 18+ group — a SEPARATE orchestrator (anime18Handler) bound to its own
+	// route family. Identical surface to /scraper/* but serves only the adult
+	// provider group; it is NEVER part of the EN failover chain.
+	r.Route("/anime18", func(r chi.Router) {
+		r.Get("/episodes", anime18Handler.GetEpisodes)
+		r.Get("/servers", anime18Handler.GetServers)
+		r.Get("/stream", anime18Handler.GetStream)
+		r.Get("/health", anime18Handler.GetHealth)
+		r.Group(func(r chi.Router) {
+			r.Use(privateOnlyMiddleware(log))
+			r.Get("/health/admin", anime18Handler.GetAdminHealth)
 		})
 	})
 

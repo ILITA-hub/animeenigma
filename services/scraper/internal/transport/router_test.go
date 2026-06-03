@@ -49,7 +49,10 @@ func freshTestRouter(t *testing.T) http.Handler {
 	// these router tests assert route registration, not cache snapshot content).
 	orch := service.NewOrchestrator(log, domain.NewRegistry(), nil)
 	sh := handler.NewScraperHandler(orch, nil, log)
-	return NewRouter(sh, cfg, log, getSharedMC())
+	// Second handler for the /anime18/* (adult-group) route family.
+	adultOrch := service.NewOrchestrator(log, domain.NewRegistry(), nil)
+	a18 := handler.NewScraperHandler(adultOrch, nil, log)
+	return NewRouter(sh, a18, cfg, log, getSharedMC())
 }
 
 // TestRouter_AllScraperRoutesRegistered fires GETs at every /scraper/* route
