@@ -16,6 +16,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/aniboom"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animelib"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/eighteenanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/hanime"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jikan"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/jimaku"
@@ -36,6 +37,7 @@ type CatalogService struct {
 	jimakuClient    *jimaku.Client
 	animelibClient  *animelib.Client
 	hanimeClient    *hanime.Client
+	anime18Client   *eighteenanime.Client
 	idMappingClient *idmapping.Client
 	scraperClient   *scraper.Client
 	cache           *cache.RedisCache
@@ -123,6 +125,7 @@ func NewCatalogService(
 		jimakuClient:    jimakuClient,
 		animelibClient:  animelibClient,
 		hanimeClient:    hanimeClient,
+		anime18Client:   eighteenanime.NewClient(),
 		idMappingClient: idmapping.NewClient(),
 		scraperClient:   scraper.NewClient(scraperAPIURL, scraperTimeout),
 		cache:           cache,

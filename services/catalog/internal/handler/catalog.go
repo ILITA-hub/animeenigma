@@ -23,15 +23,22 @@ type CatalogHandler struct {
 	// /api/anime/{animeId}/scraper/* via catalogHandler.GetScraper*
 	// alongside the existing animelib handler.
 	*ScraperEndpointsHandler
+
+	// 18anime (18+) endpoints. Embedded so chi can route
+	// /api/anime/{animeId}/anime18/* via catalogHandler.GetAnime18*.
+	*Anime18EndpointsHandler
 }
 
 func NewCatalogHandler(catalogService *service.CatalogService, log *logger.Logger) *CatalogHandler {
 	scraperEp := &ScraperEndpointsHandler{}
 	WireScraperEndpoints(scraperEp, catalogService, log)
+	anime18Ep := &Anime18EndpointsHandler{}
+	WireAnime18Endpoints(anime18Ep, catalogService, log)
 	return &CatalogHandler{
 		catalogService:          catalogService,
 		log:                     log,
 		ScraperEndpointsHandler: scraperEp,
+		Anime18EndpointsHandler: anime18Ep,
 	}
 }
 
