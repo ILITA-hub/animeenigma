@@ -15,6 +15,7 @@
           <div class="skeleton-line skel-w-3q" />
           <div class="skeleton-line skel-w-1-3" />
         </div>
+        <div class="skeleton-poster" />
       </div>
     </div>
 
@@ -55,6 +56,25 @@
           <p v-if="event.content" class="feed-excerpt">{{ event.content }}</p>
           <div class="feed-time">{{ formatRelativeTime(event.created_at) }}</div>
         </div>
+
+        <!-- Anime poster thumbnail — right-anchored, the subject of the
+             activity. Decorative: the title link above already routes to the
+             same anime, so it's hidden from the a11y tree (like the avatar). -->
+        <router-link
+          v-if="event.anime?.poster_url"
+          :to="`/anime/${event.anime_id}`"
+          class="feed-poster"
+          tabindex="-1"
+          aria-hidden="true"
+        >
+          <img
+            :src="event.anime.poster_url"
+            :alt="animeName(event)"
+            class="feed-poster-img"
+            loading="lazy"
+            @error="onPosterError"
+          />
+        </router-link>
       </div>
 
       <!-- Empty state -->
@@ -160,6 +180,15 @@ const actionText = (event: ActivityEvent): string => {
 const animeName = (event: ActivityEvent): string => {
   if (!event.anime) return t('home.noData')
   return getLocalizedTitle(event.anime.name, event.anime.name_ru) || t('home.noData')
+}
+
+// A broken poster <img> renders its (long) alt text inside the 40×60 slot,
+// ballooning the row height. Swap to the placeholder on error (guard against
+// a loop if the placeholder itself ever fails). Mirrors ColumnItem.vue.
+const onPosterError = (e: Event): void => {
+  const img = e.target as HTMLImageElement
+  if (img.src.endsWith('/placeholder.svg')) return
+  img.src = '/placeholder.svg'
 }
 
 const formatRelativeTime = (dateStr: string): string => {
@@ -273,6 +302,30 @@ onMounted(() => {
   min-width: 0;
 }
 
+/* Anime poster thumbnail — 2:3 portrait, right-anchored. Matches the app's
+   poster convention (--r-sm radius, --line border, object-fit cover). */
+.feed-poster {
+  flex-shrink: 0;
+  display: block;
+  width: 40px;
+  height: 60px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.feed-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity 0.15s ease;
+}
+.feed-poster:hover .feed-poster-img {
+  opacity: 0.82;
+}
+
 .feed-text {
   font-size: 13px;
   line-height: 1.45;
@@ -380,6 +433,16 @@ onMounted(() => {
 .skeleton-line {
   height: 12px;
   border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Skeleton poster — mirrors the loaded .feed-poster slot */
+.skeleton-poster {
+  width: 40px;
+  height: 60px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.08);
   animation: pulse 1.5s ease-in-out infinite;
 }

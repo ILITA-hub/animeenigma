@@ -1,87 +1,25 @@
 ---
-gsd_state_version: 1.0
-milestone: v3.1
-milestone_name: Scraper Self-Healing
-status: executing
-stopped_at: Phase 28 (Provider Expansion R2) scoped 2026-05-19 — AnimeFever + Miruro + 9anime.me.uk per operator "as many providers as possible." CONTEXT.md locked with D1-D7 decisions; SCRAPER-HEAL-34..39 added to v3.1-REQUIREMENTS.md; ROADMAP.md grew Phase 28 entry. Phase 24 still blocked on upstream provider recovery (`human_needed` from prior autonomous run); Phase 28 can ship independently — its only soft dependency on Phase 24 is the UI dropdown polish in 28-06 which degrades gracefully.
-last_updated: "2026-05-20T01:35:24.989Z"
-last_activity: 2026-05-20 -- Phase 28 execution started
-progress:
-  total_phases: 14
-  completed_phases: 7
-  total_plans: 53
-  completed_plans: 34
-  percent: 64
+workstream: design-system
+created: 2026-06-02
 ---
 
 # Project State
 
-## Project Reference
-
-See: .planning/PROJECT.md (last updated 2026-05-09 — v3.0 milestone started; v3.1 inherits the same project context).
-
-**Core value:** A logged-in user opens the home page and sees a personalized "Up Next for you" row of anime they have not yet started — ranked by a transparent weighted-ensemble of signals. After completing an anime they enjoyed (score ≥ 7), a "Because you finished X" pin appears at the top of the row. v3.1's contribution: when the user actually presses Play on an English-source anime, the player surfaces real video instead of upstream ad-decoy garbage.
-
-**Current focus:** Phase 28 — Provider Expansion Round 2
-
 ## Current Position
+**Status:** In progress — v1.0 Design System Consolidation
+**Current Phase:** Phase 1 complete; Phase 2 not yet planned
+**Last Activity:** 2026-06-02
+**Last Activity Description:** Workstream seeded from approved design doc; PROJECT/REQUIREMENTS/ROADMAP/MILESTONES authored. Phase 1 (Token Foundation) was implemented + shipped on `main` (commits ba8e4e83..d2baa16d) prior to workstream creation; recorded as complete.
 
-Phase: 28 (Provider Expansion Round 2) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 28
-Last activity: 2026-05-20 -- Phase 28 execution started
-
-## Shipped Milestones
-
-| Milestone | Shipped | Phases | Plans |
-|-----------|---------|--------|-------|
-| v1.0 Smart Watch Picker Overhaul | 2026-05-03 | 1-8 | — |
-| v2.0 Recommendations Engine | 2026-05-07 | 9-14 | 8/8 |
-
-## In-Flight Milestones
-
-| Milestone | Phases | Status |
-|-----------|--------|--------|
-| v3.0 Universal Anime Scraper | 15-20 | Phases 15-19 SHIPPED 2026-05-11..12; Phase 20 cutover SHIPPED 2026-05-18 (over-rotated — see v3.1 Phase 24) |
-| v3.1 Scraper Self-Healing | 21-28 | REOPENED 2026-05-19 — Phases 21-23 SHIPPED 2026-05-13 but regression undid 21's user-facing surface; Phases 24-27 scoped 2026-05-19; Phase 28 added 2026-05-19 (AnimeFever + Miruro + 9anime.me.uk per operator "as many providers as possible") |
-
-## v3.1 Phase Map
-
-| Phase | Name | Requirements | Status |
-|---|---|---|---|
-| 21 | Playability Foundation | SCRAPER-HEAL-01..08 | SHIPPED 2026-05-13 — user-facing surface (SCRAPER-HEAL-08 EnglishPlayer.vue) regressed 2026-05-18; restored in Phase 24 |
-| 22 | Provider Robustness | SCRAPER-HEAL-09..11 | SHIPPED 2026-05-13 — hls3 host rotation (BLK-INT-01) still open; addressed in Phase 25 |
-| 23 | Self-Maintenance Loop | SCRAPER-HEAL-12..16 | SHIPPED 2026-05-13 — W-INT-02 (cacheStream symbol), W-INT-03 (silent-200) addressed in Phase 25 |
-| 24 | EN Reconnect | SCRAPER-HEAL-17..20 | PLANNING — restore EnglishPlayer.vue, EN tab, type unions; provider verification per "test each provider" gate |
-| 25 | Audit Findings Resolution | SCRAPER-HEAL-21..24 | PLANNING — BLK-INT-01 hls3 allowlist auto-discovery, W-INT-01 probe race test, W-INT-02 cacheStream symbol, W-INT-03 silent-200 |
-| 26 | Provider Expansion | SCRAPER-HEAL-25..28 | Wave 1 SHIPPED 2026-05-19 (AllAnime live + has_english filter); Wave 2 at operator decision gate (`human_needed`); 26-04..07 deferred |
-| 27 | AnimePahe Revival via Stealth-Chromium Sidecar | SCRAPER-HEAL-29..33 | PLANNING — Node 20 + Fastify + puppeteer-extra stealth sidecar; depends on Phase 24 SCRAPER-HEAL-20 verdict log |
-| 28 | Provider Expansion R2 | SCRAPER-HEAL-34..39 | PLANNING — AnimeFever (slot 4) + Miruro (slot 5, spike-gated) + 9anime.me.uk (slot 6, last-resort). CONTEXT locked with D1-D7. Ready for `/gsd-plan-phase --phase 28` |
-
-## v3.1 Drivers (from PoC 2026-05-13)
-
-- VibePlayer (HD-1, the default first server returned by gogoanime) serves ad-decoy m3u8 manifests whose entire variant playlist points at TikTok's ad CDN (`p16-ad-sg.ibyteimg.com`). Real headless Chromium gets the same poison — confirmed IP-level, not fingerprint. Production EnglishPlayer plays *something* (manifest parses, duration loads) but never any actual video frame.
-- StreamHG (`otakuhg.site` → `premilkyway.com`) and Earnvids (`otakuvid.online` → `dramiyos-cdn.com`) work perfectly — Go regex on packed JS extracts a valid signed `.m3u8`, HLS proxy returns 200, real `.ts` segments. They were never tried because VibePlayer is sorted first.
-- Both StreamHG and Earnvids ALSO expose a secondary `hls3` URL family at rotated CDNs (`managementadvisory.sbs`, `exoplanethunting.space`) for use when `hls2` signed-URL TTL expires — currently unused.
-- v3.0 Phase 17 observability infrastructure (metrics, health gauges, admin endpoint) ships v3.1's metrics without new infrastructure work.
-
-## v3.0 Carryover (resumable, not abandoned)
-
-- **v3.0 Phase 20 Cutover** — SHIPPED 2026-05-18 across plans 20-02..20-05 but **over-rotated**: in addition to the targeted HiAnimePlayer.vue + ConsumetPlayer.vue + parser/hianime + parser/consumet deletions, the cutover swept up EnglishPlayer.vue, the EN tab markup in Anime.vue, the i18n keys (`tabEnglish`, `tabDebugSuffix`, `sourceUnhealthy`, etc.), and the multi-source dropdown infrastructure that v3.1 Phase 21 had shipped. The Phase 20 success criteria are met (no HiAnime/Consumet residue) but the *unintended* over-deletion regressed v3.1 Phase 21's user-facing surface. v3.1 Phase 24 (this milestone reopening) restores the regression cleanly.
-- **AnimeKai (Phase 19) gated R&D** carried as `SCRAPER_ANIMEKAI_ENABLED=false`. Picked up by v3.1 Phase 26.
-
-## v1.0 / v2.0 Carryover (preserved across milestone switches)
-
-- **v1.0 Phase 7 follow-up (override-rate re-snapshot)** ran post-deploy; tracked separately from active phases.
-- **v2.1 backlog** documented in `.planning/milestones/v2.0-MILESTONE-AUDIT.md`: editable weights UI, S1 neighbor expansion, S6 seed history, per-anime CTR breakdown, session-based attribution, GDPR delete path for rec_events, rec_events rate limit, pin signal_id observability split. Out of v3.1 scope unless explicitly pulled into a phase.
+## Progress
+**Phases Complete:** 1 / 6
+**Current Plan:** N/A (Phase 2 awaiting `/gsd-plan-phase --ws design-system`)
 
 ## Session Continuity
+**Stopped At:** Workstream review (pre–Phase-2 planning)
+**Resume File:** None
 
-Last session: 2026-05-19T00:00:00.000Z
-Stopped at: Phase 28 (Provider Expansion R2) scoped 2026-05-19 — AnimeFever + Miruro + 9anime.me.uk per operator "as many providers as possible." CONTEXT.md locked with D1-D7 decisions; SCRAPER-HEAL-34..39 added to v3.1-REQUIREMENTS.md; ROADMAP.md grew Phase 28 entry. Phase 24 still blocked on upstream provider recovery (`human_needed` from prior autonomous run); Phase 28 can ship independently — its only soft dependency on Phase 24 is the UI dropdown polish in 28-06 which degrades gracefully.
-Resume from: `/gsd-autonomous --only 28` (executes Phase 28 end-to-end: discuss-phase auto-skips because 28-CONTEXT.md exists; plan-phase generates 6 PLAN files from the locked decisions; execute-phase runs Wave 0 spikes → Wave 1 AnimeFever lift → Wave 2 Miruro conditional → Wave 3 9anime + dropdown polish). Override individual decisions D1-D7 by editing 28-CONTEXT.md *before* invoking autonomous.
-
-## Operator Next Steps
-
-- Plan Phase 24 with `/gsd-plan-phase --phase 24`. Phase 24 CONTEXT.md is ready at `.planning/milestones/v3.1-phases/24-en-reconnect/24-CONTEXT.md`.
-- Phase 24 has a hard "test each provider" gate (Phase 0 from the standalone plan superseded into this milestone) — gogoanime + animepahe + animekai-fall-through must all be verified end-to-end against Frieren (MAL 52991) before any frontend code touches.
+## Notes
+- Phase 1 artifacts live in the repo, not in this workstream's `phases/` dir (it was built before the workstream existed). Plan: `docs/superpowers/plans/2026-06-02-design-system-consolidation-p1.md`. Spec: `docs/superpowers/specs/2026-06-02-design-system-consolidation-design.md`.
+- Phase 1 commits (6, `ba8e4e83`..`d2baa16d` — non-contiguous) are on `main` and **already pushed to `origin/main`** (verified 2026-06-02; a parallel session's push swept them up). The workstream-seed commit is the only local-unpushed design-system commit at creation time.
+- `--accent` semantic flip is deferred to Phase 5 (DS-MIGRATE-05) — do not flip earlier.

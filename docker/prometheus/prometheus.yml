@@ -54,3 +54,23 @@ scrape_configs:
     static_configs:
       - targets: ['scraper:8088']
     metrics_path: /metrics
+
+  - job_name: 'notifications'
+    static_configs:
+      - targets: ['notifications:8090']
+    metrics_path: /metrics
+
+  - job_name: 'watch-together'
+    static_configs:
+      - targets: ['watch-together:8091']
+    metrics_path: /metrics
+
+  - job_name: 'analytics'
+    static_configs:
+      - targets: ['analytics:8092']
+    metrics_path: /metrics
+
+  - job_name: 'library'
+    static_configs:
+      - targets: ['library:8089']
+    metrics_path: /metrics
