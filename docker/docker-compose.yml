@@ -849,6 +849,7 @@ services:
       args:
         VITE_API_URL: /api
         VITE_RAW_PROVIDER_ENABLED: "true"
+        VITE_ANIME18_ENABLED: "true"
     container_name: animeenigma-web
     restart: unless-stopped
     ports:
