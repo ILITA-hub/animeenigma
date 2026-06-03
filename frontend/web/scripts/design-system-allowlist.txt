@@ -1,0 +1,70 @@
+# design-system-allowlist.txt — justified hardcoded-hex exceptions (DS-GOV-02).
+#
+# Format (one entry per line):  path:hex:reason
+#   - `path` is relative to frontend/web (e.g. src/views/Auth.vue).
+#   - `hex`  is the literal hex as it appears in the file (e.g. #0e7490, #fff).
+#   - `reason` is a free-text justification (REQUIRED — never blanket-allowlist).
+# A hex is allowed ONLY in the file(s) that list it (per-(file,hex)).
+# `#`-prefixed lines and blank lines are comments. Read by scripts/design-system-lint.sh RULE 2.
+#
+# Adding an exception: prefer migrating to a canonical token first. Only allowlist
+# when no token reproduces the value within tolerance (provider-brand identity,
+# subtitle render default, cover/avatar gradient stop, near-base ink, SVG <stop>,
+# functional non-theme color, or a canonical-fine `var(--token,#fallback)` fallback).
+# Out-of-scope hex (files NOT touched by the migration) MUST be ADJUDICATED
+# (migrate-to-token vs justified-allowlist) — see DESIGN-SYSTEM.md.
+
+# --- Per-provider / player accent identity hues (Phase-4 documented) -----------
+src/components/player/KodikPlayer.vue:#06b6d4:Kodik player-accent (cyan) provider-identity hue, not a token
+src/components/player/AnimeLibPlayer.vue:#f97316:AniLib player-accent (orange) provider-identity hue, not a token
+src/components/player/HanimePlayer.vue:#ec4899:Hanime player-accent (pink) provider-identity hue, not a token
+src/components/browse/BrowseSidebar.vue:#f97316:AniLib provider-identity hue (orange) — decorative accent, mirrors --player-accent seed
+
+# --- Subtitle render defaults (SubtitleOverlay) --------------------------------
+src/components/player/SubtitleOverlay.vue:#ffffff:default subtitle text color (render default), not a theme token
+src/components/player/SubtitleOverlay.vue:#ffcccc:default subtitle outline/secondary color (render default), not a theme token
+
+# --- Brand / near-base chrome hex (BrandMark, Navbar) --------------------------
+src/components/layout/BrandMark.vue:#08080f:brand base color fallback in var(--color-base,#08080f) — canonical-fine fallback
+src/components/layout/Navbar.vue:#1a3a4a:avatar teal gradient START — novel chrome hue, no token within tolerance
+src/components/layout/Navbar.vue:#0e2030:avatar teal gradient END — novel chrome hue, no token within tolerance
+src/components/layout/Navbar.vue:#00ff9d:online-dot success fallback in var(--color-success,#00ff9d) — canonical-fine fallback
+src/components/layout/Navbar.vue:#08080f:online-dot base ring fallback in var(--color-base,#08080f) — canonical-fine fallback
+
+# --- ActivityFeed teal gradient (analytics-workstream file; color lines repointed 05-03 T3) ---
+src/components/ActivityFeed.vue:#1a3a4a:avatar teal gradient START — novel chrome hue (same as Navbar), no token within tolerance
+src/components/ActivityFeed.vue:#0e2030:avatar teal gradient END — novel chrome hue (same as Navbar), no token within tolerance
+
+# --- Home spotlight / rail novel near-base + cover-gradient hex (05-01) ---------
+src/components/home/spotlight/cards/FeaturedCard.vue:#001218:.btn-primary-hero text-on-cyan near-base ink; no token within tolerance
+src/components/home/spotlight/cards/PlatformStatsCard.vue:#0d2030:ambient card-glow gradient START; novel near-base, no token
+src/components/home/spotlight/cards/PlatformStatsCard.vue:#050a12:ambient card-glow gradient END; novel near-base, no token
+src/components/home/spotlight/cards/NowWatchingCard.vue:#0a0e1a:live-dot avatar-ring near-base (ring-[#0a0e1a]); novel, no token
+src/components/home/CollectionsRow.vue:#0e7490:collection-cover fallback gradient START (cyan-tinted); novel cover hue, no token within tolerance
+src/components/home/CollectionsRow.vue:#6b21a8:collection-cover fallback gradient END (violet-tinted); novel cover hue, no token within tolerance
+src/components/home/CollectionsRow.vue:#11111c:surface fallback in var(--color-surface,#11111c) — canonical-fine fallback
+src/components/home/ContinueWatchingRow.vue:#001218:.cw-play icon-on-cyan near-base ink; no token within tolerance
+src/components/home/ContinueWatchingRow.vue:#00d4ff:brand-cyan fallback/raw glow (var(--brand-cyan,#00d4ff) + raw glow stops) — canonical-fine brand value
+src/components/home/ContinueWatchingRow.vue:#11111c:surface fallback in var(--color-surface,#11111c) — canonical-fine fallback
+src/components/home/ContinueWatchingRow.vue:#fff:foreground fallback in var(--foreground,#fff) — canonical-fine fallback
+
+# --- LastUpdates news-cover gradient (05-03) -----------------------------------
+src/components/LastUpdates.vue:#0e7490:.update-thumb--empty news-cover gradient START (cyan-tinted); novel cover hue, no token (same as CollectionsRow)
+src/components/LastUpdates.vue:#4c1d95:in-code comment documenting the migration (value migrated to var(--brand-violet)); not a live value
+
+# --- ADJUDICATED out-of-scope hex (files NOT touched by 05-01/02/03) -----------
+# Auth.vue Telegram-brand blue: JUSTIFIED provider-brand allowlist (Telegram's official
+# brand blue is a third-party identity color, analogous to per-provider player hues).
+# Confirmed: it styles the "Open in Telegram" button (src/views/Auth.vue ~L58).
+src/views/Auth.vue:#54a9eb:Telegram provider brand blue (official) — provider-identity, not a token
+src/views/Auth.vue:#4a96d2:Telegram provider brand blue hover (official) — provider-identity, not a token
+# Auth.vue QR-code module colors: FUNCTIONAL (qrcode.js canvas dark/light), not theme colors.
+src/views/Auth.vue:#000000:QR-code module dark color (functional, qrcode.js canvas) — not a theme token
+src/views/Auth.vue:#ffffff:QR-code module light color (functional, qrcode.js canvas) — not a theme token
+# Collections.vue hero fallback gradient: ADJUDICATED keep-and-allowlist. The pair is the
+# IDENTICAL cyan->purple gradient kept verbatim for CollectionsRow.vue (05-01). #0e7490 is a
+# darker/desaturated teal (not brand-cyan #00d4ff) and #6b21a8 a darker purple (not
+# brand-violet #a78bfa); a token gradient (var(--brand-cyan)->var(--brand-violet)) would shift
+# the rendered cover hue out of tolerance. No exact token pair -> adjudicated keep.
+src/views/Collections.vue:#0e7490:Collections hero fallback gradient START — no exact token pair; adjudicated keep (matches CollectionsRow)
+src/views/Collections.vue:#6b21a8:Collections hero fallback gradient END — no exact token pair; adjudicated keep (matches CollectionsRow)
