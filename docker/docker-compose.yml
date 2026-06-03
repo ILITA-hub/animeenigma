@@ -282,6 +282,20 @@ services:
       timeout: 5s
       retries: 5
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.1
+    container_name: animeenigma-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel/collector-config.yaml"]
+    volumes:
+      - ../infra/otel/collector-config.yaml:/etc/otel/collector-config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317" # OTLP gRPC (services export here)
+      - "127.0.0.1:4318:4318" # OTLP HTTP
+    depends_on:
+      tempo:
+        condition: service_healthy
+
   grafana:
     image: grafana/grafana:10.3.3
     container_name: animeenigma-grafana
