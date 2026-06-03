@@ -361,6 +361,7 @@ function attachStream(streamUrl: string, referer: string) {
 
 // ── playWithIntro (Task 9, from plan verbatim) ───────────────────────────────
 function playWithIntro(streamUrl: string, referer: string, episodeKey: string) {
+  if (skipTimer) { clearTimeout(skipTimer); skipTimer = null }
   const v = videoRef.value
   if (!v) return
   if (introShownFor.has(episodeKey)) { attachStream(streamUrl, referer); return }
@@ -394,6 +395,7 @@ function skipIntro() { proceedFn?.() }
 // ── loadStream (from plan, verbatim) ─────────────────────────────────────────
 async function loadStream(episode: number, translationID: number) {
   streamError.value = false
+  loadingStream.value = true
   // Reset the one-shot retry budget only on a NEW selection, never on the
   // retry itself (which re-calls loadStream with the same ep/translation).
   const changed = !current || current.episode !== episode || current.translationID !== translationID
@@ -405,6 +407,8 @@ async function loadStream(episode: number, translationID: number) {
     playWithIntro(data.stream_url, data.referer, `${translationID}:${episode}`)
   } catch {
     streamError.value = true
+  } finally {
+    loadingStream.value = false
   }
 }
 
