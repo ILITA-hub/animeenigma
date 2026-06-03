@@ -152,7 +152,7 @@ func (s *EpisodesValidateService) ValidateEpisode(
 		// episode-listing methods for ourenglish, hanime, and raw.
 		// Phase 4 ships permissive validation per D-04 "smallest
 		// change" + the workstream §Claude's Discretion note.
-		return s.validatePermissive(episodeID), nil
+		return s.validatePermissive(episodeID, translationID), nil
 	}
 }
 
@@ -268,14 +268,30 @@ func (s *EpisodesValidateService) validateKodikOrAnimeLib(
 	return ValidateResult{Valid: true}, nil
 }
 
-// validatePermissive is the v1.0 ourenglish/hanime/raw branch. We
-// only check episode_id is non-empty; no upstream probe.
+// validatePermissive is the v1.0 ourenglish/hanime/raw branch. No
+// upstream probe — we only sanity-check the request shape.
 //
-// TODO(v1.1): tighten validation by calling the scraper microservice's
-// /episodes endpoint (ourenglish) and the AllAnime / Hanime parser
-// episode listings. Skipped in v1.0 per D-04 "smallest change" — see
-// the workstream §Claude's Discretion paragraph for the rationale.
-func (s *EpisodesValidateService) validatePermissive(episodeID string) ValidateResult {
+// Three WT call shapes reach here (see the inbound state:* handlers):
+//   - change_episode     → episode set, translation = room's (maybe "")
+//   - change_translation → episode = room's (set), translation set
+//   - change_player      → BOTH episode_id and translation_id empty
+//
+// change_player's "both empty" shape is the player-change mode: a valid
+// "switch to this player" request whose real first episode the frontend
+// resolves on mount. We MUST accept it (mirrors the kodik/animelib
+// translation-omitted branch) — rejecting it broke every in-room switch
+// to OurEnglish/Hanime/Raw with a bogus EPISODE_UNAVAILABLE (ISS-025).
+// Full mode still requires a non-empty episode_id.
+//
+// TODO(v1.1): tighten full-mode validation by calling the scraper
+// microservice's /episodes endpoint (ourenglish) and the AllAnime /
+// Hanime parser episode listings. Skipped in v1.0 per D-04 "smallest
+// change" — see the workstream §Claude's Discretion paragraph.
+func (s *EpisodesValidateService) validatePermissive(episodeID, translationID string) ValidateResult {
+	if episodeID == "" && translationID == "" {
+		// Player-change mode — permissively accept the switch.
+		return ValidateResult{Valid: true}
+	}
 	if episodeID == "" {
 		return ValidateResult{Valid: false, Reason: ReasonEpisodeUnavailable}
 	}

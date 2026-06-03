@@ -223,14 +223,35 @@ func TestValidateEpisode_Kodik_EmptyEpisode_FullMode(t *testing.T) {
 	}
 }
 
-func TestValidateEpisode_Raw_EmptyEpisode_Permissive(t *testing.T) {
+func TestValidateEpisode_PlayerChange_Permissive_Valid(t *testing.T) {
+	// change_player sends BOTH episode_id and translation_id empty. For the
+	// permissive trio that's a valid "switch to this player" request
+	// (ISS-025) — the frontend resolves the first episode on mount.
+	// Previously this wrongly returned EPISODE_UNAVAILABLE, so switching to
+	// OurEnglish/Hanime/Raw in a Watch Together room always failed.
 	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
-	got, err := svc.ValidateEpisode(context.Background(), "111", "raw", "", "", "")
+	for _, p := range []string{"ourenglish", "hanime", "raw"} {
+		got, err := svc.ValidateEpisode(context.Background(), "111", p, "", "", "")
+		if err != nil {
+			t.Fatalf("player=%s unexpected error: %v", p, err)
+		}
+		if !got.Valid || got.Reason != "" {
+			t.Fatalf("player-change to %s: want Valid=true, got %+v", p, got)
+		}
+	}
+}
+
+func TestValidateEpisode_Permissive_FullMode_EmptyEpisode_Invalid(t *testing.T) {
+	// Full mode (translation set, episode empty) still rejects — defensive;
+	// real callers never send this shape (change_episode guards a non-empty
+	// episode; change_translation passes the room's current episode).
+	svc := NewEpisodesValidateService(&fakeLookup{t: t}, &fakeAnimeRepoValidate{}, nil)
+	got, err := svc.ValidateEpisode(context.Background(), "111", "raw", "", "x", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got.Valid || got.Reason != ReasonEpisodeUnavailable {
-		t.Fatalf("permissive empty episode: want Valid=false Reason=%q, got %+v",
+		t.Fatalf("full-mode empty episode: want Valid=false Reason=%q, got %+v",
 			ReasonEpisodeUnavailable, got)
 	}
 }

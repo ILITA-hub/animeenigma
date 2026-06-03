@@ -4,6 +4,14 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-025: Watch Together — in-room player switch to OurEnglish/Hanime/Raw always rejected (EPISODE_UNAVAILABLE)
+- **Date:** 2026-06-03
+- **Severity:** High (player switching is dead for the permissive trio; with AniLib hidden in-room, the only working in-room players were Kodik → kodik, i.e. no switch worked at all).
+- **Symptom:** Host in a Watch Together room clicks a different player in `PlayerTabBar` → sender-only error → switch silently fails. ("Player change is not working.")
+- **Root cause:** `change_player` validates in player-change mode with `episode_id=""` AND `translation_id=""`. Kodik/AnimeLib have a dedicated translation-omitted branch that returns Valid on anime existence, but OurEnglish/Hanime/Raw fall to `validatePermissive(episodeID)`, which rejected any empty `episode_id` with `EPISODE_UNAVAILABLE`. Empty episode is *expected* for a player switch (the frontend resolves the first episode on mount), so the permissive branch was conflating player-change mode with full validation. (Sibling of ISS-024; surfaced once ISS-024 unblocked Kodik/AnimeLib switching and the user tried the other tabs.)
+- **Fix applied:** `validatePermissive(episodeID, translationID)` now treats the "both empty" shape as player-change mode → `Valid:true` (mirrors the kodik/animelib translation-omitted contract); full mode (episode empty but translation set — a shape no real caller sends) still rejects. Catalog-only change. Verified live: change_player validation for all 5 players now returns `valid:true` (was `EPISODE_UNAVAILABLE` for ourenglish/hanime/raw). Tests: `TestValidateEpisode_PlayerChange_Permissive_Valid` + `TestValidateEpisode_Permissive_FullMode_EmptyEpisode_Invalid`.
+- **Status:** Fixed (catalog redeployed). File: `services/catalog/internal/service/episodes_validate.go`.
+
 ### ISS-024: Watch Together — in-room dub/episode/player switch always rejected ("Озвучка не доступна") for Kodik/AnimeLib
 - **Date:** 2026-06-03
 - **Severity:** High (Watch Together is unusable for switching translation/episode/player on the two RU players — the default surface; every switch toasts a false "unavailable").
