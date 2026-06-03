@@ -23,8 +23,11 @@ describe('deprecated tokens are aliased to canonical ones (value-preserving)', (
   it('--ink-3 aliases --muted-foreground', () => {
     expect(css).toMatch(/--ink-3:\s*var\(--muted-foreground\)/)
   })
-  it('--accent stays brand-cyan for P1 back-compat', () => {
-    expect(css).toMatch(/--accent:\s*var\(--brand-cyan\)/)
+  it('--accent resolves to the shadcn hover surface (flipped from brand-cyan in P5/05-04)', () => {
+    // Plan 05-04 (DS-MIGRATE-05) flipped --accent from its temporary brand-cyan
+    // alias to the neutral shadcn hover surface (var(--elevated)); the temp alias
+    // was deleted. var(--brand-cyan) is no longer the correct target.
+    expect(css).toMatch(/--accent:\s*var\(--elevated\)/)
   })
 })
 

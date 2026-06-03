@@ -2,7 +2,7 @@
 	k8s-apply k8s-delete k8s-diff k8s-wait k8s-status k8s-restart k8s-logs k8s-port-forward \
 	deploy-docker deploy-docker-pull deploy-k8s deploy-dev deploy-staging deploy-prod \
 	migrate migrate-down migrate-force migrate-version migrate-auth migrate-catalog migrate-player migrate-rooms migrate-all migrate-create migrate-status db-shell \
-	redeploy-all redeploy-web redeploy-animepahe-resolver type-check \
+	redeploy-all redeploy-web redeploy-animepahe-resolver type-check lint-design \
 	backfill-attributes build-backfill-attributes
 
 # Variables
@@ -146,8 +146,11 @@ lint-go: ## Run Go linter (matches CI)
 lint-proto: ## Lint protobuf files
 	buf lint api/proto
 
-lint-frontend: ## Lint frontend code
+lint-frontend: lint-design ## Lint frontend code (incl. design-system color/token gate)
 	cd frontend/web && bun lint
+
+lint-design: ## Run design-system color/token lint gate (off-palette classes, non-allowlisted hex, deprecated aliases)
+	@cd frontend/web && bash scripts/design-system-lint.sh
 
 fmt: ## Format all code
 	@echo "Formatting Go code..."
@@ -264,7 +267,7 @@ i18n-lint: ## Run i18n lint checks (missing keys, hardcoded text, unused keys)
 type-check: ## Run TypeScript type check on frontend
 	@cd frontend/web && bun run type-check
 
-redeploy-web: i18n-lint type-check ## Rebuild and restart web frontend (runs i18n lint + type-check first)
+redeploy-web: i18n-lint lint-design type-check ## Rebuild and restart web frontend (runs i18n lint + design-system gate + type-check first)
 	@echo "Rebuilding web frontend..."
 	docker compose -f docker/docker-compose.yml build web
 	docker stop animeenigma-web || true

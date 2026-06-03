@@ -51,6 +51,55 @@ Defined as `:root` foundation vars (not in `@theme`): `--surface-2 #161623`, `--
 - Radius: chips→sm, buttons/inputs→md/lg, cards→xl, modals→2xl.
 - Elevation: `glass` (flat) → `glass-card` (resting) → `glass-elevated` (raised). Glows are accent elevation, not structural.
 
+## Lint gate (enforced) — DS-GOV-01 / DS-GOV-02
+
+A build-failing custom bash gate, `frontend/web/scripts/design-system-lint.sh` (mirrors
+`scripts/i18n-lint.sh`), locks the color/token migration shut. It runs on the SAME path CI/deploy
+already use: it is a prerequisite of **`make lint-frontend`** (→ `make lint` / `all` / CI) AND of
+**`make redeploy-web`** (the deploy gate), via the `make lint-design` sub-target. No new dependency.
+
+**It enforces EXACTLY these 3 rules** over `frontend/web/src/**/*.vue` (excluding `*.spec.*` /
+`__tests__`). Each violation is an ERROR; `ERRORS>0` ⇒ `exit 1`.
+
+1. **Off-palette Tailwind color classes** — `(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50…900)`.
+   Migrate to a semantic token (`text-destructive`, `bg-warning`, `text-success`, `text-info`, `text-brand-violet`, `text-muted-foreground`, …).
+2. **Hardcoded hex outside the allowlist** — any raw `#[0-9a-fA-F]{3,8}` in a `.vue` (CSS `<style>` hex or Tailwind arbitrary `*-[#…]`) that is NOT listed in `scripts/design-system-allowlist.txt`. Allowance is per-`(file,hex)`: a hex is allowed only in the file that lists it.
+3. **Deprecated brand-alias `var()` usages** — `var(--ink)` / `var(--accent)` / `var(--pink)` (after the Wave-2 flip, brand `--accent` usage is itself a violation). EXCLUDES the literal-alias survivors `--ink-2`, `--ink-4`, `--accent-soft`, `--accent-line`, `--accent-glow`, `--pink-soft`.
+
+**Brand-exemption rationale (why some hues are NOT "off-palette").** `cyan` and `pink` are the
+Neon-Tokyo BRAND primitives, and `orange` / `rose` (plus `indigo` / `teal` / `lime`) are per-provider
+identity hues (Kodik cyan, AniLib orange, Hanime pink, Raw rose). They are deliberately ABSENT from the
+Rule-1 palette set — including them would (correctly) fail the clean tree where Anime.vue, the players,
+and the Navbar legitimately use them. Provider/brand hex go on the allowlist instead, with a reason.
+
+**Allowlist / escape-hatch** — `frontend/web/scripts/design-system-allowlist.txt`, one
+`path:hex:reason` line per justified exception (`#`-prefixed comments allowed). To add an exception:
+**prefer migrating to a token first**; only allowlist when no token reproduces the value within
+tolerance (provider-brand identity, subtitle render default, cover/avatar gradient stop, near-base ink,
+SVG `<stop>`, functional non-theme color like a QR-code module color, or a canonical-fine
+`var(--token,#fallback)` fallback). Every line MUST carry a real reason — never a blanket wildcard.
+
+**Adjudication rule (out-of-scope hex).** Any hex discovered in a file NOT touched by the migration
+MUST be ADJUDICATED — decide migrate-to-token vs justified-allowlist and record the reason — never
+blanket-allowlisted to force the gate green. (Examples on record: `Auth.vue`'s `#54a9eb`/`#4a96d2` →
+justified Telegram provider-brand allowlist; `Collections.vue`'s `#0e7490`/`#6b21a8` cover gradient →
+adjudicated keep, no exact token pair.)
+
+**Prove the fail-path** — the gate ships a `--selftest` that injects a scratch `bg-red-500` file,
+asserts the gate DETECTS it (would `exit 1`), removes it (trap-guarded), and asserts the clean tree
+PASSES — leaving the tree exactly as before:
+
+```bash
+bash frontend/web/scripts/design-system-lint.sh --selftest   # → SELFTEST PASS, tree clean
+make lint-design                                              # → PASS on the clean tree
+```
+
+> Scope is intentionally narrow (color/token discipline only). Structural conventions
+> (use-the-primitives, font-weight scale, padding scale, `cva` variants) are Phase-6 governance
+> documentation, NOT build-enforced — a grep cannot reliably distinguish a hand-rolled button from a
+> primitive without AST analysis. The docs above match the enforced rules exactly (no
+> documented-but-unenforced rule).
+
 ## Deprecated aliases (migrate away over P2–P5)
 
 `--ink/-2/-3/-4` → `--foreground`/`--muted-foreground` ramp · `--pink` → `--brand-pink` ·
