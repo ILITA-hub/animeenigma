@@ -1,0 +1,30 @@
+# Scraper EN-provider management — SOURCE OF TRUTH (replaces SCRAPER_DEGRADED_PROVIDERS).
+#
+# Edit this file, then: docker compose -f docker/docker-compose.yml restart scraper
+# (no rebuild). `enabled: false` removes a provider from the failover chain with
+# zero per-request cost. `reason` (short) + `description` (full why) render in the
+# Grafana "Scraper / Provider Management" dashboard. Git history = who/when audit;
+# the dashboard state-timeline = when each provider was disconnected/reconnected.
+#
+# Every entry REQUIRES name + enabled. Known names: gogoanime, animepahe, allanime,
+# animefever, miruro, nineanime, animekai. An unknown name fails the scraper at boot.
+providers:
+  - { name: allanime,  enabled: true }
+  - { name: animefever, enabled: true }
+  - { name: miruro,    enabled: true }
+  - { name: nineanime, enabled: true }
+
+  - name: animepahe
+    enabled: false
+    reason: "Cloudflare challenge"
+    description: >
+      animepahe.pw migrated DDoS-Guard -> Cloudflare managed challenge; the
+      stealth-Chromium sidecar can't solve it (0% solve rate). See ISS-023.
+      Disabled 2026-06-03.
+
+  - name: gogoanime
+    enabled: false
+    reason: "Platform rebrand"
+    description: >
+      anitaku.to migrated to a different platform the parser can't handle.
+      Disabled 2026-05-13.

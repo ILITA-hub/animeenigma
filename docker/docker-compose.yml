@@ -165,18 +165,16 @@ services:
       # Toggle live with: SCRAPER_ANIMEKAI_ENABLED=true docker compose up -d scraper
       SCRAPER_ANIMEKAI_ENABLED: ${SCRAPER_ANIMEKAI_ENABLED:-false}
       SCRAPER_ANIMEKAI_BASE_URL: ${SCRAPER_ANIMEKAI_BASE_URL:-https://anikai.to}
-      # Global kill-switch: comma-separated list of provider names that should
-      # NOT be registered with the orchestrator. Failover skips them with zero
-      # per-request cost. Default disables gogoanime (anitaku.to migrated to
-      # anineko.to — different platform, parser doesn't apply). Phase 27
-      # (2026-05-19) revived animepahe via the stealth-Chromium sidecar at
-      # services/animepahe-resolver/; animepahe is no longer in the default
-      # degraded set. The env-override escape hatch is preserved — set
-      # `SCRAPER_DEGRADED_PROVIDERS=gogoanime,animepahe` in `docker/.env` to
-      # re-disable on outage (e.g. animepahe.pw goes dark or stealth pins
-      # rot). Flip off by removing names + `docker compose restart scraper`
-      # (no rebuild needed).
+      # Provider management is now config-file driven via SCRAPER_PROVIDERS_FILE
+      # below (./scraper-providers.yaml). That file is the SOURCE OF TRUTH for
+      # enable/disable + reason/description, rendered in the Grafana
+      # "Scraper / Provider Management" dashboard. ISS-023.
+      #
+      # SCRAPER_DEGRADED_PROVIDERS is DEPRECATED — used ONLY as a fallback when
+      # the providers file is absent (zero-break migration). Do not rely on it.
       SCRAPER_DEGRADED_PROVIDERS: ${SCRAPER_DEGRADED_PROVIDERS:-gogoanime}
+      # Source of truth for provider management (mounted read-only below).
+      SCRAPER_PROVIDERS_FILE: /config/providers.yaml
       # ISS-022: per-provider failover budget. Without it, one hung provider
       # early in the chain (animepahe when animepahe.pw is down, ~55s of retries)
       # consumes the whole request budget so catalog's 15s SCRAPER_TIMEOUT kills
@@ -184,6 +182,9 @@ services:
       # for a working provider (<1s typical) yet under the 15s caller budget.
       SCRAPER_PROVIDER_TIMEOUT: ${SCRAPER_PROVIDER_TIMEOUT:-8s}
       TRACING_ENABLED: "true"
+    volumes:
+      # Provider management source of truth (ISS-023). Edit on host + restart.
+      - ./scraper-providers.yaml:/config/providers.yaml:ro
     ports:
       - "127.0.0.1:8088:8088"
     depends_on:
