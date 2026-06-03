@@ -21,7 +21,7 @@
 | 3 | Primitive Set Swap | ✅ Complete (2026-06-02 — 4 waves; Badge/Input/Tabs+Select/Dialog+5 new primitives on Reka, native right-click restored + kebab→anchored DropdownMenu [DS-LIB-08]; 799 vitest, vue-tsc clean, main.css untouched; live-verified: Select popper, Dialog scroll-lock/focus/escape, kebab menu anchor+actions+auth-gating, native right-click) |
 | 4 | High-Traffic Surface Migration | ✅ Complete (4/4 plans — Home+Browse+anime-card family (01), nav/layout (02), anime detail (03), 5 players + chrome helpers (04). All high-traffic surfaces token-clean of off-palette; player-accent + subtitle render hex allowlisted verbatim; DS-MIGRATE-01 proven on real player surfaces; DS-MIGRATE-02/03/06 partial-this-phase. `--accent` flip + tail sweep remain Phase 5) |
 | 5 | Tail Sweep + Lint Enforcement | ✅ Complete (5/5 plans — spotlight + home-rail (01), admin + standalone views (02), ui composites + App/themes/browse/WT + ActivityFeed (03), `--accent` flip to shadcn hover surface + temp-alias deletion (04, DS-MIGRATE-05), build-failing color/token lint gate + adjudicated allowlist wired into make lint-frontend + redeploy-web; --selftest fail-path; SC#5 full-suite green (05, DS-GOV-01 + DS-GOV-02). All `src/**/*.vue` off-palette/brand-alias clean and gate-locked) |
-| 6 | Governance into Memory | ⏳ Planned |
+| 6 | Governance into Memory | ⏳ Planned (1 plan, 1 wave) |
 
 ## Goal (v1.0)
 
@@ -150,6 +150,9 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 1. A memory entry captures: use tokens / never hardcode / reuse `ui/` primitives before building new / verify visual changes in-browser, with a pointer to `DESIGN-SYSTEM.md`.
 2. `CLAUDE.md` has a Design System subsection.
 3. The governance text matches the enforced lint rule (no rule documented that isn't enforced, and vice-versa).
+
+**Plans:** 1 plan (1 wave)
+- [ ] `06-01-PLAN.md` — CLAUDE.md "Design System" subsection (enforced vs governance-only labeled) + project-memory governance entry + MEMORY.md pointer + SC#3 consistency verification + DS-NF-05 ack (Wave 1, autonomous) [DS-GOV-03, DS-NF-05, DS-NF-06]
 
 ## Next
 
