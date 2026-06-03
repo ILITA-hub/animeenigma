@@ -15,7 +15,7 @@ export interface AnalyticsEvent {
   el_tag?: string
   el_attrs?: Record<string, string>
   active_ms?: number
-  // trace_id is intentionally omitted in Plan 2 (added by Plan 3 tracing).
+  trace_id?: string // stamped by the axios interceptor (Plan 3), links click → backend trace
   properties?: Record<string, unknown>
 }
 
