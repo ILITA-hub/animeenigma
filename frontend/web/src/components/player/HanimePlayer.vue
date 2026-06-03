@@ -80,20 +80,12 @@
             </h3>
             <slot name="header-middle" />
           </div>
-          <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
-            <button
-              v-for="(ep, idx) in episodes"
-              :key="ep.slug"
-              @click="selectEpisode(ep, idx)"
-              class="relative px-3 h-10 rounded-lg text-sm font-medium transition-all"
-              :class="selectedEpisode?.slug === ep.slug
-                ? 'accent-bg text-white'
-                : 'bg-white/10 text-white hover:bg-white/20'"
-              :title="ep.name"
-            >
-              {{ idx + 1 }}
-            </button>
-          </div>
+          <EpisodeSelector
+            :episodes="episodeOptions"
+            :selected-key="selectedEpisode?.slug ?? null"
+            :watched-up-to="watchedUpTo"
+            @select="onEpisodePicked"
+          />
         </div>
       </div>
 
@@ -139,12 +131,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import Hls from 'hls.js'
 import { hanimeApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
+import EpisodeSelector from './EpisodeSelector.vue'
+import type { EpisodeOption } from './EpisodeSelector.types'
+import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 
 interface HanimeEpisode {
   name: string
@@ -170,6 +165,8 @@ const props = defineProps<{
 
 const authStore = useAuthStore()
 
+const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.animeId)
+
 // State
 const episodes = ref<HanimeEpisode[]>([])
 const selectedEpisode = ref<HanimeEpisode | null>(null)
@@ -184,6 +181,17 @@ const error = ref<string | null>(null)
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
+
+// Normalized episode list for EpisodeSelector — ordinal-based (Hanime has no
+// numeric episode field; the ordinal idx+1 doubles as both label and number).
+const episodeOptions = computed<EpisodeOption[]>(() =>
+  episodes.value.map((ep, idx) => ({ key: ep.slug, label: idx + 1, number: idx + 1 })),
+)
+
+function onEpisodePicked(key: string | number) {
+  const idx = episodes.value.findIndex((e) => e.slug === key)
+  if (idx >= 0) selectEpisode(episodes.value[idx], idx)
+}
 
 // Phase 3 (03.3): wire real sync when a room is provided. Zero behavior
 // change when room is null/undefined.
@@ -314,6 +322,7 @@ const selectEpisode = async (ep: HanimeEpisode, idx: number, fromRoomSync = fals
   availableSources.value = []
   selectedSource.value = null
   error.value = null
+  void refreshWatched()
   await fetchStream(ep)
 }
 
@@ -398,10 +407,11 @@ const handlePause = () => {
   saveProgress()
 }
 
-const handleEnded = () => {
+const handleEnded = async () => {
   if (!selectedEpisode.value) return
   saveProgress()
-  markEpisodeWatched()
+  await markEpisodeWatched()
+  void refreshWatched()
   // Auto-advance to next episode
   if (selectedEpisodeIndex.value !== null && selectedEpisodeIndex.value < episodes.value.length - 1) {
     const nextIdx = selectedEpisodeIndex.value + 1
@@ -465,6 +475,7 @@ watch(() => props.animeId, () => {
 })
 
 onMounted(async () => {
+  void refreshWatched()
   await fetchEpisodes()
 })
 
