@@ -15,10 +15,11 @@ var opsBypass = map[string]struct{}{
 	"/metrics": {},
 }
 
-// isWebSocketUpgrade reports whether r is a WS handshake. Such requests must
-// NOT be wrapped by otelhttp.NewHandler: its ResponseWriter wrapper may not
-// implement http.Hijacker, which gorilla/websocket (watch-together) and the
-// gateway WS proxy require — wrapping would 500 the upgrade.
+// isWebSocketUpgrade reports whether r is a WS handshake. otelhttp wraps the
+// ResponseWriter via httpsnoop, which DOES preserve http.Hijacker, so the
+// upgrade would not 500 — but a span that begins on the upgrade request and
+// then times out against the long-lived WebSocket connection would pollute
+// Tempo with misleading duration/status. So bypass WS upgrades entirely.
 func isWebSocketUpgrade(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 }

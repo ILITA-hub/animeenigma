@@ -13,6 +13,7 @@ import (
 // handler sees a span whose TraceID equals the header's trace-id (the FE→BE
 // continuation guarantee).
 func TestHTTPMiddleware_ContinuesInboundTrace(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_TIMEOUT", "200")
 	tr, err := New(context.Background(), Config{ServiceName: "test", Enabled: true, SampleRate: 1.0, OTLPEndpoint: "127.0.0.1:4317"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -48,10 +49,9 @@ func TestHTTPMiddleware_BypassesOpsEndpoints(t *testing.T) {
 	}
 }
 
-// WebSocket upgrades must bypass otelhttp.NewHandler — its ResponseWriter
-// wrapper is not guaranteed to implement http.Hijacker, which gorilla/websocket
-// (watch-together) and the gateway WS proxy require. Wrapping a WS request
-// would 500 the handshake. We assert the next handler runs unwrapped.
+// WebSocket upgrades bypass otelhttp.NewHandler: not because Hijacker is lost
+// (httpsnoop preserves it) but to avoid a span that mis-times against the
+// long-lived WS connection. We assert the next handler runs unwrapped.
 func TestHTTPMiddleware_BypassesWebSocketUpgrade(t *testing.T) {
 	called := false
 	h := HTTPMiddleware("test")(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { called = true }))
