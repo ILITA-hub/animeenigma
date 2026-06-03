@@ -406,7 +406,12 @@ git commit -m "feat(18anime): client scaffold + search/title-match"
 - Modify: `services/catalog/internal/parser/eighteenanime/client.go`
 - Test: `services/catalog/internal/parser/eighteenanime/episodes_test.go` (create)
 
-> **Implementer note:** Confirm the inline mirror-JSON shape in `testdata/episode_page.html`. The spike observed an array of `{"link":"<embed>","quality":"FullHD"}`. Episodes for a title share the numbered base slug (`<id>-<slug>-episode-N`). If a title's episode list lives on a series page, capture that page as `testdata/series_page.html` in Task 1 and parse the per-episode anchors; if each `episode-N` is its own page (as observed), derive the episode list from the series' anchors / the `-episode-N` URL family.
+> **Implementer note (RESOLVED from fixtures 2026-06-03):** 18anime has **NO series page** — each episode is its own page (`/hentai/<id>-<slug>-episode-N.html`), with a distinct numeric id per episode. Confirmed against `testdata/search_results.html`: searching a series title returns **every** episode as a separate anchor (`1164-jk-to-inkou-kyoushi-4-episode-1`, `1165-…-episode-2`, …). So episode enumeration reuses the **search results page**, not a series page:
+> 1. `baseSlug(slug)` = strip the leading `<id>-` and the trailing episode marker (`-episode-N` OR a bare `-N`), lowercased. e.g. `1167-jk-to-inkou-kyoushi-4-feat-ero-giin-sensei-episode-2` → `jk-to-inkou-kyoushi-4-feat-ero-giin-sensei`.
+> 2. Group all search hits by `baseSlug`; keep the group whose base **exactly equals** the matched hit's base. **Exact, not prefix** — `jk-to-inkou-kyoushi-4` (eps 1164/1165) and `jk-to-inkou-kyoushi-4-feat-ero-giin-sensei` (eps 1166/1167) are distinct series sharing a prefix.
+> 3. `episodeNumber(slug)` parses the trailing `-episode-N` or bare `-N`; default to 1 if absent. Sort ascending, dedupe by number.
+>
+> The mirror-list JSON (`{"link":…,"quality":…}`) is confirmed present in `episode_page.html` (10 `"link"` entries). `parseEpisodeMirrors` parses that; `ListEpisodes` does the grouping above.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -440,6 +445,28 @@ func TestParseEpisodeMirrors(t *testing.T) {
 		t.Fatal("expected at least one supported mirror (mp4upload/turbovid)")
 	}
 }
+
+func TestEpisodeEnumeration(t *testing.T) {
+	// Exact-base grouping: the "-feat-ero-giin-sensei" series must NOT absorb
+	// the shorter "jk-to-inkou-kyoushi-4" series even though it's a prefix.
+	hits := []SearchHit{
+		{Slug: "1164-jk-to-inkou-kyoushi-4-episode-1", URL: "u1"},
+		{Slug: "1165-jk-to-inkou-kyoushi-4-episode-2", URL: "u2"},
+		{Slug: "1166-jk-to-inkou-kyoushi-4-feat-ero-giin-sensei-episode-1", URL: "u3"},
+		{Slug: "1167-jk-to-inkou-kyoushi-4-feat-ero-giin-sensei-episode-2", URL: "u4"},
+		{Slug: "2171-inkou-kyoushi-no-saimin-seikatsu-shidouroku-1", URL: "u5"}, // bare -N form
+	}
+	eps := episodesFromHits("jk-to-inkou-kyoushi-4", hits)
+	if len(eps) != 2 || eps[0].Number != 1 || eps[1].Number != 2 {
+		t.Fatalf("expected 2 eps [1,2], got %+v", eps)
+	}
+	if got := episodeNumber("2171-inkou-kyoushi-no-saimin-seikatsu-shidouroku-1"); got != 1 {
+		t.Fatalf("bare -N episode number: want 1 got %d", got)
+	}
+	if got := baseSlug("2171-inkou-kyoushi-no-saimin-seikatsu-shidouroku-1"); got != "inkou-kyoushi-no-saimin-seikatsu-shidouroku" {
+		t.Fatalf("bare -N base slug wrong: %q", got)
+	}
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -447,7 +474,7 @@ func TestParseEpisodeMirrors(t *testing.T) {
 Run: `cd services/catalog && go test ./internal/parser/eighteenanime/ -run TestParseEpisodeMirrors -v`
 Expected: FAIL — undefined `parseEpisodeMirrors`, `Mirror`.
 
-- [ ] **Step 3: Write minimal implementation** (append to `client.go`)
+- [ ] **Step 3: Write minimal implementation** (append to `client.go` — merge any new imports into the file's single existing `import` block; do NOT add a second `import (...)`)
 
 ```go
 type Mirror struct {
@@ -485,7 +512,57 @@ func supportedMirrors(all []Mirror) []Mirror {
 	}
 	return out
 }
+
+// --- Episode enumeration (no series page; reuse the search-results anchors) ---
+
+var episodeSuffixRe = regexp.MustCompile(`-(?:episode-)?([0-9]+)$`)
+
+// baseSlug strips the leading "<id>-" and the trailing "-episode-N" / "-N".
+func baseSlug(slug string) string {
+	if i := strings.IndexByte(slug, '-'); i >= 0 {
+		slug = slug[i+1:] // drop leading numeric id
+	}
+	return episodeSuffixRe.ReplaceAllString(slug, "")
+}
+
+// episodeNumber parses the trailing episode number; defaults to 1.
+func episodeNumber(slug string) int {
+	if m := episodeSuffixRe.FindStringSubmatch(slug); len(m) == 2 {
+		if n, err := strconv.Atoi(m[1]); err == nil {
+			return n
+		}
+	}
+	return 1
+}
+
+type Episode struct {
+	Slug   string `json:"slug"`
+	URL    string `json:"url"`
+	Number int    `json:"number"`
+}
+
+// episodesFromHits groups search hits by exact base slug and returns the group
+// matching wantBase, sorted ascending by episode number (deduped).
+func episodesFromHits(wantBase string, hits []SearchHit) []Episode {
+	byNum := map[int]Episode{}
+	for _, h := range hits {
+		if baseSlug(h.Slug) != wantBase {
+			continue
+		}
+		n := episodeNumber(h.Slug)
+		if _, ok := byNum[n]; !ok {
+			byNum[n] = Episode{Slug: h.Slug, URL: h.URL, Number: n}
+		}
+	}
+	out := make([]Episode, 0, len(byNum))
+	for _, e := range byNum {
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Number < out[j].Number })
+	return out
+}
 ```
+(New imports needed: `strconv`, `sort` — add them to the existing import block.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -550,18 +627,11 @@ func TestGetStreamFailover(t *testing.T) {
 Run: `cd services/catalog && go test ./internal/parser/eighteenanime/ -run TestGetStreamFailover -v`
 Expected: FAIL — undefined `resolveStream`.
 
-- [ ] **Step 3: Write minimal implementation** (append to `client.go`)
+- [ ] **Step 3: Write minimal implementation** (append to `client.go`. **Merge these imports into the file's single existing `import (...)` block — Go does not allow a second import block in the same file.** New imports: `context`, `fmt`, `io`, `net/url`. Do NOT import `libs/logger` unless you actually log.)
 
 ```go
-import (
-	"context"
-	"fmt"
-	"io"
-	"github.com/ILITA-hub/animeenigma/libs/logger"
-)
-
-func (c *Client) fetch(ctx context.Context, url, referer string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (c *Client) fetch(ctx context.Context, u, referer string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", err
 	}
@@ -575,9 +645,31 @@ func (c *Client) fetch(ctx context.Context, url, referer string) (string, error)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("eighteenanime: GET %s -> %d", url, resp.StatusCode)
+		return "", fmt.Errorf("eighteenanime: GET %s -> %d", u, resp.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	return string(b), err
+}
+
+// searchFetch issues the DataLife Engine POST search (confirmed POST by the spike).
+func (c *Client) searchFetch(ctx context.Context, title string) (string, error) {
+	form := url.Values{"do": {"search"}, "subaction": {"search"}, "story": {title}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		baseURL+"/index.php?do=search", strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("eighteenanime: search -> %d", resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	return string(b), err
 }
 
@@ -593,8 +685,12 @@ func extractorFor(link string) func(string) (*ExtractedSource, error) {
 	}
 }
 
-// resolveStream tries supported mirrors in order; first success wins (fail-fast per embed).
+// resolveStream tries supported mirrors in order; first success wins. The whole
+// loop is bounded by a 9s deadline so two dead mirrors can't serialize past the
+// catalog/frontend 10s budget (fail-fast — see spec §7).
 func (c *Client) resolveStream(ctx context.Context, mirrors []Mirror) (*ExtractedSource, error) {
+	ctx, cancel := context.WithTimeout(ctx, 9*time.Second)
+	defer cancel()
 	supported := supportedMirrors(mirrors)
 	if len(supported) == 0 {
 		return nil, fmt.Errorf("eighteenanime: no supported mirrors")
@@ -620,16 +716,11 @@ func (c *Client) resolveStream(ctx context.Context, mirrors []Mirror) (*Extracte
 	return nil, fmt.Errorf("eighteenanime: all mirrors failed: %w", lastErr)
 }
 
-// --- Public methods used by the handler ---
+// --- Public methods used by the handler/service ---
 
-type Episode struct {
-	Slug   string `json:"slug"`   // e.g. "1167-...-episode-2"
-	Number int    `json:"number"`
-	Title  string `json:"title"`
-}
-
+// Search returns the best-matching episode hit for a title (single anchor).
 func (c *Client) Search(ctx context.Context, title string) (*SearchHit, error) {
-	page, err := c.fetch(ctx, baseURL+"/index.php?do=search&subaction=search&story="+urlQueryEscape(title), "")
+	page, err := c.searchFetch(ctx, title)
 	if err != nil {
 		return nil, err
 	}
@@ -640,6 +731,26 @@ func (c *Client) Search(ctx context.Context, title string) (*SearchHit, error) {
 	return hit, nil
 }
 
+// ListEpisodes searches once and returns every episode sharing the matched
+// series' exact base slug (18anime has no series page — see Task 5).
+func (c *Client) ListEpisodes(ctx context.Context, title string) ([]Episode, error) {
+	page, err := c.searchFetch(ctx, title)
+	if err != nil {
+		return nil, err
+	}
+	hits := parseSearchResults(page)
+	best := bestMatch(title, hits)
+	if best == nil {
+		return nil, fmt.Errorf("eighteenanime: no match for %q", title)
+	}
+	eps := episodesFromHits(baseSlug(best.Slug), hits)
+	if len(eps) == 0 {
+		return nil, fmt.Errorf("eighteenanime: no episodes for %q", title)
+	}
+	return eps, nil
+}
+
+// GetStream resolves a playable source for an episode page URL.
 func (c *Client) GetStream(ctx context.Context, episodeURL string) (*ExtractedSource, error) {
 	page, err := c.fetch(ctx, episodeURL, baseURL+"/")
 	if err != nil {
@@ -647,11 +758,9 @@ func (c *Client) GetStream(ctx context.Context, episodeURL string) (*ExtractedSo
 	}
 	return c.resolveStream(ctx, parseEpisodeMirrors(page))
 }
-
-var _ = logger.Sugared{} // keep logger import if used for diagnostics
 ```
 
-> Add a small `urlQueryEscape` helper (or use `net/url`'s `url.QueryEscape`) and wire `ListEpisodes(ctx, hit)` to enumerate `-episode-N` per the structure confirmed in Task 5. Remove the `logger` placeholder line if unused.
+> The episode `ep` param passed by the frontend is the episode **slug** (`<id>-<slug>-episode-N`); the service rebuilds the page URL as `baseURL + "/hentai/" + slug + ".html"` before calling `GetStream`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -721,10 +830,13 @@ git commit -m "feat(18anime): catalog service methods, handlers, and routes"
 
 ```go
 func TestAnime18DomainsAllowed(t *testing.T) {
+	// isHLSDomainAllowed is the package-level checker ProxyWithReferer uses; it
+	// strips the port before matching, so mp4upload's :183 host resolves too.
 	for _, host := range []string{
-		"a4.mp4upload.com", "cdn4.turboviplay.com", "g276.turbosplayer.com",
+		"a4.mp4upload.com", "a4.mp4upload.com:183",
+		"cdn4.turboviplay.com", "g276.turbosplayer.com",
 	} {
-		if !isAllowedHost(host) { // use the package's existing allow-check helper
+		if !isHLSDomainAllowed(host) {
 			t.Fatalf("expected %s allowed", host)
 		}
 	}
@@ -748,7 +860,7 @@ Expected: FAIL — domains not allowed.
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd libs/videoutils && go test -run TestAnime18DomainsAllowed -v`
-Expected: PASS. Use the real allow-check function name from the package (grep `func.*[Aa]llow` in `proxy.go`).
+Expected: PASS. (`isHLSDomainAllowed` is package-level in `proxy.go` and reads the auto-derived `HLSProxyAllowedDomains` view of the provenance slice, so the 3 new entries flow through automatically.)
 
 - [ ] **Step 5: Commit**
 
@@ -886,4 +998,5 @@ Expected: episodes JSON non-empty; stream JSON returns a resolved `url`. Confirm
 ## Self-Review notes
 
 - **Spec coverage:** §3 arch → Tasks 4–7; §4 backend → Tasks 2–7; §5 frontend → Tasks 9–10; §6 proxy/flag → Tasks 8,10; §7 resilience (fail-fast 8s client timeout, explicit 503, embed failover) → Tasks 4,6,7; §8 testing → every task is TDD + Task 11; §10 risk → de-risked by the live spike already done (extractors confirmed trivial).
-- **Known follow-ups (out of MVP scope):** ListEpisodes per-title enumeration depends on the exact series/episode page structure — Task 5 note flags capturing the right fixture; abyss/bysesayeveum/upns embeds deferred.
+- **Episode enumeration (RESOLVED):** confirmed from `search_results.html` — no series page; episodes are enumerated by exact-base-slug grouping of the search anchors (Task 5). Handles both `-episode-N` and bare `-N` suffix forms.
+- **Known follow-ups (out of MVP scope):** abyss/bysesayeveum/upns embeds deferred; mp4upload de-pack fallback only if the bundle reverts to packed JS; if mp4upload itself rate-limits the shared Referer, revisit per-stream tokenization.

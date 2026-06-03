@@ -78,19 +78,32 @@ package name. The URL path segment, frontend provider key, and user-facing label
 `anime18` / "18anime".)
 
 **`client.go`** implements:
-- `Search(title string) (slug string, err error)` — query 18anime, fuzzy-match by romaji/English
-  title (reuse the multi-title scoring lessons from existing scraper providers).
-- `ListEpisodes(slug string) ([]Episode, error)` — parse the title's episode list.
-- `GetServers(episodeRef) ([]Embed, error)` — extract the inline-JSON mirror array from the
-  episode page; filter to supported hosts (mp4upload, turbovid).
+- `Search(title string) (*SearchHit, error)` — POST `index.php?do=search` (DataLife Engine; the
+  live spike confirmed search is **POST** with form `do=search&subaction=search&story=<query>`,
+  not GET). Each result anchor is an individual **episode** page
+  (`/hentai/<id>-<slug>-episode-N.html`); fuzzy-match by romaji/English title against the slug
+  (reuse the multi-title scoring lessons from existing scraper providers).
+- `ListEpisodes(title string) ([]Episode, error)` — 18anime has **no series page**; every episode
+  is its own page and the search-results page already lists all of a series' episodes as separate
+  anchors. So enumeration = parse all hits from the search page, derive each hit's **base slug**
+  (strip the trailing `-episode-N` or bare `-N` and the leading numeric id), keep the group whose
+  base slug **exactly** equals the matched series' base (exact, not prefix — `jk-to-inkou-kyoushi-4`
+  and `jk-to-inkou-kyoushi-4-feat-ero-giin-sensei` are distinct series), and parse the episode
+  number from each. Returns episodes sorted ascending.
+- `GetServers(episodeURL) ([]Mirror, error)` — fetch the episode page, extract the inline-JSON
+  mirror array (`{"link":…,"quality":…}`); filter to supported hosts (mp4upload, turbovid).
 - `GetStream(episodeRef) (*VideoSource, error)` — for each supported embed in priority order
   (mp4upload → turbovid), call its extractor; return the first success. If all fail, return a
   typed "source unavailable" error (NOT an empty success).
 
 **Embed extractors** (co-located in the package for MVP):
-- `embed_mp4upload.go` — fetch embed page, de-pack the `eval(function(p,a,c,k,e,d)…)` packed JS,
-  extract the direct `.mp4` URL.
-- `embed_turbovid.go` — fetch embed page, deobfuscate to the `.m3u8` manifest URL.
+- `embed_mp4upload.go` — fetch embed page, extract the direct `.mp4` URL from the jwplayer
+  `player.src({type:"video/mp4",src:"…video.mp4"})` object literal (the live spike on 2026-06-03
+  found the URL in **plaintext** inside the `src:` field — no `eval(p,a,c,k,e,d)` de-packing
+  needed for the current bundle). Stream requires `Referer: https://www.mp4upload.com/` (403
+  without). If a future bundle reverts to packed JS, add a de-pack fallback before the regex.
+- `embed_turbovid.go` — fetch embed page, extract the `.m3u8` manifest URL (present literally in
+  the jwplayer config; no deobfuscation needed). Master + nested variants need no Referer.
 
 **Routes** (`internal/transport/router.go`, mirroring the Hanime block):
 - `GET /{animeId}/anime18/episodes` → `catalogHandler.GetAnime18Episodes`
@@ -136,8 +149,10 @@ proxy continues via `/api/streaming/hls-proxy`.
 Carries forward the lesson from the current Hanime outage (a dead upstream produced a 30-second
 hang and a silent empty `200`, surfacing to users as a generic "no episodes"):
 
-- **Fail-fast.** Per-embed extraction has a tight timeout (~5–8s), and the overall stream resolve
-  is bounded — no 30-second hangs on a dead mirror.
+- **Fail-fast.** The HTTP client carries an 8s per-request timeout, AND `resolveStream` wraps the
+  whole multi-mirror loop in a single `context.WithTimeout` (~9s) so that two dead mirrors can't
+  serialize into ~16s — the overall resolve stays under the catalog/frontend 10s budget. No
+  30-second hangs on a dead mirror.
 - **Explicit unavailability.** When every supported embed fails, the handler returns a clear
   "source temporarily unavailable" signal (typed error / explicit status), and the player shows a
   distinct message — never a silent empty success masquerading as "no content".
