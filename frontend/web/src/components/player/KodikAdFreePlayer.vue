@@ -304,7 +304,12 @@ let reloadedOnce = false
 
 const streamError = ref(false)
 
-// ── Pre-roll intro state (Task 9) ────────────────────────────────────────────
+// ── Pre-roll intro state ─────────────────────────────────────────────────────
+// A branded 5s video plays before the real Kodik stream, replacing Kodik's own
+// ad pre-roll. The intro is shown ONCE per (translation:episode) key, tracked
+// by introShownFor. After the first view, subsequent selections skip straight
+// to attachStream. If the asset is missing or autoplay is blocked, onerror /
+// play().catch proceed immediately to the real stream (no dead-end).
 const INTRO_SRC = '/branding/intro.mp4'
 const showSkip = ref(false)
 const introPlaying = ref(false)
