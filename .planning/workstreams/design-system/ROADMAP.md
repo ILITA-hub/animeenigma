@@ -22,6 +22,7 @@
 | 4 | High-Traffic Surface Migration | ✅ Complete (4/4 plans — Home+Browse+anime-card family (01), nav/layout (02), anime detail (03), 5 players + chrome helpers (04). All high-traffic surfaces token-clean of off-palette; player-accent + subtitle render hex allowlisted verbatim; DS-MIGRATE-01 proven on real player surfaces; DS-MIGRATE-02/03/06 partial-this-phase. `--accent` flip + tail sweep remain Phase 5) |
 | 5 | Tail Sweep + Lint Enforcement | ✅ Complete (5/5 plans — spotlight + home-rail (01), admin + standalone views (02), ui composites + App/themes/browse/WT + ActivityFeed (03), `--accent` flip to shadcn hover surface + temp-alias deletion (04, DS-MIGRATE-05), build-failing color/token lint gate + adjudicated allowlist wired into make lint-frontend + redeploy-web; --selftest fail-path; SC#5 full-suite green (05, DS-GOV-01 + DS-GOV-02). All `src/**/*.vue` off-palette/brand-alias clean and gate-locked) |
 | 6 | Governance into Memory | ✅ Complete (2026-06-03 — 1/1 plan, commit `f39f9a0d`; CLAUDE.md `### Design System` subsection + project-memory governance entry + MEMORY.md pointer. SC#3 holds: 3 lint-ENFORCED color/token rules labeled enforced verbatim from `design-system-lint.sh` (7 exempt brand hues named), structural rules labeled GOVERNANCE-ONLY; DS-NF-06 in-browser-verify standing rule on both surfaces; both POINT at DESIGN-SYSTEM.md (no duplication). DS-NF-05 satisfied by each phase's green build — no new machinery. Pure docs, zero rendered change [DS-GOV-03, DS-NF-05, DS-NF-06]. **v1.0 Design System Consolidation milestone COMPLETE (6/6).**) |
+| 7 | Structural Primitive Swap | ⏳ Planned (2026-06-03 — 2 plans, 2 waves; adjudicate the 10 remaining raw `<button>` across 6 files onto `<Button>` where the variant/size API fits, keep+document the bespoke ones [DS-MIGRATE-06, DS-MIGRATE-01 primitive half]) |
 
 ## Goal (v1.0)
 
@@ -160,16 +161,21 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 **Depends on:** Phase 6 (primitives + tokens + lint gate + governance all in place; migration is the last structural step).
 **Requirements:** DS-MIGRATE-06, DS-MIGRATE-01 (primitive half)
 **Touches:** the 10 remaining raw `<button>` sites — `components/player/SubtitleSettingsMenu.vue` (×5), `views/Themes.vue`, `views/Browse.vue`, `components/home/spotlight/SpotlightIcon.vue`, `components/home/spotlight/CarouselDots.vue`, `components/anime/AnimeCard.vue` — plus any hand-rolled badge with a `Badge` analog. `<Card>` is currently used nowhere by design; bespoke card layouts that don't fit the `Card` API are left + documented (the requirement is "where they exist/fit").
+
+> Planning note (2026-06-03): `SpotlightIcon.vue` contains NO `<button>` — it is an inline-SVG icon sprite consumed *inside* the CarouselDots pills. The raw-button sites that actually exist are SubtitleSettingsMenu.vue (×5), CarouselDots.vue (the dot-pill `v-for`), AnimeCard.vue (the `.play-btn` overlay), plus the multiple raw buttons in Themes.vue and Browse.vue. All are covered across the 2 plans below.
+
 **Success criteria:**
 1. Each remaining hand-rolled `<button>` is EITHER swapped to `<Button>` (correct variant/size, events + a11y preserved, visually identical) OR explicitly documented as a justified bespoke control (e.g. carousel dot / tiny icon toggle that doesn't fit the Button variant API), with the reason recorded.
 2. No behavioral or visual regression: `bunx vue-tsc --noEmit` + `bunx vite build` clean; `bunx vitest run` green (no NEW failures beyond the known pre-existing AnimeContextMenu.spec.ts:227); affected-surface in-browser smoke (deferred → HUMAN-UAT, per the standing rule).
 3. The design-system lint gate still passes (`make lint-design` exit 0) — no off-palette/hex/alias reintroduced by the swaps.
 4. DS-MIGRATE-06 + DS-MIGRATE-01 marked ✅ (or the residual bespoke controls explicitly accepted as governance-only).
 
-**Plans:** TBD (planned next)
+**Plans:** 2 plans (2 waves)
+- [ ] `07-01-PLAN.md` — views + anime-card: adjudicate Themes.vue / Browse.vue / AnimeCard.vue raw buttons onto `<Button>` (swap where fits, keep+document otherwise) (Wave 1, autonomous) [DS-MIGRATE-06, DS-MIGRATE-01]
+- [ ] `07-02-PLAN.md` — player + home-spotlight: adjudicate SubtitleSettingsMenu.vue (×5) + CarouselDots.vue (expected keep) + PHASE-CLOSE verification (full vitest/vue-tsc/vite build/lint-design) + HUMAN-UAT in-browser smoke (Wave 2, autonomous:false — carries the checkpoint) [DS-MIGRATE-06, DS-MIGRATE-01]
 
 ## Next
 
 ```
-/gsd-execute-phase 02 --ws design-system        # execute Phase 2 (1 plan, 5 tasks, 2 checkpoints)
+/gsd-execute-phase 07 --ws design-system        # execute Phase 7 (2 plans, 2 waves; Wave 2 carries phase-close + HUMAN-UAT)
 ```
