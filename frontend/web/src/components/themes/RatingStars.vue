@@ -19,7 +19,7 @@
     </button>
     <button
       v-if="modelValue && !disabled"
-      class="ml-1 p-1 text-white/60 hover:text-red-400 transition-colors"
+      class="ml-1 p-1 text-white/60 hover:text-destructive transition-colors"
       title="Remove rating"
       @click="$emit('remove')"
     >

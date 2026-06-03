@@ -159,11 +159,11 @@ function onTouchEnd(): void {
       v-if="connectionStatus === 'reconnecting'"
       role="status"
       aria-live="polite"
-      class="shrink-0 px-4 py-2 text-xs font-medium text-amber-300 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2"
+      class="shrink-0 px-4 py-2 text-xs font-medium text-warning bg-warning/10 border-b border-warning/20 flex items-center gap-2"
     >
       <span
         aria-hidden="true"
-        class="inline-block w-2 h-2 rounded-full bg-amber-300 animate-pulse"
+        class="inline-block w-2 h-2 rounded-full bg-warning animate-pulse"
       />
       {{ t('watch_together.reconnecting_indicator') }}
     </div>
@@ -202,11 +202,11 @@ function onTouchEnd(): void {
       v-if="connectionStatus === 'reconnecting'"
       role="status"
       aria-live="polite"
-      class="shrink-0 px-4 py-1 text-xs font-medium text-amber-300 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2"
+      class="shrink-0 px-4 py-1 text-xs font-medium text-warning bg-warning/10 border-b border-warning/20 flex items-center gap-2"
     >
       <span
         aria-hidden="true"
-        class="inline-block w-2 h-2 rounded-full bg-amber-300 animate-pulse"
+        class="inline-block w-2 h-2 rounded-full bg-warning animate-pulse"
       />
       {{ t('watch_together.reconnecting_indicator') }}
     </div>

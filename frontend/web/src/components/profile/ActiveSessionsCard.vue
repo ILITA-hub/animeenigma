@@ -47,7 +47,7 @@ async function onRevokeOthers() {
       {{ $t('profile.settings.sessions.loading') }}
     </div>
 
-    <div v-else-if="error" class="text-sm text-red-400">
+    <div v-else-if="error" class="text-sm text-destructive">
       {{ error }}
     </div>
 
@@ -64,7 +64,7 @@ async function onRevokeOthers() {
             </span>
             <span
               v-if="s.is_current"
-              class="text-[10px] uppercase tracking-wide text-emerald-400 bg-emerald-400/10 border border-emerald-400/30 rounded px-1.5 py-0.5"
+              class="text-[10px] uppercase tracking-wide text-success bg-success/10 border border-success/30 rounded px-1.5 py-0.5"
             >
               {{ $t('profile.settings.sessions.thisDevice') }}
             </span>

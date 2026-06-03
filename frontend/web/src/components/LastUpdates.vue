@@ -352,7 +352,7 @@ onUnmounted(() => {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--foreground);
   flex-shrink: 0;
 }
 
@@ -370,7 +370,7 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
   border-radius: 6px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   transition: background 0.15s ease, color 0.15s ease;
   cursor: pointer;
 }
@@ -381,7 +381,7 @@ onUnmounted(() => {
 
 .tab-btn--active {
   background: rgba(255, 255, 255, 0.08);
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 /* Update list */
@@ -432,7 +432,8 @@ onUnmounted(() => {
 }
 
 .update-thumb--empty {
-  background: linear-gradient(135deg, #0e7490 0%, #4c1d95 100%);
+  /* #0e7490 = novel cyan-tinted cover gradient start (Wave-3 allowlist); #4c1d95 -> brand-violet */
+  background: linear-gradient(135deg, #0e7490 0%, var(--brand-violet) 100%);
 }
 
 /* Body (title + sub) */
@@ -449,12 +450,12 @@ onUnmounted(() => {
   -webkit-box-orient: vertical;
   overflow: hidden;
   white-space: normal;
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 .update-sub {
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   margin-top: 2px;
 }
 
@@ -499,10 +500,10 @@ onUnmounted(() => {
   margin-top: 1px;
 }
 
-.badge-feature { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-.badge-fix { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-.badge-perf { background: rgba(14, 165, 233, 0.2); color: #38bdf8; }
-.badge-other { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+.badge-feature { background: rgba(16, 185, 129, 0.2); color: var(--color-success); }
+.badge-fix { background: rgba(245, 158, 11, 0.2); color: var(--color-warning); }
+.badge-perf { background: rgba(14, 165, 233, 0.2); color: var(--info); }
+.badge-other { background: rgba(107, 114, 128, 0.2); color: var(--muted-foreground); }
 
 /* Entry message — inline expand/collapse */
 .entry-msg {
@@ -523,7 +524,7 @@ onUnmounted(() => {
 
 .entry-text {
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   transition: color 0.15s ease;
   white-space: pre-wrap;
   word-break: break-words;
@@ -531,7 +532,7 @@ onUnmounted(() => {
 }
 
 .update-row:hover .entry-text {
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 /* Chevron */

@@ -1,5 +1,5 @@
 <template>
-  <aside class="bg-slate-900/40 border border-white/10 rounded-xl p-4 space-y-1">
+  <aside class="bg-card/40 border border-white/10 rounded-xl p-4 space-y-1">
     <header class="flex items-center justify-between pb-2">
       <h2 class="text-lg font-semibold text-white">{{ $t('browse.filters.title') }}</h2>
     </header>
@@ -251,13 +251,15 @@ const providerOptions = computed<{ value: Provider; label: string; accent: strin
   },
   {
     value: 'animelib',
+    // AnimeLib provider-identity hue (orange) — deliberate per-provider decorative
+    // accent (mirrors the --player-accent #f97316 allowlist seed), NOT a status token.
     label: t('browse.filters.provider.animelib'),
     accent: 'text-orange-500 focus:ring-orange-500',
   },
   {
     value: 'english',
     label: t('browse.filters.provider.english'),
-    accent: 'text-emerald-500 focus:ring-emerald-500',
+    accent: 'text-success focus:ring-success',
   },
 ])
 
