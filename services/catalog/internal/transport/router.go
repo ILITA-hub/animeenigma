@@ -121,6 +121,7 @@ func NewRouter(
 			// Kodik video sources
 			r.Get("/{animeId}/kodik/translations", catalogHandler.GetKodikTranslations)
 			r.Get("/{animeId}/kodik/video", catalogHandler.GetKodikVideo)
+			r.Get("/{animeId}/kodik/stream", catalogHandler.GetKodikStream)
 			// AnimeLib video sources
 			r.Get("/{animeId}/animelib/episodes", catalogHandler.GetAnimeLibEpisodes)
 			r.Get("/{animeId}/animelib/translations", catalogHandler.GetAnimeLibTranslations)

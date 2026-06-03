@@ -564,6 +564,47 @@ func (h *CatalogHandler) GetKodikVideo(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, source)
 }
 
+// GetKodikStream returns the decoded ad-free HLS stream for a Kodik episode.
+func (h *CatalogHandler) GetKodikStream(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	if animeID == "" {
+		httputil.BadRequest(w, "anime ID is required")
+		return
+	}
+
+	episodeStr := r.URL.Query().Get("episode")
+	translationIDStr := r.URL.Query().Get("translation")
+	if episodeStr == "" {
+		httputil.BadRequest(w, "episode number is required")
+		return
+	}
+	if translationIDStr == "" {
+		httputil.BadRequest(w, "translation ID is required")
+		return
+	}
+	episode, err := strconv.Atoi(episodeStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid episode number")
+		return
+	}
+	translationID, err := strconv.Atoi(translationIDStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid translation ID")
+		return
+	}
+	quality := 0
+	if q := r.URL.Query().Get("quality"); q != "" {
+		quality, _ = strconv.Atoi(q) // optional; 0 = default
+	}
+
+	source, err := h.catalogService.GetKodikStreamSource(r.Context(), animeID, episode, translationID, quality)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, source)
+}
+
 // SearchKodik searches for anime on Kodik
 func (h *CatalogHandler) SearchKodik(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
