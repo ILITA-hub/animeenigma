@@ -131,7 +131,7 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 **Plans:** 5 plans (3 waves)
 - [x] 05-01-PLAN.md — tail sweep: 11 spotlight SFCs + 5 home-rail SFCs to semantic tokens (Wave 1, autonomous) ✅ `87a4afec`, `058eb4a6`
 - [ ] 05-02-PLAN.md — tail sweep: 4 admin views + Profile/Game/StatusPage/Themes to semantic tokens (Wave 1, autonomous)
-- [ ] 05-03-PLAN.md — tail sweep: 3 ui/ composites + App + LastUpdates + themes/browse/profile/WT to semantic tokens (Wave 1, autonomous; ActivityFeed.vue deferred — analytics-workstream uncommitted changes)
+- [x] 05-03-PLAN.md — tail sweep: 3 ui/ composites + App + LastUpdates + themes/browse/profile/WT to semantic tokens + ActivityFeed.vue color repoint via stash-isolation (Wave 1, autonomous) ✅ `9b820ab3`, `a09c915b`, `b61b0c4f`
 - [ ] 05-04-PLAN.md — `--accent` flip to shadcn hover surface + temp brand-cyan alias deletion in main.css [DS-MIGRATE-05] (Wave 2, human-verify in-browser smoke)
 - [ ] 05-05-PLAN.md — `design-system-lint.sh` gate (3 color/token rules) + allowlist + make wiring + `--selftest` + DESIGN-SYSTEM.md docs [DS-GOV-01, DS-GOV-02] (Wave 3, autonomous)
 
