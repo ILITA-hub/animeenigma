@@ -3,6 +3,11 @@
 # Exit code 1 on errors (missing keys), 0 on warnings-only (hardcoded text, unused keys).
 set -euo pipefail
 
+# Force C locale so `comm` uses byte/codepoint order — matching Python's sorted().
+# Without this, en_US.UTF-8 collation differs from Python codepoint sort on camelCase
+# keys (e.g. "kodikAdfree"), causing `comm: file not in sorted order` crashes.
+export LC_ALL=C
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR="$SCRIPT_DIR/../src"
 LOCALES_DIR="$SRC_DIR/locales"
