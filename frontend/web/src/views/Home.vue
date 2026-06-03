@@ -18,8 +18,8 @@
             listbox-id="home-search"
             @submit="goToSearch"
           />
-          <!-- ⌘K decorative hint — no global shortcut wired (none exists); purely visual -->
-          <kbd class="search-kbd hidden sm:inline-flex" aria-hidden="true">⌘K</kbd>
+          <!-- OS-aware shortcut hint: ⌘K on Mac, Ctrl K everywhere else -->
+          <kbd class="search-kbd hidden sm:inline-flex" aria-hidden="true">{{ searchHint }}</kbd>
         </div>
         <!-- Schedule button — .btn-ghost-accent -->
         <router-link
@@ -161,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
@@ -250,6 +250,10 @@ function openHomeMenuAt(el: HTMLElement, anime: HomeAnime) {
 function onHomeTouchstart(event: TouchEvent, anime: HomeAnime) {
   onHomeCtxTouchstart(event, ctxAnimeFromHome(anime), homeOpts(anime))
 }
+
+const searchHint = computed(() =>
+  /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'
+)
 
 const goToSearch = () => {
   if (searchQuery.value.trim()) {
