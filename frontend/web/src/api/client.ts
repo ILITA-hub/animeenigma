@@ -707,6 +707,15 @@ export const hanimeApi = {
     }),
 }
 
+export const anime18Api = {
+  getEpisodes: (animeId: string) =>
+    apiClient.get(`/anime/${animeId}/anime18/episodes`),
+  getStream: (animeId: string, episodeSlug: string) =>
+    apiClient.get(`/anime/${animeId}/anime18/stream`, {
+      params: { ep: episodeSlug }
+    }),
+}
+
 export const themesApi = {
   list: (params?: { year?: number; season?: string; type?: string; sort?: string }) =>
     apiClient.get('/themes', { params }),

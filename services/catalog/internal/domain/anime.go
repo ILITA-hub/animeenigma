@@ -389,6 +389,21 @@ type HanimeStream struct {
 	Sources []HanimeSource `json:"sources"`
 }
 
+// Anime18Episode represents one episode from the 18anime.me provider.
+type Anime18Episode struct {
+	Slug   string `json:"slug"`   // full slug incl. numeric id, e.g. "1167-...-episode-2"
+	URL    string `json:"url"`    // canonical episode page URL
+	Number int    `json:"number"` // 1-based episode number
+}
+
+// Anime18Stream is a resolved playable source from an 18anime embed mirror.
+type Anime18Stream struct {
+	URL     string `json:"url"`               // direct mp4 or m3u8 URL
+	Referer string `json:"referer,omitempty"` // Referer the HLS proxy must inject ("" if none)
+	IsHLS   bool   `json:"is_hls"`            // true => m3u8 (turbovid), false => progressive mp4 (mp4upload)
+	Quality string `json:"quality"`           // e.g. "FullHD"
+}
+
 // AnimeLib types
 
 // AnimeLibEpisode represents an episode from AnimeLib
