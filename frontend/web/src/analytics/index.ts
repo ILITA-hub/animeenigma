@@ -5,6 +5,7 @@ import type { AnalyticsConfig, AnalyticsEvent, EventType } from './types'
 import { Transport } from './transport'
 import { extractClick } from './autocapture'
 import { getUserId, setUserId, clearUserId, resetAnon } from './identity'
+import { registerClickForTrace } from './traceContext'
 
 class Analytics {
   private transport: Transport | null = null
@@ -27,7 +28,10 @@ class Analytics {
       if (!target) return
       const desc = extractClick(target)
       if (!desc) return
-      this.enqueue({ event_type: 'click', timestamp: nowISO(), path: location.pathname, ...desc })
+      const evt = { event_type: 'click' as const, timestamp: nowISO(), path: location.pathname, ...desc }
+      this.enqueue(evt)
+      // Best-effort: the next API call within ~1.5s back-fills evt.trace_id.
+      registerClickForTrace(evt)
     }
     document.addEventListener('click', this.clickListener, { capture: true })
 

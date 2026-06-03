@@ -3,6 +3,10 @@ import { hookAxiosDiagnostics } from '@/utils/diagnostics'
 import { getOrCreateAnonId } from '@/utils/anonId'
 import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/preference'
 import type { CreateJobPayload } from '@/types/library'
+import { newTraceparent } from '@/analytics/traceparent'
+import { stampTrace } from '@/analytics/traceContext'
+
+const TRACING_ON = import.meta.env.VITE_ANALYTICS_ENABLED !== 'false'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
@@ -153,6 +157,14 @@ apiClient.interceptors.request.use(
     // downstream. See .planning/phases/01-instrumentation-baseline/01-PATTERNS.md
     // and 01-RESEARCH.md §Pattern 7.
     config.headers['X-Anon-ID'] = getOrCreateAnonId()
+    // Distributed tracing: mint a W3C traceparent per call so the backend
+    // trace roots with a known trace_id, and stamp that id onto the click
+    // event that triggered this request (best-effort, ~1.5s window).
+    if (TRACING_ON) {
+      const { header, traceId } = newTraceparent()
+      config.headers['traceparent'] = header
+      stampTrace(traceId)
+    }
     return config
   },
   (error) => {
