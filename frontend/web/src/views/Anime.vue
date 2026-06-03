@@ -456,6 +456,16 @@
               >
                 Hanime
               </button>
+              <button
+                v-if="anime18Enabled"
+                @click="videoProvider = 'anime18'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'anime18'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                {{ $t('player.anime18.label') }}
+              </button>
             </template>
             <!-- Workstream raw-jp / Phase 04 — single-chip group for v0.1.
                  v0.2's hybrid resolver adds 'minio' here. -->
@@ -566,6 +576,18 @@
                 <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
               </template>
             </HanimePlayer>
+            <!-- 18anime (18+) Player — second 18+ provider, behind VITE_ANIME18_ENABLED. -->
+            <Anime18Player
+              v-else-if="videoProvider === 'anime18' && anime18Enabled"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :initial-episode="resumeStartEpisode"
+            >
+              <template #header-middle>
+                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+              </template>
+            </Anime18Player>
             <!-- Workstream raw-jp / Phase 04 — RawPlayer mounts behind the
                  same VITE_RAW_PROVIDER_ENABLED flag that gates the chip. -->
             <RawPlayer
@@ -978,6 +1000,10 @@ import type { WatchCombo } from '@/types/preference'
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
 const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
+// 18anime (18+) — second 18+ provider alongside Hanime. Behind
+// VITE_ANIME18_ENABLED (default OFF) so it can dark-ship until verified.
+const Anime18Player = defineAsyncComponent(() => import('@/components/player/Anime18Player.vue'))
+const anime18Enabled = import.meta.env.VITE_ANIME18_ENABLED === 'true'
 // Workstream raw-jp, Phase 04 — lazy-load RawPlayer behind a Vite flag.
 const RawPlayer = defineAsyncComponent(() => import('@/components/player/RawPlayer.vue'))
 const rawProviderEnabled = import.meta.env.VITE_RAW_PROVIDER_ENABLED === 'true'
@@ -1135,7 +1161,7 @@ const videoLanguage = ref<VideoLanguage>(
 // Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
 // Phase 24-28 — 'ourenglish' is the scraper-microservice-backed EN provider
 // (failover across gogoanime/animepahe/allanime/animefever/miruro/nineanime).
-const VALID_PROVIDERS = ['kodik', 'animelib', 'ourenglish', 'hanime', 'raw'] as const
+const VALID_PROVIDERS = ['kodik', 'animelib', 'ourenglish', 'hanime', 'anime18', 'raw'] as const
 type VideoProvider = (typeof VALID_PROVIDERS)[number]
 const _savedProv = localStorage.getItem('preferred_video_provider')
 // Coerce a pinned-but-disabled 'animelib' back to 'kodik' so users who last
@@ -1339,7 +1365,7 @@ const playerSwitchTracker = useOverrideTracker({
   // Phase 24-28 — 'ourenglish' maps to 'english' (the existing analytics
   // bucket for EN providers, preserved across the HiAnime→Consumet→OurEnglish
   // generation rollover).
-  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw'
+  player: videoProvider.value === 'hanime' || videoProvider.value === 'raw' || videoProvider.value === 'anime18'
     ? 'kodik'
     : videoProvider.value === 'ourenglish'
       ? 'english'

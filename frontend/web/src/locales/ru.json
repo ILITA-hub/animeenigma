@@ -226,6 +226,10 @@
       "serverLabel": "Сервер",
       "activeProvider": "Стрим от {name}"
     },
+    "anime18": {
+      "tab": "18anime",
+      "label": "18anime"
+    },
     "scraperProviders": {
       "allanime": "AllAnime",
       "animefever": "AnimeFever",
