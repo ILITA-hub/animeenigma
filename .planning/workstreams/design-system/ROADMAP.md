@@ -171,7 +171,7 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 4. DS-MIGRATE-06 + DS-MIGRATE-01 marked ✅ (or the residual bespoke controls explicitly accepted as governance-only).
 
 **Plans:** 2 plans (2 waves)
-- [ ] `07-01-PLAN.md` — views + anime-card: adjudicate Themes.vue / Browse.vue / AnimeCard.vue raw buttons onto `<Button>` (swap where fits, keep+document otherwise) (Wave 1, autonomous) [DS-MIGRATE-06, DS-MIGRATE-01]
+- [x] `07-01-PLAN.md` — views + anime-card: adjudicate Themes.vue / Browse.vue / AnimeCard.vue raw buttons onto `<Button>` (swap where fits, keep+document otherwise) (Wave 1, autonomous) [DS-MIGRATE-06, DS-MIGRATE-01] — DONE: all 8 sites KEPT+documented (07-01-SUMMARY.md)
 - [ ] `07-02-PLAN.md` — player + home-spotlight: adjudicate SubtitleSettingsMenu.vue (×5) + CarouselDots.vue (expected keep) + PHASE-CLOSE verification (full vitest/vue-tsc/vite build/lint-design) + HUMAN-UAT in-browser smoke (Wave 2, autonomous:false — carries the checkpoint) [DS-MIGRATE-06, DS-MIGRATE-01]
 
 ## Next

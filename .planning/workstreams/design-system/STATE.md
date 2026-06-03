@@ -2,35 +2,35 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Scraper Self-Healing
-current_phase: 06
-current_plan: 1
-status: milestone_complete
-stopped_at: Phase 06 Plan 01 complete (governance into memory + CLAUDE.md [DS-GOV-03, DS-NF-05, DS-NF-06]) — Phase 06 COMPLETE (1/1); v1.0 Design System Consolidation milestone COMPLETE (6/6 phases)
-last_updated: "2026-06-03T02:50:08Z"
+current_phase: 07
+current_plan: 2
+status: executing
+stopped_at: Phase 07 Plan 01 complete (adjudicated Themes/Browse/AnimeCard raw <button> vs <Button> — all-KEEP, documented [DS-MIGRATE-06, DS-MIGRATE-01]) — Phase 07 in progress (1/2)
+last_updated: "2026-06-03T00:00:00.000Z"
 last_activity: 2026-06-03
 progress:
-  total_phases: 6
-  completed_phases: 7
-  total_plans: 17
-  completed_plans: 17
-  percent: 117
+  total_phases: 14
+  completed_phases: 8
+  total_plans: 53
+  completed_plans: 42
+  percent: 79
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 06 (governance-into-memory) — COMPLETE
-Plan: 1 of 1
-**Status:** Milestone complete
-**Current Phase:** 06
+Phase: 07 (structural-primitive-swap) — EXECUTING
+Plan: 2 of 2
+**Status:** Executing Phase 07
+**Current Phase:** 07
 **Last Activity:** 2026-06-03
-**Last Activity Description:** Phase 06 Plan 01 complete — governance written into CLAUDE.md + project memory
+**Last Activity Description:** Phase 07 Plan 01 complete — views + anime-card raw buttons adjudicated (all-KEEP, documented)
 
 ## Progress
 
 **Phases Complete:** 6 / 6
-**Current Plan:** Not started
+**Current Plan:** 1
 
 ## Performance Metrics
 
@@ -46,10 +46,11 @@ Plan: 1 of 1
 | 05 | 04 | ~6 min | 2 | 1 |
 | 05 | 05 | ~20 min | 2 | 5 |
 | 06 | 01 | ~9 min | 3 | 3 |
+| 07 | 01 | ~10 min | 2 | 3 |
 
 ## Session Continuity
 
-**Stopped At:** Phase 06 Plan 01 complete (governance into memory + CLAUDE.md [DS-GOV-03, DS-NF-05, DS-NF-06]) — Phase 06 COMPLETE (1/1); v1.0 milestone COMPLETE (6/6)
+**Stopped At:** Phase 07 Plan 01 complete (adjudicated Themes/Browse/AnimeCard raw <button> vs <Button> — all-KEEP, documented [DS-MIGRATE-06, DS-MIGRATE-01]) — Phase 07 in progress (1/2)
 **Resume File:** None
 
 ## Notes
@@ -66,4 +67,5 @@ Plan: 1 of 1
 - Plan 05-03 (commits `9b820ab3`, `a09c915b`, `b61b0c4f`): tail-swept 11 SFCs — 3 ui composites (GenreFilterPopup/Select/Toaster) + App + LastUpdates + themes (RatingStars/ThemeCard) + BrowseSidebar + ActiveSessionsCard + RoomSidebar + ActivityFeed. Elevated poppers `slate-900/95`→`popover/95`; non-elevated aside `slate-900/40`→`card/40`. LastUpdates changelog `color:` hex → `var(--color-success)`/`var(--color-warning)`/`var(--info)`/`var(--muted-foreground)`; rgba badge BACKGROUNDS left verbatim (value-preserving — `-soft` alpha 0.14≠0.2). **NOVEL hex (Wave-3 allowlist):** LastUpdates `#0e7490` (news-cover gradient start — same novel cyan hue 05-01 kept for CollectionsRow); thumb `#4c1d95`→`var(--brand-violet)`. **Judgment call:** BrowseSidebar AnimeLib `text-orange-500 focus:ring-orange-500` KEPT (provider-identity decorative hue, mirrors `--player-accent #f97316`; orange not in off-palette regex) while english `emerald-500`→`success` and kodik cyan brand left. ThemeCard star `yellow-400`→`warning`; ED badge `purple`→`brand-violet`. **ActivityFeed via STASH-ISOLATION:** `git stash push -- ActivityFeed.vue` → repoint `var(--accent)`×2→`var(--brand-cyan)` + `var(--ink)`→`var(--foreground)` + `var(--ink-3)`→`var(--muted-foreground)` (literal `--ink-2/-4` left) → commit color-only (`b61b0c4f`, 9 ins/9 del, NO analytics hunks) → `git stash pop` clean auto-merge (analytics 63-ins preserved uncommitted, stash list empty). **REPO-WIDE off-palette + repointable-alias greps now ZERO survivors across `src/**/*.vue`** → Wave-2 `--accent` flip-gate prerequisite satisfied. See 05-03-SUMMARY.md.
 - Plan 05-05 (commits `4701f8bc`, `e969c9ec`): the build-failing color/token lint gate that locks the migration shut [DS-GOV-01, DS-GOV-02]. `scripts/design-system-lint.sh` (mirrors i18n-lint.sh) enforces EXACTLY 3 rules over `src/**/*.vue` (excl specs/__tests__): (1) off-palette classes — Phase-4 verbatim regex, brand-exempt (cyan|pink|orange|rose|indigo|teal|lime ABSENT, else clean tree fails); (2) non-allowlisted hex (per-(file,hex)); (3) deprecated `var(--ink|--accent|--pink)` (excl `--ink-2/-4`, `--accent-soft/-line/-glow`, `--pink-soft`). `scripts/design-system-allowlist.txt` = 33 justified `path:hex:reason` entries (seeded from 05-01/05-03 novel-hex + Phase-4 player/chrome). `--selftest` proves the fail-path (inject `bg-red-500` → DETECT → trap-clean → clean-tree PASS, no scratch left). Wired into `make lint-design` → `lint-frontend` (CI/all) AND `redeploy-web` prereqs (deploy gate) + `.PHONY`. **ADJUDICATED out-of-scope hex (not blanket-allowlisted):** Auth.vue Telegram blue `#54a9eb`/`#4a96d2` → justified provider-brand allowlist; Auth.vue QR `#000000`/`#ffffff` → functional allowlist; Collections.vue gradient `#0e7490`/`#6b21a8` → adjudicated KEEP (identical to CollectionsRow's kept novel gradient; darker/desaturated, no token within tolerance) — NOT migrated. DESIGN-SYSTEM.md "Lint gate (enforced)" docs the 3 rules + brand-exemption + allowlist format + adjudication + selftest, matching the enforced rules exactly. **SC#5 (owned by this plan): `vue-tsc --noEmit` exit 0; `vitest run` FULL = 831 pass / 1 fail (sole fail = documented pre-existing `AnimeContextMenu.spec.ts:227`); home/spotlight 223/223 pass.** **[Rule 1 deviation]** fixed stale `design-tokens.spec.ts:27` (05-04 flipped `--accent`→`var(--elevated)` but left the test asserting `var(--brand-cyan)`) — realigned to the committed behavior. spotlight e2e canary requires a live `webServer:5173`, not runnable headless here → documented (no rendered/route/component change ⇒ no plausible e2e regression). Pre-existing uncommitted changes (ActivityFeed analytics, scraper, changelog, etc.) NOT swept into either commit. See 05-05-SUMMARY.md. **Phase 05 COMPLETE (5/5).**
 - Plan 06-01 (commit `f39f9a0d`): wrote design-system governance onto two durable surfaces — CLAUDE.md `### Design System` subsection (under Code Conventions) + project-memory `project_design_system_governance.md` (OUTSIDE git repo, written not committed) + MEMORY.md pointer. SC#3 holds: 3 lint-ENFORCED rules (off-palette classes / non-allowlisted hex / deprecated `var(--ink|--accent|--pink)` brand-alias) labeled enforced verbatim from `design-system-lint.sh`, 7 exempt brand/provider hues (cyan/pink/orange/rose/indigo/teal/lime) named under Rule 1; structural rules (reuse `@/components/ui` primitives / `font-medium`/`font-semibold` / padding scale / `cva`) labeled GOVERNANCE-ONLY; DS-NF-06 in-browser-verify standing rule on both surfaces. Both surfaces POINT at canonical `DESIGN-SYSTEM.md` (no duplication). DS-NF-05 acknowledged: satisfied by each phase's green build, no new machinery. Pure docs — zero rendered change. ONLY CLAUDE.md staged/committed by explicit path (pre-existing analytics/scraper/changelog changes untouched). See 06-01-SUMMARY.md. **Phase 06 COMPLETE (1/1); v1.0 Design System Consolidation milestone COMPLETE (6/6).**
+- Plan 07-01 (commits `28e27090`, `dcfaf350`): adjudicated all 8 remaining raw `<button>` in Themes.vue / Browse.vue / AnimeCard.vue against `<Button>` under the 07-CONTEXT strict "no visible diff" rule → **all 8 KEPT bespoke**, each with an inline one-line reason comment + the per-button table in 07-01-SUMMARY.md. Concrete keep-drivers: AnimeCard `.play-btn` (60px round, no fitting variant); Themes admin-sync (borderless two-state soft-bg pill — `ghost` adds an unstrippable border/bg base); Themes type-filter (segmented item in `<ButtonGroup>` — every variant's `rounded-lg/xl` breaks the seam); Themes Retry + Browse clear-recent/refresh-Shikimori (bare text-links — no text-only variant); Browse recent-search pills (`rounded-full` chip + bespoke text/hover); Browse drawer-close (`size="icon"` 40×40 + ghost bg/border = enlargement diff). **Browse mobile-toggle KEPT specifically because it is the `useFocusTrap` `returnFocusTo` target** — a template `ref` on `<Button>` resolves to the component instance, not a focusable DOM element, which would break the drawer focus-return path. Pre-existing `<Button variant="outline">` (Browse L80/L89) untouched. `vue-tsc --noEmit` exit 0 (whole project), `design-system-lint.sh` exit 0 (RULE 1/2/3 = 0). No co-located specs for these 3 files → no spec realignment. Staged ONLY this plan's files by explicit path; ActivityFeed.vue analytics / scraper / changelog / root STATE.md left untouched. Full vitest/vite-build phase-close deferred to 07-02. See 07-01-SUMMARY.md.
 - Plan 05-04 (commit `7127275f`): the milestone's ONE intentional rendered change — flipped `main.css :root --accent` from `var(--brand-cyan)` to `var(--elevated)` (#1c1c2c neutral shadcn hover surface, consistent with `--popover`/`--secondary`) and deleted the temp brand-cyan alias annotation + the "deferred to P2 / stays brand-cyan" NOTE block. Hard precondition re-asserted: zero brand `var(--accent)` in `src/**/*.vue`. `--brand-cyan`, `--accent-soft/-line/-glow` untouched; no rule relayered (Tailwind v4 cascade footgun). Staged ONLY main.css (1 ins / 3 del). vue-tsc exit 0, vite build exit 0. human-verify checkpoint AUTO-APPROVED (autonomous); in-browser 5-surface smoke deferred → persisted as `05-04-HUMAN-UAT.md` for live confirmation (DS-NF-06: jsdom/build can't catch a cascade regression). Satisfies the Wave-3 lint-gate rule (c) prerequisite (any `var(--accent)` brand usage is now a violation). See 05-04-SUMMARY.md.
