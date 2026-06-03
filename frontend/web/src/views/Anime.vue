@@ -433,6 +433,17 @@
               >
                 AniLib
               </button>
+              <button
+                v-if="kodikAdfreeEnabled"
+                @click="onUserPickedProvider('kodik-adfree')"
+                :aria-pressed="videoProvider === 'kodik-adfree'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                :class="videoProvider === 'kodik-adfree'
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                  : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+              >
+                {{ $t('player.kodikAdfree.tab') }}
+              </button>
             </ButtonGroup>
             <template v-else-if="videoLanguage === 'en' && ourEnglishEnabled">
               <button
@@ -540,6 +551,20 @@
                 <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
               </template>
             </KodikPlayer>
+            <!-- Ad-free Kodik Player (HLS via kodikextract) -->
+            <KodikAdFreePlayer
+              v-else-if="videoProvider === 'kodik-adfree' && kodikAdfreeEnabled"
+              :anime-id="anime.id"
+              :anime-name="anime.title"
+              :total-episodes="anime.totalEpisodes"
+              :preferred-combo="resolvedCombo"
+              :initial-episode="resumeStartEpisode"
+              @available-translations="handleAvailableTranslations"
+            >
+              <template #header-middle>
+                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+              </template>
+            </KodikAdFreePlayer>
             <!-- AnimeLib Player -->
             <AnimeLibPlayer
               v-else-if="videoProvider === 'animelib' && animeLibEnabled"
@@ -998,6 +1023,10 @@ import { useContextMenu } from '@/composables/useContextMenu'
 import type { WatchCombo } from '@/types/preference'
 
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
+// Ad-free Kodik player (libs/kodikextract HLS extraction). Behind a flag so it
+// can dark-ship; defaults ON.
+const KodikAdFreePlayer = defineAsyncComponent(() => import('@/components/player/KodikAdFreePlayer.vue'))
+const kodikAdfreeEnabled = import.meta.env.VITE_KODIK_ADFREE_ENABLED !== 'false'
 const AnimeLibPlayer = defineAsyncComponent(() => import('@/components/player/AnimeLibPlayer.vue'))
 const HanimePlayer = defineAsyncComponent(() => import('@/components/player/HanimePlayer.vue'))
 // 18anime (18+) — second 18+ provider alongside Hanime. Behind
@@ -1161,7 +1190,7 @@ const videoLanguage = ref<VideoLanguage>(
 // Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
 // Phase 24-28 — 'ourenglish' is the scraper-microservice-backed EN provider
 // (failover across gogoanime/animepahe/allanime/animefever/miruro/nineanime).
-const VALID_PROVIDERS = ['kodik', 'animelib', 'ourenglish', 'hanime', 'anime18', 'raw'] as const
+const VALID_PROVIDERS = ['kodik', 'kodik-adfree', 'animelib', 'ourenglish', 'hanime', 'anime18', 'raw'] as const
 type VideoProvider = (typeof VALID_PROVIDERS)[number]
 const _savedProv = localStorage.getItem('preferred_video_provider')
 // Coerce a pinned-but-disabled 'animelib' back to 'kodik' so users who last
@@ -1374,14 +1403,16 @@ const playerSwitchTracker = useOverrideTracker({
   currentEpisode: currentEpisodeForTracker,
 })
 
-function onUserPickedProvider(newProvider: 'kodik' | 'animelib' | 'raw') {
+function onUserPickedProvider(newProvider: 'kodik' | 'kodik-adfree' | 'animelib' | 'raw') {
   // Only fire override if the user is genuinely SWITCHING. The composable's
   // first-per-(load_session_id, dimension) lock would also catch repeats, but
   // an explicit guard keeps E2E timing predictable.
   if (newProvider !== videoProvider.value) {
     // Workstream raw-jp / Phase 04 — 'raw' is outside the tracked
     // PlayerName set; map to 'kodik' for the picker event like hanime.
-    const trackedProvider = newProvider === 'raw' ? 'kodik' : newProvider
+    // Ad-free Kodik is also outside the tracked PlayerName set; map to 'kodik'
+    // for the bucket label so the analytics type compiles.
+    const trackedProvider = (newProvider === 'raw' || newProvider === 'kodik-adfree') ? 'kodik' : newProvider
     playerSwitchTracker.recordPickerEvent('player', { player: trackedProvider })
   }
   videoProvider.value = newProvider
@@ -2044,7 +2075,7 @@ const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
   videoLanguage.value = lang
   // Auto-select first provider in the group
   if (lang === 'ru') {
-    const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'animelib' | null
+    const savedRu = localStorage.getItem('preferred_ru_provider') as 'kodik' | 'kodik-adfree' | 'animelib' | null
     videoProvider.value = savedRu && (savedRu !== 'animelib' || animeLibEnabled) ? savedRu : 'kodik'
   } else if (lang === 'en') {
     // Phase 24-28 — single-provider group; the in-player source dropdown
