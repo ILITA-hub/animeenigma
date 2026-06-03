@@ -20,7 +20,7 @@
 | 2 | shadcn-vue Install + Button/Card Proof | ✅ Complete (2026-06-02 — 4 commits 7083bbca..bd975bfa; reka-ui+cva+clsx+tailwind-merge installed, Button+Card on cn()/cva, 714 vitest, vue-tsc clean = 9 consumers unchanged, main.css untouched, A2 white-text confirmed live, 5-surface smoke zero-diff) |
 | 3 | Primitive Set Swap | ✅ Complete (2026-06-02 — 4 waves; Badge/Input/Tabs+Select/Dialog+5 new primitives on Reka, native right-click restored + kebab→anchored DropdownMenu [DS-LIB-08]; 799 vitest, vue-tsc clean, main.css untouched; live-verified: Select popper, Dialog scroll-lock/focus/escape, kebab menu anchor+actions+auth-gating, native right-click) |
 | 4 | High-Traffic Surface Migration | ✅ Complete (4/4 plans — Home+Browse+anime-card family (01), nav/layout (02), anime detail (03), 5 players + chrome helpers (04). All high-traffic surfaces token-clean of off-palette; player-accent + subtitle render hex allowlisted verbatim; DS-MIGRATE-01 proven on real player surfaces; DS-MIGRATE-02/03/06 partial-this-phase. `--accent` flip + tail sweep remain Phase 5) |
-| 5 | Tail Sweep + Lint Enforcement | 🔄 In Progress (2/5 plans — spotlight + home-rail (01), admin + standalone views (02) done) |
+| 5 | Tail Sweep + Lint Enforcement | 🔄 In Progress (4/5 plans — spotlight + home-rail (01), admin + standalone views (02), ui composites + App/themes/browse/WT + ActivityFeed (03), `--accent` flip to shadcn hover surface + temp-alias deletion (04, DS-MIGRATE-05) done; lint-gate wiring (05) remains) |
 | 6 | Governance into Memory | ⏳ Planned |
 
 ## Goal (v1.0)
