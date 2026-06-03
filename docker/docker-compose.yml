@@ -248,6 +248,40 @@ services:
       loki:
         condition: service_healthy
 
+  tempo-init:
+    image: minio/mc:latest
+    container_name: animeenigma-tempo-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/tempo &&
+        echo "tempo bucket ready"
+    restart: "no"
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: animeenigma-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ../infra/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200" # Tempo API (Grafana datasource target)
+    depends_on:
+      tempo-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3200/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   grafana:
     image: grafana/grafana:10.3.3
     container_name: animeenigma-grafana
@@ -780,6 +814,7 @@ volumes:
   # ffmpeg encode scratch dir before HLS segments land in MinIO (Phase 4).
   library_torrents:
   library_minio_staging:
+  tempo_data:
 
 networks:
   default:
