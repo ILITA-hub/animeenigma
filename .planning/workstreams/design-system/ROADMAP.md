@@ -172,7 +172,7 @@ Phases 2–5 reference this set in their success criteria as "smoke the standing
 
 **Plans:** 2 plans (2 waves)
 - [x] `07-01-PLAN.md` — views + anime-card: adjudicate Themes.vue / Browse.vue / AnimeCard.vue raw buttons onto `<Button>` (swap where fits, keep+document otherwise) (Wave 1, autonomous) [DS-MIGRATE-06, DS-MIGRATE-01] — DONE: all 8 sites KEPT+documented (07-01-SUMMARY.md)
-- [ ] `07-02-PLAN.md` — player + home-spotlight: adjudicate SubtitleSettingsMenu.vue (×5) + CarouselDots.vue (expected keep) + PHASE-CLOSE verification (full vitest/vue-tsc/vite build/lint-design) + HUMAN-UAT in-browser smoke (Wave 2, autonomous:false — carries the checkpoint) [DS-MIGRATE-06, DS-MIGRATE-01]
+- [x] `07-02-PLAN.md` — player + home-spotlight: adjudicate SubtitleSettingsMenu.vue (×5) + CarouselDots.vue (expected keep) + PHASE-CLOSE verification (full vitest/vue-tsc/vite build/lint-design) + HUMAN-UAT in-browser smoke (Wave 2, autonomous:false — carries the checkpoint) [DS-MIGRATE-06, DS-MIGRATE-01] — DONE: gear toggle SWAPPED to `<Button ghost>`; 4 nudge steppers + reset + CarouselDots KEPT+documented; phase-close gate green (vitest 831 pass/1 known-pre-existing, vue-tsc 0, vite build 0, lint-design 0); HUMAN-UAT auto-approved (07-02-SUMMARY.md). **Phase 07 COMPLETE (2/2); DS-MIGRATE-06 + DS-MIGRATE-01 CLOSED — 1 swapped, 9 documented keeps across 07-01+07-02.**
 
 ## Next
 

@@ -38,12 +38,12 @@ Requirement IDs are workstream-local. Status: ✅ done · ⏳ planned.
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| DS-MIGRATE-01 | High-traffic surfaces (Home, Browse, Watch/player, nav, anime detail) use ONLY tokens + `ui/` primitives — no off-palette colors, no hardcoded hex. | ⏳ |
+| DS-MIGRATE-01 | High-traffic surfaces (Home, Browse, Watch/player, nav, anime detail) use ONLY tokens + `ui/` primitives — no off-palette colors, no hardcoded hex. | ✅ (Phases 4–7 — color/token half done Phases 4–5; primitive half adjudicated Phase 7: all 10 raw `<button>` sites resolved — 1 swapped to `<Button>`, 9 specialized controls documented governance-only) |
 | DS-MIGRATE-02 | Off-palette Tailwind color usages (241 occurrences / 44 files) migrated to semantic tokens (`red→destructive`, `amber/yellow→warning`, `emerald/green→success`, `blue/sky→info`, `purple/violet→brand-violet`, `gray/slate/zinc→muted/card/border`), each with a human/agent semantic judgment. | ✅ (Phases 4–5 — repo-wide off-palette grep zero; brand cyan/pink/orange/rose correctly exempt) |
 | DS-MIGRATE-03 | Hardcoded hex in `.vue` (17 files) replaced with tokens (or a new token added if a value is legitimately novel). | ✅ (Phases 4–5 — non-allowlisted hex grep zero; legitimately-novel hex adjudicated into `design-system-allowlist.txt`) |
 | DS-MIGRATE-04 | Deprecated alias usages (`var(--ink)`, `var(--accent)`, `var(--pink)`; ~19 files) repointed to canonical names. | ✅ (Phases 4–5 — repointable-alias grep zero across `src/**/*.vue`; ActivityFeed handled via stash-isolation) |
 | DS-MIGRATE-05 | After DS-MIGRATE-04, flip `--accent` to its shadcn hover-surface meaning and drop the temporary brand-cyan alias. | ✅ (05-04 — `main.css` `--accent: var(--elevated)`; temp brand-cyan alias deleted; in-browser smoke deferred → `05-04-HUMAN-UAT.md`) |
-| DS-MIGRATE-06 | Hand-rolled buttons/cards/badges replaced with `ui/` primitives where they exist. | ⏳ |
+| DS-MIGRATE-06 | Hand-rolled buttons/cards/badges replaced with `ui/` primitives where they exist. | ✅ (Phase 7 — all 10 audit-enumerated raw `<button>` sites adjudicated under strict "no visible diff": SubtitleSettingsMenu gear → `<Button variant=ghost size=sm>`; the other 9 (bare text-links, sub-scale steppers, 60px play circle, `rounded-full` chip, seamless segmented item, ref-focus toggle, 4px scoped-CSS dot pills) kept bespoke + documented — Button variant/size API doesn't model them without a pixel-shifting regression. "Where they exist/fit" satisfied. 07-01 + 07-02 SUMMARYs) |
 
 ## DS-GOV — Enforcement + governance (Phases 5–6)
 
