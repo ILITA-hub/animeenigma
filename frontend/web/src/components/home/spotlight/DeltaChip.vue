@@ -45,11 +45,11 @@ const pctLabel = computed<string>(() =>
 
 const cls = computed<string>(() =>
   delta.value === null
-    ? 'bg-gray-500/20 text-gray-300'
+    ? 'bg-muted/20 text-muted-foreground'
     : delta.value > 0
-      ? 'bg-green-500/20 text-green-200'
+      ? 'bg-success/20 text-success'
       : delta.value < 0
-        ? 'bg-red-500/20 text-red-200'
-        : 'bg-gray-500/20 text-gray-300',
+        ? 'bg-destructive/20 text-destructive'
+        : 'bg-muted/20 text-muted-foreground',
 )
 </script>

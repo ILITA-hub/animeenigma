@@ -9,7 +9,7 @@
         <div class="flex items-center gap-2">
           <SpotlightIcon
             name="sparkles"
-            class="w-5 h-5 text-amber-300"
+            class="w-5 h-5 text-warning"
           />
           <h3
             class="text-lg md:text-xl font-semibold text-white"
@@ -106,7 +106,7 @@ function badgeFor(type?: string): LatestNewsTypeBadge | null {
 
 function iconAccentClassFor(type?: string): string {
   const badge = badgeFor(type)
-  return badge ? badge.accent : 'text-gray-300'
+  return badge ? badge.accent : 'text-muted-foreground'
 }
 
 // Locale-aware relative date. Falls back to a medium absolute date when
@@ -154,7 +154,7 @@ function entryTitle(msg: string): string {
 .news-tile:hover {
   background: rgba(255, 255, 255, 0.07);
 }
-.news-date { color: var(--ink-3); }
+.news-date { color: var(--muted-foreground); }
 
 /* Show up to 7 lines of the changelog message, then truncate with an
    ellipsis. Defined here (not via a Tailwind line-clamp-[7] utility) because

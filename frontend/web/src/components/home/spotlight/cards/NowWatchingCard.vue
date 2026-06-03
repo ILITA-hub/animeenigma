@@ -8,7 +8,7 @@
       <header class="flex items-center gap-2">
         <SpotlightIcon
           name="pulse"
-          class="w-5 h-5 text-green-300 animate-pulse flex-shrink-0"
+          class="w-5 h-5 text-success animate-pulse flex-shrink-0"
         />
         <h3
           class="text-lg md:text-xl font-semibold text-white"
@@ -36,7 +36,7 @@
               <!-- Pulsing LIVE indicator dot (visually hidden text for a11y) -->
               <span
                 aria-hidden="true"
-                class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 ring-2 ring-[#0a0e1a] animate-pulse"
+                class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-success ring-2 ring-[#0a0e1a] animate-pulse"
               />
               <span class="sr-only">{{
                 t('spotlight.nowWatching.liveBadge')
@@ -112,13 +112,13 @@ const { t } = useI18n()
 // same username always renders the same color across mounts and across
 // page reloads (no flicker on data refresh).
 const PALETTE = [
-  'bg-red-500',
+  'bg-destructive',
   'bg-orange-500',
-  'bg-amber-500',
-  'bg-emerald-500',
+  'bg-warning',
+  'bg-success',
   'bg-cyan-500',
-  'bg-sky-500',
-  'bg-violet-500',
+  'bg-info',
+  'bg-brand-violet',
   'bg-pink-500',
 ] as const
 

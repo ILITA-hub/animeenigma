@@ -9,7 +9,7 @@
       <header class="flex items-center gap-3">
         <SpotlightIcon
           name="telegram"
-          class="w-6 h-6 text-sky-300 flex-shrink-0"
+          class="w-6 h-6 text-info flex-shrink-0"
           aria-label="Telegram"
         />
         <h3
@@ -18,7 +18,7 @@
           {{ t('spotlight.telegramNews.title') }}
         </h3>
         <span
-          class="ml-auto text-xs font-medium text-sky-200 truncate"
+          class="ml-auto text-xs font-medium text-info truncate"
         >@anime_enigma</span>
       </header>
       <div
@@ -62,7 +62,7 @@
           </p>
           <p
             v-if="post.date"
-            class="text-[10px] font-medium text-sky-300/70"
+            class="text-[10px] font-medium text-info/70"
           >
             {{ post.date }}
           </p>

@@ -9,7 +9,7 @@
          distinguishes this card from FeaturedCard's cyan. -->
     <div
       aria-hidden="true"
-      class="absolute inset-0 bg-gradient-to-r from-amber-500/30 via-transparent to-transparent"
+      class="absolute inset-0 bg-gradient-to-r from-warning/30 via-transparent to-transparent"
     />
 
     <div
@@ -21,7 +21,7 @@
         class="flex-shrink-0 self-center md:self-start w-32 md:w-40 lg:w-52 group"
       >
         <div
-          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-amber-500/20"
+          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-warning/20"
         >
           <img
             :src="data.anime.poster_url || '/placeholder.svg'"
@@ -39,10 +39,10 @@
           <div class="flex items-center gap-2 mb-3">
             <SpotlightIcon
               name="clock"
-              class="w-5 h-5 text-amber-300"
+              class="w-5 h-5 text-warning"
             />
             <p
-              class="text-amber-200 text-sm font-semibold uppercase tracking-[0.15em]"
+              class="text-warning text-sm font-semibold uppercase tracking-[0.15em]"
             >
               {{ t('spotlight.notTimeYet.title') }}
             </p>
@@ -75,7 +75,7 @@
 
           <p
             v-if="addedAtLabel"
-            class="mt-1 text-xs text-amber-300/70 font-medium"
+            class="mt-1 text-xs text-warning/70 font-medium"
           >
             {{ addedAtLabel }}
           </p>
@@ -132,8 +132,8 @@ const statusLabel = computed<string>(() =>
 
 const statusPillClass = computed<string>(() =>
   props.data.status === 'planned'
-    ? 'bg-yellow-500/20 text-yellow-200'
-    : 'bg-slate-500/20 text-slate-300',
+    ? 'bg-warning/20 text-warning'
+    : 'bg-muted/20 text-muted-foreground',
 )
 
 const addedAtLabel = computed<string | null>(() => {
@@ -146,5 +146,5 @@ const addedAtLabel = computed<string | null>(() => {
 
 <style scoped>
 /* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
-.nty-muted { color: var(--ink-3); }
+.nty-muted { color: var(--muted-foreground); }
 </style>

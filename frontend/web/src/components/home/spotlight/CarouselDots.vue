@@ -14,7 +14,7 @@
 
     Neon Tokyo restyle (feat/homepage-neon-tokyo-redesign):
       Inactive: 26×4 pill rgba(255,255,255,.16), border-radius 999px.
-      Active: 36×4 pill var(--accent) with 0 0 10px cyan glow.
+      Active: 36×4 pill var(--brand-cyan) with 0 0 10px cyan glow.
       Hover: rgba(255,255,255,.3).
       Transcribed from .dot-btn / .dot-btn.active in the design handoff.
       The button wrapper keeps its existing Tailwind classes so spec
@@ -127,7 +127,7 @@ function tokenFor(type: string): CardToken {
   width: 36px;
   /* background is provided by the accentDotBg Tailwind class (e.g. bg-cyan-500);
      box-shadow adds the glow. For cyan accent the glow uses the accent token. */
-  box-shadow: 0 0 10px var(--accent);
+  box-shadow: 0 0 10px var(--brand-cyan);
 }
 
 /* Hide the SpotlightIcon visually — it's in the DOM for tooltip/a11y context

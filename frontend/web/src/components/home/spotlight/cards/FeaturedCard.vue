@@ -120,9 +120,9 @@ const watchTo = computed(() =>
 .featured-eyebrow {
   display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--accent);
+  text-transform: uppercase; color: var(--brand-cyan);
 }
-.featured-eyebrow .pulse { width: 6px; height: 6px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: featured-pulse 1.6s ease-in-out infinite; }
+.featured-eyebrow .pulse { width: 6px; height: 6px; border-radius: 999px; background: var(--brand-cyan); box-shadow: 0 0 8px var(--brand-cyan); animation: featured-pulse 1.6s ease-in-out infinite; }
 .featured-eyebrow .sep { opacity: .5; }
 @keyframes featured-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .5; transform: scale(.8); } }
 .featured-title { font-family: var(--f-display); font-weight: 800; font-size: clamp(28px, 2.6vw, 34px); line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; }
@@ -136,17 +136,17 @@ const watchTo = computed(() =>
    Verified against the real 73-char Mushoku Tensei title at 400px height
    (incl. the jp subtitle + a 2-line description): eyebrow stays un-clipped. */
 .featured-title .main { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.featured-title .jp { display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; font-family: var(--f-jp); font-weight: 500; font-size: .42em; letter-spacing: .02em; color: var(--ink-3); margin-top: 8px; }
-.featured-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: 13px; }
+.featured-title .jp { display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; font-family: var(--f-jp); font-weight: 500; font-size: .42em; letter-spacing: .02em; color: var(--muted-foreground); margin-top: 8px; }
+.featured-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; color: var(--muted-foreground); font-size: 13px; }
 .featured-meta .dot { width: 3px; height: 3px; border-radius: 999px; background: currentColor; opacity: .4; }
 .featured-meta .score { display: inline-flex; align-items: center; gap: 6px; color: var(--color-warning); font-weight: 600; }
 .featured-meta .chip-genre { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 12px; color: var(--ink-2); }
 /* 2 lines (was 3) — reclaims vertical room for the now-3-line title clamp. */
 .featured-desc { font-size: 15px; line-height: 1.6; color: var(--ink-2); max-width: 540px; text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .featured-actions { display: flex; gap: 10px; align-items: center; }
-.btn-primary-hero { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; background: var(--accent); color: #001218; border-radius: 12px; font-weight: 700; font-size: 14px; transition: filter .15s ease, box-shadow .15s ease; }
+.btn-primary-hero { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; background: var(--brand-cyan); color: #001218; border-radius: 12px; font-weight: 700; font-size: 14px; transition: filter .15s ease, box-shadow .15s ease; }
 .btn-primary-hero:hover { filter: brightness(1.08); box-shadow: var(--accent-glow); }
-.btn-secondary-hero { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; background: rgba(255,255,255,.06); border: 1px solid var(--line-strong); border-radius: 12px; font-weight: 600; font-size: 14px; color: var(--ink); }
+.btn-secondary-hero { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; background: rgba(255,255,255,.06); border: 1px solid var(--line-strong); border-radius: 12px; font-weight: 600; font-size: 14px; color: var(--foreground); }
 .btn-secondary-hero:hover { background: rgba(255,255,255,.1); }
 @media (max-width: 640px) { .featured-content { padding: 24px; } }
 </style>

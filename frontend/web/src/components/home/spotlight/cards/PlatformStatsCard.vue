@@ -119,7 +119,7 @@ function formatBytes(n: number): string {
   font-weight: 800;
   line-height: 1.05;
   letter-spacing: -0.025em;
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 .stats-ok {
@@ -134,7 +134,7 @@ function formatBytes(n: number): string {
 .stats-uptime {
   font-family: var(--f-mono);
   font-size: 13px;
-  color: var(--accent);
+  color: var(--brand-cyan);
   letter-spacing: 0.04em;
 }
 
@@ -150,7 +150,7 @@ function formatBytes(n: number): string {
   font-style: italic;
   font-size: 14px;
   color: var(--ink-2);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--brand-cyan);
   padding-left: 14px;
   max-width: 380px;
 }
@@ -177,7 +177,7 @@ function formatBytes(n: number): string {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--accent);
+  color: var(--brand-cyan);
   margin-bottom: 6px;
 }
 
@@ -187,12 +187,12 @@ function formatBytes(n: number): string {
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 .stat-tile-sub {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--muted-foreground);
   margin-top: 6px;
 }
 

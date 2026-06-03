@@ -7,7 +7,7 @@
         plus a purple secondary overlay so the card reads as "discovery"
         rather than the cyan "anime of day" sibling.
       - Promoted kicker now leads with a <SpotlightIcon name="shuffle" />
-        in purple-300, with a purple-200 label.
+        in brand-violet, with a brand-violet label.
       - Desktop subtitle is one of 4 rotating taglines (i18n
         spotlight.randomTail.taglines[]), picked at mount via Math.random.
         Falls back to spotlight.randomTail.subtitle when the array is
@@ -26,7 +26,7 @@
          the cyan FeaturedCard backdrop without re-fetching the poster. -->
     <div
       aria-hidden="true"
-      class="absolute inset-0 bg-gradient-to-r from-purple-500/30 via-transparent to-transparent"
+      class="absolute inset-0 bg-gradient-to-r from-brand-violet/30 via-transparent to-transparent"
     />
 
     <!-- Mount-time shuffle-deck animation. Skipped entirely when the user
@@ -53,9 +53,9 @@
     >
       <header class="md:hidden">
         <div class="flex items-center gap-2 mb-1">
-          <SpotlightIcon name="shuffle" class="w-4 h-4 text-purple-300" />
+          <SpotlightIcon name="shuffle" class="w-4 h-4 text-brand-violet" />
           <p
-            class="text-purple-200 text-[10px] uppercase tracking-[0.18em] font-semibold"
+            class="text-brand-violet text-[10px] uppercase tracking-[0.18em] font-semibold"
           >
             {{ t('spotlight.randomTail.title') }}
           </p>
@@ -67,7 +67,7 @@
         class="flex-shrink-0 self-center md:self-center w-32 md:w-44 lg:w-56 group"
       >
         <div
-          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-purple-500/20 transition-shadow duration-300 group-hover:shadow-purple-500/40"
+          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-brand-violet/20 transition-shadow duration-300 group-hover:shadow-brand-violet/40"
         >
           <img
             :src="data.anime.poster_url || '/placeholder.svg'"
@@ -81,9 +81,9 @@
       <div class="flex-1 flex flex-col justify-between gap-3 min-w-0">
         <div>
           <div class="hidden md:flex items-center gap-2 mb-2">
-            <SpotlightIcon name="shuffle" class="w-4 h-4 text-purple-300" />
+            <SpotlightIcon name="shuffle" class="w-4 h-4 text-brand-violet" />
             <p
-              class="text-purple-200 text-[10px] uppercase tracking-[0.18em] font-semibold"
+              class="text-brand-violet text-[10px] uppercase tracking-[0.18em] font-semibold"
             >
               {{ t('spotlight.randomTail.title') }}
             </p>
@@ -109,7 +109,7 @@
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <span
               v-if="data.anime.score"
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-yellow-500/20 text-yellow-200"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-warning/20 text-warning"
             >
               <svg
                 class="w-3 h-3"
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign).
    Swap hardcoded gray values for semantic design tokens. */
-.rt-muted { color: var(--ink-3); }
+.rt-muted { color: var(--muted-foreground); }
 .rt-chip {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--line);

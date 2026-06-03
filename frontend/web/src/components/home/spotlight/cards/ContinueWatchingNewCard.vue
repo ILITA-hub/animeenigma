@@ -9,7 +9,7 @@
          distinguishes this card from NotTimeYet's amber. -->
     <div
       aria-hidden="true"
-      class="absolute inset-0 bg-gradient-to-r from-purple-500/30 via-transparent to-transparent"
+      class="absolute inset-0 bg-gradient-to-r from-brand-violet/30 via-transparent to-transparent"
     />
 
     <div
@@ -21,7 +21,7 @@
         class="relative flex-shrink-0 self-center md:self-start w-32 md:w-40 lg:w-52 group"
       >
         <div
-          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-purple-500/30"
+          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-brand-violet/30"
         >
           <img
             :src="data.anime.poster_url || '/placeholder.svg'"
@@ -31,7 +31,7 @@
           />
           <!-- Hero ribbon ACROSS the top of the poster -->
           <div
-            class="absolute inset-x-0 top-0 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white text-xs font-semibold uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5"
+            class="absolute inset-x-0 top-0 px-3 py-1.5 bg-gradient-to-r from-brand-violet to-fuchsia-500 text-white text-xs font-semibold uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5"
           >
             <SpotlightIcon
               name="play"
@@ -52,10 +52,10 @@
           <div class="flex items-center gap-2 mb-3">
             <SpotlightIcon
               name="play"
-              class="w-5 h-5 text-purple-300"
+              class="w-5 h-5 text-brand-violet"
             />
             <p
-              class="text-purple-200 text-sm font-semibold uppercase tracking-[0.15em]"
+              class="text-brand-violet text-sm font-semibold uppercase tracking-[0.15em]"
             >
               {{ t('spotlight.continueWatchingNew.title') }}
             </p>
@@ -77,7 +77,7 @@
           </p>
           <!-- Accent: what's new -->
           <p
-            class="mt-1 text-lg text-purple-200 font-semibold tabular-nums"
+            class="mt-1 text-lg text-brand-violet font-semibold tabular-nums"
           >
             {{
               t('spotlight.continueWatchingNew.newEpisodeLine', {
@@ -137,5 +137,5 @@ const watchUrl = computed<string>(
 
 <style scoped>
 /* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
-.cwn-muted { color: var(--ink-3); }
+.cwn-muted { color: var(--muted-foreground); }
 </style>

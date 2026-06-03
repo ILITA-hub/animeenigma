@@ -15,7 +15,7 @@
     Neon Tokyo restyle (feat/homepage-neon-tokyo-redesign):
       36×36 round pill, rgba(8,8,15,0.7) bg + blur(8px) backdrop filter,
       1px solid var(--line) border, var(--ink-2) icon, hover raises to
-      rgba(255,255,255,.08) + var(--line-strong) border + var(--ink).
+      rgba(255,255,255,.08) + var(--line-strong) border + var(--foreground).
       Transcribed from .arrow-btn / .arrow-l / .arrow-r in the design
       handoff styles.css.
   -->
@@ -96,7 +96,7 @@ const { t } = useI18n()
 .arrow-next:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: var(--line-strong);
-  color: var(--ink);
+  color: var(--foreground);
 }
 
 .arrow-prev:focus-visible,
