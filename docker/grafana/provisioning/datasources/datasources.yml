@@ -2,7 +2,12 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
-    uid: aenigma-prometheus
+    # UID must stay PBFA97CFB590B2093 — every alert rule and the pre-existing
+    # dashboards (player-health, animeenigma-services, scraper-*, library,
+    # watch-together) bind their queries to this exact UID. Renaming it (briefly
+    # done during the tracing rollout) orphaned all 14 alert rules with
+    # "data source not found". Do NOT change without remapping every reference.
+    uid: PBFA97CFB590B2093
     type: prometheus
     access: proxy
     url: http://prometheus:9090/prometheus

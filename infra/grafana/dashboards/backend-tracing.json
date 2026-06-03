@@ -12,7 +12,7 @@
     {
       "type": "timeseries",
       "title": "Request latency p95 by service (s)",
-      "datasource": { "type": "prometheus", "uid": "aenigma-prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
@@ -24,7 +24,7 @@
     {
       "type": "timeseries",
       "title": "5xx error rate by service (req/s)",
-      "datasource": { "type": "prometheus", "uid": "aenigma-prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
