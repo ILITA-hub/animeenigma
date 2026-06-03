@@ -9,9 +9,17 @@ datasources:
     editable: false
 
   - name: Loki
+    uid: aenigma-loki
     type: loki
     access: proxy
     url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: aenigma-tempo
+          url: '$${__value.raw}'
     editable: false
 
   - name: PostgreSQL
@@ -28,3 +36,18 @@ datasources:
     secureJsonData:
       password: postgres
     editable: false
+
+  - name: Tempo
+    type: tempo
+    uid: aenigma-tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: aenigma-loki
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
+        filterByTraceID: true
+        filterBySpanID: false
+      nodeGraph:
+        enabled: true
