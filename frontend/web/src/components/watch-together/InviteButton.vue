@@ -160,7 +160,7 @@ async function onClick(): Promise<void> {
     :disabled="loading"
     :aria-label="t('watch_together.invite_button_label')"
     data-testid="wt-invite-button"
-    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+    class="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
     @click="onClick"
   >
     <span

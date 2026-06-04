@@ -148,6 +148,7 @@
     "episodeUnknown": "? ep.",
     "hide": "Hide",
     "unhide": "Unhide",
+    "adminMenu": "Admin tools",
     "status": {
       "ongoing": "Ongoing",
       "released": "Released",

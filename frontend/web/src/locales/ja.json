@@ -148,6 +148,7 @@
     "episodeUnknown": "?話",
     "hide": "非表示",
     "unhide": "表示",
+    "adminMenu": "管理ツール",
     "status": {
       "ongoing": "放送中",
       "released": "放送終了",

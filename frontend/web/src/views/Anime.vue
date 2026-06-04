@@ -150,25 +150,6 @@
 
           <!-- Actions -->
           <div v-if="authStore.isAuthenticated" class="flex flex-wrap items-center gap-3 mb-6">
-            <!-- Refresh Data Button -->
-            <button
-              @click="refreshAnimeData"
-              :disabled="refreshing"
-              class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all bg-white/5 text-white border border-white/10 hover:bg-white/10 disabled:opacity-50"
-              :title="$t('anime.refreshTooltip')"
-            >
-              <svg
-                class="w-5 h-5 transition-transform"
-                :class="{ 'animate-spin': refreshing }"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span class="hidden sm:inline">{{ refreshing ? $t('anime.refreshing') : $t('anime.refresh') }}</span>
-            </button>
-
             <!-- Watchlist Status Dropdown -->
             <div class="relative" ref="dropdownRef">
               <button
@@ -241,34 +222,68 @@
               </Transition>
             </div>
 
-            <!-- Hide Button (Admin only) -->
-            <button
+            <!-- Admin Tools (Admin only) — kebab groups maintenance/moderation
+                 actions (Refresh, Hide, Shikimori ID) into a visually distinct
+                 amber-tinted cluster, separate from the user action above. -->
+            <DropdownMenu
               v-if="authStore.isAdmin"
-              @click="toggleHidden"
-              class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all"
-              :class="isHidden
-                ? 'bg-warning-soft text-warning border border-warning/30 hover:bg-warning/30'
-                : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'"
+              v-model:open="showAdminMenu"
+              align="end"
+              side="bottom"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-              </svg>
-              <span>{{ isHidden ? $t('anime.unhide') : $t('anime.hide') }}</span>
-            </button>
+              <template #trigger>
+                <button
+                  type="button"
+                  :aria-label="$t('anime.adminMenu')"
+                  aria-haspopup="menu"
+                  :aria-expanded="showAdminMenu"
+                  class="flex items-center justify-center w-10 h-10 rounded-lg bg-warning-soft text-warning border border-warning/30 hover:bg-warning/30 transition-all"
+                >
+                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+                  </svg>
+                </button>
+              </template>
 
-            <!-- Edit Shikimori ID (Admin only) -->
-            <button
-              v-if="authStore.isAdmin"
-              @click="showShikimoriEdit = !showShikimoriEdit"
-              class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all bg-white/5 text-white border border-white/10 hover:bg-white/10"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              <span>Shikimori ID</span>
-            </button>
+              <!-- Refresh Data — moved out of the user row; admin/maintenance only -->
+              <DropdownMenuItem
+                :disabled="refreshing"
+                class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left cursor-pointer outline-none text-white/70 hover:bg-white/5 hover:text-white data-[highlighted]:bg-white/5 data-[highlighted]:text-white data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed"
+                @select="refreshAnimeData"
+              >
+                <svg class="w-4 h-4 flex-shrink-0" :class="{ 'animate-spin': refreshing }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {{ refreshing ? $t('anime.refreshing') : $t('anime.refresh') }}
+              </DropdownMenuItem>
+
+              <!-- Hide / Unhide -->
+              <DropdownMenuItem
+                class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left cursor-pointer outline-none data-[highlighted]:bg-white/5"
+                :class="isHidden
+                  ? 'text-warning hover:bg-warning/10 data-[highlighted]:bg-warning/10'
+                  : 'text-white/70 hover:bg-white/5 hover:text-white data-[highlighted]:text-white'"
+                @select="toggleHidden"
+              >
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                </svg>
+                {{ isHidden ? $t('anime.unhide') : $t('anime.hide') }}
+              </DropdownMenuItem>
+
+              <!-- Edit Shikimori ID — toggles the inline edit panel below -->
+              <DropdownMenuItem
+                class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left cursor-pointer outline-none text-white/70 hover:bg-white/5 hover:text-white data-[highlighted]:bg-white/5 data-[highlighted]:text-white"
+                @select="showShikimoriEdit = !showShikimoriEdit"
+              >
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Shikimori ID
+              </DropdownMenuItem>
+            </DropdownMenu>
           </div>
 
           <!-- Shikimori ID Edit Panel (Admin only) -->
@@ -1013,7 +1028,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, ButtonGroup } from '@/components/ui'
+import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem } from '@/components/ui'
 import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
@@ -1176,6 +1191,9 @@ const relatedAnime = ref<RelatedAnime[]>([])
 const refreshing = ref(false)
 const isHidden = ref(false)
 const showShikimoriEdit = ref(false)
+// Admin kebab (Refresh / Hide / Shikimori ID) — admin-only, grouped out of the
+// user action row. Controlled open state for the DropdownMenu #trigger.
+const showAdminMenu = ref(false)
 const editShikimoriId = ref('')
 const savingShikimoriId = ref(false)
 // Runtime-validate localStorage values — users who previously selected an

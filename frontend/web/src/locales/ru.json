@@ -148,6 +148,7 @@
     "episodeUnknown": "? эп.",
     "hide": "Скрыть",
     "unhide": "Показать",
+    "adminMenu": "Инструменты админа",
     "status": {
       "ongoing": "Онгоинг",
       "released": "Вышло",

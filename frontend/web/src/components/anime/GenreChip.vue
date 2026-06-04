@@ -1,11 +1,11 @@
 <template>
   <router-link
     :to="`/browse?genre=${encodeURIComponent(genre)}`"
-    class="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white/80 transition-all hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-white/10 touch-target"
+    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80 transition-all hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-white/10 min-h-[44px] md:min-h-0"
   >
     <!-- Icon -->
-    <component v-if="icon" :is="icon" class="w-5 h-5" />
-    <span v-else-if="emoji" class="text-lg">{{ emoji }}</span>
+    <component v-if="icon" :is="icon" class="w-4 h-4" />
+    <span v-else-if="emoji" class="text-base">{{ emoji }}</span>
 
     <!-- Label -->
     <span class="font-medium">{{ label || genre }}</span>
