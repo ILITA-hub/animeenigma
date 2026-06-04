@@ -68,9 +68,17 @@ func (h *AuthHandler) setRefreshTokenCookie(w http.ResponseWriter, token string)
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     refreshTokenCookieName,
-		Value:    token,
-		Path:     "/api/auth",
+		Name:  refreshTokenCookieName,
+		Value: token,
+		// Path "/" (not "/api/auth") so the gateway's AdminSessionRefreshMiddleware
+		// can read it on /admin/* and transparently renew the short-lived access
+		// token for browser-driven admin tools (Grafana), which run outside the
+		// Vue SPA and so can't trigger the SPA's /api/auth/refresh interceptor.
+		// The token stays HttpOnly+Secure, and the gateway strips the Cookie
+		// header before forwarding to any downstream service (proxy.go
+		// copyForwardHeaders + ws_proxy.go Director), so widening the path does
+		// not expose the refresh token to backends.
+		Path:     "/",
 		Domain:   h.cookieConfig.Domain,
 		MaxAge:   int(refreshTokenMaxAge.Seconds()),
 		HttpOnly: true,
@@ -80,15 +88,22 @@ func (h *AuthHandler) setRefreshTokenCookie(w http.ResponseWriter, token string)
 }
 
 func (h *AuthHandler) clearRefreshTokenCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     refreshTokenCookieName,
-		Value:    "",
-		Path:     "/api/auth",
-		Domain:   h.cookieConfig.Domain,
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   h.cookieConfig.Secure,
-	})
+	// Clear at BOTH paths: the current cookie is set at "/", but sessions
+	// created before the path-widening deploy hold a cookie at "/api/auth".
+	// A cookie is keyed by (name, path, domain), so a single "/" deletion
+	// would not remove the legacy "/api/auth" cookie, leaving an orphaned
+	// 30-day credential in the browser. Emit a deletion for each path.
+	for _, path := range []string{"/", "/api/auth"} {
+		http.SetCookie(w, &http.Cookie{
+			Name:     refreshTokenCookieName,
+			Value:    "",
+			Path:     path,
+			Domain:   h.cookieConfig.Domain,
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   h.cookieConfig.Secure,
+		})
+	}
 }
 
 func (h *AuthHandler) setAccessTokenCookie(w http.ResponseWriter, token string, expiresAt time.Time) {

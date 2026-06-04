@@ -136,8 +136,18 @@ func NewRouterWithCleanup(
 	// Admin panel routes (protected by admin role, unless DevMode is enabled)
 	r.Route("/admin", func(r chi.Router) {
 		if !cfg.DevMode {
+			// AdminSessionRefreshMiddleware runs FIRST: browser-driven admin
+			// tools (Grafana etc.) run outside the Vue SPA, so nothing renews
+			// the 15-min access_token cookie. This transparently refreshes it
+			// from the refresh_token cookie so admin sessions last as long as
+			// the login, instead of 401ing every ~15 min.
+			r.Use(AdminSessionRefreshMiddleware(cfg.JWT, cfg.Services.AuthService, log))
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
-			r.Use(userRateLimit)
+			// NOTE: the per-user GCRA limiter (userRateLimit) is deliberately
+			// NOT applied here. A single Grafana/Prometheus page fires dozens
+			// of sub-requests, which tripped the 60/min budget and produced
+			// spurious 429s. /admin is already admin-gated (JWT + AdminRole,
+			// single trusted user) and the global per-IP limiter still applies.
 			r.Use(AdminRoleMiddleware)
 		}
 

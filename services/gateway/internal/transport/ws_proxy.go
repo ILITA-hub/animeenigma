@@ -75,6 +75,14 @@ func newWSProxy(targetBaseURL string, log *logger.Logger) (http.HandlerFunc, err
 		// doesn't care about Host, but a few middlewares do (e.g. CORS),
 		// so we set it to the target host explicitly for cleanliness.
 		req.Host = target.Host
+		// Strip the Cookie header before forwarding. Unlike the standard
+		// ProxyService.Forward path, this reverse proxy copies request headers
+		// verbatim — so it would otherwise leak the browser's auth cookies
+		// (access_token at Path=/, and refresh_token which is also Path=/ so
+		// it can reach the gateway on /admin) to the watch-together service.
+		// The WS endpoint authenticates via the ?token= query param (see the
+		// package doc above), so it needs no cookies. Drop them.
+		req.Header.Del("Cookie")
 	}
 
 	// FlushInterval=-1 flushes immediately after every write. Mandatory for
