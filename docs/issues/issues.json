@@ -1,5 +1,5 @@
 {
-  "last_id": 353,
+  "last_id": 358,
   "issues": [
     {
       "id": "AUTO-001",
@@ -5673,15 +5673,90 @@
     {
       "id": "AUTO-353",
       "created_at": "2026-06-03T07:43:49Z",
+      "resolved_at": "2026-06-03T09:57:39Z",
       "source": "grafana_alert",
       "category": "upstream_cdn",
       "priority": "P1",
-      "status": "escalated",
+      "status": "resolved",
       "title": "AnimeFever CDN returning 403 — HLS proxy 502s",
       "reporter": "grafana",
       "telegram_message_id": 2804,
       "affected_service": "streaming",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-354",
+      "created_at": "2026-06-03T09:57:38Z",
+      "resolved_at": "2026-06-03T09:57:39Z",
+      "source": "grafana_alert",
+      "category": "false_positive",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Themes P95 alert — sparse-traffic false positive",
+      "reporter": "grafana",
+      "telegram_message_id": 2806,
+      "affected_service": "themes",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-355",
+      "created_at": "2026-06-03T10:46:15Z",
+      "source": "grafana_alert",
+      "category": "false_positive",
+      "priority": "P3",
+      "status": "no_action_required",
+      "title": "ScraperPlayabilityRegression: gogoanime/1anime cdn_unreachable — false positive (stale label + youtube stub)",
+      "reporter": "grafana",
+      "telegram_message_id": 2810,
+      "affected_service": "gogoanime",
       "actions": null
+    },
+    {
+      "id": "AUTO-356",
+      "created_at": "2026-06-03T11:09:35Z",
+      "resolved_at": "2026-06-03T11:12:35Z",
+      "source": "grafana_alert",
+      "category": "latency",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Themes P95 spike: 211ms Go GC STW pause",
+      "reporter": "grafana",
+      "telegram_message_id": 2812,
+      "affected_service": "themes",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-357",
+      "created_at": "2026-06-03T12:29:57Z",
+      "resolved_at": "2026-06-04T00:18:32Z",
+      "source": "grafana_alert",
+      "category": "alert_noise",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "False-positive P95 alert on idle themes service",
+      "reporter": "grafana",
+      "telegram_message_id": 2815,
+      "affected_service": "themes",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-358",
+      "created_at": "2026-06-04T01:08:38Z",
+      "resolved_at": "2026-06-04T01:12:30Z",
+      "source": "grafana_alert",
+      "category": "noise",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Library P95 latency — false positive, no real traffic",
+      "reporter": "grafana",
+      "telegram_message_id": 2819,
+      "affected_service": "library",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
     }
   ]
 }

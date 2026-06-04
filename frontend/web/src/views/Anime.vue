@@ -1320,7 +1320,10 @@ watch(
 // guaranteed last < total).
 const resumeNextEpisodeNumber = computed<number | undefined>(() => {
   if (resume.kind.value === 'not-yet-aired' || resume.kind.value === 'currently-airing') {
-    return Math.max(1, resume.lastWatched.value + 1)
+    // Use episodesAired + 1 — the next episode to AIR — so this matches the
+    // top-of-page airing banner (which uses the same formula) instead of
+    // diverging on `lastWatched + 1` when catalog/progress data is out of sync.
+    return Math.max(1, resumeAired.value + 1)
   }
   return undefined
 })
@@ -1332,9 +1335,16 @@ const resumePillProps = computed(() => {
   if (!authStore.isAuthenticated || !resume.loaded.value || resume.kind.value === 'first-time') {
     return { kind: 'first-time' as const }
   }
-  const etaLabel = (resume.kind.value === 'not-yet-aired' && resumeNextAt.value)
-    ? formatNextEpisode(resumeNextAt.value)
-    : undefined
+  // Only surface an ETA when the air time is genuinely in the future. A past
+  // nextEpisodeAt (stale airing data that just degraded out of currently-airing)
+  // would otherwise format into a date in the PAST; suppress it so the pill
+  // shows the honest "not yet available" instead of a nonsensical past ETA.
+  const hasFutureEta =
+    !!resumeNextAt.value && new Date(resumeNextAt.value).getTime() > Date.now()
+  const etaLabel =
+    resume.kind.value === 'not-yet-aired' && hasFutureEta
+      ? formatNextEpisode(resumeNextAt.value as string)
+      : undefined
   return {
     kind: resume.kind.value,
     finishedEpisode: resume.finishedEpisode.value,

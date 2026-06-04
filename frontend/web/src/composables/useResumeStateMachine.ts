@@ -1,5 +1,15 @@
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import { ref, computed, onScopeDispose, type Ref, type ComputedRef } from 'vue'
 import { userApi } from '@/api/client'
+
+/**
+ * Grace window for the "currently airing" hint. The episode's announced air
+ * time has passed but our catalog hasn't recorded it as aired yet — a real but
+ * SHORT data-lag window. Past this, the airing data is stale/stuck (hiatus, a
+ * silently-ended show whose status is still 'ongoing', or scheduler lag) and we
+ * must not keep promising the episode "appears within an hour" indefinitely, so
+ * we degrade to not-yet-aired (which renders the honest "not yet available").
+ */
+const CURRENTLY_AIRING_WINDOW_MS = 6 * 60 * 60 * 1000 // 6h
 
 /**
  * useResumeStateMachine — Phase 4 (A-03, A-04).
@@ -85,6 +95,20 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
   // greater than totalEpisodes.
   const rawLastWatched = ref(0)
 
+  // Reactive "now" so the airing-state predicates self-heal as time passes,
+  // without a page refresh. `kind` previously read Date.now() directly, which
+  // isn't a reactive dependency — so not-yet-aired never flipped to
+  // currently-airing in-session, and currently-airing never expired. Ticking a
+  // ref once a minute makes `kind` recompute on a coarse-but-free cadence,
+  // which is plenty for an hours-wide grace window.
+  const nowMs = ref(Date.now())
+  if (typeof window !== 'undefined') {
+    const timer = window.setInterval(() => {
+      nowMs.value = Date.now()
+    }, 60_000)
+    onScopeDispose(() => window.clearInterval(timer))
+  }
+
   async function init() {
     loaded.value = false
     if (!inputs.isAuthenticated.value) {
@@ -145,11 +169,18 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     const nextIsAired = aired > 0 && aired > last
     if (isReleased || nextIsAired) return 'watching'
 
-    // Ongoing series, next ep not yet aired. Pick which copy to show based
-    // on whether the announced air time has passed.
+    // Ongoing series, next ep not yet aired. Pick which copy to show based on
+    // whether the announced air time has passed — but ONLY treat it as
+    // "currently airing" within a short grace window. A nextEpisodeAt that
+    // passed long ago is stale/stuck airing data (hiatus, silently-ended show,
+    // scheduler lag); keeping the "appears within an hour" promise alive
+    // indefinitely would be a lie, so we fall through to not-yet-aired.
     if (status === 'ongoing' && nextAt) {
       const t = new Date(nextAt).getTime()
-      if (!Number.isNaN(t) && t < Date.now()) return 'currently-airing'
+      if (!Number.isNaN(t)) {
+        const elapsed = nowMs.value - t
+        if (elapsed >= 0 && elapsed < CURRENTLY_AIRING_WINDOW_MS) return 'currently-airing'
+      }
     }
     return 'not-yet-aired'
   })

@@ -5,13 +5,13 @@
   "reactions_supported": true,
   "bot_user_id": 8609426278,
   "active_alerts": {
-    "High Error Rate:streaming": {
-      "alert_uid": "High Error Rate",
-      "service": "streaming",
-      "first_seen": "2026-06-03T07:43:49Z",
-      "last_seen": "2026-06-03T07:43:49Z",
-      "issue_id": "AUTO-353",
-      "status": "escalate"
+    "ScraperPlayabilityRegression:gogoanime": {
+      "alert_uid": "ScraperPlayabilityRegression",
+      "service": "gogoanime",
+      "first_seen": "2026-06-03T10:46:15Z",
+      "last_seen": "2026-06-03T10:46:15Z",
+      "issue_id": "AUTO-355",
+      "status": "info_only"
     }
   },
   "cooldowns": {
@@ -33,7 +33,7 @@
     "code_fix:services/scraper/internal/providers/animefever/client.go": "2026-05-26T06:59:47+02:00",
     "docker_pull:aniwatch": "2026-04-27T03:29:05+02:00",
     "docker_pull:consumet": "2026-04-03T10:56:33+02:00",
-    "escalate-outage:global": "2026-06-03T16:25:34+02:00",
+    "escalate-outage:global": "2026-06-04T16:30:55+02:00",
     "redeploy:scraper": "2026-05-21T03:47:54+02:00",
     "redeploy:web": "2026-04-06T09:05:52+02:00",
     "restart:catalog": "2026-04-05T05:09:33+02:00",
