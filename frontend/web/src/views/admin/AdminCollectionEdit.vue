@@ -24,7 +24,6 @@
             variant="default"
             size="sm"
             :disabled="isSaving || !form.title"
-            :loading="isSaving"
             @click="onSave"
           >
             {{ isSaving ? '…' : $t('admin.collections.save') }}
@@ -221,11 +220,11 @@
                   class="w-16 px-2 py-1 rounded bg-black/40 border border-white/10 text-white text-sm text-right"
                   @change="(e) => onUpdateSort(item, (e.target as HTMLInputElement).valueAsNumber)"
                 />
-                <Button
-                  variant="destructive"
-                  size="xs"
+                <button
+                  type="button"
+                  class="px-3 py-1 rounded bg-destructive/30 hover:bg-destructive/50 text-xs text-destructive"
                   @click="onRemoveItem(item)"
-                >{{ $t('admin.collections.itemRemove') }}</Button>
+                >{{ $t('admin.collections.itemRemove') }}</button>
               </div>
             </li>
           </ul>

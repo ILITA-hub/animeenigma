@@ -68,11 +68,11 @@
                   :to="`/admin/collections/${c.id}`"
                   class="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-xs"
                 >{{ $t('admin.collections.edit') }}</router-link>
-                <Button
-                  variant="destructive"
-                  size="xs"
+                <button
+                  type="button"
+                  class="px-3 py-1 rounded bg-destructive/30 hover:bg-destructive/50 text-xs text-destructive"
                   @click="onDelete(c)"
-                >{{ $t('admin.collections.delete') }}</Button>
+                >{{ $t('admin.collections.delete') }}</button>
               </td>
             </tr>
           </tbody>
@@ -86,7 +86,6 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminApi, type Collection } from '@/api/client'
-import Button from '@/components/ui/Button.vue'
 
 const { t } = useI18n()
 
