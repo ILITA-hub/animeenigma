@@ -13,10 +13,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/config"
+	"github.com/ILITA-hub/animeenigma/services/analytics/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/ingest"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/job"
@@ -58,7 +60,46 @@ func main() {
 		log.Fatalw("view create failed", "error", err)
 	}
 
-	store := repo.NewPostgresStore(db.DB)
+	// Postgres store is ALWAYS constructed — it is the dual-write primary /
+	// source of truth and the reversible-rollback path. The PG tables/view are
+	// migrated above regardless of backend.
+	pgStore := repo.NewPostgresStore(db.DB)
+
+	// Select the EventStore on ANALYTICS_STORE_BACKEND (default "postgres" keeps
+	// the system exactly as today). "clickhouse"/"dualwrite" open the native CH
+	// connection + run EnsureSchema. On CH failure: clickhouse → Fatal (explicit
+	// CH-only must not silently fall back); dualwrite → WARN + degrade to PG-only
+	// (a CH outage must never take analytics down — T-01-07 reversibility).
+	log.Infow("analytics store backend", "backend", cfg.StoreBackend)
+	var store domain.EventStore = pgStore
+	var chConn driver.Conn
+	if cfg.StoreBackend == "clickhouse" || cfg.StoreBackend == "dualwrite" {
+		conn, err := repo.OpenClickHouse(repo.CHConfig{
+			Addr:     cfg.ClickHouse.Addr(),
+			Database: cfg.ClickHouse.Database,
+			Username: cfg.ClickHouse.User,
+			Password: cfg.ClickHouse.Password,
+		})
+		if err == nil {
+			err = repo.EnsureSchema(context.Background(), conn)
+		}
+		if err != nil {
+			if cfg.StoreBackend == "clickhouse" {
+				log.Fatalw("clickhouse backend selected but unavailable", "error", err)
+			}
+			log.Warnw("dualwrite: clickhouse unavailable at boot — degrading to postgres-only", "error", err)
+		} else {
+			chConn = conn
+			defer chConn.Close()
+			chStore := repo.NewClickHouseStore(chConn)
+			if cfg.StoreBackend == "clickhouse" {
+				store = chStore
+			} else {
+				store = repo.NewDualWriteStore(pgStore, chStore, log)
+			}
+		}
+	}
+
 	batcher := ingest.New(store, ingest.Config{
 		MaxBatch:      cfg.MaxBatch,
 		FlushInterval: cfg.FlushInterval,
@@ -67,7 +108,7 @@ func main() {
 	batcher.Start()
 
 	collectHandler := handler.NewCollectHandler(countingSink{batcher}, cfg.IPSalt)
-	adminHandler := handler.NewAdminHandler(repoEraser{db: db})
+	adminHandler := handler.NewAdminHandler(repoEraser{db: db, chConn: chConn})
 
 	purgeJob := job.NewPurgeJob(repoPurger{db: db}, cfg.RetentionDays, log)
 	c := cron.New()
