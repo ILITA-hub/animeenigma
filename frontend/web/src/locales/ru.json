@@ -97,7 +97,8 @@
       "findSimilar": "Найти похожее",
       "notYetAvailable": "Эпизод {n} ещё не вышел.",
       "notYetAvailableEta": "Эпизод {n} выйдет {when}.",
-      "currentlyAiring": "Эпизод {n} выходит прямо сейчас — обычно появляется в течение часа."
+      "episodeNotLoaded": "Эпизод {n} уже вышел — загружаем. Обычно появляется в течение часа.",
+      "episodeNotLoadedDelayed": "Эпизод {n} уже вышел, но ещё не загружен. Загрузка задерживается."
     },
     "rateStar": "Оценить на {n} из 10",
     "episodesShort": "эп.",

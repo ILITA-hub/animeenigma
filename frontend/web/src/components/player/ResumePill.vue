@@ -60,13 +60,14 @@
       </span>
     </template>
 
-    <!-- currently-airing -->
-    <template v-else-if="kind === 'currently-airing' && nextEpisodeNumber">
+    <!-- episode-not-loaded-yet: aired (air time passed) but not in our sources yet -->
+    <template v-else-if="kind === 'episode-not-loaded-yet' && nextEpisodeNumber">
       <span class="relative flex h-2 w-2 flex-shrink-0" aria-hidden="true">
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400/60 opacity-75"></span>
         <span class="relative inline-flex rounded-full h-2 w-2 bg-pink-400/70"></span>
       </span>
-      <span>{{ t('anime.resume.currentlyAiring', { n: nextEpisodeNumber }) }}</span>
+      <span v-if="loadDelayed">{{ t('anime.resume.episodeNotLoadedDelayed', { n: nextEpisodeNumber }) }}</span>
+      <span v-else>{{ t('anime.resume.episodeNotLoaded', { n: nextEpisodeNumber }) }}</span>
     </template>
   </div>
 </template>
@@ -76,13 +77,15 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
 
-type ResumeKind = 'first-time' | 'watching' | 'finished' | 'not-yet-aired' | 'currently-airing'
+type ResumeKind = 'first-time' | 'watching' | 'finished' | 'not-yet-aired' | 'episode-not-loaded-yet'
 
 const props = defineProps<{
   kind: ResumeKind
   finishedEpisode?: number
   nextEpisodeNumber?: number
   nextEpisodeEtaLabel?: string
+  /** episode-not-loaded-yet only: aired a while ago, still not loaded → softer copy. */
+  loadDelayed?: boolean
   canMarkCompleteInList?: boolean
   findSimilarRoute?: RouteLocationRaw
 }>()
@@ -97,7 +100,7 @@ const { t } = useI18n()
 const visible = computed(() => {
   if (props.kind === 'first-time') return false
   if (props.kind === 'watching') return (props.finishedEpisode ?? 0) > 0
-  if (props.kind === 'not-yet-aired' || props.kind === 'currently-airing') {
+  if (props.kind === 'not-yet-aired' || props.kind === 'episode-not-loaded-yet') {
     return !!props.nextEpisodeNumber
   }
   return true

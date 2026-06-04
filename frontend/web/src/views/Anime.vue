@@ -1319,10 +1319,10 @@ watch(
 // to. Always lastWatched + 1 in those states (the state machine has already
 // guaranteed last < total).
 const resumeNextEpisodeNumber = computed<number | undefined>(() => {
-  if (resume.kind.value === 'not-yet-aired' || resume.kind.value === 'currently-airing') {
-    // Use episodesAired + 1 — the next episode to AIR — so this matches the
-    // top-of-page airing banner (which uses the same formula) instead of
-    // diverging on `lastWatched + 1` when catalog/progress data is out of sync.
+  if (resume.kind.value === 'not-yet-aired' || resume.kind.value === 'episode-not-loaded-yet') {
+    // Use episodesAired + 1 — the episode the announced air time refers to, and
+    // the same formula the top-of-page airing banner uses — so both surfaces
+    // name the same episode instead of diverging on `lastWatched + 1`.
     return Math.max(1, resumeAired.value + 1)
   }
   return undefined
@@ -1336,9 +1336,9 @@ const resumePillProps = computed(() => {
     return { kind: 'first-time' as const }
   }
   // Only surface an ETA when the air time is genuinely in the future. A past
-  // nextEpisodeAt (stale airing data that just degraded out of currently-airing)
-  // would otherwise format into a date in the PAST; suppress it so the pill
-  // shows the honest "not yet available" instead of a nonsensical past ETA.
+  // nextEpisodeAt would otherwise format into a date in the PAST (a past air
+  // time means the episode aired and the state is episode-not-loaded-yet, not
+  // not-yet-aired); suppress it so we never render a nonsensical past ETA.
   const hasFutureEta =
     !!resumeNextAt.value && new Date(resumeNextAt.value).getTime() > Date.now()
   const etaLabel =
@@ -1350,6 +1350,7 @@ const resumePillProps = computed(() => {
     finishedEpisode: resume.finishedEpisode.value,
     nextEpisodeNumber: resumeNextEpisodeNumber.value,
     nextEpisodeEtaLabel: etaLabel,
+    loadDelayed: resume.episodeLoadDelayed.value,
     canMarkCompleteInList: currentListStatus.value !== 'completed',
     findSimilarRoute: anime.value?.genres?.length
       ? { path: '/browse', query: { genres: anime.value.genres[0] } }

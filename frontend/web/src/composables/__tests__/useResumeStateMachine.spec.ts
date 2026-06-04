@@ -47,19 +47,22 @@ describe('useResumeStateMachine — airing state', () => {
     return sm
   }
 
-  it('is currently-airing when air time passed within the grace window', async () => {
+  it('is episode-not-loaded-yet (not delayed) when air time just passed', async () => {
     const nextAt = new Date(Date.now() - 1 * HOUR).toISOString()
     const sm = await setup(makeInputs({ nextEpisodeAt: ref(nextAt) }))
-    expect(sm.kind.value).toBe('currently-airing')
+    expect(sm.kind.value).toBe('episode-not-loaded-yet')
+    expect(sm.episodeLoadDelayed.value).toBe(false)
   })
 
-  it('degrades to not-yet-aired when air time is stale (past the window)', async () => {
-    const nextAt = new Date(Date.now() - 10 * HOUR).toISOString()
+  it('marks load delayed when air time passed long ago but catalog never caught up', async () => {
+    // The Re:Zero S4 case: aired ~a day ago, episodes_aired still stuck.
+    const nextAt = new Date(Date.now() - 27 * HOUR).toISOString()
     const sm = await setup(makeInputs({ nextEpisodeAt: ref(nextAt) }))
-    expect(sm.kind.value).toBe('not-yet-aired')
+    expect(sm.kind.value).toBe('episode-not-loaded-yet') // NOT not-yet-aired
+    expect(sm.episodeLoadDelayed.value).toBe(true)
   })
 
-  it('self-heals not-yet-aired → currently-airing as the clock advances', async () => {
+  it('self-heals not-yet-aired → episode-not-loaded-yet as the clock advances', async () => {
     const nextAt = new Date(Date.now() + 2 * 60_000).toISOString() // 2 min out
     const sm = await setup(makeInputs({ nextEpisodeAt: ref(nextAt) }))
     expect(sm.kind.value).toBe('not-yet-aired')
@@ -67,12 +70,13 @@ describe('useResumeStateMachine — airing state', () => {
     // Advance past the air time; the internal 60s tick refreshes reactive `now`.
     await vi.advanceTimersByTimeAsync(3 * 60_000)
     await nextTick()
-    expect(sm.kind.value).toBe('currently-airing')
+    expect(sm.kind.value).toBe('episode-not-loaded-yet')
   })
 
   it('stays not-yet-aired for a far-future air time', async () => {
     const nextAt = new Date(Date.now() + 48 * HOUR).toISOString()
     const sm = await setup(makeInputs({ nextEpisodeAt: ref(nextAt) }))
     expect(sm.kind.value).toBe('not-yet-aired')
+    expect(sm.episodeLoadDelayed.value).toBe(false)
   })
 })

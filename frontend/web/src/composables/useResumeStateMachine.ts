@@ -2,14 +2,16 @@ import { ref, computed, onScopeDispose, type Ref, type ComputedRef } from 'vue'
 import { userApi } from '@/api/client'
 
 /**
- * Grace window for the "currently airing" hint. The episode's announced air
- * time has passed but our catalog hasn't recorded it as aired yet — a real but
- * SHORT data-lag window. Past this, the airing data is stale/stuck (hiatus, a
- * silently-ended show whose status is still 'ongoing', or scheduler lag) and we
- * must not keep promising the episode "appears within an hour" indefinitely, so
- * we degrade to not-yet-aired (which renders the honest "not yet available").
+ * Grace window for the "episode-not-loaded-yet" hint. Once an episode's
+ * announced air time passes we KNOW it aired — it's just not loaded into our
+ * catalog/sources yet (Shikimori episodes_aired lag, provider delay). Within
+ * this window we tell the user it usually shows up within the hour; past it the
+ * load is clearly delayed (or the airing data is stale — hiatus, a
+ * silently-ended show still flagged 'ongoing', scheduler lag), so we switch to
+ * a softer copy that makes no time promise. Either way we never claim the
+ * episode hasn't aired — its air time is demonstrably in the past.
  */
-const CURRENTLY_AIRING_WINDOW_MS = 6 * 60 * 60 * 1000 // 6h
+const EPISODE_LOAD_GRACE_MS = 3 * 60 * 60 * 1000 // 3h
 
 /**
  * useResumeStateMachine — Phase 4 (A-03, A-04).
@@ -26,13 +28,16 @@ const CURRENTLY_AIRING_WINDOW_MS = 6 * 60 * 60 * 1000 // 6h
  *   - finished       — last == total. Player still mounts (in case of rewatch),
  *                      but a "you finished this" surface renders alongside.
  *                      startEpisode=last (re-loads the final ep).
- *   - not-yet-aired  — last < total but the next episode hasn't aired yet
- *                      (anime.status='ongoing' AND nextEpisodeAt > now AND
- *                      episodesAired <= last). Player still mounts on
- *                      startEpisode=last so the user can rewatch.
- *   - currently-airing — last < total, nextEpisodeAt has passed but
- *                        episodesAired hasn't caught up yet (data lag). Same
- *                        startEpisode as not-yet-aired.
+ *   - not-yet-aired  — last < total but the next episode genuinely hasn't aired
+ *                      yet (anime.status='ongoing' AND nextEpisodeAt is in the
+ *                      FUTURE — or unknown — AND episodesAired <= last). Player
+ *                      still mounts on startEpisode=last so the user can rewatch.
+ *   - episode-not-loaded-yet — last < total, nextEpisodeAt is in the PAST (so the
+ *                      episode HAS aired) but episodesAired hasn't caught up yet:
+ *                      it aired but isn't loaded into our catalog/sources yet.
+ *                      `episodeLoadDelayed` distinguishes "just aired, loading"
+ *                      from "aired a while ago, still missing". Same startEpisode
+ *                      as not-yet-aired.
  *
  * Anonymous users: this composable is logged-in only — the parent view should
  * keep using its existing localStorage path and not invoke this. Phase 7
@@ -44,7 +49,7 @@ export type ResumeKind =
   | 'watching'
   | 'finished'
   | 'not-yet-aired'
-  | 'currently-airing'
+  | 'episode-not-loaded-yet'
 
 export interface ResumeStateInputs {
   animeId: Ref<string>
@@ -62,6 +67,12 @@ export interface ResumeStateMachine {
   lastWatched: ComputedRef<number>
   /** Computed state. */
   kind: ComputedRef<ResumeKind>
+  /**
+   * For `episode-not-loaded-yet`: true once the load has run past the grace
+   * window (aired a while ago, still not in our sources) — drives the softer,
+   * no-time-promise copy. Always false for other states.
+   */
+  episodeLoadDelayed: ComputedRef<boolean>
   /** Episode the player should mount on. */
   startEpisode: ComputedRef<number>
   /** Episode the user just finished — drives the breadcrumb. 0 when N/A. */
@@ -98,9 +109,9 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
   // Reactive "now" so the airing-state predicates self-heal as time passes,
   // without a page refresh. `kind` previously read Date.now() directly, which
   // isn't a reactive dependency — so not-yet-aired never flipped to
-  // currently-airing in-session, and currently-airing never expired. Ticking a
-  // ref once a minute makes `kind` recompute on a coarse-but-free cadence,
-  // which is plenty for an hours-wide grace window.
+  // episode-not-loaded-yet in-session, and the load-delayed copy never kicked
+  // in. Ticking a ref once a minute makes `kind` / `episodeLoadDelayed`
+  // recompute on a coarse-but-free cadence, plenty for an hours-wide window.
   const nowMs = ref(Date.now())
   if (typeof window !== 'undefined') {
     const timer = window.setInterval(() => {
@@ -150,12 +161,18 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     return rawLastWatched.value
   })
 
+  // Parsed nextEpisodeAt (ms). NaN when absent/unparseable.
+  const airTimeMs = computed(() => {
+    const nextAt = inputs.nextEpisodeAt.value
+    if (!nextAt) return Number.NaN
+    return new Date(nextAt).getTime()
+  })
+
   const kind = computed<ResumeKind>(() => {
     const total = inputs.totalEpisodes.value
     const aired = inputs.episodesAired.value
     const last = lastWatched.value
     const status = inputs.status.value
-    const nextAt = inputs.nextEpisodeAt.value
 
     if (last <= 0) return 'first-time'
 
@@ -169,28 +186,35 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     const nextIsAired = aired > 0 && aired > last
     if (isReleased || nextIsAired) return 'watching'
 
-    // Ongoing series, next ep not yet aired. Pick which copy to show based on
-    // whether the announced air time has passed — but ONLY treat it as
-    // "currently airing" within a short grace window. A nextEpisodeAt that
-    // passed long ago is stale/stuck airing data (hiatus, silently-ended show,
-    // scheduler lag); keeping the "appears within an hour" promise alive
-    // indefinitely would be a lie, so we fall through to not-yet-aired.
-    if (status === 'ongoing' && nextAt) {
-      const t = new Date(nextAt).getTime()
-      if (!Number.isNaN(t)) {
-        const elapsed = nowMs.value - t
-        if (elapsed >= 0 && elapsed < CURRENTLY_AIRING_WINDOW_MS) return 'currently-airing'
-      }
+    // Ongoing series, our catalog hasn't recorded the next episode as aired.
+    // The announced air time tells us which side of the line we're on:
+    //   - air time in the PAST  → the episode HAS aired; it's just not loaded
+    //     into our catalog/sources yet (episodes_aired lag, provider delay).
+    //   - air time in the FUTURE (or unknown) → it genuinely hasn't aired.
+    // We must never tell the user an episode whose air time has passed "hasn't
+    // aired" — that's demonstrably false.
+    const t = airTimeMs.value
+    if (status === 'ongoing' && !Number.isNaN(t) && t <= nowMs.value) {
+      return 'episode-not-loaded-yet'
     }
     return 'not-yet-aired'
+  })
+
+  // For episode-not-loaded-yet: has the load run past the grace window? Beyond
+  // it the "usually within the hour" promise no longer holds, so the consumer
+  // shows a softer "still loading / delayed" copy instead.
+  const episodeLoadDelayed = computed(() => {
+    if (kind.value !== 'episode-not-loaded-yet') return false
+    const t = airTimeMs.value
+    return !Number.isNaN(t) && nowMs.value - t >= EPISODE_LOAD_GRACE_MS
   })
 
   const startEpisode = computed(() => {
     const k = kind.value
     if (k === 'first-time') return 1
     if (k === 'watching') return Math.min(lastWatched.value + 1, inputs.totalEpisodes.value || lastWatched.value + 1)
-    // finished / not-yet-aired / currently-airing → re-mount on the last
-    // watched episode (rewatch lands here, ETA banners show alongside).
+    // finished / not-yet-aired / episode-not-loaded-yet → re-mount on the last
+    // watched episode (rewatch lands here, status banners show alongside).
     return Math.max(lastWatched.value, 1)
   })
 
@@ -199,5 +223,5 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     return 0
   })
 
-  return { loaded, lastWatched, kind, startEpisode, finishedEpisode, init, reset }
+  return { loaded, lastWatched, kind, episodeLoadDelayed, startEpisode, finishedEpisode, init, reset }
 }
