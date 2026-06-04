@@ -10,32 +10,30 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 
 ## Current State
 
-- ✅ **v1.0 Smart Watch Picker Overhaul** — shipped 2026-05-03 (Phases 1-8) — see `.planning/milestones/v1.0-ROADMAP.md`
-- ✅ **v2.0 Recommendations Engine** — shipped 2026-05-07 (Phases 9-14) — see `.planning/milestones/v2.0-ROADMAP.md`
-- 🟢 **v3.0 Universal Anime Scraper** — Phase 15 (Foundation) complete 2026-05-11; scraper microservice live on `:8088` with `Provider`/`EmbedExtractor` interfaces + 503-stub HTTP contract; Phases 16-20 remaining (AnimePahe + EnglishPlayer, Observability, 9anime, AnimeKai gated, Cutover)
+- ✅ **v1.0 Smart Watch Picker Overhaul** — shipped 2026-05-03 (Phases 1-8)
+- ✅ **v2.0 Recommendations Engine** — shipped 2026-05-07 (Phases 9-14)
+- ✅ **v3.0 Universal Anime Scraper** — shipped 2026-05-18 (Phases 15-20); scraper microservice with provider failover replacing HiAnime + Consumet
+- ✅ **v3.1 Scraper Self-Healing** — shipped + closed 2026-06-04 (Phases 21-28, tagged `v3.1`; reopened 24-28 + `18anime` group) — see `.planning/MILESTONES.md`
+- 🟢 **v4.0 Activity Register (ClickHouse unified event plane)** — started 2026-06-04
 
-## Current Milestone: v3.0 Universal Anime Scraper
+## Current Milestone: v4.0 Activity Register (ClickHouse unified event plane)
 
-**Goal:** Replace the dead HiAnime (`aniwatch` upstream, `hianime.to` shut down) and broken Consumet (`enc-dec.app` contract change) provider paths with a self-hosted Go scraping service that targets alive English anime sources, preserving the existing HLS m3u8 + tracks + subtitles contract that our HiAnime and Consumet players consume.
+**Goal:** A multidimensional, pivotable register of every platform action and its effects (egress / DB / cache), unifying frontend + backend causation on a ClickHouse-backed wide-event store, surfaced as human-readable Grafana reports. **Awareness first**; optimization insight is a derived perk.
+
+**Design spec:** `docs/superpowers/specs/2026-06-04-analytics-activity-register-design.md`
 
 **Target features:**
-- New Go service (working name `services/scraper/` or extension of `services/catalog/`) with a `Provider` interface so new sources plug in without rewriting the orchestrator
-- Initial provider implementations targeting alive sources: AnimeKai (`animekai.to`), AnimePahe (alive mirror), Anitaku / Gogoanime (`anitaku.io`) — pick the subset that ship in v3.0 during planning
-- Cross-provider search → episode list → server list → stream extraction pipeline returning a uniform DTO compatible with the existing HiAnime / Consumet frontend players (HLS m3u8 + VTT/ASS subtitle tracks)
-- Reuse our existing `megacloud-extractor` Node helper for any embed decryption that genuinely benefits from a JS runtime; everything else stays Go
-- Cutover: remove the dead `aniwatch` and `consumet-api` containers from `docker/docker-compose.yml`, remove `services/catalog/internal/parser/{hianime,consumet}/`, update the two frontend players (HiAnimePlayer.vue + ConsumetPlayer.vue) to point at the new endpoints (or merge them into a single English-source player component)
-- Health-check and per-provider Prometheus metrics so we can see when a provider site dies before users do
-- Kodik (RU iframe) and AnimeLib (RU MP4) parsers stay untouched — they remain separate parsers behind their dedicated player tabs
+- ClickHouse as the unified event store (activity register + traces + logs); `EventStore` interface swap from Postgres; retire Tempo + Loki (keep Prometheus + Grafana).
+- Wide-event model: **one row per effect** — dimensions (origin / operation / effect_kind / target / correlation) + measures (requests / bytes_in / bytes_out / duration_ms / rows).
+- BE egress recorder at the `libs/tracing` `WrapTransport` seam + baggage propagation; retrofit non-shared HTTP clients (Kodik extractor, scraper `BaseHTTPClient`, OpenSubtitles, idmapping); per-(session,host) HLS aggregation.
+- DB/cache effects (otel-GORM) + **automatic operation discovery** (service-frame stack attribution + Tempo span-metrics + service graph).
+- FE causation: wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (marked approximate).
+- Grafana wide-event pivot tables (template vars = any dimension), the "from → choke-point → effects" report, anomaly flagging, awareness overview.
 
-**Drivers / why now:**
-- HiAnime ecosystem dead: `hianime.to` unreachable, `hianime.nz` shows shutdown notice, `aniwatch-api` GitHub repo deleted, `aniwatchtv.to` returns 404
-- Consumet broken: `riimuru/consumet-api:latest` (5 months stale) calls `enc-dec.app` with stale body shape (`Expected body: text, agent`) → 100% of Zoro stream resolution fails
-- AnimeLib's Kodik-fallback path was just disabled (commit `9347143`); users with EN-only anime currently have no working player tab other than Kodik (which has no JP subs, no quality switching, no time tracking)
-
-**Out of v3.0 scope:**
-- Russian providers (Kodik, AnimeLib) — separate parsers, untouched
-- Player UX redesign — preserve the existing player surface
-- New languages/frameworks — Go 1.22 backend + existing Vue/TS frontend only
+**Out of v4.0 scope:**
+- Exhaustive ClickHouse pre-aggregation tuning (AggregatingMergeTree rollups added only as the dashboards need them).
+- Per-segment HLS fact rows (aggregated per stream-session by design).
+- Replacing Prometheus or Grafana alerting (they stay).
 
 ## Requirements
 
