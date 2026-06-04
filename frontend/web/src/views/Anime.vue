@@ -130,35 +130,22 @@
                 :translation-id="resolvedCombo?.translation_id ?? ''"
               />
             </template>
-
-            <!-- Next Episode Info — shares the CTA row -->
-            <div
-              v-if="anime.nextEpisodeAt && anime.status === 'ongoing'"
-              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20"
-            >
-              <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span class="text-cyan-400 font-medium">
-                {{ $t('anime.nextEpisode', { episode: (anime.episodesAired || 0) + 1 }) }}
-              </span>
-              <span class="text-white">
-                {{ formatNextEpisode(anime.nextEpisodeAt) }}
-              </span>
-            </div>
           </div>
 
-          <!-- Actions -->
-          <div v-if="authStore.isAuthenticated" class="flex flex-wrap items-center gap-3 mb-6">
+          <!-- Actions / Status row — status (user) · next-episode (everyone) · admin kebab (admin) -->
+          <div
+            v-if="authStore.isAuthenticated || (anime.nextEpisodeAt && anime.status === 'ongoing')"
+            class="flex flex-wrap items-center gap-3 mb-6"
+          >
             <!-- Watchlist Status Dropdown -->
-            <div class="relative" ref="dropdownRef">
+            <div v-if="authStore.isAuthenticated" class="relative" ref="dropdownRef">
               <button
                 @click="showStatusDropdown = !showStatusDropdown"
                 type="button"
                 aria-haspopup="menu"
                 :aria-expanded="showStatusDropdown"
                 aria-controls="watchlist-status-menu"
-                class="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all"
+                class="flex items-center gap-2 h-10 px-4 rounded-lg font-medium transition-all"
                 :class="currentListStatus
                   ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30'
                   : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'"
@@ -222,6 +209,23 @@
               </Transition>
             </div>
 
+            <!-- Next Episode Info — sits between the status dropdown and the
+                 admin kebab; shown to everyone (incl. anonymous), not auth-gated. -->
+            <div
+              v-if="anime.nextEpisodeAt && anime.status === 'ongoing'"
+              class="inline-flex items-center gap-2 h-10 px-3 rounded-lg bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20"
+            >
+              <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-cyan-400 font-medium">
+                {{ $t('anime.nextEpisode', { episode: (anime.episodesAired || 0) + 1 }) }}
+              </span>
+              <span class="text-white">
+                {{ formatNextEpisode(anime.nextEpisodeAt) }}
+              </span>
+            </div>
+
             <!-- Admin Tools (Admin only) — kebab groups maintenance/moderation
                  actions (Refresh, Hide, Shikimori ID) into a visually distinct
                  amber-tinted cluster, separate from the user action above. -->
@@ -237,7 +241,7 @@
                   :aria-label="$t('anime.adminMenu')"
                   aria-haspopup="menu"
                   :aria-expanded="showAdminMenu"
-                  class="flex items-center justify-center w-10 h-10 rounded-lg bg-warning-soft text-warning border border-warning/30 hover:bg-warning/30 transition-all"
+                  class="flex items-center justify-center w-10 h-10 rounded-lg bg-warning/20 text-warning border border-warning/40 hover:bg-warning/30 transition-all"
                 >
                   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                     <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
