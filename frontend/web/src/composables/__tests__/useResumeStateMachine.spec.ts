@@ -55,16 +55,17 @@ describe('useResumeStateMachine — airing state', () => {
     expect(sm.episodeAiredAgoMs.value).toBeGreaterThanOrEqual(HOUR - 1000)
   })
 
-  it('trusts the user when they have watched PAST the stale catalog aired count', async () => {
-    // The reported Re:Zero S4 bug: user completed ep 9, but catalog
-    // episodes_aired is stuck at 8. We must NOT say "ep 9 not loaded" — the
-    // user watched it. last (9) > aired (8) → watching.
+  it('Re:Zero S4 post-cache-fix: caught up with a fresh future air date → not-yet-aired', async () => {
+    // The reported bug was a STALE catalog cache (episodes_aired=8 while the
+    // user had watched ep 9). The catalog cache fix keeps episodes_aired fresh,
+    // so the state machine sees aired=9 == last=9 with ep 10's FUTURE air date
+    // → correct "Эпизод 10 выйдет {when}". No watch-history compensation here.
     getProgress.mockResolvedValue({ data: { data: [{ episode_number: 9, completed: true }] } })
-    const nextAt = new Date(Date.now() - 27 * HOUR).toISOString()
-    const sm = await setup(makeInputs({ episodesAired: ref(8), nextEpisodeAt: ref(nextAt) }))
-    expect(sm.kind.value).toBe('watching')
-    expect(sm.finishedEpisode.value).toBe(9)
-    expect(sm.startEpisode.value).toBe(10)
+    const nextAt = new Date(Date.now() + 6 * 24 * HOUR).toISOString() // ~6 days out
+    const sm = await setup(
+      makeInputs({ totalEpisodes: ref(19), episodesAired: ref(9), nextEpisodeAt: ref(nextAt) }),
+    )
+    expect(sm.kind.value).toBe('not-yet-aired')
   })
 
   it('self-heals not-yet-aired → episode-not-loaded-yet as the clock advances', async () => {

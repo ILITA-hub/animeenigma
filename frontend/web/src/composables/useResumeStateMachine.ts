@@ -25,10 +25,10 @@ import { userApi } from '@/api/client'
  *                      aired) but it isn't loaded into our catalog/sources yet
  *                      (translation/upload lag). `episodeAiredAgoMs` drives an
  *                      "aired N ago" label. Same startEpisode as not-yet-aired.
- *                      NOTE: if the user has watched PAST episodesAired (the
- *                      catalog count is stale), we trust their progress and
- *                      classify as `watching` instead — we never tell a user an
- *                      episode they've already watched "isn't loaded".
+ *                      This relies on episodesAired/nextEpisodeAt being fresh —
+ *                      the catalog now invalidates the anime cache on Shikimori
+ *                      upserts + caps ongoing-anime cache TTL, so stale catalog
+ *                      data (which used to produce false banners) self-heals.
  *
  * Anonymous users: this composable is logged-in only — the parent view should
  * keep using its existing localStorage path and not invoke this. Phase 7
@@ -173,16 +173,9 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     // Determine whether ep last+1 is available. Three ways to tell:
     //   1. anime.status is 'released' / 'completed' — all eps exist.
     //   2. anime.episodesAired > last — the next episode has been released.
-    //   3. last > episodesAired — the user has watched PAST the catalog's
-    //      (often-lagging) aired count, which proves those episodes exist and
-    //      that episodesAired + its single next_episode_at are stale and refer
-    //      to an episode the user has already seen. Trust the user's progress:
-    //      they're actively watching, and we must never tell them an episode
-    //      they've watched "isn't loaded yet".
     const isReleased = status === 'released' || status === 'completed'
     const nextIsAired = aired > 0 && aired > last
-    const userAheadOfCatalog = last > aired
-    if (isReleased || nextIsAired || userAheadOfCatalog) return 'watching'
+    if (isReleased || nextIsAired) return 'watching'
 
     // Ongoing series, our catalog hasn't recorded the next episode as aired.
     // The announced air time tells us which side of the line we're on:

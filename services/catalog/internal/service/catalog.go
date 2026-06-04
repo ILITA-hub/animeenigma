@@ -261,8 +261,15 @@ func (s *CatalogService) GetAnime(ctx context.Context, id string) (*domain.Anime
 
 	s.enrichAnime(ctx, dbAnime)
 
-	// Cache the result
-	_ = s.cache.Set(ctx, cacheKey, dbAnime, cache.TTLAnimeDetails)
+	// Cache the result. Ongoing anime change often (episodes_aired /
+	// next_episode_at advance as episodes air), so cache their detail row
+	// briefly so airing data self-heals even if an invalidation is missed;
+	// released/finished rows are stable, keep the long TTL.
+	ttl := cache.TTLAnimeDetails
+	if dbAnime.Status == domain.StatusOngoing {
+		ttl = cache.TTLOngoingAnimeDetails
+	}
+	_ = s.cache.Set(ctx, cacheKey, dbAnime, ttl)
 
 	return dbAnime, nil
 }
@@ -1170,7 +1177,15 @@ func (s *CatalogService) upsertAnimeFromExternal(ctx context.Context, anime *dom
 		anime.ID = existing.ID
 		anime.HasVideo = existing.HasVideo
 		anime.CreatedAt = existing.CreatedAt
-		return s.animeRepo.Update(ctx, anime)
+		if err := s.animeRepo.Update(ctx, anime); err != nil {
+			return err
+		}
+		// Invalidate the per-anime cache so fresh Shikimori data (episodes_aired,
+		// next_episode_at, …) is visible immediately. This path is reached from
+		// search / trending / seasonal / ResolveMALAnime; without this the 6h
+		// anime:{id} cache served stale airing data to the watch page.
+		_ = s.cache.Delete(ctx, cache.KeyAnime(existing.ID))
+		return nil
 	}
 
 	// Create new

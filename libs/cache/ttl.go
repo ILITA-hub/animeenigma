@@ -22,6 +22,10 @@ var (
 
 	// Long-lived cache for stable data
 	TTLAnimeDetails   = 6 * time.Hour
+	// Ongoing anime change often (episodes_aired / next_episode_at advance as
+	// episodes air), so cache their detail row briefly — airing data self-heals
+	// within minutes even if an invalidation is ever missed.
+	TTLOngoingAnimeDetails = 15 * time.Minute
 	TTLTopAnime       = 24 * time.Hour
 	TTLGenreList      = 24 * time.Hour
 	TTLStudioList     = 24 * time.Hour
