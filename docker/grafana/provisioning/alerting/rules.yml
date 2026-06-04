@@ -3,7 +3,7 @@ apiVersion: 1
 groups:
   - orgId: 1
     name: AnimeEnigma Alerts
-    folder: AnimeEnigma
+    folder: Alerts
     interval: 1m
     rules:
       - uid: service-unreachable
@@ -552,7 +552,7 @@ groups:
   # block can be deleted and infra/grafana/alerts/ mounted as a directory.
   - orgId: 1
     name: Scraper Self-Healing
-    folder: AnimeEnigma
+    folder: Alerts
     interval: 1m
     rules:
       - uid: scraper-playability-regression

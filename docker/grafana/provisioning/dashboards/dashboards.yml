@@ -10,9 +10,13 @@ providers:
     options:
       path: /var/lib/grafana/dashboards
 
-  - name: 'infra-self-healing'
+  # Renamed from 'infra-self-healing' (was folder 'Self-Healing'). The rename
+  # forces Grafana to re-home already-provisioned dashboards into the new
+  # folder ('' = General); a folder-only change leaves unchanged dashboards in
+  # their old folder. folder '' keeps all dashboards flat, no sub-folders.
+  - name: 'infra-dashboards'
     orgId: 1
-    folder: 'Self-Healing'
+    folder: ''
     type: file
     disableDeletion: false
     editable: true
