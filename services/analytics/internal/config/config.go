@@ -18,7 +18,30 @@ type Config struct {
 	MaxBatch      int
 	FlushInterval time.Duration
 	BufferSize    int
+
+	// StoreBackend selects the EventStore implementation. One of
+	// "postgres" (default — keeps the system exactly as today), "clickhouse"
+	// (CH-only), or "dualwrite" (PG source-of-truth + CH best-effort fan-out).
+	// Default stays "postgres" for the reversibility guarantee (RESEARCH §Migration).
+	StoreBackend string
+	// ClickHouse holds the native-protocol connection params for the CH backend.
+	// Only consulted when StoreBackend is "clickhouse" or "dualwrite".
+	ClickHouse ClickHouseConfig
 }
+
+// ClickHouseConfig mirrors the env-driven Database config shape for the native
+// ClickHouse connection (CLICKHOUSE_* envs). Host/Port are joined into the
+// native host:port address consumed by repo.OpenClickHouse.
+type ClickHouseConfig struct {
+	Host     string
+	Port     int
+	Database string
+	User     string
+	Password string
+}
+
+// Addr returns the host:port native-protocol address (e.g. "clickhouse:9000").
+func (c ClickHouseConfig) Addr() string { return fmt.Sprintf("%s:%d", c.Host, c.Port) }
 
 type ServerConfig struct {
 	Host string
@@ -47,6 +70,14 @@ func Load() (*Config, error) {
 		MaxBatch:      getEnvInt("ANALYTICS_MAX_BATCH", 500),
 		FlushInterval: getEnvDuration("ANALYTICS_FLUSH_INTERVAL", time.Second),
 		BufferSize:    getEnvInt("ANALYTICS_BUFFER_SIZE", 10000),
+		StoreBackend:  getEnv("ANALYTICS_STORE_BACKEND", "postgres"),
+		ClickHouse: ClickHouseConfig{
+			Host:     getEnv("CLICKHOUSE_HOST", "clickhouse"),
+			Port:     getEnvInt("CLICKHOUSE_PORT", 9000),
+			Database: getEnv("CLICKHOUSE_DB", "analytics"),
+			User:     getEnv("CLICKHOUSE_USER", "analytics"),
+			Password: getEnv("CLICKHOUSE_PASSWORD", ""),
+		},
 	}, nil
 }
 
