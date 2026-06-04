@@ -35,7 +35,10 @@
   3. The ClickHouse `EventStore` implementation (`InsertBatch` + `UpsertIdentity`) passes the **same contract test suite** the Postgres impl passes — verified by running the shared suite against both backends. (AR-STORE-03)
   4. The existing analytics clickstream ingests into ClickHouse and the `product-analytics` Grafana dashboards still render from the new datasource — confirmed by a live event flowing end-to-end and a dashboard panel showing it. (AR-STORE-04)
   5. Ingestion is async + batched + drop-on-full (no synchronous write on any request hot path); a `*_dropped_total`-style metric exposes the dropped-event count and is observable in `/metrics`. (AR-STORE-05)
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
+- [ ] 01-01-PLAN.md — ClickHouse + clickhouse-backup compose services, native Prometheus self-metrics, backup/restore runbook with dry-run (Wave 1, AR-STORE-01)
+- [ ] 01-02-PLAN.md — ClickHouse `EventStore` impl: wide-event MergeTree schema, native batch insert, append-only identity + argMax view, GDPR erase, backend-agnostic contract suite (Wave 1, AR-STORE-02/03/05)
+- [ ] 01-03-PLAN.md — Dual-write wiring + backend selector, clickstream migration, `aenigma-clickhouse` datasource + 6 rewritten panels, live end-to-end smoke (Wave 2, AR-STORE-04)
 **Metrics**: `UXΔ = +1 (Better)` (internal observability foundation; user benefit is indirect — reliability/perf insight) · `CDI = 0.12 * 34` (introduces a new stateful service + new schema, but the `EventStore` swap seam already exists; significant phase-of-work effort) · `MVQ = Phoenix 80%/88%` (transformative foundation — the event plane is reborn on a purpose-built columnar store; strong slop-resistance built on the existing swap interface)
 
 ### Phase 2: BE Egress Recorder
