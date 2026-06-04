@@ -1,0 +1,212 @@
+package repo
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
+	"github.com/ILITA-hub/animeenigma/services/analytics/internal/domain"
+)
+
+// ClickHouseStore implements domain.EventStore against ClickHouse via the
+// native protocol (PrepareBatch + Send). It mirrors PostgresStore exactly in
+// shape (struct/constructor/empty-guard/row-mapping) — the only difference is
+// the columnar batch write replacing the GORM bulk insert.
+type ClickHouseStore struct{ conn driver.Conn }
+
+// Compile-time assertion that ClickHouseStore satisfies the swap seam.
+var _ domain.EventStore = (*ClickHouseStore)(nil)
+
+// NewClickHouseStore wraps an open native ClickHouse connection.
+func NewClickHouseStore(conn driver.Conn) *ClickHouseStore {
+	return &ClickHouseStore{conn: conn}
+}
+
+// CHConfig holds the ClickHouse connection parameters. Mirrors the env-driven
+// config shape used elsewhere in the service (host/port/db/user/password).
+type CHConfig struct {
+	Addr     string // host:port for the native protocol, e.g. "clickhouse:9000"
+	Database string
+	Username string
+	Password string
+}
+
+// OpenClickHouse opens a native ClickHouse connection with sane single-host
+// settings (LZ4 compression, bounded pool, 5s dial timeout). It does NOT run
+// the schema — call EnsureSchema after opening, mirroring the AutoMigrateAll +
+// EnsureView boot sequence.
+func OpenClickHouse(cfg CHConfig) (driver.Conn, error) {
+	return clickhouse.Open(&clickhouse.Options{
+		Addr: []string{cfg.Addr},
+		Auth: clickhouse.Auth{
+			Database: cfg.Database,
+			Username: cfg.Username,
+			Password: cfg.Password,
+		},
+		Settings:        clickhouse.Settings{"max_execution_time": 60},
+		Compression:     &clickhouse.Compression{Method: clickhouse.CompressionLZ4},
+		DialTimeout:     5 * time.Second,
+		MaxOpenConns:    10,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: time.Hour,
+	})
+}
+
+// nullableString returns nil for an empty string so it maps to a CH
+// Nullable(String) NULL, else a pointer to the value.
+func nullableString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	v := s
+	return &v
+}
+
+// defaultJSON preserves the toModel behavior: empty JSON-shaped columns default
+// to "{}".
+func defaultJSON(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "{}"
+	}
+	return s
+}
+
+// InsertBatch persists a batch of events via the native columnar batch API.
+// Empty batches are a no-op (matching PostgresStore). Each event is appended in
+// exact events-table column order; clickstream rows leave the effect
+// dimensions/measures at their zero/default values (effect_kind='').
+func (s *ClickHouseStore) InsertBatch(ctx context.Context, events []domain.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO events")
+	if err != nil {
+		return err
+	}
+	for _, e := range events {
+		// Column order MUST match createEventsTableDDL exactly.
+		if err := batch.Append(
+			// correlation / time
+			e.Timestamp,            // timestamp
+			e.ReceivedAt,           // received_at
+			e.EventID,              // event_id
+			e.TraceID,              // trace_id
+			e.SessionID,            // session_id
+			e.AnonymousID,          // anonymous_id
+			nullableString(e.UserID), // user_id (Nullable)
+
+			// register dimensions — clickstream rows use defaults
+			"api",                // origin
+			"",                   // operation
+			"",                   // effect_kind
+			"",                   // target_kind
+			"",                   // target
+			"be",                 // source
+			"exact",              // accuracy
+			(*string)(nil),       // anime_id (Nullable)
+
+			// reconciled clickstream dimensions
+			string(e.EventType),     // event_type
+			e.EventName,             // event_name
+			e.URL,                   // url
+			e.Path,                  // path
+			e.Referrer,              // referrer
+			e.Title,                 // title
+			e.ElSelector,            // el_selector
+			e.ElText,                // el_text
+			e.ElTag,                 // el_tag
+			defaultJSON(e.ElAttrs),  // el_attrs
+			e.UserAgent,             // user_agent
+			e.DeviceType,            // device_type
+			uint16(e.ScreenW),       // screen_w
+			uint16(e.ScreenH),       // screen_h
+			e.IPHash,                // ip_hash
+			defaultJSON(e.Properties), // properties
+
+			// register measures — clickstream rows leave effect measures at 0
+			uint32(0),               // requests
+			uint64(0),               // bytes_in
+			uint64(0),               // bytes_out
+			uint32(0),               // duration_ms
+			uint32(0),               // row_count
+			uint32(e.ActiveMS),      // active_ms
+		); err != nil {
+			return err
+		}
+	}
+	return batch.Send()
+}
+
+// UpsertIdentity appends an identity row. ClickHouse has no UPSERT; the
+// "latest row per anonymous_id wins" semantic is resolved at query time by the
+// argMax events_resolved view (consistent with the append-only Postgres impl).
+func (s *ClickHouseStore) UpsertIdentity(ctx context.Context, anonymousID, userID string, ts time.Time) error {
+	if anonymousID == "" || userID == "" {
+		return nil
+	}
+	return s.conn.Exec(ctx,
+		"INSERT INTO identities (anonymous_id, user_id, timestamp) VALUES (?, ?, ?)",
+		anonymousID, userID, ts)
+}
+
+// EraseByUserIDCH is the ClickHouse analog of repo.EraseByUserID: it removes
+// all events for the user_id AND all events for anonymous_ids stitched to the
+// user via identities, plus the identity rows. ClickHouse deletes are
+// ALTER TABLE ... DELETE mutations (admin-triggered GDPR erase only). Uses
+// parameterized placeholders (T-01-04). resolve.go itself stays Postgres-only.
+func EraseByUserIDCH(ctx context.Context, conn driver.Conn, userID string) error {
+	// Resolve the anonymous ids mapped to this user first.
+	rows, err := conn.Query(ctx,
+		"SELECT DISTINCT anonymous_id FROM identities WHERE user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+	var anonIDs []string
+	for rows.Next() {
+		var a string
+		if err := rows.Scan(&a); err != nil {
+			rows.Close()
+			return err
+		}
+		anonIDs = append(anonIDs, a)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	if err := conn.Exec(ctx,
+		"ALTER TABLE events DELETE WHERE user_id = ?", userID); err != nil {
+		return err
+	}
+	if len(anonIDs) > 0 {
+		if err := conn.Exec(ctx,
+			"ALTER TABLE events DELETE WHERE anonymous_id IN (?)", anonIDs); err != nil {
+			return err
+		}
+	}
+	return conn.Exec(ctx,
+		"ALTER TABLE identities DELETE WHERE user_id = ?", userID)
+}
+
+// EraseByAnonymousIDCH is the ClickHouse analog of repo.EraseByAnonymousID.
+func EraseByAnonymousIDCH(ctx context.Context, conn driver.Conn, anonymousID string) error {
+	if err := conn.Exec(ctx,
+		"ALTER TABLE events DELETE WHERE anonymous_id = ?", anonymousID); err != nil {
+		return err
+	}
+	return conn.Exec(ctx,
+		"ALTER TABLE identities DELETE WHERE anonymous_id = ?", anonymousID)
+}
+
+// PurgeOlderThanCH is a no-op: ClickHouse retention is handled declaratively by
+// the events table's native `TTL ... DELETE`, so the Go purge cron is retired
+// for the ClickHouse backend (RESEARCH §Don't Hand-Roll). cutoff is accepted
+// only to mirror repo.PurgeOlderThan's signature shape.
+func PurgeOlderThanCH(_ context.Context, _ driver.Conn, _ time.Time) (int64, error) {
+	return 0, nil
+}
