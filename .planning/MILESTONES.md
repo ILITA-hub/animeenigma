@@ -1,6 +1,33 @@
 # Milestones
 
-## v3.1 Scraper Self-Healing — REOPENED 2026-05-19
+## v3.1 Scraper Self-Healing — CLOSED 2026-06-04
+
+**Status:** Shipped & closed. Original ship 2026-05-13 (Phases 21-23, tagged `v3.1`); reopened 2026-05-19 for Phases 24-28; all reopened phases shipped (SUMMARYs on disk). Closed 2026-06-04 to start root **v4 (Activity Register)**.
+
+**Reopened phases delivered (24-28):**
+- **Phase 24 — EN Reconnect:** restored `EnglishPlayer.vue` + EN tab + language/provider type unions + i18n; per-provider end-to-end verification gate.
+- **Phase 25 — Audit Findings Resolution:** closed BLK-INT-01 (hls3 host auto-discovery) + W-INT-01..03.
+- **Phase 26 — Provider Expansion:** AllAnime lifted into scraper providers; AnimeKai revival; 2026 source sweep.
+- **Phase 27 — AnimePahe Revival:** stealth-Chromium sidecar (DDoS-Guard solve) restoring `animepahe.pw`.
+- **Phase 28 — Provider Expansion R2:** AnimeFever + Miruro + 9anime added to the failover chain.
+
+**Also shipped outside the numbered roadmap:** `18anime` adult-provider group ported into the scraper microservice as a separate 18+ provider group (merge `e2172c31`).
+
+**Carryover deferred to backlog / future v3.x:** MinIO hot archival; VibePlayer recovery via WARP egress.
+
+**Tag note:** the original `v3.1` git tag (2026-05-13 ship point) is left intact; the reopened delta is recorded here rather than re-tagged (per operator: "close it and go v4").
+
+> Full reopening chronology preserved in the historical detail below + `.planning/milestones/v3.1-REOPENING.md`.
+
+---
+
+## v3.0 Universal Anime Scraper (Shipped: 2026-05-18) — backfilled record
+
+**Phases 15-20.** Provider-failover scraper microservice (`services/scraper/`) replacing the removed HiAnime + Consumet: provider interface + orchestrator + EmbedExtractor registry + BaseHTTPClient (15); AnimePahe/Kwik + unified `EnglishPlayer.vue` (16); per-provider health observability + 15-min canary (17); Gogoanime/Anitaku second provider (18); gated AnimeKai (19); HiAnime/Consumet cutover (20 — over-rotated, repaired in v3.1 Phase 24). Was never formally archived/tagged at the time; recorded here for history completeness.
+
+---
+
+## v3.1 Scraper Self-Healing — reopening detail (2026-05-19, historical)
 
 **Original ship:** 2026-05-13 — Phases 21, 22, 23 (16 SCRAPER-HEAL requirements, 9 plans across 3 phases). Audit verdict that day: `gaps_found (with strong implementation foundation)` — 1 production blocker (BLK-INT-01: rotated hls3 hosts not in HLS proxy allowlist → silent HTTP 200 / Content-Length 0) and 3 warnings (W-INT-01..03) all logged but not resolved.
 

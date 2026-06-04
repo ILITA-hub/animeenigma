@@ -5,7 +5,8 @@
 - ✅ **v1.0 Smart Watch Picker Overhaul** — Phases 1-8 (shipped 2026-05-03) — see `.planning/milestones/v1.0-ROADMAP.md`
 - ✅ **v2.0 Recommendations Engine** — Phases 9-14 (shipped 2026-05-07) — see `.planning/milestones/v2.0-ROADMAP.md`
 - ✅ **v3.0 Universal Anime Scraper** — Phases 15-20 (shipped 2026-05-18; Phase 20 cutover landed but over-rotated — regression repaired in v3.1 Phase 24) — see below
-- 🟡 **v3.1 Scraper Self-Healing** — Phases 21-28 (REOPENED 2026-05-19; 21-23 shipped 2026-05-13 with SCRAPER-HEAL-08 regression + audit gaps still open; 24-27 scoped 2026-05-19; **Phase 28 added 2026-05-19** — AnimeFever + Miruro + 9anime.me.uk per operator request) — see `.planning/milestones/v3.1-ROADMAP.md`
+- ✅ **v3.1 Scraper Self-Healing** — Phases 21-28 shipped + closed 2026-06-04 (orig 21-23 @2026-05-13 tagged `v3.1`; reopened 24-28 + `18anime` group shipped) — see `.planning/MILESTONES.md` + `.planning/milestones/v3.1-ROADMAP.md`
+- 🟡 **v4.0 Activity Register (ClickHouse unified event plane)** — root milestone started 2026-06-04 — design: `docs/superpowers/specs/2026-06-04-analytics-activity-register-design.md`
 
 ## Phases
 
