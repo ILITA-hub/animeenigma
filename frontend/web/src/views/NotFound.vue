@@ -4,7 +4,7 @@
       <h1>{{ $t('notFound.code') }}</h1>
       <h2>{{ $t('notFound.title') }}</h2>
       <p>{{ $t('notFound.description') }}</p>
-      <router-link to="/" class="btn">{{ $t('notFound.goHome') }}</router-link>
+      <router-link to="/" class="home-link">{{ $t('notFound.goHome') }}</router-link>
     </div>
   </div>
 </template>
@@ -43,7 +43,7 @@ useI18n()
   margin-bottom: 2rem;
 }
 
-.btn {
+.home-link {
   display: inline-block;
   padding: 1rem 2rem;
   background: var(--destructive);
@@ -51,10 +51,11 @@ useI18n()
   text-decoration: none;
   border-radius: 8px;
   font-size: 1.1rem;
+  font-weight: 500;
   transition: background 0.3s;
 }
 
-.btn:hover {
+.home-link:hover {
   background: var(--destructive);
 }
 </style>

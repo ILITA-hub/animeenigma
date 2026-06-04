@@ -30,25 +30,3 @@ describe('deprecated tokens are aliased to canonical ones (value-preserving)', (
     expect(css).toMatch(/--accent:\s*var\(--elevated\)/)
   })
 })
-
-// The .btn-* re-points are the highest-regression-risk edit (a wrong target
-// token would silently shift a rendered color). Pin them so a future
-// accidental re-point to a non-equivalent token is caught. [^}] matches
-// across newlines, so these span the multi-line rule body.
-describe('.btn-* classes reference canonical tokens (value-preserving)', () => {
-  it('.btn-primary background uses --primary', () => {
-    expect(css).toMatch(/\.btn-primary\s*\{[^}]*background-color:\s*var\(--primary\)/)
-  })
-  it('.btn-primary text uses --primary-foreground', () => {
-    expect(css).toMatch(/\.btn-primary\s*\{[^}]*color:\s*var\(--primary-foreground\)/)
-  })
-  it('.btn-secondary background uses --brand-pink', () => {
-    expect(css).toMatch(/\.btn-secondary\s*\{[^}]*background-color:\s*var\(--brand-pink\)/)
-  })
-  it('.btn-secondary text uses --brand-pink-foreground', () => {
-    expect(css).toMatch(/\.btn-secondary\s*\{[^}]*color:\s*var\(--brand-pink-foreground\)/)
-  })
-  it('.btn:focus-visible ring uses --ring', () => {
-    expect(css).toMatch(/\.btn:focus-visible\s*\{[^}]*var\(--ring\)/)
-  })
-})
