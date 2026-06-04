@@ -7,6 +7,7 @@ describe('buttonVariants', () => {
   it('default variant binds cyan token + radius + hover token', () => {
     const c = buttonVariants({ variant: 'default' })
     expect(c).toContain('bg-primary')
+    expect(c).toContain('text-primary-foreground')
     expect(c).toContain('rounded-xl')
     expect(c).toContain('hover:bg-brand-cyan')
   })
@@ -84,6 +85,11 @@ describe('buttonVariants', () => {
   it('legacy primary/secondary aliases still mirror default/brand glow tokens', () => {
     expect(buttonVariants({ variant: 'primary' })).toContain('hover:shadow-glow-cyan')
     expect(buttonVariants({ variant: 'secondary' })).toContain('hover:shadow-glow-pink')
+  })
+
+  it('default/primary set primary-foreground text for contrast on cyan', () => {
+    expect(buttonVariants({ variant: 'default' })).toContain('text-primary-foreground')
+    expect(buttonVariants({ variant: 'primary' })).toContain('text-primary-foreground')
   })
 })
 
