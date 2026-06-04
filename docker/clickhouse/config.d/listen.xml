@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  Bind ClickHouse to all container interfaces (AR-STORE-01).
+
+  The stock image binds only to 127.0.0.1/::1 INSIDE the container, so neither
+  the host port mappings (docker-proxy forwards to the container's eth0 IP) nor
+  in-Docker-network peers (Prometheus scraping clickhouse:9363, the analytics Go
+  store connecting to clickhouse:8123) can reach it — connections reset.
+
+  Host-side exposure is still locked down by the compose `127.0.0.1:` port
+  bindings (T-01-01): only loopback on the host can reach these ports, and CH
+  itself requires the CLICKHOUSE_USER/PASSWORD credentials (T-01-02).
+-->
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+    <listen_host>::</listen_host>
+    <listen_try>1</listen_try>
+</clickhouse>

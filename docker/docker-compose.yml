@@ -331,10 +331,16 @@ services:
     entrypoint: ["/bin/sh", "-c", "sleep infinity"]
     environment:
       CLICKHOUSE_HOST: clickhouse
+      # Must match the dedicated CH user — the entrypoint creates CLICKHOUSE_USER
+      # INSTEAD of `default`, so a username-less sidecar fails auth (code 516).
+      CLICKHOUSE_USERNAME: ${CLICKHOUSE_USER:-analytics}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-changeme}
     volumes:
+      # Backups live at /var/lib/clickhouse/backup INSIDE the shared data volume.
+      # clickhouse-backup hardlinks from shadow/ into backup/, so both dirs MUST be
+      # on the same filesystem — a separate volume over backup/ causes
+      # "invalid cross-device link" and the backup fails.
       - clickhouse_data:/var/lib/clickhouse
-      - clickhouse_backups:/var/lib/clickhouse/backup
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -925,8 +931,9 @@ volumes:
   library_minio_staging:
   tempo_data:
   # v4.0 Activity Register Phase 1 (AR-STORE-01) — ClickHouse data + backups.
+  # Backups live under /var/lib/clickhouse/backup INSIDE this volume so
+  # clickhouse-backup can hardlink from shadow/ (no cross-device link error).
   clickhouse_data:
-  clickhouse_backups:
 
 networks:
   default:
