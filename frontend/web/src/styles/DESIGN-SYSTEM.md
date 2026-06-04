@@ -109,4 +109,29 @@ make lint-design                                              # → PASS on the 
 
 `Button`→Button(cva) · `Card`→Card · `Badge`→Badge · `Input`→Input · `Select`→Select ·
 `Modal`→Dialog · `Tabs`→Tabs · `ContextMenu`→DropdownMenu · plus new: `Tooltip`, `Popover`, `Switch`, `Checkbox`.
-Button variant map: `primary→default`, `secondary→brand` (pink, NOT shadcn secondary), `ghost→ghost`, `outline→outline`, add `destructive`.
+
+## Button API (v2.0 — widened 2026-06-04)
+
+The `Button` primitive (`components/ui/button-variants.ts` + `Button.vue`) is the single
+source of truth — the old `.btn-*` CSS classes were deleted (v2.0 Phase 1). Reuse it before
+hand-rolling a `<button>`.
+
+- **variants:** `default` (cyan primary — `bg-primary text-primary-foreground`, hover-glow + `active:scale-95`) · `brand` (solid pink CTA) · `destructive` (solid red) · `ghost` (bordered quiet — `bg-white/5 border border-white/10`) · `soft` (BORDERLESS quiet — `bg-white/10`, no glow/scale) · `outline` (cyan text + border) · `link` (bare cyan text, `hover:underline`, padding zeroed via `px-0! py-0!`) · legacy `primary`/`secondary` aliases (back-compat, mirror default/brand).
+- **sizes:** `xs` (`px-2 py-1 text-xs`) · `sm` · `md` (default) · `lg` · `icon` (40px) · `icon-sm` (32px).
+- **props:** `radius` (`sm|md|lg|xl|full`, overrides the variant's baked corner via tailwind-merge) · `fullWidth` · `loading` (spinner + disabled) · `href` (renders `<a>`) · `disabled` · `type` · `class` (passthrough, merged).
+- Glow uses the `--shadow-glow-cyan`/`--shadow-glow-pink` tokens (not raw rgba). Color contrast: `default`/`primary` MUST carry `text-primary-foreground` (near-black) — white-on-cyan fails WCAG.
+
+### Bespoke button keeps (governance — NOT every `<button>` becomes `<Button>`)
+
+The v2.0 swap was **value-preserving with minor normalization, color-family-preserving**. These
+shapes legitimately stay raw `<button>` because the opinionated primitive can't model them without
+a visible diff — do NOT force-swap them:
+
+1. **Stateful / segmented toggles** — active/inactive conditional `:class` (language tabs, provider chips, quality/speed/source selectors, view toggles, `role="tab"`/`role="radio"`/`role="menuitemradio"` groups). One variant can't express two states.
+2. **Translucent colored fills** — `bg-*/10`–`/30` tints (e.g. ghost-destructive delete buttons, `bg-cyan-500/10` chips). The solid variants would over-emphasize them.
+3. **Icon-only, zero resting background + bespoke hover-tint** — `ghost`/`soft` add a resting bg/border these don't have.
+4. **Overlay / transport controls** — play/pause/seek/PiP/settings positioned over `<video>` (absolute positioning, custom sizing, hover-reveal).
+5. **Scoped-CSS buttons** — styling lives in a component `<style>` block (`.icon-btn-nt`, `.play-btn`, `.arrow-*`, `.feed-load-more`, `.update-row`, carousel dots/arrows).
+6. **No matching variant** — brand hues with no token variant (`bg-brand-violet`, `bg-warning`).
+7. **Whole-component / structural buttons** — `EpisodeCard`, `AnimeKebab`, full-bleed poster click targets, complex flex-layout rows.
+8. **Sub-`xs` micro-controls** — e.g. `w-6 h-6` steppers smaller than `icon-sm`.

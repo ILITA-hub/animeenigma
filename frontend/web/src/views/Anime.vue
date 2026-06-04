@@ -107,16 +107,19 @@
               <span>{{ premiereDate ? $t('anime.notReleased.cta', { date: premiereDate }) : $t('anime.notReleased.ctaNoDate') }}</span>
             </div>
             <template v-else>
-              <button
+              <Button
                 @click="activatePlayer"
                 type="button"
-                class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/20 transition-all"
+                variant="default"
+                size="md"
+                radius="lg"
+                class="shadow-lg shadow-cyan-500/20"
               >
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M8 5v14l11-7z" />
                 </svg>
                 <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
-              </button>
+              </Button>
               <!-- Workstream watch-together — discovery-stage Invite mount.
                    Anonymous users don't see it (creating a room requires JWT).
                    The button fetches a translation_id from the catalog on
@@ -307,13 +310,15 @@
                 class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
                 :placeholder="$t('anime.examplePlaceholder')"
               />
-              <button
+              <Button
                 @click="saveShikimoriId"
                 :disabled="savingShikimoriId"
-                class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg transition-colors disabled:opacity-50 text-sm"
+                variant="default"
+                size="sm"
+                radius="lg"
               >
                 {{ savingShikimoriId ? '...' : $t('anime.save') }}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -338,13 +343,14 @@
             :class="{ 'line-clamp-4': !synopsisExpanded }"
             v-html="parsedDescription"
           />
-          <button
+          <Button
             v-if="anime.description && anime.description.length > 300"
-            class="mt-2 text-cyan-400 hover:text-cyan-300 transition-colors text-sm"
+            variant="link"
             @click="synopsisExpanded = !synopsisExpanded"
+            class="mt-2 text-sm"
           >
             {{ synopsisExpanded ? $t('anime.showLess') : $t('anime.showMore') }}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -724,13 +730,15 @@
 
           <!-- Submit Buttons -->
           <div class="flex gap-3">
-            <button
+            <Button
               @click="submitReview"
               :disabled="reviewForm.score === 0 || reviewSubmitting"
-              class="px-6 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="default"
+              size="md"
+              radius="lg"
             >
               {{ reviewSubmitting ? $t('anime.publishing') : (myReview ? $t('anime.update') : $t('anime.publish')) }}
-            </button>
+            </Button>
             <button
               v-if="myReview"
               @click="deleteMyReview"
@@ -815,14 +823,16 @@
                 {{ $t('anime.ugc.charCount', { count: runeLen(newCommentBody) }) }}
               </div>
               <div class="flex items-center gap-3 mt-2">
-                <button
+                <Button
                   type="button"
                   @click="postComment"
                   :disabled="posting || newCommentBody.trim().length === 0 || runeLen(newCommentBody.trim()) > 2000"
-                  class="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg px-6 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  variant="default"
+                  size="sm"
+                  radius="lg"
                 >
                   {{ posting ? $t('anime.ugc.posting') : $t('anime.ugc.postComment') }}
-                </button>
+                </Button>
               </div>
               <p v-if="postError" class="text-pink-400 text-sm mt-2">{{ postError }}</p>
             </div>
@@ -844,13 +854,15 @@
             <!-- Load error -->
             <div v-if="commentsError && comments.length === 0" class="glass-card p-8 text-center">
               <p class="text-pink-400 text-sm mb-3">{{ commentsError }}</p>
-              <button
+              <Button
                 type="button"
                 @click="fetchComments"
-                class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition-colors"
+                variant="default"
+                size="sm"
+                radius="lg"
               >
                 {{ $t('common.retry') }}
-              </button>
+              </Button>
             </div>
 
             <!-- Empty state -->
@@ -923,14 +935,16 @@
                     class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
                   ></textarea>
                   <div class="flex items-center gap-2 mt-2">
-                    <button
+                    <Button
                       type="button"
                       @click="saveEditComment"
                       :disabled="editSaving || editingBody.trim().length === 0 || runeLen(editingBody.trim()) > 2000"
-                      class="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      variant="default"
+                      size="sm"
+                      radius="lg"
                     >
                       {{ editSaving ? $t('anime.ugc.posting') : $t('anime.ugc.saveEdit') }}
-                    </button>
+                    </Button>
                     <button
                       type="button"
                       @click="cancelEditComment"

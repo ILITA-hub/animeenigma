@@ -29,12 +29,13 @@
         <!-- Expired state -->
         <div v-if="expired" class="flex flex-col items-center gap-4">
           <p class="text-white/50 text-sm">{{ $t('auth.sessionExpired') }}</p>
-          <button
-            class="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-medium rounded-lg transition-colors"
+          <Button
+            variant="default"
+            size="md"
             @click="startAuth"
           >
             {{ $t('auth.tryAgain') }}
-          </button>
+          </Button>
         </div>
 
         <!-- Active state (QR card visible immediately; canvas paints when token arrives) -->
@@ -131,6 +132,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import Button from '@/components/ui/Button.vue'
 import QRCode from 'qrcode'
 
 useI18n()

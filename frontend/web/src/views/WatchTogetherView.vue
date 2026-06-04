@@ -77,6 +77,7 @@ import ReactionBurstOverlay from '@/components/watch-together/ReactionBurstOverl
 import SyncToastStack from '@/components/watch-together/SyncToastStack.vue'
 import ConnectionStatusOverlay from '@/components/watch-together/ConnectionStatusOverlay.vue'
 import PlayerTabBar from '@/components/watch-together/PlayerTabBar.vue'
+import Button from '@/components/ui/Button.vue'
 
 // Lazy-load each player so the WatchTogetherView chunk stays under the
 // 30KB gz budget (WT-NF-04). Mirrors Anime.vue's defineAsyncComponent
@@ -381,13 +382,13 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
     class="flex flex-col items-center justify-center min-h-screen p-4 md:p-6 lg:p-8 text-center gap-4"
   >
     <h2 class="text-2xl font-semibold">{{ t('watch_together.room_ended_title') }}</h2>
-    <button
-      type="button"
-      class="px-4 py-2 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+    <Button
+      variant="default"
+      size="md"
       @click="goBackToAnime"
     >
       {{ t('watch_together.room_ended_back_button') }}
-    </button>
+    </Button>
   </div>
 
   <!-- Capacity full — composable.onError fired with CAPACITY_FULL. -->
@@ -396,13 +397,13 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
     class="flex flex-col items-center justify-center min-h-screen p-4 md:p-6 lg:p-8 text-center gap-4"
   >
     <h2 class="text-2xl font-semibold">{{ t('watch_together.capacity_full_title') }}</h2>
-    <button
-      type="button"
-      class="px-4 py-2 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+    <Button
+      variant="default"
+      size="md"
       @click="goBackToAnime"
     >
       {{ t('watch_together.capacity_full_back_button') }}
-    </button>
+    </Button>
   </div>
 
   <!-- Auth-expired — composable.onAuthExpired fired (Plan 05.5,
@@ -427,14 +428,15 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
       <p class="text-foreground/80 font-medium">
         {{ t('watch_together.auth_expired_modal_body') }}
       </p>
-      <button
-        type="button"
+      <Button
+        variant="default"
+        size="md"
         data-testid="wt-auth-expired-login"
-        class="px-4 py-2 rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors self-end"
+        class="self-end"
         @click="onAuthExpiredLoginClick"
       >
         {{ t('watch_together.auth_expired_modal_login_button') }}
-      </button>
+      </Button>
     </div>
   </div>
 
@@ -466,13 +468,14 @@ const animeId = computed(() => roomHandle.room.value?.anime_id ?? lastAnimeId.va
         data-testid="wt-guest-banner"
       >
         <span>{{ t('watch_together.guest_banner_text') }}</span>
-        <button
-          type="button"
-          class="text-primary font-semibold hover:underline"
+        <Button
+          variant="link"
+          size="xs"
+          class="font-semibold"
           @click="onGuestLoginClick"
         >
           {{ t('watch_together.guest_banner_login') }}
-        </button>
+        </Button>
       </div>
 
       <KodikPlayer

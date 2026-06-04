@@ -57,13 +57,14 @@
             role="group"
             :aria-label="$t('admin.recs.picker.listboxLabel')"
           >
-            <button
+            <Button
               type="submit"
-              class="px-4 py-2 rounded-md bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium text-sm transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+              variant="default"
+              size="sm"
               :disabled="!input.trim() || isSubmitting"
             >
               {{ $t('admin.recs.pickerSubmit') }}
-            </button>
+            </Button>
             <button
               v-if="authStore.user?.id"
               type="button"
@@ -95,6 +96,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import Button from '@/components/ui/Button.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

@@ -65,14 +65,15 @@
               class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
           </div>
-          <button
+          <Button
             type="submit"
-            class="px-4 py-2 rounded bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium text-sm transition disabled:opacity-50"
+            variant="default"
+            size="sm"
             :disabled="searching"
             :aria-label="$t('player.adminLibrary.search.submit')"
           >
             {{ $t('player.adminLibrary.search.submit') }}
-          </button>
+          </Button>
         </form>
 
         <div v-if="searching" class="flex justify-center py-6">
@@ -111,14 +112,14 @@
                 <td class="px-3 py-2 text-right font-mono text-white/70">{{ formatBytes(release.size_bytes) }}</td>
                 <td class="px-3 py-2 text-white/40 font-mono text-xs">{{ truncateMagnet(release.magnet) }}</td>
                 <td class="px-3 py-2 text-right">
-                  <button
-                    type="button"
-                    class="px-3 py-1 rounded bg-cyan-500/80 hover:bg-cyan-500 text-white text-xs font-medium transition"
+                  <Button
+                    variant="default"
+                    size="xs"
                     :aria-label="$t('player.adminLibrary.search.queue')"
                     @click="queueJob(release)"
                   >
                     {{ $t('player.adminLibrary.search.queue') }}
-                  </button>
+                  </Button>
                 </td>
               </tr>
             </tbody>
@@ -265,6 +266,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { adminLibraryApi, animeApi } from '@/api/client'
 import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload } from '@/types/library'
 import Badge from '@/components/ui/Badge.vue'
+import Button from '@/components/ui/Button.vue'
 
 // Phase 5 (LIB-09): RawLibrary admin view.
 //

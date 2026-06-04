@@ -18,15 +18,15 @@
             class="text-xs text-cyan-300"
             :title="$t('admin.recs.lastComputed')"
           >{{ lastRecomputeLatencyMs }}ms</span>
-          <button
-            type="button"
-            class="px-4 py-2 rounded-md bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium text-sm transition disabled:opacity-50"
+          <Button
+            variant="default"
+            size="sm"
             :disabled="isRecomputing || !userId"
             :aria-label="$t('admin.recs.forceRecompute')"
             @click="recompute"
           >
             {{ isRecomputing ? $t('admin.recs.recomputing') : $t('admin.recs.forceRecompute') }}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -211,6 +211,7 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminRecs, type AdminRecRow } from '@/composables/useAdminRecs'
+import Button from '@/components/ui/Button.vue'
 
 // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug page.
 const route = useRoute()

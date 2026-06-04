@@ -241,7 +241,6 @@ import type { EpisodeOption } from './EpisodeSelector.types'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
-
 const { t } = useI18n()
 
 // ── Watch progress tracking ─────────────────────────────────────────────────

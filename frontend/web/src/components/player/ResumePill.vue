@@ -19,22 +19,24 @@
       </svg>
       <span>{{ t('anime.resume.youFinishedThis') }}</span>
       <span class="text-white/30" aria-hidden="true">—</span>
-      <button
+      <Button
         type="button"
+        variant="link"
+        size="xs"
         @click="$emit('rewatch')"
-        class="text-cyan-400 hover:text-cyan-300 underline-offset-2 hover:underline transition-colors"
       >
         {{ t('anime.resume.rewatch') }}
-      </button>
+      </Button>
       <template v-if="canMarkCompleteInList">
         <span class="text-white/30" aria-hidden="true">·</span>
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="xs"
           @click="$emit('mark-complete-in-list')"
-          class="text-cyan-400 hover:text-cyan-300 underline-offset-2 hover:underline transition-colors"
         >
           {{ t('anime.resume.markCompleteInList') }}
-        </button>
+        </Button>
       </template>
       <template v-if="findSimilarRoute">
         <span class="text-white/30" aria-hidden="true">·</span>
@@ -75,6 +77,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
+import Button from '@/components/ui/Button.vue'
 
 type ResumeKind = 'first-time' | 'watching' | 'finished' | 'not-yet-aired' | 'episode-not-loaded-yet'
 

@@ -20,14 +20,14 @@
             rel="noopener"
             class="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-white/80 text-sm"
           >{{ $t('admin.collections.preview') }}</a>
-          <button
-            type="button"
-            class="px-4 py-2 rounded-md bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium text-sm transition disabled:opacity-50"
+          <Button
+            variant="default"
+            size="sm"
             :disabled="isSaving || !form.title"
             @click="onSave"
           >
             {{ isSaving ? '…' : $t('admin.collections.save') }}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -241,6 +241,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import Button from '@/components/ui/Button.vue'
 import {
   adminApi,
   animeApi,

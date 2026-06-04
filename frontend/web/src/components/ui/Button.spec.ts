@@ -7,6 +7,7 @@ describe('buttonVariants', () => {
   it('default variant binds cyan token + radius + hover token', () => {
     const c = buttonVariants({ variant: 'default' })
     expect(c).toContain('bg-primary')
+    expect(c).toContain('text-primary-foreground')
     expect(c).toContain('rounded-xl')
     expect(c).toContain('hover:bg-brand-cyan')
   })
@@ -49,6 +50,47 @@ describe('buttonVariants', () => {
     expect(buttonVariants({ size: 'lg' })).toContain('px-8 py-4 text-lg')
     expect(buttonVariants({ size: 'icon' })).toContain('h-10 w-10 p-0')
   })
+
+  it('soft variant: quiet filled, no glow, no border', () => {
+    const c = buttonVariants({ variant: 'soft' })
+    expect(c).toContain('bg-white/10')
+    expect(c).toContain('hover:bg-white/20')
+    expect(c).not.toContain('border')
+    expect(c).not.toContain('shadow-glow')
+  })
+
+  it('link variant: bare text, brand-cyan, padding zeroed', () => {
+    const c = buttonVariants({ variant: 'link' })
+    expect(c).toContain('text-cyan-400')
+    expect(c).toContain('hover:underline')
+    expect(c).toContain('bg-transparent')
+    expect(c).toContain('px-0!')
+    expect(c).not.toContain('active:scale')
+  })
+
+  it('new sizes map to expected utilities', () => {
+    expect(buttonVariants({ size: 'xs' })).toContain('px-2 py-1 text-xs')
+    expect(buttonVariants({ size: 'icon-sm' })).toContain('h-8 w-8 p-0')
+  })
+
+  it('default/brand glow uses the shadow-glow token, NOT raw rgba', () => {
+    const d = buttonVariants({ variant: 'default' })
+    expect(d).toContain('hover:shadow-glow-cyan')
+    expect(d).not.toContain('rgba(0,212,255')
+    const b = buttonVariants({ variant: 'brand' })
+    expect(b).toContain('hover:shadow-glow-pink')
+    expect(b).not.toContain('rgba(255,45,124')
+  })
+
+  it('legacy primary/secondary aliases still mirror default/brand glow tokens', () => {
+    expect(buttonVariants({ variant: 'primary' })).toContain('hover:shadow-glow-cyan')
+    expect(buttonVariants({ variant: 'secondary' })).toContain('hover:shadow-glow-pink')
+  })
+
+  it('default/primary set primary-foreground text for contrast on cyan', () => {
+    expect(buttonVariants({ variant: 'default' })).toContain('text-primary-foreground')
+    expect(buttonVariants({ variant: 'primary' })).toContain('text-primary-foreground')
+  })
 })
 
 describe('Button.vue back-compat', () => {
@@ -87,5 +129,18 @@ describe('Button.vue back-compat', () => {
 
     const loadingWithIcon = mount(Button, { props: { loading: true }, slots: { icon: '<i class="my-icon" />' } })
     expect(loadingWithIcon.find('.my-icon').exists()).toBe(false)
+  })
+
+  it('radius prop overrides the baked corner via tailwind-merge (last-wins)', () => {
+    const round = mount(Button, { props: { radius: 'full' } })
+    expect(round.classes()).toContain('rounded-full')
+    expect(round.classes()).not.toContain('rounded-xl')
+  })
+
+  it('omitting radius keeps the variant default corner (no pixel movement)', () => {
+    const def = mount(Button)
+    expect(def.classes()).toContain('rounded-xl')
+    const ghost = mount(Button, { props: { variant: 'ghost' } })
+    expect(ghost.classes()).toContain('rounded-lg')
   })
 })
