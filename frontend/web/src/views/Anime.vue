@@ -226,9 +226,11 @@
               </span>
             </div>
 
-            <!-- Admin Tools (Admin only) — kebab groups maintenance/moderation
-                 actions (Refresh, Hide, Shikimori ID) into a visually distinct
-                 amber-tinted cluster, separate from the user action above. -->
+            <!-- Admin Tools (Admin only) — trigger is absolutely positioned so
+                 the kebab floats to the hero top-right (anchored to the relative
+                 hero container at line ~16), out of the user action row. Muted-
+                 pink tint marks the admin zone; the portaled menu stays anchored
+                 to the trigger. -->
             <DropdownMenu
               v-if="authStore.isAdmin"
               v-model:open="showAdminMenu"
@@ -241,13 +243,18 @@
                   :aria-label="$t('anime.adminMenu')"
                   aria-haspopup="menu"
                   :aria-expanded="showAdminMenu"
-                  class="flex items-center justify-center w-10 h-10 rounded-lg bg-warning/20 text-warning border border-warning/40 hover:bg-warning/30 transition-all"
+                  class="absolute top-0 right-4 lg:right-8 z-20 flex items-center justify-center w-10 h-10 rounded-lg bg-pink-500/10 text-pink-400/80 border border-pink-500/25 hover:bg-pink-500/20 hover:text-pink-300 transition-colors"
                 >
                   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                     <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
                   </svg>
                 </button>
               </template>
+
+              <!-- Stylized /admin label — non-interactive menu header -->
+              <div class="px-2 pt-1 pb-1.5 mb-1 border-b border-white/10 select-none">
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-pink-400/70">/admin</span>
+              </div>
 
               <!-- Refresh Data — moved out of the user row; admin/maintenance only -->
               <DropdownMenuItem
