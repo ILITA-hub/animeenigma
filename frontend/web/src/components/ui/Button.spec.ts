@@ -63,7 +63,8 @@ describe('buttonVariants', () => {
     expect(c).toContain('text-cyan-400')
     expect(c).toContain('hover:underline')
     expect(c).toContain('bg-transparent')
-    expect(c).toContain('px-0')
+    expect(c).toContain('px-0!')
+    expect(c).not.toContain('active:scale')
   })
 
   it('new sizes map to expected utilities', () => {

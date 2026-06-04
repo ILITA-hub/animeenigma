@@ -12,6 +12,7 @@ export const buttonVariants = cva(
         destructive: 'bg-destructive text-destructive-foreground rounded-xl hover:bg-destructive/90 active:scale-95',
         soft: 'bg-white/10 hover:bg-white/20 text-white rounded-lg',
         link: 'bg-transparent text-cyan-400 hover:text-cyan-300 hover:underline underline-offset-4',
+        // DS-NF-04 back-compat aliases — mirror default/brand so old call-sites are unchanged:
         primary: 'bg-primary rounded-xl hover:bg-brand-cyan hover:shadow-glow-cyan active:scale-95',
         secondary: 'bg-brand-pink text-brand-pink-foreground rounded-xl hover:bg-pink-400 hover:shadow-glow-pink active:scale-95',
       },
@@ -25,7 +26,7 @@ export const buttonVariants = cva(
       },
     },
     compoundVariants: [
-      { variant: 'link', class: 'px-0 py-0 h-auto' },
+      { variant: 'link', class: 'px-0! py-0! h-auto' },
     ],
     defaultVariants: { variant: 'default', size: 'md' },
   },
