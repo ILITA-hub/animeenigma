@@ -4,7 +4,7 @@
     :href="href"
     :type="href ? undefined : type"
     :disabled="disabled || loading"
-    :class="cn(buttonVariants({ variant, size }), fullWidth && 'w-full', 'touch-target', props.class)"
+    :class="cn(buttonVariants({ variant, size }), radius && radiusClass[radius], fullWidth && 'w-full', 'touch-target', props.class)"
   >
     <span v-if="loading" class="animate-spin mr-2">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24">
@@ -33,6 +33,7 @@ interface Props {
   disabled?: boolean
   loading?: boolean
   fullWidth?: boolean
+  radius?: 'sm' | 'md' | 'lg' | 'xl' | 'full'
   class?: HTMLAttributes['class']
 }
 
@@ -44,4 +45,8 @@ const props = withDefaults(defineProps<Props>(), {
   loading: false,
   fullWidth: false,
 })
+
+const radiusClass = {
+  sm: 'rounded-sm', md: 'rounded-md', lg: 'rounded-lg', xl: 'rounded-xl', full: 'rounded-full',
+} as const
 </script>

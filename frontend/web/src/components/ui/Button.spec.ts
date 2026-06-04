@@ -124,4 +124,17 @@ describe('Button.vue back-compat', () => {
     const loadingWithIcon = mount(Button, { props: { loading: true }, slots: { icon: '<i class="my-icon" />' } })
     expect(loadingWithIcon.find('.my-icon').exists()).toBe(false)
   })
+
+  it('radius prop overrides the baked corner via tailwind-merge (last-wins)', () => {
+    const round = mount(Button, { props: { radius: 'full' } })
+    expect(round.classes()).toContain('rounded-full')
+    expect(round.classes()).not.toContain('rounded-xl')
+  })
+
+  it('omitting radius keeps the variant default corner (no pixel movement)', () => {
+    const def = mount(Button)
+    expect(def.classes()).toContain('rounded-xl')
+    const ghost = mount(Button, { props: { variant: 'ghost' } })
+    expect(ghost.classes()).toContain('rounded-lg')
+  })
 })
