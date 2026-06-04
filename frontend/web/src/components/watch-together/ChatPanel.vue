@@ -80,14 +80,14 @@
         </span>
         <span v-else aria-hidden="true" />
 
-        <button
-          type="button"
+        <Button
+          variant="default"
+          size="sm"
           :disabled="!canSend"
-          class="px-3 py-1.5 rounded-md bg-primary text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90"
           @click="onSend"
         >
           {{ t('watch_together.send_button') }}
-        </button>
+        </Button>
       </div>
     </div>
   </section>
@@ -96,6 +96,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Button from '@/components/ui/Button.vue'
 
 import type { ChatMessage } from '@/api/watch-together'
 

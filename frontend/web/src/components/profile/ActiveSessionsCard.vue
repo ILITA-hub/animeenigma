@@ -30,13 +30,14 @@ async function onRevokeOthers() {
       <h3 class="text-base font-semibold text-white">
         {{ $t('profile.settings.sessions.title') }}
       </h3>
-      <button
-        class="text-xs text-white/60 hover:text-white"
+      <Button
+        variant="link"
+        size="xs"
         :disabled="loading"
         @click="refresh"
       >
         {{ $t('profile.settings.sessions.refresh') }}
-      </button>
+      </Button>
     </header>
 
     <p class="text-sm text-white/60">

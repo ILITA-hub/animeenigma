@@ -39,16 +39,17 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <p class="text-destructive text-sm font-medium">{{ $t('player.kodikAdfree.extractError') }}</p>
-              <button
+              <Button
                 data-testid="report-button"
-                class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-destructive/20 hover:bg-destructive/30 text-destructive border border-destructive/40 transition-colors"
+                variant="destructive"
+                size="sm"
                 @click="reportStreamError"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
                 </svg>
                 {{ $t('player.report') || 'Сообщить об ошибке' }}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -241,6 +242,7 @@ import type { EpisodeOption } from './EpisodeSelector.types'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
+import Button from '@/components/ui/Button.vue'
 
 const { t } = useI18n()
 

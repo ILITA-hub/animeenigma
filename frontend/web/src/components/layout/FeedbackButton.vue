@@ -64,13 +64,14 @@
       </template>
 
       <template #footer>
-        <button
+        <Button
           v-if="!submitted"
-          class="px-4 py-2 text-sm rounded-lg bg-white/10 text-white/60 hover:bg-white/15 transition-colors"
+          variant="soft"
+          size="sm"
           @click="showModal = false"
         >
           {{ $t('common.cancel') }}
-        </button>
+        </Button>
         <button
           v-if="!submitted"
           class="px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 bg-brand-violet/20 text-brand-violet hover:bg-brand-violet/30"
@@ -83,13 +84,14 @@
           </span>
           <span v-else>{{ $t('footer.feedback.submit') }}</span>
         </button>
-        <button
+        <Button
           v-if="submitted"
-          class="px-4 py-2 text-sm rounded-lg bg-white/10 text-white/60 hover:bg-white/15 transition-colors"
+          variant="soft"
+          size="sm"
           @click="closeAfterSuccess"
         >
           {{ $t('common.close') }}
-        </button>
+        </Button>
       </template>
     </Modal>
   </div>
@@ -102,6 +104,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/client'
 import { collectDiagnostics } from '@/utils/diagnostics'
+import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
 
 type FeedbackCategory = 'bug' | 'issue' | 'feature'

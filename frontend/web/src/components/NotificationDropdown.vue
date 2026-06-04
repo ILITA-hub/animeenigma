@@ -35,13 +35,13 @@
       v-if="store.unreadCount > 0"
       class="border-t border-white/10 bg-white/[0.02] px-3 py-2 flex items-center justify-end"
     >
-      <button
-        type="button"
-        class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors px-2 py-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+      <Button
+        variant="link"
+        size="xs"
         @click="onMarkAllRead"
       >
         {{ $t('notifications.dropdown.markAllRead') }}
-      </button>
+      </Button>
     </div>
   </div>
 </template>
@@ -61,6 +61,7 @@
  */
 import { useNotificationsStore } from '@/stores/notifications'
 import { resolveRenderer } from '@/lib/notification-renderers'
+import Button from '@/components/ui/Button.vue'
 
 const store = useNotificationsStore()
 

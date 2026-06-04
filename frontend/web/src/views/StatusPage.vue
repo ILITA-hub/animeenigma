@@ -65,12 +65,13 @@
             {{ $t('status.lastChecked', { time: checkedAtFormatted }) }}
             <span class="ml-2">{{ $t('status.autoRefresh') }}</span>
           </p>
-          <button
-            class="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors"
+          <Button
+            variant="soft"
+            size="sm"
             @click="fetchStatus"
           >
             {{ $t('status.refresh') }}
-          </button>
+          </Button>
         </div>
       </template>
 
@@ -86,6 +87,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { statusApi } from '@/api/client'
+import Button from '@/components/ui/Button.vue'
 
 const { locale } = useI18n()
 

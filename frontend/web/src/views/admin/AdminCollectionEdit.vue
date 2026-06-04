@@ -20,14 +20,15 @@
             rel="noopener"
             class="px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-white/80 text-sm"
           >{{ $t('admin.collections.preview') }}</a>
-          <button
-            type="button"
-            class="px-4 py-2 rounded-md bg-cyan-500/80 hover:bg-cyan-500 text-white font-medium text-sm transition disabled:opacity-50"
+          <Button
+            variant="default"
+            size="sm"
             :disabled="isSaving || !form.title"
+            :loading="isSaving"
             @click="onSave"
           >
             {{ isSaving ? '…' : $t('admin.collections.save') }}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -220,11 +221,11 @@
                   class="w-16 px-2 py-1 rounded bg-black/40 border border-white/10 text-white text-sm text-right"
                   @change="(e) => onUpdateSort(item, (e.target as HTMLInputElement).valueAsNumber)"
                 />
-                <button
-                  type="button"
-                  class="px-3 py-1 rounded bg-destructive/30 hover:bg-destructive/50 text-xs text-destructive"
+                <Button
+                  variant="destructive"
+                  size="xs"
                   @click="onRemoveItem(item)"
-                >{{ $t('admin.collections.itemRemove') }}</button>
+                >{{ $t('admin.collections.itemRemove') }}</Button>
               </div>
             </li>
           </ul>
@@ -241,6 +242,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import Button from '@/components/ui/Button.vue'
 import {
   adminApi,
   animeApi,
