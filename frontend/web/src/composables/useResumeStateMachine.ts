@@ -2,18 +2,6 @@ import { ref, computed, onScopeDispose, type Ref, type ComputedRef } from 'vue'
 import { userApi } from '@/api/client'
 
 /**
- * Grace window for the "episode-not-loaded-yet" hint. Once an episode's
- * announced air time passes we KNOW it aired — it's just not loaded into our
- * catalog/sources yet (Shikimori episodes_aired lag, provider delay). Within
- * this window we tell the user it usually shows up within the hour; past it the
- * load is clearly delayed (or the airing data is stale — hiatus, a
- * silently-ended show still flagged 'ongoing', scheduler lag), so we switch to
- * a softer copy that makes no time promise. Either way we never claim the
- * episode hasn't aired — its air time is demonstrably in the past.
- */
-const EPISODE_LOAD_GRACE_MS = 3 * 60 * 60 * 1000 // 3h
-
-/**
  * useResumeStateMachine — Phase 4 (A-03, A-04).
  *
  * Computes the correct resume state for an anime given the user's server-side
@@ -32,12 +20,15 @@ const EPISODE_LOAD_GRACE_MS = 3 * 60 * 60 * 1000 // 3h
  *                      yet (anime.status='ongoing' AND nextEpisodeAt is in the
  *                      FUTURE — or unknown — AND episodesAired <= last). Player
  *                      still mounts on startEpisode=last so the user can rewatch.
- *   - episode-not-loaded-yet — last < total, nextEpisodeAt is in the PAST (so the
- *                      episode HAS aired) but episodesAired hasn't caught up yet:
- *                      it aired but isn't loaded into our catalog/sources yet.
- *                      `episodeLoadDelayed` distinguishes "just aired, loading"
- *                      from "aired a while ago, still missing". Same startEpisode
- *                      as not-yet-aired.
+ *   - episode-not-loaded-yet — user is caught up (last == episodesAired),
+ *                      nextEpisodeAt is in the PAST (so the next episode HAS
+ *                      aired) but it isn't loaded into our catalog/sources yet
+ *                      (translation/upload lag). `episodeAiredAgoMs` drives an
+ *                      "aired N ago" label. Same startEpisode as not-yet-aired.
+ *                      NOTE: if the user has watched PAST episodesAired (the
+ *                      catalog count is stale), we trust their progress and
+ *                      classify as `watching` instead — we never tell a user an
+ *                      episode they've already watched "isn't loaded".
  *
  * Anonymous users: this composable is logged-in only — the parent view should
  * keep using its existing localStorage path and not invoke this. Phase 7
@@ -68,11 +59,11 @@ export interface ResumeStateMachine {
   /** Computed state. */
   kind: ComputedRef<ResumeKind>
   /**
-   * For `episode-not-loaded-yet`: true once the load has run past the grace
-   * window (aired a while ago, still not in our sources) — drives the softer,
-   * no-time-promise copy. Always false for other states.
+   * For `episode-not-loaded-yet`: milliseconds since the episode's air time
+   * (reactive — refreshes on the 60s tick). 0 for other states. The consumer
+   * formats it into a localized "aired N ago" label.
    */
-  episodeLoadDelayed: ComputedRef<boolean>
+  episodeAiredAgoMs: ComputedRef<number>
   /** Episode the player should mount on. */
   startEpisode: ComputedRef<number>
   /** Episode the user just finished — drives the breadcrumb. 0 when N/A. */
@@ -109,9 +100,9 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
   // Reactive "now" so the airing-state predicates self-heal as time passes,
   // without a page refresh. `kind` previously read Date.now() directly, which
   // isn't a reactive dependency — so not-yet-aired never flipped to
-  // episode-not-loaded-yet in-session, and the load-delayed copy never kicked
-  // in. Ticking a ref once a minute makes `kind` / `episodeLoadDelayed`
-  // recompute on a coarse-but-free cadence, plenty for an hours-wide window.
+  // episode-not-loaded-yet in-session, and the "aired N ago" label never
+  // advanced. Ticking a ref once a minute makes `kind` / `episodeAiredAgoMs`
+  // recompute on a coarse-but-free cadence, plenty for a minutes/hours label.
   const nowMs = ref(Date.now())
   if (typeof window !== 'undefined') {
     const timer = window.setInterval(() => {
@@ -179,12 +170,19 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     // Finished: user watched every aired episode AND total is known.
     if (total > 0 && last >= total) return 'finished'
 
-    // Determine whether ep last+1 is available. Two ways to tell:
+    // Determine whether ep last+1 is available. Three ways to tell:
     //   1. anime.status is 'released' / 'completed' — all eps exist.
     //   2. anime.episodesAired > last — the next episode has been released.
+    //   3. last > episodesAired — the user has watched PAST the catalog's
+    //      (often-lagging) aired count, which proves those episodes exist and
+    //      that episodesAired + its single next_episode_at are stale and refer
+    //      to an episode the user has already seen. Trust the user's progress:
+    //      they're actively watching, and we must never tell them an episode
+    //      they've watched "isn't loaded yet".
     const isReleased = status === 'released' || status === 'completed'
     const nextIsAired = aired > 0 && aired > last
-    if (isReleased || nextIsAired) return 'watching'
+    const userAheadOfCatalog = last > aired
+    if (isReleased || nextIsAired || userAheadOfCatalog) return 'watching'
 
     // Ongoing series, our catalog hasn't recorded the next episode as aired.
     // The announced air time tells us which side of the line we're on:
@@ -200,13 +198,12 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     return 'not-yet-aired'
   })
 
-  // For episode-not-loaded-yet: has the load run past the grace window? Beyond
-  // it the "usually within the hour" promise no longer holds, so the consumer
-  // shows a softer "still loading / delayed" copy instead.
-  const episodeLoadDelayed = computed(() => {
-    if (kind.value !== 'episode-not-loaded-yet') return false
+  // For episode-not-loaded-yet: how long ago the episode aired (ms), reactive
+  // via nowMs. The consumer turns this into a localized "aired N ago" label.
+  const episodeAiredAgoMs = computed(() => {
+    if (kind.value !== 'episode-not-loaded-yet') return 0
     const t = airTimeMs.value
-    return !Number.isNaN(t) && nowMs.value - t >= EPISODE_LOAD_GRACE_MS
+    return Number.isNaN(t) ? 0 : Math.max(0, nowMs.value - t)
   })
 
   const startEpisode = computed(() => {
@@ -223,5 +220,5 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     return 0
   })
 
-  return { loaded, lastWatched, kind, episodeLoadDelayed, startEpisode, finishedEpisode, init, reset }
+  return { loaded, lastWatched, kind, episodeAiredAgoMs, startEpisode, finishedEpisode, init, reset }
 }

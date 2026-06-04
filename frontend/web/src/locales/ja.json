@@ -97,8 +97,7 @@
       "findSimilar": "似た作品を探す",
       "notYetAvailable": "第{n}話はまだ配信されていません。",
       "notYetAvailableEta": "第{n}話は{when}に配信予定です。",
-      "episodeNotLoaded": "第{n}話は配信開始済みです — 読み込み中です。通常は1時間以内に視聴可能になります。",
-      "episodeNotLoadedDelayed": "第{n}話は配信開始済みですが、まだ読み込まれていません。読み込みが遅れています。"
+      "episodeNotLoaded": "第{n}話は{ago}に放送されました — 翻訳チームの読み込みをお待ちください。"
     },
     "rateStar": "{n}/10で評価",
     "episodesShort": "話",

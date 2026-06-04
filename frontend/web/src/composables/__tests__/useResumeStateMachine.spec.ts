@@ -47,19 +47,24 @@ describe('useResumeStateMachine — airing state', () => {
     return sm
   }
 
-  it('is episode-not-loaded-yet (not delayed) when air time just passed', async () => {
+  it('is episode-not-loaded-yet when caught up (last == aired) and air time just passed', async () => {
+    // Default: episodesAired=3, last=3 (caught up). Next ep aired 1h ago, not loaded.
     const nextAt = new Date(Date.now() - 1 * HOUR).toISOString()
     const sm = await setup(makeInputs({ nextEpisodeAt: ref(nextAt) }))
     expect(sm.kind.value).toBe('episode-not-loaded-yet')
-    expect(sm.episodeLoadDelayed.value).toBe(false)
+    expect(sm.episodeAiredAgoMs.value).toBeGreaterThanOrEqual(HOUR - 1000)
   })
 
-  it('marks load delayed when air time passed long ago but catalog never caught up', async () => {
-    // The Re:Zero S4 case: aired ~a day ago, episodes_aired still stuck.
+  it('trusts the user when they have watched PAST the stale catalog aired count', async () => {
+    // The reported Re:Zero S4 bug: user completed ep 9, but catalog
+    // episodes_aired is stuck at 8. We must NOT say "ep 9 not loaded" — the
+    // user watched it. last (9) > aired (8) → watching.
+    getProgress.mockResolvedValue({ data: { data: [{ episode_number: 9, completed: true }] } })
     const nextAt = new Date(Date.now() - 27 * HOUR).toISOString()
-    const sm = await setup(makeInputs({ nextEpisodeAt: ref(nextAt) }))
-    expect(sm.kind.value).toBe('episode-not-loaded-yet') // NOT not-yet-aired
-    expect(sm.episodeLoadDelayed.value).toBe(true)
+    const sm = await setup(makeInputs({ episodesAired: ref(8), nextEpisodeAt: ref(nextAt) }))
+    expect(sm.kind.value).toBe('watching')
+    expect(sm.finishedEpisode.value).toBe(9)
+    expect(sm.startEpisode.value).toBe(10)
   })
 
   it('self-heals not-yet-aired → episode-not-loaded-yet as the clock advances', async () => {
@@ -77,6 +82,6 @@ describe('useResumeStateMachine — airing state', () => {
     const nextAt = new Date(Date.now() + 48 * HOUR).toISOString()
     const sm = await setup(makeInputs({ nextEpisodeAt: ref(nextAt) }))
     expect(sm.kind.value).toBe('not-yet-aired')
-    expect(sm.episodeLoadDelayed.value).toBe(false)
+    expect(sm.episodeAiredAgoMs.value).toBe(0)
   })
 })

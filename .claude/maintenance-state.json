@@ -5,6 +5,14 @@
   "reactions_supported": true,
   "bot_user_id": 8609426278,
   "active_alerts": {
+    "High Error Rate:streaming": {
+      "alert_uid": "High Error Rate",
+      "service": "streaming",
+      "first_seen": "2026-06-04T01:51:52Z",
+      "last_seen": "2026-06-04T01:51:52Z",
+      "issue_id": "AUTO-360",
+      "status": "escalate"
+    },
     "ScraperPlayabilityRegression:gogoanime": {
       "alert_uid": "ScraperPlayabilityRegression",
       "service": "gogoanime",

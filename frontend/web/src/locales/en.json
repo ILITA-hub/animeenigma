@@ -97,8 +97,7 @@
       "findSimilar": "Find similar anime",
       "notYetAvailable": "Episode {n} — not yet available.",
       "notYetAvailableEta": "Episode {n} airs {when}.",
-      "episodeNotLoaded": "Episode {n} has aired — loading now. It usually appears within an hour.",
-      "episodeNotLoadedDelayed": "Episode {n} has aired, but isn't loaded yet. Loading is delayed."
+      "episodeNotLoaded": "Episode {n} aired {ago} — translation teams need time to upload it."
     },
     "rateStar": "Rate {n} out of 10",
     "episodesShort": "eps",

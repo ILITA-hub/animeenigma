@@ -1345,12 +1345,18 @@ const resumePillProps = computed(() => {
     resume.kind.value === 'not-yet-aired' && hasFutureEta
       ? formatNextEpisode(resumeNextAt.value as string)
       : undefined
+  // For episode-not-loaded-yet: localized "aired N ago" (reads episodeAiredAgoMs
+  // so it stays reactive to the 60s clock tick).
+  const airedAgoLabel =
+    resume.kind.value === 'episode-not-loaded-yet'
+      ? formatAiredAgo(resume.episodeAiredAgoMs.value)
+      : undefined
   return {
     kind: resume.kind.value,
     finishedEpisode: resume.finishedEpisode.value,
     nextEpisodeNumber: resumeNextEpisodeNumber.value,
     nextEpisodeEtaLabel: etaLabel,
-    loadDelayed: resume.episodeLoadDelayed.value,
+    airedAgoLabel,
     canMarkCompleteInList: currentListStatus.value !== 'completed',
     findSimilarRoute: anime.value?.genres?.length
       ? { path: '/browse', query: { genres: anime.value.genres[0] } }
@@ -1634,6 +1640,18 @@ const formatNextEpisode = (dateStr: string) => {
     return t('anime.dayAtTime', { day: t(`schedule.days.${dayKeys[date.getDay()]}`), time: timeStr })
   }
   return t('anime.timeMsk', { time: date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }) })
+}
+
+// Localized "N ago" for an episode that already aired (episode-not-loaded-yet).
+// Uses Intl.RelativeTimeFormat so pluralization + the "ago"/"назад"/"前" suffix
+// are correct per-locale. Picks the coarsest sensible unit.
+const formatAiredAgo = (agoMs: number) => {
+  const loc = locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US'
+  const rtf = new Intl.RelativeTimeFormat(loc, { numeric: 'always' })
+  const sec = Math.max(0, Math.floor(agoMs / 1000))
+  if (sec < 3600) return rtf.format(-Math.max(1, Math.round(sec / 60)), 'minute')
+  if (sec < 86400) return rtf.format(-Math.round(sec / 3600), 'hour')
+  return rtf.format(-Math.round(sec / 86400), 'day')
 }
 
 const formatEpisodeCount = (anime: { episodesAired?: number; totalEpisodes?: number; status?: string }) => {

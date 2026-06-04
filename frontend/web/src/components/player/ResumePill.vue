@@ -66,8 +66,7 @@
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400/60 opacity-75"></span>
         <span class="relative inline-flex rounded-full h-2 w-2 bg-pink-400/70"></span>
       </span>
-      <span v-if="loadDelayed">{{ t('anime.resume.episodeNotLoadedDelayed', { n: nextEpisodeNumber }) }}</span>
-      <span v-else>{{ t('anime.resume.episodeNotLoaded', { n: nextEpisodeNumber }) }}</span>
+      <span>{{ t('anime.resume.episodeNotLoaded', { n: nextEpisodeNumber, ago: airedAgoLabel }) }}</span>
     </template>
   </div>
 </template>
@@ -84,8 +83,8 @@ const props = defineProps<{
   finishedEpisode?: number
   nextEpisodeNumber?: number
   nextEpisodeEtaLabel?: string
-  /** episode-not-loaded-yet only: aired a while ago, still not loaded → softer copy. */
-  loadDelayed?: boolean
+  /** episode-not-loaded-yet only: localized "aired N ago" label (e.g. "2 часа назад"). */
+  airedAgoLabel?: string
   canMarkCompleteInList?: boolean
   findSimilarRoute?: RouteLocationRaw
 }>()
