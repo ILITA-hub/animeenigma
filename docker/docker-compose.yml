@@ -409,6 +409,9 @@ services:
       GF_AUTH_PROXY_SYNC_TTL: "60"
       GF_USERS_AUTO_ASSIGN_ORG_ROLE: "Admin"
       GF_UNIFIED_ALERTING_ENABLED: "true"
+      # v4 Activity Register (01-03): the aenigma-clickhouse datasource needs the
+      # official ClickHouse plugin installed (no built-in CH datasource exists).
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
       GRAFANA_WEBHOOK_PASS: ${GRAFANA_WEBHOOK_PASS:-}
     extra_hosts:
       - "host-gateway:host-gateway"
@@ -831,10 +834,22 @@ services:
       ANALYTICS_IP_SALT: ${ANALYTICS_IP_SALT:-change-me-in-production}
       ANALYTICS_RETENTION_DAYS: "90"
       ANALYTICS_PURGE_CRON: "17 3 * * *"
+      # v4 Activity Register (01-03): dual-write the clickstream to ClickHouse.
+      # Postgres stays the source of truth + dashboard fallback; a CH write
+      # failure is best-effort/swallowed (DualWriteStore). Flip to "clickhouse"
+      # to cut over fully, "postgres" to roll back.
+      ANALYTICS_STORE_BACKEND: ${ANALYTICS_STORE_BACKEND:-dualwrite}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "9000"
+      CLICKHOUSE_DB: analytics
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-analytics}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-changeme}
     ports:
       - "127.0.0.1:8092:8092"
     depends_on:
       postgres:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8092/health"]

@@ -57,3 +57,23 @@ datasources:
         filterBySpanID: false
       nodeGraph:
         enabled: true
+
+  # v4 Activity Register (01-03): ClickHouse clickstream store. The uid
+  # aenigma-clickhouse is BRAND NEW — never reuse aenigma-postgres (the header
+  # warning above; reusing a uid orphaned 14 alert rules before). The product-
+  # analytics dashboard binds its 6 panels to this exact uid. Requires the
+  # grafana-clickhouse-datasource plugin (GF_INSTALL_PLUGINS in compose).
+  - name: ClickHouse
+    uid: aenigma-clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    editable: false
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      secure: false
+      username: ${CLICKHOUSE_USER:-analytics}
+      defaultDatabase: analytics
+    secureJsonData:
+      password: ${CLICKHOUSE_PASSWORD:-changeme}

@@ -5,15 +5,15 @@
   "id": null,
   "uid": "product-analytics",
   "title": "Product Analytics (Clickstream)",
-  "description": "Clickstream over analytics_events_resolved (Plan 1/2). person_id = identified user if known, else anonymous.",
+  "description": "Clickstream over the ClickHouse events_resolved view (v4 Activity Register, 01-03). person_id = identified user if known, else anonymous.",
   "tags": ["analytics", "clickstream"],
   "time": { "from": "now-7d", "to": "now" },
   "timezone": "",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "panels": [
     {
-      "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "title": "Unique visitors",
       "type": "stat",
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
@@ -22,16 +22,17 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
           "rawQuery": true,
           "format": "table",
+          "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT count(DISTINCT person_id) AS visitors FROM analytics_events_resolved WHERE $__timeFilter(timestamp)"
+          "rawSql": "SELECT count(DISTINCT person_id) AS visitors FROM events_resolved WHERE $__timeFilter(timestamp)"
         }
       ]
     },
     {
-      "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "title": "Sessions",
       "type": "stat",
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
@@ -40,16 +41,17 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
           "rawQuery": true,
           "format": "table",
+          "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT count(DISTINCT session_id) AS sessions FROM analytics_events_resolved WHERE $__timeFilter(timestamp)"
+          "rawSql": "SELECT count(DISTINCT session_id) AS sessions FROM events_resolved WHERE $__timeFilter(timestamp)"
         }
       ]
     },
     {
-      "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "title": "Anonymous vs identified visitors",
       "type": "piechart",
       "gridPos": { "h": 4, "w": 12, "x": 12, "y": 0 },
@@ -58,16 +60,17 @@
       "options": { "legend": { "displayMode": "list", "placement": "right" } },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
           "rawQuery": true,
           "format": "table",
+          "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT CASE WHEN resolved_user_id IS NULL THEN 'anonymous' ELSE 'identified' END AS kind, count(DISTINCT person_id) AS visitors FROM analytics_events_resolved WHERE $__timeFilter(timestamp) GROUP BY 1"
+          "rawSql": "SELECT CASE WHEN resolved_user_id IS NULL THEN 'anonymous' ELSE 'identified' END AS kind, count(DISTINCT person_id) AS visitors FROM events_resolved WHERE $__timeFilter(timestamp) GROUP BY kind"
         }
       ]
     },
     {
-      "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "title": "Pageviews over time",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
@@ -76,16 +79,17 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
           "rawQuery": true,
           "format": "time_series",
+          "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT $__timeGroupAlias(timestamp,'1h') AS time, count(*) AS pageviews FROM analytics_events_resolved WHERE event_type='pageview' AND $__timeFilter(timestamp) GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT toStartOfHour(timestamp) AS time, count() AS pageviews FROM events_resolved WHERE event_type = 'pageview' AND $__timeFilter(timestamp) GROUP BY time ORDER BY time"
         }
       ]
     },
     {
-      "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "title": "Top clicked elements",
       "type": "table",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
@@ -94,16 +98,17 @@
       "options": {},
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
           "rawQuery": true,
           "format": "table",
+          "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT el_selector, count(*) AS clicks FROM analytics_events_resolved WHERE event_type='click' AND coalesce(el_selector,'') <> '' AND $__timeFilter(timestamp) GROUP BY el_selector ORDER BY clicks DESC LIMIT 25"
+          "rawSql": "SELECT el_selector, count() AS clicks FROM events_resolved WHERE event_type = 'click' AND el_selector != '' AND $__timeFilter(timestamp) GROUP BY el_selector ORDER BY clicks DESC LIMIT 25"
         }
       ]
     },
     {
-      "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "title": "Time on page (active seconds, top paths)",
       "type": "table",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
@@ -112,11 +117,12 @@
       "options": {},
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
           "rawQuery": true,
           "format": "table",
+          "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT path, round(sum(coalesce(active_ms,0))/1000.0,1) AS active_seconds, count(DISTINCT session_id) AS sessions FROM analytics_events_resolved WHERE event_type='heartbeat' AND $__timeFilter(timestamp) GROUP BY path ORDER BY active_seconds DESC LIMIT 25"
+          "rawSql": "SELECT path, round(sum(active_ms) / 1000.0, 1) AS active_seconds, count(DISTINCT session_id) AS sessions FROM events_resolved WHERE event_type = 'heartbeat' AND $__timeFilter(timestamp) GROUP BY path ORDER BY active_seconds DESC LIMIT 25"
         }
       ]
     }
