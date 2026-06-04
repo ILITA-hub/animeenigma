@@ -74,3 +74,9 @@ scrape_configs:
     static_configs:
       - targets: ['library:8089']
     metrics_path: /metrics
+
+  # ClickHouse native self-metrics (v4.0 Activity Register Phase 1, AR-STORE-01).
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:9363']
+    metrics_path: /metrics
