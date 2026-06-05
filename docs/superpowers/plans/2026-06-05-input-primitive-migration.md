@@ -69,6 +69,13 @@ Append these `it(...)` blocks inside the existing `describe('Input.vue', () => {
     expect(onBlur).toHaveBeenCalledTimes(1)
     expect(onBlur.mock.calls[0][0].target).toBe(w.find('input').element)
   })
+
+  it('merges a passed class through cn — override wins over the primitive w-full', () => {
+    const w = mount(Input, { attrs: { class: 'w-20' } })
+    const cls = w.find('input').classes()
+    expect(cls).toContain('w-20')
+    expect(cls).not.toContain('w-full')
+  })
 ```
 
 Add `vi` to the import at the top of the file:
@@ -80,7 +87,7 @@ import { describe, it, expect, vi } from 'vitest'
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd frontend/web && bunx vitest run src/components/ui/Input.spec.ts`
-Expected: FAIL — `type="date"` test fails (TS/runtime rejects `'date'`) and `focus()` test fails (`vm.focus` is not a function).
+Expected: FAIL — `type="date"` rejected, `vm.focus` not a function, and the class-merge test fails (inner input keeps `w-full` because `$attrs.class` is applied raw, not via `cn()`).
 
 - [ ] **Step 3: Add `'date'` to the type union**
 
@@ -90,25 +97,48 @@ In `src/components/ui/Input.vue`, change the `type` line in the `Props` interfac
   type?: 'text' | 'email' | 'password' | 'search' | 'number' | 'tel' | 'url' | 'date'
 ```
 
-- [ ] **Step 4: Add an inner ref and expose `focus()`**
+- [ ] **Step 4: Add an inner ref, expose `focus()`, and merge `$attrs.class` through `cn()`**
 
-In `src/components/ui/Input.vue`:
+The inner `<input>` currently has both `v-bind="$attrs"` (which carries a passed `class` raw) and `:class="cn(inputClasses, …)"` — so a passed `class="w-20"` lands as a *separate, un-merged* class next to the primitive's `w-full`, and CSS source order makes `w-full` win. Fix: pull `class` out of `$attrs` and feed it into `cn()` LAST so tailwind-merge dedupes (override wins).
 
-(a) Add `ref="inputRef"` to the `<input>` element (line ~10, alongside the existing `:id`):
+(a) In `<script setup>`, update the import and add the attrs split + ref + expose. Change the existing `import { computed, ref } from 'vue'` to include `useAttrs`:
+
+```ts
+import { computed, ref, useAttrs } from 'vue'
+```
+
+Then, after the existing `const focused = ref(false)` line, add:
+
+```ts
+const attrs = useAttrs()
+const passedClass = computed(() => attrs.class as string | undefined)
+const restAttrs = computed(() => {
+  const { class: _omitClass, ...rest } = attrs
+  return rest
+})
+const inputRef = ref<HTMLInputElement | null>(null)
+defineExpose({ focus: () => inputRef.value?.focus() })
+```
+
+(b) In the template, change the inner `<input>`: add `ref="inputRef"`, swap `v-bind="$attrs"` → `v-bind="restAttrs"`, and append `passedClass` as the final `cn()` arg:
 
 ```html
       <input
         :id="inputId"
         ref="inputRef"
-        v-bind="$attrs"
+        v-bind="restAttrs"
+        v-model="model"
+        :type="type"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        :readonly="readonly"
+        :class="cn(inputClasses, $slots.prefix ? 'pl-10' : '', (clearable || $slots.suffix) ? 'pr-10' : '', passedClass)"
+        @focus="focused = true"
+        @blur="focused = false"
+      />
 ```
 
-(b) In `<script setup>`, after the existing `const focused = ref(false)` line, add the ref + expose:
-
-```ts
-const inputRef = ref<HTMLInputElement | null>(null)
-defineExpose({ focus: () => inputRef.value?.focus() })
-```
+(`defineOptions({ inheritAttrs: false })` already present — keep it. This makes `class` on `<Input>` style the FIELD, merged via tailwind-merge. Layout sizing still goes on a wrapper — see the sizing rule in Task 3.)
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -124,7 +154,7 @@ Expected: no errors.
 
 ```bash
 git add frontend/web/src/components/ui/Input.vue frontend/web/src/components/ui/Input.spec.ts
-git commit -m "feat(ui): Input — add date type + expose focus()"
+git commit -m "feat(ui): Input — add date type, expose focus(), merge class via cn"
 ```
 
 ---
@@ -288,7 +318,18 @@ git commit -m "feat(ui): add RadioGroup primitive (reka-backed, options prop)"
 
 ## Task 3: Migrate clean `v-model` text inputs
 
-These are direct swaps: replace `<input ... />` with `<Input ... />` and add an import. All passthrough attrs (`placeholder`, `:disabled`, `required`, `aria-*`, `@input`, `@keyup`, `class`) ride `$attrs` unchanged. `v-model.number` consumers keep `.number` at the call site (the primitive emits a string; `.number` coerces on the component v-model boundary).
+These are direct swaps: replace `<input ... />` with `<Input ... />` and add an import. All passthrough attrs (`placeholder`, `:disabled`, `required`, `aria-*`, `@input`, `@keyup`) ride `$attrs` unchanged. `v-model.number` consumers keep `.number` at the call site (the primitive emits a string; `.number` coerces on the component v-model boundary).
+
+> **SIZING RULE (load-bearing — applies to every `<Input>` swap below).** The `Input`
+> primitive renders an inner `<input>` inside a hardcoded `w-full` wrapper `<div>`.
+> - **Field styling** (`bg-*`, `text-*`, `rounded-*`, `border-*`, `focus:*`) → put on
+>   `<Input class="…">`. After the Task 1 fix this merges via `cn()` and reliably wins.
+> - **Layout sizing** that positions the field within its parent (`w-20`, `w-48`,
+>   `w-16`, `w-32`, `flex-1`, `mr-auto`) → put on a NEW wrapper `<div>` AROUND `<Input>`,
+>   NEVER as a class on `<Input>`. The wrapper is the real flex/grid child; a width
+>   class on `<Input>` styles only the inner input while the `w-full` wrapper still
+>   fills the parent (verified: `w-full` wins the cascade for the wrapper). The
+>   snippets below already follow this rule.
 
 > Import pattern for every file below: add `import { Input } from '@/components/ui'` to the file's `<script setup>` import block (or extend an existing `from '@/components/ui'` import).
 
@@ -302,9 +343,11 @@ Before:
 ```html
 <input v-model="editShikimoriId" type="text" class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500" :placeholder="$t('anime.examplePlaceholder')" />
 ```
-After:
+After (`flex-1` on a wrapper, per the sizing rule):
 ```html
-<Input v-model="editShikimoriId" type="text" class="flex-1" :placeholder="$t('anime.examplePlaceholder')" />
+<div class="flex-1">
+  <Input v-model="editShikimoriId" type="text" :placeholder="$t('anime.examplePlaceholder')" />
+</div>
 ```
 
 Add `import { Input } from '@/components/ui'` to the script imports (check it is not already imported).
@@ -322,11 +365,13 @@ Before:
 ```html
 <input v-model="publicId" type="text" placeholder="your-username" class="flex-1 bg-transparent py-3 pr-3 text-white placeholder-white/40 focus:outline-none" :disabled="saving" @keyup.enter="save" />
 ```
-After:
+After (`flex-1` on wrapper; `border-0 bg-transparent` are field styling on `<Input>`):
 ```html
-<Input v-model="publicId" type="text" placeholder="your-username" class="flex-1 bg-transparent border-0" :disabled="saving" @keyup.enter="save" />
+<div class="flex-1">
+  <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="saving" @keyup.enter="save" />
+</div>
 ```
-(`border-0`/`bg-transparent` preserve the borderless inline look of the original, which sat inside a styled shell.)
+(`border-0`/`bg-transparent` preserve the borderless inline look of the original, which sits inside a styled shell with a `your-username` prefix — verify the shell still reads as one control in the smoke test.)
 
 Add the `Input` import.
 
@@ -404,21 +449,29 @@ Keep `required` on the title field. Add the `Input` import. (The `form.published
 
 - [ ] **Step 1: Swap the 4 text inputs**
 
-`searchQuery`:
+`searchQuery` (layout `w-48 mr-auto flex-shrink-0` on wrapper; `rounded-full` is field styling):
 ```html
-<Input v-model="searchQuery" type="text" :placeholder="$t('profile.watchlist.searchPlaceholder')" class="flex-shrink-0 w-48 rounded-full mr-auto" />
+<div class="flex-shrink-0 w-48 mr-auto">
+  <Input v-model="searchQuery" type="text" :placeholder="$t('profile.watchlist.searchPlaceholder')" class="rounded-full" />
+</div>
 ```
-`malUsername`:
+`malUsername` (`flex-1` on wrapper):
 ```html
-<Input v-model="malUsername" type="text" :placeholder="$t('profile.import.malPlaceholder')" class="flex-1 bg-white/10" :disabled="malSync.importing" />
+<div class="flex-1">
+  <Input v-model="malUsername" type="text" :placeholder="$t('profile.import.malPlaceholder')" class="bg-white/10" :disabled="malSync.importing" />
+</div>
 ```
 `shikimoriNickname`:
 ```html
-<Input v-model="shikimoriNickname" type="text" :placeholder="$t('profile.import.shikimoriPlaceholder')" class="flex-1 bg-white/10" :disabled="shikimoriSync.importing" />
+<div class="flex-1">
+  <Input v-model="shikimoriNickname" type="text" :placeholder="$t('profile.import.shikimoriPlaceholder')" class="bg-white/10" :disabled="shikimoriSync.importing" />
+</div>
 ```
-`publicId`:
+`publicId` (inside a styled shell — `flex-1` on wrapper, borderless field):
 ```html
-<Input v-model="publicId" type="text" placeholder="your-username" class="flex-1 bg-transparent border-0" :disabled="savingPublicId" />
+<div class="flex-1">
+  <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="savingPublicId" />
+</div>
 ```
 
 Add `Input` to the existing `@/components/ui` import if present, else add the import.
@@ -504,64 +557,72 @@ Change `const searchInputRef = ref<HTMLInputElement | null>(null)` to `ref<{ foc
 
 ### 4c. `components/layout/Navbar.vue` (HIGHEST RISK — icon → prefix slot, dropdown reparent)
 
-The native input shares a `<div class="relative">` with an absolutely-positioned autocomplete dropdown and a magnifier icon. The migration: give the wrapper a fixed `w-64`, move the icon into `Input`'s `prefix` slot, keep the dropdown as a sibling.
-
-- [ ] **Step 1: Restructure the search block**
-
-Before (the `<div class="relative">` … input … icon svg):
-```html
-<div class="relative">
-  <input
-    ref="searchInputRef"
-    v-model="searchQuery"
-    type="text"
-    :placeholder="$t('search.placeholder')"
-    class="w-64 px-3 py-1.5 pl-9 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:bg-white/15 transition-all"
-    @input="onSearchInput"
-    @keydown.enter="goToSearch"
-    @keydown.escape="closeSearch"
-    @keydown.down.prevent="highlightNext"
-    @keydown.up.prevent="highlightPrev"
-  />
-  <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-  </svg>
-  <!-- Autocomplete Dropdown -->
-  <Transition name="dropdown">
-    ...
-  </Transition>
+**Real structure (verify before editing — do NOT flatten it).** The search lives in a
+three-level nest (`Navbar.vue` ~42–119):
+```
+<div class="relative" ref="searchContainerRef">      (OUTER — keep, untouched)
+  <button v-if="!searchOpen" …>…</button>            (search-open button — keep)
+  <div v-else class="flex items-center gap-2">        (FLEX row — keep)
+    <div class="relative">                            (INNER — EDIT THIS ONE: add w-64)
+      <input ref="searchInputRef" … />                (← replace with <Input>)
+      <svg class="absolute left-2.5 …">…</svg>        (← move into <Input> #prefix)
+      <Transition name="dropdown">…</Transition>      (autocomplete — keep untouched)
+    </div>
+    <button @click="closeSearch">…</button>           (close button — keep untouched)
+  </div>
 </div>
 ```
-After (icon → `#prefix`, wrapper `w-64`, dropdown unchanged):
+Touch ONLY the inner `<div class="relative">`: add `w-64`, replace the `<input>`+icon `<svg>`
+with `<Input>` + a `#prefix` slot. Leave the outer `.relative` ref div, the `flex items-center
+gap-2` wrapper, the `<Transition>` dropdown, and the close `<button>` exactly as-is.
+
+- [ ] **Step 1: Edit the inner `.relative` block**
+
+Before (lines ~54–69 — the inner div open tag, the `<input>`, and the icon `<svg>`):
 ```html
-<div class="relative w-64">
-  <Input
-    ref="searchInputRef"
-    v-model="searchQuery"
-    type="text"
-    size="sm"
-    :placeholder="$t('search.placeholder')"
-    class="bg-white/10 border-white/20 text-sm"
-    @input="onSearchInput"
-    @keydown.enter="goToSearch"
-    @keydown.escape="closeSearch"
-    @keydown.down.prevent="highlightNext"
-    @keydown.up.prevent="highlightPrev"
-  >
-    <template #prefix>
-      <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div class="relative">
+      <input
+        ref="searchInputRef"
+        v-model="searchQuery"
+        type="text"
+        :placeholder="$t('search.placeholder')"
+        class="w-64 px-3 py-1.5 pl-9 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:bg-white/15 transition-all"
+        @input="onSearchInput"
+        @keydown.enter="goToSearch"
+        @keydown.escape="closeSearch"
+        @keydown.down.prevent="highlightNext"
+        @keydown.up.prevent="highlightPrev"
+      />
+      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
-    </template>
-  </Input>
-  <!-- Autocomplete Dropdown (unchanged) -->
-  <Transition name="dropdown">
-    ...
-  </Transition>
-</div>
 ```
-
-Leave the `<Transition>` dropdown block exactly as-is. Add the `Input` import.
+After (inner div gains `w-64`; icon → `#prefix`; field styling on `<Input>`; dropdown/close untouched below):
+```html
+    <div class="relative w-64">
+      <Input
+        ref="searchInputRef"
+        v-model="searchQuery"
+        type="text"
+        size="sm"
+        :placeholder="$t('search.placeholder')"
+        class="bg-white/10 border-white/20 text-sm focus:border-cyan-400/50 focus:bg-white/15"
+        @input="onSearchInput"
+        @keydown.enter="goToSearch"
+        @keydown.escape="closeSearch"
+        @keydown.down.prevent="highlightNext"
+        @keydown.up.prevent="highlightPrev"
+      >
+        <template #prefix>
+          <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </template>
+      </Input>
+```
+(The primitive's `#prefix` already does `absolute left-3 -translate-y-1/2` + `pl-10` on the
+input, so the manual `pl-9` and absolute icon positioning are no longer needed.) Add the
+`Input` import.
 
 - [ ] **Step 2: Update the ref type + focus call**
 
@@ -604,47 +665,60 @@ First score editor (table, `editingScore`) — before:
   class="..."
 />
 ```
-After (keep `v-if`, all bindings; `:value` → `:model-value` with String()):
+After — move the `v-if` to a `w-20` wrapper div so the `v-if`/`v-else` chain with the
+clickable score-display sibling stays intact (the `v-else` element must remain the
+immediate next sibling — do not insert anything between them). `:value` → `:model-value`
+with `String()`; preserve every other attr/handler verbatim:
 ```html
-<Input
-  v-if="editingScore === anime.anime_id"
-  type="number"
-  min="0" max="10"
-  :model-value="String(anime.score || 0)"
-  @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
-  @keydown.escape="editingScore = null"
-  class="w-20"
-/>
+<div v-if="editingScore === anime.anime_id" class="w-20">
+  <Input
+    type="number"
+    min="0" max="10"
+    :model-value="String(anime.score || 0)"
+    @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
+    @keydown.escape="editingScore = null"
+  />
+</div>
 ```
-(Preserve any other attrs/handlers present on the original element verbatim; only `:value`→`:model-value` and the tag name change.)
+(There is a stray `ref="scoreInputRef"` on the original element that is never declared
+in `<script setup>` — drop it during the swap; it is dead.)
 
 Grid score editor (`editingScoreGrid`) — same transform:
 ```html
-<Input
-  v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
-  type="number"
-  min="0" max="10"
-  :model-value="String(anime.score || 0)"
-  @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
-  @keydown.escape="editingScoreGrid = null"
-  class="w-20"
-/>
+<div v-if="isOwnProfile && editingScoreGrid === anime.anime_id" class="w-20">
+  <Input
+    type="number"
+    min="0" max="10"
+    :model-value="String(anime.score || 0)"
+    @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
+    @keydown.escape="editingScoreGrid = null"
+  />
+</div>
 ```
+
+> Note: the `watch(editingScore, …)` focus helper does
+> `document.querySelector('input[type="number"][min="0"][max="10"]')` — this still
+> matches because `type`/`min`/`max` pass through to the inner `<input>`. Do not change it.
 
 - [ ] **Step 2: Swap the episodes editor**
 
-Before `:value="anime.episodes || 0"` → after:
+Before `:value="anime.episodes || 0"` → after (non-conditional — plain `w-20` wrapper):
 ```html
-<Input
-  type="number"
-  :model-value="String(anime.episodes || 0)"
-  min="0" :max="animeTotalEpisodes(anime) || 9999"
-  @blur="(e) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
-  class="w-20"
-/>
+<div class="w-20">
+  <Input
+    type="number"
+    :model-value="String(anime.episodes || 0)"
+    min="0" :max="animeTotalEpisodes(anime) || 9999"
+    @blur="(e) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
+  />
+</div>
 ```
 
 - [ ] **Step 3: Swap the two date editors**
+
+These keep `v-if="isOwnProfile"` directly on `<Input>` (no width wrapper needed — the
+field is full-width of its `<td>`, which is the wrapper's default `w-full`). The `v-else`
+display span must remain the immediate next sibling.
 
 `started_at`:
 ```html
@@ -654,7 +728,7 @@ Before `:value="anime.episodes || 0"` → after:
   :model-value="formatDateForInput(anime.started_at)"
   @change="(e) => updateAnimeDate(anime.anime_id, 'started_at', (e.target as HTMLInputElement).value)"
   size="sm"
-  class="w-full text-xs"
+  class="text-xs"
 />
 ```
 `completed_at`:
@@ -665,22 +739,27 @@ Before `:value="anime.episodes || 0"` → after:
   :model-value="formatDateForInput(anime.completed_at)"
   @change="(e) => updateAnimeDate(anime.anime_id, 'completed_at', (e.target as HTMLInputElement).value)"
   size="sm"
-  class="w-full text-xs"
+  class="text-xs"
 />
 ```
 
 - [ ] **Step 4: Swap the skip-intro seconds editor**
 
-Before `:value="skipIntroSec"` → after:
+Before `:value="skipIntroSec"` → after (`w-32` on wrapper; `bg-white/10` is field styling).
+Note `onSkipIntroSecChange` does an imperative `event.target.value = …` clamp-reflect — this
+still works because the inner native input is the event target and the `:model-value` one-way
+bind does not re-sync the DOM when the model is unchanged:
 ```html
-<Input
-  id="skip-intro-dismiss-sec"
-  type="number"
-  :min="skipIntroMin" :max="skipIntroMax" step="1"
-  :model-value="String(skipIntroSec)"
-  @change="onSkipIntroSecChange"
-  class="w-32 bg-white/10"
-/>
+<div class="w-32">
+  <Input
+    id="skip-intro-dismiss-sec"
+    type="number"
+    :min="skipIntroMin" :max="skipIntroMax" step="1"
+    :model-value="String(skipIntroSec)"
+    @change="onSkipIntroSecChange"
+    class="bg-white/10"
+  />
+</div>
 ```
 
 - [ ] **Step 5: Verify the editingScore focus watcher still matches**
@@ -695,9 +774,12 @@ Before:
 ```html
 <input :value="item.sort_order" type="number" min="0" class="w-16 px-2 py-1 rounded bg-black/40 border border-white/10 text-white text-sm text-right" @change="(e) => ...">
 ```
-After (keep the exact `@change` handler body verbatim):
+After (`w-16` on wrapper; `bg-black/40 text-right` field styling; keep the exact existing
+`@change` handler body — it reads `event.target.valueAsNumber` — verbatim):
 ```html
-<Input :model-value="String(item.sort_order)" type="number" min="0" size="sm" class="w-16 bg-black/40 text-right" @change="(e) => ...">
+<div class="w-16">
+  <Input :model-value="String(item.sort_order)" type="number" min="0" size="sm" class="bg-black/40 text-right" @change="(e) => /* existing valueAsNumber handler, unchanged */" />
+</div>
 ```
 
 ### 5c. `components/browse/BrowseSidebar.vue` — year from/to (side-by-side; needs wrapper divs)
@@ -928,6 +1010,11 @@ One batched run at the very end (per the batching rule — no changelog spam acr
 ## Self-Review notes (for the executor)
 
 - **Highest-risk tasks:** Task 4c (Navbar — layout reparent + custom focus classes) and Task 5 (Profile inline-edit commit semantics + focus watcher). Smoke-test these explicitly.
-- **Stop-and-report triggers:** a ref site reading input DOM props other than `focus()` (Task 4); reka rejecting `value=""` in RadioGroup (Task 2 Step 4); `form.published` typing widening under Checkbox v-model (Task 6c).
+- **SIZING:** layout width/flex (`w-20`/`w-48`/`w-16`/`w-32`/`flex-1`/`mr-auto`) goes on a wrapper `<div>`, never as a class on `<Input>` — the primitive's `w-full` wrapper is the real flex/grid child and a width class on `<Input>` styles only the inner input. Field styling (`bg-*`/`text-*`/`rounded-*`/`border-*`/`focus:*`) goes on `<Input class>` and merges via the Task-1 `cn()` fix. For conditional inputs (`v-if`), put the `v-if` on the wrapper so the `v-if`/`v-else` chain with the display sibling stays intact.
+- **Stop-and-report triggers:** a ref site reading input DOM props other than `focus()` (Task 4); reka rejecting `value=""` in RadioGroup (Task 2 Step 4); `form.published` typing widening under Checkbox v-model (Task 6c — verified fine, but watch vue-tsc).
 - **Never** use `:value` on `<Input>` for controlled inputs — always `:model-value`. The primitive's internal `v-model` overrides a passed `value`.
 - **Bun only:** `bunx` / `bun run`, never npm/npx.
+
+## Review trail
+
+This plan was adversarially reviewed against the live codebase (2026-06-05). Confirmed correct: passthrough-listener merge, RadioGroup empty-string selection + reka 2.x `v-model` API, all named handlers/refs/types, lint/token posture. One cross-cutting defect found and fixed inline: width/flex classes on `<Input>` are clobbered by the primitive's `w-full` because `$attrs.class` bypasses `cn()` — resolved by (a) merging `$attrs.class` through `cn()` in Task 1 and (b) moving all layout sizing onto wrapper divs. The Navbar before/after was corrected to match the real three-level nesting.
