@@ -68,8 +68,8 @@
   3. `operation` is auto-derived with **no manual catalog**, via service-layer stack-frame attribution (nearest `*/internal/service/*` frame) — verified by an effect row showing a real operation like `catalog.UpdateAnimeInfo` with no code that names it explicitly. (AR-EFFECT-03)
   4. The Tempo span-metrics generator + service graph are enabled (config flag, no per-span code), producing per-operation RED metrics + a service graph in Prometheus — verified by querying a per-operation request/error/duration metric and viewing the service graph in Grafana. (AR-EFFECT-04)
 **Plans**: 6 plans (4 waves)
-- [ ] 03-01-PLAN.md — Effect wire-contract extension (TargetKind/Rows/anime_id) + runtime.Callers operation resolver + egress stack-frame retrofit (Wave 1, AR-EFFECT-03)
-- [ ] 03-02-PLAN.md — Tempo metrics_generator (span-metrics + service-graphs) + Prometheus remote-write + Grafana Tempo→Prometheus wiring (Wave 1, AR-EFFECT-04)
+- [x] 03-01-PLAN.md — Effect wire-contract extension (TargetKind/Rows/anime_id) + runtime.Callers operation resolver + egress stack-frame retrofit (Wave 1, AR-EFFECT-03)
+- [x] 03-02-PLAN.md — Tempo metrics_generator (span-metrics + service-graphs) + Prometheus remote-write + Grafana Tempo→Prometheus wiring (Wave 1, AR-EFFECT-04)
 - [ ] 03-03-PLAN.md — GORM DB-effect callbacks (db_write always, db_read P95-gated) + in-memory ReadGate snapshot (Wave 2, AR-EFFECT-01)
 - [ ] 03-04-PLAN.md — Cache aggregator (HLSSessions clone) + key-class classifier + cache.go hit/miss hooks (Wave 2, AR-EFFECT-02)
 - [ ] 03-05-PLAN.md — Daily ClickHouse P95 → read_thresholds Redis hash + scheduler cron + ThresholdRefresher ticker (Wave 3, AR-EFFECT-01)
@@ -132,7 +132,7 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
 | 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
-| 3 | v4.0 | 0/6 | Planned | — |
+| 3 | v4.0 | 2/6 | In Progress|  |
 | 4 | v4.0 | 0/? | Not started | — |
 | 5 | v4.0 | 0/? | Not started | — |
 | 6 | v4.0 | 0/? | Not started | — |
