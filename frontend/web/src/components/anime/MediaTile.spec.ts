@@ -31,6 +31,18 @@ describe('MediaTile', () => {
     expect(w.text()).toContain('Dandadan')
   })
 
+  it('kicker text forwards the episode number', () => {
+    const w = mountTile()
+    // useI18n mock returns "key::{"n":5}" so the ep param is embedded
+    expect(w.find('[data-testid="kicker"]').text()).toContain('"n":5')
+  })
+
+  it('hides kicker but keeps title when nextEpisode is null', () => {
+    const w = mountTile({ nextEpisode: null })
+    expect(w.find('[data-testid="kicker"]').exists()).toBe(false)
+    expect(w.text()).toContain('Dandadan')
+  })
+
   it('renders the progress bar only when pct > 0', () => {
     expect(mountTile({}, 42).find('[data-testid="progress"]').exists()).toBe(true)
     expect(mountTile({}, 0).find('[data-testid="progress"]').exists()).toBe(false)

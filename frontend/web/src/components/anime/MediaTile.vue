@@ -8,7 +8,7 @@
 
       <!-- Info overlay (bottom) -->
       <div class="mtile-info">
-        <div class="mtile-kicker" data-testid="kicker">
+        <div v-if="model.nextEpisode" class="mtile-kicker" data-testid="kicker">
           {{ kickerLabel }}
           <template v-if="model.episodes"> · {{ model.episodes }}</template>
         </div>
@@ -39,7 +39,7 @@ const { t } = useI18n()
 // Script-level computed — avoids $t() in the template branch asserted in unit
 // tests where the global i18n plugin is NOT installed (mirrors PosterCard pattern).
 const kickerLabel = computed(() =>
-  t('home.continueWatchingEpisode', { n: props.model.nextEpisode ? props.model.nextEpisode.ep : 0 }),
+  t('home.continueWatchingEpisode', { n: props.model.nextEpisode?.ep ?? 0 }),
 )
 </script>
 
@@ -52,9 +52,10 @@ const kickerLabel = computed(() =>
   cursor: pointer;
   text-decoration: none;
   color: inherit;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid var(--line);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.mtile:hover { transform: translateY(-2px); box-shadow: var(--accent-glow); }
+.mtile:hover { transform: translateY(-2px); box-shadow: var(--accent-glow); border-color: var(--accent-line); }
 .mtile:focus-visible { outline: 2px solid var(--brand-cyan); outline-offset: 2px; }
 
 .mtile-play {
