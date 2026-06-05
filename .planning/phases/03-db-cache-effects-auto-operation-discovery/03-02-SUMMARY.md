@@ -93,3 +93,10 @@ None — no new network endpoints, auth paths, or trust-boundary surface beyond 
 ## TDD Gate Compliance
 
 N/A — config-only plan, no `tdd="true"` tasks.
+
+## Self-Check: PASSED
+
+- All 3 modified files present on disk.
+- SUMMARY.md present on disk.
+- All commits exist in git log: `bec6d610` (Task 1), `c3d27f78` (Task 2), `b61c0fde` (SUMMARY).
+- Working tree clean.
