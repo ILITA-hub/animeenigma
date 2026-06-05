@@ -33,7 +33,7 @@
       </div>
 
       <div class="chips">
-        <span v-if="variant === 'ongoing' && model.airing" class="chip airing" data-testid="airing">● {{ airingLabel }}</span>
+        <span v-if="variant === 'ongoing'" class="chip airing" data-testid="airing">● {{ airingLabel }}</span>
         <template v-if="variant === 'announced'">
           <span class="chip announced">{{ announcedLabel }}</span>
           <span v-if="season" class="chip season" data-testid="season">{{ seasonLabel }}</span>

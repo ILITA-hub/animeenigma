@@ -10,7 +10,7 @@ import type { AnimeCardModel } from '@/types/card'
 
 const RouterLinkStub = { name: 'RouterLink', props: ['to'], template: '<a :href="to"><slot /></a>' }
 
-function mountRow(model: Partial<AnimeCardModel> = {}, variant: 'ongoing' | 'top' | 'announced' = 'ongoing', rank?: number) {
+function mountRow(model: Partial<AnimeCardModel> = {}, variant: 'ongoing' | 'top' | 'announced' = 'ongoing', rank?: number, season?: string) {
   const full: AnimeCardModel = {
     id: '1', href: '/anime/1', title: 'Frieren: Beyond Journey\'s End',
     coverImage: 'http://x/p.jpg', year: 2023, episodes: 28,
@@ -19,7 +19,7 @@ function mountRow(model: Partial<AnimeCardModel> = {}, variant: 'ongoing' | 'top
     ...model,
   }
   return mount(PosterRow, {
-    props: { model: full, variant, rank },
+    props: { model: full, variant, rank, ...(season !== undefined ? { season } : {}) },
     global: { stubs: { RouterLink: RouterLinkStub } },
   })
 }
@@ -30,9 +30,14 @@ describe('PosterRow', () => {
     expect(w.find('[data-testid="row-title"]').classes()).toContain('truncate')
   })
 
-  it('shows the ongoing chip + next-ep line for the ongoing variant', () => {
-    const w = mountRow({}, 'ongoing')
+  it('shows the airing chip for ongoing variant even when airing flag is false', () => {
+    // Locks Fix 1: chip must appear for ALL ongoing rows regardless of model.airing
+    const w = mountRow({ airing: false }, 'ongoing')
     expect(w.find('[data-testid="airing"]').exists()).toBe(true)
+  })
+
+  it('shows the next-ep line when nextEpisode is present on ongoing variant', () => {
+    const w = mountRow({ nextEpisode: { ep: 6, when: '2026-06-10T12:00:00Z' } }, 'ongoing')
     expect(w.find('[data-testid="next-ep"]').exists()).toBe(true)
   })
 
@@ -42,16 +47,7 @@ describe('PosterRow', () => {
   })
 
   it('shows the season chip for the announced variant', () => {
-    const full: AnimeCardModel = {
-      id: '1', href: '/anime/1', title: 'Frieren: Beyond Journey\'s End',
-      coverImage: 'http://x/p.jpg', year: 2023, episodes: 28,
-      malScore: 8.9, siteScore: 9.4, airing: true,
-      nextEpisode: { ep: 6, when: '2026-06-10T12:00:00Z' }, listStatus: null, progress: null,
-    }
-    const w = mount(PosterRow, {
-      props: { model: full, variant: 'announced', season: 'winter' },
-      global: { stubs: { RouterLink: RouterLinkStub } },
-    })
+    const w = mountRow({}, 'announced', undefined, 'winter')
     expect(w.find('[data-testid="season"]').exists()).toBe(true)
   })
 
