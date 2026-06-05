@@ -52,11 +52,13 @@ type wireProducerEffect struct {
 	EffectKind string `json:"effect_kind,omitempty"`
 	TargetKind string `json:"target_kind,omitempty"`
 	Target     string `json:"target,omitempty"`
+	AnimeID    string `json:"anime_id,omitempty"`
 	Status     int    `json:"status,omitempty"`
 	Requests   int    `json:"requests,omitempty"`
 	BytesIn    int    `json:"bytes_in,omitempty"`
 	BytesOut   int    `json:"bytes_out,omitempty"`
 	DurationMS int    `json:"duration_ms,omitempty"`
+	RowCount   int    `json:"row_count,omitempty"`
 }
 
 type wireProducerBatch struct {
@@ -156,18 +158,29 @@ func (p *Producer) post(effects []Effect) {
 		if target == "" {
 			target = e.Host
 		}
+		// TargetKind defaults to "host" only when unset, preserving egress
+		// behavior; db/cache rows carry "table"/"key_class".
+		targetKind := e.TargetKind
+		if targetKind == "" {
+			targetKind = "host"
+		}
+		// Resolve the fine operation on the async side (D-11): when the effect
+		// carried captured PCs, op.Resolve() runs CallersFrames here, off the
+		// request hot path; otherwise the pre-set Operation dimension is used.
 		batch.Effects = append(batch.Effects, wireProducerEffect{
 			Origin:     e.Origin,
-			Operation:  e.Operation,
+			Operation:  e.resolvedOperation(),
 			UserID:     e.UserID,
 			EffectKind: e.EffectKind,
-			TargetKind: "host",
+			TargetKind: targetKind,
 			Target:     target,
+			AnimeID:    e.AnimeID,
 			Status:     e.Status,
 			Requests:   e.Requests,
 			BytesIn:    e.BytesIn,
 			BytesOut:   e.BytesOut,
 			DurationMS: e.DurationMS,
+			RowCount:   e.Rows,
 		})
 	}
 	body, err := json.Marshal(batch)
