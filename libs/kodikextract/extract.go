@@ -87,15 +87,41 @@ func parseEmbedParams(html string) (*embedParams, error) {
 // (containers have no IPv6 egress; matches libs/videoutils).
 // The client and jar are intentionally per-call so session cookies don't leak across users.
 func newClient() *http.Client {
-	jar, _ := cookiejar.New(nil)
-	return &http.Client{
-		Timeout: 15 * time.Second,
-		Jar:     jar,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, "tcp4", addr)
-			},
+	return NewRecordingClient(nil)
+}
+
+// ipv4Transport builds the IPv4-forced transport this package uses (containers
+// have no IPv6 egress; matches libs/videoutils).
+func ipv4Transport() *http.Transport {
+	return &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, "tcp4", addr)
 		},
+	}
+}
+
+// NewRecordingClient builds the per-call Kodik HTTP client (15s timeout,
+// cookie jar for the __ddg* DDoS-Guard handoff, IPv4 dialer) and lets the
+// owning service WRAP its transport for egress recording WITHOUT this leaf
+// module importing the tracing module (T-02-LEAF). wrap may be nil (no
+// recording, current behavior). Callers pass:
+//
+//	kodikextract.NewRecordingClient(func(base http.RoundTripper) http.RoundTripper {
+//		return tracing.WrapRecording(base, sink)
+//	})
+//
+// The cookie jar is intentionally per-call so session cookies don't leak
+// across users.
+func NewRecordingClient(wrap func(base http.RoundTripper) http.RoundTripper) *http.Client {
+	jar, _ := cookiejar.New(nil)
+	var rt http.RoundTripper = ipv4Transport()
+	if wrap != nil {
+		rt = wrap(rt)
+	}
+	return &http.Client{
+		Timeout:   15 * time.Second,
+		Jar:       jar,
+		Transport: rt,
 	}
 }
 
@@ -133,11 +159,27 @@ func buildStreams(fr ftorResponse, referer string) (*Result, error) {
 }
 
 // Resolve fetches a Kodik embed URL and returns the decoded HLS streams.
+// It builds a fresh per-call client (cookie jar + IPv4 dialer) via newClient
+// and delegates to ResolveWithClient. This keeps the zero-arg back-compat
+// signature for callers that don't need to inject a transport.
 func Resolve(ctx context.Context, embedURL string) (*Result, error) {
+	return ResolveWithClient(ctx, embedURL, newClient())
+}
+
+// ResolveWithClient is the client-injection entry point: callers supply the
+// *http.Client whose Transport carries the egress-recording wrapper (built in
+// the owning service, e.g. catalog wraps NewRecordingClient's IPv4 transport
+// with tracing.WrapRecording). The client MUST carry a cookie jar so the
+// __ddg* DDoS-Guard cookies set on the embed GET ride into the /ftor POST —
+// use NewRecordingClient as the base if building one. This avoids importing
+// the tracing module into this dependency-free leaf module (T-02-LEAF).
+func ResolveWithClient(ctx context.Context, embedURL string, client *http.Client) (*Result, error) {
 	if !strings.HasPrefix(embedURL, "http") {
 		embedURL = "https:" + embedURL
 	}
-	client := newClient()
+	if client == nil {
+		client = newClient()
+	}
 
 	// 1. GET embed page (carry cookies).
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, embedURL, nil)

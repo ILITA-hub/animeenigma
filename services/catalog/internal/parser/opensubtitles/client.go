@@ -40,6 +40,13 @@ type Config struct {
 	Timeout   time.Duration
 	BaseURL   string         // override for tests
 	Logger    *logger.Logger // optional; when set, Download logs quota usage
+
+	// Transport, when set, is used as the http.Client's RoundTripper so
+	// outbound requests emit one egress effect each (AR-EGRESS-03, host-only
+	// per D-08). catalog injects tracing.WrapRecording(base, sink) here. When
+	// nil, the default transport is used (current behavior). The configured
+	// Timeout still applies (it lives on the http.Client, not the transport).
+	Transport http.RoundTripper
 }
 
 // Client is the OpenSubtitles v1 REST client.
@@ -62,7 +69,7 @@ func NewClient(cfg Config) *Client {
 	}
 	return &Client{
 		cfg:        cfg,
-		httpClient: &http.Client{Timeout: cfg.Timeout},
+		httpClient: &http.Client{Timeout: cfg.Timeout, Transport: cfg.Transport},
 	}
 }
 

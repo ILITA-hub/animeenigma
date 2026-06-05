@@ -142,6 +142,9 @@ func main() {
 			HanimePassword: cfg.Hanime.Password,
 			ScraperAPIURL:  cfg.Scraper.APIURL,
 			ScraperTimeout: cfg.Scraper.Timeout,
+			// AR-EGRESS-03 (D-08): the internal idmapping client + Kodik
+			// extractor record egress via the shared recording transport.
+			EgressTransportWrap: tracing.WrapTransport,
 		},
 	)
 
@@ -229,13 +232,22 @@ func main() {
 	// Fans out to Jimaku (JP) + OpenSubtitles (everything else, keyed by
 	// IMDb/TMDB) and merges results. Mounts /api/anime/{id}/subtitles[/all].
 	jimakuClient := jimaku.NewClient(cfg.Jimaku.APIKey)
+	// AR-EGRESS-03 (D-08, host-only): route OpenSubtitles + idmapping outbound
+	// through the shared recording transport. tracing.WrapTransport composes the
+	// recording RoundTripper only when a process-global sink is installed
+	// (SetGlobalSink at BE boot, wired in the general-egress plan); until then
+	// it is a nil-safe pass-through, so this is safe to wire now.
 	openSubsClient := opensubtitles.NewClient(opensubtitles.Config{
 		APIKey:    cfg.OpenSubtitles.APIKey,
 		UserAgent: cfg.OpenSubtitles.UserAgent,
 		Timeout:   cfg.OpenSubtitles.Timeout,
 		Logger:    log,
+		Transport: tracing.WrapTransport(nil),
 	})
-	idMapClient := idmapping.NewClient()
+	// Wrap idmapping's IPv4-forced transport (preserve the dialer; add recording).
+	idMapClient := idmapping.NewClient(
+		idmapping.WithTransport(tracing.WrapTransport(idmapping.NewIPv4Transport())),
+	)
 	subsAggregator := service.NewSubsAggregator(jimakuClient, openSubsClient, idMapClient, animeRepo, redisCache, log)
 	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
 

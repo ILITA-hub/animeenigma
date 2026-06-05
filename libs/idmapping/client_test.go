@@ -37,6 +37,55 @@ const armOKBody = `{
 // aniListOKBody mirrors the AniList GraphQL response for `idMal:21`.
 const aniListOKBody = `{"data":{"Media":{"id":21,"idMal":21}}}`
 
+// stubRoundTripper records the hosts it sees and delegates to an inner
+// RoundTripper. It stands in for tracing.WrapRecording's recording transport:
+// the test asserts that injected transports actually intercept outbound
+// requests (the egress-recording seam).
+type stubRoundTripper struct {
+	inner http.RoundTripper
+	hosts []string
+}
+
+func (s *stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	s.hosts = append(s.hosts, req.URL.Host)
+	return s.inner.RoundTrip(req)
+}
+
+// TestIDMappingTransport — WithTransport routes outbound ARM/AniList requests
+// through the injected (recording) transport, and the default NewClient()
+// continues to build its own IPv4 transport.
+func TestIDMappingTransport(t *testing.T) {
+	armSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(armOKBody))
+	}))
+	defer armSrv.Close()
+
+	stub := &stubRoundTripper{inner: http.DefaultTransport}
+	c := NewClient(WithTransport(stub))
+	c.baseURL = armSrv.URL
+	c.aniListBaseURL = armSrv.URL // unused on the happy path
+
+	if _, err := c.ResolveByMALID("21"); err != nil {
+		t.Fatalf("ResolveByMALID error: %v", err)
+	}
+	if len(stub.hosts) == 0 {
+		t.Fatalf("injected transport was never invoked — egress recording would never fire")
+	}
+	wantHost := strings.TrimPrefix(armSrv.URL, "http://")
+	if stub.hosts[0] != wantHost {
+		t.Errorf("recorder saw host %q, want %q", stub.hosts[0], wantHost)
+	}
+
+	// Default client preserves the IPv4-forced transport (no stub).
+	def := NewClient()
+	if def.httpClient.Transport == nil {
+		t.Fatalf("default NewClient() must keep its IPv4 transport")
+	}
+	if _, ok := def.httpClient.Transport.(*stubRoundTripper); ok {
+		t.Errorf("default NewClient() unexpectedly used the stub transport")
+	}
+}
+
 // TestResolveByMALID_ARMHappyPath — ARM responds with a complete mapping,
 // AniList must NOT be called.
 func TestResolveByMALID_ARMHappyPath(t *testing.T) {

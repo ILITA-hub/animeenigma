@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,12 @@ type CatalogService struct {
 	scraperClient   *scraper.Client
 	cache           *cache.RedisCache
 	log             *logger.Logger
+
+	// kodikExtractWrap wraps the per-call Kodik extractor client's transport
+	// for egress recording (AR-EGRESS-03). nil → default (no recording). Built
+	// from CatalogServiceOptions.EgressTransportWrap so kodikextract stays a
+	// dependency-free leaf module (it never imports the tracing module).
+	kodikExtractWrap func(base http.RoundTripper) http.RoundTripper
 }
 
 // CatalogServiceOptions contains optional configuration for CatalogService
@@ -55,6 +62,14 @@ type CatalogServiceOptions struct {
 	// ScraperTimeout defaults to 15s when zero.
 	ScraperAPIURL  string
 	ScraperTimeout time.Duration
+
+	// EgressTransportWrap, when set, wraps an http.RoundTripper to add egress
+	// effect recording (AR-EGRESS-03, host-only per D-08). catalog passes
+	// tracing.WrapTransport here so the internal idmapping client and the Kodik
+	// extractor emit one egress effect per outbound request — WITHOUT this
+	// service or the dependency-free leaf modules (idmapping/kodikextract)
+	// importing the tracing module. When nil, the default transports are used.
+	EgressTransportWrap func(base http.RoundTripper) http.RoundTripper
 }
 
 func NewCatalogService(
@@ -78,6 +93,7 @@ func NewCatalogService(
 	var jimakuAPIKey, animelibToken, hanimeEmail, hanimePassword string
 	var scraperAPIURL string
 	var scraperTimeout time.Duration
+	var egressWrap func(base http.RoundTripper) http.RoundTripper
 	if len(opts) > 0 {
 		jimakuAPIKey = opts[0].JimakuAPIKey
 		animelibToken = opts[0].AnimeLibToken
@@ -85,6 +101,7 @@ func NewCatalogService(
 		hanimePassword = opts[0].HanimePassword
 		scraperAPIURL = opts[0].ScraperAPIURL
 		scraperTimeout = opts[0].ScraperTimeout
+		egressWrap = opts[0].EgressTransportWrap
 	}
 	if scraperAPIURL == "" {
 		// Match the docker-compose / config.go default so unit-test
@@ -113,21 +130,30 @@ func NewCatalogService(
 		log.Infow("hanime client not configured, hanime features will be unavailable")
 	}
 
+	// AR-EGRESS-03 (D-08, host-only): wrap the internal idmapping client's
+	// IPv4-forced transport for egress recording when a wrap func is provided.
+	var idMapOpts []idmapping.Option
+	if egressWrap != nil {
+		idMapOpts = append(idMapOpts,
+			idmapping.WithTransport(egressWrap(idmapping.NewIPv4Transport())))
+	}
+
 	return &CatalogService{
-		animeRepo:       animeRepo,
-		genreRepo:       genreRepo,
-		videoRepo:       videoRepo,
-		shikimoriClient: shikimoriClient,
-		aniboomClient:   aniboom.NewClient(),
-		kodikClient:     kodikClient,
-		jikanClient:     jikan.NewClient(),
-		jimakuClient:    jimakuClient,
-		animelibClient:  animelibClient,
-		hanimeClient:    hanimeClient,
-		idMappingClient: idmapping.NewClient(),
-		scraperClient:   scraper.NewClient(scraperAPIURL, scraperTimeout),
-		cache:           cache,
-		log:             log,
+		animeRepo:        animeRepo,
+		genreRepo:        genreRepo,
+		videoRepo:        videoRepo,
+		shikimoriClient:  shikimoriClient,
+		aniboomClient:    aniboom.NewClient(),
+		kodikClient:      kodikClient,
+		jikanClient:      jikan.NewClient(),
+		jimakuClient:     jimakuClient,
+		animelibClient:   animelibClient,
+		hanimeClient:     hanimeClient,
+		idMappingClient:  idmapping.NewClient(idMapOpts...),
+		scraperClient:    scraper.NewClient(scraperAPIURL, scraperTimeout),
+		cache:            cache,
+		log:              log,
+		kodikExtractWrap: egressWrap,
 	}
 }
 
@@ -1586,7 +1612,16 @@ func (s *CatalogService) GetKodikStreamSource(ctx context.Context, animeID strin
 		return nil, errors.NotFound("video not found on kodik")
 	}
 
-	resolved, err := kodikextract.Resolve(ctx, embedLink)
+	// AR-EGRESS-03 (D-08): route the Kodik extractor's outbound requests through
+	// the recording transport when a wrap func is configured, preserving the
+	// per-call cookie jar + IPv4 dialer. Falls back to the package default.
+	var resolved *kodikextract.Result
+	if s.kodikExtractWrap != nil {
+		resolved, err = kodikextract.ResolveWithClient(ctx, embedLink,
+			kodikextract.NewRecordingClient(s.kodikExtractWrap))
+	} else {
+		resolved, err = kodikextract.Resolve(ctx, embedLink)
+	}
 	if err != nil {
 		s.log.Warnw("kodik adfree: extraction failed", "anime_id", animeID, "embed", embedLink, "error", err)
 		return nil, errors.NotFound("could not extract kodik stream")
