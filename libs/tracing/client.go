@@ -1,13 +1,38 @@
 package tracing
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/baggage"
 )
+
+// baggageKeyUserID is the baggage member key that must NEVER ride the outbound
+// wire (T-02-PII). user_id rides the private non-propagated ctx value
+// (WithUserID) only; this constant exists solely so the defense-in-depth strip
+// below can detect and remove a member a careless future caller might have
+// added.
+const baggageKeyUserID = "user_id"
+
+// stripWireBaggagePII returns ctx with any PII baggage member removed. The
+// recording transport calls this on every outbound request BEFORE the base
+// RoundTrip runs, so otelhttp's outbound baggage propagation can never inject a
+// user_id member onto a 3rd-party-bound request — even if one was accidentally
+// seeded upstream. origin/operation are preserved. This is defense-in-depth: by
+// design user_id never enters baggage (it rides WithUserID's private ctx value),
+// but this guarantees it regardless of caller behavior (T-02-PII, the sharpest
+// RESEARCH §Security finding).
+func stripWireBaggagePII(ctx context.Context) context.Context {
+	bg := baggage.FromContext(ctx)
+	if bg.Member(baggageKeyUserID).Key() == "" {
+		return ctx // no user_id member present — nothing to strip
+	}
+	return baggage.ContextWithBaggage(ctx, bg.DeleteMember(baggageKeyUserID))
+}
 
 // globalSink is an optional process-wide EffectSink. When set (via SetGlobalSink)
 // WrapTransport composes the recording transport so EVERY shared HTTP client
@@ -80,11 +105,21 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	start := time.Now()
 
 	// Attribution: origin/operation ride wire baggage; user_id + provider ride
-	// private ctx values (never baggage — T-02-PII).
+	// private ctx values (never baggage — T-02-PII). Read attribution BEFORE
+	// stripping so the recorder still captures user_id from the private ctx value.
 	ctx := req.Context()
 	origin, operation := ReadBaggage(ctx)
 	userID := UserIDFromContext(ctx)
 	provider := ProviderFromContext(ctx)
+
+	// Defense-in-depth (T-02-PII): strip any user_id baggage member from the
+	// request context BEFORE the base RoundTrip runs, so otelhttp's outbound
+	// baggage propagation cannot inject user_id onto this 3rd-party-bound request.
+	// By design user_id is never in baggage; this guarantees it regardless of
+	// caller mistakes. origin/operation are preserved.
+	if stripped := stripWireBaggagePII(ctx); stripped != ctx {
+		req = req.WithContext(stripped)
+	}
 
 	var bytesOut int
 	if req.ContentLength > 0 {
