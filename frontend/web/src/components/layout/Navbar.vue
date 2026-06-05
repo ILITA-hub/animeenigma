@@ -19,6 +19,7 @@
           <span class="brand-wordmark">
             <span class="brand-b1">Anime</span><span class="brand-b2">Enigma</span>
           </span>
+          <span class="brand-beta">beta</span>
         </router-link>
 
         <!-- Desktop Navigation -->
@@ -552,6 +553,25 @@ onUnmounted(() => {
 
 .brand-b2 {
   color: var(--foreground);
+}
+
+/* Small tilted "beta" tag next to the wordmark */
+.brand-beta {
+  align-self: flex-start;
+  margin-left: -2px;
+  margin-top: -4px;
+  padding: 1px 5px;
+  font-family: var(--f-ui, "Inter", system-ui, sans-serif);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--brand-pink);
+  border: 1px solid var(--brand-pink);
+  border-radius: var(--r-sm, 6px);
+  transform: rotate(-8deg);
+  transform-origin: left center;
 }
 
 /* ------------------------------------------------------------------ */
