@@ -17,7 +17,11 @@ providers:
   - { name: allanime,  enabled: true }
   - { name: animefever, enabled: true }
   - { name: miruro,    enabled: true }
-  - { name: nineanime, enabled: true }
+  # AUTO-362: disabled 2026-06-05 — nineanime's upstream brand-jack rebrand now
+  # serves YouTube stubs (parser_zero_match_total youtube_stub=27, video_mp4_source
+  # miss=20) instead of real MP4s. It's the last-resort provider; allanime + miruro
+  # cover EN with real-bytes-green streams, so this only removes probe noise.
+  - { name: nineanime, enabled: false }
 
   # 18+ group — separate orchestrator, not in the EN chain.
   - name: 18anime

@@ -2143,6 +2143,14 @@ const savePublicId = async () => {
     await userApi.updatePublicId(publicId.value)
     publicIdSuccess.value = true
     await authStore.fetchUser()
+    // Navigate to the new profile URL so route.params.publicId matches the
+    // updated public_id. Without this the page stays on /user/<oldId>, fetchProfile
+    // sees isOwn=false (store has the new id, URL still has the old), and renders an
+    // empty public profile for the now-unassigned old id (the "empty profile until
+    // re-login" bug). The route.params.publicId watcher re-runs fetchProfile.
+    if (route.params.publicId && route.params.publicId !== publicId.value) {
+      router.replace(`/user/${publicId.value}`)
+    }
     setTimeout(() => { publicIdSuccess.value = false }, 3000)
   } catch (err: unknown) {
     const apiErr = err as ApiError

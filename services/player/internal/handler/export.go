@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -124,6 +125,19 @@ func (h *ExportHandler) ExportJSON(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// parseIDPtr converts a numeric external-ID string ("52991") to *int, returning
+// nil for empty or non-numeric values so the export omits the field cleanly.
+func parseIDPtr(s string) *int {
+	if s == "" {
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return nil
+	}
+	return &n
+}
+
 func toExportEntry(e *domain.AnimeListEntry) exportEntry {
 	entry := exportEntry{
 		AnimeenigmaID:   e.AnimeID,
@@ -149,6 +163,15 @@ func toExportEntry(e *domain.AnimeListEntry) exportEntry {
 		entry.PosterURL = e.Anime.PosterURL
 		entry.EpisodesTotal = e.Anime.EpisodesCount
 		entry.EpisodesAired = e.Anime.EpisodesAired
+
+		// Prefer the authoritative external IDs from the catalog-owned animes row
+		// (100% populated) over the sparse per-list anime_list.mal_id override above.
+		if id := parseIDPtr(e.Anime.ShikimoriID); id != nil {
+			entry.ShikimoriID = id
+		}
+		if id := parseIDPtr(e.Anime.MALID); id != nil {
+			entry.MalID = id
+		}
 
 		genres := make([]string, 0, len(e.Anime.Genres))
 		for _, g := range e.Anime.Genres {

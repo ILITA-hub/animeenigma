@@ -22,7 +22,11 @@ type AnimeInfo struct {
 	PosterURL     string      `json:"poster_url,omitempty"`
 	EpisodesCount int         `json:"episodes_count"`
 	EpisodesAired int         `json:"episodes_aired,omitempty"`
-	Genres        []GenreInfo `gorm:"many2many:anime_genres;joinForeignKey:anime_id;joinReferences:genre_id" json:"genres,omitempty"`
+	// Authoritative external IDs from the catalog-owned animes row (Shikimori ID == MAL ID).
+	// Read-only here; the player service mirrors these columns for export/lookup.
+	ShikimoriID string      `gorm:"column:shikimori_id" json:"shikimori_id,omitempty"`
+	MALID       string      `gorm:"column:mal_id" json:"mal_id,omitempty"`
+	Genres      []GenreInfo `gorm:"many2many:anime_genres;joinForeignKey:anime_id;joinReferences:genre_id" json:"genres,omitempty"`
 }
 
 func (AnimeInfo) TableName() string { return "animes" }
