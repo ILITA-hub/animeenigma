@@ -5,51 +5,51 @@
   "graphTooltip": 1,
   "id": null,
   "links": [],
-  "description": "Unified playback health: RU/JP/18+ player & catalog-parser health (success-rate %, p95 latency, liveness) plus the EN OurEnglish scraper failover chain (provider×stage probes, enabled/degraded state, fallbacks, daily playability canary). Replaces the former Player/Health, Scraper/Health and Scraper/Provider Health dashboards.",
+  "description": "Unified playback health: catalog-parser performance (success-rate %, p95 latency) for the RU/JP/18+ players, plus a single Provider Health view covering Kodik and the EN OurEnglish scraper failover chain (per-provider×stage probes, management table with degraded reasons, fallback transparency, probe heartbeats) and the daily playability canary. Replaces the former Player/Health, Scraper/Health, Scraper/Provider Health and Scraper/Provider Management dashboards.",
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Count of RU player liveness probes currently UP (max 2: kodik, animelib).",
+      "description": "Kodik RU iframe player liveness (1=UP, 0=DOWN). Probed catalog-side every 5min via a Naruto search; reported under provider_health_up{provider=\"kodik\"}.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 1 }, { "color": "green", "value": 2 } ] },
+          "mappings": [ { "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" } ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
       "id": 1,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(player_health_up)", "legendFormat": "RU Players Up", "refId": "A" } ],
-      "title": "RU Players Up",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "max(provider_health_up{provider=\"kodik\"})", "legendFormat": "Kodik", "refId": "A" } ],
+      "title": "Kodik Up",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "EN scraper providers currently enabled (provider_enabled=1). Degraded providers (SCRAPER_DEGRADED_PROVIDERS) report 0.",
+      "description": "EN scraper providers currently enabled (provider_enabled=1). Excludes 18anime (18+ player, separate group) and kodik. Degraded providers (SCRAPER_DEGRADED_PROVIDERS) report 0.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 2 }, { "color": "green", "value": 4 } ] },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 3 }, { "color": "green", "value": 5 } ] },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
       "id": 2,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(provider_enabled)", "legendFormat": "EN Providers Enabled", "refId": "A" } ],
-      "title": "EN Providers Enabled",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(provider_enabled{provider!=\"18anime\", provider!=\"kodik\"})", "legendFormat": "EN Providers Enabled", "refId": "A" } ],
+      "title": "Providers Enabled",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Fraction of EN scraper provider×stage probes currently UP. 1.0 = all healthy.",
+      "description": "Fraction of provider×stage probes currently UP (Kodik + EN scraper providers; excludes 18anime). 1.0 = all healthy.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -59,37 +59,38 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 0 },
       "id": 3,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(provider_health_up) / clamp_min(count(provider_health_up), 1)", "legendFormat": "EN Stage Health", "refId": "A" } ],
-      "title": "EN Stage Health",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(provider_health_up{provider!=\"18anime\"}) / clamp_min(count(provider_health_up{provider!=\"18anime\"}), 1)", "legendFormat": "Stage Health", "refId": "A" } ],
+      "title": "Stage Health",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Age of the last successful scraper playability canary run. Red if stale (canary runs daily).",
+      "description": "Age of the last SUCCESSFUL scraper playability canary run. Shows 'never' (not a 56-year epoch artifact) when the canary has never succeeded. Red if stale (canary runs daily).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
           "mappings": [],
+          "noValue": "never",
           "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 100000 }, { "color": "red", "value": 200000 } ] },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
+      "gridPos": { "h": 4, "w": 5, "x": 15, "y": 0 },
       "id": 4,
       "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - scheduler_job_last_success_timestamp{exported_job=\"scraper_playability_canary\"}", "legendFormat": "Canary Age", "refId": "A" } ],
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - (scheduler_job_last_success_timestamp{exported_job=\"scraper_playability_canary\"} > 0)", "legendFormat": "Canary Age", "refId": "A" } ],
       "title": "Canary Last Run (age)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Total provider→provider failover events in the EN scraper chain over the last hour.",
+      "description": "Total provider→provider failover events in the EN scraper chain over the selected time range (top time picker).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -99,36 +100,16 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
       "id": 5,
       "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(parser_fallback_total[1h]))", "legendFormat": "Fallbacks (1h)", "refId": "A" } ],
-      "title": "Fallbacks (1h)",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(parser_fallback_total[$__range]))", "legendFormat": "Fallbacks", "refId": "A" } ],
+      "title": "Fallbacks",
       "type": "stat"
     },
 
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 }, "id": 10, "panels": [], "title": "Player / Parser Health (RU / JP / 18+)", "type": "row" },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "RU player liveness probes (1=UP, 0=DOWN). Probes exist only for kodik and animelib.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "custom": { "fillOpacity": 80, "lineWidth": 0 },
-          "mappings": [ { "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" } ],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 5 },
-      "id": 11,
-      "options": { "alignValue": "center", "mergeValues": true, "rowHeight": 0.8, "showValue": "never" },
-      "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "player_health_up", "legendFormat": "{{ player }}", "refId": "A" } ],
-      "title": "Player Liveness",
-      "type": "state-timeline"
-    },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 }, "id": 10, "panels": [], "title": "Parser Performance (catalog parsers — RU / JP / 18+)", "type": "row" },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "description": "Catalog-parser request success rate per provider (success / total) over a 5m window. Providers: allanime, anime18, animelib, hanime, kodik. NOT the EN scraper provider set.",
@@ -142,7 +123,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 5 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 5 },
       "id": 12,
       "options": { "legend": { "calcs": ["mean", "last"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "pluginVersion": "10.3.3",
@@ -161,7 +142,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 11 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 5 },
       "id": 13,
       "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "pluginVersion": "10.3.3",
@@ -169,31 +150,42 @@
       "title": "Parser p95 Latency (by provider)",
       "type": "timeseries"
     },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Seconds since the last RU player health-check tick, per player.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 600 }, { "color": "red", "value": 1800 } ] },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 11 },
-      "id": 14,
-      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
-      "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - player_health_last_check_timestamp", "legendFormat": "{{ player }}", "refId": "A" } ],
-      "title": "Player Health-Check Age",
-      "type": "stat"
-    },
 
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }, "id": 20, "panels": [], "title": "EN Scraper Provider Health (OurEnglish failover chain)", "type": "row" },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 }, "id": 20, "panels": [], "title": "Provider Health", "type": "row" },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Per-provider × per-stage probe state (1=UP, 0=DOWN). Filtered by the $provider and $stage dropdowns. Stages: search, episodes, servers, stream, stream_segment.",
+      "description": "Per-provider management view: enabled state, live up/down, and (for degraded providers) the reason + description. Joins provider_enabled + provider_health_up + provider_info. Includes Kodik (RU) and the EN scraper providers.",
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Enabled" }, "properties": [ { "id": "mappings", "value": [ { "type": "value", "options": { "1": { "text": "🟢 Enabled", "color": "green" }, "0": { "text": "⚪ Disabled", "color": "red" } } } ] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] },
+          { "matcher": { "id": "byName", "options": "Live Up" }, "properties": [ { "id": "mappings", "value": [ { "type": "value", "options": { "1": { "text": "🟢 Up", "color": "green" }, "0": { "text": "🔴 Down", "color": "red" } } } ] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] },
+          { "matcher": { "id": "byName", "options": "Description" }, "properties": [ { "id": "custom.width", "value": 520 } ] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 13 },
+      "id": 21,
+      "options": { "cellHeight": "sm", "footer": { "show": false }, "showHeader": true },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_enabled", "format": "table", "instant": true, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "max by (provider) (provider_health_up)", "format": "table", "instant": true, "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_info", "format": "table", "instant": true, "refId": "C" }
+      ],
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "provider", "mode": "outer" } },
+        { "id": "organize", "options": {
+          "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "__name__": true, "__name__ 1": true, "__name__ 2": true, "__name__ 3": true, "job": true, "job 1": true, "job 2": true, "job 3": true, "instance": true, "instance 1": true, "instance 2": true, "instance 3": true, "Value #C": true },
+          "renameByName": { "provider": "Provider", "Value #A": "Enabled", "Value #B": "Live Up", "reason": "Reason", "description": "Description" },
+          "indexByName": { "Provider": 0, "Enabled": 1, "Live Up": 2, "Reason": 3, "Description": 4 }
+        } }
+      ],
+      "title": "Provider Management",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "Per-provider × per-stage probe state (1=UP, 0=DOWN) over time. Filtered by the $provider and $stage dropdowns. Scraper stages: search, episodes, servers, stream, stream_segment. Kodik reports stage 'liveness'.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -203,9 +195,9 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
-      "id": 21,
-      "options": { "alignValue": "center", "mergeValues": true, "rowHeight": 0.8, "showValue": "never" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 21 },
+      "id": 22,
+      "options": { "alignValue": "center", "mergeValues": true, "rowHeight": 0.6, "showValue": "never", "legend": { "displayMode": "list", "placement": "bottom" } },
       "pluginVersion": "10.3.3",
       "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_health_up{provider=~\"$provider\", stage=~\"$stage\"}", "legendFormat": "{{ provider }}/{{ stage }}", "refId": "A" } ],
       "title": "Provider × Stage Up",
@@ -213,45 +205,47 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Provider enabled state (1=Enabled, 0=Degraded). Degraded providers come from SCRAPER_DEGRADED_PROVIDERS.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [ { "options": { "0": { "color": "red", "text": "DEGRADED" }, "1": { "color": "green", "text": "ENABLED" } }, "type": "value" } ],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 27 },
-      "id": 22,
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
-      "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_enabled{provider=~\"$provider\"}", "legendFormat": "{{ provider }}", "refId": "A" } ],
-      "title": "Provider Enabled / Degraded",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "EN scraper failover edges (from→to) over the last hour. Not $provider-filtered (from/to are distinct labels).",
+      "description": "Which providers the failover chain moved AWAY from over the selected range — i.e. how often each provider failed and triggered a fallback. Higher = less reliable as a primary.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisBorderShow": false, "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "showPoints": "never", "stacking": { "mode": "normal", "group": "A" } },
+          "custom": { "axisBorderShow": false, "fillOpacity": 80, "gradientMode": "none", "lineWidth": 1 },
+          "mappings": [],
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 27 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
       "id": 23,
-      "options": { "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "options": { "barRadius": 0, "barWidth": 0.7, "fullHighlight": false, "groupWidth": 0.7, "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true }, "orientation": "horizontal", "showValue": "auto", "stacking": "none", "tooltip": { "mode": "multi", "sort": "desc" }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (from, to) (increase(parser_fallback_total[1h]))", "legendFormat": "{{ from }} → {{ to }}", "refId": "A" } ],
-      "title": "Provider Fallbacks (1h)",
-      "type": "timeseries"
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (from) (increase(parser_fallback_total[$__range]))", "format": "time_series", "legendFormat": "{{ from }}", "refId": "A" } ],
+      "title": "Fallbacked from",
+      "type": "barchart"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Seconds since each EN scraper provider's probe last ticked.",
+      "description": "Where the failover chain landed over the selected range — the next provider tried after a fallback. '(chain exhausted)' means no further provider was available (total failure for that attempt).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisBorderShow": false, "fillOpacity": 80, "gradientMode": "none", "lineWidth": 1 },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "id": 24,
+      "options": { "barRadius": 0, "barWidth": 0.7, "fullHighlight": false, "groupWidth": 0.7, "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true }, "orientation": "horizontal", "showValue": "auto", "stacking": "none", "tooltip": { "mode": "multi", "sort": "desc" }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
+      "pluginVersion": "10.3.3",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "label_replace(sum by (to) (increase(parser_fallback_total[$__range])), \"to\", \"(chain exhausted)\", \"to\", \"\")", "format": "time_series", "legendFormat": "{{ to }}", "refId": "A" } ],
+      "title": "Stopped fallbacking at",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "Seconds since each provider's probe last ticked (heartbeat). Catches a silently-dead probe (stale gauge). Includes Kodik.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -261,81 +255,39 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 35 },
-      "id": 24,
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 41 },
+      "id": 25,
       "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
       "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - provider_probe_last_tick_timestamp{provider=~\"$provider\"}", "legendFormat": "{{ provider }}", "refId": "A" } ],
       "title": "Probe Last Tick (by provider)",
       "type": "stat"
     },
-
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 }, "id": 30, "panels": [], "title": "EN Playability Canary", "type": "row" },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Daily playability canary pass/fail counts per provider over 24h. Filtered by $provider.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 80, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineWidth": 1, "scaleDistribution": { "type": "linear" }, "thresholdsStyle": { "mode": "off" } },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
-      "id": 31,
-      "options": { "barRadius": 0, "barWidth": 0.85, "fullHighlight": false, "groupWidth": 0.7, "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true }, "orientation": "auto", "showValue": "auto", "stacking": "normal", "tooltip": { "mode": "multi", "sort": "desc" }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
-      "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (provider, result) (increase(playability_canary_runs_total{provider=~\"$provider\"}[24h]))", "format": "time_series", "legendFormat": "{{ provider }} — {{ result }}", "refId": "A" } ],
-      "title": "Pass / Fail per Provider (24h)",
-      "type": "barchart"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Failure-reason breakdown for canary failures over 24h. Filtered by $provider.",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 80, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineWidth": 1, "scaleDistribution": { "type": "linear" }, "thresholdsStyle": { "mode": "off" } },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
-      "id": 32,
-      "options": { "barRadius": 0, "barWidth": 0.85, "fullHighlight": false, "groupWidth": 0.7, "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true }, "orientation": "auto", "showValue": "auto", "stacking": "normal", "tooltip": { "mode": "multi", "sort": "desc" }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
-      "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (reason) (increase(playability_canary_runs_total{result=\"fail\", provider=~\"$provider\"}[24h]))", "format": "time_series", "legendFormat": "{{ reason }}", "refId": "A" } ],
-      "title": "Failure Reason Breakdown (24h)",
-      "type": "barchart"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Timestamp of the last successful canary run.",
+      "description": "Enabled/disabled history per provider (provider_enabled). Shows when a provider was degraded via SCRAPER_DEGRADED_PROVIDERS / config.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] },
-          "unit": "dateTimeFromNow"
+          "custom": { "fillOpacity": 80, "lineWidth": 0 },
+          "mappings": [ { "options": { "0": { "color": "red", "text": "Disabled" }, "1": { "color": "green", "text": "Enabled" } }, "type": "value" } ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 48 },
-      "id": 33,
-      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 45 },
+      "id": 26,
+      "options": { "alignValue": "left", "mergeValues": true, "rowHeight": 0.8, "showValue": "never", "legend": { "displayMode": "list", "placement": "bottom" } },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "scheduler_job_last_success_timestamp{exported_job=\"scraper_playability_canary\"}", "legendFormat": "Last Canary Run", "refId": "A" } ],
-      "title": "Last Canary Run",
-      "type": "stat"
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "provider_enabled{provider=~\"$provider\"}", "legendFormat": "{{ provider }}", "refId": "A" } ],
+      "title": "Connect / Disconnect History",
+      "type": "state-timeline"
     },
+
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 51 }, "id": 30, "panels": [], "title": "EN Playability Canary", "type": "row" },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Top 10 failing (provider, server, reason) tuples by 24h fail count. Filtered by $provider.",
+      "description": "Failing (provider, server, reason, anime slot) tuples by cumulative fail count. Single source of truth for canary failures. The daily canary increments rarely, so this uses cumulative counts (not a decaying rate window) to stay populated. Empty = no canary failures ever recorded. Filtered by $provider.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -344,16 +296,37 @@
           "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
           "unit": "short"
         },
-        "overrides": [ { "matcher": { "id": "byName", "options": "Fail Count (24h)" }, "properties": [ { "id": "custom.cellOptions", "value": { "mode": "gradient", "type": "gauge" } }, { "id": "custom.width", "value": 200 } ] } ]
+        "overrides": [ { "matcher": { "id": "byName", "options": "Fail Count" }, "properties": [ { "id": "custom.cellOptions", "value": { "mode": "gradient", "type": "gauge" } }, { "id": "custom.width", "value": 200 } ] } ]
       },
-      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 48 },
-      "id": 34,
-      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true, "sortBy": [ { "desc": true, "displayName": "Fail Count (24h)" } ] },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 52 },
+      "id": 31,
+      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true, "sortBy": [ { "desc": true, "displayName": "Fail Count" } ] },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "topk(10, sum by (provider, server, reason) (increase(playability_canary_runs_total{result=\"fail\", provider=~\"$provider\"}[24h])))", "format": "table", "instant": true, "legendFormat": "", "refId": "A" } ],
-      "title": "Top Failing (provider, server, reason) Tuples",
-      "transformations": [ { "id": "organize", "options": { "excludeByName": { "Time": true }, "indexByName": { "provider": 0, "server": 1, "reason": 2, "Value": 3 }, "renameByName": { "Value": "Fail Count (24h)" } } } ],
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "topk(15, sum by (provider, server, reason, anime_slot) (playability_canary_runs_total{result=\"fail\", provider=~\"$provider\"}))", "format": "table", "instant": true, "legendFormat": "", "refId": "A" } ],
+      "title": "Top Failing (provider, server, reason, slot) Tuples",
+      "transformations": [ { "id": "organize", "options": { "excludeByName": { "Time": true }, "indexByName": { "provider": 0, "server": 1, "reason": 2, "anime_slot": 3, "Value": 4 }, "renameByName": { "anime_slot": "Slot", "Value": "Fail Count" } } } ],
       "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "Timestamp of the last successful canary run. 'never' if it has not yet succeeded.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "never",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] },
+          "unit": "dateTimeFromNow"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 52 },
+      "id": 32,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
+      "pluginVersion": "10.3.3",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "scheduler_job_last_success_timestamp{exported_job=\"scraper_playability_canary\"} > 0", "legendFormat": "Last Canary Run", "refId": "A" } ],
+      "title": "Last Canary Run",
+      "type": "stat"
     }
   ],
   "schemaVersion": 39,
@@ -403,7 +376,7 @@
     ]
   },
   "refresh": "30s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "",
   "title": "Playback / Health",

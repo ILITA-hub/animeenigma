@@ -7,22 +7,29 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
-	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/animelib"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/kodik"
 )
 
 const (
-	playerKodik    = "kodik"
-	playerAnimeLib = "animelib"
+	// providerKodik is the provider label Kodik reports under in the shared
+	// provider-health metric family (libs/metrics/provider.go). Kodik is the RU
+	// iframe player; it is probed by catalog (not the scraper microservice) but
+	// surfaces in the unified "Provider Health" Grafana view alongside the EN
+	// scraper providers. See docs/superpowers/specs/2026-06-05-playback-health-v2.
+	providerKodik = "kodik"
+	// kodikStage is the single synthetic probe stage for Kodik (distinct from the
+	// scraper stages search/episodes/servers/stream/stream_segment).
+	kodikStage = "liveness"
 )
 
-// PlayerHealthChecker periodically tests each player/parser to verify availability
-// and exposes the results as Prometheus metrics.
+// PlayerHealthChecker periodically tests Kodik to verify availability and exposes
+// the result via the shared provider-health metrics so it appears in the unified
+// Provider Health dashboard. (The AnimeLib probe was retired with the AniLib
+// player; player_health_* metrics are no longer emitted.)
 type PlayerHealthChecker struct {
-	kodikClient    *kodik.Client
-	animelibClient *animelib.Client
-	interval       time.Duration
-	log            *logger.Logger
+	kodikClient *kodik.Client
+	interval    time.Duration
+	log         *logger.Logger
 
 	// track previous status for transition logging
 	prevStatus map[string]bool
@@ -31,19 +38,25 @@ type PlayerHealthChecker struct {
 // NewPlayerHealthChecker creates a new health checker.
 func NewPlayerHealthChecker(
 	kodikClient *kodik.Client,
-	animelibClient *animelib.Client,
 	interval time.Duration,
 	log *logger.Logger,
 ) *PlayerHealthChecker {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
+	// Register Kodik as a first-class provider row in the management table even
+	// before the first probe tick completes.
+	metrics.ProviderEnabled.WithLabelValues(providerKodik).Set(1)
+	metrics.ProviderInfo.WithLabelValues(
+		providerKodik,
+		"RU iframe player",
+		"Kodik RU iframe — liveness via Naruto search probe (catalog-side, not part of the EN failover chain)",
+	).Set(1)
 	return &PlayerHealthChecker{
-		kodikClient:    kodikClient,
-		animelibClient: animelibClient,
-		interval:       interval,
-		log:            log,
-		prevStatus:     make(map[string]bool),
+		kodikClient: kodikClient,
+		interval:    interval,
+		log:         log,
+		prevStatus:  make(map[string]bool),
 	}
 }
 
@@ -69,35 +82,35 @@ func (h *PlayerHealthChecker) Start(ctx context.Context) {
 }
 
 func (h *PlayerHealthChecker) checkAll() {
-	h.checkPlayer(playerKodik, h.checkKodik)
-	h.checkPlayer(playerAnimeLib, h.checkAnimeLib)
+	h.checkProvider(providerKodik, kodikStage, h.checkKodik)
 }
 
-func (h *PlayerHealthChecker) checkPlayer(name string, check func() error) {
+// checkProvider runs a single probe and reports it via the shared provider-health
+// metrics (provider_health_up{provider,stage} + provider_probe_last_tick_timestamp).
+func (h *PlayerHealthChecker) checkProvider(provider, stage string, check func() error) {
 	start := time.Now()
 	err := check()
 	duration := time.Since(start).Seconds()
 
-	metrics.PlayerHealthCheckDuration.WithLabelValues(name).Observe(duration)
-	metrics.PlayerHealthLastCheck.WithLabelValues(name).SetToCurrentTime()
+	metrics.ProviderProbeLastTick.WithLabelValues(provider).SetToCurrentTime()
 
 	up := err == nil
 	if up {
-		metrics.PlayerHealthUp.WithLabelValues(name).Set(1)
+		metrics.ProviderHealthUp.WithLabelValues(provider, stage).Set(1)
 	} else {
-		metrics.PlayerHealthUp.WithLabelValues(name).Set(0)
+		metrics.ProviderHealthUp.WithLabelValues(provider, stage).Set(0)
 	}
 
 	// Log status transitions
-	prev, hasPrev := h.prevStatus[name]
+	prev, hasPrev := h.prevStatus[provider]
 	if !hasPrev || prev != up {
 		if up {
-			h.log.Infow("player is UP", "player", name, "duration_s", fmt.Sprintf("%.2f", duration))
+			h.log.Infow("provider is UP", "provider", provider, "stage", stage, "duration_s", fmt.Sprintf("%.2f", duration))
 		} else {
-			h.log.Warnw("player is DOWN", "player", name, "error", err, "duration_s", fmt.Sprintf("%.2f", duration))
+			h.log.Warnw("provider is DOWN", "provider", provider, "stage", stage, "error", err, "duration_s", fmt.Sprintf("%.2f", duration))
 		}
 	}
-	h.prevStatus[name] = up
+	h.prevStatus[provider] = up
 }
 
 // checkKodik verifies Kodik API is reachable and returns results with embed links.
@@ -119,50 +132,4 @@ func (h *PlayerHealthChecker) checkKodik() error {
 		}
 	}
 	return fmt.Errorf("kodik results have no embed links")
-}
-
-// checkAnimeLib verifies the full AnimeLib playback chain:
-// search → get episodes → get episode streams → verify video sources exist.
-func (h *PlayerHealthChecker) checkAnimeLib() error {
-	if h.animelibClient == nil {
-		return fmt.Errorf("animelib client not initialized")
-	}
-
-	// Step 1: Search
-	results, err := h.animelibClient.Search("naruto")
-	if err != nil {
-		return fmt.Errorf("search failed: %w", err)
-	}
-	if len(results) == 0 {
-		return fmt.Errorf("search returned 0 results")
-	}
-
-	// Step 2: Get episodes
-	episodes, err := h.animelibClient.GetEpisodes(results[0].ID)
-	if err != nil {
-		return fmt.Errorf("get episodes failed (anime %d): %w", results[0].ID, err)
-	}
-	if len(episodes) == 0 {
-		return fmt.Errorf("anime %d has 0 episodes", results[0].ID)
-	}
-
-	// Step 3: Get streams for first episode
-	detail, err := h.animelibClient.GetEpisodeStreams(episodes[0].ID)
-	if err != nil {
-		return fmt.Errorf("get streams failed (episode %d): %w", episodes[0].ID, err)
-	}
-	if len(detail.Players) == 0 {
-		return fmt.Errorf("episode %d has 0 players", episodes[0].ID)
-	}
-
-	// Step 4: Verify at least one player has a video source
-	for _, p := range detail.Players {
-		if p.Video != nil && len(p.Video.Quality) > 0 {
-			return nil // Has direct MP4
-		}
-		if p.Src != "" {
-			return nil // Has Kodik iframe
-		}
-	}
-	return fmt.Errorf("episode %d players have no video sources", episodes[0].ID)
 }

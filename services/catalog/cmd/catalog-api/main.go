@@ -163,10 +163,9 @@ func main() {
 		},
 	)
 
-	// Start player health checker
+	// Start Kodik liveness probe (reports via shared provider-health metrics).
 	healthChecker := service.NewPlayerHealthChecker(
 		catalogService.KodikClient(),
-		catalogService.AnimeLibClient(),
 		cfg.HealthCheck.Interval,
 		log,
 	)

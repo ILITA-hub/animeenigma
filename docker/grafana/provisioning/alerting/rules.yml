@@ -442,7 +442,7 @@ groups:
           description: "The cleanup job hasn't succeeded in over 8 days (expected weekly on Sundays)."
 
       - uid: player-unavailable
-        title: Player Unavailable
+        title: Kodik Player Unavailable
         noDataState: OK
         condition: C
         data:
@@ -452,7 +452,7 @@ groups:
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
-              expr: player_health_up
+              expr: provider_health_up{provider="kodik"}
               instant: true
               refId: A
           - refId: B
@@ -484,8 +484,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Player {{ $labels.player }} is DOWN"
-          description: "Player {{ $labels.player }} has been unavailable for 30+ minutes. Check external API status."
+          summary: "Kodik player ({{ $labels.provider }}) is DOWN"
+          description: "Kodik has been unavailable for 30+ minutes. Check Kodik API status."
 
       - uid: provider-health-stream-segment-down
         title: Scraper Provider Stream-Segment Down
