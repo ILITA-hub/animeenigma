@@ -92,13 +92,10 @@ func main() {
 	registry.Register(earnvidsExtractor)
 	log.Infow("registered embed extractor", "name", earnvidsExtractor.Name())
 
-	// Megaplay — the gogoanimes.fi mirror's newplayer.php embed (host
-	// gogoanime.me.uk) nests the megaplay.buzz HLS player, so gogoanime resolves
-	// streams through this extractor via the shared registry (2026-06-05 revival).
-	// nineanime constructs its own instance; this shared one serves gogoanime.
-	megaplayExtractor := embeds.NewMegaplayExtractor()
-	registry.Register(megaplayExtractor)
-	log.Infow("registered embed extractor", "name", megaplayExtractor.Name())
+	// NOTE: the Megaplay extractor is constructed AFTER SetGlobalSink (below) so
+	// its recording transport composes the egress recorder (WR-07). It is still
+	// registered before the gogoanime.Provider constructor (line ~248), which is
+	// the only ordering constraint the registry dispatch requires.
 
 	// Phase 28 (SCRAPER-HEAL-38) — vidstream_vip extractor for AnimeFever.
 	// Plain regex against inline `sources: [{"file":"...m3u8"}]` literal —
@@ -150,6 +147,24 @@ func main() {
 	// single-provider — the streaming-vs-general distinction is made downstream by
 	// EffectKind, not here.
 	egressTransport := tracing.WrapTransport(nil)
+
+	// megaplayWrap wraps a leaf extractor's transport with the egress recorder
+	// (WR-07). Built here, after SetGlobalSink, so tracing.WrapTransport composes
+	// the recording RoundTripper. The leaf module stays tracing-free (it takes a
+	// func(base) wrapper, mirroring kodikextract.NewRecordingClient).
+	megaplayWrap := func(base http.RoundTripper) http.RoundTripper {
+		return tracing.WrapTransport(base)
+	}
+
+	// Megaplay — the gogoanimes.fi mirror's newplayer.php embed (host
+	// gogoanime.me.uk) nests the megaplay.buzz HLS player, so gogoanime resolves
+	// streams through this extractor via the shared registry (2026-06-05 revival).
+	// nineanime constructs its own instance below; this shared one serves
+	// gogoanime. Both are recording-wrapped so the megaplay.buzz / 1anime.site /
+	// getSources hops emit egress effects (WR-07).
+	megaplayExtractor := embeds.NewRecordingMegaplayExtractor(megaplayWrap)
+	registry.Register(megaplayExtractor)
+	log.Infow("registered embed extractor", "name", megaplayExtractor.Name())
 
 	// Build the shared HTTP client for AnimePahe.
 	//
@@ -415,7 +430,7 @@ func main() {
 		HTTP:     nineAnimeBaseHTTP,
 		Cache:    redisCache,
 		Log:      log,
-		Megaplay: embeds.NewMegaplayExtractor(),
+		Megaplay: embeds.NewRecordingMegaplayExtractor(megaplayWrap), // WR-07: record megaplay egress; nineanime tags provider via ctx
 	})
 	if err != nil {
 		log.Fatalw("failed to construct NineAnime provider", "error", err)

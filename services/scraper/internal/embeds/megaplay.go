@@ -89,10 +89,33 @@ type MegaplayExtractor struct {
 	timeout time.Duration
 }
 
-// NewMegaplayExtractor returns a MegaplayExtractor with default timeouts.
+// NewMegaplayExtractor returns a MegaplayExtractor with default timeouts and an
+// UNRECORDED transport (back-compat, zero-arg). Use NewRecordingMegaplayExtractor
+// in production so the megaplay.buzz / 1anime.site / getSources hops emit egress
+// effects (WR-07).
 func NewMegaplayExtractor() *MegaplayExtractor {
+	return NewRecordingMegaplayExtractor(nil)
+}
+
+// NewRecordingMegaplayExtractor builds a MegaplayExtractor and lets the owning
+// service WRAP the http.Client transport for egress recording WITHOUT this leaf
+// module importing the tracing module (mirrors kodikextract.NewRecordingClient,
+// T-02-LEAF / WR-07). wrap may be nil (no recording, current behavior). Without
+// this seam the extractor's three outbound hops (1anime.site wrapper fetch,
+// megaplay.buzz player fetch, getSources XHR) bypass the shared egress recorder
+// and emit no effect rows — the blind spot confirmed live (zero megaplay.buzz
+// rows in ClickHouse). Callers pass:
+//
+//	embeds.NewRecordingMegaplayExtractor(func(base http.RoundTripper) http.RoundTripper {
+//		return tracing.WrapTransport(base)
+//	})
+func NewRecordingMegaplayExtractor(wrap func(base http.RoundTripper) http.RoundTripper) *MegaplayExtractor {
+	var rt http.RoundTripper = http.DefaultTransport
+	if wrap != nil {
+		rt = wrap(rt)
+	}
 	return &MegaplayExtractor{
-		http:    &http.Client{Timeout: defaultMegaplayHTTPTimeout},
+		http:    &http.Client{Timeout: defaultMegaplayHTTPTimeout, Transport: rt},
 		timeout: defaultMegaplayHTTPTimeout,
 	}
 }

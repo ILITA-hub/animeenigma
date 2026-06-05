@@ -67,6 +67,38 @@ func TestMegaplay_Name(t *testing.T) {
 	}
 }
 
+// markerTransport is a sentinel RoundTripper used to prove the wrap func was
+// applied to the extractor's http.Client transport (WR-07).
+type markerTransport struct{ inner http.RoundTripper }
+
+func (m *markerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return m.inner.RoundTrip(r)
+}
+
+// TestMegaplay_RecordingTransportWrapped proves the recording-wrap seam is
+// applied to the extractor's http.Client transport (WR-07) — mirrors the
+// kodikextract NewRecordingClient test. The default zero-arg constructor leaves
+// the transport unwrapped (back-compat).
+func TestMegaplay_RecordingTransportWrapped(t *testing.T) {
+	var wrapCalled bool
+	e := NewRecordingMegaplayExtractor(func(base http.RoundTripper) http.RoundTripper {
+		wrapCalled = true
+		return &markerTransport{inner: base}
+	})
+	if !wrapCalled {
+		t.Fatal("wrap func was never invoked — recording seam not applied")
+	}
+	if _, ok := e.http.Transport.(*markerTransport); !ok {
+		t.Fatalf("http.Client.Transport = %T; want *markerTransport (recording-wrapped)", e.http.Transport)
+	}
+
+	// Back-compat: the zero-arg constructor must NOT wrap (no recording).
+	plain := NewMegaplayExtractor()
+	if _, ok := plain.http.Transport.(*markerTransport); ok {
+		t.Fatal("NewMegaplayExtractor() unexpectedly wrapped its transport")
+	}
+}
+
 func TestMegaplay_Matches(t *testing.T) {
 	t.Parallel()
 	e := NewMegaplayExtractor()

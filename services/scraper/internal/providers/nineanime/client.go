@@ -654,6 +654,11 @@ func (p *Provider) GetStream(ctx context.Context, providerID, episodeURL, server
 // The master.m3u8 is stable per episode, so the 5min cache is safe; rotating
 // segment CDNs are handled downstream by the HLS proxy's provenance token.
 func (p *Provider) streamViaMegaplay(ctx context.Context, providerID, episodeURL, serverID, iframeURL string) (*domain.Stream, error) {
+	// Tag the ctx with this provider so the megaplay extractor's recording
+	// transport pivots its egress effects by provider+host (D-02/D-09, WR-07),
+	// matching how BaseHTTPClient-routed provider calls are tagged. No-op when
+	// the extractor's transport is unrecorded (tests / global sink absent).
+	ctx = domain.ProviderContext(ctx, p.Name())
 	stream, err := p.megaplay.Extract(ctx, iframeURL, nil)
 	if err != nil {
 		p.markStage(health.StageStream, err)
