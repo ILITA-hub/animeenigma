@@ -2,7 +2,7 @@
   <button
     ref="btnEl"
     type="button"
-    :class="[
+    :class="cn(
       'absolute z-20 w-9 h-9 rounded-full',
       'bg-black/65 backdrop-blur flex items-center justify-center',
       'text-white opacity-0 scale-90',
@@ -13,9 +13,10 @@
       'hover:bg-cyan-500/90 hover:rotate-[12deg] hover:scale-110',
       'pointer-events-auto',
       positionClass,
-      extraClass,
-    ]"
-    :aria-label="$t('contextMenu.openMenu')"
+      props.extraClass,
+      props.class,
+    )"
+    :aria-label="t('contextMenu.openMenu')"
     aria-haspopup="menu"
     :aria-expanded="menuOpen"
     @click.prevent.stop="onActivate"
@@ -32,17 +33,23 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import type { HTMLAttributes } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { cn } from '@/lib/utils'
 
 const props = withDefaults(
   defineProps<{
     menuOpen?: boolean
     position?: 'top-right' | 'top-left' | 'bottom-right'
     extraClass?: string
+    class?: HTMLAttributes['class']
   }>(),
   { menuOpen: false, position: 'top-right', extraClass: '' }
 )
 
 const emit = defineEmits<{ open: [el: HTMLElement] }>()
+
+const { t } = useI18n()
 
 const btnEl = ref<HTMLButtonElement | null>(null)
 
