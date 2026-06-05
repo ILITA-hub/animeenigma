@@ -57,6 +57,21 @@ datasources:
         filterBySpanID: false
       nodeGraph:
         enabled: true
+      # AR-EFFECT-04 (D-12): resolve the Tempo metrics_generator output against
+      # Prometheus. serviceMap renders the service graph from traces_service_graph_*
+      # and tracesToMetrics surfaces the per-operation RED metrics from
+      # traces_spanmetrics_*. Both bind to the existing Prometheus uid (must stay
+      # PBFA97CFB590B2093 — see the header warning; reusing/renaming it orphaned
+      # 14 alert rules before).
+      serviceMap:
+        datasourceUid: PBFA97CFB590B2093
+      tracesToMetrics:
+        datasourceUid: PBFA97CFB590B2093
+        spanStartTimeShift: '-2m'
+        spanEndTimeShift: '2m'
+        queries:
+          - name: 'RED rate'
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags}[$$__rate_interval]))'
 
   # v4 Activity Register (01-03): ClickHouse clickstream store. The uid
   # aenigma-clickhouse is BRAND NEW — never reuse aenigma-postgres (the header
