@@ -44,9 +44,9 @@ func TestNormalizeServiceFrame(t *testing.T) {
 			want: "watch.Tracker.Save",
 		},
 		{
-			name: "bare service package func",
+			name: "bare service package func resolves to service name",
 			in:   "github.com/ILITA-hub/animeenigma/services/player/internal/service.SaveProgress",
-			want: "service.SaveProgress",
+			want: "player.SaveProgress",
 		},
 	}
 	for _, tc := range cases {
