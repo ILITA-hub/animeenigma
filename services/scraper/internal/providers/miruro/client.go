@@ -66,7 +66,10 @@ var stageNames = health.AllStages
 // libs/idmapping. Captured here as an interface so tests can pass a
 // stub without standing up a real ARM HTTP server.
 type IDMapper interface {
-	ResolveByShikimoriID(id string) (*idmapping.MappingResult, error)
+	// ResolveByShikimoriIDContext threads the caller's request ctx into the
+	// outbound ARM/AniList calls so their egress effects carry trace linkage +
+	// attribution (WR-01).
+	ResolveByShikimoriIDContext(ctx context.Context, id string) (*idmapping.MappingResult, error)
 }
 
 // Deps is the constructor input for New(). Required fields validated eagerly
@@ -220,7 +223,7 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 		return hit, nil
 	}
 
-	mapping, err := p.idMap.ResolveByShikimoriID(ref.ShikimoriID)
+	mapping, err := p.idMap.ResolveByShikimoriIDContext(ctx, ref.ShikimoriID)
 	if err != nil {
 		// ARM is a remote service — treat lookup failure as ProviderDown
 		// so the orchestrator falls through. We log enough to debug the

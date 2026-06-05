@@ -275,7 +275,7 @@ func (s *SubsAggregator) ensureExternalIDs(ctx context.Context, anime *domain.An
 	if s.idmap == nil {
 		return
 	}
-	mapping, err := s.idmap.ResolveByShikimoriID(anime.ShikimoriID)
+	mapping, err := s.idmap.ResolveByShikimoriIDContext(ctx, anime.ShikimoriID)
 	if err != nil || mapping == nil || mapping.Kitsu == nil {
 		return
 	}
@@ -311,7 +311,7 @@ func (s *SubsAggregator) ensureAniListID(ctx context.Context, anime *domain.Anim
 	if s.idmap == nil {
 		return
 	}
-	mapping, err := s.idmap.ResolveByShikimoriID(anime.ShikimoriID)
+	mapping, err := s.idmap.ResolveByShikimoriIDContext(ctx, anime.ShikimoriID)
 	if err != nil || mapping == nil || mapping.AniList == nil {
 		if err != nil {
 			s.log.Debugw("subs aggregator: arm anilist lookup failed",

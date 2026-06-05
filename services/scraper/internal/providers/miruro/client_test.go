@@ -88,7 +88,7 @@ type stubIDMapper struct {
 	resolve func(id string) (*idmapping.MappingResult, error)
 }
 
-func (s *stubIDMapper) ResolveByShikimoriID(id string) (*idmapping.MappingResult, error) {
+func (s *stubIDMapper) ResolveByShikimoriIDContext(_ context.Context, id string) (*idmapping.MappingResult, error) {
 	if s.resolve == nil {
 		return nil, nil
 	}

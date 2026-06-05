@@ -1,6 +1,7 @@
 package idmapping
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -379,4 +380,56 @@ func TestResolveByMALID_ErrorUnwrap(t *testing.T) {
 		t.Logf("(no unwrap target, OK for fmt.Errorf %%w over a string-formatted parent — this is informational, not a hard requirement)")
 	}
 	_ = fmt.Sprintf // imports
+}
+
+// TestResolveByMALIDContext_PropagatesCtx proves the caller's ctx threads into
+// the outbound ARM/AniList requests (WR-01): an already-cancelled ctx must abort
+// the call before either upstream is hit, and neither server should observe a
+// request.
+func TestResolveByMALIDContext_PropagatesCtx(t *testing.T) {
+	var armHits, aniHits int
+	armSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		armHits++
+		_, _ = w.Write([]byte(armOKBody))
+	}))
+	defer armSrv.Close()
+	aniSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		aniHits++
+	}))
+	defer aniSrv.Close()
+	c := newTestClient(armSrv.URL, aniSrv.URL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel BEFORE the call so the threaded ctx aborts the HTTP request
+
+	_, err := c.ResolveByMALIDContext(ctx, "21")
+	if err == nil {
+		t.Fatal("expected error from a cancelled ctx threaded into the request")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error chain does not carry context.Canceled (ctx not propagated): %v", err)
+	}
+	if armHits != 0 || aniHits != 0 {
+		t.Fatalf("servers were hit despite a pre-cancelled ctx (arm=%d ani=%d) — ctx not threaded", armHits, aniHits)
+	}
+}
+
+// TestResolveByShikimoriIDContext_Succeeds proves the ctx-aware Shikimori
+// variant resolves identically to the no-ctx wrapper on the happy path.
+func TestResolveByShikimoriIDContext_Succeeds(t *testing.T) {
+	armSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(armOKBody))
+	}))
+	defer armSrv.Close()
+	aniSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer aniSrv.Close()
+	c := newTestClient(armSrv.URL, aniSrv.URL)
+
+	res, err := c.ResolveByShikimoriIDContext(context.Background(), "21")
+	if err != nil {
+		t.Fatalf("ResolveByShikimoriIDContext: %v", err)
+	}
+	if res == nil || res.AniList == nil {
+		t.Fatalf("expected a populated AniList ID, got %+v", res)
+	}
 }

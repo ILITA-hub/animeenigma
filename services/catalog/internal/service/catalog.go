@@ -2149,7 +2149,7 @@ func (s *CatalogService) resolveAniListID(ctx context.Context, anime *domain.Ani
 	// Try Shikimori ID first (source of truth)
 	if anime.ShikimoriID != "" {
 		armStart := time.Now()
-		result, err := s.idMappingClient.ResolveByShikimoriID(anime.ShikimoriID)
+		result, err := s.idMappingClient.ResolveByShikimoriIDContext(ctx, anime.ShikimoriID)
 		metrics.ExternalAPIDuration.WithLabelValues("arm").Observe(time.Since(armStart).Seconds())
 		if err != nil {
 			metrics.ExternalAPIRequestsTotal.WithLabelValues("arm", "error").Inc()
@@ -2165,7 +2165,7 @@ func (s *CatalogService) resolveAniListID(ctx context.Context, anime *domain.Ani
 	// Fallback to MAL ID
 	if anilistID == "" && anime.MALID != "" {
 		armStart := time.Now()
-		result, err := s.idMappingClient.ResolveByMALID(anime.MALID)
+		result, err := s.idMappingClient.ResolveByMALIDContext(ctx, anime.MALID)
 		metrics.ExternalAPIDuration.WithLabelValues("arm").Observe(time.Since(armStart).Seconds())
 		if err != nil {
 			metrics.ExternalAPIRequestsTotal.WithLabelValues("arm", "error").Inc()

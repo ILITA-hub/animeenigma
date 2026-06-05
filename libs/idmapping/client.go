@@ -131,14 +131,37 @@ func NewClient(opts ...Option) *Client {
 // ResolveByShikimoriID resolves anime IDs from a Shikimori ID.
 // Shikimori IDs equal MAL IDs, so we query with source=myanimelist.
 // Falls back to AniList GraphQL on ARM failure.
+//
+// Deprecated for in-process use: prefer ResolveByShikimoriIDContext so the
+// caller's request context (trace span + egress attribution) threads into the
+// outbound ARM/AniList calls (WR-01). This no-ctx wrapper is kept for
+// backward compat and uses context.Background().
 func (c *Client) ResolveByShikimoriID(id string) (*MappingResult, error) {
-	return c.resolveMAL(id)
+	return c.resolveMAL(context.Background(), id)
 }
 
 // ResolveByMALID resolves anime IDs from a MyAnimeList ID.
 // Falls back to AniList GraphQL on ARM failure.
+//
+// Deprecated for in-process use: prefer ResolveByMALIDContext (WR-01). This
+// no-ctx wrapper is kept for backward compat and uses context.Background().
 func (c *Client) ResolveByMALID(id string) (*MappingResult, error) {
-	return c.resolveMAL(id)
+	return c.resolveMAL(context.Background(), id)
+}
+
+// ResolveByShikimoriIDContext is the context-aware variant of
+// ResolveByShikimoriID (WR-01). The caller's ctx threads into the outbound
+// ARM/AniList HTTP requests so the egress effects carry the inbound request's
+// trace linkage + attribution; the per-request ARM/AniList timeouts are derived
+// from ctx via context.WithTimeout(ctx, …), so a cancelled ctx aborts promptly.
+func (c *Client) ResolveByShikimoriIDContext(ctx context.Context, id string) (*MappingResult, error) {
+	return c.resolveMAL(ctx, id)
+}
+
+// ResolveByMALIDContext is the context-aware variant of ResolveByMALID (WR-01).
+// See ResolveByShikimoriIDContext for the contract.
+func (c *Client) ResolveByMALIDContext(ctx context.Context, id string) (*MappingResult, error) {
+	return c.resolveMAL(ctx, id)
 }
 
 // resolveMAL is the merged ARM → AniList resolution path used by both
@@ -156,18 +179,21 @@ func (c *Client) ResolveByMALID(id string) (*MappingResult, error) {
 //     failure message so operators see the full picture). The maintenance
 //     bot keys on "ARM" in the error message to dispatch the right
 //     pattern (see .claude/maintenance-prompt.md — ARM-down pattern).
-func (c *Client) resolveMAL(id string) (*MappingResult, error) {
+func (c *Client) resolveMAL(ctx context.Context, id string) (*MappingResult, error) {
 	if id == "" {
 		return nil, errors.New("idmapping: empty ID")
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	armResult, armErr := c.resolveARM("myanimelist", id)
+	armResult, armErr := c.resolveARM(ctx, "myanimelist", id)
 	if armErr == nil && armResult != nil && armResult.AniList != nil {
 		return armResult, nil
 	}
 
 	// Fallback path: AniList GraphQL.
-	fb, fbErr := c.resolveAniList(id)
+	fb, fbErr := c.resolveAniList(ctx, id)
 	if fbErr != nil {
 		if armErr != nil {
 			// Both layers failed — preserve the ARM error for operator
@@ -202,8 +228,11 @@ func (c *Client) resolveMAL(id string) (*MappingResult, error) {
 // resolveARM is the original ARM HTTP path, unchanged in shape but with
 // a tighter timeout and explicit context handling so the per-request
 // budget is honored even if the outer client timeout is bumped later.
-func (c *Client) resolveARM(source, id string) (*MappingResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), armTimeout)
+func (c *Client) resolveARM(ctx context.Context, source, id string) (*MappingResult, error) {
+	// Derive the per-request budget from the caller's ctx so the inbound
+	// request's trace span + egress attribution thread into the ARM call
+	// (WR-01), while still capping the ARM hop at armTimeout.
+	ctx, cancel := context.WithTimeout(ctx, armTimeout)
 	defer cancel()
 
 	endpoint := fmt.Sprintf("%s/ids?source=%s&id=%s",
@@ -260,13 +289,14 @@ type aniListGraphQLResponse struct {
 //
 // AniList's GraphQL Media query supports `idMal: Int` directly, which is
 // what we need. No auth required for public reads.
-func (c *Client) resolveAniList(malID string) (*MappingResult, error) {
+func (c *Client) resolveAniList(ctx context.Context, malID string) (*MappingResult, error) {
 	intID, perr := strconv.Atoi(malID)
 	if perr != nil {
 		return nil, fmt.Errorf("AniList: invalid MAL id %q: %w", malID, perr)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), aniListTimeout)
+	// Per-request budget derived from the caller's ctx (WR-01); see resolveARM.
+	ctx, cancel := context.WithTimeout(ctx, aniListTimeout)
 	defer cancel()
 
 	body := fmt.Sprintf(
