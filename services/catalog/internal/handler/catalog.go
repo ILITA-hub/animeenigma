@@ -683,8 +683,16 @@ func (h *CatalogHandler) parseFilters(r *http.Request) domain.SearchFilters {
 		}
 	}
 
+	// Frontend sends genres as a single comma-joined query param (?genre=id1,id2).
+	// Handle both that form and the multi-value form (?genre=id1&genre=id2).
 	if genres := query["genre"]; len(genres) > 0 {
-		filters.GenreIDs = genres
+		for _, g := range genres {
+			for _, id := range strings.Split(g, ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					filters.GenreIDs = append(filters.GenreIDs, id)
+				}
+			}
+		}
 	}
 
 	if scoreMinStr := query.Get("score_min"); scoreMinStr != "" {
