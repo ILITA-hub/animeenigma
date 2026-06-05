@@ -127,13 +127,10 @@
             <!-- UA-048 (UX-11 Phase 4): sr-only h2 to satisfy heading-order. -->
             <h2 class="sr-only">{{ $t('browse.resultsHeading') }}</h2>
             <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              <AnimeCardNew
+              <PosterCard
                 v-for="anime in animeList"
                 :key="anime.id"
-                :anime="anime"
-                :list-status="getListStatus(anime.id)"
-                :site-rating="siteRatings[String(anime.id)]"
-                :progress="browseProgress.get(String(anime.id)) ?? null"
+                :model="browseCardModel(anime)"
                 :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
                 @open-menu="(el: HTMLElement) => openContextMenuAt(el, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
                 @touchstart="onTouchstart($event, anime, { listStatus: getListStatus(anime.id), siteRating: siteRatings[String(anime.id)] })"
@@ -216,7 +213,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Button, PaginationBar, SearchAutocomplete } from '@/components/ui'
-import { AnimeCardNew, AnimeContextMenu } from '@/components/anime'
+import { PosterCard, AnimeContextMenu } from '@/components/anime'
+import { fromCatalogAnime } from '@/utils/toCardModel'
+import type { ListStatus } from '@/types/card'
 import BrowseSidebar from '@/components/browse/BrowseSidebar.vue'
 import { useBrowseFilters } from '@/composables/useBrowseFilters'
 import { useFocusTrap } from '@/composables/useFocusTrap'
@@ -257,6 +256,19 @@ const getListStatus = (animeId: string | number): string | null => {
 
 // Site ratings for anime cards
 const { ratings: siteRatings, fetchRatings: fetchSiteRatings } = useSiteRatings()
+
+function browseCardModel(anime: (typeof animeList.value)[number]) {
+  const id = String(anime.id)
+  const sr = siteRatings.value[id]
+  const pe = browseProgress.value.get(id) ?? null
+  return fromCatalogAnime(anime as never, {
+    siteScore: sr && sr.total_reviews > 0 ? sr.average_score : undefined,
+    listStatus: (getListStatus(anime.id) as ListStatus | null) ?? null,
+    progress: pe && pe.latest_episode > 0
+      ? { current: pe.latest_episode, total: pe.episodes_count || pe.episodes_aired || 0 }
+      : null,
+  })
+}
 
 // Context menu
 const { contextMenu, openAtElement: openContextMenuAt, onTouchstart, onTouchmove, onTouchend } = useContextMenu()
