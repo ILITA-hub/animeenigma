@@ -95,9 +95,10 @@ type SessionContext struct {
 	IP        string
 }
 
-// SessionTTL is the sliding-window length. Every refresh extends a session
-// to now+SessionTTL. 30 days = "user opens the site at least once a month".
-const SessionTTL = 30 * 24 * time.Hour
+// SessionExpirySentinel makes a session effectively non-expiring. We keep the
+// expires_at column (so no schema migration) but set it ~100 years out and
+// never let it lapse for an active session. A session ends only on revoke.
+const SessionExpirySentinel = 100 * 365 * 24 * time.Hour
 
 func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest, sc SessionContext) (*domain.AuthResponse, error) {
 	// Check if username exists
@@ -163,106 +164,56 @@ func (s *AuthService) RefreshToken(
 	ctx context.Context,
 	req *domain.RefreshRequest,
 	sc SessionContext,
-) (*domain.AuthResponse, bool, error) {
-	rt := req.RefreshToken
-	hash := hashRefreshToken(rt)
+) (*domain.AuthResponse, error) {
+	hash := hashRefreshToken(req.RefreshToken)
 
-	// 1) Try persistent-session path.
 	session, err := s.sessionRepo.FindAliveByHash(ctx, hash)
-	if err == nil {
-		newRT, err := generateRefreshToken()
-		if err != nil {
-			return nil, false, err
-		}
-		newHash := hashRefreshToken(newRT)
-
-		result, err := s.sessionRepo.Rotate(ctx, session.ID, hash, newHash, sc.IP, time.Now().Add(SessionTTL))
-		if err != nil {
-			// Either CAS missed AND grace window expired, or session was
-			// revoked between FindAliveByHash and Rotate. Either way, treat
-			// as a generic auth failure — don't leak that the token was
-			// once valid.
-			return nil, false, errors.Unauthorized("invalid refresh token")
-		}
-
-		// Re-load user (cheap; could cache later)
-		user, err := s.userRepo.GetByID(ctx, result.Session.UserID)
-		if err != nil {
-			return nil, false, err
-		}
-
-		pair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role, result.Session.ID)
-		if err != nil {
-			return nil, false, fmt.Errorf("generate tokens: %w", err)
-		}
-
-		resp := &domain.AuthResponse{
-			AccessToken: pair.AccessToken,
-			ExpiresAt:   pair.ExpiresAt,
-			User:        user,
-		}
-		if result.Rotated {
-			resp.RefreshToken = newRT
-			metrics.AuthEventsTotal.WithLabelValues("refresh_token", "success").Inc()
-		} else {
-			// Grace path — caller must NOT issue a Set-Cookie for refresh.
-			metrics.AuthEventsTotal.WithLabelValues("refresh_cas_miss", "grace_hit").Inc()
-		}
-		return resp, result.Rotated, nil
+	if err != nil {
+		// Not alive / unknown / revoked — generic auth failure.
+		return nil, errors.Unauthorized("invalid refresh token")
 	}
 
-	// 2) Legacy JWT path (transition window).
-	userID, jwtErr := s.jwtManager.ValidateRefreshToken(rt)
-	if jwtErr == nil {
-		// Check legacy blacklist
-		blacklistKey := cache.PrefixSession + "blacklist:" + rt
-		if exists, _ := s.cache.Exists(ctx, blacklistKey); exists {
-			return nil, false, errors.Unauthorized("token has been revoked")
-		}
-		user, err := s.userRepo.GetByID(ctx, userID)
-		if err != nil {
-			return nil, false, err
-		}
-		// Blacklist the legacy RT so it can't be reused.
-		_ = s.cache.Set(ctx, blacklistKey, true, 7*24*time.Hour)
-
-		// Upgrade — mint a real session.
-		resp, err := s.createSessionAndAuthResponse(ctx, user, sc)
-		if err != nil {
-			return nil, false, err
-		}
-		metrics.AuthEventsTotal.WithLabelValues("session_legacy_upgraded", "success").Inc()
-		s.log.Infow("upgraded legacy refresh JWT to persistent session", "user_id", user.ID)
-		return resp, true, nil
+	// Non-rotating: stamp activity, keep the same refresh token.
+	now := time.Now()
+	if terr := s.sessionRepo.Touch(ctx, session.ID, sc.IP, now, now.Add(SessionExpirySentinel)); terr != nil {
+		return nil, terr
 	}
 
-	// 3) Both paths failed. Distinguish a lapsed-grace desync (this hash WAS a
-	// session's previous token but its grace window has since expired — the
-	// "random logout" symptom) from a genuinely unknown token, for observability.
-	if s.sessionRepo.PreviousHashExists(ctx, hash) {
-		metrics.AuthEventsTotal.WithLabelValues("refresh_grace_lapsed", "error").Inc()
+	user, err := s.userRepo.GetByID(ctx, session.UserID)
+	if err != nil {
+		return nil, err
 	}
-	return nil, false, errors.Unauthorized("invalid refresh token")
+
+	pair, err := s.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role, session.ID)
+	if err != nil {
+		return nil, fmt.Errorf("generate tokens: %w", err)
+	}
+
+	metrics.AuthEventsTotal.WithLabelValues("refresh_token", "success").Inc()
+	return &domain.AuthResponse{
+		AccessToken: pair.AccessToken,
+		ExpiresAt:   pair.ExpiresAt,
+		User:        user,
+		// RefreshToken intentionally empty: the cookie value is unchanged.
+	}, nil
 }
 
-// Logout revokes the session that owns this refresh token. If the cookie
-// is a legacy JWT, fall back to the old blacklist behavior.
+// Logout revokes the session that owns this refresh token. Unknown tokens are
+// a no-op (the cookie is cleared by the handler regardless).
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	if refreshToken == "" {
 		return nil
 	}
 	hash := hashRefreshToken(refreshToken)
 	session, err := s.sessionRepo.FindAliveByHash(ctx, hash)
-	if err == nil {
-		if rerr := s.sessionRepo.Revoke(ctx, session.ID, session.UserID); rerr != nil {
-			return rerr
-		}
-		metrics.AuthEventsTotal.WithLabelValues("session_revoked", "logout").Inc()
-		return nil
+	if err != nil {
+		return nil // unknown/already-dead token: nothing to revoke
 	}
-	// Legacy: blacklist the JWT.
-	blacklistKey := cache.PrefixSession + "blacklist:" + refreshToken
-	return s.cache.Set(ctx, blacklistKey, true, 7*24*time.Hour)
+	if rerr := s.sessionRepo.Revoke(ctx, session.ID, session.UserID); rerr != nil {
+		return rerr
+	}
+	metrics.AuthEventsTotal.WithLabelValues("session_revoked", "logout").Inc()
+	return nil
 }
 
 func (s *AuthService) ValidateToken(ctx context.Context, token string) (*authz.Claims, error) {
@@ -588,7 +539,7 @@ func (s *AuthService) createSessionAndAuthResponse(
 		UserAgent:        truncateUA(sc.UserAgent),
 		IP:               sc.IP,
 		LastSeenAt:       now,
-		ExpiresAt:        now.Add(SessionTTL),
+		ExpiresAt:        now.Add(SessionExpirySentinel),
 	}
 	if err := s.sessionRepo.Create(ctx, session); err != nil {
 		return nil, err

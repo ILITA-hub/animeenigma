@@ -54,78 +54,56 @@ func newTestService(t *testing.T) (*service.AuthService, *repo.UserRepository, *
 	return service.NewAuthService(uRepo, sRepo, c, jwtCfg, "", 6*time.Hour, logr), uRepo, sRepo
 }
 
-func TestRefreshToken_PersistentPath_RotatesAndReturnsNewRT(t *testing.T) {
-	svc, _, _ := newTestService(t)
+func TestRefreshToken_NonRotating_SameTokenFreshAccess(t *testing.T) {
+	svc, _, sRepo := newTestService(t)
 	ctx := context.Background()
 	sc := service.SessionContext{UserAgent: "go-test", IP: "1.2.3.4"}
 
 	username := "u_" + time.Now().Format("150405") + "_a"
 	resp, err := svc.Register(ctx, &domain.RegisterRequest{Username: username, Password: "password123"}, sc)
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.RefreshToken, "register should return an opaque RT")
-	require.True(t, strings.HasPrefix(resp.RefreshToken, "rt_"), "RT should be opaque rt_*")
+	require.True(t, strings.HasPrefix(resp.RefreshToken, "rt_"))
 	first := resp.RefreshToken
 
-	// Refresh once → new RT issued, rotated=true.
-	resp2, rotated, err := svc.RefreshToken(ctx, &domain.RefreshRequest{RefreshToken: first}, sc)
+	// JWT iat/exp are second-granularity, so a refresh in the same wall-clock
+	// second as Register mints a byte-identical access token. Cross a second
+	// boundary so the freshly-minted token is observably distinct.
+	time.Sleep(1100 * time.Millisecond)
+
+	// Refresh: same refresh token returned (resp has no new RT), brand-new access token.
+	resp2, err := svc.RefreshToken(ctx, &domain.RefreshRequest{RefreshToken: first}, service.SessionContext{UserAgent: "go-test", IP: "5.6.7.8"})
 	require.NoError(t, err)
-	require.True(t, rotated)
-	require.NotEqual(t, first, resp2.RefreshToken)
-	require.True(t, strings.HasPrefix(resp2.RefreshToken, "rt_"))
+	require.NotEmpty(t, resp2.AccessToken)
+	require.NotEqual(t, resp.AccessToken, resp2.AccessToken, "a fresh access token should be minted")
 
-	// Reuse old RT within grace → grace path, rotated=false, no new RT in resp.
-	resp3, rotated2, err := svc.RefreshToken(ctx, &domain.RefreshRequest{RefreshToken: first}, sc)
+	// Refresh again with the SAME original token from a DIFFERENT IP — still
+	// works (no rotation, no race), and Touch must stamp the new IP.
+	resp3, err := svc.RefreshToken(ctx, &domain.RefreshRequest{RefreshToken: first}, service.SessionContext{UserAgent: "go-test", IP: "9.9.9.9"})
 	require.NoError(t, err)
-	require.False(t, rotated2)
-	require.Empty(t, resp3.RefreshToken, "grace path should not return a new RT")
-	require.NotEmpty(t, resp3.AccessToken, "grace path should still mint a fresh access token")
+	require.NotEmpty(t, resp3.AccessToken)
 
-	// Reusing the original RT AGAIN must still succeed on the grace path (the
-	// window slides on each hit), proving a desynced browser stuck on the
-	// previous token keeps working across repeated refreshes instead of being
-	// logged out — the core of the random-logout fix.
-	resp4, rotated3, err := svc.RefreshToken(ctx, &domain.RefreshRequest{RefreshToken: first}, sc)
-	require.NoError(t, err)
-	require.False(t, rotated3, "repeated previous-token reuse must stay on the grace path")
-	require.Empty(t, resp4.RefreshToken)
-	require.NotEmpty(t, resp4.AccessToken, "repeated grace hit should still mint a fresh access token")
-}
-
-func TestRefreshToken_LegacyJWT_UpgradesToSession(t *testing.T) {
-	svc, uRepo, sRepo := newTestService(t)
-	ctx := context.Background()
-
-	// Make a user
-	user := &domain.User{
-		Username:     "legacy_" + time.Now().Format("150405"),
-		PasswordHash: "x",
-		Role:         authz.RoleUser,
-	}
-	require.NoError(t, uRepo.Create(ctx, user))
-
-	// Mint a legacy 7-day refresh JWT directly via JWTManager (using same secret as svc).
-	jm := authz.NewJWTManager(authz.JWTConfig{
-		Secret:          "test-secret",
-		Issuer:          "test",
-		AccessTokenTTL:  time.Minute,
-		RefreshTokenTTL: time.Hour,
-	})
-	pair, err := jm.GenerateTokenPair(user.ID, user.Username, user.Role, "")
-	require.NoError(t, err)
-
-	// Refresh using the legacy JWT — should upgrade to a real session.
-	resp, rotated, err := svc.RefreshToken(
-		ctx,
-		&domain.RefreshRequest{RefreshToken: pair.RefreshToken},
-		service.SessionContext{UserAgent: "legacy", IP: "9.9.9.9"},
-	)
-	require.NoError(t, err)
-	require.True(t, rotated, "legacy upgrade should return rotated=true so handler sets cookie")
-	require.NotEmpty(t, resp.RefreshToken)
-	require.True(t, strings.HasPrefix(resp.RefreshToken, "rt_"), "upgraded token should be opaque rt_*")
-
-	// Confirm a session row now exists for the user.
-	sessions, err := sRepo.ListAlive(ctx, user.ID)
+	// Exactly one alive session; IP reflects the LAST refresh's sc.IP, proving
+	// Touch wrote it (create IP was 1.2.3.4, so 9.9.9.9 can only come from Touch).
+	sessions, err := sRepo.ListAlive(ctx, resp.User.ID)
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
+	require.Equal(t, "9.9.9.9", sessions[0].IP, "Touch stamps the latest refresh IP")
+}
+
+func TestRefreshToken_RevokedSession_Fails(t *testing.T) {
+	svc, _, sRepo := newTestService(t)
+	ctx := context.Background()
+	sc := service.SessionContext{UserAgent: "go-test", IP: "1.2.3.4"}
+
+	username := "u_" + time.Now().Format("150405") + "_b"
+	resp, err := svc.Register(ctx, &domain.RegisterRequest{Username: username, Password: "password123"}, sc)
+	require.NoError(t, err)
+
+	sessions, err := sRepo.ListAlive(ctx, resp.User.ID)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	require.NoError(t, sRepo.Revoke(ctx, sessions[0].ID, resp.User.ID))
+
+	_, err = svc.RefreshToken(ctx, &domain.RefreshRequest{RefreshToken: resp.RefreshToken}, sc)
+	require.Error(t, err, "refresh on a revoked session must fail")
 }
