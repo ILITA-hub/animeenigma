@@ -474,7 +474,7 @@ assert {"DS_PROMETHEUS", "provider", "stage"} <= varnames, varnames
 print("OK: 17 panels, unique ids, all exprs non-empty, vars present")
 PY
 ```
-Expected: `OK: 14 panels, unique ids, all exprs non-empty, vars present`
+Expected: `OK: 17 panels, unique ids, all exprs non-empty, vars present`
 
 - [ ] **Step 4: Commit**
 
