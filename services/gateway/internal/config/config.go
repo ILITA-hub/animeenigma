@@ -99,7 +99,7 @@ func Load() (*Config, error) {
 		JWT: authz.JWTConfig{
 			Secret:          getEnv("JWT_SECRET", ""),
 			Issuer:          getEnv("JWT_ISSUER", "animeenigma"),
-			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
+			AccessTokenTTL:  getEnvDuration("JWT_ACCESS_TTL", time.Hour),
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Services: ServiceURLs{

@@ -43,7 +43,7 @@ type JWTConfig struct {
 func DefaultJWTConfig() JWTConfig {
 	return JWTConfig{
 		Issuer:          "animeenigma",
-		AccessTokenTTL:  15 * time.Minute,
+		AccessTokenTTL:  time.Hour,
 		RefreshTokenTTL: 7 * 24 * time.Hour,
 	}
 }

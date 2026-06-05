@@ -499,6 +499,10 @@ services:
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      # Access-token lifetime for gateway-minted (API-key) JWTs. Mirror the auth
+      # service so all access tokens share one TTL. See
+      # docs/superpowers/specs/2026-06-05-simplify-auth-sessions-design.md
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-1h}
       CORS_ORIGINS: "http://localhost:3003,http://localhost:8000"
       SITE_URL: ${SITE_URL:-https://animeenigma.ru}
       DEV_MODE: "true"
@@ -535,6 +539,10 @@ services:
       DB_NAME: animeenigma
       REDIS_HOST: redis
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      # Access-token lifetime. 1h: sessions are non-rotating + revoke-only, so a
+      # short access token only bounds revoke latency (<=1h). See
+      # docs/superpowers/specs/2026-06-05-simplify-auth-sessions-design.md
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-1h}
       # Set COOKIE_SECURE=true in docker/.env for any HTTPS deployment so the
       # refresh_token / access_token cookies carry the Secure attribute. Default
       # stays false so local `make dev` over http://localhost can still set them.
