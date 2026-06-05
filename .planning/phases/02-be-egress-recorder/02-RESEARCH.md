@@ -415,7 +415,9 @@ func (p *Producer) Record(e Effect) {
 | A4 | Idle window default ~45s is acceptable; reaper scan ~10s | Pattern 4 | User explicitly granted discretion (30–60s); only risk is a too-long window delaying the row or a too-short one splitting a buffering pause into 2 rows |
 | A5 | Recommend a `libs/tracing` sub-package for the producer to avoid the 14-Dockerfile checklist | Project Structure | If a standalone `libs/effects` is chosen, the checklist applies — flagged in Runtime State Inventory |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Resolved during planning (plans 02-01..02-04): Q1 → extend `domain.Event` with effect fields (02-01 T1); Q2 → reuse the existing analytics batcher Sink, no separate buffer (02-01 T1); Q3 → capture `operation`/`user_id` at `?sess=` token-mint from the manifest fetch (02-03 T1).
 
 1. **Effect-row shape: extend `Event` vs new `EffectEvent`?**
    - What we know: CH columns exist; `InsertBatch` hard-codes them. Both approaches keep the schema unchanged.

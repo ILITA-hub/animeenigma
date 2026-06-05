@@ -1,8 +1,8 @@
 ---
 phase: 2
 slug: be-egress-recorder
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-05
 ---
@@ -85,4 +85,4 @@ created: 2026-06-05
 - [ ] Feedback latency < ~30s quick
 - [ ] `nyquist_compliant: true` set in frontmatter (after plan-checker reconciles task IDs)
 
-**Approval:** pending
+**Approval:** approved 2026-06-05 (plan-checker reconciled all 9 test names across plans 02-01..02-04)
