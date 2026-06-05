@@ -1,28 +1,58 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "graphTooltip": 0,
   "id": null,
   "uid": "product-analytics",
   "title": "Product Analytics (Clickstream)",
   "description": "Clickstream over the ClickHouse events_resolved view (v4 Activity Register, 01-03). person_id = identified user if known, else anonymous.",
-  "tags": ["analytics", "clickstream"],
-  "time": { "from": "now-7d", "to": "now" },
+  "tags": [
+    "analytics",
+    "clickstream"
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
   "timezone": "",
   "schemaVersion": 39,
   "version": 2,
   "panels": [
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
       "title": "Unique visitors",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
           "rawQuery": true,
           "format": "table",
           "queryType": "sql",
@@ -32,16 +62,38 @@
       ]
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
       "title": "Sessions",
       "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
       "id": 2,
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
           "rawQuery": true,
           "format": "table",
           "queryType": "sql",
@@ -51,16 +103,35 @@
       ]
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
       "title": "Anonymous vs identified visitors",
       "type": "piechart",
-      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 0 },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "id": 3,
-      "fieldConfig": { "defaults": {}, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "right" } },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "right"
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
           "rawQuery": true,
           "format": "table",
           "queryType": "sql",
@@ -70,18 +141,42 @@
       ]
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
       "title": "Pageviews over time",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
       "id": 4,
-      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
           "rawQuery": true,
-          "format": "time_series",
+          "format": 0,
           "queryType": "sql",
           "refId": "A",
           "rawSql": "SELECT toStartOfHour(timestamp) AS time, count() AS pageviews FROM events_resolved WHERE event_type = 'pageview' AND $__timeFilter(timestamp) GROUP BY time ORDER BY time"
@@ -89,16 +184,30 @@
       ]
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
       "title": "Top clicked elements",
       "type": "table",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
       "id": 5,
-      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "options": {},
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
           "rawQuery": true,
           "format": "table",
           "queryType": "sql",
@@ -108,16 +217,30 @@
       ]
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
       "title": "Time on page (active seconds, top paths)",
       "type": "table",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
       "id": 6,
-      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "options": {},
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
           "rawQuery": true,
           "format": "table",
           "queryType": "sql",
