@@ -113,6 +113,101 @@ func TestRecordingTransportNoReadAll(t *testing.T) {
 	}
 }
 
+// TestRecordingTransportEmitsOnEOFWithoutClose proves CR-01(a): a caller that
+// reads the body to EOF but NEVER calls Close still emits exactly one effect
+// (and the connection is recoverable). Before the fix the effect fired only on
+// Close, so a missing Close silently dropped the egress row.
+func TestRecordingTransportEmitsOnEOFWithoutClose(t *testing.T) {
+	const payload = "hello world payload"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer srv.Close()
+
+	sink := &captureSink{}
+	client := &http.Client{Transport: WrapRecording(http.DefaultTransport, sink)}
+
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	// Read to EOF but deliberately DO NOT Close.
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+
+	if sink.count() != 1 {
+		t.Fatalf("expected exactly 1 effect after read-to-EOF (no Close), got %d", sink.count())
+	}
+	if got := sink.at(0).BytesIn; got != len(body) {
+		t.Fatalf("BytesIn = %d, want %d (full body)", got, len(body))
+	}
+	if sink.at(0).Status != http.StatusOK {
+		t.Fatalf("Status = %d, want 200", sink.at(0).Status)
+	}
+}
+
+// TestRecordingTransportEmitsOnCloseWithoutFullRead proves CR-01(b): a caller
+// that closes the body without reading it to EOF still emits exactly one
+// effect.
+func TestRecordingTransportEmitsOnCloseWithoutFullRead(t *testing.T) {
+	const n = 1 << 20 // 1 MiB — large enough that we won't read it all.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.Copy(w, strings.NewReader(strings.Repeat("x", n)))
+	}))
+	defer srv.Close()
+
+	sink := &captureSink{}
+	client := &http.Client{Transport: WrapRecording(http.DefaultTransport, sink)}
+
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	// Read only a few bytes, then Close without reaching EOF.
+	buf := make([]byte, 8)
+	_, _ = io.ReadFull(resp.Body, buf)
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if sink.count() != 1 {
+		t.Fatalf("expected exactly 1 effect after Close (partial read), got %d", sink.count())
+	}
+}
+
+// TestRecordingTransportReadToEOFThenCloseEmitsOnce proves CR-01(c): the common
+// well-behaved path (read to EOF, THEN Close) emits exactly ONE effect, not two
+// — the EOF emit and the Close emit must be guarded so they don't double-count.
+func TestRecordingTransportReadToEOFThenCloseEmitsOnce(t *testing.T) {
+	const payload = "hello world payload"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer srv.Close()
+
+	sink := &captureSink{}
+	client := &http.Client{Transport: WrapRecording(http.DefaultTransport, sink)}
+
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if sink.count() != 1 {
+		t.Fatalf("expected exactly 1 effect after read-to-EOF-then-Close, got %d (double-emit)", sink.count())
+	}
+	if got := sink.at(0).BytesIn; got != len(body) {
+		t.Fatalf("BytesIn = %d, want %d (full body)", got, len(body))
+	}
+}
+
 // TestProducerDropOnFull: Record never blocks; overflow increments a dropped
 // counter; a flush POSTs a JSON batch to a stub /internal/effects.
 func TestProducerDropOnFull(t *testing.T) {

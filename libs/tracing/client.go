@@ -72,10 +72,14 @@ func WrapTransport(base http.RoundTripper) http.RoundTripper {
 
 // WrapRecording wraps base so each outbound request emits exactly one Effect to
 // rec: host, status, request/response bytes, and duration. It NEVER buffers the
-// whole response body — it wraps resp.Body in a byte-counting
-// ReadCloser and emits the effect on Close (D-10, Pitfall 6). On a transport
-// error the effect is emitted immediately (no body to wrap). rec must be
-// non-blocking. If rec is nil, base is returned unchanged.
+// whole response body — it wraps resp.Body in a byte-counting ReadCloser and
+// emits the effect on the FIRST of (full body read to EOF) OR (Close),
+// idempotently (CR-01). Emitting on the terminal read means a caller that reads
+// a 2xx body to completion but forgets to Close still records its egress row;
+// the Close path still fires for callers that close early without a full read.
+// The emit is guarded so read-to-EOF-then-Close records exactly once, never
+// twice. On a transport error the effect is emitted immediately (no body to
+// wrap). rec must be non-blocking. If rec is nil, base is returned unchanged.
 func WrapRecording(base http.RoundTripper, rec EffectSink) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
@@ -155,38 +159,58 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 
 	status := resp.StatusCode
 	// Wrap the body so BytesIn is counted as the caller reads, and the effect
-	// emits exactly once on Close. We never buffer the body here.
+	// emits exactly once on the first of (read-to-EOF) or (Close). We never
+	// buffer the body here.
 	resp.Body = &countingBody{
 		rc: resp.Body,
-		onClose: func(n int) {
+		emit: func(n int) {
 			t.rec.Record(build(status, n))
 		},
 	}
 	return resp, nil
 }
 
-// countingBody wraps a response body, counting bytes read and firing onClose
-// exactly once (idempotent) with the total when the body is closed.
+// countingBody wraps a response body, counting bytes read and firing emit
+// exactly once (idempotent, CR-01) with the running total on the FIRST of:
+//   - a terminal read (the underlying Read returns a non-nil error — io.EOF on a
+//     fully-consumed body, or any hard error), so a read-to-EOF-without-Close
+//     caller still records its egress row and never leaks the effect; or
+//   - Close, so a caller that closes early (partial / no read) still records.
+//
+// The fired flag guarantees the common read-to-EOF-then-Close path emits
+// exactly once, not twice.
 type countingBody struct {
-	rc      io.ReadCloser
-	n       int
-	closed  bool
-	onClose func(n int)
+	rc    io.ReadCloser
+	n     int
+	fired bool
+	emit  func(n int)
+}
+
+// fireOnce emits the effect at most once with the current byte count.
+func (c *countingBody) fireOnce() {
+	if !c.fired {
+		c.fired = true
+		if c.emit != nil {
+			c.emit(c.n)
+		}
+	}
 }
 
 func (c *countingBody) Read(p []byte) (int, error) {
 	n, err := c.rc.Read(p)
 	c.n += n
+	// A non-nil err marks a terminal read (io.EOF on full consumption, or a
+	// hard read error). Emit here so a fully-read-but-never-Closed body still
+	// records exactly one effect. Close (if it later runs) is a no-op via the
+	// fired guard.
+	if err != nil {
+		c.fireOnce()
+	}
 	return n, err
 }
 
 func (c *countingBody) Close() error {
 	err := c.rc.Close()
-	if !c.closed {
-		c.closed = true
-		if c.onClose != nil {
-			c.onClose(c.n)
-		}
-	}
+	c.fireOnce()
 	return err
 }
