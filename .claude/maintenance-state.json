@@ -1,27 +1,10 @@
 {
-  "last_update_id": 124398502,
-  "last_poll_at": "2026-06-03T06:12:32Z",
-  "session_started": "2026-06-03T04:11:33Z",
+  "last_update_id": 124398504,
+  "last_poll_at": "2026-06-04T05:19:18Z",
+  "session_started": "2026-06-05T01:37:03Z",
   "reactions_supported": true,
   "bot_user_id": 8609426278,
-  "active_alerts": {
-    "High Error Rate:streaming": {
-      "alert_uid": "High Error Rate",
-      "service": "streaming",
-      "first_seen": "2026-06-04T01:51:52Z",
-      "last_seen": "2026-06-04T01:51:52Z",
-      "issue_id": "AUTO-360",
-      "status": "escalate"
-    },
-    "ScraperPlayabilityRegression:gogoanime": {
-      "alert_uid": "ScraperPlayabilityRegression",
-      "service": "gogoanime",
-      "first_seen": "2026-06-03T10:46:15Z",
-      "last_seen": "2026-06-03T10:46:15Z",
-      "issue_id": "AUTO-355",
-      "status": "info_only"
-    }
-  },
+  "active_alerts": {},
   "cooldowns": {
     "alert_refire:Parser Failure Rate:consumet": "2026-04-07T09:13:01+02:00",
     "alert_refire:Parser Failure Rate:hianime": "2026-04-08T10:24:52+02:00",
@@ -41,7 +24,7 @@
     "code_fix:services/scraper/internal/providers/animefever/client.go": "2026-05-26T06:59:47+02:00",
     "docker_pull:aniwatch": "2026-04-27T03:29:05+02:00",
     "docker_pull:consumet": "2026-04-03T10:56:33+02:00",
-    "escalate-outage:global": "2026-06-04T16:30:55+02:00",
+    "escalate-outage:global": "2026-06-05T16:47:33+02:00",
     "redeploy:scraper": "2026-05-21T03:47:54+02:00",
     "redeploy:web": "2026-04-06T09:05:52+02:00",
     "restart:catalog": "2026-04-05T05:09:33+02:00",
@@ -122,5 +105,19 @@
       "at": "2026-04-06T06:55:52Z"
     }
   },
-  "pending_fixes": {}
+  "pending_fixes": {
+    "AUTO-362": {
+      "issue_id": "AUTO-362",
+      "proposed_at": "2026-06-04T05:26:13Z",
+      "fix_plan": {
+        "type": "code_fix",
+        "target": "services/scraper/internal/providers/miruro/",
+        "description": "Miruro secure-pipe sources endpoint changed: streams[].url is now empty; the kwik.cx embed URL appears in the referer field. The dto.go sourcesResponse struct has an embeds[] field ('currently unused — present for forward-compat') — the real stream likely migrated there. Fix: (1) Fetch a live sources response to confirm new wire format (run from inside scraper container: docker exec animeenigma-scraper sh -c 'wget -qO- --header=\"Referer: https://www.miruro.tv/\" \"\u003csecure-pipe-sources-url\u003e\"'). (2) If embeds[] now carries the kwik.cx URL (type='kwik'), add embed extraction via the existing kwik extractor in services/scraper/internal/embeds/. (3) If streams[] now has a different URL field name, update rawStream json tags. (4) Run go test -count=1 ./internal/providers/miruro/... — update goldens if format changed. (5) make redeploy-scraper and verify miruro.stream stage comes up. For nineanime: set enabled: false in docker/scraper-providers.yaml (it is the last-resort provider, probe anime now hits YouTube stubs — noise with no user benefit given allanime+animefever are healthy).",
+        "context": "EN failover chain is allanime→animefever→miruro→nineanime. First two are healthy so users still get EN streams. But miruro and nineanime degradation means 0 fallback depth if allanime or animefever have a bad day. The miruro schema drift is likely from a recent upstream secure-pipe API update rotating the response shape (consistent with the 2026-06 comment in client.go about anilistId becoming required). Nineanime disable is low-risk: it was already the acknowledged last-resort sink per its doc.go.",
+        "verification": "After fix: curl -s http://localhost:8088/metrics | grep 'provider_health_up{provider=\"miruro\",stage=\"stream\"}' should return 1. curl -s http://localhost:8000/api/anime/_/scraper/health should show miruro.stream up=true. For nineanime: verify it no longer appears in the health endpoint after being disabled."
+      },
+      "telegram_message_id": 2833,
+      "alert_message_id": 2831
+    }
+  }
 }

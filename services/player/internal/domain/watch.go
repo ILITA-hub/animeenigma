@@ -31,6 +31,10 @@ type AnimeInfo struct {
 
 func (AnimeInfo) TableName() string { return "animes" }
 
+// MaxRewatchCount is the upper clamp for a manually-edited rewatch_count
+// (abuse guard). Design 2026-06-05.
+const MaxRewatchCount = 9999
+
 type WatchProgress struct {
 	ID            string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID        string    `gorm:"type:uuid;uniqueIndex:idx_watch_progress_user_anime_ep,priority:1" json:"user_id"`
@@ -82,6 +86,11 @@ type AnimeListEntry struct {
 	ReviewText   string     `gorm:"type:text;not null;default:''" json:"review_text"`
 	Username     string     `gorm:"size:32;not null;default:''" json:"username"`
 	IsRewatching bool       `gorm:"default:false" json:"is_rewatching"`
+	// RewatchCount = number of COMPLETED rewatches (MAL "times rewatched").
+	// Auto-incremented when a watching→completed transition occurs while
+	// IsRewatching is true; also settable manually and via import. Design
+	// 2026-06-05. Total times watched = 1 + RewatchCount.
+	RewatchCount int        `gorm:"default:0" json:"rewatch_count"`
 	Priority     string     `gorm:"size:20" json:"priority"`
 	MalID        *int       `json:"mal_id,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
@@ -171,6 +180,9 @@ type UpdateListRequest struct {
 	Notes        *string    `json:"notes,omitempty"`
 	Tags         *string    `json:"tags,omitempty"`
 	IsRewatching *bool      `json:"is_rewatching,omitempty"`
+	// RewatchCount — manual edit of completed-rewatch tally. nil = leave
+	// untouched (PATCH). Clamped to [0, MaxRewatchCount]. Design 2026-06-05.
+	RewatchCount *int       `json:"rewatch_count,omitempty"`
 	Priority     *string    `json:"priority,omitempty"`
 	MalID        *int       `json:"mal_id,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`

@@ -78,6 +78,7 @@ func setupSocialMigrationTestDB(t *testing.T) *gorm.DB {
 			review_text TEXT NOT NULL DEFAULT '',
 			username TEXT NOT NULL DEFAULT '',
 			is_rewatching INTEGER DEFAULT 0,
+			rewatch_count INTEGER DEFAULT 0,
 			priority TEXT,
 			mal_id INTEGER,
 			started_at DATETIME,

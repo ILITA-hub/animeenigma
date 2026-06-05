@@ -91,10 +91,7 @@
     "continueEp": "Continue ep. {n}",
     "resume": {
       "justFinished": "You finished episode {n}.",
-      "youFinishedThis": "You finished this anime.",
       "rewatch": "Rewatch from ep. 1",
-      "markCompleteInList": "Mark as completed in your list",
-      "findSimilar": "Find similar anime",
       "notYetAvailable": "Episode {n} — not yet available.",
       "notYetAvailableEta": "Episode {n} airs {when}.",
       "episodeNotLoaded": "Episode {n} aired {ago} — translation teams need time to upload it."

@@ -234,23 +234,7 @@ func (h *ShikimoriImportHandler) processImport(userID, jobID string, entries []s
 
 		animeID := catalogAnime.ID
 
-		listReq := &domain.UpdateListRequest{
-			AnimeID: animeID,
-			Status:  status,
-		}
-
-		if entry.Score > 0 {
-			listReq.Score = &entry.Score
-		}
-
-		if entry.Episodes > 0 {
-			listReq.Episodes = &entry.Episodes
-		}
-
-		isRewatching := entry.Status == "rewatching"
-		if isRewatching {
-			listReq.IsRewatching = &isRewatching
-		}
+		listReq := buildShikimoriListReq(entry, animeID)
 
 		if _, err := h.listService.UpdateListEntry(ctx, userID, "", listReq); err != nil {
 			skipped++
@@ -349,6 +333,30 @@ func (h *ShikimoriImportHandler) fetchShikimoriPage(ctx context.Context, nicknam
 	}
 
 	return entries, nil
+}
+
+// buildShikimoriListReq maps a Shikimori rate entry to an UpdateListRequest.
+// Re-import is authoritative: rewatches (incl. 0) always overwrites
+// rewatch_count so a stale local value can't survive a fresh import. Score and
+// episodes are carried only when present (Shikimori uses 0 for "unset").
+// Design 2026-06-05.
+func buildShikimoriListReq(entry shikimoriAnimeRate, animeID string) *domain.UpdateListRequest {
+	req := &domain.UpdateListRequest{
+		AnimeID:      animeID,
+		Status:       convertShikimoriStatus(entry.Status),
+		RewatchCount: &entry.Rewatches,
+	}
+	if entry.Score > 0 {
+		req.Score = &entry.Score
+	}
+	if entry.Episodes > 0 {
+		req.Episodes = &entry.Episodes
+	}
+	if entry.Status == "rewatching" {
+		isRewatching := true
+		req.IsRewatching = &isRewatching
+	}
+	return req
 }
 
 func convertShikimoriStatus(status string) string {

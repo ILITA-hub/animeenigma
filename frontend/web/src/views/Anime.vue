@@ -580,7 +580,7 @@
               @available-translations="handleAvailableTranslations"
             >
               <template #header-middle>
-                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+                <ResumePill v-bind="resumePillProps" />
               </template>
             </KodikPlayer>
             <!-- Ad-free Kodik Player (HLS via kodikextract) -->
@@ -594,7 +594,7 @@
               @available-translations="handleAvailableTranslations"
             >
               <template #header-middle>
-                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+                <ResumePill v-bind="resumePillProps" />
               </template>
             </KodikAdFreePlayer>
             <!-- AnimeLib Player -->
@@ -608,7 +608,7 @@
               @available-translations="handleAvailableTranslations"
             >
               <template #header-middle>
-                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+                <ResumePill v-bind="resumePillProps" />
               </template>
             </AnimeLibPlayer>
             <!-- OurEnglish Player (Phase 24-28 scraper microservice) -->
@@ -618,7 +618,7 @@
               :initial-episode="resumeStartEpisode"
             >
               <template #header-middle>
-                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+                <ResumePill v-bind="resumePillProps" />
               </template>
             </OurEnglishPlayer>
             <!-- Hanime Player -->
@@ -630,7 +630,7 @@
               :initial-episode="resumeStartEpisode"
             >
               <template #header-middle>
-                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+                <ResumePill v-bind="resumePillProps" />
               </template>
             </HanimePlayer>
             <!-- 18anime (18+) Player — second 18+ provider, behind VITE_ANIME18_ENABLED. -->
@@ -642,7 +642,7 @@
               :initial-episode="resumeStartEpisode"
             >
               <template #header-middle>
-                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+                <ResumePill v-bind="resumePillProps" />
               </template>
             </Anime18Player>
             <!-- Workstream raw-jp / Phase 04 — RawPlayer mounts behind the
@@ -652,7 +652,7 @@
               :anime-id="anime.id"
             >
               <template #header-middle>
-                <ResumePill v-bind="resumePillProps" @rewatch="resumeRewatch" @mark-complete-in-list="setListStatus('completed')" />
+                <ResumePill v-bind="resumePillProps" />
               </template>
             </RawPlayer>
           </template>
@@ -1400,20 +1400,8 @@ const resumePillProps = computed(() => {
     nextEpisodeNumber: resumeNextEpisodeNumber.value,
     nextEpisodeEtaLabel: etaLabel,
     airedAgoLabel,
-    canMarkCompleteInList: currentListStatus.value !== 'completed',
-    findSimilarRoute: anime.value?.genres?.length
-      ? { path: '/browse', query: { genres: anime.value.genres[0] } }
-      : undefined,
   }
 })
-
-// Restart from episode 1 — used by the "Rewatch" action on the finished
-// banner. Sets the override (which wins over the state machine's startEpisode
-// for 'finished') and activates the player.
-function resumeRewatch() {
-  resumeOverrideEpisode.value = 1
-  activatePlayer()
-}
 
 // Watch preference resolution
 const preferenceState = ref<{

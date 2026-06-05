@@ -128,6 +128,18 @@ func (s *ListService) GetUserAnimeEntry(ctx context.Context, userID, animeID str
 	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
 }
 
+// clampRewatchCount bounds a manually-supplied rewatch_count to
+// [0, MaxRewatchCount]. Design 2026-06-05.
+func clampRewatchCount(n int) int {
+	if n < 0 {
+		return 0
+	}
+	if n > domain.MaxRewatchCount {
+		return domain.MaxRewatchCount
+	}
+	return n
+}
+
 // UpdateListEntry updates or creates an anime list entry
 func (s *ListService) UpdateListEntry(ctx context.Context, userID, username string, req *domain.UpdateListRequest) (*domain.AnimeListEntry, error) {
 	// Check if entry already exists to preserve dates
@@ -161,6 +173,14 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 
 	if req.IsRewatching != nil {
 		entry.IsRewatching = *req.IsRewatching
+	}
+
+	// RewatchCount: apply (clamped) when provided, else preserve existing so a
+	// PATCH that omits it doesn't clobber the tally to 0. Design 2026-06-05.
+	if req.RewatchCount != nil {
+		entry.RewatchCount = clampRewatchCount(*req.RewatchCount)
+	} else if existingEntry != nil {
+		entry.RewatchCount = existingEntry.RewatchCount
 	}
 
 	if req.Priority != nil {
@@ -236,6 +256,31 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 // DeleteListEntry removes an anime from user's list
 func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID string) error {
 	return s.listRepo.Delete(ctx, userID, animeID)
+}
+
+// Rewatch starts a fresh rewatch cycle for a completed anime. Design 2026-06-05:
+// status→'watching', episodes→0, is_rewatching→true, and this anime's
+// watch_progress rows reset to completed=false/progress=0 (rows kept;
+// watch_history audit trail preserved). rewatch_count is NOT bumped here — it
+// increments when the rewatch reaches the finale (watching→completed while
+// is_rewatching).
+//
+func (s *ListService) Rewatch(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
+	if _, err := s.listRepo.StartRewatch(ctx, userID, animeID); err != nil {
+		return nil, err
+	}
+	// Reset per-episode progress so the resume state machine sees a fresh cycle
+	// (0 → partial → full). Best-effort: a reset failure must not strand the
+	// already-applied list-state change, mirroring MarkEpisodeWatched's
+	// best-effort progress writes.
+	if err := s.progressRepo.ResetForAnime(ctx, userID, animeID); err != nil {
+		s.log.Errorw("failed to reset watch_progress for rewatch",
+			"user_id", userID,
+			"anime_id", animeID,
+			"error", err,
+		)
+	}
+	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
 }
 
 // MarkEpisodeWatched marks an episode as watched and updates the episodes count.

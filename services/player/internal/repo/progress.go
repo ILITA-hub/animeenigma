@@ -94,6 +94,23 @@ func (r *ProgressRepository) MarkCompleted(ctx context.Context, userID, animeID 
 	}).Create(progress).Error
 }
 
+// ResetForAnime clears per-episode completion for a fresh rewatch cycle:
+// completed=false and progress=0 for every row of (user, anime). Rows are KEPT
+// (not deleted) and the append-only watch_history audit trail is untouched, so
+// only the resume state machine's "highest completed episode" is rewound.
+// Design 2026-06-05.
+func (r *ProgressRepository) ResetForAnime(ctx context.Context, userID, animeID string) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).
+		Model(&domain.WatchProgress{}).
+		Where("user_id = ? AND anime_id = ?", userID, animeID).
+		Updates(map[string]interface{}{
+			"completed":  false,
+			"progress":   0,
+			"updated_at": now,
+		}).Error
+}
+
 // MarkDropOff records that the user closed the page mid-episode without
 // completing. Idempotent: safe whether the row exists or not. Does NOT touch
 // the completed flag — drop-off only annotates an in-progress watch.

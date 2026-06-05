@@ -68,6 +68,7 @@ func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntr
 			"notes":         gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.notes)", entry.Notes),
 			"tags":          gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.tags)", entry.Tags),
 			"is_rewatching": entry.IsRewatching,
+			"rewatch_count": entry.RewatchCount,
 			"priority":      gorm.Expr("COALESCE(NULLIF(?, ''), anime_list.priority)", entry.Priority),
 			"mal_id":        gorm.Expr("COALESCE(?, anime_list.mal_id)", entry.MalID),
 			"started_at":    gorm.Expr("COALESCE(?, anime_list.started_at)", entry.StartedAt),
@@ -116,6 +117,11 @@ func (r *ListRepository) Delete(ctx context.Context, userID, animeID string) err
 }
 
 func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID string, episodeNumber int) (bool, error) {
+	// The rewatch_count / is_rewatching CASE branches fire only on the
+	// watching→completed transition (finale reached) AND only when a rewatch is
+	// in progress: completing a rewatch bumps the tally once and clears the flag.
+	// A normal first completion (is_rewatching=false) leaves both untouched.
+	// Design 2026-06-05.
 	result := r.db.WithContext(ctx).Exec(`
 		UPDATE anime_list SET
 			episodes = ?,
@@ -123,6 +129,14 @@ func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID 
 				WHEN a.episodes_count > 0 AND ? >= a.episodes_count THEN 'completed'
 				WHEN anime_list.status = 'plan_to_watch' THEN 'watching'
 				ELSE anime_list.status END,
+			rewatch_count = CASE
+				WHEN a.episodes_count > 0 AND ? >= a.episodes_count AND anime_list.is_rewatching
+					THEN anime_list.rewatch_count + 1
+				ELSE anime_list.rewatch_count END,
+			is_rewatching = CASE
+				WHEN a.episodes_count > 0 AND ? >= a.episodes_count AND anime_list.is_rewatching
+					THEN false
+				ELSE anime_list.is_rewatching END,
 			started_at = COALESCE(anime_list.started_at, NOW()),
 			completed_at = CASE
 				WHEN a.episodes_count > 0 AND ? >= a.episodes_count THEN NOW()
@@ -132,7 +146,23 @@ func (r *ListRepository) IncrementEpisodes(ctx context.Context, userID, animeID 
 		WHERE anime_list.anime_id = a.id
 		  AND anime_list.user_id = ? AND anime_list.anime_id = ?
 		  AND anime_list.episodes < ?`,
-		episodeNumber, episodeNumber, episodeNumber, userID, animeID, episodeNumber)
+		episodeNumber, episodeNumber, episodeNumber, episodeNumber, episodeNumber, userID, animeID, episodeNumber)
+	return result.RowsAffected > 0, result.Error
+}
+
+// StartRewatch resets a COMPLETED entry to a fresh rewatch cycle: status back
+// to 'watching', episodes=0, is_rewatching=true. rewatch_count is left alone —
+// it bumps when the rewatch reaches the finale (see IncrementEpisodes). Returns
+// true when a completed entry was actually reset. Design 2026-06-05.
+func (r *ListRepository) StartRewatch(ctx context.Context, userID, animeID string) (bool, error) {
+	result := r.db.WithContext(ctx).Exec(`
+		UPDATE anime_list SET
+			status = 'watching',
+			episodes = 0,
+			is_rewatching = true,
+			updated_at = NOW()
+		WHERE user_id = ? AND anime_id = ? AND status = 'completed'`,
+		userID, animeID)
 	return result.RowsAffected > 0, result.Error
 }
 
@@ -261,9 +291,12 @@ func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID strin
 		base = base.Where("anime_list.status IN ?", statuses)
 	}
 
+	// Lifetime episodes counts rewatches: a completed entry's `episodes` equals
+	// its total, so episodes * (1 + rewatch_count) credits each completed
+	// rewatch once more. Design 2026-06-05.
 	err := base.Select(
 		"COALESCE(AVG(NULLIF(anime_list.score, 0)), 0) as avg_score, "+
-			"COALESCE(SUM(anime_list.episodes), 0) as total_episodes, "+
+			"COALESCE(SUM(anime_list.episodes * (1 + anime_list.rewatch_count)), 0) as total_episodes, "+
 			"COUNT(*) as total_entries, "+
 			"COUNT(CASE WHEN anime_list.status = 'completed' THEN 1 END) as completed",
 	).Scan(&stats).Error
