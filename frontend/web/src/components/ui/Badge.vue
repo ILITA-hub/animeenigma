@@ -1,5 +1,5 @@
 <template>
-  <span :class="cn(badgeVariants({ variant, size }), props.class)">
+  <span :class="cn(badgeVariants({ variant, size, overlay }), props.class)">
     <span v-if="$slots.icon" class="mr-1">
       <slot name="icon" />
     </span>
@@ -15,11 +15,13 @@ import { badgeVariants, type BadgeVariants } from './badge-variants'
 interface Props {
   variant?: NonNullable<BadgeVariants['variant']>
   size?: NonNullable<BadgeVariants['size']>
+  overlay?: boolean
   class?: HTMLAttributes['class']
 }
 
 const props = withDefaults(defineProps<Props>(), {
   variant: 'default',
   size: 'md',
+  overlay: false,
 })
 </script>

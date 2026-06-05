@@ -19,8 +19,20 @@ export const badgeVariants = cva('inline-flex items-center font-medium', {
       md: 'px-2.5 py-1 text-sm rounded-md',
       lg: 'px-3 py-1.5 text-base rounded-lg',
     },
+    // Overlay treatment for badges sitting on top of posters/imagery: dark glass
+    // + blur + inset hairline. Declared AFTER `variant` so its bg wins the
+    // tailwind-merge conflict resolution; the variant's accent TEXT colour is
+    // preserved (text/bg are separate merge groups). Pair with:
+    //   variant="warning" → amber ★ (MAL score)
+    //   variant="primary" → cyan  ◆ (AnimeEnigma score)
+    //   variant="success" → green   (ONGOING)
+    //   variant="default" → white   (quality / neutral)
+    overlay: {
+      true: 'bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10',
+      false: '',
+    },
   },
-  defaultVariants: { variant: 'default', size: 'md' },
+  defaultVariants: { variant: 'default', size: 'md', overlay: false },
 })
 
 export type BadgeVariants = VariantProps<typeof badgeVariants>
