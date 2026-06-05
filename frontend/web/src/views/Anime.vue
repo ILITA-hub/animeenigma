@@ -1003,8 +1003,8 @@
         >
           <template #default="{ item }">
             <div>
-              <AnimeCardNew
-                :anime="(item as RelatedAnime)"
+              <PosterCard
+                :model="fromCatalogAnime({ ...(item as RelatedAnime), totalEpisodes: (item as RelatedAnime).episodes })"
                 :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String((item as RelatedAnime).id)"
                 @open-menu="(el: HTMLElement) => openContextMenuAt(el, (item as RelatedAnime))"
               />
@@ -1054,12 +1054,13 @@ import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem } from '@/components/ui'
-import { GenreChip, AnimeCardNew, AnimeContextMenu } from '@/components/anime'
+import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
 import { useContextMenu } from '@/composables/useContextMenu'
+import { fromCatalogAnime } from '@/utils/toCardModel'
 import type { WatchCombo } from '@/types/preference'
 
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
