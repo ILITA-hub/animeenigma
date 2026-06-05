@@ -108,6 +108,9 @@ func main() {
 	batcher.Start()
 
 	collectHandler := handler.NewCollectHandler(countingSink{batcher}, cfg.IPSalt)
+	// The effects handler shares the same batcher Sink — effect rows flow
+	// through the identical InsertBatch write path as clickstream rows.
+	effectsHandler := handler.NewEffectsHandler(countingSink{batcher})
 	adminHandler := handler.NewAdminHandler(repoEraser{db: db, chConn: chConn})
 
 	purgeJob := job.NewPurgeJob(repoPurger{db: db}, cfg.RetentionDays, log)
@@ -119,7 +122,7 @@ func main() {
 	defer c.Stop()
 
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, adminHandler, log, collector)
+	router := transport.NewRouter(collectHandler, effectsHandler, adminHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

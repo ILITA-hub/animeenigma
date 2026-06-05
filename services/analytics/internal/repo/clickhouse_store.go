@@ -74,6 +74,16 @@ func defaultJSON(s string) string {
 	return s
 }
 
+// defaultStr returns def when s is empty. Used so clickstream rows (which leave
+// Event's effect dimensions unset) keep the historical column defaults while
+// effect rows carry the value the producer supplied.
+func defaultStr(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
+
 // InsertBatch persists a batch of events via the native columnar batch API.
 // Empty batches are a no-op (matching PostgresStore). Each event is appended in
 // exact events-table column order; clickstream rows leave the effect
@@ -98,15 +108,17 @@ func (s *ClickHouseStore) InsertBatch(ctx context.Context, events []domain.Event
 			e.AnonymousID,          // anonymous_id
 			nullableString(e.UserID), // user_id (Nullable)
 
-			// register dimensions — clickstream rows use defaults
-			"api",                // origin
-			"",                   // operation
-			"",                   // effect_kind
-			"",                   // target_kind
-			"",                   // target
-			"be",                 // source
-			"exact",              // accuracy
-			(*string)(nil),       // anime_id (Nullable)
+			// register dimensions — effect rows populate these; clickstream
+			// rows leave Event's effect fields empty/zero so the historical
+			// defaults (origin="api", source="be", accuracy="exact") apply.
+			defaultStr(e.Origin, "api"),     // origin
+			e.Operation,                     // operation
+			e.EffectKind,                    // effect_kind
+			e.TargetKind,                    // target_kind
+			e.Target,                        // target
+			defaultStr(e.Source, "be"),      // source
+			defaultStr(e.Accuracy, "exact"), // accuracy
+			nullableString(e.AnimeID),       // anime_id (Nullable)
 
 			// reconciled clickstream dimensions
 			string(e.EventType),     // event_type
@@ -126,13 +138,14 @@ func (s *ClickHouseStore) InsertBatch(ctx context.Context, events []domain.Event
 			e.IPHash,                // ip_hash
 			defaultJSON(e.Properties), // properties
 
-			// register measures — clickstream rows leave effect measures at 0
-			uint32(0),               // requests
-			uint64(0),               // bytes_in
-			uint64(0),               // bytes_out
-			uint32(0),               // duration_ms
-			uint32(0),               // row_count
-			uint32(e.ActiveMS),      // active_ms
+			// register measures — effect rows populate these; clickstream rows
+			// leave Event's measure fields at 0.
+			uint32(e.Requests),   // requests
+			uint64(e.BytesIn),    // bytes_in
+			uint64(e.BytesOut),   // bytes_out
+			uint32(e.DurationMS), // duration_ms
+			uint32(e.RowCount),   // row_count
+			uint32(e.ActiveMS),   // active_ms
 		); err != nil {
 			return err
 		}
