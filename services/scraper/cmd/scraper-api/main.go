@@ -125,6 +125,18 @@ func main() {
 	defer func() { _ = redisCache.Close() }()
 	log.Infow("redis connected", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
 
+	// AR-EGRESS-03: the shared recording transport that every per-provider
+	// BaseHTTPClient routes its upstream traffic through. tracing.WrapTransport
+	// composes the recording RoundTripper only when a process-global effect sink
+	// is installed (SetGlobalSink at BE boot, wired in the general-egress plan);
+	// until then it is a nil-safe pass-through, so this is safe to wire now. The
+	// per-provider tag (domain.WithProvider) rides each request's context so the
+	// recorder can pivot streaming egress by provider+host (D-02/D-09); general
+	// (non-streaming) upstream calls still carry their provider since each
+	// BaseHTTPClient is single-provider — the streaming-vs-general distinction is
+	// made downstream by EffectKind, not here.
+	egressTransport := tracing.WrapTransport(nil)
+
 	// Build the shared HTTP client for AnimePahe.
 	//
 	// Phase 27 SCRAPER-HEAL-30: the per-host rate limits for upstream
@@ -141,6 +153,8 @@ func main() {
 		domain.WithPerHostRPS("kwik.cx", 1.0, 2),
 		domain.WithPerHostRPS("kwik.si", 1.0, 2),
 		domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
+		domain.WithProvider("animepahe"),
+		domain.WithTransport(egressTransport),
 	)
 
 	// MalSync client (24h positive + 24h negative cache).
@@ -187,6 +201,8 @@ func main() {
 		domain.WithPerHostRPS("otakuhg.site", 1.0, 2),
 		domain.WithPerHostRPS("otakuvid.online", 1.0, 2),
 		domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
+		domain.WithProvider("gogoanime"),
+		domain.WithTransport(egressTransport),
 	)
 	gogoanimeMalsync := gogoanime.NewMalSyncClient(redisCache)
 
@@ -262,6 +278,8 @@ func main() {
 	allAnimeBaseHTTP := domain.NewBaseHTTPClient(log,
 		domain.WithPerHostRPS("api.allanime.day", 1.0, 2),
 		domain.WithPerHostRPS("allmanga.to", 1.0, 2),
+		domain.WithProvider("allanime"),
+		domain.WithTransport(egressTransport),
 	)
 	allAnimeProvider, err := allanime.New(allanime.Deps{
 		BaseURL: cfg.AllAnime.BaseURL,
@@ -290,6 +308,8 @@ func main() {
 		domain.WithPerHostRPS("animefever.cc", 1.0, 2),
 		domain.WithPerHostRPS("am.vidstream.vip", 1.0, 2),
 		domain.WithPerHostRPS("static-cdn-ca1.mofl.pro", 2.0, 4),
+		domain.WithProvider("animefever"),
+		domain.WithTransport(egressTransport),
 	)
 	animeFeverProvider, err := animefever.New(animefever.Deps{
 		BaseURL: cfg.AnimeFever.BaseURL,
@@ -324,8 +344,15 @@ func main() {
 		domain.WithPerHostRPS("pro.ultracloud.cc", 0.5, 2),
 		domain.WithPerHostRPS("pru.ultracloud.cc", 0.5, 2),
 		domain.WithPerHostRPS("arm.haglund.dev", 1.0, 2),
+		domain.WithProvider("miruro"),
+		domain.WithTransport(egressTransport),
 	)
-	armClient := idmapping.NewClient()
+	// AR-EGRESS-03 (host-only, D-08): the miruro ARM/AniList ID-mapping client
+	// records egress via the shared recording transport, preserving its
+	// IPv4-forced dialer.
+	armClient := idmapping.NewClient(
+		idmapping.WithTransport(tracing.WrapTransport(idmapping.NewIPv4Transport())),
+	)
 	miruroProvider, err := miruro.New(miruro.Deps{
 		BaseURL:     cfg.Miruro.BaseURL,
 		ProxyURL:    cfg.Miruro.ProxyURL,
@@ -366,6 +393,8 @@ func main() {
 		domain.WithPerHostRPS("my.1anime.site", 1.0, 2),
 		domain.WithPerHostRPS("1anime.site", 1.0, 2),
 		domain.WithPerHostRPS("megaplay.buzz", 1.0, 2),
+		domain.WithProvider("nineanime"),
+		domain.WithTransport(egressTransport),
 	)
 	nineAnimeProvider, err := nineanime.New(nineanime.Deps{
 		BaseURL:  cfg.NineAnime.BaseURL,
@@ -398,6 +427,8 @@ func main() {
 			domain.WithPerHostRPS("anikai.to", 1.0, 2),
 			domain.WithPerHostRPS("megaup.cc", 1.0, 2),
 			domain.WithPerHostRPS("api.malsync.moe", 2.0, 4),
+			domain.WithProvider("animekai"),
+			domain.WithTransport(egressTransport),
 		)
 		animeKaiProvider, err := animekai.New(animekai.Deps{
 			BaseURL: cfg.AnimeKai.BaseURL,

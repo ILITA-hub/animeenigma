@@ -68,6 +68,37 @@ type Client struct {
 	aniListBaseURL string
 }
 
+// Option configures a Client at construction time.
+type Option func(*Client)
+
+// NewIPv4Transport builds the IPv4-forced http.Transport this client uses by
+// default. It is exported so the owning service (e.g. catalog) can WRAP it
+// with a recording transport and inject the result via WithTransport —
+// keeping the IPv4 dialer behavior intact while adding egress recording.
+// This avoids importing the tracing module into this dependency-free leaf
+// module (RESEARCH §Pitfall 1 / T-02-LEAF).
+func NewIPv4Transport() *http.Transport {
+	return &http.Transport{
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp4", addr)
+		},
+	}
+}
+
+// WithTransport overrides the http.RoundTripper this client uses. The intended
+// production use is to WRAP (not replace) the IPv4 transport — callers build
+// NewIPv4Transport(), wrap it with tracing.WrapRecording(ipv4, sink), and pass
+// the result here so outbound ARM/AniList requests emit one egress effect each
+// while preserving the IPv4-forced dialer. Absent this option, NewClient()
+// uses NewIPv4Transport() directly (back-compat, zero-arg).
+func WithTransport(rt http.RoundTripper) Option {
+	return func(c *Client) {
+		if rt != nil {
+			c.httpClient.Transport = rt
+		}
+	}
+}
+
 // NewClient creates a new ARM mapping client with the AniList GraphQL
 // fallback enabled. The HTTP transport forces IPv4 because Docker
 // container egress has no IPv6 route — without this, the default dialer
@@ -75,24 +106,26 @@ type Client struct {
 // issue). The IPv4 fix remains in place even though it did not, on its
 // own, address the underlying ARM-origin-hang failure mode that the
 // AniList fallback now papers over.
-func NewClient() *Client {
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "tcp4", addr)
-		},
-	}
-	return &Client{
+//
+// Pass WithTransport to inject a recording-wrapped transport from the owning
+// service (host-only egress effect per outbound request, D-08).
+func NewClient(opts ...Option) *Client {
+	c := &Client{
 		httpClient: &http.Client{
 			// Per-request timeouts are enforced via context.WithTimeout
 			// in the resolve* helpers; this outer timeout is a defensive
 			// upper bound covering the slowest acceptable combined path
 			// (ARM timeout + AniList fallback).
 			Timeout:   armTimeout + aniListTimeout + 2*time.Second,
-			Transport: transport,
+			Transport: NewIPv4Transport(),
 		},
 		baseURL:        defaultBaseURL,
 		aniListBaseURL: aniListGraphQL,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // ResolveByShikimoriID resolves anime IDs from a Shikimori ID.

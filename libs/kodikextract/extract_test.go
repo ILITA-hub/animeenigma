@@ -1,11 +1,56 @@
 package kodikextract
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 )
+
+// stubRoundTripper records the hosts it intercepts and delegates to inner.
+// It stands in for tracing.WrapRecording's recording transport.
+type stubRoundTripper struct {
+	inner http.RoundTripper
+	hosts []string
+}
+
+func (s *stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	s.hosts = append(s.hosts, req.URL.Host)
+	return s.inner.RoundTrip(req)
+}
+
+// TestKodikExtractTransport — ResolveWithClient routes the outbound embed GET
+// through the injected (recording) transport. We point the embed at an
+// httptest server and assert the stub transport saw the request; the resolve
+// itself fails later (no real /ftor stream) but the recording seam fired,
+// which is the behavior under test. Resolve() remains a thin back-compat
+// wrapper using newClient() (asserted by the package's other tests + build).
+func TestKodikExtractTransport(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(sampleEmbed))
+	}))
+	defer srv.Close()
+
+	stub := &stubRoundTripper{inner: http.DefaultTransport}
+	client := NewRecordingClient(func(base http.RoundTripper) http.RoundTripper {
+		return stub // ignore base; route everything through the stub for the test
+	})
+
+	// The embed GET succeeds (server returns sampleEmbed); the /ftor POST then
+	// fails to decode a real stream. Either way the transport must be hit.
+	_, _ = ResolveWithClient(context.Background(), srv.URL, client)
+
+	if len(stub.hosts) == 0 {
+		t.Fatalf("injected transport never invoked — egress recording would never fire")
+	}
+	wantHost := strings.TrimPrefix(srv.URL, "http://")
+	if stub.hosts[0] != wantHost {
+		t.Errorf("recorder saw host %q, want %q", stub.hosts[0], wantHost)
+	}
+}
 
 const sampleEmbed = `
 <script>

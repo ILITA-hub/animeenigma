@@ -22,6 +22,52 @@ func newTestClient(t *testing.T, mock *httptest.Server, apiKey string) *Client {
 	})
 }
 
+// stubRoundTripper records intercepted hosts and delegates to inner. Stands
+// in for tracing.WrapRecording's recording transport.
+type stubRoundTripper struct {
+	inner http.RoundTripper
+	hosts []string
+}
+
+func (s *stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	s.hosts = append(s.hosts, req.URL.Host)
+	return s.inner.RoundTrip(req)
+}
+
+// TestOpenSubtitlesTransport — Config.Transport routes outbound requests
+// through the injected (recording) transport; absent it, the default
+// http.Client transport is used.
+func TestOpenSubtitlesTransport(t *testing.T) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data": []}`)
+	}))
+	defer mock.Close()
+
+	stub := &stubRoundTripper{inner: http.DefaultTransport}
+	c := NewClient(Config{
+		APIKey:    "test-key",
+		UserAgent: "test/1.0",
+		BaseURL:   mock.URL,
+		Transport: stub,
+	})
+	if _, err := c.Search(context.Background(), SearchParams{Query: "x"}); err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(stub.hosts) == 0 {
+		t.Fatalf("injected transport never invoked — egress recording would never fire")
+	}
+	wantHost := strings.TrimPrefix(mock.URL, "http://")
+	if stub.hosts[0] != wantHost {
+		t.Errorf("recorder saw host %q, want %q", stub.hosts[0], wantHost)
+	}
+
+	// Absent Transport → default http.Client transport (nil RoundTripper field).
+	def := NewClient(Config{APIKey: "k", BaseURL: mock.URL})
+	if def.httpClient.Transport != nil {
+		t.Errorf("default client should leave Transport nil (net/http default), got %T", def.httpClient.Transport)
+	}
+}
+
 func TestSearch_RequiresAPIKey(t *testing.T) {
 	c := NewClient(Config{}) // no api key
 	_, err := c.Search(context.Background(), SearchParams{Query: "x"})
