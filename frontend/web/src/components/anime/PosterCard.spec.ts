@@ -56,10 +56,34 @@ describe('PosterCard', () => {
     const w = mountCard()
     await w.findComponent({ name: 'AnimeKebab' }).find('button').trigger('click')
     expect(w.emitted('openMenu')).toBeTruthy()
+    expect(w.emitted('openMenu')![0][0]).toBeInstanceOf(HTMLButtonElement)
   })
 
   it('renders the ongoing badge only while airing', () => {
     expect(mountCard({ airing: true }).find('[data-testid="ongoing"]').exists()).toBe(true)
     expect(mountCard({ airing: false }).find('[data-testid="ongoing"]').exists()).toBe(false)
+  })
+
+  it('quality badge renders the quality string', () => {
+    const w = mountCard({ quality: '1080p' })
+    expect(w.text()).toContain('1080p')
+  })
+
+  it('DUB badge renders when hasDub is true', () => {
+    const w = mountCard({ hasDub: true })
+    expect(w.text()).toContain('card.dubBadge')
+  })
+
+  it('status badge renders the i18n key for dropped', () => {
+    const w = mountCard({ listStatus: 'dropped' })
+    expect(w.text()).toContain('profile.watchlist.dropped')
+  })
+
+  it('progress badge shows when in-progress and suppressed when completed', () => {
+    const inProgress = mountCard({ listStatus: 'watching', progress: { current: 5, total: 12 } })
+    expect(inProgress.text()).toContain('card.episodeProgress')
+
+    const completed = mountCard({ listStatus: 'completed', progress: { current: 12, total: 12 } })
+    expect(completed.text()).not.toContain('card.episodeProgress')
   })
 })
