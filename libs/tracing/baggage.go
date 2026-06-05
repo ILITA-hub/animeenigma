@@ -131,3 +131,28 @@ func UserIDFromContext(ctx context.Context) string {
 	}
 	return ""
 }
+
+// providerKeyType is an unexported context-key type for an optional provider
+// tag (e.g. "allanime", "kodik"). Like user_id it rides a PRIVATE ctx value, not
+// wire baggage — it is an internal attribution detail, populated only on the
+// streaming/scraper egress path (D-02).
+type providerKeyType struct{}
+
+var providerKey providerKeyType
+
+// WithProvider tags ctx with the provider responsible for an outbound effect.
+// Empty provider is a no-op.
+func WithProvider(ctx context.Context, provider string) context.Context {
+	if provider == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, providerKey, provider)
+}
+
+// ProviderFromContext reads the private provider tag, or "" when unset.
+func ProviderFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(providerKey).(string); ok {
+		return v
+	}
+	return ""
+}
