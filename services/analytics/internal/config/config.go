@@ -6,12 +6,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 )
 
 type Config struct {
 	Server        ServerConfig
 	Database      database.Config
+	Redis         cache.Config
 	IPSalt        string
 	RetentionDays int
 	PurgeCron     string
@@ -63,6 +65,15 @@ func Load() (*Config, error) {
 			Password: getEnv("DB_PASSWORD", "postgres"),
 			Database: getEnv("DB_NAME", "animeenigma"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+		},
+		// Redis carries the read_thresholds hash that the daily db_read P95
+		// recompute publishes (D-03). DB 2 matches the scheduler/catalog shared
+		// instance so the GORM services read the same hash.
+		Redis: cache.Config{
+			Host:     getEnv("REDIS_HOST", "redis"),
+			Port:     getEnvInt("REDIS_PORT", 6379),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvInt("REDIS_DB", 2),
 		},
 		IPSalt:        getEnv("ANALYTICS_IP_SALT", "change-me-in-production"),
 		RetentionDays: getEnvInt("ANALYTICS_RETENTION_DAYS", 90),

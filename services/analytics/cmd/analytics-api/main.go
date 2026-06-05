@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -24,6 +25,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/job"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/observ"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/repo"
+	svc "github.com/ILITA-hub/animeenigma/services/analytics/internal/service"
 	"github.com/ILITA-hub/animeenigma/services/analytics/internal/transport"
 	"github.com/robfig/cron/v3"
 )
@@ -113,6 +115,21 @@ func main() {
 	effectsHandler := handler.NewEffectsHandler(countingSink{batcher})
 	adminHandler := handler.NewAdminHandler(repoEraser{db: db, chConn: chConn})
 
+	// Redis publisher for the daily db_read P95 recompute (D-03). The hash is
+	// the fan-out channel the 7 GORM services snapshot into their ReadGate. A
+	// Redis outage at boot is NON-fatal: the recompute endpoint then degrades to
+	// a no-op (nil writer) and the GORM services keep their last good 48h hash —
+	// analytics' core ingestion must never depend on Redis being up.
+	var readThresholdHandler *handler.ReadThresholdHandler
+	redisCache, rerr := cache.New(cfg.Redis)
+	if rerr != nil {
+		log.Warnw("redis unavailable — read-threshold recompute disabled this boot", "error", rerr)
+	} else {
+		defer redisCache.Close()
+		readThresholdSvc := svc.NewReadThresholdService(chConn, redisThresholdWriter{cache: redisCache})
+		readThresholdHandler = handler.NewReadThresholdHandler(readThresholdSvc)
+	}
+
 	purgeJob := job.NewPurgeJob(repoPurger{db: db}, cfg.RetentionDays, log)
 	c := cron.New()
 	_, _ = c.AddFunc(cfg.PurgeCron, func() {
@@ -122,7 +139,7 @@ func main() {
 	defer c.Stop()
 
 	collector := metrics.NewCollector("analytics")
-	router := transport.NewRouter(collectHandler, effectsHandler, adminHandler, log, collector)
+	router := transport.NewRouter(collectHandler, effectsHandler, adminHandler, readThresholdHandler, log, collector)
 
 	srv := &http.Server{Addr: cfg.Server.Address(), Handler: router}
 	go func() {

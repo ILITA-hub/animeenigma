@@ -52,6 +52,17 @@ type JobsConfig struct {
 	ScraperPlayabilityCanaryCron string
 	ScraperBaseURL               string
 	CanaryReportDir              string
+
+	// Phase 03 (v4.0) — daily db_read P95 read-threshold recompute trigger
+	// (D-03 / AR-EFFECT-01). ReadThresholdCron: cron for the daily trigger
+	//   (default `0 5 * * *`, 05:00 — after the existing 01:00-04:00 jobs and
+	//   well clear of the analytics purge at 03:17, so the events table has a
+	//   full day of db_read rows to percentile over).
+	// AnalyticsInternalURL: base URL of the in-cluster analytics service whose
+	//   /internal/read-thresholds/recompute endpoint this job POSTs. Matches
+	//   the docker-compose service name + the shared ANALYTICS_INTERNAL_URL env.
+	ReadThresholdCron    string
+	AnalyticsInternalURL string
 }
 
 func Load() (*Config, error) {
@@ -90,6 +101,9 @@ func Load() (*Config, error) {
 			ScraperPlayabilityCanaryCron: getEnv("SCRAPER_PLAYABILITY_CANARY_CRON", "0 3 * * *"),
 			ScraperBaseURL:               getEnv("SCRAPER_BASE_URL", "http://scraper:8088"),
 			CanaryReportDir:              getEnv("CANARY_REPORT_DIR", "/data/reports/canary-runs"),
+			// Phase 03 (v4.0) — daily read-threshold recompute trigger.
+			ReadThresholdCron:    getEnv("READ_THRESHOLD_CRON", "0 5 * * *"),
+			AnalyticsInternalURL: getEnv("ANALYTICS_INTERNAL_URL", "http://analytics:8092"),
 		},
 	}, nil
 }
