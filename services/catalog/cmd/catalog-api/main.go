@@ -145,6 +145,20 @@ func main() {
 	}
 	defer dbEffectsStop()
 
+	// AR-EFFECT-02 (D-17): catalog is the cache-effect service. Attach the cache
+	// hit/miss aggregator to the shared RedisCache so Get/Set outcomes flush as
+	// summed `cache` effect rows keyed by key-class. The aggregator MUST flush
+	// BEFORE the producer drains so the final summed rows are shipped (mirror
+	// streaming's HLSSessions ordering). defers run LIFO, so registering this
+	// Stop AFTER effectProducer.Stop() above guarantees cacheAggregator.Stop()
+	// (flush) runs first, then the producer drains. gateway is intentionally N/A
+	// (its rate-limit cache uses a raw redis.Client, not libs/cache.RedisCache —
+	// the aggregator's only hook seam); rooms/watch-together are skipped too.
+	cacheAggregator := cache.NewCacheAggregator(tracing.GlobalSink(), 0, 0)
+	redisCache.WithAggregator(cacheAggregator)
+	cacheAggregator.Start()
+	defer cacheAggregator.Stop()
+
 	// Initialize external parsers
 	shikimoriClient := shikimori.NewClient(cfg.Shikimori, log)
 
