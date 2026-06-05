@@ -14,7 +14,7 @@ Each maps to a roadmap phase (1–6).
 - [ ] **AR-STORE-01**: ClickHouse runs as a docker-compose service with a documented backup/restore procedure, a healthcheck, and a Prometheus scrape (or self-metrics) entry.
 - [ ] **AR-STORE-02**: Wide-event schema defined — **one row per effect** — dimensions (`origin`, `operation`, `effect_kind`, `target_kind`, `target`, `trace_id`, `session_id`, nullable `user_id`/`anime_id`, `source`, `accuracy`) + measures (`requests`, `bytes_in`, `bytes_out`, `duration_ms`, `rows`).
 - [ ] **AR-STORE-03**: A ClickHouse `EventStore` implementation (`InsertBatch` + `UpsertIdentity`) passes the same contract tests as the Postgres impl.
-- [ ] **AR-STORE-04**: The existing analytics clickstream is migrated onto ClickHouse — clickstream events still ingest and the `product-analytics` dashboards still render.
+- [x] **AR-STORE-04**: The existing analytics clickstream is migrated onto ClickHouse — clickstream events still ingest and the `product-analytics` dashboards still render.
 - [ ] **AR-STORE-05**: Ingestion is async + batched + drop-on-full (no added latency on hot paths); a metric exposes dropped-event count.
 
 ### Egress recorder — BE (Phase 2)

@@ -16,7 +16,7 @@
 
 **Milestone goal:** A multidimensional, pivotable register of every platform action and its effects (egress / DB / cache), unifying frontend + backend causation on a ClickHouse-backed wide-event store, surfaced as human-readable Grafana reports. **Awareness first**; optimization insight is a derived perk.
 
-- [ ] **Phase 1: ClickHouse Foundation + EventStore Swap** — Stand up ClickHouse, define the wide-event schema (1 row per effect), implement the ClickHouse `EventStore` behind the existing interface, migrate the clickstream onto it.
+- [x] **Phase 1: ClickHouse Foundation + EventStore Swap** — Stand up ClickHouse, define the wide-event schema (1 row per effect), implement the ClickHouse `EventStore` behind the existing interface, migrate the clickstream onto it. (completed 2026-06-05)
 - [ ] **Phase 2: BE Egress Recorder** — Async batched effect recorder at the `WrapTransport` outbound seam + OTel baggage; retrofit non-shared HTTP clients; per-(stream-session, host) HLS aggregation.
 - [ ] **Phase 3: DB/Cache Effects + Auto Operation Discovery** — otel-GORM DB-write effects, cache hit/miss effects, stack-frame operation attribution, Tempo span-metrics + service graph.
 - [ ] **Phase 4: FE Causation + RUM** — Wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (flagged approximate).
@@ -36,9 +36,9 @@
   4. The existing analytics clickstream ingests into ClickHouse and the `product-analytics` Grafana dashboards still render from the new datasource — confirmed by a live event flowing end-to-end and a dashboard panel showing it. (AR-STORE-04)
   5. Ingestion is async + batched + drop-on-full (no synchronous write on any request hot path); a `*_dropped_total`-style metric exposes the dropped-event count and is observable in `/metrics`. (AR-STORE-05)
 **Plans**: 3 plans (2 waves)
-- [ ] 01-01-PLAN.md — ClickHouse + clickhouse-backup compose services, native Prometheus self-metrics, backup/restore runbook with dry-run (Wave 1, AR-STORE-01)
-- [ ] 01-02-PLAN.md — ClickHouse `EventStore` impl: wide-event MergeTree schema, native batch insert, append-only identity + argMax view, GDPR erase, backend-agnostic contract suite (Wave 1, AR-STORE-02/03/05)
-- [ ] 01-03-PLAN.md — Dual-write wiring + backend selector, clickstream migration, `aenigma-clickhouse` datasource + 6 rewritten panels, live end-to-end smoke (Wave 2, AR-STORE-04)
+- [x] 01-01-PLAN.md — ClickHouse + clickhouse-backup compose services, native Prometheus self-metrics, backup/restore runbook with dry-run (Wave 1, AR-STORE-01)
+- [x] 01-02-PLAN.md — ClickHouse `EventStore` impl: wide-event MergeTree schema, native batch insert, append-only identity + argMax view, GDPR erase, backend-agnostic contract suite (Wave 1, AR-STORE-02/03/05)
+- [x] 01-03-PLAN.md — Dual-write wiring + backend selector, clickstream migration, `aenigma-clickhouse` datasource + 6 rewritten panels, live end-to-end smoke (Wave 2, AR-STORE-04)
 **Metrics**: `UXΔ = +1 (Better)` (internal observability foundation; user benefit is indirect — reliability/perf insight) · `CDI = 0.12 * 34` (introduces a new stateful service + new schema, but the `EventStore` swap seam already exists; significant phase-of-work effort) · `MVQ = Phoenix 80%/88%` (transformative foundation — the event plane is reborn on a purpose-built columnar store; strong slop-resistance built on the existing swap interface)
 
 ### Phase 2: BE Egress Recorder
@@ -120,7 +120,7 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 9-14 | v2.0 | 8/8 | ✅ Complete | 2026-05-06 → 2026-05-07 |
 | 15-20 | v3.0 | — | ✅ Complete | 2026-05-11 → 2026-05-18 |
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
-| 1 | v4.0 | 0/? | Not started | — |
+| 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
 | 2 | v4.0 | 0/? | Not started | — |
 | 3 | v4.0 | 0/? | Not started | — |
 | 4 | v4.0 | 0/? | Not started | — |
