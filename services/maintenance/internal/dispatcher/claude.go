@@ -44,6 +44,7 @@ var analysisSchema = `{
   "type": "object",
   "properties": {
     "tier": {"type": "string", "enum": ["auto_fix", "button_fix", "escalate", "info_only", "resolved"]},
+    "risk": {"type": "string", "enum": ["low", "medium", "high"]},
     "diagnosis": {
       "type": "object",
       "properties": {
@@ -112,8 +113,17 @@ var allowedFixTools = []string{
 	"Bash(go work sync:*)",
 	"Bash(git add:*)",
 	"Bash(git commit:*)",
+	"Bash(git push:*)",
+	"Bash(git checkout:*)",
+	"Bash(git revert:*)",
 	"Bash(git diff:*)",
 	"Bash(git status:*)",
+	"Bash(git log:*)",
+	"Bash(bun:*)",
+	"Bash(bunx:*)",
+	// Skill lets the fix run /animeenigma-after-update (lint → redeploy → changelog
+	// → commit + push → health) as the canonical apply path for auto-applied fixes.
+	"Skill",
 	"Bash(docker pull:*)",
 	"Bash(docker restart:*)",
 	"Bash(docker exec:*)",

@@ -680,11 +680,12 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 		)
 	}
 
-	// Footer feedback is user commentary, not a diagnosable alert — it's now
-	// delivered to Telegram, so stop before invoking Claude root-cause analysis.
-	if isFeedback {
-		return
-	}
+	// All reports — including footer feedback — are now run through Claude analysis
+	// so genuine bugs get diagnosed and (per the risk policy) auto-fixed. The
+	// risk gate (decideAutoApply) never auto-implements category=feature, so feature
+	// requests still surface an admin "Implement?" button; pure commentary lands as
+	// info_only (acknowledged, no fix). report.Category (bug|issue|feature) is passed
+	// to Claude so it can classify correctly.
 
 	// Build ClassifiedMessage for Claude analysis
 	msg := domain.ClassifiedMessage{
@@ -693,11 +694,11 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 		Priority:  domain.P2,
 		Text:      b.String(),
 		From:      domain.User{Username: report.Username},
-		RawJSON:   fmt.Sprintf(`{"report": {"player":"%s","anime":"%s","error":"%s","description":"%s","server":"%s","url":"%s","file":"%s"}}`, report.PlayerType, report.AnimeName, report.ErrorMessage, report.Description, report.ServerName, report.URL, report.ReportFile),
+		RawJSON:   fmt.Sprintf(`{"report": {"player":"%s","category":"%s","anime":"%s","error":"%s","description":"%s","server":"%s","url":"%s","file":"%s"}}`, report.PlayerType, report.Category, report.AnimeName, report.ErrorMessage, report.Description, report.ServerName, report.URL, report.ReportFile),
 	}
 
 	// Invoke Claude
-	log.Infow("analyzing report", "message_id", msgID)
+	log.Infow("analyzing report", "message_id", msgID, "category", report.Category)
 	analyzeStart := time.Now()
 	result, err := s.disp.Analyze(ctx, msg)
 	elapsed := time.Since(analyzeStart).Round(time.Second)
@@ -836,6 +837,28 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		sendFunc(replyHTML)
 
 	case domain.TierButtonFix:
+		// Active auto-fix: when the risk gate allows (see decideAutoApply), apply the
+		// fix autonomously instead of waiting for an admin button. The diagnosis is
+		// still posted first (no buttons), then applyFix executes + reports the result.
+		if apply, label, _ := s.decideAutoApply(msg, result); apply && result.FixPlan != nil {
+			replyToID, _ := sendFunc(replyHTML)
+			log.Infow("auto-applying fix",
+				"issue_id", issueID,
+				"label", label,
+				"risk", result.Risk,
+				"category", result.Issue.Category,
+				"target", result.FixPlan.Target,
+			)
+			fix := domain.PendingFix{
+				IssueID:        issueID,
+				ProposedAt:     time.Now().UTC().Format(time.RFC3339),
+				FixPlan:        *result.FixPlan,
+				AlertMessageID: msg.MessageID,
+			}
+			s.applyFix(ctx, replyToID, issueID, fix, label)
+			return
+		}
+
 		buttons := []telegram.InlineButton{
 			{Text: "🔧 Apply Fix", CallbackData: "fix:" + issueID},
 			{Text: "❌ Dismiss", CallbackData: "dismiss:" + issueID},
@@ -856,6 +879,136 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 				AlertMessageID:    msg.MessageID,
 			})
 		}
+	}
+}
+
+// applyFix executes a pending fix (autonomous or admin-approved), threads the
+// result under replyToID, and records the outcome. approver labels the source:
+// "auto(risk=low)" for autonomous fixes or "@username" for button approvals.
+// Used by both the auto-apply path (handleResult) and the manual button path.
+func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, fix domain.PendingFix, approver string) {
+	if replyToID != 0 {
+		s.tg.SetReaction(replyToID, "👀")
+	}
+	log.Infow("executing fix", "issue_id", issueID, "approver", approver, "target", fix.FixPlan.Target, "fix_type", fix.FixPlan.Type)
+	analyzeStart := time.Now()
+	result, err := s.disp.ExecuteFix(ctx, fix)
+	elapsed := time.Since(analyzeStart).Round(time.Second)
+
+	reply := func(html string) {
+		if replyToID != 0 {
+			s.tg.SendReply(replyToID, html)
+		} else {
+			s.tg.SendMessage(html)
+		}
+	}
+
+	if err != nil {
+		log.Errorw("fix execution failed", "issue_id", issueID, "duration", elapsed, "error", err)
+		if replyToID != 0 {
+			s.tg.SetReaction(replyToID, "💔")
+		}
+		reply(fmt.Sprintf("<b>❌ Fix failed</b> (%s)\n%s", approver, truncateForTelegram(err.Error())))
+		return
+	}
+
+	log.Infow("fix executed", "issue_id", issueID, "duration", elapsed, "tier", result.Tier)
+	for _, a := range result.ActionsTaken {
+		log.Infow("fix action", "action", a.Action, "result", a.Result)
+	}
+	if replyToID != 0 {
+		s.tg.SetReaction(replyToID, "👍")
+	}
+	replyHTML := result.ReplyHTML
+	if replyHTML == "" {
+		replyHTML = fmt.Sprintf("<b>🔧 Fix Applied</b> (%s)\n\n<b>Issue:</b> %s", approver, issueID)
+	}
+	reply(replyHTML)
+	log.Infow("telegram fix result sent", "issue_id", issueID)
+	s.state.UpdateIssue(issueID, func(issue *domain.Issue) {
+		issue.Status = domain.StatusResolved
+		issue.Resolution = fmt.Sprintf("Fix applied by %s", approver)
+		issue.Actions = append(issue.Actions, result.ActionsTaken...)
+	})
+	if fix.FixPlan.Target != "" {
+		s.state.RecordFix(fix.FixPlan.Target, string(fix.FixPlan.Type))
+		s.state.SetCooldown(string(fix.FixPlan.Type), fix.FixPlan.Target, 10*time.Minute)
+	}
+}
+
+// decideAutoApply implements the risk-gated active auto-fix policy. It returns
+// whether to apply the fix without an admin button, a short label for the
+// notification, and (when not applying) the reason a button is required.
+//
+//	low    → always auto-apply
+//	medium → auto-apply if it's a real bug OR the message is from an admin
+//	high   → never auto-apply (button)
+//
+// Feature work is never auto-implemented. A per-target loop guard (recently-fixed
+// or >2 attempts in 30m) downgrades to a button to prevent runaway fix loops.
+func (s *service) decideAutoApply(msg domain.ClassifiedMessage, result *domain.AnalysisResult) (apply bool, label, reason string) {
+	if result.Tier != domain.TierButtonFix || result.FixPlan == nil {
+		return false, "", "not an applicable button fix"
+	}
+	// Feature requests always need explicit admin approval — never auto-implement.
+	if strings.EqualFold(result.Issue.Category, string(domain.CategoryFeature)) {
+		return false, "", "feature requires admin approval"
+	}
+
+	switch result.Risk {
+	case domain.RiskLow:
+		label = "auto(risk=low)"
+	case domain.RiskMedium:
+		switch {
+		case isRealBug(result.Issue.Category):
+			label = "auto(risk=medium,bug)"
+		case s.isAdminMessage(msg):
+			label = "auto(risk=medium,admin)"
+		default:
+			return false, "", "medium risk: needs admin button (not a bug, not admin-sent)"
+		}
+	default: // high or unset
+		return false, "", "high/unknown risk: needs admin button"
+	}
+
+	// Loop guard — never auto-apply the same target in a tight window.
+	target := result.FixPlan.Target
+	if target != "" {
+		if s.state.WasRecentlyFixed(target, 15*time.Minute) {
+			return false, "", "loop guard: target fixed within 15m — needs admin button"
+		}
+		if n := s.state.IncrementFixAttempt(target, target); n > 2 {
+			return false, "", fmt.Sprintf("loop guard: %d auto-fix attempts in 30m — needs admin button", n)
+		}
+	}
+	return true, label, ""
+}
+
+// isAdminMessage reports whether the message was sent by a configured admin
+// (ADMIN_USERNAMES). Grafana alerts and end-user reports are never admin messages.
+func (s *service) isAdminMessage(msg domain.ClassifiedMessage) bool {
+	if msg.From.Username == "" {
+		return false
+	}
+	for _, a := range s.cfg.Admins {
+		if strings.EqualFold(msg.From.Username, a) {
+			return true
+		}
+	}
+	return false
+}
+
+// isRealBug reports whether an issue category represents a genuine defect/outage
+// (eligible for medium-risk auto-fix) as opposed to a feature request, a tuning
+// concern, or a false-positive/misconfiguration alert.
+func isRealBug(category string) bool {
+	switch strings.ToLower(strings.TrimSpace(category)) {
+	case "bug", "outage", "regression", "stability", "content-quality",
+		"degradation", "parser_failure", "data-integrity", "crash":
+		return true
+	default:
+		// feature, latency, capacity, alert_misconfiguration, false_positive_alert, … → not a real bug
+		return false
 	}
 }
 
@@ -902,58 +1055,7 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 			"fix_type", fix.FixPlan.Type,
 		)
 		s.tg.AnswerCallbackQuery(msg.CallbackID, "Applying fix...")
-		s.tg.SetReaction(replyToID, "👀")
-
-		log.Infow("executing fix", "issue_id", issueID)
-		analyzeStart := time.Now()
-		result, err := s.disp.ExecuteFix(ctx, *fix)
-		elapsed := time.Since(analyzeStart).Round(time.Second)
-
-		if err != nil {
-			log.Errorw("fix execution failed",
-				"issue_id", issueID,
-				"duration", elapsed,
-				"error", err,
-			)
-			s.tg.SetReaction(replyToID, "💔")
-			s.tg.SendReply(replyToID, fmt.Sprintf("<b>❌ Fix failed</b>\n%s", truncateForTelegram(err.Error())))
-		} else {
-			log.Infow("fix executed",
-				"issue_id", issueID,
-				"duration", elapsed,
-				"tier", result.Tier,
-			)
-			if len(result.ActionsTaken) > 0 {
-				for _, a := range result.ActionsTaken {
-					log.Infow("fix action",
-						"action", a.Action,
-						"result", a.Result,
-					)
-				}
-			}
-			s.tg.SetReaction(replyToID, "👍")
-			replyHTML := result.ReplyHTML
-			if replyHTML == "" {
-				replyHTML = fmt.Sprintf("<b>🔧 Fix Applied</b> (approved by @%s)\n\n<b>Issue:</b> %s", msg.From.Username, issueID)
-			}
-			if _, err := s.tg.SendReply(replyToID, replyHTML); err != nil {
-				log.Errorw("telegram failed to send fix result",
-					"issue_id", issueID,
-					"error", err,
-				)
-			} else {
-				log.Infow("telegram fix result sent", "issue_id", issueID)
-			}
-			s.state.UpdateIssue(issueID, func(issue *domain.Issue) {
-				issue.Status = domain.StatusResolved
-				issue.Resolution = fmt.Sprintf("Fix applied by @%s", msg.From.Username)
-				issue.Actions = append(issue.Actions, result.ActionsTaken...)
-			})
-			if fix.FixPlan.Target != "" {
-				s.state.RecordFix(fix.FixPlan.Target, string(fix.FixPlan.Type))
-				s.state.SetCooldown(string(fix.FixPlan.Type), fix.FixPlan.Target, 10*time.Minute)
-			}
-		}
+		s.applyFix(ctx, replyToID, issueID, *fix, "@"+msg.From.Username)
 		s.state.RemovePendingFix(issueID)
 		s.state.Save()
 		log.Infow("button fix processing complete", "issue_id", issueID)

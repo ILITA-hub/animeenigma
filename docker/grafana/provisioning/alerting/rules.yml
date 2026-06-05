@@ -167,8 +167,15 @@ groups:
               to: 0
             datasourceUid: PBFA97CFB590B2093
             model:
+              # AUTO-361 family: gate P95 on a minimum request rate so idle/low-traffic
+              # services (themes, library, auth) don't fire on a single GC/bcrypt blip.
+              # `> 0.1 req/s` over 30m ≈ ≥180 requests — enough for a meaningful P95.
+              # The `and` drops below-threshold services from the result vector entirely
+              # (noDataState: OK → correctly non-firing).
               expr: |
                 histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{path!~"/admin/.*",service!="streaming"}[30m])) by (service, le))
+                  and
+                (sum(rate(http_request_duration_seconds_count{path!~"/admin/.*",service!="streaming"}[30m])) by (service) > 0.1)
               instant: true
               refId: A
           - refId: B

@@ -34,6 +34,17 @@ const (
 	TierResolved  FixTier = "resolved"
 )
 
+// FixRisk is Claude's self-assessed risk of applying a fix. It gates whether a
+// button_fix is auto-applied (low: always; medium: real bug or admin-sourced;
+// high: never) — see decideAutoApply in cmd/maintenance/main.go.
+type FixRisk string
+
+const (
+	RiskLow    FixRisk = "low"
+	RiskMedium FixRisk = "medium"
+	RiskHigh   FixRisk = "high"
+)
+
 // FixType for fix plans.
 type FixType string
 
@@ -112,6 +123,7 @@ type ClassifiedBatch struct {
 // AnalysisResult is what Claude returns (structured JSON).
 type AnalysisResult struct {
 	Tier         FixTier       `json:"tier"`
+	Risk         FixRisk       `json:"risk,omitempty"`
 	Diagnosis    Diagnosis     `json:"diagnosis"`
 	ActionsTaken []Action      `json:"actions_taken"`
 	FixPlan      *FixPlan      `json:"fix_plan,omitempty"`

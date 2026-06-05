@@ -675,6 +675,14 @@ services:
       dockerfile: services/scheduler/Dockerfile
     container_name: animeenigma-scheduler
     restart: unless-stopped
+    # AUTO-381: pin nproc to the host ceiling so the Go runtime can always spawn
+    # its background OS threads under load (prevents `fatal error: newosproc` /
+    # errno=11 EAGAIN seen 2026-06-03 during a load burst). Host ulimit -u ~63619,
+    # kernel threads-max ~127238 — 65535 sits safely under both.
+    ulimits:
+      nproc:
+        soft: 65535
+        hard: 65535
     environment:
       SERVER_PORT: 8085
       DB_HOST: postgres

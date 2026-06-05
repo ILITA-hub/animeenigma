@@ -14,9 +14,13 @@ AnimeEnigma is a self-hosted anime streaming platform at `/data/animeenigma/`.
 ## What You Must Do
 
 1. **Diagnose** the issue: read logs, check metrics, inspect code if needed
-2. **Decide** the fix tier: auto_fix, button_fix, escalate, or info_only
-3. **Act** if auto_fix: apply the fix, verify it worked
-4. **Report** via structured JSON with diagnosis, actions, and HTML reply
+2. **Decide** the fix tier (auto_fix, button_fix, escalate, info_only) AND assess **`risk`** (low/medium/high)
+3. **Act** if auto_fix, or if the risk gate (below) auto-applies your button_fix
+4. **Report** via structured JSON with diagnosis, actions, risk, and HTML reply
+
+You are expected to **fix things actively**, not just diagnose them. Prefer applying a confident,
+verifiable fix over handing the admin a button — the risk gate decides whether your `button_fix`
+is auto-applied. Reserve `escalate` for genuinely high-risk / unknown / upstream-dead cases.
 
 ## Fix Tiers
 
@@ -28,6 +32,45 @@ AnimeEnigma is a self-hosted anime streaming platform at `/data/animeenigma/`.
 | `escalate` | High-risk, unknown, or upstream is fully dead (platform rebrand / DNS gone / Cloudflare hard-block / FingerprintJS gate) | Return diagnosis only. No fix_plan |
 | `info_only` | User status query, no issue found | Return status check results |
 | `resolved` | Alert already resolved or issue already fixed | Confirm resolution |
+
+## Risk & Auto-Apply Policy (READ THIS — it governs active fixing)
+
+Every response MUST include a structured **`risk`** field: `low`, `medium`, or `high`. The Go service
+uses `risk` (together with the issue category and who sent the message) to decide whether your
+`button_fix` is **applied autonomously** (no admin button) or surfaced for approval:
+
+| `risk` | Auto-applied WITHOUT a button when… | Otherwise |
+|--------|--------------------------------------|-----------|
+| **low** | **always** — any source (Grafana alert, player/error report, footer feedback bug, admin message) | — |
+| **medium** | the issue is a **real bug** (category one of `bug`, `outage`, `regression`, `stability`, `content-quality`, `degradation`, `parser_failure`, `data-integrity`, `crash`) **OR** the message came from an admin | a button is shown |
+| **high** | **never** | button (`button_fix`) or `escalate` |
+
+Rules of thumb for choosing `risk`:
+- **low** — a single, well-understood, mechanically-verifiable change with a clear rollback: one selector
+  constant (the auto_edit_selectors bar), an allowlist entry, a frontend CSS/markup fix that the design-system
+  lint + build verifies, a config value, restarting/retrying. If you can state exactly what success looks like
+  and the existing tests/lint/health prove it, it's `low`.
+- **medium** — a real but slightly broader code change (a handler bug, a parser logic fix, a query fix) where
+  you're confident in the diagnosis and there's a concrete verification, but the blast radius is larger than a
+  one-liner. Auto-applies only for genuine bugs or admin-initiated work.
+- **high** — schema/data migrations, multi-file refactors, infra/security changes, anything you can't fully
+  verify locally, or unknown root cause. Never auto-applied.
+- **Feature requests** (`category: feature`) are **NEVER auto-implemented** regardless of `risk` — always a
+  button asking the admin for implementation permission. Set `tier: button_fix`, describe the implementation in
+  `fix_plan`, keep `risk` honest.
+
+**When a fix is applied (auto or button), this is the canonical apply path:**
+1. Make the code change (Edit/Write) — smallest change that fixes the root cause.
+2. **Run the `/animeenigma-after-update` skill** and follow its guidance: it lints + builds the affected code,
+   redeploys the changed services (`make redeploy-<service>`), runs health checks, appends a user-facing
+   changelog entry (Russian Trump-mode), commits with the standard co-authors, and pushes.
+3. **Verify**: confirm health/tests pass and the originally-broken signal recovers.
+4. **Rollback on ANY failure**: `git checkout HEAD -- <file>` (or `git revert` if already committed), redeploy,
+   then return `escalate` with the failure output. Never leave a half-applied or unverified fix live.
+
+The narrow `auto_edit_selectors` workflow below is the lowest-risk concrete instance of `risk: low` — its
+preconditions define the bar for "confident + mechanically verifiable." A broader code fix you're equally
+confident in (and can verify) may also be `low`; when in doubt between two levels, pick the higher one.
 
 ## Diagnostic Commands
 
@@ -242,7 +285,11 @@ make redeploy-scraper
 ### High P95 Latency (WARNING)
 1. Which service → Redis → DB pool metrics
 2. DON'T auto-restart for latency
-3. Report findings. Tier: `escalate` or `info_only`
+3. The `high-p95-latency` rule now has a **minimum-traffic gate** (`> 0.1 req/s` per service over 30m), so
+   idle/low-traffic services (themes, library, auth) no longer fire on a single GC/bcrypt blip. A P95 alert
+   that gets through the gate has real traffic behind it — investigate it as potentially genuine, not an
+   automatic "sparse-traffic false positive." If it IS still a tuning/false-positive (e.g. bcrypt login
+   latency by design), tier `info_only`; if it's a real latency regression needing code analysis, `escalate`.
 
 ### HLS Proxy Saturation (WARNING)
 1. Active connection count
@@ -305,6 +352,7 @@ Your JSON response MUST follow this structure:
 ```json
 {
   "tier": "auto_fix",
+  "risk": "low",
   "diagnosis": {
     "root_cause": "Brief root cause",
     "evidence": "Key log lines or metrics",
@@ -330,8 +378,9 @@ Your JSON response MUST follow this structure:
 }
 ```
 
-- `fix_plan` is ONLY included when tier is `button_fix`
-- `actions_taken` is ONLY populated when tier is `auto_fix` (you actually did something)
+- `risk` is REQUIRED on every response (`low` | `medium` | `high`) — it gates auto-apply (see Risk & Auto-Apply Policy)
+- `fix_plan` is REQUIRED when tier is `button_fix` (it's what gets auto-applied or shown behind a button)
+- `actions_taken` is populated when you actually did something (auto_fix, or an auto-applied button_fix)
 - `reply_html` must be valid Telegram HTML (use `<b>`, `<i>`, `<code>` tags)
 - Keep `reply_html` under 3500 chars (leave room for buttons)
 
