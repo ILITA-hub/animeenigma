@@ -13,15 +13,42 @@
 # default to group "en"; "18anime" is group "adult". The "adult" group runs in a
 # SEPARATE orchestrator on /anime18/* routes and is NEVER part of the EN failover
 # chain — so enabling/disabling 18anime here only affects the 18+ player.
+#
+# ─── EN PROVIDER PLAYERS / STREAM TYPES / FORMATS (reference) ────────────────────
+# Each provider resolves an upstream embed PLAYER, which the scraper's embed
+# extractors (services/scraper/internal/embeds/) turn into a playable stream:
+#
+#   provider     upstream / embed player                     extractor       stream type
+#   ──────────   ─────────────────────────────────────────  ─────────────   ───────────
+#   gogoanime    gogoanimes.fi → gogoanime.me.uk/newplayer    megaplay        HLS (m3u8)
+#                .php → nests megaplay.buzz player
+#   nineanime    9anime.me.uk → 1anime.site → megaplay.buzz   megaplay        HLS (m3u8)
+#                (genuinely-unavailable anime → YouTube stub → youtube_stub guard → failover)
+#   allanime     allmanga.to API → fast4speed.rsvp            (direct)        MP4 (signed)
+#   animefever   animefever.cc → am.vidstream.vip             vidstream_vip   HLS (m3u8)
+#                tserver = extractable; hserver = Hydrax iframe (NOT extractable — see Hydrax TODO ISS)
+#   miruro       miruro.tv secure-pipe (pure-Go obfuscation)  (inline)        HLS (m3u8)
+#   animepahe    animepahe.pw (stealth sidecar) → Kwik        kwik            HLS (m3u8)
+#   18anime      18anime.me (adult group)                     megacloud/...   HLS (m3u8)
+#
+# Other extractors: streamhg, earnvids, vibeplayer, megacloud (legacy / per-embed).
+#
+# STREAM TRUST MODEL: the streaming HLS proxy gate is `allowlisted OR signed`.
+# Catalog's GetScraperStream signs every scraper-resolved sources[].url / tracks[].file
+# (libs/videoutils.SignStreamURL); the proxy then mints HMAC provenance tokens for the
+# rotating child/segment CDNs. => a NEW upstream CDN host needs NO static allowlist entry.
+# (The libs/videoutils/proxy.go static allowlist is now a legacy fallback being phased out.)
+# ────────────────────────────────────────────────────────────────────────────────
 providers:
   - { name: allanime,  enabled: true }
   - { name: animefever, enabled: true }
   - { name: miruro,    enabled: true }
-  # AUTO-362: disabled 2026-06-05 — nineanime's upstream brand-jack rebrand now
-  # serves YouTube stubs (parser_zero_match_total youtube_stub=27, video_mp4_source
-  # miss=20) instead of real MP4s. It's the last-resort provider; allanime + miruro
-  # cover EN with real-bytes-green streams, so this only removes probe noise.
-  - { name: nineanime, enabled: false }
+  # Re-enabled 2026-06-05: nineanime's popular catalog plays via the megaplay.buzz
+  # HLS player (megaplay extractor), with signed-URL proxy trust covering the
+  # rotating master CDN. Genuinely-unavailable anime still emit a YouTube-trailer
+  # stub, but the youtube_stub guard classifies those as no-embed → clean failover
+  # (no trailer shown to users). Last-resort EN provider behind allanime/miruro.
+  - { name: nineanime, enabled: true }
 
   # 18+ group — separate orchestrator, not in the EN chain.
   - name: 18anime
@@ -41,8 +68,11 @@ providers:
       Disabled 2026-06-03.
 
   - name: gogoanime
-    enabled: false
-    reason: "Platform rebrand"
+    enabled: true
+    reason: "Revived via gogoanimes.fi mirror + megaplay"
     description: >
-      anitaku.to migrated to a different platform the parser can't handle.
-      Disabled 2026-05-13.
+      anitaku.to migrated to anineko.to ("We Have Moved"). Repointed
+      SCRAPER_GOGOANIME_BASE_URL to gogoanimes.fi (classic gogo HTML:
+      anime_muti_link + /search.html), whose newplayer.php embed nests the
+      megaplay.buzz player — now routed through the megaplay extractor
+      (gogoanime.me.uk added to its wrapper allowlist). Re-enabled 2026-06-05.

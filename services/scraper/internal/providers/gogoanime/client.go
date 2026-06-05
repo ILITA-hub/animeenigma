@@ -46,6 +46,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -283,85 +284,206 @@ func (p *Provider) FindID(ctx context.Context, ref domain.AnimeRef) (string, err
 			return id, nil
 		}
 	}
-	// 2. Fuzzy /search.html fallback — the PRIMARY path in practice.
-	if ref.Title == "" {
+	// 2. Fuzzy /search.html fallback — the PRIMARY path in practice. The current
+	// mirror (gogoanimes.fi) matches the keyword as a LITERAL contiguous substring
+	// and HTTP-404s on some punctuation (apostrophes), so a full-title query usually
+	// misses. We derive progressively-broader keywords from every title form
+	// (see searchKeywords), accumulate the /category results across them, then let
+	// the Jaro-Winkler step pick the right slug from the (broader) candidate set.
+	titles := make([]string, 0, 1+len(ref.AltTitles))
+	if ref.Title != "" {
+		titles = append(titles, ref.Title)
+	}
+	for _, t := range ref.AltTitles {
+		if strings.TrimSpace(t) != "" {
+			titles = append(titles, t)
+		}
+	}
+	if len(titles) == 0 {
 		err := domain.WrapNotFound(errors.New("no title"), "gogoanime: cannot search without a title")
 		p.markStage(health.StageSearch, err)
 		return "", err
 	}
-	q := url.QueryEscape(ref.Title)
+
+	keywords := make([]string, 0, maxSearchKeywords)
+	seenKw := make(map[string]bool)
+	for _, t := range titles {
+		for _, kw := range searchKeywords(t) {
+			lk := strings.ToLower(kw)
+			if seenKw[lk] || len(keywords) >= maxSearchKeywords {
+				continue
+			}
+			seenKw[lk] = true
+			keywords = append(keywords, kw)
+		}
+	}
+
+	// 3. Search each keyword in turn, accumulating /category candidates and
+	// scoring against ALL title forms. Return as soon as a candidate clears the
+	// fuzzy threshold (short-circuit so a confident first-keyword hit doesn't
+	// fan out into extra requests). Broader fallback keywords are only reached
+	// when the specific ones miss.
+	normForms := make([]string, 0, len(titles))
+	for _, t := range titles {
+		normForms = append(normForms, fuzzy.NormalizeTitle(t))
+	}
+	rowsBySlug := make(map[string]searchResult)
+	best := struct {
+		score float64
+		slug  string
+	}{}
+	var lastErr error
+	for _, kw := range keywords {
+		rows, err := p.searchCandidates(ctx, kw)
+		if err != nil {
+			// A 404/parse miss on one keyword is not fatal — try the next. Remember
+			// the error so a wholly-failed search still surfaces a real cause.
+			lastErr = err
+			continue
+		}
+		for _, r := range rows {
+			if _, dup := rowsBySlug[r.Slug]; dup {
+				continue
+			}
+			rowsBySlug[r.Slug] = r
+			nr := fuzzy.NormalizeTitle(r.Title)
+			for _, nf := range normForms {
+				if score := fuzzy.JaroWinkler(nf, nr); score > best.score {
+					best.score = score
+					best.slug = r.Slug
+				}
+			}
+		}
+		if best.score >= fuzzyMatchThreshold && best.slug != "" {
+			p.markStage(health.StageSearch, nil)
+			return best.slug, nil
+		}
+	}
+
+	if len(rowsBySlug) == 0 {
+		if lastErr != nil {
+			p.markStage(health.StageSearch, lastErr)
+			return "", lastErr
+		}
+		// Selector drift vs real-empty: a 200 page with zero matches could be
+		// either. Emit the zero-match counter so a sudden selector regression
+		// (the mirror changes the .name class) is visible before queries pile up.
+		metrics.ParserZeroMatchTotal.WithLabelValues("gogoanime", selectorSearchResult).Inc()
+		werr := domain.WrapNotFound(nil, "gogoanime: 0 search results for "+ref.Title)
+		p.markStage(health.StageSearch, werr)
+		return "", werr
+	}
+	werr := domain.WrapNotFound(
+		fmt.Errorf("best score %.4f", best.score),
+		"gogoanime: no fuzzy match for "+ref.Title,
+	)
+	p.markStage(health.StageSearch, werr)
+	return "", werr
+}
+
+// maxSearchKeywords caps how many distinct /search.html requests FindID issues
+// per resolve (across all title forms) so a multi-alt-title anime can't fan out
+// into a request storm against the mirror.
+const maxSearchKeywords = 6
+
+// searchKeywords derives mirror-safe search keywords from a title. gogoanimes.fi
+// matches the keyword as a literal contiguous substring and HTTP-404s on some
+// punctuation (e.g. apostrophes), so multi-word full titles usually miss. We
+// emit progressively-broader candidates and let FindID's Jaro-Winkler step pick
+// the right /category from the (broader) result set:
+//
+//	"Frieren: Beyond Journey's End" -> ["Frieren"]
+//	"Re:Zero kara Hajimeru…"        -> ["Re"]
+//	"One Piece"                     -> ["One Piece", "One"]
+//	"Dr. Stone"                     -> ["Dr"]
+//
+// Candidate 1 is the leading run up to the first punctuation mark; candidate 2 is
+// the first word (when the lead is multi-word). Results are letters/digits/spaces
+// only, trimmed, deduped (case-insensitive), in original case.
+func searchKeywords(title string) []string {
+	isWord := func(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsSpace(r) }
+
+	// Leading run up to the first punctuation mark.
+	var lead strings.Builder
+	for _, r := range title {
+		if !isWord(r) {
+			break
+		}
+		lead.WriteRune(r)
+	}
+	leadKw := strings.Join(strings.Fields(lead.String()), " ")
+
+	// If the title starts with punctuation, the lead is empty — fall back to the
+	// whole title with punctuation replaced by spaces.
+	if leadKw == "" {
+		var sb strings.Builder
+		for _, r := range title {
+			if isWord(r) {
+				sb.WriteRune(r)
+			} else {
+				sb.WriteRune(' ')
+			}
+		}
+		leadKw = strings.Join(strings.Fields(sb.String()), " ")
+	}
+
+	out := make([]string, 0, 2)
+	seen := make(map[string]bool)
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		k := strings.ToLower(s)
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, s)
+	}
+	add(leadKw)
+	if fields := strings.Fields(leadKw); len(fields) > 1 {
+		add(fields[0]) // first-word fallback for stricter mirrors
+	}
+	return out
+}
+
+// searchCandidates issues one /search.html?keyword= request and parses the
+// /category result rows. Transport/non-200/parse errors are returned (FindID
+// tries the next keyword); a 200 with zero rows returns (nil, nil).
+func (p *Provider) searchCandidates(ctx context.Context, keyword string) ([]searchResult, error) {
+	q := url.QueryEscape(keyword)
 	searchURL := fmt.Sprintf("%s/search.html?keyword=%s", p.baseURL, q)
 	resp, err := p.http.Get(ctx, searchURL)
 	if err != nil {
-		werr := domain.WrapProviderDown(err, "gogoanime: search fetch")
-		p.markStage(health.StageSearch, werr)
-		return "", werr
+		return nil, domain.WrapProviderDown(err, "gogoanime: search fetch")
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode != http.StatusOK {
-		werr := domain.WrapProviderDown(fmt.Errorf("status %d", resp.StatusCode), "gogoanime: search non-200")
-		p.markStage(health.StageSearch, werr)
-		return "", werr
+		return nil, domain.WrapProviderDown(fmt.Errorf("status %d", resp.StatusCode), "gogoanime: search non-200")
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySearch))
 	if err != nil {
-		werr := domain.WrapProviderDown(err, "gogoanime: search read body")
-		p.markStage(health.StageSearch, werr)
-		return "", werr
+		return nil, domain.WrapProviderDown(err, "gogoanime: search read body")
 	}
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
 	if err != nil {
-		werr := domain.WrapExtractFailed(err, "gogoanime: search parse")
-		p.markStage(health.StageSearch, werr)
-		return "", werr
+		return nil, domain.WrapExtractFailed(err, "gogoanime: search parse")
 	}
 	rows := make([]searchResult, 0, 16)
 	doc.Find("p.name a[href^='/category/']").Each(func(_ int, sel *goquery.Selection) {
 		href, _ := sel.Attr("href")
-		slug := strings.TrimPrefix(href, "/category/")
-		slug = strings.TrimSuffix(slug, "/")
+		slug := strings.TrimSuffix(strings.TrimPrefix(href, "/category/"), "/")
 		title := strings.TrimSpace(sel.Text())
 		if slug == "" || title == "" {
 			return
 		}
 		rows = append(rows, searchResult{Slug: slug, Title: title})
 	})
-	if len(rows) == 0 {
-		// Selector drift vs real-empty: a 200 page with zero matches could be
-		// either. Emit the zero-match counter so a sudden selector regression
-		// (anitaku changes the .name class to e.g. .item-title) is visible
-		// before queries pile up.
-		metrics.ParserZeroMatchTotal.WithLabelValues("gogoanime", selectorSearchResult).Inc()
-		werr := domain.WrapNotFound(nil, "gogoanime: 0 search results for "+ref.Title)
-		p.markStage(health.StageSearch, werr)
-		return "", werr
-	}
-	// 3. Score each entry; pick the best ≥ threshold.
-	normTitle := fuzzy.NormalizeTitle(ref.Title)
-	best := struct {
-		score float64
-		slug  string
-	}{}
-	for _, e := range rows {
-		score := fuzzy.JaroWinkler(normTitle, fuzzy.NormalizeTitle(e.Title))
-		if score > best.score {
-			best.score = score
-			best.slug = e.Slug
-		}
-	}
-	if best.score < fuzzyMatchThreshold || best.slug == "" {
-		werr := domain.WrapNotFound(
-			fmt.Errorf("best score %.4f", best.score),
-			"gogoanime: no fuzzy match for "+ref.Title,
-		)
-		p.markStage(health.StageSearch, werr)
-		return "", werr
-	}
-	p.markStage(health.StageSearch, nil)
-	return best.slug, nil
+	return rows, nil
 }
 
 // ListEpisodes fetches /category/<base>, plus /category/<base>-dub (if a

@@ -165,6 +165,9 @@ services:
       # Toggle live with: SCRAPER_ANIMEKAI_ENABLED=true docker compose up -d scraper
       SCRAPER_ANIMEKAI_ENABLED: ${SCRAPER_ANIMEKAI_ENABLED:-false}
       SCRAPER_ANIMEKAI_BASE_URL: ${SCRAPER_ANIMEKAI_BASE_URL:-https://anikai.to}
+      # gogoanime mirror — default anitaku.to migrated to anineko.to; override to
+      # the live classic-structure mirror gogoanimes.fi (set in docker/.env). 2026-06-05.
+      SCRAPER_GOGOANIME_BASE_URL: ${SCRAPER_GOGOANIME_BASE_URL:-https://anitaku.to}
       # Provider management is now config-file driven via SCRAPER_PROVIDERS_FILE
       # below (./scraper-providers.yaml). That file is the SOURCE OF TRUTH for
       # enable/disable + reason/description, rendered in the Grafana

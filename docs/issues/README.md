@@ -4,6 +4,15 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-027: TODO — Hydrax-iframe player surface (animefever hserver / `am.vidstream.vip?lt=hydrax`)
+- **Date:** 2026-06-05
+- **Severity:** Low (enhancement / extra failover depth — not an outage).
+- **Context:** animefever exposes two servers: `tserver` (am.vidstream.vip, HLS — extractable via `vidstream_vip.go`) and `hserver`. hserver's embed is itself an iframe — `<iframe src="https://am.vidstream.vip?…&lt=hydrax">` — that loads the **Hydrax JS player** (`hydrax.player.min.js`), which hides its stream behind obfuscated JS. The `VidstreamVipExtractor` can't parse a `sources:` literal out of it, so hserver is deliberately excluded (`supportedServers = [tserver]`, AUTO-275). When tserver has no embed for an entry (the ISS-017 case), there's no fallback.
+- **Idea:** instead of extracting hserver's HLS, **embed its `am.vidstream.vip?lt=hydrax` iframe directly** (Kodik-style), as an explicit alternate surface.
+- **Blocker / design constraint (D-DEC §2.8):** the scraper `Stream` DTO is type-enforced to have **NO `iframe_url`** (`services/scraper/internal/domain/provider.go` + `TestStream_HasNoIframeURL`) — silent EN-tier→iframe fallback shipped as a bug twice (ISS-008). So this MUST be a **separate DTO (e.g. `IframeEmbed`) + its own handler + an explicit frontend iframe mode** in OurEnglishPlayer — never overloading `Stream`. It loses watched-tracking, JP subs, and quality control (iframe limitations, like Kodik).
+- **Open questions (verify before building):** does `am.vidstream.vip` permit framing on our origin (X-Frame-Options / CSP frame-ancestors — unverified; the signed player URL is time-limited so it needs a fresh ctk-driven fetch to test)? ads? Is the marginal failover depth worth a whole iframe surface given allanime + miruro + gogoanime are healthy?
+- **Status:** Open (backlog idea, not started). Gated on animefever's tserver actually dying — currently tserver is healthy for embed-bearing anime (real bytes flow; `stream=false` is ISS-017 probe noise).
+
 ### ISS-026: `rec_watched_total` never observed — recommendation→watch conversions not reported by the frontend
 - **Date:** 2026-06-03
 - **Severity:** Low (observability gap, not an outage — recommendations still work; only the closed-loop CTR/conversion metric is blind).

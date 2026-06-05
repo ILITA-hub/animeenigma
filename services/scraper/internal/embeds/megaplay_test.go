@@ -77,9 +77,12 @@ func TestMegaplay_Matches(t *testing.T) {
 		{"https://1anime.site/megaplay/stream/s-2/94554/sub", true},
 		{"https://megaplay.buzz/stream/s-2/94554/sub", true},
 		{"https://cdn.megaplay.buzz/x", true},     // strict subdomain
+		{"https://gogoanime.me.uk/newplayer.php?id=frieren-20409?ep=168580&type=hd-1&category=dub", true}, // gogoanime megaplay wrapper
 		{"https://evil1anime.site/x", false},      // substring impostor
 		{"https://1anime.site.evil.com/x", false}, // suffix impostor
 		{"https://my.1anime.site/index.php", false},
+		{"https://gogoanime.me.uk.evil.com/x", false}, // suffix impostor (exact-host gate)
+		{"https://sub.gogoanime.me.uk/x", false},      // exact-host only, no subdomains
 		{"https://youtube.com/embed/x", false},
 		{"ftp://megaplay.buzz/x", false},
 	}

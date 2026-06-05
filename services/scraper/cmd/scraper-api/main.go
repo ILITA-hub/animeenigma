@@ -92,6 +92,14 @@ func main() {
 	registry.Register(earnvidsExtractor)
 	log.Infow("registered embed extractor", "name", earnvidsExtractor.Name())
 
+	// Megaplay — the gogoanimes.fi mirror's newplayer.php embed (host
+	// gogoanime.me.uk) nests the megaplay.buzz HLS player, so gogoanime resolves
+	// streams through this extractor via the shared registry (2026-06-05 revival).
+	// nineanime constructs its own instance; this shared one serves gogoanime.
+	megaplayExtractor := embeds.NewMegaplayExtractor()
+	registry.Register(megaplayExtractor)
+	log.Infow("registered embed extractor", "name", megaplayExtractor.Name())
+
 	// Phase 28 (SCRAPER-HEAL-38) — vidstream_vip extractor for AnimeFever.
 	// Plain regex against inline `sources: [{"file":"...m3u8"}]` literal —
 	// NOT a Dean-Edwards-packer (CONTEXT.md D4 + RESEARCH.md Discretion).
@@ -188,7 +196,7 @@ func main() {
 	// boot logs surface the typo'd name (CONTEXT.md §risks: "Server-
 	// priority env typo silently demotes a real server").
 	gogoanimeExtractors := []embeds.HostingExtractor{
-		vibeplayerExtractor, streamhgExtractor, earnvidsExtractor,
+		vibeplayerExtractor, streamhgExtractor, earnvidsExtractor, megaplayExtractor,
 	}
 	hostExtractor := map[string]string{}
 	knownExtractorNames := make([]string, 0, len(gogoanimeExtractors))

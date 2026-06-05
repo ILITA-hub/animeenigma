@@ -535,3 +535,34 @@ func health_StageSearch() string   { return stageNames[0] }
 func health_StageEpisodes() string { return stageNames[1] }
 func health_StageServers() string  { return stageNames[2] }
 func health_StageStream() string   { return stageNames[3] }
+
+// TestSearchKeywords verifies the mirror-safe keyword derivation: gogoanimes.fi
+// matches the keyword as a literal substring and 404s on apostrophes, so we emit
+// the leading clean phrase (up to first punctuation) + a first-word fallback.
+func TestSearchKeywords(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		title string
+		want  []string
+	}{
+		{"Frieren: Beyond Journey's End", []string{"Frieren"}},
+		{"Re:Zero kara Hajimeru Isekai Seikatsu", []string{"Re"}},
+		{"Dr. Stone", []string{"Dr"}},
+		{"One Piece", []string{"One Piece", "One"}},
+		{"Sousou no Frieren", []string{"Sousou no Frieren", "Sousou"}},
+		{"JoJo's Bizarre Adventure", []string{"JoJo"}},
+		{"   ", nil},
+	}
+	for _, c := range cases {
+		got := searchKeywords(c.title)
+		if len(got) != len(c.want) {
+			t.Errorf("searchKeywords(%q) = %v; want %v", c.title, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("searchKeywords(%q)[%d] = %q; want %q", c.title, i, got[i], c.want[i])
+			}
+		}
+	}
+}

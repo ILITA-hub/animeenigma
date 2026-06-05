@@ -60,11 +60,14 @@ const (
 	selectorMegaplayBodyRead      = "megaplay_body_read"
 )
 
-// megaplayExactHosts match by host EQUALITY only. `1anime.site` is the
-// bare-apex wrapper origin embedded by 9anime; it must NOT match its
-// subdomain `my.1anime.site`, which is the legacy direct-MP4 host the
-// nineanime provider still handles inline (a different service entirely).
-var megaplayExactHosts = []string{"1anime.site"}
+// megaplayExactHosts match by host EQUALITY only.
+//   - `1anime.site` is the bare-apex wrapper origin embedded by 9anime; it must
+//     NOT match its subdomain `my.1anime.site`, which is the legacy direct-MP4
+//     host the nineanime provider still handles inline (a different service).
+//   - `gogoanime.me.uk` is the gogoanime (gogoanimes.fi mirror) `newplayer.php`
+//     wrapper, which nests the SAME `megaplay.buzz` player iframe — so Extract's
+//     generic wrapper path resolves it identically (2026-06-05 gogoanime revival).
+var megaplayExactHosts = []string{"1anime.site", "gogoanime.me.uk"}
 
 // megaplaySubdomainHosts match by host equality OR strict subdomain.
 // `megaplay.buzz` is the real player + getSources origin and may front via
