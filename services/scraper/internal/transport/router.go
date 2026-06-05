@@ -7,6 +7,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/handler"
 	"github.com/go-chi/chi/v5"
@@ -81,6 +82,13 @@ func NewRouter(
 	r.Use(metricsCollector.Middleware)
 	r.Use(httputil.RequestLogger(log))
 	r.Use(httputil.Recoverer(log))
+	// AR-EGRESS-01/02: seed origin + coarse operation (the scraper route that
+	// triggered the upstream provider fetch) into W3C baggage so each provider's
+	// recorded egress effect attributes to the inbound scraper request. The
+	// scraper is backend-to-backend with no end-user auth, so user_id is normally
+	// absent here (the per-provider tag, set on the BaseHTTPClient, carries the
+	// provider dimension). user_id never rides the wire regardless (T-02-PII).
+	r.Use(tracing.SeedMiddleware("scraper"))
 	// REVIEW.md WR-02: CORS middleware intentionally omitted. The scraper is
 	// a backend-to-backend service (bound to 127.0.0.1:8088, called only by
 	// catalog) — it is never hit directly from a browser, so an

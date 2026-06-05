@@ -185,6 +185,10 @@ services:
       # for a working provider (<1s typical) yet under the 15s caller budget.
       SCRAPER_PROVIDER_TIMEOUT: ${SCRAPER_PROVIDER_TIMEOUT:-8s}
       TRACING_ENABLED: "true"
+      # AR-EGRESS-01/03 — BE egress recorder. The scraper ships recorded outbound
+      # effects (per-provider host/bytes) to analytics /internal/effects via this
+      # Docker-network-only URL. Non-secret service-discovery URL (T-02-ENV).
+      ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
     volumes:
       # Provider management source of truth (ISS-023). Edit on host + restart.
       - ./scraper-providers.yaml:/config/providers.yaml:ro
@@ -596,6 +600,11 @@ services:
       TELEGRAM_NEWS_CHANNEL: ${TELEGRAM_NEWS_CHANNEL:-animeenigmanews}
       PROMETHEUS_SERVICE_URL: http://prometheus:9090/prometheus
       TRACING_ENABLED: "true"
+      # AR-EGRESS-01/03 — BE egress recorder. Catalog ships recorded outbound
+      # effects (OpenSubtitles / idmapping ARM-AniList / Kodik extractor) to
+      # analytics /internal/effects via this Docker-network-only URL. Non-secret
+      # service-discovery URL (T-02-ENV).
+      ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
     ports:
       - "127.0.0.1:8081:8081"
     depends_on:
@@ -623,6 +632,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       STREAM_TOKEN_SECRET: ${STREAM_TOKEN_SECRET:-stream-secret-change-in-production}
       TRACING_ENABLED: "true"
+      # AR-EGRESS-01/04/05 — BE egress recorder. Streaming ships ONE aggregated
+      # HLS egress row per (watch-session, host) to analytics /internal/effects
+      # via this Docker-network-only URL. Non-secret service-discovery URL
+      # (T-02-ENV).
+      ANALYTICS_INTERNAL_URL: ${ANALYTICS_INTERNAL_URL:-http://analytics:8092}
     ports:
       - "127.0.0.1:8082:8082"
     depends_on:

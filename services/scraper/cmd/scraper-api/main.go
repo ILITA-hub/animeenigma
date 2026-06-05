@@ -125,16 +125,30 @@ func main() {
 	defer func() { _ = redisCache.Close() }()
 	log.Infow("redis connected", "host", cfg.Redis.Host, "port", cfg.Redis.Port)
 
+	// Egress effect producer (AR-EGRESS-01/03). Ships recorded outbound effects
+	// to analytics /internal/effects; non-blocking + drop-on-full so an analytics
+	// outage never affects scraper resolves. SetGlobalSink MUST run BEFORE the
+	// egressTransport is built below, because tracing.WrapTransport snapshots the
+	// process-global sink at wrap time to decide whether to compose the recording
+	// RoundTripper.
+	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://analytics:8092"
+	}
+	effectProducer := tracing.NewProducer(tracing.ProducerConfig{AnalyticsURL: analyticsURL})
+	effectProducer.Start()
+	defer effectProducer.Stop()
+	tracing.SetGlobalSink(effectProducer)
+
 	// AR-EGRESS-03: the shared recording transport that every per-provider
 	// BaseHTTPClient routes its upstream traffic through. tracing.WrapTransport
-	// composes the recording RoundTripper only when a process-global effect sink
-	// is installed (SetGlobalSink at BE boot, wired in the general-egress plan);
-	// until then it is a nil-safe pass-through, so this is safe to wire now. The
-	// per-provider tag (domain.WithProvider) rides each request's context so the
-	// recorder can pivot streaming egress by provider+host (D-02/D-09); general
-	// (non-streaming) upstream calls still carry their provider since each
-	// BaseHTTPClient is single-provider — the streaming-vs-general distinction is
-	// made downstream by EffectKind, not here.
+	// composes the recording RoundTripper because the process-global effect sink
+	// (the producer above) is now installed. The per-provider tag
+	// (domain.WithProvider) rides each request's context so the recorder can pivot
+	// streaming egress by provider+host (D-02/D-09); general (non-streaming)
+	// upstream calls still carry their provider since each BaseHTTPClient is
+	// single-provider — the streaming-vs-general distinction is made downstream by
+	// EffectKind, not here.
 	egressTransport := tracing.WrapTransport(nil)
 
 	// Build the shared HTTP client for AnimePahe.

@@ -7,6 +7,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/handler"
 	"github.com/go-chi/chi/v5"
@@ -30,6 +31,10 @@ func NewRouter(
 	r.Use(httputil.Recoverer(log))
 	r.Use(httputil.CORS([]string{"*"}))
 	r.Use(middleware.RealIP)
+	// AR-EGRESS-01/02: seed origin/operation baggage + private user_id ctx so the
+	// recording transport (and HLS aggregator) attribute egress to the inbound
+	// request. user_id never rides the wire (T-02-PII).
+	r.Use(tracing.SeedMiddleware("streaming"))
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

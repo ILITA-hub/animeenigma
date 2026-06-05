@@ -292,6 +292,17 @@ REDIS_HOST, REDIS_PORT
 JWT_SECRET
 ```
 
+BE egress recorder (catalog/scraper/streaming — Activity Register v4.0 Phase 2):
+```
+ANALYTICS_INTERNAL_URL   # default http://analytics:8092 — catalog/scraper/streaming
+                         # ship recorded outbound egress effects (host/provider/bytes,
+                         # one aggregated row per HLS watch session) to analytics
+                         # POST /internal/effects over the Docker network. Non-secret
+                         # service-discovery URL; the producer is non-blocking +
+                         # drop-on-full so an analytics outage never affects requests.
+                         # /internal/effects is NOT gateway-proxied (Docker-network-only).
+```
+
 Catalog service specific:
 ```
 SHIKIMORI_CLIENT_ID

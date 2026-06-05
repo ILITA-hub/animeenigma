@@ -117,6 +117,21 @@ func main() {
 	}
 	defer redisCache.Close()
 
+	// Egress effect producer (AR-EGRESS-01/03). The producer ships recorded
+	// outbound effects to analytics /internal/effects; it is non-blocking +
+	// drop-on-full so an analytics outage never affects catalog requests.
+	// SetGlobalSink lights up tracing.WrapTransport's recording composition
+	// process-wide, so the OpenSubtitles / idmapping / Kodik retrofits (02-02)
+	// begin emitting effect rows with no further per-client wiring.
+	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://analytics:8092"
+	}
+	effectProducer := tracing.NewProducer(tracing.ProducerConfig{AnalyticsURL: analyticsURL})
+	effectProducer.Start()
+	defer effectProducer.Stop()
+	tracing.SetGlobalSink(effectProducer)
+
 	// Initialize external parsers
 	shikimoriClient := shikimori.NewClient(cfg.Shikimori, log)
 

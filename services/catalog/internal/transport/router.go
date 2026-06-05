@@ -7,6 +7,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
 	"github.com/go-chi/chi/v5"
@@ -38,6 +39,12 @@ func NewRouter(
 	r.Use(httputil.Recoverer(log))
 	r.Use(httputil.CORS([]string{"*"}))
 	r.Use(middleware.RealIP)
+	// AR-EGRESS-01/02: seed origin + coarse operation (chi route pattern) into
+	// W3C baggage and the authenticated user_id into a private ctx value, so the
+	// recording transport attributes every outbound effect to the inbound request
+	// that caused it (user_id never rides the wire — T-02-PII). Mounted on the
+	// chi router so the lazy operation resolver can read the route pattern.
+	r.Use(tracing.SeedMiddleware("catalog"))
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
