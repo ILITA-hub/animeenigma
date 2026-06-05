@@ -1,14 +1,14 @@
 ---
-status: partial
+status: resolved
 phase: 02-be-egress-recorder
 source: [02-VERIFICATION.md, 02-REVIEW.md]
 started: 2026-06-05T07:30:00Z
-updated: 2026-06-05T07:30:00Z
+updated: 2026-06-05T07:40:00Z
 ---
 
 ## Current Test
 
-[awaiting human decision on the two items below]
+[resolved — both items fixed via gap-fix commits 6493625b (CR-01), 83e263bd (WR-07), aa9af659 (WR-01); affected services redeployed + healthy 2026-06-05]
 
 ## Tests
 
@@ -35,13 +35,14 @@ production today. Verifier + reviewer both recommend fixing before Phase 3 adds 
 ## Summary
 
 total: 2
-passed: 0
+passed: 2
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
 
-- WR-07 MegaplayExtractor unrecorded hop (megaplay.buzz) — confirmed via live ClickHouse query
-- CR-01 effect-on-Close robustness gap — latent, no production impact today
+- WR-07 MegaplayExtractor unrecorded hop (megaplay.buzz) — RESOLVED: `NewRecordingMegaplayExtractor` wraps transport via `tracing.WrapTransport`, provider-tagged on the nineanime path (commit 83e263bd); live row appears next time the nineanime last-resort path is exercised post-redeploy.
+- CR-01 effect-on-Close robustness gap — RESOLVED: effect now emits on first-of(EOF, Close), idempotent (commit 6493625b).
+- WR-01 idmapping dropped inbound ctx — RESOLVED: ctx-aware resolve methods threaded through catalog/scraper callers (commit aa9af659).

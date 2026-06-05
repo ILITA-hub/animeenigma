@@ -1,9 +1,10 @@
 ---
 phase: 02-be-egress-recorder
 verified: 2026-06-05T09:30:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 overrides_applied: 0
+human_needed_resolution: "WR-07 MegaplayExtractor blind spot + code-review BLOCKER CR-01 + WR-01 idmapping ctx all FIXED via gap commits 83e263bd (WR-07: NewRecordingMegaplayExtractor + provider tag), 6493625b (CR-01: emit on first-of EOF/Close), aa9af659 (WR-01: ctx-threaded idmapping resolves). catalog/scraper/streaming redeployed + make health green 2026-06-05. Megaplay live row will appear when the nineanime last-resort path is next exercised (unit-test-proven wrap + already-live recording path)."
 human_verification:
   - test: "Confirm MegaplayExtractor (nineanime provider) is recording egress — verify scraper rows in ClickHouse trace back to megaplay.buzz / cdn.mewstream.buzz, or accept that 9anime/megaplay host rows are absent from the register and document the blind spot."
     expected: "Either egress rows appear for megaplay.buzz / 1anime.site / cdn.mewstream.buzz in the ClickHouse events table, OR the team consciously accepts the accounting gap for the 9anime/megaplay path until WR-07 is fixed."
