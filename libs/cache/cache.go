@@ -226,6 +226,16 @@ func (c *RedisCache) Client() *redis.Client {
 	return c.client
 }
 
+// HGetAll returns the full field->value map of a Redis hash. It exists so a
+// *RedisCache satisfies the gormtrace.HashReader interface directly (the
+// db_read P95 ThresholdRefresher snapshots the read_thresholds hash through it),
+// keeping libs/tracing free of any go-redis import — each GORM service passes its
+// existing *RedisCache as the HashReader at boot (plan 06). An empty map (no
+// fields) is a valid, non-error cold-start result.
+func (c *RedisCache) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	return c.client.HGetAll(ctx, key).Result()
+}
+
 // SetJSON is an alias for Set (which already handles JSON marshaling)
 func (c *RedisCache) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	return c.Set(ctx, key, value, ttl)

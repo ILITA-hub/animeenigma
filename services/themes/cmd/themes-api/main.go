@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -71,6 +72,35 @@ func main() {
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
+
+	// Redis client (added v4.0 Phase 3 — themes had none before). The db_read
+	// P95 ReadGate refresher needs a Redis handle to snapshot read_thresholds.
+	redisCache, err := cache.New(cfg.Redis)
+	if err != nil {
+		log.Fatalw("failed to connect to redis", "error", err)
+	}
+	defer redisCache.Close()
+
+	// Activity-register effect producer (AR-EFFECT-01). Non-blocking +
+	// drop-on-full so an analytics outage never affects themes requests.
+	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://analytics:8092"
+	}
+	effectProducer := tracing.NewProducer(tracing.ProducerConfig{AnalyticsURL: analyticsURL})
+	effectProducer.Start()
+	defer effectProducer.Stop()
+	tracing.SetGlobalSink(effectProducer)
+
+	// AR-EFFECT-01 (D-15): GORM db_write/db_read effect callbacks + the daily-P95
+	// ReadGate refresher (D-03), using the Redis client just constructed.
+	dbEffectsCtx, dbEffectsCancel := context.WithCancel(context.Background())
+	defer dbEffectsCancel()
+	dbEffectsStop, err := gormtrace.WireDBEffects(dbEffectsCtx, db.DB, tracing.GlobalSink(), redisCache)
+	if err != nil {
+		log.Warnw("db-effect callbacks disabled", "error", err)
+	}
+	defer dbEffectsStop()
 
 	// Initialize AnimeThemes API client
 	atClient := animethemes.NewClient(log)

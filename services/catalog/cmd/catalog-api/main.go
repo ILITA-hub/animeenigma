@@ -132,6 +132,19 @@ func main() {
 	defer effectProducer.Stop()
 	tracing.SetGlobalSink(effectProducer)
 
+	// AR-EFFECT-01 (D-15): wire the GORM db_write (always) + db_read (P95-gated)
+	// effect callbacks + the daily-P95 ReadGate refresher (D-03). The sink is the
+	// Producer just installed; the existing redisCache doubles as the HashReader
+	// for the read_thresholds snapshot. dbEffectsStop halts the refresher on
+	// shutdown.
+	dbEffectsCtx, dbEffectsCancel := context.WithCancel(context.Background())
+	defer dbEffectsCancel()
+	dbEffectsStop, err := gormtrace.WireDBEffects(dbEffectsCtx, db.DB, tracing.GlobalSink(), redisCache)
+	if err != nil {
+		log.Warnw("db-effect callbacks disabled", "error", err)
+	}
+	defer dbEffectsStop()
+
 	// Initialize external parsers
 	shikimoriClient := shikimori.NewClient(cfg.Shikimori, log)
 
