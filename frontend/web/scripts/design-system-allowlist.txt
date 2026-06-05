@@ -47,9 +47,7 @@ src/components/home/spotlight/cards/NowWatchingCard.vue:#0a0e1a:live-dot avatar-
 src/components/home/CollectionsRow.vue:#0e7490:collection-cover fallback gradient START (cyan-tinted); novel cover hue, no token within tolerance
 src/components/home/CollectionsRow.vue:#6b21a8:collection-cover fallback gradient END (violet-tinted); novel cover hue, no token within tolerance
 src/components/home/CollectionsRow.vue:#11111c:surface fallback in var(--color-surface,#11111c) — canonical-fine fallback
-src/components/home/ContinueWatchingRow.vue:#001218:.cw-play icon-on-cyan near-base ink; no token within tolerance
 src/components/home/ContinueWatchingRow.vue:#00d4ff:brand-cyan fallback/raw glow (var(--brand-cyan,#00d4ff) + raw glow stops) — canonical-fine brand value
-src/components/home/ContinueWatchingRow.vue:#11111c:surface fallback in var(--color-surface,#11111c) — canonical-fine fallback
 src/components/home/ContinueWatchingRow.vue:#fff:foreground fallback in var(--foreground,#fff) — canonical-fine fallback
 
 # --- LastUpdates news-cover gradient (05-03) -----------------------------------
