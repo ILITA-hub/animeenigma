@@ -21,13 +21,17 @@ describe('AnimeKebab', () => {
   it('lets a caller override size/position via class', () => {
     const w = mount(AnimeKebab, { props: { class: 'static w-12 h-12' } })
     const cls = w.find('button').classes()
-    // tailwind-merge resolves the conflicts in favour of the caller
+    // tailwind-merge resolves position-type (absolute→static) and size (w-9/h-9→w-12/h-12)
+    // conflicts in favour of the caller. Inset classes (top-2, right-2) are a separate
+    // utility group and survive — they are harmless on a static element.
     expect(cls).toContain('w-12')
     expect(cls).toContain('h-12')
     expect(cls).not.toContain('w-9')
     expect(cls).not.toContain('h-9')
     expect(cls).toContain('static')
     expect(cls).not.toContain('absolute')
+    expect(cls).toContain('top-2')
+    expect(cls).toContain('right-2')
   })
 
   it('emits open with the button element on click', async () => {

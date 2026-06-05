@@ -13,7 +13,6 @@
       'hover:bg-cyan-500/90 hover:rotate-[12deg] hover:scale-110',
       'pointer-events-auto',
       positionClass,
-      props.extraClass,
       props.class,
     )"
     :aria-label="t('contextMenu.openMenu')"
@@ -37,14 +36,15 @@ import type { HTMLAttributes } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { cn } from '@/lib/utils'
 
+defineOptions({ inheritAttrs: false })
+
 const props = withDefaults(
   defineProps<{
     menuOpen?: boolean
     position?: 'top-right' | 'top-left' | 'bottom-right'
-    extraClass?: string
     class?: HTMLAttributes['class']
   }>(),
-  { menuOpen: false, position: 'top-right', extraClass: '' }
+  { menuOpen: false, position: 'top-right' }
 )
 
 const emit = defineEmits<{ open: [el: HTMLElement] }>()
