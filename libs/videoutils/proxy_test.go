@@ -1,10 +1,100 @@
 package videoutils
 
 import (
+	"bytes"
+	"io"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// TestSessTokenInjection asserts rewriteHLSURL appends a non-empty &sess=<token>
+// param onto a rewritten segment URL, that the token is preserved verbatim
+// across all segments of one manifest (one mint per manifest), that distinct
+// manifest mints produce distinct tokens, and that an already-proxied URL is
+// left untouched (existing skip rule preserved).
+func TestSessTokenInjection(t *testing.T) {
+	// A fresh manifest mint produces a non-empty crypto/rand token.
+	tok1 := newSessToken()
+	tok2 := newSessToken()
+	assert.NotEmpty(t, tok1, "minted sess token must be non-empty")
+	assert.NotEqual(t, tok1, tok2, "distinct manifest mints must produce distinct tokens")
+
+	// rewriteHLSURL on a relative segment URL appends &sess=<token>.
+	out := rewriteHLSURL("seg-1.ts", "https://cdn.example.com/path/", "https://ref.example/", tok1)
+	assert.Contains(t, out, "sess="+tok1, "rewritten segment URL must carry &sess=<token>")
+	assert.Contains(t, out, "/api/streaming/hls-proxy", "must still be a proxy URL")
+
+	// All segments of the same manifest carry the SAME token.
+	out2 := rewriteHLSURL("seg-2.ts", "https://cdn.example.com/path/", "https://ref.example/", tok1)
+	assert.Contains(t, out2, "sess="+tok1, "second segment shares the manifest token")
+
+	// An already-proxied URL is left untouched (skip rule preserved).
+	already := "/api/streaming/hls-proxy?url=https%3A%2F%2Fcdn.example.com%2Fx.ts&sess=abc"
+	assert.Equal(t, already, rewriteHLSURL(already, "https://cdn.example.com/path/", "", tok1),
+		"already-proxied URL must be returned unchanged")
+
+	// A whole-manifest rewrite mints exactly one token shared across its segments.
+	manifest := strings.Join([]string{
+		"#EXTM3U",
+		"#EXTINF:6.0,",
+		"a.ts",
+		"#EXTINF:6.0,",
+		"b.ts",
+		"",
+	}, "\n")
+	rewritten := rewriteM3U8URLs(manifest, "https://cdn.example.com/path/playlist.m3u8", "https://ref.example/")
+	// Extract every sess= value; they must all be identical and non-empty.
+	var seen []string
+	for _, line := range strings.Split(rewritten, "\n") {
+		if i := strings.Index(line, "sess="); i != -1 {
+			v := line[i+len("sess="):]
+			if amp := strings.IndexByte(v, '&'); amp != -1 {
+				v = v[:amp]
+			}
+			seen = append(seen, v)
+		}
+	}
+	assert.Len(t, seen, 2, "two segment lines should each carry a sess token")
+	if len(seen) == 2 {
+		assert.NotEmpty(t, seen[0])
+		assert.Equal(t, seen[0], seen[1], "both segments of one manifest share one minted token")
+	}
+}
+
+// TestDualByteCount asserts the countReader wrapper increments a uint64 counter
+// on each Read via atomic add (bytes_in source) — paired with the existing
+// client-sink byte count (bytes_out), the proxy can report distinct, non-zero
+// in/out totals where it reads upstream.
+func TestDualByteCount(t *testing.T) {
+	payload := []byte("the quick brown fox jumps over the lazy dog")
+	var bytesIn uint64
+	cr := &countReader{r: bytes.NewReader(payload), n: &bytesIn}
+
+	var sink bytes.Buffer // stands in for the client ResponseWriter sink
+	written, err := io.Copy(&sink, cr)
+	assert.NoError(t, err)
+
+	assert.Equal(t, int64(len(payload)), written, "client sink (bytes_out) wrote full payload")
+	assert.Equal(t, uint64(len(payload)), bytesIn, "countReader (bytes_in) counted full upstream read")
+	assert.Greater(t, bytesIn, uint64(0), "bytes_in must be non-zero")
+
+	// Counter is safe under concurrent reads (atomic add, no data race).
+	var racing uint64
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rc := &countReader{r: bytes.NewReader(payload), n: &racing}
+			_, _ = io.Copy(io.Discard, rc)
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, uint64(len(payload)*8), racing, "atomic counter sums all concurrent reads")
+}
 
 func TestIsDomainAllowed_EmptyList(t *testing.T) {
 	proxy := NewVideoProxy(ProxyConfig{
