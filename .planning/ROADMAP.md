@@ -52,7 +52,7 @@
   4. An HLS stream session produces **one effect row per (stream-session, host)** with summed `bytes` and a segment count — never one row per ~6s segment; verified by playing/replaying a session and asserting a single aggregated row per host. (AR-EGRESS-04)
   5. Where the proxy reads upstream, both `bytes_out` (client egress) and `bytes_in` (upstream ingress) are populated on the row — verified by a proxied stream showing non-zero values in both measures. (AR-EGRESS-05)
 **Plans**: 4 plans (3 waves)
-- [ ] 02-01-PLAN.md — Effect fields on domain.Event + /internal/effects ingestion + async drop-on-full producer + baggage seed/read helpers + recording RoundTripper core (Wave 1, AR-EGRESS-01/02)
+- [x] 02-01-PLAN.md — Effect fields on domain.Event + /internal/effects ingestion + async drop-on-full producer + baggage seed/read helpers + recording RoundTripper core (Wave 1, AR-EGRESS-01/02)
 - [ ] 02-02-PLAN.md — Retrofit the 4 uninstrumented clients (Kodik/OpenSubtitles/idmapping via catalog injection; scraper BaseHTTPClient + stream-provider tag) (Wave 2, AR-EGRESS-03)
 - [ ] 02-03-PLAN.md — HLS per-(session,host) aggregation via ?sess= token + idle reaper + dual byte counters in the proxy (Wave 2, AR-EGRESS-04/05)
 - [ ] 02-04-PLAN.md — Baggage-PII strip + e2e baggage proof + wire middleware/producer into catalog/scraper/streaming + redeploy + live ClickHouse verification (Wave 3, AR-EGRESS-01..05, non-autonomous)
@@ -125,7 +125,7 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 15-20 | v3.0 | — | ✅ Complete | 2026-05-11 → 2026-05-18 |
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
 | 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
-| 2 | v4.0 | 0/4 | Planned | — |
+| 2 | v4.0 | 1/4 | In Progress|  |
 | 3 | v4.0 | 0/? | Not started | — |
 | 4 | v4.0 | 0/? | Not started | — |
 | 5 | v4.0 | 0/? | Not started | — |

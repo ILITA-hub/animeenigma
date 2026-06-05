@@ -5,8 +5,8 @@ milestone_name: Activity Register (ClickHouse unified event plane)
 current_plan: 1
 status: executing
 stopped_at: Phase 2 planned (4 plans, plan-check passed)
-last_updated: "2026-06-05T05:25:35.514Z"
-last_activity: 2026-06-04 -- Phase 01 execution started
+last_updated: "2026-06-05T05:45:52.443Z"
+last_activity: 2026-06-05 -- Phase 02 execution started
 progress:
   total_phases: 6
   completed_phases: 1
@@ -19,10 +19,10 @@ progress:
 
 ## Current Position
 
-Phase: 01 (clickhouse-foundation-eventstore-swap) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 01
-Last activity: 2026-06-04 -- Phase 01 execution started
+Phase: 02 (be-egress-recorder) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 02
+Last activity: 2026-06-05 -- Phase 02 execution started
 
 ## Progress
 
