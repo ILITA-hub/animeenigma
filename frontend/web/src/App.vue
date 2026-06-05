@@ -91,6 +91,7 @@ import Navbar from '@/components/layout/Navbar.vue'
 import FeedbackButton from '@/components/layout/FeedbackButton.vue'
 import Toaster from '@/components/ui/Toaster.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
+import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -141,7 +142,19 @@ function consumeAdminRedirectKey() {
 }
 
 onErrorCaptured((err) => {
-  appError.value = err
+  // Stale-chunk recovery: lazy-loaded async components (e.g. the per-player
+  // defineAsyncComponent imports) that fail because their hashed chunk was
+  // replaced by a newer deploy surface HERE, not at the global
+  // unhandledrejection handler in main.ts — this boundary intercepts them
+  // first. Without this, the user dead-ends on the generic "Something went
+  // wrong" screen showing "Failed to fetch dynamically imported module".
+  // Reload to the fresh index.html + new hashed asset names instead. The
+  // helper's cooldown guards against an infinite reload loop when the asset
+  // is genuinely gone server-side.
+  if (tryReloadOnChunkError(err)) {
+    return false
+  }
+  appError.value = err instanceof Error ? err : new Error(String(err))
   console.error('[App Error]', err)
   return false // prevent propagation
 })
