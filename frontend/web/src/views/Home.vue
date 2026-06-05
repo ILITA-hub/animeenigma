@@ -61,15 +61,14 @@
           see-all-to="/browse?status=ongoing"
           :loading="loadingOngoing"
         >
-          <ColumnItem
+          <PosterRow
             v-for="anime in ongoingAnime"
             :key="anime.id"
-            :anime="anime"
+            :model="fromHomeAnime(anime, { siteScore: siteRatings[anime.id] && siteRatings[anime.id].total_reviews > 0 ? siteRatings[anime.id].average_score : undefined })"
             variant="ongoing"
             :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
-            :site-rating="siteRatings[anime.id] ?? null"
             @open-menu="(el) => openHomeMenuAt(el, anime)"
-            @touchstart="(e) => onHomeTouchstart(e, anime)"
+            @touchstart="(e: TouchEvent) => onHomeTouchstart(e, anime)"
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
@@ -86,16 +85,15 @@
           see-all-to="/browse?sort=rating"
           :loading="loadingTop"
         >
-          <ColumnItem
+          <PosterRow
             v-for="(anime, index) in topAnime"
             :key="anime.id"
-            :anime="anime"
+            :model="fromHomeAnime(anime, { siteScore: siteRatings[anime.id] && siteRatings[anime.id].total_reviews > 0 ? siteRatings[anime.id].average_score : undefined })"
             variant="top"
             :rank="index + 1"
             :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
-            :site-rating="siteRatings[anime.id] ?? null"
             @open-menu="(el) => openHomeMenuAt(el, anime)"
-            @touchstart="(e) => onHomeTouchstart(e, anime)"
+            @touchstart="(e: TouchEvent) => onHomeTouchstart(e, anime)"
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
@@ -112,14 +110,15 @@
           see-all-to="/browse?status=announced"
           :loading="loadingAnnounced"
         >
-          <ColumnItem
+          <PosterRow
             v-for="anime in announcedAnime"
             :key="anime.id"
-            :anime="anime"
+            :model="fromHomeAnime(anime)"
             variant="announced"
+            :season="anime.season"
             :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
             @open-menu="(el) => openHomeMenuAt(el, anime)"
-            @touchstart="(e) => onHomeTouchstart(e, anime)"
+            @touchstart="(e: TouchEvent) => onHomeTouchstart(e, anime)"
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
@@ -179,7 +178,8 @@ import CollectionsRow from '@/components/home/CollectionsRow.vue'
 import SystemStatusBanner from '@/components/home/SystemStatusBanner.vue'
 import HeroSpotlightBlock from '@/components/home/spotlight/HeroSpotlightBlock.vue'
 import HomeColumn from '@/components/home/HomeColumn.vue'
-import ColumnItem from '@/components/home/ColumnItem.vue'
+import { PosterRow } from '@/components/anime'
+import { fromHomeAnime } from '@/utils/toCardModel'
 
 interface HomeAnime {
   id: string
@@ -193,6 +193,7 @@ interface HomeAnime {
   next_episode_at?: string // Phase 9 (UX-17) — gates the episode-aware URL
   year?: number
   status?: string
+  season?: string
 }
 
 const router = useRouter()
