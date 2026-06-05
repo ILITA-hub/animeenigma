@@ -63,7 +63,7 @@
       "id": 3,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(provider_health_up) / count(provider_health_up)", "legendFormat": "EN Stage Health", "refId": "A" } ],
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(provider_health_up) / clamp_min(count(provider_health_up), 1)", "legendFormat": "EN Stage Health", "refId": "A" } ],
       "title": "EN Stage Health",
       "type": "stat"
     },
