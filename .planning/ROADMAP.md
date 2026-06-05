@@ -73,7 +73,7 @@
 - [ ] 03-03-PLAN.md — GORM DB-effect callbacks (db_write always, db_read P95-gated) + in-memory ReadGate snapshot (Wave 2, AR-EFFECT-01)
 - [ ] 03-04-PLAN.md — Cache aggregator (HLSSessions clone) + key-class classifier + cache.go hit/miss hooks (Wave 2, AR-EFFECT-02)
 - [ ] 03-05-PLAN.md — Daily ClickHouse P95 → read_thresholds Redis hash + scheduler cron + ThresholdRefresher ticker (Wave 3, AR-EFFECT-01)
-- [ ] 03-06-PLAN.md — Per-service boot wiring (7 GORM + catalog/gateway cache) + live ClickHouse/Prometheus/Grafana phase-gate verification (Wave 4, AR-EFFECT-01..04, non-autonomous)
+- [ ] 03-06-PLAN.md — Per-service boot wiring (7 GORM + catalog cache; gateway N/A — rate-limit cache bypasses libs/cache) + live ClickHouse/Prometheus/Grafana phase-gate verification (Wave 4, AR-EFFECT-01..04, non-autonomous)
 **Metrics**: `UXΔ = +1 (Better)` (operation-level cost attribution; the "expensive popular button" insight derives from here) · `CDI = 0.14 * 21` (GORM hook + cache hook + a `runtime.Callers` attribution helper + a Tempo config flag; new-but-compatible patterns across the DB/cache libs, attribution is the novel piece) · `MVQ = Griffin 85%/84%` (elegantly fuses GORM hooks, cache hooks, stack-walking, and Tempo span-metrics into one attribution story; strong slop-resistance)
 
 ### Phase 4: FE Causation + RUM
