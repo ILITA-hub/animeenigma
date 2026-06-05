@@ -226,4 +226,10 @@ describe('AnimeContextMenu.vue (Reka DropdownMenu rebuild)', () => {
     const w = mountMenu({ listStatus: null, anchorEl: fakeEl })
     expect(w.findComponent(DropdownMenuStub).props('reference')).toStrictEqual(fakeEl)
   })
+
+  it('pins Open in new tab as the first action (C-top)', () => {
+    const w = mountMenu({ listStatus: 'watching', episodesWatched: 2, episodesTotal: 12 })
+    const items = w.findAllComponents({ name: 'DropdownMenuItem' })
+    expect(items[0].text()).toContain('contextMenu.openInNewTab')
+  })
 })

@@ -48,89 +48,90 @@
 
       <!-- Menu items — Reka DropdownMenuItem provides roving focus + keyboard nav. -->
       <div class="border-t border-white/10 pt-2">
-        <DropdownMenuItem
-          v-for="action in actions"
-          :key="action.key"
-          :class="itemClasses(action)"
-          @select="activate(action)"
-        >
-          <!-- icon -->
-          <svg
-            v-if="action.kind === 'status' && action.current"
-            class="w-4 h-4 flex-shrink-0"
-            fill="currentColor"
-            viewBox="0 0 20 20"
+        <template v-for="action in actions" :key="action.key">
+          <div v-if="action.dividerBefore" class="border-t border-white/10 my-1" aria-hidden="true" />
+          <DropdownMenuItem
+            :class="itemClasses(action)"
+            @select="activate(action)"
           >
-            <path
-              fill-rule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          <span v-else-if="action.kind === 'status'" class="w-4 flex-shrink-0" />
+            <!-- icon -->
+            <svg
+              v-if="action.kind === 'status' && action.current"
+              class="w-4 h-4 flex-shrink-0"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            <span v-else-if="action.kind === 'status'" class="w-4 flex-shrink-0" />
 
-          <svg
-            v-else-if="action.kind === 'remove'"
-            class="w-4 h-4 flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-          </svg>
+            <svg
+              v-else-if="action.kind === 'remove'"
+              class="w-4 h-4 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
 
-          <svg
-            v-else-if="action.kind === 'mark-next'"
-            class="w-4 h-4 flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
+            <svg
+              v-else-if="action.kind === 'mark-next'"
+              class="w-4 h-4 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
 
-          <svg
-            v-else-if="action.kind === 'goto'"
-            class="w-4 h-4 flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-            />
-          </svg>
+            <svg
+              v-else-if="action.kind === 'goto'"
+              class="w-4 h-4 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+              />
+            </svg>
 
-          <svg
-            v-else-if="action.kind === 'newtab'"
-            class="w-4 h-4 flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M14 3h7v7m0-7L10 14m-4-4H4a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-2"
-            />
-          </svg>
+            <svg
+              v-else-if="action.kind === 'newtab'"
+              class="w-4 h-4 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M14 3h7v7m0-7L10 14m-4-4H4a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-2"
+              />
+            </svg>
 
-          {{ action.label }}
-        </DropdownMenuItem>
+            {{ action.label }}
+          </DropdownMenuItem>
+        </template>
       </div>
     </div>
   </DropdownMenu>
@@ -171,6 +172,7 @@ interface MenuAction {
   label: string
   current?: boolean
   danger?: boolean
+  dividerBefore?: boolean
   onActivate: () => void | Promise<void>
 }
 
@@ -226,13 +228,17 @@ const statusOptions = [
 
 const actions = computed<MenuAction[]>(() => {
   const out: MenuAction[] = []
+  // C-top: open-in-new-tab pinned first, its own navigation group.
+  out.push({ key: 'newtab', kind: 'newtab', label: t('contextMenu.openInNewTab'), onActivate: openInNewTab })
+  out.push({ key: 'goto', kind: 'goto', label: t('contextMenu.goToPage'), onActivate: goToPage })
   if (authStore.isAuthenticated) {
-    for (const s of statusOptions) {
+    for (const [i, s] of statusOptions.entries()) {
       out.push({
         key: `status-${s.value}`,
         kind: 'status',
         label: t(s.i18nKey),
         current: props.listStatus === s.value,
+        dividerBefore: i === 0,
         onActivate: () => setStatus(s.value),
       })
     }
@@ -258,8 +264,6 @@ const actions = computed<MenuAction[]>(() => {
       })
     }
   }
-  out.push({ key: 'goto', kind: 'goto', label: t('contextMenu.goToPage'), onActivate: goToPage })
-  out.push({ key: 'newtab', kind: 'newtab', label: t('contextMenu.openInNewTab'), onActivate: openInNewTab })
   return out
 })
 
