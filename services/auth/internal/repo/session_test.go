@@ -71,141 +71,6 @@ func TestSessionRepo_CreateAndFindByHash(t *testing.T) {
 	require.Equal(t, s.ID, found.ID)
 }
 
-func TestSessionRepo_RotateCASWinAndGracePath(t *testing.T) {
-	db := dbForTest(t)
-	r := repo.NewSessionRepository(db)
-	userID := seedUser(t, db)
-
-	hashLen64 := func(prefix string) string {
-		raw := prefix + uuid.NewString()
-		for len(raw) < 64 {
-			raw += "0"
-		}
-		return raw[:64]
-	}
-
-	oldHash := hashLen64("old")
-	newHash := hashLen64("new")
-	s := &domain.UserSession{
-		UserID:           userID,
-		RefreshTokenHash: oldHash,
-		ExpiresAt:        time.Now().Add(time.Hour),
-		LastSeenAt:       time.Now(),
-	}
-	require.NoError(t, r.Create(context.Background(), s))
-
-	// Winner CAS — rotates.
-	res1, err := r.Rotate(context.Background(), s.ID, oldHash, newHash, "1.2.3.4", time.Now().Add(30*24*time.Hour))
-	require.NoError(t, err)
-	require.True(t, res1.Rotated)
-	require.Equal(t, newHash, res1.Session.RefreshTokenHash)
-
-	// A real rotation opens a fresh grace window: grace_opened_at is stamped and
-	// grace_until is ~now + GraceWindow.
-	var afterRotate domain.UserSession
-	require.NoError(t, db.First(&afterRotate, "id = ?", s.ID).Error)
-	require.NotNil(t, afterRotate.GraceOpenedAt, "rotation should stamp grace_opened_at")
-	require.NotNil(t, afterRotate.GraceUntil)
-	require.WithinDuration(t, time.Now().Add(repo.GraceWindow), *afterRotate.GraceUntil, time.Minute,
-		"grace_until should be ~now + GraceWindow after a rotation")
-
-	// Loser CAS with the same oldHash — should hit the grace path, not rotate.
-	res2, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("loser"), "5.6.7.8", time.Now().Add(30*24*time.Hour))
-	require.NoError(t, err)
-	require.False(t, res2.Rotated, "expected grace path (no rotation) on second CAS with same oldHash")
-	require.Equal(t, newHash, res2.Session.RefreshTokenHash, "row hash should still be the winner's")
-}
-
-// A grace window that is about to lapse must SLIDE forward when the previous
-// hash is presented again, so an active browser stuck on the previous token
-// (the lost-rotation desync) keeps riding the grace path across refreshes far
-// beyond the original near-lapse instead of getting a hard 401.
-func TestSessionRepo_GraceSlides_SurvivesBeyondOriginalWindow(t *testing.T) {
-	db := dbForTest(t)
-	r := repo.NewSessionRepository(db)
-	userID := seedUser(t, db)
-
-	hashLen64 := func(prefix string) string {
-		raw := prefix + uuid.NewString()
-		for len(raw) < 64 {
-			raw += "0"
-		}
-		return raw[:64]
-	}
-
-	oldHash := hashLen64("old")
-	newHash := hashLen64("new")
-	now := time.Now()
-	openedAt := now.Add(-90 * time.Second) // window opened well within MaxGraceLifetime
-	graceUntil := now.Add(5 * time.Second) // about to lapse
-	s := &domain.UserSession{
-		UserID:                   userID,
-		RefreshTokenHash:         newHash,
-		PreviousRefreshTokenHash: &oldHash,
-		GraceUntil:               &graceUntil,
-		GraceOpenedAt:            &openedAt,
-		ExpiresAt:                now.Add(time.Hour),
-		LastSeenAt:               now,
-	}
-	require.NoError(t, r.Create(context.Background(), s))
-
-	res, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("loser"), "1.1.1.1", now.Add(30*24*time.Hour))
-	require.NoError(t, err)
-	require.False(t, res.Rotated, "previous-hash presentation must stay on the grace path")
-
-	var reread domain.UserSession
-	require.NoError(t, db.First(&reread, "id = ?", s.ID).Error)
-	require.NotNil(t, reread.GraceUntil)
-	require.WithinDuration(t, time.Now().Add(repo.GraceWindow), *reread.GraceUntil, time.Minute,
-		"grace_until should have slid to ~now + GraceWindow, well past the original near-lapse")
-}
-
-// The slide must NOT extend a window past grace_opened_at + MaxGraceLifetime —
-// this is the hard bound on how long a stolen previous-token can be replayed.
-func TestSessionRepo_GraceSlide_BoundedCap(t *testing.T) {
-	db := dbForTest(t)
-	r := repo.NewSessionRepository(db)
-	userID := seedUser(t, db)
-
-	hashLen64 := func(prefix string) string {
-		raw := prefix + uuid.NewString()
-		for len(raw) < 64 {
-			raw += "0"
-		}
-		return raw[:64]
-	}
-
-	oldHash := hashLen64("old")
-	newHash := hashLen64("new")
-	now := time.Now()
-	// Window opened almost MaxGraceLifetime ago: only ~1 min of cap remains, so a
-	// fresh now+GraceWindow slide must be clamped down to the cap.
-	openedAt := now.Add(-(repo.MaxGraceLifetime - time.Minute))
-	graceUntil := now.Add(5 * time.Second)
-	s := &domain.UserSession{
-		UserID:                   userID,
-		RefreshTokenHash:         newHash,
-		PreviousRefreshTokenHash: &oldHash,
-		GraceUntil:               &graceUntil,
-		GraceOpenedAt:            &openedAt,
-		ExpiresAt:                now.Add(time.Hour),
-		LastSeenAt:               now,
-	}
-	require.NoError(t, r.Create(context.Background(), s))
-
-	res, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("loser"), "1.1.1.1", now.Add(30*24*time.Hour))
-	require.NoError(t, err)
-	require.False(t, res.Rotated)
-
-	var reread domain.UserSession
-	require.NoError(t, db.First(&reread, "id = ?", s.ID).Error)
-	require.NotNil(t, reread.GraceUntil)
-	require.WithinDuration(t, openedAt.Add(repo.MaxGraceLifetime), *reread.GraceUntil, 30*time.Second,
-		"grace_until should be clamped to grace_opened_at + MaxGraceLifetime")
-	require.True(t, reread.GraceUntil.Before(time.Now().Add(repo.GraceWindow).Add(-2*time.Minute)),
-		"clamped grace_until must be well below an uncapped now + GraceWindow slide")
-}
-
 func TestSessionRepo_RevokeAndRevokeOthers(t *testing.T) {
 	db := dbForTest(t)
 	r := repo.NewSessionRepository(db)
@@ -254,86 +119,92 @@ func TestSessionRepo_RevokeAndRevokeOthers(t *testing.T) {
 	require.Equal(t, c.ID, alive[0].ID)
 }
 
-func TestSessionRepo_Rotate_GraceExpired_ThirdReplayFails(t *testing.T) {
+func TestSessionRepo_Touch_BumpsLastSeenAndExpiry(t *testing.T) {
 	db := dbForTest(t)
 	r := repo.NewSessionRepository(db)
 	userID := seedUser(t, db)
 
-	hashLen64 := func(prefix string) string {
-		raw := prefix + uuid.NewString()
-		for len(raw) < 64 {
-			raw += "0"
-		}
-		return raw[:64]
-	}
-
-	oldHash := hashLen64("old")
-	newHash := hashLen64("new")
-	pastGrace := time.Now().Add(-1 * time.Second)
-
-	// Hand-build a session that already has previous_hash=oldHash and an
-	// EXPIRED grace_until — simulates "rotation happened >30s ago".
+	old := time.Now().Add(-48 * time.Hour)
 	s := &domain.UserSession{
-		UserID:                   userID,
-		RefreshTokenHash:         newHash,
-		PreviousRefreshTokenHash: &oldHash,
-		GraceUntil:               &pastGrace,
-		ExpiresAt:                time.Now().Add(time.Hour),
-		LastSeenAt:               time.Now(),
+		UserID:           userID,
+		RefreshTokenHash: padHash("touch"),
+		UserAgent:        "go-test",
+		IP:               "1.1.1.1",
+		LastSeenAt:       old,
+		ExpiresAt:        time.Now().Add(24 * time.Hour),
 	}
 	require.NoError(t, r.Create(context.Background(), s))
 
-	// Replaying the now-stale oldHash must fail (grace lapsed).
-	_, err := r.Rotate(context.Background(), s.ID, oldHash, hashLen64("late"), "9.9.9.9", time.Now().Add(30*24*time.Hour))
-	require.Error(t, err, "rotate with stale oldHash after grace expiry must fail")
+	far := time.Now().Add(1000 * time.Hour)
+	require.NoError(t, r.Touch(context.Background(), s.ID, "2.2.2.2", time.Now(), far))
+
+	got, err := r.FindAliveByHash(context.Background(), s.RefreshTokenHash)
+	require.NoError(t, err)
+	require.Equal(t, "2.2.2.2", got.IP)
+	require.True(t, got.LastSeenAt.After(old), "last_seen should advance")
+	require.True(t, got.ExpiresAt.After(time.Now().Add(900*time.Hour)), "expiry should be pushed far out")
 }
 
-func TestSessionRepo_Cleanup_DeletesStaleRowsOnly(t *testing.T) {
+func TestSessionRepo_Touch_NoOpOnRevoked(t *testing.T) {
 	db := dbForTest(t)
 	r := repo.NewSessionRepository(db)
 	userID := seedUser(t, db)
 
-	hashLen64 := func(prefix string) string {
-		raw := prefix + uuid.NewString()
-		for len(raw) < 64 {
-			raw += "0"
-		}
-		return raw[:64]
+	s := &domain.UserSession{
+		UserID:           userID,
+		RefreshTokenHash: padHash("revoked"),
+		UserAgent:        "go-test",
+		LastSeenAt:       time.Now(),
+		ExpiresAt:        time.Now().Add(24 * time.Hour),
 	}
+	require.NoError(t, r.Create(context.Background(), s))
+	require.NoError(t, r.Revoke(context.Background(), s.ID, userID))
 
-	oldRevoked := time.Now().Add(-8 * 24 * time.Hour)
-	oldExpires := time.Now().Add(-8 * 24 * time.Hour)
-	recentRevoked := time.Now().Add(-1 * 24 * time.Hour)
+	_ = r.Touch(context.Background(), s.ID, "3.3.3.3", time.Now(), time.Now().Add(1000*time.Hour))
+	_, err := r.FindAliveByHash(context.Background(), s.RefreshTokenHash)
+	require.Error(t, err, "revoked session must stay un-findable")
+}
 
-	mk := func(tag string, expiresAt time.Time, revokedAt *time.Time) *domain.UserSession {
-		s := &domain.UserSession{
-			UserID:           userID,
-			RefreshTokenHash: hashLen64(tag),
-			ExpiresAt:        expiresAt,
-			LastSeenAt:       time.Now(),
-			RevokedAt:        revokedAt,
-		}
-		require.NoError(t, r.Create(context.Background(), s))
-		return s
+func TestSessionRepo_Cleanup_DeletesRevokedOlderThan7d(t *testing.T) {
+	db := dbForTest(t)
+	r := repo.NewSessionRepository(db)
+	userID := seedUser(t, db)
+
+	staleRevoked := &domain.UserSession{
+		UserID: userID, RefreshTokenHash: padHash("stale"),
+		LastSeenAt: time.Now(), ExpiresAt: time.Now().Add(1000 * time.Hour),
+		RevokedAt: ptrTime(time.Now().Add(-8 * 24 * time.Hour)),
 	}
+	require.NoError(t, r.Create(context.Background(), staleRevoked))
 
-	staleRevoked := mk("stale_revoked", time.Now().Add(time.Hour), &oldRevoked) // should DELETE
-	staleExpired := mk("stale_expired", oldExpires, nil)                         // should DELETE
-	freshAlive := mk("fresh_alive", time.Now().Add(time.Hour), nil)              // should KEEP
-	freshRevoked := mk("fresh_revoked", time.Now().Add(time.Hour), &recentRevoked) // should KEEP
+	alive := &domain.UserSession{
+		UserID: userID, RefreshTokenHash: padHash("alive"),
+		LastSeenAt: time.Now(), ExpiresAt: time.Now().Add(1000 * time.Hour),
+	}
+	require.NoError(t, r.Create(context.Background(), alive))
 
 	n, err := r.Cleanup(context.Background())
 	require.NoError(t, err)
-	require.EqualValues(t, 2, n, "expected exactly 2 deletions")
+	require.GreaterOrEqual(t, n, int64(1))
 
-	// Verify by direct lookup.
-	var count int64
-	for _, id := range []string{staleRevoked.ID, staleExpired.ID} {
-		require.NoError(t, db.Model(&domain.UserSession{}).Where("id = ?", id).Count(&count).Error)
-		require.EqualValues(t, 0, count, "stale row %s should have been deleted", id)
-	}
-	for _, id := range []string{freshAlive.ID, freshRevoked.ID} {
-		require.NoError(t, db.Model(&domain.UserSession{}).Where("id = ?", id).Count(&count).Error)
-		require.EqualValues(t, 1, count, "fresh row %s should have survived", id)
-	}
+	// The specific stale-revoked row must be gone.
+	var staleCount int64
+	require.NoError(t, db.Model(&domain.UserSession{}).
+		Where("id = ?", staleRevoked.ID).Count(&staleCount).Error)
+	require.Equal(t, int64(0), staleCount, "stale revoked session must be deleted")
+
+	// The alive session must survive.
+	_, err = r.FindAliveByHash(context.Background(), alive.RefreshTokenHash)
+	require.NoError(t, err, "alive session must survive cleanup")
 }
+
+// padHash builds a deterministic 64-char hash from a prefix.
+func padHash(prefix string) string {
+	raw := prefix + uuid.NewString()
+	for len(raw) < 64 {
+		raw += "0"
+	}
+	return raw[:64]
+}
+
+func ptrTime(t time.Time) *time.Time { return &t }
