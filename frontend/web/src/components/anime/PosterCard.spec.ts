@@ -1,0 +1,65 @@
+import { describe, it, expect, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (k: string, p?: Record<string, unknown>) => (p ? `${k}::${JSON.stringify(p)}` : k) }),
+}))
+
+import PosterCard from './PosterCard.vue'
+import type { AnimeCardModel } from '@/types/card'
+
+const RouterLinkStub = { name: 'RouterLink', props: ['to'], template: '<a :href="to"><slot /></a>' }
+
+function mountCard(model: Partial<AnimeCardModel> = {}) {
+  const full: AnimeCardModel = {
+    id: '1', href: '/anime/1', title: 'Frieren', coverImage: 'http://x/p.jpg',
+    year: 2023, episodes: 28, primaryGenre: 'Adventure',
+    malScore: 8.9, siteScore: 9.4, listStatus: null, progress: null, airing: false,
+    ...model,
+  }
+  return mount(PosterCard, {
+    props: { model: full },
+    global: { stubs: { RouterLink: RouterLinkStub } },
+  })
+}
+
+describe('PosterCard', () => {
+  it('renders title, meta and a link to the anime', () => {
+    const w = mountCard()
+    expect(w.text()).toContain('Frieren')
+    expect(w.text()).toContain('2023')
+    expect(w.text()).toContain('Adventure')
+    expect(w.find('a').attributes('href')).toBe('/anime/1')
+  })
+
+  it('shows both scores with tabular-nums (alignment)', () => {
+    const w = mountCard()
+    const scoreEls = w.findAll('[data-testid="score"]')
+    expect(scoreEls.length).toBe(2)
+    scoreEls.forEach((el) => expect(el.classes()).toContain('tabular-nums'))
+  })
+
+  it('keeps scores visible on hover (no opacity-0 on the score cluster)', () => {
+    const w = mountCard()
+    const cluster = w.find('[data-testid="score-cluster"]')
+    expect(cluster.classes()).not.toContain('opacity-0')
+    expect(cluster.classes()).not.toContain('group-hover:opacity-0')
+  })
+
+  it('renders the centered play+kebab cluster with the kebab', () => {
+    const w = mountCard()
+    expect(w.find('[data-testid="play-cluster"]').exists()).toBe(true)
+    expect(w.findComponent({ name: 'AnimeKebab' }).exists()).toBe(true)
+  })
+
+  it('emits openMenu with the kebab element', async () => {
+    const w = mountCard()
+    await w.findComponent({ name: 'AnimeKebab' }).find('button').trigger('click')
+    expect(w.emitted('openMenu')).toBeTruthy()
+  })
+
+  it('renders the ongoing badge only while airing', () => {
+    expect(mountCard({ airing: true }).find('[data-testid="ongoing"]').exists()).toBe(true)
+    expect(mountCard({ airing: false }).find('[data-testid="ongoing"]').exists()).toBe(false)
+  })
+})

@@ -1,0 +1,163 @@
+<template>
+  <div class="group block relative">
+    <!-- Full-card SPA link, sits behind the kebab cluster -->
+    <router-link
+      :to="model.href"
+      class="absolute inset-0 z-0 rounded-xl"
+      :aria-label="model.title"
+    />
+
+    <div class="card-hover rounded-xl overflow-hidden bg-white/5 border border-white/10 pointer-events-none">
+      <PosterImage
+        :src="model.coverImage"
+        :alt="model.title"
+        ratio="2/3"
+        scrim
+      >
+        <!-- Top-left: quality + DUB + ONGOING stack -->
+        <div class="absolute top-2 left-2 flex flex-col items-start gap-1">
+          <Badge v-if="model.quality" variant="default" size="sm" :overlay="true">{{ model.quality }}</Badge>
+          <Badge v-if="model.hasDub" variant="default" size="sm" :overlay="true">{{ dubLabel }}</Badge>
+          <Badge v-if="model.airing" variant="success" size="sm" :overlay="true" data-testid="ongoing" class="gap-1">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+            {{ airingLabel }}
+          </Badge>
+        </div>
+
+        <!-- Top-right: score cluster — STAYS visible on hover (no opacity-0) -->
+        <div
+          v-if="model.malScore || model.siteScore"
+          data-testid="score-cluster"
+          class="absolute top-2 right-2 flex flex-col items-end gap-1"
+        >
+          <Badge
+            v-if="model.malScore"
+            variant="warning"
+            size="sm"
+            :overlay="true"
+            data-testid="score"
+            class="gap-1 tabular-nums"
+          >
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+            </svg>
+            {{ model.malScore.toFixed(1) }}
+          </Badge>
+          <Badge
+            v-if="model.siteScore"
+            variant="primary"
+            size="sm"
+            :overlay="true"
+            data-testid="score"
+            class="gap-1 tabular-nums"
+          >
+            <!-- ◆ diamond = AnimeEnigma score -->
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2l9 10-9 10L3 12z" />
+            </svg>
+            {{ model.siteScore.toFixed(1) }}
+          </Badge>
+        </div>
+
+        <!-- Bottom-left: watchlist status + progress -->
+        <div
+          v-if="model.listStatus || progressText"
+          class="absolute bottom-2 left-2 flex flex-col gap-1 items-start"
+        >
+          <Badge v-if="model.listStatus" :variant="statusVariant" size="sm" :overlay="true">
+            {{ statusLabel }}
+          </Badge>
+          <Badge v-if="progressText" variant="default" size="sm" :overlay="true">{{ progressText }}</Badge>
+        </div>
+
+        <!-- Centered play + kebab cluster, equal size, hover reveal -->
+        <div
+          data-testid="play-cluster"
+          class="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+        >
+          <span
+            class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(0,212,255,0.5)]"
+            aria-hidden="true"
+          >
+            <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </span>
+          <AnimeKebab
+            :menu-open="menuOpen"
+            class="static opacity-100 scale-100 w-12 h-12"
+            @open="(el: HTMLElement) => emit('openMenu', el)"
+          />
+        </div>
+      </PosterImage>
+
+      <!-- Content -->
+      <div class="p-3">
+        <h3 class="font-medium text-white line-clamp-2 mb-1 group-hover:text-cyan-400 transition-colors">
+          {{ model.title }}
+        </h3>
+        <div class="flex items-center gap-2 text-xs text-white/50">
+          <span v-if="model.year">{{ model.year }}</span>
+          <span v-if="model.year && model.episodes" class="text-white/30">•</span>
+          <span v-if="model.episodes">{{ model.episodes }} {{ episodeLabel }}</span>
+          <span v-if="model.episodes && model.primaryGenre" class="text-white/30">•</span>
+          <span v-if="model.primaryGenre">{{ model.primaryGenre }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Badge from '@/components/ui/Badge.vue'
+import AnimeKebab from './AnimeKebab.vue'
+import PosterImage from './PosterImage.vue'
+import type { AnimeCardModel } from '@/types/card'
+
+const props = defineProps<{
+  model: AnimeCardModel
+  menuOpen?: boolean
+}>()
+
+const emit = defineEmits<{ openMenu: [el: HTMLElement] }>()
+
+const { t } = useI18n()
+
+// Script-level computed labels — avoids $t() in template branches that are
+// asserted in unit tests where the global i18n plugin is NOT installed.
+const airingLabel = computed(() => t('home.airing'))
+const dubLabel = computed(() => t('card.dubBadge'))
+const episodeLabel = computed(() => t('anime.episode'))
+
+const statusKey = computed(() => {
+  const map: Record<string, string> = {
+    watching: 'profile.watchlist.watching',
+    plan_to_watch: 'profile.watchlist.planToWatch',
+    completed: 'profile.watchlist.completed',
+    on_hold: 'profile.watchlist.onHold',
+    dropped: 'profile.watchlist.dropped',
+  }
+  return map[props.model.listStatus || ''] || ''
+})
+
+const statusLabel = computed(() => statusKey.value ? t(statusKey.value) : '')
+
+const statusVariant = computed<'primary' | 'success' | 'warning' | 'destructive' | 'default'>(() => {
+  switch (props.model.listStatus) {
+    case 'watching': return 'primary'
+    case 'completed': return 'success'
+    case 'on_hold': return 'warning'
+    case 'dropped': return 'destructive'
+    default: return 'default'
+  }
+})
+
+const progressText = computed(() => {
+  const p = props.model.progress
+  if (!p || p.current <= 0) return ''
+  if (props.model.listStatus === 'completed') return ''
+  return t('card.episodeProgress', { n: p.current, total: p.total ?? '?' })
+})
+</script>
