@@ -19,9 +19,11 @@ import (
 //	POST /api/analytics/collect    (public — anonymous users tracked; gateway
 //	                                forwards the full path UNCHANGED, same as
 //	                                every other service serves /api/<name>/...)
+//	POST /internal/effects         (internal — BE egress producer sink)
 //	POST /internal/erase           (internal — gateway never proxies /internal/*)
 func NewRouter(
 	collect *handler.CollectHandler,
+	effects *handler.EffectsHandler,
 	admin *handler.AdminHandler,
 	log *logger.Logger,
 	collector *metrics.Collector,
@@ -53,6 +55,10 @@ func NewRouter(
 	// notifications serves /api/notifications/...). /internal/* is hit
 	// directly inside the Docker network and is never gateway-proxied.
 	r.Post("/api/analytics/collect", collect.ServeHTTP)
+	// /internal/effects ingests BE egress/db/cache effect batches from the
+	// libs/tracing producer. Like /internal/erase it lives only here and is
+	// never gateway-proxied (Docker-network-only; T-02-INT).
+	r.Post("/internal/effects", effects.ServeHTTP)
 	r.Post("/internal/erase", admin.Erase)
 
 	return r
