@@ -126,3 +126,6 @@ services/maintenance/maintenance
 .claude/plans/
 tmp/
 .planning/.active-workstream
+
+# Visual brainstorming companion (local-only)
+.superpowers/
