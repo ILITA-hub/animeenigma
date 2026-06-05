@@ -33,6 +33,19 @@ type Config struct {
 
 type RedisCache struct {
 	client *redis.Client
+	// agg is an OPTIONAL cache hit/miss aggregator. When nil (the default), all
+	// Observe hooks below are no-ops, so cache-less call paths and tests need no
+	// aggregator. Wire one with WithAggregator at service boot (plan 06).
+	agg *CacheAggregator
+}
+
+// WithAggregator attaches an optional cache hit/miss aggregator so Get/Set
+// outcomes are recorded as summed `cache` effect rows (AR-EFFECT-02). It returns
+// the receiver for fluent boot wiring. A nil agg is accepted and leaves hooks as
+// no-ops.
+func (c *RedisCache) WithAggregator(agg *CacheAggregator) *RedisCache {
+	c.agg = agg
+	return c
 }
 
 func New(cfg Config) (*RedisCache, error) {
@@ -59,21 +72,33 @@ func (c *RedisCache) Get(ctx context.Context, key string, dest interface{}) erro
 		if err == redis.Nil {
 			metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
 			metrics.CacheOperationsTotal.WithLabelValues("get", "miss").Inc()
+			if c.agg != nil {
+				c.agg.Observe(ctx, KeyClass(key), "miss")
+			}
 			return ErrNotFound
 		}
 		metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
 		metrics.CacheOperationsTotal.WithLabelValues("get", "error").Inc()
+		if c.agg != nil {
+			c.agg.Observe(ctx, KeyClass(key), "error")
+		}
 		return fmt.Errorf("cache get: %w", err)
 	}
 
 	if err := json.Unmarshal(data, dest); err != nil {
 		metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
 		metrics.CacheOperationsTotal.WithLabelValues("get", "error").Inc()
+		if c.agg != nil {
+			c.agg.Observe(ctx, KeyClass(key), "error")
+		}
 		return fmt.Errorf("cache unmarshal: %w", err)
 	}
 
 	metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
 	metrics.CacheOperationsTotal.WithLabelValues("get", "hit").Inc()
+	if c.agg != nil {
+		c.agg.Observe(ctx, KeyClass(key), "hit")
+	}
 	return nil
 }
 
@@ -83,17 +108,26 @@ func (c *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl
 	if err != nil {
 		metrics.CacheOperationDuration.WithLabelValues("set").Observe(time.Since(start).Seconds())
 		metrics.CacheOperationsTotal.WithLabelValues("set", "error").Inc()
+		if c.agg != nil {
+			c.agg.Observe(ctx, KeyClass(key), "error")
+		}
 		return fmt.Errorf("cache marshal: %w", err)
 	}
 
 	if err := c.client.Set(ctx, key, data, ttl).Err(); err != nil {
 		metrics.CacheOperationDuration.WithLabelValues("set").Observe(time.Since(start).Seconds())
 		metrics.CacheOperationsTotal.WithLabelValues("set", "error").Inc()
+		if c.agg != nil {
+			c.agg.Observe(ctx, KeyClass(key), "error")
+		}
 		return fmt.Errorf("cache set: %w", err)
 	}
 
 	metrics.CacheOperationDuration.WithLabelValues("set").Observe(time.Since(start).Seconds())
 	metrics.CacheOperationsTotal.WithLabelValues("set", "success").Inc()
+	if c.agg != nil {
+		c.agg.Observe(ctx, KeyClass(key), "success")
+	}
 	return nil
 }
 
