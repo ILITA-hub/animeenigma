@@ -261,7 +261,7 @@ function browseCardModel(anime: (typeof animeList.value)[number]) {
   const id = String(anime.id)
   const sr = siteRatings.value[id]
   const pe = browseProgress.value.get(id) ?? null
-  return fromCatalogAnime(anime as never, {
+  return fromCatalogAnime(anime, {
     siteScore: sr && sr.total_reviews > 0 ? sr.average_score : undefined,
     listStatus: (getListStatus(anime.id) as ListStatus | null) ?? null,
     progress: pe && pe.latest_episode > 0
