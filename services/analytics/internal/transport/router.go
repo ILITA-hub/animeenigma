@@ -21,10 +21,12 @@ import (
 //	                                every other service serves /api/<name>/...)
 //	POST /internal/effects         (internal — BE egress producer sink)
 //	POST /internal/erase           (internal — gateway never proxies /internal/*)
+//	POST /internal/read-thresholds/recompute (internal — scheduler daily trigger)
 func NewRouter(
 	collect *handler.CollectHandler,
 	effects *handler.EffectsHandler,
 	admin *handler.AdminHandler,
+	readThresholds *handler.ReadThresholdHandler,
 	log *logger.Logger,
 	collector *metrics.Collector,
 ) http.Handler {
@@ -60,6 +62,13 @@ func NewRouter(
 	// never gateway-proxied (Docker-network-only; T-02-INT).
 	r.Post("/internal/effects", effects.ServeHTTP)
 	r.Post("/internal/erase", admin.Erase)
+	// /internal/read-thresholds/recompute triggers the daily db_read P95
+	// compute + read_thresholds Redis-hash publish (D-03). The scheduler service
+	// (no ClickHouse connection) POSTs here on its daily cron. Docker-network
+	// only — never gateway-proxied (T-03-15).
+	if readThresholds != nil {
+		r.Post("/internal/read-thresholds/recompute", readThresholds.ServeHTTP)
+	}
 
 	return r
 }

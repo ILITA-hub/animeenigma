@@ -216,6 +216,48 @@ func EraseByAnonymousIDCH(ctx context.Context, conn driver.Conn, anonymousID str
 		"ALTER TABLE identities DELETE WHERE anonymous_id = ?", anonymousID)
 }
 
+// ReadThresholdRow is one (operation, target) -> p95 duration row produced by
+// the daily db_read P95 query. p95_ms is the 95th-percentile of duration_ms for
+// that key over the lookback window.
+type ReadThresholdRow struct {
+	Operation string
+	Target    string
+	P95MS     float64
+}
+
+// QueryReadThresholdP95 runs the daily per-(operation, target) db_read P95
+// query against the ClickHouse events table over the last `lookbackDays` days.
+// It keeps only keys with at least minSamples rows (HAVING count() >=
+// minSamples) so tiny-sample keys are dropped — those fall back to the gate's
+// static cold-start default (D-03 / Pitfall 5). This READS the events table
+// only; it records NO effect (D-16 — analytics is excluded from recording).
+//
+// The query is parameterized (no string interpolation of the bounds) so it is
+// injection-safe even though both args are int-typed.
+func QueryReadThresholdP95(ctx context.Context, conn driver.Conn, lookbackDays, minSamples int) ([]ReadThresholdRow, error) {
+	const q = `SELECT operation, target, quantile(0.95)(duration_ms) AS p95_ms
+FROM events
+WHERE effect_kind = 'db_read' AND timestamp >= now() - INTERVAL ? DAY
+GROUP BY operation, target
+HAVING count() >= ?`
+	rows, err := conn.Query(ctx, q, lookbackDays, minSamples)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ReadThresholdRow
+	for rows.Next() {
+		var r ReadThresholdRow
+		// quantile(0.95)(UInt32) returns Float64 in ClickHouse.
+		if err := rows.Scan(&r.Operation, &r.Target, &r.P95MS); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // PurgeOlderThanCH is a no-op: ClickHouse retention is handled declaratively by
 // the events table's native `TTL ... DELETE`, so the Go purge cron is retired
 // for the ClickHouse backend (RESEARCH §Don't Hand-Roll). cutoff is accepted
