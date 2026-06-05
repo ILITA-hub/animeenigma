@@ -77,6 +77,29 @@ func main() {
 	}
 	defer redisCache.Close()
 
+	// Activity-register effect producer (AR-EFFECT-01). Non-blocking +
+	// drop-on-full so an analytics outage never affects auth requests.
+	// SetGlobalSink also lights up tracing.WrapTransport recording for any
+	// shared HTTP client this service uses.
+	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://analytics:8092"
+	}
+	effectProducer := tracing.NewProducer(tracing.ProducerConfig{AnalyticsURL: analyticsURL})
+	effectProducer.Start()
+	defer effectProducer.Stop()
+	tracing.SetGlobalSink(effectProducer)
+
+	// AR-EFFECT-01 (D-15): GORM db_write/db_read effect callbacks + the daily-P95
+	// ReadGate refresher (D-03), reusing the existing Redis client as HashReader.
+	dbEffectsCtx, dbEffectsCancel := context.WithCancel(context.Background())
+	defer dbEffectsCancel()
+	dbEffectsStop, err := gormtrace.WireDBEffects(dbEffectsCtx, db.DB, tracing.GlobalSink(), redisCache)
+	if err != nil {
+		log.Warnw("db-effect callbacks disabled", "error", err)
+	}
+	defer dbEffectsStop()
+
 	// Initialize repositories
 	userRepo := repo.NewUserRepository(db.DB)
 	sessionRepo := repo.NewSessionRepository(db.DB)

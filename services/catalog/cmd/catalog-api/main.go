@@ -132,6 +132,33 @@ func main() {
 	defer effectProducer.Stop()
 	tracing.SetGlobalSink(effectProducer)
 
+	// AR-EFFECT-01 (D-15): wire the GORM db_write (always) + db_read (P95-gated)
+	// effect callbacks + the daily-P95 ReadGate refresher (D-03). The sink is the
+	// Producer just installed; the existing redisCache doubles as the HashReader
+	// for the read_thresholds snapshot. dbEffectsStop halts the refresher on
+	// shutdown.
+	dbEffectsCtx, dbEffectsCancel := context.WithCancel(context.Background())
+	defer dbEffectsCancel()
+	dbEffectsStop, err := gormtrace.WireDBEffects(dbEffectsCtx, db.DB, tracing.GlobalSink(), redisCache)
+	if err != nil {
+		log.Warnw("db-effect callbacks disabled", "error", err)
+	}
+	defer dbEffectsStop()
+
+	// AR-EFFECT-02 (D-17): catalog is the cache-effect service. Attach the cache
+	// hit/miss aggregator to the shared RedisCache so Get/Set outcomes flush as
+	// summed `cache` effect rows keyed by key-class. The aggregator MUST flush
+	// BEFORE the producer drains so the final summed rows are shipped (mirror
+	// streaming's HLSSessions ordering). defers run LIFO, so registering this
+	// Stop AFTER effectProducer.Stop() above guarantees cacheAggregator.Stop()
+	// (flush) runs first, then the producer drains. gateway is intentionally N/A
+	// (its rate-limit cache uses a raw redis.Client, not libs/cache.RedisCache —
+	// the aggregator's only hook seam); rooms/watch-together are skipped too.
+	cacheAggregator := cache.NewCacheAggregator(tracing.GlobalSink(), 0, 0)
+	redisCache.WithAggregator(cacheAggregator)
+	cacheAggregator.Start()
+	defer cacheAggregator.Stop()
+
 	// Initialize external parsers
 	shikimoriClient := shikimori.NewClient(cfg.Shikimori, log)
 

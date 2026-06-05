@@ -51,6 +51,19 @@ func SetGlobalSink(sink EffectSink) {
 	globalSink.Store(&sink)
 }
 
+// GlobalSink returns the process-wide EffectSink installed by SetGlobalSink, or
+// nil when none is set. The GORM db-effect callbacks (gormtrace.RegisterEffectCallbacks)
+// and the cache aggregator (cache.NewCacheAggregator) reach the running Producer
+// through this getter at boot wiring, instead of threading the Producer handle
+// through every constructor. Wire it AFTER SetGlobalSink so the returned sink is
+// the live Producer (a nil sink leaves those hooks as no-ops).
+func GlobalSink() EffectSink {
+	if sp := globalSink.Load(); sp != nil {
+		return *sp
+	}
+	return nil
+}
+
 // WrapTransport wraps an existing RoundTripper so outbound requests get a
 // client span and the active trace context is injected (W3C traceparent) using
 // the global propagator. Pass nil to wrap http.DefaultTransport. When a

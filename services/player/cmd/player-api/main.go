@@ -209,6 +209,27 @@ func main() {
 			"host", cfg.Redis.Host, "port", cfg.Redis.Port, "error", err)
 	}
 
+	// Activity-register effect producer (AR-EFFECT-01). Non-blocking +
+	// drop-on-full so an analytics outage never affects player requests.
+	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://analytics:8092"
+	}
+	effectProducer := tracing.NewProducer(tracing.ProducerConfig{AnalyticsURL: analyticsURL})
+	effectProducer.Start()
+	defer effectProducer.Stop()
+	tracing.SetGlobalSink(effectProducer)
+
+	// AR-EFFECT-01 (D-15): GORM db_write/db_read effect callbacks + the daily-P95
+	// ReadGate refresher (D-03), reusing the existing Redis client as HashReader.
+	dbEffectsCtx, dbEffectsCancel := context.WithCancel(context.Background())
+	defer dbEffectsCancel()
+	dbEffectsStop, err := gormtrace.WireDBEffects(dbEffectsCtx, db.DB, tracing.GlobalSink(), redisCache)
+	if err != nil {
+		log.Warnw("db-effect callbacks disabled", "error", err)
+	}
+	defer dbEffectsStop()
+
 	// Phase 10: rec engine population cron (60-minute ticker).
 	// Spawned with a derived context so graceful shutdown can cancel it
 	// before the HTTP server stops accepting traffic.

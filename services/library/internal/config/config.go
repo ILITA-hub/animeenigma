@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
 )
 
@@ -19,6 +20,10 @@ import (
 type Config struct {
 	Server        ServerConfig
 	Database      database.Config
+	// Redis is added in v4.0 Phase 3 (AR-EFFECT-01) so the GORM db_read P95
+	// ReadGate refresher has a Redis handle to snapshot the read_thresholds
+	// hash. The shared REDIS_* trio is already provided by docker-compose.
+	Redis         cache.Config
 	JWT           authz.JWTConfig
 	Nyaa          NyaaConfig
 	AnimeTosho    AnimeToshoConfig
@@ -147,6 +152,12 @@ func Load() (*Config, error) {
 			Password: getEnv("DB_PASSWORD", "postgres"),
 			Database: getEnv("DB_NAME", "library"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+		},
+		Redis: cache.Config{
+			Host:     getEnv("REDIS_HOST", "redis"),
+			Port:     getEnvInt("REDIS_PORT", 6379),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvInt("REDIS_DB", 0),
 		},
 		JWT: authz.JWTConfig{
 			Secret:          getEnv("JWT_SECRET", ""),
