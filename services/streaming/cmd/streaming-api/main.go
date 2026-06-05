@@ -69,8 +69,29 @@ func main() {
 	// Initialize services
 	streamingService := service.NewStreamingService(storage, proxy, redisCache, cfg, log)
 
+	// Egress effect producer + HLS session aggregator (AR-EGRESS-04/05).
+	// The producer ships aggregated egress rows to analytics /internal/effects;
+	// it is non-blocking + drop-on-full so an analytics outage never affects
+	// playback. The aggregator folds a watch's many segment GETs (correlated by
+	// the per-manifest ?sess= token) into ONE row per (session, host) on idle
+	// flush — never one row per ~6s segment.
+	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://analytics:8092"
+	}
+	effectProducer := tracing.NewProducer(tracing.ProducerConfig{AnalyticsURL: analyticsURL})
+	effectProducer.Start()
+	defer effectProducer.Stop()
+	tracing.SetGlobalSink(effectProducer)
+
+	hlsSessions := service.NewHLSSessions(effectProducer, 0, 0) // defaults: 45s idle, 10k cap
+	hlsSessions.Start()
+	// Flush all open sessions BEFORE the producer drains so the final rows are
+	// shipped (D-06 graceful flush).
+	defer hlsSessions.Stop()
+
 	// Initialize handlers
-	streamHandler := handler.NewStreamHandler(streamingService, log)
+	streamHandler := handler.NewStreamHandlerWithSessions(streamingService, hlsSessions, log)
 	uploadHandler := handler.NewUploadHandler(streamingService, log)
 
 	// Initialize image proxy

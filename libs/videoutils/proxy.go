@@ -2,6 +2,8 @@ package videoutils
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -9,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -108,22 +111,66 @@ func newIPv4Transport() *http.Transport {
 	return t
 }
 
+// countReader wraps an io.Reader and atomically tallies the number of bytes
+// read through it. It is the bytes_in (upstream ingress) counter for the
+// egress register: wrapping resp.Body BEFORE io.Copy/rateLimitedCopy lets the
+// proxy count exactly the bytes pulled from upstream WITHOUT buffering the
+// whole body (D-05 — never io.ReadAll the stream path). The atomic counter is
+// safe to read concurrently while the copy is in flight (T-02-LOCK: no lock is
+// held across the copy).
+type countReader struct {
+	r io.Reader
+	n *uint64
+}
+
+func (c *countReader) Read(p []byte) (int, error) {
+	nr, err := c.r.Read(p)
+	if nr > 0 {
+		atomic.AddUint64(c.n, uint64(nr))
+	}
+	return nr, err
+}
+
+// newSessToken mints a fresh per-manifest correlation id. It is crypto/rand
+// derived (NOT from user_id/PII — Security V3 / T-02-PII / T-02-SESS) and
+// carries NO authority: it only groups a manifest's segment GETs into one
+// aggregated egress row (AR-EGRESS-04). On the (vanishingly unlikely) rand
+// failure it returns "" — the caller simply omits the param and that
+// manifest's segments fall back to per-request (unaggregated) accounting.
+func newSessToken() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b[:])
+}
+
 // ProxyStream proxies a video stream from an external URL
 func (p *VideoProxy) ProxyStream(ctx context.Context, sourceURL string, w http.ResponseWriter, r *http.Request) error {
+	_, _, err := p.ProxyStreamCounted(ctx, sourceURL, w, r)
+	return err
+}
+
+// ProxyStreamCounted is ProxyStream that additionally reports the bytes_in
+// (upstream resp.Body) and bytes_out (client sink) counts for this call so the
+// streaming handler can fold them into the per-session egress tally
+// (AR-EGRESS-05). bytes_out is the io.Copy return; bytes_in is the countReader
+// total. Both are zero on early-return errors before the copy.
+func (p *VideoProxy) ProxyStreamCounted(ctx context.Context, sourceURL string, w http.ResponseWriter, r *http.Request) (bytesIn, bytesOut uint64, _ error) {
 	// Validate URL is from allowed domain
 	parsed, err := url.Parse(sourceURL)
 	if err != nil {
-		return fmt.Errorf("invalid source url: %w", err)
+		return 0, 0, fmt.Errorf("invalid source url: %w", err)
 	}
 
 	if !p.isDomainAllowed(parsed.Host) {
-		return fmt.Errorf("domain not allowed: %s", parsed.Host)
+		return 0, 0, fmt.Errorf("domain not allowed: %s", parsed.Host)
 	}
 
 	// Create upstream request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return 0, 0, fmt.Errorf("create request: %w", err)
 	}
 
 	// Set headers for upstream request
@@ -140,7 +187,7 @@ func (p *VideoProxy) ProxyStream(ctx context.Context, sourceURL string, w http.R
 	// Make upstream request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("upstream request: %w", err)
+		return 0, 0, fmt.Errorf("upstream request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -160,18 +207,21 @@ func (p *VideoProxy) ProxyStream(ctx context.Context, sourceURL string, w http.R
 	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Stream the response
-	_, err = io.Copy(w, resp.Body)
+	// Stream the response, counting upstream bytes_in (countReader) and
+	// client bytes_out (io.Copy return) — no buffering (D-05).
+	src := &countReader{r: resp.Body, n: &bytesIn}
+	written, err := io.Copy(w, src)
+	bytesOut = uint64(written)
 	if err != nil {
 		// Client disconnected, not an error
 		if strings.Contains(err.Error(), "broken pipe") ||
 			strings.Contains(err.Error(), "connection reset") {
-			return nil
+			return bytesIn, bytesOut, nil
 		}
-		return fmt.Errorf("stream copy: %w", err)
+		return bytesIn, bytesOut, fmt.Errorf("stream copy: %w", err)
 	}
 
-	return nil
+	return bytesIn, bytesOut, nil
 }
 
 // GetStreamInfo fetches information about a video stream without downloading
@@ -456,10 +506,21 @@ func (e *DomainNotAllowedError) Error() string {
 // ProxyWithReferer proxies a stream with a custom Referer header
 // This is needed for HLS streams that require specific referer for authentication
 func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) error {
+	_, _, err := p.ProxyWithRefererCounted(ctx, sourceURL, referer, w, r)
+	return err
+}
+
+// ProxyWithRefererCounted is ProxyWithReferer that additionally reports the
+// per-call bytes_in (upstream resp.Body) and bytes_out (client sink) so the
+// streaming handler can Observe(...) them into the per-session HLS tally
+// (AR-EGRESS-04/05). bytes_in is counted via a countReader wrapping resp.Body
+// before io.Copy/rateLimitedCopy; bytes_out is the copy's write total. For an
+// M3U8 rewrite (the manifest path) the counts reflect the rewritten payload.
+func (p *VideoProxy) ProxyWithRefererCounted(ctx context.Context, sourceURL, referer string, w http.ResponseWriter, r *http.Request) (bytesIn, bytesOut uint64, _ error) {
 	// Validate URL
 	parsed, err := url.Parse(sourceURL)
 	if err != nil {
-		return fmt.Errorf("invalid source url: %w", err)
+		return 0, 0, fmt.Errorf("invalid source url: %w", err)
 	}
 
 	// Check if domain is allowed for HLS proxy. A valid provenance token
@@ -468,13 +529,13 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 	// CDNs (megaplay/mewstream) are served without a static per-domain entry.
 	if !isHLSDomainAllowed(parsed.Host) &&
 		!validProvenanceToken(sourceURL, r.URL.Query().Get("exp"), r.URL.Query().Get("sig"), time.Now()) {
-		return &DomainNotAllowedError{Domain: parsed.Host}
+		return 0, 0, &DomainNotAllowedError{Domain: parsed.Host}
 	}
 
 	// Create upstream request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return 0, 0, fmt.Errorf("create request: %w", err)
 	}
 
 	// Set headers for upstream request
@@ -495,7 +556,7 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 	// Make upstream request
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("upstream request: %w", err)
+		return 0, 0, fmt.Errorf("upstream request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -509,9 +570,9 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 			strings.Contains(string(body), "<html")
 
 		if isHTML {
-			return &UpstreamError{StatusCode: resp.StatusCode, Domain: parsed.Host, HTML: true}
+			return 0, 0, &UpstreamError{StatusCode: resp.StatusCode, Domain: parsed.Host, HTML: true}
 		}
-		return &UpstreamError{StatusCode: resp.StatusCode, Domain: parsed.Host}
+		return 0, 0, &UpstreamError{StatusCode: resp.StatusCode, Domain: parsed.Host}
 	}
 
 	// Check if this is an M3U8 file that needs URL rewriting
@@ -527,11 +588,15 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
 
 	if isM3U8 && resp.StatusCode == http.StatusOK {
-		// Read and rewrite M3U8 content
+		// Read and rewrite M3U8 content. This is a small manifest (not a
+		// segment stream) so a bounded ReadAll is acceptable here — the D-05
+		// "never ReadAll the stream path" rule applies to segment bodies, which
+		// take the io.Copy/rateLimitedCopy path below.
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return fmt.Errorf("read m3u8 body: %w", err)
+			return 0, 0, fmt.Errorf("read m3u8 body: %w", err)
 		}
+		bytesIn = uint64(len(body))
 
 		// Rewrite URLs in the M3U8
 		rewritten := rewriteM3U8URLs(string(body), sourceURL, referer)
@@ -548,8 +613,9 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 
 		w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
 		w.WriteHeader(resp.StatusCode)
-		w.Write([]byte(rewritten))
-		return nil
+		n, _ := w.Write([]byte(rewritten))
+		bytesOut = uint64(n)
+		return bytesIn, bytesOut, nil
 	}
 
 	// Copy response headers for non-M3U8 content
@@ -586,14 +652,22 @@ func (p *VideoProxy) ProxyWithReferer(ctx context.Context, sourceURL, referer st
 	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Stream the response — rate limit HLS segments (5MB/s) but not direct video files
+	// Stream the response — rate limit HLS segments (5MB/s) but not direct
+	// video files. Wrap resp.Body in a countReader (bytes_in) so the upstream
+	// ingress is tallied WITHOUT buffering (D-05); the copy writes everything
+	// it reads to the client sink, so bytes_out == bytes_in on success here
+	// (the handler's CountingResponseWriter is the authoritative client-egress
+	// counter, but ProxyWithRefererCounted reports its own copy total).
+	src := &countReader{r: resp.Body, n: &bytesIn}
 	if isDirectVideo {
-		io.Copy(w, resp.Body)
+		written, _ := io.Copy(w, src)
+		bytesOut = uint64(written)
 	} else {
-		rateLimitedCopy(w, resp.Body, 5*1024*1024) // 5MB/s for HLS segments
+		_ = rateLimitedCopy(w, src, 5*1024*1024) // 5MB/s for HLS segments
+		bytesOut = bytesIn
 	}
 
-	return nil
+	return bytesIn, bytesOut, nil
 }
 
 // rewriteM3U8URLs rewrites URLs in an M3U8 playlist to go through the proxy
@@ -619,6 +693,12 @@ func rewriteM3U8URLs(content, baseURL, referer string) string {
 		basePath += "/"
 	}
 
+	// Mint ONE per-manifest correlation token. Every segment/child URL we
+	// rewrite from THIS manifest carries the same token, so the streaming
+	// service can group all of a watch's segment GETs into a single
+	// aggregated egress row (AR-EGRESS-04). One manifest fetch → one token.
+	sess := newSessToken()
+
 	var result strings.Builder
 	lines := strings.Split(content, "\n")
 
@@ -634,7 +714,7 @@ func rewriteM3U8URLs(content, baseURL, referer string) string {
 
 		// Handle lines with URI="..." attributes (like #EXT-X-KEY)
 		if strings.Contains(trimmed, "URI=\"") {
-			rewritten := rewriteURIAttribute(line, basePath, referer)
+			rewritten := rewriteURIAttribute(line, basePath, referer, sess)
 			result.WriteString(rewritten)
 			result.WriteString("\n")
 			continue
@@ -642,7 +722,7 @@ func rewriteM3U8URLs(content, baseURL, referer string) string {
 
 		// This is a URL line (not a comment)
 		if !strings.HasPrefix(trimmed, "#") {
-			rewrittenURL := rewriteHLSURL(trimmed, basePath, referer)
+			rewrittenURL := rewriteHLSURL(trimmed, basePath, referer, sess)
 			result.WriteString(rewrittenURL)
 			result.WriteString("\n")
 			continue
@@ -655,8 +735,13 @@ func rewriteM3U8URLs(content, baseURL, referer string) string {
 	return strings.TrimSuffix(result.String(), "\n")
 }
 
-// rewriteHLSURL rewrites a single HLS URL to go through the proxy
-func rewriteHLSURL(urlStr, basePath, referer string) string {
+// rewriteHLSURL rewrites a single HLS URL to go through the proxy. The sess
+// argument is the per-manifest correlation token (minted once by the caller
+// rewriteM3U8URLs); when non-empty it is appended as &sess=<token> so the
+// streaming service can aggregate this manifest's segment GETs into one egress
+// row (AR-EGRESS-04). Already-proxied URLs are returned untouched (the existing
+// skip rule), so the token is only added to freshly-rewritten URLs.
+func rewriteHLSURL(urlStr, basePath, referer, sess string) string {
 	// Skip if already a proxy URL (check both encoded and decoded)
 	if strings.Contains(urlStr, "/api/streaming/hls-proxy") ||
 		strings.Contains(urlStr, "%2Fapi%2Fstreaming%2Fhls-proxy") ||
@@ -695,11 +780,20 @@ func rewriteHLSURL(urlStr, basePath, referer string) string {
 	exp, sig := signProvenance(absoluteURL, time.Now())
 	proxyURL += "&exp=" + exp + "&sig=" + sig
 
+	// Per-manifest session correlation token (AR-EGRESS-04). Non-authoritative
+	// (crypto/rand, carries no authority — T-02-SESS); only groups segment GETs
+	// into one aggregated egress row. Omitted when empty (rand failure) so the
+	// segments simply fall back to per-request accounting.
+	if sess != "" {
+		proxyURL += "&sess=" + sess
+	}
+
 	return proxyURL
 }
 
-// rewriteURIAttribute rewrites URI="..." attributes in M3U8 tags
-func rewriteURIAttribute(line, basePath, referer string) string {
+// rewriteURIAttribute rewrites URI="..." attributes in M3U8 tags. sess is the
+// per-manifest correlation token threaded through from rewriteM3U8URLs.
+func rewriteURIAttribute(line, basePath, referer, sess string) string {
 	// Find URI="..." and rewrite the URL inside
 	uriStart := strings.Index(line, "URI=\"")
 	if uriStart == -1 {
@@ -713,7 +807,7 @@ func rewriteURIAttribute(line, basePath, referer string) string {
 	}
 
 	originalURI := line[uriStart : uriStart+uriEnd]
-	rewrittenURI := rewriteHLSURL(originalURI, basePath, referer)
+	rewrittenURI := rewriteHLSURL(originalURI, basePath, referer, sess)
 
 	return line[:uriStart] + rewrittenURI + line[uriStart+uriEnd:]
 }

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync/atomic"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/streaming/internal/service"
 	"golang.org/x/sync/semaphore"
@@ -29,10 +31,17 @@ var (
 type StreamHandler struct {
 	streamingService *service.StreamingService
 	videoProxy       *videoutils.VideoProxy
+	hlsSessions      *service.HLSSessions // egress aggregator (may be nil — no-op)
 	log              *logger.Logger
 }
 
 func NewStreamHandler(streamingService *service.StreamingService, log *logger.Logger) *StreamHandler {
+	return NewStreamHandlerWithSessions(streamingService, nil, log)
+}
+
+// NewStreamHandlerWithSessions wires the HLS egress aggregator (AR-EGRESS-04).
+// A nil aggregator degrades to no egress accounting (proxy behavior unchanged).
+func NewStreamHandlerWithSessions(streamingService *service.StreamingService, hlsSessions *service.HLSSessions, log *logger.Logger) *StreamHandler {
 	// Create video proxy with default config for HLS proxying
 	proxyCfg := videoutils.DefaultProxyConfig()
 	proxyCfg.AllowedDomains = videoutils.HLSProxyAllowedDomains
@@ -40,6 +49,7 @@ func NewStreamHandler(streamingService *service.StreamingService, log *logger.Lo
 	return &StreamHandler{
 		streamingService: streamingService,
 		videoProxy:       videoutils.NewVideoProxy(proxyCfg),
+		hlsSessions:      hlsSessions,
 		log:              log,
 	}
 }
@@ -199,8 +209,16 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 		Counter:        metrics.ProxyBytesTransferredTotal.WithLabelValues("hls"),
 	}
 
-	// Proxy the request with the provided referer
-	if err := h.videoProxy.ProxyWithReferer(r.Context(), sourceURL, referer, cw, r); err != nil {
+	// Proxy the request with the provided referer, capturing per-call byte
+	// counts so a segment GET bearing a ?sess= token can be folded into one
+	// aggregated egress row (AR-EGRESS-04 / AR-EGRESS-05). The ?sess= token was
+	// injected into this segment URL when its parent manifest was rewritten;
+	// the upstream host is derived from the proxied URL.
+	bytesIn, bytesOut, err := h.videoProxy.ProxyWithRefererCounted(r.Context(), sourceURL, referer, cw, r)
+	if err == nil {
+		h.observeEgress(r, sourceURL, bytesIn, bytesOut)
+	}
+	if err != nil {
 		// Check if this is an upstream CDN error (403, 5xx, Cloudflare block, etc.)
 		var upstreamErr *videoutils.UpstreamError
 		if errors.As(err, &upstreamErr) {
@@ -245,6 +263,42 @@ func (h *StreamHandler) HLSProxy(w http.ResponseWriter, r *http.Request) {
 		// headers are already committed, so this is safe in both states.
 		http.Error(w, "internal proxy error", http.StatusBadGateway)
 	}
+}
+
+// observeEgress folds one proxied HLS request into the per-session egress
+// aggregator. Only requests bearing a ?sess= token participate — those are the
+// segment/child GETs whose parent manifest was rewritten through the proxy
+// (rewriteHLSURL minted the token). The manifest fetch itself carries no
+// ?sess= and is skipped here (its bytes are small and uncorrelated).
+//
+// Attribution (provider/operation/user_id) is captured on first touch via
+// Mint, which backfills empty fields without resetting the byte tally. Browser
+// segment GETs usually have no baggage, so these are typically empty — the
+// manifest-fetch baggage is the intended source per the plan, but the in-
+// manifest token is not visible to the handler, so first-touch capture from
+// the segment request context is the available signal. Provider is derived
+// from the upstream host.
+func (h *StreamHandler) observeEgress(r *http.Request, sourceURL string, bytesIn, bytesOut uint64) {
+	if h.hlsSessions == nil {
+		return
+	}
+	sess := r.URL.Query().Get("sess")
+	if sess == "" {
+		return
+	}
+	host := ""
+	if u, err := url.Parse(sourceURL); err == nil {
+		host = u.Host
+	}
+
+	// Capture attribution on first touch (idempotent backfill).
+	origin, operation := tracing.ReadBaggage(r.Context())
+	_ = origin
+	provider := tracing.ProviderFromContext(r.Context())
+	userID := tracing.UserIDFromContext(r.Context())
+	h.hlsSessions.Mint(sess, host, provider, operation, userID)
+
+	h.hlsSessions.Observe(sess, host, bytesIn, bytesOut)
 }
 
 // GetProxyStatus returns the current HLS proxy load status
