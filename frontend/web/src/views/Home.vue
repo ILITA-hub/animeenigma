@@ -64,7 +64,7 @@
           <PosterRow
             v-for="anime in ongoingAnime"
             :key="anime.id"
-            :model="fromHomeAnime(anime, { siteScore: siteRatings[anime.id] && siteRatings[anime.id].total_reviews > 0 ? siteRatings[anime.id].average_score : undefined })"
+            :model="homeCardModel(anime)"
             variant="ongoing"
             :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
             @open-menu="(el) => openHomeMenuAt(el, anime)"
@@ -88,7 +88,7 @@
           <PosterRow
             v-for="(anime, index) in topAnime"
             :key="anime.id"
-            :model="fromHomeAnime(anime, { siteScore: siteRatings[anime.id] && siteRatings[anime.id].total_reviews > 0 ? siteRatings[anime.id].average_score : undefined })"
+            :model="homeCardModel(anime)"
             variant="top"
             :rank="index + 1"
             :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
@@ -180,21 +180,7 @@ import HeroSpotlightBlock from '@/components/home/spotlight/HeroSpotlightBlock.v
 import HomeColumn from '@/components/home/HomeColumn.vue'
 import { PosterRow } from '@/components/anime'
 import { fromHomeAnime } from '@/utils/toCardModel'
-
-interface HomeAnime {
-  id: string
-  name?: string
-  name_ru?: string
-  name_jp?: string
-  poster_url?: string
-  score?: number
-  episodes_count?: number
-  episodes_aired?: number // Phase 9 (UX-17) — used to construct ?episode={N+1}
-  next_episode_at?: string // Phase 9 (UX-17) — gates the episode-aware URL
-  year?: number
-  status?: string
-  season?: string
-}
+import type { HomeAnime } from '@/stores/home'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -235,6 +221,13 @@ function ctxAnimeFromHome(anime: HomeAnime) {
     episodes: anime.episodes_count,
     status: anime.status,
   }
+}
+
+function homeCardModel(anime: HomeAnime) {
+  const sr = siteRatings.value[anime.id]
+  return fromHomeAnime(anime, {
+    siteScore: sr && sr.total_reviews > 0 ? sr.average_score : undefined,
+  })
 }
 
 function homeOpts(anime: HomeAnime) {
