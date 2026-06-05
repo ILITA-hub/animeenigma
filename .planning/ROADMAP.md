@@ -72,7 +72,7 @@
 - [x] 03-02-PLAN.md — Tempo metrics_generator (span-metrics + service-graphs) + Prometheus remote-write + Grafana Tempo→Prometheus wiring (Wave 1, AR-EFFECT-04)
 - [x] 03-03-PLAN.md — GORM DB-effect callbacks (db_write always, db_read P95-gated) + in-memory ReadGate snapshot (Wave 2, AR-EFFECT-01)
 - [x] 03-04-PLAN.md — Cache aggregator (HLSSessions clone) + key-class classifier + cache.go hit/miss hooks (Wave 2, AR-EFFECT-02)
-- [ ] 03-05-PLAN.md — Daily ClickHouse P95 → read_thresholds Redis hash + scheduler cron + ThresholdRefresher ticker (Wave 3, AR-EFFECT-01)
+- [x] 03-05-PLAN.md — Daily ClickHouse P95 → read_thresholds Redis hash + scheduler cron + ThresholdRefresher ticker (Wave 3, AR-EFFECT-01)
 - [ ] 03-06-PLAN.md — Per-service boot wiring (7 GORM + catalog cache; gateway N/A — rate-limit cache bypasses libs/cache) + live ClickHouse/Prometheus/Grafana phase-gate verification (Wave 4, AR-EFFECT-01..04, non-autonomous)
 **Metrics**: `UXΔ = +1 (Better)` (operation-level cost attribution; the "expensive popular button" insight derives from here) · `CDI = 0.14 * 21` (GORM hook + cache hook + a `runtime.Callers` attribution helper + a Tempo config flag; new-but-compatible patterns across the DB/cache libs, attribution is the novel piece) · `MVQ = Griffin 85%/84%` (elegantly fuses GORM hooks, cache hooks, stack-walking, and Tempo span-metrics into one attribution story; strong slop-resistance)
 
@@ -132,7 +132,7 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
 | 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
-| 3 | v4.0 | 4/6 | In Progress|  |
+| 3 | v4.0 | 5/6 | In Progress|  |
 | 4 | v4.0 | 0/? | Not started | — |
 | 5 | v4.0 | 0/? | Not started | — |
 | 6 | v4.0 | 0/? | Not started | — |
