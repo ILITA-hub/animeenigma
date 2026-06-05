@@ -73,7 +73,11 @@ datasources:
       port: 9000
       protocol: native
       secure: false
-      username: ${CLICKHOUSE_USER:-analytics}
+      # Bare ${VAR} only — Grafana provisioning does NOT support shell
+      # ${VAR:-default} (it would be passed through literally, making the CH
+      # plugin fall back to the `default` user and fail auth). The defaults are
+      # supplied to the grafana container env in docker-compose.yml.
+      username: ${CLICKHOUSE_USER}
       defaultDatabase: analytics
     secureJsonData:
-      password: ${CLICKHOUSE_PASSWORD:-changeme}
+      password: ${CLICKHOUSE_PASSWORD}

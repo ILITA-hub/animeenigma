@@ -412,6 +412,13 @@ services:
       # v4 Activity Register (01-03): the aenigma-clickhouse datasource needs the
       # official ClickHouse plugin installed (no built-in CH datasource exists).
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      # The CH datasource provisioning (datasources.yml) reads these from the
+      # container env. Grafana's provisioning interpolation supports only $VAR /
+      # ${VAR} — NOT shell ${VAR:-default} — so the datasource file must use bare
+      # ${CLICKHOUSE_USER}/${CLICKHOUSE_PASSWORD} and we supply the defaults HERE
+      # (compose DOES honor :- ). Must match the clickhouse service creds above.
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-analytics}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-changeme}
       GRAFANA_WEBHOOK_PASS: ${GRAFANA_WEBHOOK_PASS:-}
     extra_hosts:
       - "host-gateway:host-gateway"
