@@ -26,7 +26,7 @@ interface CatalogAnimeLike {
 
 interface HomeAnimeLike {
   id: string | number
-  name: string
+  name?: string
   name_ru?: string
   name_jp?: string
   poster_url?: string

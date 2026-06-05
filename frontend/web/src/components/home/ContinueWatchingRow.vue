@@ -23,44 +23,13 @@
 
     <!-- Horizontal cinematic grid -->
     <div class="cw-row">
-      <router-link
+      <MediaTile
         v-for="item in items"
         :key="item.anime.id + ':' + item.episode_number"
-        :to="`/anime/${item.anime.id}?episode=${item.episode_number}`"
-        class="cw-card"
-      >
-        <!-- Cover image with bottom scrim -->
-        <div
-          class="cw-img"
-          :style="item.anime.poster_url ? { backgroundImage: `url(${item.anime.poster_url})` } : {}"
-        />
-
-        <!-- Centered play button, revealed on hover -->
-        <div class="cw-play" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M5 3l14 9-14 9V3z" />
-          </svg>
-        </div>
-
-        <!-- Info overlay (bottom) -->
-        <div class="cw-info">
-          <div class="cw-ep">
-            {{ $t('home.continueWatchingEpisode', { n: item.episode_number }) }}
-            <template v-if="item.anime.episodes_count"> · {{ item.anime.episodes_count }}</template>
-          </div>
-          <div class="cw-title-line">
-            {{ getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp) }}
-          </div>
-        </div>
-
-        <!-- Progress bar (3px, cyan with glow) -->
-        <div v-if="progressPct(item) > 0" class="cw-progress">
-          <div
-            class="cw-progress-fill"
-            :style="progressBarStyle(item)"
-          />
-        </div>
-      </router-link>
+        :model="fromContinueWatching(item)"
+        :progress-pct="progressPct(item)"
+        class="cw-card-tile"
+      />
     </div>
   </section>
 
@@ -78,7 +47,8 @@
 </template>
 
 <script setup lang="ts">
-import { getLocalizedTitle } from '@/utils/title'
+import MediaTile from '@/components/anime/MediaTile.vue'
+import { fromContinueWatching } from '@/utils/toCardModel'
 import { useContinueWatching, type ContinueWatchingItem } from '@/composables/useContinueWatching'
 
 const { items, isLoading } = useContinueWatching(10)
@@ -88,17 +58,6 @@ function progressPct(item: ContinueWatchingItem): number {
   const pct = (item.progress / item.duration) * 100
   // Cap at 100 in case progress > duration (clock skew between heartbeats).
   return Math.max(0, Math.min(100, pct))
-}
-
-// IN-02 (Phase 8): when the user is genuinely past 0 but at a tiny
-// percentage of the episode, render the cyan bar with a min-width of 4px
-// so it's visible.
-function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
-  const pct = progressPct(item)
-  return {
-    width: pct + '%',
-    minWidth: '4px',
-  }
 }
 </script>
 
@@ -175,120 +134,9 @@ function progressBarStyle(item: ContinueWatchingItem): Record<string, string> {
 }
 
 /* -----------------------------------------------------------------------
-   16:9 cinematic card — mirrors .cw-card from design handoff
+   MediaTile grid cell — snap alignment for the horizontal scroller
    ----------------------------------------------------------------------- */
-.cw-card {
-  position: relative;
-  scroll-snap-align: start;
-  border-radius: var(--r-lg, 16px);
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
-  background: var(--color-surface, #11111c);
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.06));
-  cursor: pointer;
-  display: block;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.cw-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent-line, rgba(0, 212, 255, 0.28));
-  box-shadow: var(--accent-glow, 0 0 30px rgba(0, 212, 255, 0.28));
-}
-.cw-card:focus-visible {
-  outline: 2px solid var(--brand-cyan, #00d4ff);
-  outline-offset: 2px;
-}
-
-/* Cover image with bottom gradient scrim */
-.cw-img {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center;
-  background-color: var(--color-surface, #11111c);
-}
-.cw-img::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    transparent 30%,
-    rgba(8, 8, 15, 0.55) 65%,
-    rgba(8, 8, 15, 0.95) 100%
-  );
-}
-
-/* Centered play button — hidden at rest, revealed on card hover */
-.cw-play {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 52px;
-  height: 52px;
-  border-radius: 999px;
-  background: rgba(0, 212, 255, 0.95);
-  display: grid;
-  place-items: center;
-  color: #001218;
-  opacity: 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  box-shadow: 0 0 24px rgba(0, 212, 255, 0.5);
-  z-index: 1;
-}
-.cw-card:hover .cw-play {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1.06);
-}
-
-/* Info overlay at the bottom of the card */
-.cw-info {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 12px;
-  z-index: 1;
-}
-
-/* Episode label: mono, cyan, uppercase */
-.cw-ep {
-  font-family: var(--f-mono, "JetBrains Mono", ui-monospace, monospace);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: var(--brand-cyan, #00d4ff);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-/* Title: single line, ellipsis */
-.cw-title-line {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--foreground, #fff);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* -----------------------------------------------------------------------
-   Progress bar — 3px, cyan with glow, absolute bottom
-   ----------------------------------------------------------------------- */
-.cw-progress {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.08);
-  z-index: 2;
-}
-.cw-progress-fill {
-  height: 100%;
-  background: var(--brand-cyan, #00d4ff);
-  box-shadow: 0 0 8px var(--brand-cyan, #00d4ff);
-  transition: width 0.3s ease;
-}
+.cw-card-tile { scroll-snap-align: start; }
 
 /* -----------------------------------------------------------------------
    Loading skeleton card
