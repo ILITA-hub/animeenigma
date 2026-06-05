@@ -112,6 +112,32 @@
   50%      { box-shadow: 0 0 0 6px rgba(0, 212, 255, 0.18); }
 }
 
+/* Drift skeleton — animated gradient sweep for loading placeholders.
+   CRITICAL: the loading element paints a background-IMAGE gradient and animates
+   background-POSITION. The element it sits on must NOT use the `background`
+   shorthand (which resets background-position and kills the animation), and we
+   never use !important (author !important overrides CSS animations). See
+   docs/superpowers/specs/2026-06-05-unified-anime-card-design.md. */
+@keyframes drift {
+  0%   { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
+}
+.sk-drift {
+  background-color: rgba(255, 255, 255, 0.05);
+  background-image: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(120, 225, 255, 0.22),
+    rgba(255, 255, 255, 0.06)
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  animation: drift 2.6s ease-in-out infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-drift { animation: none; }
+}
+
 /* Base styles */
 html {
   scroll-behavior: smooth;

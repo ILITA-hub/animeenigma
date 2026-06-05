@@ -1,9 +1,10 @@
 <template>
   <div
     :class="[
-      'animate-pulse bg-white/10 rounded',
+      variant === 'drift' ? 'sk-drift' : 'animate-pulse bg-white/10',
+      'rounded',
       roundedClass,
-      className
+      className,
     ]"
     :style="style"
   />
@@ -17,11 +18,13 @@ interface Props {
   height?: string | number
   rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
   className?: string
+  variant?: 'pulse' | 'drift'
 }
 
 const props = withDefaults(defineProps<Props>(), {
   rounded: 'md',
   className: '',
+  variant: 'pulse',
 })
 
 const roundedClass = computed(() => {
