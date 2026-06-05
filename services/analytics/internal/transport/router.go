@@ -14,6 +14,7 @@ import (
 // NewRouter builds the analytics chi router.
 //
 //	GET  /health                  (public)
+//	HEAD /health                  (public — Docker healthcheck wget --spider)
 //	GET  /metrics                  (public, prom format)
 //	POST /api/analytics/collect    (public — anonymous users tracked; gateway
 //	                                forwards the full path UNCHANGED, same as
@@ -34,9 +35,15 @@ func NewRouter(
 	r.Use(httputil.CORS([]string{"*"}))
 	r.Use(middleware.RealIP)
 
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+	healthHandler := func(w http.ResponseWriter, _ *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
-	})
+	}
+	r.Get("/health", healthHandler)
+	// The Docker healthcheck uses `wget --spider`, which issues a HEAD request.
+	// Without an explicit HEAD route chi returns 405, leaving the container
+	// flagged unhealthy even though the service is serving fine. Register HEAD
+	// too so the compose healthcheck (and any HEAD probe) passes.
+	r.Head("/health", healthHandler)
 	r.Get("/metrics", func(w http.ResponseWriter, req *http.Request) {
 		metrics.Handler().ServeHTTP(w, req)
 	})
