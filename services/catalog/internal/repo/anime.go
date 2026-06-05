@@ -120,7 +120,7 @@ func (r *AnimeRepository) Search(ctx context.Context, filters domain.SearchFilte
 		}
 	}
 	if len(filters.GenreIDs) > 0 {
-		query = query.Where("id IN (SELECT anime_id FROM anime_genres WHERE genre_id IN ?)", filters.GenreIDs)
+		query = query.Where("id IN (SELECT anime_id FROM anime_genres WHERE genre_id IN ? GROUP BY anime_id HAVING COUNT(DISTINCT genre_id) = ?)", filters.GenreIDs, len(filters.GenreIDs))
 	}
 	if filters.ScoreMin != nil {
 		query = query.Where("score >= ?", *filters.ScoreMin)
