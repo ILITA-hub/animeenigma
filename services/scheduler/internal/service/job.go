@@ -17,12 +17,14 @@ type JobService struct {
 	topAnimeJob                 *jobs.TopAnimeSyncJob
 	calendarJob                 *jobs.CalendarSyncJob
 	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob
+	readThresholdJob            *jobs.ReadThresholdJob
 	log                         *logger.Logger
 	lastShikimoriRun            time.Time
 	lastCleanupRun              time.Time
 	lastTopAnimeRun             time.Time
 	lastCalendarRun             time.Time
 	lastCanaryRun               time.Time
+	lastReadThresholdRun        time.Time
 }
 
 func NewJobService(
@@ -31,6 +33,7 @@ func NewJobService(
 	topAnimeJob *jobs.TopAnimeSyncJob,
 	calendarJob *jobs.CalendarSyncJob,
 	scraperPlayabilityCanaryJob *jobs.ScraperPlayabilityCanaryJob,
+	readThresholdJob *jobs.ReadThresholdJob,
 	log *logger.Logger,
 ) *JobService {
 	return &JobService{
@@ -40,12 +43,13 @@ func NewJobService(
 		topAnimeJob:                 topAnimeJob,
 		calendarJob:                 calendarJob,
 		scraperPlayabilityCanaryJob: scraperPlayabilityCanaryJob,
+		readThresholdJob:            readThresholdJob,
 		log:                         log,
 	}
 }
 
 // Start starts the job scheduler
-func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron string) error {
+func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCron, scraperPlayabilityCanaryCron, readThresholdCron string) error {
 	// Schedule Shikimori sync job
 	_, err := s.cron.AddFunc(shikimoriCron, func() {
 		ctx := context.Background()
@@ -155,6 +159,34 @@ func (s *JobService) Start(shikimoriCron, cleanupCron, topAnimeCron, calendarCro
 	}
 	s.log.Info("registered job: scraper_playability_canary")
 
+	// Schedule daily read-threshold recompute trigger (Phase 03 / D-03 /
+	// AR-EFFECT-01). The scheduler has no ClickHouse connection — this job
+	// POSTs analytics' /internal recompute endpoint, which runs the
+	// quantile(0.95)(duration_ms) query and publishes the read_thresholds
+	// Redis hash. Skipped if no job was wired (analytics URL unset).
+	if s.readThresholdJob != nil {
+		_, err = s.cron.AddFunc(readThresholdCron, func() {
+			ctx := context.Background()
+			s.log.Info("starting scheduled read-threshold recompute")
+			start := time.Now()
+			if err := s.readThresholdJob.Run(ctx); err != nil {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("read_threshold_recompute", "error").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("read_threshold_recompute").Observe(time.Since(start).Seconds())
+				s.log.Errorw("read-threshold recompute failed", "error", err)
+			} else {
+				metrics.SchedulerJobExecutionsTotal.WithLabelValues("read_threshold_recompute", "success").Inc()
+				metrics.SchedulerJobDuration.WithLabelValues("read_threshold_recompute").Observe(time.Since(start).Seconds())
+				metrics.SchedulerJobLastSuccess.WithLabelValues("read_threshold_recompute").SetToCurrentTime()
+				s.lastReadThresholdRun = time.Now()
+				s.log.Info("read-threshold recompute completed successfully")
+			}
+		})
+		if err != nil {
+			return err
+		}
+		s.log.Info("registered job: read_threshold_recompute")
+	}
+
 	s.cron.Start()
 	s.log.Info("job scheduler started")
 	return nil
@@ -248,6 +280,9 @@ func (s *JobService) GetStatus() map[string]interface{} {
 		},
 		"scraper_playability_canary": map[string]interface{}{
 			"last_run": s.lastCanaryRun,
+		},
+		"read_threshold_recompute": map[string]interface{}{
+			"last_run": s.lastReadThresholdRun,
 		},
 	}
 }
