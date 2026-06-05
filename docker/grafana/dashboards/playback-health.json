@@ -83,7 +83,7 @@
       "id": 4,
       "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - scheduler_job_last_success_timestamp{job=\"scraper_playability_canary\"}", "legendFormat": "Canary Age", "refId": "A" } ],
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "time() - scheduler_job_last_success_timestamp{exported_job=\"scraper_playability_canary\"}", "legendFormat": "Canary Age", "refId": "A" } ],
       "title": "Canary Last Run (age)",
       "type": "stat"
     },
@@ -329,7 +329,7 @@
       "id": 33,
       "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
       "pluginVersion": "10.3.3",
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "scheduler_job_last_success_timestamp{job=\"scraper_playability_canary\"}", "legendFormat": "Last Canary Run", "refId": "A" } ],
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "scheduler_job_last_success_timestamp{exported_job=\"scraper_playability_canary\"}", "legendFormat": "Last Canary Run", "refId": "A" } ],
       "title": "Last Canary Run",
       "type": "stat"
     },
