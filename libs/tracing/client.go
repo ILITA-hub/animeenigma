@@ -108,13 +108,20 @@ type recordingTransport struct {
 func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 
-	// Attribution: origin/operation ride wire baggage; user_id + provider ride
-	// private ctx values (never baggage — T-02-PII). Read attribution BEFORE
-	// stripping so the recorder still captures user_id from the private ctx value.
+	// Attribution: origin rides wire baggage; user_id + provider ride private
+	// ctx values (never baggage — T-02-PII). Read attribution BEFORE stripping
+	// so the recorder still captures user_id from the private ctx value.
 	ctx := req.Context()
-	origin, operation := ReadBaggage(ctx)
+	origin, _ := ReadBaggage(ctx)
 	userID := UserIDFromContext(ctx)
 	provider := ProviderFromContext(ctx)
+
+	// D-08: operation is now stack-frame-PRIMARY. Capture the program counters
+	// synchronously here (cheap, no symbol resolution — D-11); the Producer
+	// resolves them to the fine "<pkg>.<Func>" label on its async goroutine,
+	// falling back to the baggage operation then the origin name when no service
+	// frame is present (Operation.Resolve). user_id never enters baggage.
+	op := CaptureOperationPCs(ctx)
 
 	// Defense-in-depth (T-02-PII): strip any user_id baggage member from the
 	// request context BEFORE the base RoundTrip runs, so otelhttp's outbound
@@ -137,18 +144,18 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	build := func(status, bytesIn int) Effect {
 		return Effect{
 			Origin:     origin,
-			Operation:  operation,
 			UserID:     userID,
 			EffectKind: "egress",
 			Host:       host,
 			Provider:   provider,
 			Target:     host,
+			// TargetKind left empty → post() labels egress rows "host".
 			Status:     status,
 			BytesIn:    bytesIn,
 			BytesOut:   bytesOut,
 			DurationMS: int(time.Since(start).Milliseconds()),
 			Requests:   1,
-		}
+		}.WithOperationPCs(op)
 	}
 
 	if err != nil {
