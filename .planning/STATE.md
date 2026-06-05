@@ -2,13 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Activity Register (ClickHouse unified event plane)
-status: planning
-last_updated: "2026-06-04T07:54:28.412Z"
-last_activity: 2026-06-04
+current_plan: 1
+status: executing
+stopped_at: Workstream review (pre–Phase-2 planning)
+last_updated: "2026-06-05T01:09:36.902Z"
+last_activity: 2026-06-04 -- Phase 01 execution started
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -17,15 +19,15 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-06-04 — Milestone v4.0 started
+Phase: 01 (clickhouse-foundation-eventstore-swap) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 01
+Last activity: 2026-06-04 -- Phase 01 execution started
 
 ## Progress
 
 **Phases Complete:** 1 / 6
-**Current Plan:** N/A (Phase 2 awaiting `/gsd-plan-phase --ws design-system`)
+**Current Plan:** 1
 
 ## Session Continuity
 
