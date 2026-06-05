@@ -1,5 +1,5 @@
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
-import type { AnimeCardModel, CardExtras, ListStatus } from '@/types/card'
+import type { AnimeCardModel, CardExtras } from '@/types/card'
 
 // Minimal structural shapes the mappers accept. We intentionally keep these
 // local + loose (rather than importing the full Anime/HomeAnime interfaces) so
@@ -107,19 +107,17 @@ export function fromHomeAnime(a: HomeAnimeLike, extras?: CardExtras): AnimeCardM
 export function fromContinueWatching(item: ContinueWatchingLike): AnimeCardModel {
   const a = item.anime
   const id = String(a.id)
-  const total = a.episodes_count || 0
   return {
     id,
     href: `/anime/${id}?episode=${item.episode_number}`,
     title: getLocalizedTitle(a.name, a.name_ru, a.name_jp) || '',
     coverImage: a.poster_url || PLACEHOLDER,
+    episodes: a.episodes_count || undefined,
     // For continue-watching the "next episode" slot carries the resume episode;
     // `when` is unused by MediaTile variant ② so we leave it empty.
     nextEpisode: { ep: item.episode_number, when: '' },
-    progress: { current: item.episode_number, total },
+    progress: { current: item.episode_number, total: a.episodes_count || null },
     listStatus: null,
     airing: false,
   }
 }
-
-export type { ListStatus }

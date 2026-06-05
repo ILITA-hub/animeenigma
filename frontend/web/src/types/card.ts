@@ -22,7 +22,7 @@ export interface AnimeCardModel {
   quality?: string             // e.g. "1080p" — neutral overlay badge
   hasDub?: boolean             // DUB overlay badge
   listStatus?: ListStatus | null
-  progress?: { current: number; total: number } | null
+  progress?: { current: number; total: number | null } | null
   airing?: boolean             // ONGOING (green + pulse) — only while true
   nextEpisode?: { ep: number; when: string } | null  // Row / MediaTile
 }

@@ -85,6 +85,12 @@ describe('fromHomeAnime', () => {
     const m = fromHomeAnime({ ...h, poster_url: undefined } as never)
     expect(m.coverImage).toBe('/placeholder.svg')
   })
+
+  it('yields airing=false and nextEpisode=null for non-ongoing status', () => {
+    const m = fromHomeAnime({ ...h, status: 'released', next_episode_at: undefined } as never)
+    expect(m.airing).toBe(false)
+    expect(m.nextEpisode).toBeNull()
+  })
 })
 
 describe('fromContinueWatching', () => {
@@ -102,5 +108,13 @@ describe('fromContinueWatching', () => {
     expect(m.href).toBe('/anime/c1?episode=5')
     expect(m.nextEpisode).toEqual({ ep: 5, when: '' })
     expect(m.progress).toEqual({ current: 5, total: 12 })
+    expect(m.episodes).toBe(12)
+  })
+
+  it('uses null total and undefined episodes when episodes_count is absent', () => {
+    const noCount = { ...item, anime: { id: 'c2', name: 'Mystery', poster_url: 'http://x/m.jpg' } }
+    const m = fromContinueWatching(noCount as never)
+    expect(m.progress).toEqual({ current: 5, total: null })
+    expect(m.episodes).toBeUndefined()
   })
 })
