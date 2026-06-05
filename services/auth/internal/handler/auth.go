@@ -17,9 +17,10 @@ import (
 
 const (
 	refreshTokenCookieName = "refresh_token"
-	// refreshTokenMaxAge MUST match service.SessionTTL — the cookie expiring
-	// before the DB session leaves an orphaned row that the user can't reclaim.
-	refreshTokenMaxAge    = 30 * 24 * time.Hour
+	// refreshTokenMaxAge is effectively "never" for the browser cookie. The DB
+	// session is non-expiring (revoke-only), and we re-set this cookie on every
+	// refresh so it keeps sliding ~10 years out and never ages out client-side.
+	refreshTokenMaxAge    = 10 * 365 * 24 * time.Hour
 	accessTokenCookieName = "access_token"
 )
 
@@ -239,7 +240,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	sc := sessionContextFromReq(r)
 	req := &domain.RefreshRequest{RefreshToken: cookie.Value}
-	resp, rotated, err := h.authService.RefreshToken(r.Context(), req, sc)
+	resp, err := h.authService.RefreshToken(r.Context(), req, sc)
 	if err != nil {
 		metrics.AuthEventsTotal.WithLabelValues("refresh_token", "error").Inc()
 		// Clear invalid cookie
@@ -248,11 +249,9 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only set a new refresh-token cookie when the token was actually rotated.
-	// On the grace path (rotated=false), the existing cookie remains valid.
-	if rotated {
-		h.setRefreshTokenCookie(w, resp.RefreshToken)
-	}
+	// Non-rotating: the refresh token is unchanged. Re-set the same cookie value
+	// so its 10-year max-age slides forward and the browser never drops it.
+	h.setRefreshTokenCookie(w, cookie.Value)
 
 	// Set access token as httpOnly cookie for direct browser navigation
 	h.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
