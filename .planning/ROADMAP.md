@@ -67,7 +67,13 @@
   2. Cache effects record hit/miss by key-class as effect rows — verified by exercising a cached read twice (miss then hit) and seeing both classified rows. (AR-EFFECT-02)
   3. `operation` is auto-derived with **no manual catalog**, via service-layer stack-frame attribution (nearest `*/internal/service/*` frame) — verified by an effect row showing a real operation like `catalog.UpdateAnimeInfo` with no code that names it explicitly. (AR-EFFECT-03)
   4. The Tempo span-metrics generator + service graph are enabled (config flag, no per-span code), producing per-operation RED metrics + a service graph in Prometheus — verified by querying a per-operation request/error/duration metric and viewing the service graph in Grafana. (AR-EFFECT-04)
-**Plans**: TBD
+**Plans**: 6 plans (4 waves)
+- [ ] 03-01-PLAN.md — Effect wire-contract extension (TargetKind/Rows/anime_id) + runtime.Callers operation resolver + egress stack-frame retrofit (Wave 1, AR-EFFECT-03)
+- [ ] 03-02-PLAN.md — Tempo metrics_generator (span-metrics + service-graphs) + Prometheus remote-write + Grafana Tempo→Prometheus wiring (Wave 1, AR-EFFECT-04)
+- [ ] 03-03-PLAN.md — GORM DB-effect callbacks (db_write always, db_read P95-gated) + in-memory ReadGate snapshot (Wave 2, AR-EFFECT-01)
+- [ ] 03-04-PLAN.md — Cache aggregator (HLSSessions clone) + key-class classifier + cache.go hit/miss hooks (Wave 2, AR-EFFECT-02)
+- [ ] 03-05-PLAN.md — Daily ClickHouse P95 → read_thresholds Redis hash + scheduler cron + ThresholdRefresher ticker (Wave 3, AR-EFFECT-01)
+- [ ] 03-06-PLAN.md — Per-service boot wiring (7 GORM + catalog/gateway cache) + live ClickHouse/Prometheus/Grafana phase-gate verification (Wave 4, AR-EFFECT-01..04, non-autonomous)
 **Metrics**: `UXΔ = +1 (Better)` (operation-level cost attribution; the "expensive popular button" insight derives from here) · `CDI = 0.14 * 21` (GORM hook + cache hook + a `runtime.Callers` attribution helper + a Tempo config flag; new-but-compatible patterns across the DB/cache libs, attribution is the novel piece) · `MVQ = Griffin 85%/84%` (elegantly fuses GORM hooks, cache hooks, stack-walking, and Tempo span-metrics into one attribution story; strong slop-resistance)
 
 ### Phase 4: FE Causation + RUM
@@ -126,7 +132,7 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
 | 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
-| 3 | v4.0 | 0/? | Not started | — |
+| 3 | v4.0 | 0/6 | Planned | — |
 | 4 | v4.0 | 0/? | Not started | — |
 | 5 | v4.0 | 0/? | Not started | — |
 | 6 | v4.0 | 0/? | Not started | — |
