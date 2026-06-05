@@ -75,9 +75,9 @@ function dispatchAuthExpired() {
   }
 }
 
-// Actually performs the /auth/refresh POST. Kept separate so the
-// cross-tab lock wrapper in doTokenRefresh can short-circuit when another
-// tab already minted a fresh token while we were waiting on the lock.
+// Actually performs the /auth/refresh POST. Kept separate from doTokenRefresh
+// so the still-valid-token short-circuit can skip this round-trip when another
+// tab already minted a fresh access token.
 async function performRefresh(): Promise<string | null> {
   try {
     const response = await axios.post(`${BASE_URL}/auth/refresh`, {}, {
@@ -106,11 +106,9 @@ async function performRefresh(): Promise<string | null> {
   }
 }
 
-// Shared token refresh — single-flight both within a tab (module-level
-// refreshPromise) and across tabs (Web Locks). The cross-tab guard is the
-// fix for the rotation race: the backend single-uses each refresh token,
-// so two tabs both POSTing /auth/refresh would have the second tab's RT1
-// blacklisted by the first → spurious 401 → logout.
+// Shared token refresh — single-flight within a tab via the module-level
+// refreshPromise. Refresh tokens are non-rotating, so two tabs refreshing at
+// once both succeed; no cross-tab coordination is required.
 async function doTokenRefresh(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
   // Session already confirmed dead — don't re-POST the surviving httpOnly
@@ -125,18 +123,14 @@ async function doTokenRefresh(): Promise<string | null> {
   isRefreshing = true
   refreshPromise = (async () => {
     try {
-      if (typeof navigator !== 'undefined' && 'locks' in navigator) {
-        return await navigator.locks.request('auth-refresh', async () => {
-          // Another tab may have refreshed while we waited on the lock.
-          // If localStorage now holds a still-valid token, use it instead
-          // of burning our refresh-token round-trip.
-          const stored = localStorage.getItem('token')
-          if (stored && !isTokenExpired(stored)) {
-            processQueue(null, stored)
-            return stored
-          }
-          return await performRefresh()
-        })
+      // Non-rotating refresh tokens: concurrent refreshes (other tabs, the
+      // gateway admin middleware) all present the SAME stable token and all
+      // succeed, so no cross-tab coordination is needed. A still-valid token
+      // written by another tab is reused to skip a redundant round-trip.
+      const stored = localStorage.getItem('token')
+      if (stored && !isTokenExpired(stored)) {
+        processQueue(null, stored)
+        return stored
       }
       return await performRefresh()
     } finally {
