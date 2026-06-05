@@ -2,12 +2,14 @@ package domain
 
 import "time"
 
-// UserSession is one persistent login. Created on login/register, rotated on
-// every /auth/refresh, revoked on logout or via the settings UI.
+// UserSession is one persistent login. Created on login/register, refreshed
+// (activity-stamped) on every /auth/refresh, revoked on logout or via the
+// settings UI. The refresh token is NON-ROTATING: it stays stable for the
+// session's life, so there is no rotation race to absorb.
 //
-// `RefreshTokenHash` and `PreviousRefreshTokenHash` are sha256-hex of the
-// opaque `rt_<64-hex>` refresh token. The previous hash is accepted during
-// the grace window to absorb cross-tab refresh races.
+// `RefreshTokenHash` is the sha256-hex of the opaque `rt_<64-hex>` refresh
+// token. `PreviousRefreshTokenHash`/`GraceUntil`/`GraceOpenedAt` are DORMANT
+// columns kept from the old rotating design (never read/written).
 type UserSession struct {
 	ID                       string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID                   string     `gorm:"type:uuid;not null;index:idx_user_sessions_user_id" json:"user_id"`

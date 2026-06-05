@@ -177,9 +177,9 @@ func AdminSessionRefreshMiddleware(jwtConfig authz.JWTConfig, authServiceURL str
 				return
 			}
 
-			// Relay the fresh cookies to the browser (new access_token, and a
-			// rotated refresh_token when auth rotated it) and hand the fresh
-			// access token to the downstream JWTValidationMiddleware via the
+			// Relay the fresh cookies to the browser (new access_token, and the
+			// re-set non-rotating refresh_token with its sliding max-age) and
+			// hand the fresh access token to the downstream JWTValidationMiddleware via the
 			// Authorization header (BearerToken prefers the header over the
 			// still-expired access_token cookie).
 			for _, sc := range res.setCookies {
