@@ -221,6 +221,10 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=15d"
       - "--web.enable-lifecycle"
+      # Accept Tempo metrics_generator span-metrics + service-graphs remote_write
+      # at /prometheus/api/v1/write (AR-EFFECT-04, D-12). Receiver is reachable
+      # only on the Docker network; Tempo is the sole writer (T-03-04, accepted).
+      - "--web.enable-remote-write-receiver"
       - "--web.external-url=/prometheus"
       - "--web.route-prefix=/prometheus"
     ports:
