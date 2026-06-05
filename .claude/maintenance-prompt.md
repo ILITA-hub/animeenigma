@@ -31,7 +31,7 @@ is auto-applied. Reserve `escalate` for genuinely high-risk / unknown / upstream
 | `button_fix` | Medium-risk, needs admin (anything outside auto-edit's narrow scope) | Return diagnosis + fix_plan. Do NOT apply — Go service will show admin a button |
 | `escalate` | High-risk, unknown, or upstream is fully dead (platform rebrand / DNS gone / Cloudflare hard-block / FingerprintJS gate) | Return diagnosis only. No fix_plan |
 | `info_only` | User status query, no issue found | Return status check results |
-| `resolved` | Alert already resolved or issue already fixed | Confirm resolution |
+| `resolved` | Alert already resolved or issue already fixed | Confirm resolution **using the same signal Grafana uses** — Prometheus `up{job="<svc>"}`==1 and/or the alert no longer firing — NOT a self-chosen `localhost:{PORT}/health` probe. If a host-port probe passes while the alert is STILL firing, the failure is in the consumer/Docker-network path, not the process: do NOT tier `resolved` (see Pattern 2b). |
 
 ## Risk & Auto-Apply Policy (READ THIS — it governs active fixing)
 
@@ -77,7 +77,16 @@ confident in (and can verify) may also be `low`; when in doubt between two level
 ```bash
 # Health checks
 make health                                          # All services
-curl -sf http://localhost:{PORT}/health              # Individual service
+curl -sf http://localhost:{PORT}/health              # Individual service — LIVENESS ONLY (host port)
+
+# ⚠️ REACHABILITY / ERROR-RATE alerts ("Service Unreachable", "High Error Rate"): the host port above
+# can return 200 while the service is unreachable to its REAL consumers (gateway, Grafana, sibling
+# services) over the Docker network — host ports bypass Docker DNS. NEVER declare healthy/resolved from
+# localhost:{PORT}; verify the way consumers + Grafana actually reach it:
+docker exec animeenigma-gateway sh -c 'getent hosts {service}'                        # Docker DNS resolves the name?
+docker exec animeenigma-gateway sh -c 'wget -qO- -T3 http://{service}:{PORT}/health'  # reachable over docker net?
+curl -s -o /dev/null -w '%{http_code}\n' "http://localhost:8000/api/..."             # consumer path via gateway (want 200, not 500)
+curl -s 'http://localhost:9090/prometheus/api/v1/query?query=up{job="{service}"}'    # Grafana's OWN signal — must be 1
 
 # Container state
 docker compose -f docker/docker-compose.yml ps {service}
@@ -115,6 +124,25 @@ git log --oneline -5
 **GOTCHA**: aniwatch `/health` returns 200 even when broken! Test: `curl localhost:3100/api/v2/hianime/search?q=naruto&page=1`
 **Fix**: `docker pull rz6e/aniwatch-api:latest && docker compose -f docker/docker-compose.yml up -d aniwatch`
 **Tier**: `button_fix` (pulling new image = medium risk)
+
+### Pattern 2b: "Service Unreachable" but localhost:{PORT}/health is 200 — lost Docker-network alias (AUTO-392, 2026-06-05)
+**Signature**: Grafana `Service Unreachable {job=<svc>}` (often with `High Error Rate`) firing for minutes, BUT `curl localhost:{PORT}/health` → 200 and `docker inspect` shows the container `Up`, `RestartCount 0`. Consumers (the gateway) return **500**; `up{job="<svc>"}` == 0.
+**GOTCHA (this is what false-resolved AUTO-392)**: the host-published port works because it bypasses Docker DNS. The service was **recreated during a redeploy** and came back **without its compose network alias**, so every sibling that connects via the short name `<svc>` gets SERVFAIL → 500. A `localhost:{PORT}/health` probe CANNOT see this — it is not evidence of reachability for this alert class.
+**Diagnostic** (confirm before acting):
+```bash
+docker exec animeenigma-gateway sh -c 'getent hosts <svc>'          # → SERVFAIL  (a healthy peer resolves fine)
+docker exec animeenigma-gateway sh -c 'wget -qO- -T3 http://<ip>:<PORT>/health'   # by-IP WORKS → process is fine, DNS is broken
+docker inspect animeenigma-<svc> --format '{{json .NetworkSettings.Networks.animeenigma-network.Aliases}}'
+#   broken → null ;  healthy peer → ["<svc>"]   (full name animeenigma-<svc> still resolves; short <svc> doesn't)
+```
+**Fix** (restores the alias, no rebuild; a plain `docker restart` does NOT fix it — it doesn't re-apply compose networking):
+```bash
+docker network disconnect animeenigma-network animeenigma-<svc>
+docker network connect --alias <svc> animeenigma-network animeenigma-<svc>
+# verify: docker exec animeenigma-gateway sh -c 'getent hosts <svc>'  resolves, and the consumer path returns 200
+```
+**Tier**: `auto_fix` (risk `low` — deterministic, verifiable via Docker DNS + consumer-path 200, reversible).
+**Prevention (root cause)**: `deploy/scripts/redeploy.sh` recreates with `stop → rm -f → up -d --no-deps <svc>`, which can drop the service-name network alias. If this recurs across services, harden the script to re-add/verify the alias after `up`.
 
 ### Pattern 3: Missing HLS Proxy Domain (ISS-002)
 **Signature**: Streaming logs: `domain not allowed for HLS proxy`

@@ -4,6 +4,17 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-028: Site-wide outage — catalog lost its Docker-network alias on redeploy; maintenance bot false-resolved it
+- **Date:** 2026-06-05
+- **Severity:** Critical (full site outage — every `/api/anime*` call 500'd for ~10+ min; Grafana `Service Unreachable{job=catalog}` + `High Error Rate` fired correctly).
+- **Symptom:** `https://animeenigma.ru/browse` → 500; `GET /api/anime?page=1&sort=popularity` → 500 through the gateway. Yet `curl localhost:8081/health` → 200 and `docker inspect` showed catalog `Up`, `RestartCount 0`. Catalog **direct** on `:8081` returned real data; only the **gateway** path 500'd.
+- **Root cause:** `make redeploy-catalog` (commit `5aff6881`) recreated the catalog container via `deploy/scripts/redeploy.sh`'s `stop → rm -f → up -d --no-deps` sequence. It came back **without its `catalog` network alias** on `animeenigma-network` (`Aliases: None`, vs a healthy peer's `["auth"]`). So `catalog` → **SERVFAIL** from Docker's embedded DNS (127.0.0.11); the full name `animeenigma-catalog` and by-IP both resolved, but every sibling (gateway, Grafana, Prometheus) connects via the short name → NXDOMAIN/SERVFAIL → 500s and `up{catalog}=0`. The host-published port works because it bypasses Docker DNS entirely.
+- **Secondary failure:** the **maintenance bot false-resolved it** (AUTO-392, 👍). It verified with `curl -sf http://localhost:8081/health` — the host port — which cannot observe Docker-network unreachability, and tiered `resolved` while the outage was live.
+- **Fix applied (recovery):** re-attached the alias — `docker network disconnect animeenigma-network animeenigma-catalog && docker network connect --alias catalog animeenigma-network animeenigma-catalog`. Verified: public `/api/anime` → 200, `up{catalog}=1`. A plain `docker restart` does NOT fix it (doesn't re-apply compose networking).
+- **Fix applied (prevention):** `deploy/scripts/redeploy.sh` — (1) recreate via a single atomic `up -d --force-recreate --no-deps` (removes the stop/rm/up race window), (2) added an `ensure_network_alias` guard that, after each service starts, verifies the short-name alias and auto re-attaches + loudly logs if missing.
+- **Fix applied (detection):** `.claude/maintenance-prompt.md` — added Pattern 2b (this exact signature), required consumer-path probes (`getent hosts <svc>` from inside the gateway + Prometheus `up{job}`), and tightened the `resolved` tier to forbid declaring resolution from a `localhost:{PORT}/health` probe while an alert is still firing.
+- **Status:** Fixed. Files: `deploy/scripts/redeploy.sh`, `.claude/maintenance-prompt.md`. The prompt is read fresh per bot invocation (no redeploy); the script change applies to the next redeploy.
+
 ### ISS-027: TODO — Hydrax-iframe player surface (animefever hserver / `am.vidstream.vip?lt=hydrax`)
 - **Date:** 2026-06-05
 - **Severity:** Low (enhancement / extra failover depth — not an outage).
