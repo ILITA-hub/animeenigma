@@ -1004,7 +1004,7 @@
           <template #default="{ item }">
             <div>
               <PosterCard
-                :model="fromCatalogAnime({ ...(item as RelatedAnime), totalEpisodes: (item as RelatedAnime).episodes })"
+                :model="relatedCardModel(item as RelatedAnime)"
                 :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String((item as RelatedAnime).id)"
                 @open-menu="(el: HTMLElement) => openContextMenuAt(el, (item as RelatedAnime))"
               />
@@ -1061,6 +1061,7 @@ import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { fromCatalogAnime } from '@/utils/toCardModel'
+import type { AnimeCardModel } from '@/types/card'
 import type { WatchCombo } from '@/types/preference'
 
 const KodikPlayer = defineAsyncComponent(() => import('@/components/player/KodikPlayer.vue'))
@@ -2297,6 +2298,10 @@ const loadAnimeData = async (animeId: string) => {
 
   // Fetch related anime (non-blocking)
   fetchRelatedAnime()
+}
+
+function relatedCardModel(item: RelatedAnime): AnimeCardModel {
+  return fromCatalogAnime({ ...item, totalEpisodes: item.episodes })
 }
 
 async function fetchRelatedAnime() {
