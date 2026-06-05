@@ -4,15 +4,15 @@ milestone: v4.0
 milestone_name: Activity Register (ClickHouse unified event plane)
 current_plan: 1
 status: executing
-stopped_at: Workstream review (pre–Phase-2 planning)
-last_updated: "2026-06-05T01:09:36.902Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-06-05T05:00:47.162Z"
 last_activity: 2026-06-04 -- Phase 01 execution started
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 3
+  percent: 17
 ---
 
 # Project State
@@ -31,8 +31,8 @@ Last activity: 2026-06-04 -- Phase 01 execution started
 
 ## Session Continuity
 
-**Stopped At:** Workstream review (pre–Phase-2 planning)
-**Resume File:** None
+**Stopped At:** Phase 2 context gathered
+**Resume File:** .planning/phases/02-be-egress-recorder/02-CONTEXT.md
 
 ## Notes
 
