@@ -38,6 +38,12 @@ type BaseHTTPClient struct {
 	jar      *cookiejar.Jar
 	log      *logger.Logger
 	headers  http.Header
+	// provider is the stream-provider this client serves (set via WithProvider).
+	// Each BaseHTTPClient is single-provider (scraper main builds one per
+	// provider), so the tag is baked at construction (RESEARCH A3) and threaded
+	// onto every outbound request's context so the recording transport can pivot
+	// streaming egress by provider+host (D-02/D-09). Empty → no provider tag.
+	provider string
 }
 
 // Option configures a BaseHTTPClient at construction time.
@@ -79,24 +85,34 @@ func WithHeaders(h http.Header) Option {
 }
 
 // WithTransport overrides the underlying http.RoundTripper used by the
-// retryablehttp client. Used by tests to route all outgoing traffic to an
-// httptest.Server while preserving the BaseHTTPClient's retry + rate-limit
-// + cookie-jar pipeline.
+// retryablehttp client, preserving the BaseHTTPClient's retry + rate-limit +
+// cookie-jar pipeline.
 //
-// Phase 18 motivation: the orchestrator failover integration test
-// (services/scraper/internal/service/orchestrator_phase18_test.go) needs to
-// exercise a REAL gogoanime.Provider against an offline httptest.Server.
-// Without this Option, the only way to redirect traffic would be to either
-// (a) hand-roll a separate http.Client (defeats the SCRAPER-FOUND-06
-// "no hand-rolled clients" invariant) or (b) expose BaseHTTPClient.client
-// as a public field (breaks encapsulation).
+// PRODUCTION (Phase 02, AR-EGRESS-03): this is the egress-recording seam.
+// scraper main wraps the recording transport (tracing.WrapTransport /
+// tracing.WrapRecording) and injects it here at each per-provider construction
+// site, so every upstream request a provider makes emits exactly one egress
+// effect row (host/status/bytes/duration), pivotable by provider+host via the
+// WithProvider tag (D-02/D-09).
 //
-// Phase 19 (AnimeKai) will reuse this for its own offline integration test.
-//
-// Production callers MUST NOT set this — the default retryablehttp transport
-// is the right choice for real upstreams.
+// TESTS: also used to route all outgoing traffic to an httptest.Server. The
+// Phase 18 orchestrator failover integration test
+// (services/scraper/internal/service/orchestrator_phase18_test.go) exercises a
+// REAL gogoanime.Provider against an offline httptest.Server through this seam
+// without hand-rolling a separate http.Client (which would defeat the
+// SCRAPER-FOUND-06 "no hand-rolled clients" invariant) or exposing the
+// internal client field (breaks encapsulation). Phase 19 (AnimeKai) reuses it.
 func WithTransport(rt http.RoundTripper) Option {
 	return func(c *BaseHTTPClient) { c.client.HTTPClient.Transport = rt }
+}
+
+// WithProvider bakes the stream-provider tag into this client (RESEARCH A3:
+// each BaseHTTPClient is single-provider). Every outbound request issued via
+// Get/Do has its context tagged with the provider so the recording transport
+// records `target = provider + host` for streaming egress (D-02/D-09). General
+// (non-streaming) egress leaves this empty and carries no provider (D-01).
+func WithProvider(name string) Option {
+	return func(c *BaseHTTPClient) { c.provider = name }
 }
 
 // NewBaseHTTPClient builds a configured *BaseHTTPClient.
@@ -176,6 +192,7 @@ func (c *BaseHTTPClient) waitForLimiter(ctx context.Context, host string) error 
 // Get issues a GET request to urlStr through the retry + rate-limit + cookie
 // pipeline. Caller-supplied ctx propagates through all retry attempts.
 func (c *BaseHTTPClient) Get(ctx context.Context, urlStr string) (*http.Response, error) {
+	ctx = ProviderContext(ctx, c.provider)
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
@@ -196,6 +213,7 @@ func (c *BaseHTTPClient) Get(ctx context.Context, urlStr string) (*http.Response
 // pipeline. Use this when you need POST, custom body, or custom headers
 // (caller-set headers take precedence over baseline).
 func (c *BaseHTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	ctx = ProviderContext(ctx, c.provider)
 	if req.URL == nil {
 		return nil, http.ErrNoLocation
 	}
