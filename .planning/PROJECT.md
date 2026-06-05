@@ -14,7 +14,7 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 - ✅ **v2.0 Recommendations Engine** — shipped 2026-05-07 (Phases 9-14)
 - ✅ **v3.0 Universal Anime Scraper** — shipped 2026-05-18 (Phases 15-20); scraper microservice with provider failover replacing HiAnime + Consumet
 - ✅ **v3.1 Scraper Self-Healing** — shipped + closed 2026-06-04 (Phases 21-28, tagged `v3.1`; reopened 24-28 + `18anime` group) — see `.planning/MILESTONES.md`
-- 🟢 **v4.0 Activity Register (ClickHouse unified event plane)** — started 2026-06-04
+- 🟢 **v4.0 Activity Register (ClickHouse unified event plane)** — started 2026-06-04; Phase 1 (ClickHouse foundation + EventStore swap) ✅ and Phase 2 (BE Egress Recorder) ✅ complete 2026-06-05 — async batched effect recorder live at the `WrapTransport` seam with OTel baggage; egress effect rows + per-(session,host) HLS aggregation verified in ClickHouse
 
 ## Current Milestone: v4.0 Activity Register (ClickHouse unified event plane)
 
@@ -192,4 +192,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-09 — v3.0 Universal Anime Scraper milestone started. v2.0 (Recommendations Engine) closed and archived 2026-05-09.*
+*Last updated: 2026-06-05 — v4.0 Phase 2 (BE Egress Recorder) complete; egress effect recording live across catalog/scraper/streaming with per-(session,host) HLS aggregation.*
