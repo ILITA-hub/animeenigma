@@ -104,8 +104,8 @@ Plans:
   4. An "awareness overview" answers "what is the platform doing now/today" at a glance — verified by a single dashboard view showing current top operations + top external dependencies + active anomalies. (AR-REPORT-04)
 **Plans**: 3 plans in 2 waves
 Plans:
-- [ ] 05-01-PLAN.md — Wide-event pivot dashboard (AR-REPORT-01) + from→choke-point→effects flow report (AR-REPORT-02)
-- [ ] 05-02-PLAN.md — Awareness overview dashboard + explainable volume-anomaly panel (AR-REPORT-04, AR-REPORT-03) + provisioned ClickHouse alert rule
+- [x] 05-01-PLAN.md — Wide-event pivot dashboard (AR-REPORT-01) + from→choke-point→effects flow report (AR-REPORT-02)
+- [x] 05-02-PLAN.md — Awareness overview dashboard + explainable volume-anomaly panel (AR-REPORT-04, AR-REPORT-03) + provisioned ClickHouse alert rule
 - [ ] 05-03-PLAN.md — Live Grafana phase gate: reload, dry-run all panel SQL, inject synthetic spike, confirm all four reports + anomaly alert (autonomous: false)
 **Metrics**: `UXΔ = +2 (Better)` (this is where awareness becomes usable — the admin-facing payoff of the whole register) · `CDI = 0.06 * 21` (Grafana dashboards + template vars + anomaly rules; new dashboards on an existing Grafana, no code-structure disruption, but a large authoring effort to get the pivots right) · `MVQ = Dragon 88%/86%` (the showy high-impact centerpiece — the register made human-readable; high match, strong slop-resistance if the pivots are genuinely insightful rather than panel-spam)
 **UI hint**: yes
@@ -143,5 +143,5 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
 | 3 | v4.0 | 6/6 | Complete   | 2026-06-06 |
 | 4 | v4.0 | 4/4 | Complete   | 2026-06-06 |
-| 5 | v4.0 | 0/? | Not started | — |
+| 5 | v4.0 | 2/3 | In Progress|  |
 | 6 | v4.0 | 0/? | Not started | — |
