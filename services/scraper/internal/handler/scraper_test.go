@@ -1470,6 +1470,9 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 	if reason == "" {
 		t.Errorf("providers[animepahe].reason is empty; want non-empty reason string")
 	}
+	if desc, _ := pahe["description"].(string); desc != "Cloudflare blocks the sidecar" {
+		t.Errorf("providers[animepahe].description = %q; want %q", desc, "Cloudflare blocks the sidecar")
+	}
 
 	// --- allanime assertions ---
 	alla, ok := wrapper.Data.Providers["allanime"]
@@ -1481,5 +1484,8 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 	}
 	if up, _ := alla["up"].(bool); !up {
 		t.Errorf("providers[allanime].up = false; want true (search stage is up)")
+	}
+	if desc, _ := alla["description"].(string); desc != "Primary EN source" {
+		t.Errorf("providers[allanime].description = %q; want %q", desc, "Primary EN source")
 	}
 }
