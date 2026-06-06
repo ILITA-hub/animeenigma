@@ -54,4 +54,19 @@ describe('computeProviderRows', () => {
     const rows = computeProviderRows([], { audio: 'sub', lang: 'en', content: 'common' })
     expect(rows.find(r => r.def.id === 'raw')!.state).toBe('irrelevant')
   })
+
+  it('M3: disabled wins over down — scraper provider with enabled:false AND up:false resolves to disabled', () => {
+    const rows = computeProviderRows(
+      [health({ name: 'allanime', enabled: false, up: false, reason: 'Provider offline' })],
+      { audio: 'sub', lang: 'en', content: 'common' },
+    )
+    const r = rows.find(r => r.def.id === 'allanime')!
+    expect(r.state).toBe('disabled')
+    expect(r.reason).toContain('Provider offline')
+  })
+
+  it('M4: non-scraper, non-disabled, relevant provider is active (kodik, dub/ru/common)', () => {
+    const rows = computeProviderRows([], { audio: 'dub', lang: 'ru', content: 'common' })
+    expect(rows.find(r => r.def.id === 'kodik')!.state).toBe('active')
+  })
 })

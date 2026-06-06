@@ -1,4 +1,4 @@
-import { ref, onUnmounted, type Ref } from 'vue'
+import { ref, watch, onUnmounted, type Ref } from 'vue'
 import { scraperApi } from '@/api/client'
 import { PROVIDER_REGISTRY } from '@/components/player/unified/providerRegistry'
 import type {
@@ -42,9 +42,10 @@ export function computeProviderRows(
         return { def, state: 'disabled', reason: h.reason || h.description }
       }
       if (h && !h.up) {
-        return { def, state: 'down', reason: 'Temporarily unreachable' }
+        return { def, state: 'down', reason: 'Temporarily unreachable' } // up: absent ⇒ pessimistic 'down'
       }
     }
+    // Non-scraper, non-disabled providers that are relevant fall through to 'active'.
     return { def, state: 'active' }
   })
 }
@@ -86,9 +87,14 @@ export function useProviderHealth(filter: Ref<RowFilter>, intervalMs = 30_000) {
     recompute()
   }
 
+  // Re-derive rows immediately when the filter changes (e.g. audio/language toggle),
+  // without waiting for the next poll cycle.
+  watch(filter, recompute)
+
   let timer: ReturnType<typeof setInterval> | null = null
 
   const start = () => {
+    if (timer) return // guard against double-start
     void poll()
     timer = setInterval(() => { void poll() }, intervalMs)
   }
