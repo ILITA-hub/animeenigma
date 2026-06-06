@@ -330,6 +330,11 @@ const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
 const isResolving = ref(false)
 
+// Monotonically-increasing request token — only the latest resolve applies.
+// Prevents a stale audio/lang/server re-resolve from clobbering a concurrent
+// provider-change full re-list+resolve that started after it.
+let resolveToken = 0
+
 // Initialize selectedEpisode from initialEpisode or anime.ep
 function initSelectedEpisode() {
   const targetEp = props.initialEpisode ?? props.anime.ep ?? 1
@@ -351,13 +356,16 @@ async function loadEpisodesAndStream() {
 
   sourceError.value = null
   isResolving.value = true
+  const token = ++resolveToken
 
   try {
     // Load episode list
     const eps = await resolver.listEpisodes(provider, props.animeId)
+    if (token !== resolveToken) return // superseded by a later request
+
     episodes.value = eps
 
-    // Select the right episode
+    // Preserve the selected episode number across provider changes
     const targetNum =
       selectedEpisode.value?.number ?? props.initialEpisode ?? props.anime.ep ?? 1
     const ep =
@@ -380,9 +388,12 @@ async function loadEpisodesAndStream() {
       state.combo.value,
     )
 
+    if (token !== resolveToken) return // superseded
+
     resolvedServers.value = stream.servers ?? []
     await engine.load(stream)
   } catch (err: unknown) {
+    if (token !== resolveToken) return // superseded
     const isNotAvailable =
       err instanceof Error && err.name === 'NotAvailableError'
     if (isNotAvailable) {
@@ -391,17 +402,40 @@ async function loadEpisodesAndStream() {
       sourceError.value = 'Stream unavailable'
     }
   } finally {
-    isResolving.value = false
+    if (token === resolveToken) {
+      isResolving.value = false
+    }
   }
 }
 
-// Watch provider or selected episode changes → re-resolve
+// Provider change → full re-list + resolve (episodes are provider-specific)
 watch(
   () => state.combo.value.provider,
   (newProvider) => {
     if (newProvider) {
       void loadEpisodesAndStream()
     }
+  },
+)
+
+// Audio / language / server change, or episode selection → re-resolve stream
+// only (no need to re-list episodes). The token inside resolveStreamForEpisode
+// ensures a concurrent provider-change full-resolve wins if they race.
+// Skip when loadEpisodesAndStream is in-flight: it sets selectedEpisode itself
+// and will call resolveStream at the end — we must not fire a duplicate.
+watch(
+  () => [
+    state.combo.value.audio,
+    state.combo.value.lang,
+    state.combo.value.server,
+    selectedEpisode.value,
+  ] as const,
+  (_newVal, oldVal) => {
+    // Skip the very first run (oldVal is undefined on initial watch fire)
+    if (oldVal === undefined) return
+    // Skip if a full re-list is already in progress (provider changed)
+    if (isResolving.value) return
+    void resolveStreamForCurrentEpisode()
   },
 )
 
@@ -497,6 +531,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   const provider = state.combo.value.provider
   if (!provider) return
   sourceError.value = null
+  const token = ++resolveToken
   try {
     const stream = await resolver.resolveStream(
       provider,
@@ -504,15 +539,27 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
       ep,
       state.combo.value,
     )
+    if (token !== resolveToken) return // superseded
     resolvedServers.value = stream.servers ?? []
     await engine.load(stream)
   } catch (err: unknown) {
+    if (token !== resolveToken) return // superseded
     const isNotAvailable =
       err instanceof Error && err.name === 'NotAvailableError'
     sourceError.value = isNotAvailable
       ? "This source isn't available yet"
       : 'Stream unavailable'
   }
+}
+
+// Re-resolve stream (without re-listing episodes) for the currently-selected
+// episode when audio, lang, server, or selectedEpisode changes.
+// Provider changes are handled separately by the provider watcher above
+// (which does a full re-list + resolve) — we skip here when it's active.
+async function resolveStreamForCurrentEpisode() {
+  const ep = selectedEpisode.value
+  if (!ep) return
+  await resolveStreamForEpisode(ep)
 }
 
 // ─── Menu state ───────────────────────────────────────────────────────────────
