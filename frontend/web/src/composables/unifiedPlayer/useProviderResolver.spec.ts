@@ -47,4 +47,19 @@ describe('useProviderResolver', () => {
     const resolver = makeResolver({} as any)
     await expect(resolver.listEpisodes('animelib', 'x')).rejects.toThrow(/not available/i)
   })
+
+  it('wires kodik via translations + proxy-wrapped stream', async () => {
+    const kodikApi = {
+      getTranslations: vi.fn().mockResolvedValue({ data: { data: [{ id: 7, title: 'AniLibria', type: 'voice', episodes_count: 3 }] } }),
+      getStream: vi.fn().mockResolvedValue({ data: { data: { stream_url: 'http://cdn/x.m3u8', referer: 'https://kodik' } } }),
+    }
+    const resolver = makeResolver({ kodikApi } as any)
+    const eps = await resolver.listEpisodes('kodik', 'uuid')
+    expect(eps.length).toBe(3)
+    const stream = await resolver.resolveStream('kodik', 'uuid', eps[0], { audio: 'dub', lang: 'ru', provider: 'kodik', server: '', team: 'AniLibria' })
+    expect(stream.type).toBe('hls')
+    expect(stream.url).toContain('/api/streaming/hls-proxy')
+    expect(stream.url).toContain('x.m3u8')
+    expect(kodikApi.getStream).toHaveBeenCalledWith('uuid', 1, 7)
+  })
 })

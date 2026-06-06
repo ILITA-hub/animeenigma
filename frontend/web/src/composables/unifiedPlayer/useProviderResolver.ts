@@ -14,11 +14,11 @@
  *   getStream (resp.data?.data ?? resp.data envelope).
  * • anime18Adapter  — covers '18anime' NON-scraper path using anime18Api.getEpisodes /
  *   getStream (resp.data?.data || resp.data envelope).
+ * • kodikAdapter    — covers 'kodik' (RU ad-free HLS path) using kodikApi.getTranslations /
+ *   getStream; stream URLs are wrapped through the HLS proxy for CORS (resp.data?.data ?? resp.data).
  *
  * NOT wired (throw NotAvailableError)
  * ─────────────────────────────────────
- * • 'kodik'     — kodik iframe; no stable HLS URL retrievable via the current
- *                 public API without the /ftor extraction pipeline (future task).
  * • 'animelib'  — upstream went Kodik-only (see MEMORY.md); hidden by default.
  * • 'hanime'    — hanimeApi.getStream(animeId, slug) needs the episode slug, not
  *                 a number, and the resolver contract uses a number-keyed EpisodeOption;
@@ -26,7 +26,7 @@
  * • 'ae'        — first-party / admin-only path, not yet exposed to this layer.
  */
 
-import { scraperApi, rawApi, anime18Api } from '@/api/client'
+import { scraperApi, rawApi, anime18Api, kodikApi } from '@/api/client'
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
 import type { StreamResult, Combo } from '@/types/unifiedPlayer'
 
@@ -100,6 +100,20 @@ interface Anime18Source {
   quality: string
 }
 
+// ─── Kodik types ─────────────────────────────────────────────────────────────
+
+interface KodikTranslation {
+  id: number
+  title: string
+  type: string // 'voice' = dub, otherwise sub
+  episodes_count: number
+}
+
+interface KodikStream {
+  stream_url: string
+  referer: string
+}
+
 // ─── ProviderAdapter interface ───────────────────────────────────────────────
 
 export interface ProviderAdapter {
@@ -123,6 +137,7 @@ export interface ResolverDeps {
   scraperApi?: typeof scraperApi
   rawApi?: typeof rawApi
   anime18Api?: typeof anime18Api
+  kodikApi?: typeof kodikApi
 }
 
 // ─── Set of provider IDs that route through the scraper microservice ─────────
@@ -262,6 +277,54 @@ function makeAnime18Adapter(api: typeof anime18Api): ProviderAdapter {
   }
 }
 
+// ─── Kodik proxy helper ───────────────────────────────────────────────────────
+
+function buildProxyUrl(url: string, referer: string): string {
+  const params = new URLSearchParams()
+  params.set('url', url)
+  if (referer) params.set('referer', referer)
+  return `/api/streaming/hls-proxy?${params.toString()}`
+}
+
+function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
+  return {
+    async listEpisodes(animeId: string): Promise<EpisodeOption[]> {
+      const resp = await api.getTranslations(animeId)
+      const translations: KodikTranslation[] = resp.data?.data ?? resp.data ?? []
+      if (!Array.isArray(translations) || translations.length === 0) {
+        return []
+      }
+      // Use the first translation to determine episode count
+      const first = translations[0]
+      return Array.from({ length: first.episodes_count }, (_, i) => {
+        const n = i + 1
+        return { key: n, label: n, number: n }
+      })
+    },
+
+    async resolveStream(animeId: string, ep: EpisodeOption, combo: Combo): Promise<StreamResult> {
+      const resp = await api.getTranslations(animeId)
+      const translations: KodikTranslation[] = resp.data?.data ?? resp.data ?? []
+      if (!Array.isArray(translations) || translations.length === 0) {
+        throw new NotAvailableError('kodik', 'has no translations')
+      }
+      // Pick by team name, fall back to first
+      const tr = (combo.team ? translations.find((t) => t.title === combo.team) : undefined)
+        ?? translations[0]
+
+      const stResp = await api.getStream(animeId, ep.number, tr.id)
+      const stream: KodikStream = stResp.data?.data ?? stResp.data
+      if (!stream?.stream_url) {
+        throw new NotAvailableError('kodik', 'returned no stream URL')
+      }
+      return {
+        url: buildProxyUrl(stream.stream_url, stream.referer),
+        type: 'hls',
+      }
+    },
+  }
+}
+
 // ─── Resolver (factory + composable) ─────────────────────────────────────────
 
 export interface ProviderResolver {
@@ -273,6 +336,7 @@ export interface ProviderResolver {
  * `makeResolver(deps)` — injectable factory for testing.
  *
  * Dispatching rules:
+ * - provider === 'kodik'       → kodikAdapter (requires deps.kodikApi)
  * - provider in SCRAPER_IDS   → scraperAdapter (requires deps.scraperApi)
  * - provider === 'raw'         → rawAdapter (requires deps.rawApi)
  * - provider === '18anime-direct' → anime18Adapter (requires deps.anime18Api)
@@ -280,7 +344,6 @@ export interface ProviderResolver {
  */
 export function makeResolver(deps: ResolverDeps): ProviderResolver {
   const UNAVAILABLE_PROVIDERS = new Set<string>([
-    'kodik',    // iframe; no stable HLS URL without /ftor extraction pipeline
     'animelib', // upstream went Kodik-only
     'hanime',   // needs slug-based episode key; deferred
     'ae',       // first-party admin path; not exposed here
@@ -289,6 +352,13 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
   function getAdapter(provider: string): ProviderAdapter {
     if (UNAVAILABLE_PROVIDERS.has(provider)) {
       throw new NotAvailableError(provider)
+    }
+
+    if (provider === 'kodik') {
+      if (!deps.kodikApi) {
+        throw new NotAvailableError(provider, 'not available (kodikApi dep missing)')
+      }
+      return makeKodikAdapter(deps.kodikApi)
     }
 
     if (SCRAPER_IDS.has(provider)) {
@@ -337,5 +407,5 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
  * Call this inside a Vue setup context.
  */
 export function useProviderResolver(): ProviderResolver {
-  return makeResolver({ scraperApi, rawApi, anime18Api })
+  return makeResolver({ scraperApi, rawApi, anime18Api, kodikApi })
 }
