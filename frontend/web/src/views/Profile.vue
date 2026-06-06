@@ -619,8 +619,11 @@
                   <div>
                     <label class="block text-white/60 text-sm mb-2">{{ $t('profile.profileLink') }}</label>
                     <div class="flex gap-2">
-                      <div class="flex-1">
-                        <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="savingPublicId" />
+                      <div class="flex-1 flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
+                        <span class="px-3 text-white/60 text-sm">/user/</span>
+                        <div class="flex-1">
+                          <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="savingPublicId" />
+                        </div>
                       </div>
                       <Button
                         variant="primary"
