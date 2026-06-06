@@ -142,7 +142,7 @@
               <!-- View Toggle + Sort -->
               <div class="flex items-center justify-end gap-2">
                 <div class="flex-shrink-0 w-48 mr-auto">
-                  <Input v-model="searchQuery" type="text" :placeholder="$t('profile.watchlist.searchPlaceholder')" class="rounded-full" />
+                  <Input v-model="searchQuery" type="text" size="sm" :placeholder="$t('profile.watchlist.searchPlaceholder')" class="rounded-full border-transparent" />
                 </div>
                 <!-- Sort -->
                 <div class="w-36">
@@ -622,7 +622,7 @@
                       <div class="flex-1 flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
                         <span class="px-3 text-white/60 text-sm">/user/</span>
                         <div class="flex-1">
-                          <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="savingPublicId" />
+                          <Input v-model="publicId" type="text" size="sm" placeholder="your-username" class="bg-transparent border-0 pl-0" :disabled="savingPublicId" />
                         </div>
                       </div>
                       <Button

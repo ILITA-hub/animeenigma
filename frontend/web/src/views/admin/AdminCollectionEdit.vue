@@ -49,7 +49,7 @@
             <label class="block text-white/70 text-xs uppercase mb-1">
               {{ $t('admin.collections.fieldSlug') }}
             </label>
-            <Input v-model="form.slug" type="text" class="bg-black/40" :placeholder="$t('admin.collections.slugPlaceholder')" />
+            <Input v-model="form.slug" type="text" size="sm" class="bg-black/40" :placeholder="$t('admin.collections.slugPlaceholder')" />
           </div>
 
           <!-- Titles -->
@@ -58,19 +58,19 @@
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleEn') }} *
               </label>
-              <Input v-model="form.title" type="text" class="bg-black/40" required />
+              <Input v-model="form.title" type="text" size="sm" class="bg-black/40" required />
             </div>
             <div>
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleRu') }}
               </label>
-              <Input v-model="form.title_ru" type="text" class="bg-black/40" />
+              <Input v-model="form.title_ru" type="text" size="sm" class="bg-black/40" />
             </div>
             <div>
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleJp') }}
               </label>
-              <Input v-model="form.title_jp" type="text" class="bg-black/40" />
+              <Input v-model="form.title_jp" type="text" size="sm" class="bg-black/40" />
             </div>
           </div>
 
@@ -79,7 +79,7 @@
             <label class="block text-white/70 text-xs uppercase mb-1">
               {{ $t('admin.collections.fieldCover') }}
             </label>
-            <Input v-model="form.cover_image_url" type="url" class="bg-black/40" placeholder="https://…" />
+            <Input v-model="form.cover_image_url" type="url" size="sm" class="bg-black/40" placeholder="https://…" />
             <div v-if="form.cover_image_url" class="mt-2">
               <img
                 :src="form.cover_image_url"
@@ -144,7 +144,7 @@
 
           <!-- Picker -->
           <div class="mb-4">
-            <Input v-model="searchQuery" type="text" class="bg-black/40" :placeholder="$t('admin.collections.itemSearchPlaceholder')" @input="onSearch" />
+            <Input v-model="searchQuery" type="text" size="sm" class="bg-black/40" :placeholder="$t('admin.collections.itemSearchPlaceholder')" @input="onSearch" />
             <div v-if="searchResults.length > 0" class="mt-2 max-h-60 overflow-y-auto rounded border border-white/10 bg-black/60">
               <button
                 v-for="r in searchResults"

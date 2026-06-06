@@ -17,7 +17,7 @@
             <div class="flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
               <span class="px-3 text-white/40 text-sm">/user/</span>
               <div class="flex-1">
-                <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="saving" @keyup.enter="save" />
+                <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0 pl-0" :disabled="saving" @keyup.enter="save" />
               </div>
             </div>
             <p v-if="error" class="text-pink-400 text-xs mt-2 text-left">{{ error }}</p>

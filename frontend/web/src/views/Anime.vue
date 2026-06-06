@@ -305,7 +305,7 @@
             <div class="flex items-center gap-3">
               <label class="text-white/60 text-sm whitespace-nowrap">Shikimori ID:</label>
               <div class="flex-1">
-                <Input v-model="editShikimoriId" type="text" :placeholder="$t('anime.examplePlaceholder')" />
+                <Input v-model="editShikimoriId" type="text" size="sm" :placeholder="$t('anime.examplePlaceholder')" />
               </div>
               <Button
                 @click="saveShikimoriId"

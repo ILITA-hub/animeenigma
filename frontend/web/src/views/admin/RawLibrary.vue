@@ -48,10 +48,10 @@
         </h2>
         <form class="glass-card p-4 mb-4 flex flex-wrap gap-3 items-end" @submit.prevent="handleSearch">
           <div class="flex-1 min-w-[260px]">
-            <Input v-model="searchQuery" type="text" :placeholder="$t('player.adminLibrary.search.placeholder')" :aria-label="$t('player.adminLibrary.search.placeholder')" />
+            <Input v-model="searchQuery" type="text" size="sm" :placeholder="$t('player.adminLibrary.search.placeholder')" :aria-label="$t('player.adminLibrary.search.placeholder')" />
           </div>
           <div class="w-32">
-            <Input v-model.number="searchMalId" type="number" placeholder="MAL ID" aria-label="MAL ID" />
+            <Input v-model.number="searchMalId" type="number" size="sm" placeholder="MAL ID" aria-label="MAL ID" />
           </div>
           <Button
             type="submit"
@@ -412,7 +412,7 @@ function handleSearch() {
     }
     searching.value = true
     try {
-      const resp = await adminLibraryApi.search(searchQuery.value.trim(), searchMalId.value ?? undefined, 50)
+      const resp = await adminLibraryApi.search(searchQuery.value.trim(), searchMalId.value, 50)
       const data = unwrap<{ releases?: Release[] } | Release[]>(resp)
       searchResults.value = Array.isArray(data) ? data : data?.releases ?? []
     } catch (err) {
