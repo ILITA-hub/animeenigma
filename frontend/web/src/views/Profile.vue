@@ -680,11 +680,9 @@
                         :key="status.value"
                         class="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
                       >
-                        <input
-                          type="checkbox"
-                          :checked="publicStatuses.includes(status.value)"
-                          @change="togglePublicStatus(status.value)"
-                          class="w-4 h-4 rounded border-white/20 bg-white/10 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+                        <Checkbox
+                          :model-value="publicStatuses.includes(status.value)"
+                          @update:model-value="() => togglePublicStatus(status.value)"
                         />
                         <span class="text-white">{{ status.label }}</span>
                       </label>
@@ -1026,7 +1024,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Badge, Button, Input, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
+import { Badge, Button, Checkbox, Input, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'

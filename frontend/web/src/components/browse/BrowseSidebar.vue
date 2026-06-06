@@ -15,12 +15,9 @@
           :key="g.id"
           class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
         >
-          <input
-            type="checkbox"
-            :value="g.id"
-            :checked="filters.genres.value.includes(g.id)"
-            class="rounded border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-            @change="onGenreToggle(g.id, ($event.target as HTMLInputElement).checked)"
+          <Checkbox
+            :model-value="filters.genres.value.includes(g.id)"
+            @update:model-value="(v) => onGenreToggle(g.id, v === true)"
           />
           <span>{{ localizedGenre(g) }}</span>
         </label>
@@ -189,6 +186,7 @@ import {
 import FilterSection from './FilterSection.vue'
 import { getLocalizedGenre } from '@/utils/title'
 import Input from '@/components/ui/Input.vue'
+import Checkbox from '@/components/ui/Checkbox.vue'
 
 // Phase 15 (UX-31) — Browse.vue passes the genre list down (no
 // duplicate fetch) and the parent's useBrowseFilters instance so the

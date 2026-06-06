@@ -127,7 +127,7 @@
           <!-- Published toggle -->
           <div class="flex items-center gap-3">
             <label class="inline-flex items-center cursor-pointer">
-              <input v-model="form.published" type="checkbox" class="mr-2" />
+              <Checkbox v-model="form.published" class="mr-2" />
               <span class="text-white text-sm">{{ $t('admin.collections.fieldPublished') }}</span>
             </label>
           </div>
@@ -209,6 +209,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
+import Checkbox from '@/components/ui/Checkbox.vue'
 import Input from '@/components/ui/Input.vue'
 import {
   adminApi,
