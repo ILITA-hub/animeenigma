@@ -5,6 +5,8 @@ import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/prefere
 import type { CreateJobPayload } from '@/types/library'
 import { newTraceparent } from '@/analytics/traceparent'
 import { stampTrace } from '@/analytics/traceContext'
+import { analytics } from '@/analytics'
+import router from '@/router'
 
 const TRACING_ON = import.meta.env.VITE_ANALYTICS_ENABLED !== 'false'
 
@@ -179,6 +181,37 @@ apiClient.interceptors.request.use(
       const { header, traceId } = newTraceparent()
       config.headers['traceparent'] = header
       stampTrace(traceId)
+      // Emit a lightweight source='fe' register row carrying THIS call's
+      // trace_id — the same id stampTrace just back-filled onto the pending
+      // click — so the click, the FE call, and the downstream BE effects all
+      // join on one trace_id (AR-FE-01/AR-FE-02). Best-effort: a no-op before
+      // analytics.init(), and wrapped so it can never throw into the request
+      // path.
+      try {
+        // Read the route from the singleton (router.currentRoute) — useRoute()
+        // throws in interceptor/module scope (no active component, RESEARCH P4).
+        const route = router.currentRoute.value
+        // Prefer the pattern-like route.name over the concrete fullPath to bound
+        // register cardinality (T-04-07).
+        const routeLabel = (route?.name as string | undefined) ?? route?.fullPath
+        // Opt-in semantic action — set only when a caller passes config.meta.action,
+        // so poster/poll fetches stay unlabeled (AR-FE-01 "optional semantic action").
+        const action = (config as unknown as { meta?: { action?: string } }).meta?.action
+        const method = (config.method ?? 'GET').toUpperCase()
+        analytics.track('fe.call', {
+          source: 'fe',
+          trace_id: traceId,
+          route: routeLabel,
+          action,
+          // API path as target (e.g. /api/anime/123). target_kind='route' tags it.
+          target: config.url,
+          target_kind: 'route',
+          // Coarse operation label (METHOD route) to bound cardinality.
+          operation: `${method} ${routeLabel ?? ''}`.trim(),
+        })
+      } catch {
+        // Never let analytics emission break the request.
+      }
     }
     return config
   },
