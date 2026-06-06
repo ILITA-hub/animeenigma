@@ -265,6 +265,11 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  /* Right gutter so the right-anchored .feed-poster clears the 4px scroll
+     thumb instead of colliding with it (matches the row-level padding
+     HomeColumn/.item and LastUpdates/.update-row use to clear the same
+     scrollbar). Content-box spacing, so it holds for overlay scrollbars too. */
+  padding-right: 10px;
 }
 
 /* 28px avatar — uses poster as avatar thumbnail */
@@ -412,6 +417,8 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  /* Match .feed-item so the skeleton poster sits in the same slot. */
+  padding-right: 10px;
 }
 
 .skeleton-av {
