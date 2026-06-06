@@ -1,0 +1,192 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "uid": "activity-register-pivot",
+  "title": "Activity Register — Pivot",
+  "description": "AR-REPORT-01 wide-event pivot over ClickHouse analytics.events. Switch the $group_by template var to regroup the table by ANY dimension (origin, operation, effect_kind, target_kind, target, source) live. The $effect_kind / $origin / $target dropdowns self-discover live values via SELECT DISTINCT. Byte measure uses sumIf(..., source='be') so fe_rum approximate rows never contaminate authoritative byte totals (AR-FE-03).",
+  "tags": [
+    "activity-register",
+    "pivot"
+  ],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "group_by",
+        "label": "Group by",
+        "type": "custom",
+        "query": "origin, operation, effect_kind, target_kind, target, source",
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "operation",
+          "value": "operation"
+        },
+        "options": [
+          { "text": "origin", "value": "origin", "selected": false },
+          { "text": "operation", "value": "operation", "selected": true },
+          { "text": "effect_kind", "value": "effect_kind", "selected": false },
+          { "text": "target_kind", "value": "target_kind", "selected": false },
+          { "text": "target", "value": "target", "selected": false },
+          { "text": "source", "value": "source", "selected": false }
+        ]
+      },
+      {
+        "name": "effect_kind",
+        "label": "Effect kind",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "aenigma-clickhouse"
+        },
+        "query": "SELECT DISTINCT effect_kind FROM events WHERE effect_kind != '' AND $__timeFilter(timestamp) ORDER BY effect_kind",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "origin",
+        "label": "Origin",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "aenigma-clickhouse"
+        },
+        "query": "SELECT DISTINCT origin FROM events WHERE origin != '' AND $__timeFilter(timestamp) ORDER BY origin",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "target",
+        "label": "Target",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "aenigma-clickhouse"
+        },
+        "query": "SELECT DISTINCT target FROM events WHERE target != '' AND $__conditionalAll(effect_kind IN (${effect_kind:singlequote}), $effect_kind) AND $__timeFilter(timestamp) ORDER BY target LIMIT 200",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "title": "Pivot — grouped by ${group_by}",
+      "type": "table",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bytes_be"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "format": "table",
+          "queryType": "sql",
+          "refId": "A",
+          "rawSql": "SELECT ${group_by} AS dimension, sum(requests) AS requests, sumIf(bytes_out + bytes_in, source = 'be') AS bytes_be, round(avg(duration_ms), 1) AS avg_ms FROM events WHERE $__timeFilter(timestamp) AND $__conditionalAll(effect_kind IN (${effect_kind:singlequote}), $effect_kind) AND $__conditionalAll(origin IN (${origin:singlequote}), $origin) AND $__conditionalAll(target IN (${target:singlequote}), $target) GROUP BY dimension ORDER BY requests DESC LIMIT 100"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "title": "Requests over time",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 2,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "format": 0,
+          "queryType": "sql",
+          "refId": "A",
+          "rawSql": "SELECT toStartOfHour(timestamp) AS time, sum(requests) AS requests FROM events WHERE $__timeFilter(timestamp) AND $__conditionalAll(effect_kind IN (${effect_kind:singlequote}), $effect_kind) AND $__conditionalAll(origin IN (${origin:singlequote}), $origin) AND $__conditionalAll(target IN (${target:singlequote}), $target) GROUP BY time ORDER BY time"
+        }
+      ]
+    }
+  ]
+}
