@@ -19,7 +19,7 @@
 - [x] **Phase 1: ClickHouse Foundation + EventStore Swap** — Stand up ClickHouse, define the wide-event schema (1 row per effect), implement the ClickHouse `EventStore` behind the existing interface, migrate the clickstream onto it. (completed 2026-06-05)
 - [x] **Phase 2: BE Egress Recorder** — Async batched effect recorder at the `WrapTransport` outbound seam + OTel baggage; retrofit non-shared HTTP clients; per-(stream-session, host) HLS aggregation. (completed 2026-06-05)
 - [x] **Phase 3: DB/Cache Effects + Auto Operation Discovery** — otel-GORM DB-write effects, cache hit/miss effects, stack-frame operation attribution, Tempo span-metrics + service graph. (completed 2026-06-06)
-- [ ] **Phase 4: FE Causation + RUM** — Wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (flagged approximate).
+- [x] **Phase 4: FE Causation + RUM** — Wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (flagged approximate). (completed 2026-06-06)
 - [ ] **Phase 5: Reports & Dashboards** — Grafana wide-event pivot tables (template vars = any dimension), the "from → choke-point → effects" report, anomaly flagging, awareness overview.
 - [ ] **Phase 6: Consolidation → Topology A** — OTel Collector ClickHouse exporter for traces + logs; retire Tempo + Loki; keep Prometheus + Grafana. Deliberately last (register proven before SPOF consolidation).
 
@@ -89,7 +89,7 @@ Plans:
 - [x] 04-01-PLAN.md — Backend: collect.go FE register field-mapping + source whitelist + byte-poverty tests (AR-FE-01/03)
 - [x] 04-02-PLAN.md — FE: AnalyticsEvent wire-type extension + rum.ts PerformanceObserver (host-only, byte-poor fe_rum rows) + spec (AR-FE-03)
 - [x] 04-03-PLAN.md — FE: axios interceptor emits source='fe' call row sharing the call's trace_id; click↔trace stamp proof (AR-FE-01/02)
-- [ ] 04-04-PLAN.md — Live ClickHouse phase-gate (non-autonomous): prove trace_id join + click→effect join + source=be byte filter
+- [x] 04-04-PLAN.md — Live ClickHouse phase-gate (non-autonomous): prove trace_id join + click→effect join + source=be byte filter
 **Metrics**: `UXΔ = +1 (Better)` (closes the FE→BE causation last mile; RUM gives real client-side perf signal) · `CDI = 0.08 * 13` (frontend axios interceptor + click-capture + a `PerformanceObserver`; extends the existing `traceparent` minting, contained to the FE analytics layer) · `MVQ = Griffin 80%/85%` (joins frontend causation to the backend register into one trace-linked form; the `accuracy=approx` discipline is the crafted, slop-resistant detail)
 **UI hint**: yes
 
@@ -138,6 +138,6 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
 | 3 | v4.0 | 6/6 | Complete   | 2026-06-06 |
-| 4 | v4.0 | 3/4 | In Progress|  |
+| 4 | v4.0 | 4/4 | Complete   | 2026-06-06 |
 | 5 | v4.0 | 0/? | Not started | — |
 | 6 | v4.0 | 0/? | Not started | — |
