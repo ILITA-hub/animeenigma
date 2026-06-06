@@ -87,3 +87,11 @@ src/views/Auth.vue:#ffffff:QR-code module light color (functional, qrcode.js can
 # the rendered cover hue out of tolerance. No exact token pair -> adjudicated keep.
 src/views/Collections.vue:#0e7490:Collections hero fallback gradient START — no exact token pair; adjudicated keep (matches CollectionsRow)
 src/views/Collections.vue:#6b21a8:Collections hero fallback gradient END — no exact token pair; adjudicated keep (matches CollectionsRow)
+
+# --- UnifiedPlayer orchestrator (Task 13) ----------------------------------------
+# #000: video canvas background — always-dark letterbox, no theme token (bg-black equiv)
+# #fff: icon/text color on player chrome (always-dark video backdrop) — functional, non-theme surface
+# #00d4ff: brand-cyan fallback in `?? '#00d4ff'` — canonical-fine brand value fallback
+src/components/player/unified/UnifiedPlayer.vue:#000:video element container background (always-dark letterbox) — player chrome, no theme token
+src/components/player/unified/UnifiedPlayer.vue:#fff:icon/text color on player top-bar chrome (always-dark video backdrop) — functional non-theme surface
+src/components/player/unified/UnifiedPlayer.vue:#00d4ff:brand-cyan fallback in activeProviderHue computed (var(--brand-cyan,#00d4ff) equivalent) — canonical-fine brand value
