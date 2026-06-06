@@ -102,7 +102,11 @@ Plans:
   2. The "from → choke-point → effects" report renders the target shape: origin → operation → per-target requests + bytes — verified by opening it and reading a real origin's effect breakdown. (AR-REPORT-02)
   3. Volume anomalies are flagged: a provider/operation whose request count is far above its baseline is visibly surfaced (panel/alert) — verified by injecting a synthetic volume spike and seeing it flagged. (AR-REPORT-03)
   4. An "awareness overview" answers "what is the platform doing now/today" at a glance — verified by a single dashboard view showing current top operations + top external dependencies + active anomalies. (AR-REPORT-04)
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
+Plans:
+- [ ] 05-01-PLAN.md — Wide-event pivot dashboard (AR-REPORT-01) + from→choke-point→effects flow report (AR-REPORT-02)
+- [ ] 05-02-PLAN.md — Awareness overview dashboard + explainable volume-anomaly panel (AR-REPORT-04, AR-REPORT-03) + provisioned ClickHouse alert rule
+- [ ] 05-03-PLAN.md — Live Grafana phase gate: reload, dry-run all panel SQL, inject synthetic spike, confirm all four reports + anomaly alert (autonomous: false)
 **Metrics**: `UXΔ = +2 (Better)` (this is where awareness becomes usable — the admin-facing payoff of the whole register) · `CDI = 0.06 * 21` (Grafana dashboards + template vars + anomaly rules; new dashboards on an existing Grafana, no code-structure disruption, but a large authoring effort to get the pivots right) · `MVQ = Dragon 88%/86%` (the showy high-impact centerpiece — the register made human-readable; high match, strong slop-resistance if the pivots are genuinely insightful rather than panel-spam)
 **UI hint**: yes
 
