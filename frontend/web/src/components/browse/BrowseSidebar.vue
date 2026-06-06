@@ -77,27 +77,13 @@
       :count="filters.yearFrom.value || filters.yearTo.value ? 1 : 0"
     >
       <div class="flex items-center gap-2">
-        <input
-          type="number"
-          :min="MIN_YEAR"
-          :max="MAX_YEAR"
-          :value="filters.yearFrom.value ?? ''"
-          :placeholder="$t('browse.filters.year.from')"
-          :aria-label="$t('browse.filters.year.from')"
-          class="w-1/2 px-2 py-1 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:ring-2 focus:ring-cyan-500/40 focus:outline-none"
-          @change="onYearChange('from', ($event.target as HTMLInputElement).valueAsNumber)"
-        />
+        <div class="w-1/2">
+          <Input type="number" size="sm" :min="MIN_YEAR" :max="MAX_YEAR" :model-value="filters.yearFrom.value != null ? String(filters.yearFrom.value) : ''" :placeholder="$t('browse.filters.year.from')" :aria-label="$t('browse.filters.year.from')" @change="onYearChange('from', ($event.target as HTMLInputElement).valueAsNumber)" />
+        </div>
         <span class="text-white/40">—</span>
-        <input
-          type="number"
-          :min="MIN_YEAR"
-          :max="MAX_YEAR"
-          :value="filters.yearTo.value ?? ''"
-          :placeholder="$t('browse.filters.year.to')"
-          :aria-label="$t('browse.filters.year.to')"
-          class="w-1/2 px-2 py-1 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:ring-2 focus:ring-cyan-500/40 focus:outline-none"
-          @change="onYearChange('to', ($event.target as HTMLInputElement).valueAsNumber)"
-        />
+        <div class="w-1/2">
+          <Input type="number" size="sm" :min="MIN_YEAR" :max="MAX_YEAR" :model-value="filters.yearTo.value != null ? String(filters.yearTo.value) : ''" :placeholder="$t('browse.filters.year.to')" :aria-label="$t('browse.filters.year.to')" @change="onYearChange('to', ($event.target as HTMLInputElement).valueAsNumber)" />
+        </div>
       </div>
     </FilterSection>
 
@@ -202,6 +188,7 @@ import {
 } from '@/composables/useBrowseFilters'
 import FilterSection from './FilterSection.vue'
 import { getLocalizedGenre } from '@/utils/title'
+import Input from '@/components/ui/Input.vue'
 
 // Phase 15 (UX-31) — Browse.vue passes the genre list down (no
 // duplicate fetch) and the parent's useBrowseFilters instance so the

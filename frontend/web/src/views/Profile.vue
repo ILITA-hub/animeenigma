@@ -236,18 +236,17 @@
                       <!-- Score (inline edit) -->
                       <td class="py-3 px-2 text-center">
                         <template v-if="isOwnProfile">
-                          <input
-                            v-if="editingScore === anime.anime_id"
-                            type="number"
-                            min="0"
-                            max="10"
-                            :value="anime.score || 0"
-                            @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
-                            @keydown.enter="(e) => { (e.target as HTMLInputElement).blur(); }"
-                            @keydown.escape="editingScore = null"
-                            class="w-12 h-8 text-center bg-white/10 border border-cyan-500/50 rounded text-cyan-400 font-bold focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                            ref="scoreInputRef"
-                          />
+                          <div v-if="editingScore === anime.anime_id" class="w-20">
+                            <Input
+                              type="number"
+                              size="sm"
+                              min="0" max="10"
+                              :model-value="String(anime.score || 0)"
+                              @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
+                              @keydown.enter="(e: KeyboardEvent) => { (e.target as HTMLInputElement).blur(); }"
+                              @keydown.escape="editingScore = null"
+                            />
+                          </div>
                           <button
                             v-else
                             @click="editingScore = anime.anime_id"
@@ -272,15 +271,17 @@
                             class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
                             :disabled="(anime.episodes || 0) <= 0"
                           >-</button>
-                          <input
-                            type="number"
-                            :value="anime.episodes || 0"
-                            min="0"
-                            :max="animeTotalEpisodes(anime) || 9999"
-                            @blur="(e) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
-                            @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
-                            class="w-10 h-6 text-center text-xs bg-white/10 border border-white/10 rounded text-white focus:outline-none focus:border-cyan-500"
-                          />
+                          <div class="w-20">
+                            <Input
+                              type="number"
+                              size="sm"
+                              :model-value="String(anime.episodes || 0)"
+                              min="0"
+                              :max="animeTotalEpisodes(anime) || 9999"
+                              @blur="(e: Event) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
+                              @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
+                            />
+                          </div>
                           <span class="text-white/60">/</span>
                           <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
                           <button
@@ -296,24 +297,26 @@
                         </div>
                       </td>
                       <td class="py-3 px-2 text-center hidden sm:table-cell">
-                        <input
+                        <Input
                           v-if="isOwnProfile"
                           type="date"
-                          :value="formatDateForInput(anime.started_at)"
-                          @change="(e) => updateAnimeDate(anime.anime_id, 'started_at', (e.target as HTMLInputElement).value)"
-                          class="bg-white/10 border border-white/10 rounded px-2 py-1 text-white text-xs w-full focus:outline-none focus:border-cyan-500"
+                          size="sm"
+                          :model-value="formatDateForInput(anime.started_at)"
+                          @change="(e: Event) => updateAnimeDate(anime.anime_id, 'started_at', (e.target as HTMLInputElement).value)"
+                          class="text-xs"
                         />
                         <span v-else class="text-white/60 text-xs">
                           {{ formatDateDisplay(anime.started_at) }}
                         </span>
                       </td>
                       <td class="py-3 px-2 text-center hidden sm:table-cell">
-                        <input
+                        <Input
                           v-if="isOwnProfile"
                           type="date"
-                          :value="formatDateForInput(anime.completed_at)"
-                          @change="(e) => updateAnimeDate(anime.anime_id, 'completed_at', (e.target as HTMLInputElement).value)"
-                          class="bg-white/10 border border-white/10 rounded px-2 py-1 text-white text-xs w-full focus:outline-none focus:border-cyan-500"
+                          size="sm"
+                          :model-value="formatDateForInput(anime.completed_at)"
+                          @change="(e: Event) => updateAnimeDate(anime.anime_id, 'completed_at', (e.target as HTMLInputElement).value)"
+                          class="text-xs"
                         />
                         <span v-else class="text-white/60 text-xs">
                           {{ formatDateDisplay(anime.completed_at) }}
@@ -387,18 +390,17 @@
                       <!-- Score edit popover for grid (z-40 keeps it above the kebab) -->
                       <div
                         v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
-                        class="absolute top-2 right-2 z-40"
+                        class="absolute top-2 right-2 z-40 w-20"
                         @click.prevent.stop
                       >
-                        <input
+                        <Input
                           type="number"
-                          min="0"
-                          max="10"
-                          :value="anime.score || 0"
-                          @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
-                          @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
+                          size="sm"
+                          min="0" max="10"
+                          :model-value="String(anime.score || 0)"
+                          @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
+                          @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
                           @keydown.escape="editingScoreGrid = null"
-                          class="w-14 h-8 text-center bg-black/80 border border-cyan-500/50 rounded text-warning font-bold text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         />
                       </div>
 
@@ -714,16 +716,17 @@
                   <label for="skip-intro-dismiss-sec" class="block text-white/60 text-sm mb-2">
                     {{ $t('profile.settings.skipIntroDismissSec.label') }}
                   </label>
-                  <input
-                    id="skip-intro-dismiss-sec"
-                    type="number"
-                    :min="skipIntroMin"
-                    :max="skipIntroMax"
-                    step="1"
-                    :value="skipIntroSec"
-                    @change="onSkipIntroSecChange"
-                    class="w-32 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
-                  />
+                  <div class="w-32">
+                    <Input
+                      id="skip-intro-dismiss-sec"
+                      type="number"
+                      size="sm"
+                      :min="skipIntroMin" :max="skipIntroMax" step="1"
+                      :model-value="String(skipIntroSec)"
+                      @change="onSkipIntroSecChange"
+                      class="bg-white/10"
+                    />
+                  </div>
                   <p class="text-white/60 text-xs mt-2">
                     {{ $t('profile.settings.skipIntroDismissSec.hint') }}
                   </p>
