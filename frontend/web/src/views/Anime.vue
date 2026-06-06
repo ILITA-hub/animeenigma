@@ -1261,6 +1261,12 @@ const resumeAired = computed(() => anime.value?.episodesAired ?? 0)
 const resumeStatus = computed(() => anime.value?.status ?? '')
 const resumeNextAt = computed(() => anime.value?.nextEpisodeAt ?? undefined)
 const resumeAuth = computed(() => authStore.isAuthenticated)
+// Highest episode actually loaded into our sources, surfaced by the active
+// player via `available-translations` (max episodes_count across teams). This
+// is the ground truth for availability and overrides Shikimori's lagging
+// `episodesAired` in the resume state machine — so a freshly-uploaded episode
+// is never mislabeled "not loaded yet". 0 until the player emits.
+const resumeLoadedEpisodes = ref(0)
 const resume = useResumeStateMachine({
   animeId: resumeAnimeId,
   totalEpisodes: resumeTotal,
@@ -1268,6 +1274,7 @@ const resume = useResumeStateMachine({
   nextEpisodeAt: resumeNextAt,
   status: resumeStatus,
   isAuthenticated: resumeAuth,
+  loadedEpisodes: resumeLoadedEpisodes,
 })
 
 function loadLastEpisode(animeId: string) {
@@ -1513,6 +1520,12 @@ const handleAvailableTranslations = (combos: WatchCombo[]) => {
   if (preferenceState.value) {
     preferenceState.value.resolve(combos)
   }
+  // Feed the real provider episode count into the resume state machine so a
+  // freshly-aired-but-already-uploaded episode is classified 'watching', not a
+  // false "not loaded yet" (Shikimori episodesAired lags reality by hours).
+  // Take the max across teams — if ANY team has ep N, it's watchable.
+  const maxLoaded = combos.reduce((m, c) => Math.max(m, c.episodes_count ?? 0), 0)
+  if (maxLoaded > resumeLoadedEpisodes.value) resumeLoadedEpisodes.value = maxLoaded
 }
 
 // Reviews
@@ -2185,6 +2198,7 @@ const loadAnimeData = async (animeId: string) => {
   anime.value = null
   lastEpisode.value = undefined
   resume.reset()
+  resumeLoadedEpisodes.value = 0
   resumeOverrideEpisode.value = null
   currentListStatus.value = null
   reviews.value = []

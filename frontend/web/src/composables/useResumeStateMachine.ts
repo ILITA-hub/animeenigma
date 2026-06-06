@@ -49,6 +49,16 @@ export interface ResumeStateInputs {
   nextEpisodeAt: Ref<string | undefined>
   status: Ref<string>
   isAuthenticated: Ref<boolean>
+  /**
+   * Highest episode number actually loaded into our video sources (max across
+   * the active player's translations/teams), 0 when unknown. This is the
+   * GROUND TRUTH for availability — Shikimori's `episodesAired` lags reality by
+   * hours after an episode airs, but the providers (Kodik fan teams, etc.) have
+   * often already uploaded it. When `loadedEpisodes > episodesAired`, those
+   * extra episodes ARE watchable, so we must not show "not loaded yet" for
+   * them. Optional/0 falls back to pure Shikimori metadata (prior behavior).
+   */
+  loadedEpisodes?: Ref<number>
 }
 
 export interface ResumeStateMachine {
@@ -161,7 +171,11 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
 
   const kind = computed<ResumeKind>(() => {
     const total = inputs.totalEpisodes.value
-    const aired = inputs.episodesAired.value
+    // `episodesAired` (Shikimori) lags reality for hours after an episode airs.
+    // The active player's real loaded-episode count is authoritative for
+    // availability, so take the max: if our sources actually have ep N, ep N is
+    // "aired" for resume purposes regardless of Shikimori's slow metadata.
+    const aired = Math.max(inputs.episodesAired.value, inputs.loadedEpisodes?.value ?? 0)
     const last = lastWatched.value
     const status = inputs.status.value
 
@@ -172,7 +186,8 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
 
     // Determine whether ep last+1 is available. Three ways to tell:
     //   1. anime.status is 'released' / 'completed' — all eps exist.
-    //   2. anime.episodesAired > last — the next episode has been released.
+    //   2. effective aired count > last — the next episode has been released
+    //      (per Shikimori OR already loaded into our sources).
     const isReleased = status === 'released' || status === 'completed'
     const nextIsAired = aired > 0 && aired > last
     if (isReleased || nextIsAired) return 'watching'

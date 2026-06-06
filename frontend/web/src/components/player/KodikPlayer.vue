@@ -564,7 +564,8 @@ const fetchTranslations = async () => {
         language: 'ru' as const,
         watch_type: tr.type === 'voice' ? 'dub' as const : 'sub' as const,
         translation_id: String(tr.id),
-        translation_title: tr.title
+        translation_title: tr.title,
+        episodes_count: tr.episodes_count
       }))
       emit('availableTranslations', combos)
 

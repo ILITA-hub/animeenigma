@@ -55,6 +55,44 @@ describe('useResumeStateMachine — airing state', () => {
     expect(sm.episodeAiredAgoMs.value).toBeGreaterThanOrEqual(HOUR - 1000)
   })
 
+  it('TenSura S4: caught up at aired=8, ep 9 air time passed, but providers already loaded 9 → watching', async () => {
+    // Shikimori lags (episodes_aired stuck at 8) hours after ep 9 airs, but the
+    // RU teams already uploaded ep 9 (Kodik translations report episodes_count=9).
+    // The provider count overrides the lagging Shikimori metadata so we never
+    // falsely tell the user "translation teams need time to upload" an episode
+    // that is, in fact, sitting in our sources. (Reported 2026-06-05.)
+    getProgress.mockResolvedValue({ data: { data: [{ episode_number: 8, completed: true }] } })
+    const nextAt = new Date(Date.now() - 10 * HOUR).toISOString() // ep 9 aired 10h ago
+    const sm = await setup(
+      makeInputs({
+        totalEpisodes: ref(0), // ongoing, total unknown
+        episodesAired: ref(8),
+        nextEpisodeAt: ref(nextAt),
+        loadedEpisodes: ref(9), // providers actually have ep 9
+      }),
+    )
+    expect(sm.kind.value).toBe('watching')
+    expect(sm.finishedEpisode.value).toBe(8)
+    expect(sm.startEpisode.value).toBe(9)
+  })
+
+  it('episode-not-loaded-yet survives when NO provider has the next episode yet', async () => {
+    // Same air-time-passed setup, but provider max == aired (8): genuinely not
+    // loaded. The banner must still fire — the override only suppresses FALSE
+    // negatives, never invents availability.
+    getProgress.mockResolvedValue({ data: { data: [{ episode_number: 8, completed: true }] } })
+    const nextAt = new Date(Date.now() - 1 * HOUR).toISOString()
+    const sm = await setup(
+      makeInputs({
+        totalEpisodes: ref(0),
+        episodesAired: ref(8),
+        nextEpisodeAt: ref(nextAt),
+        loadedEpisodes: ref(8),
+      }),
+    )
+    expect(sm.kind.value).toBe('episode-not-loaded-yet')
+  })
+
   it('Re:Zero S4 post-cache-fix: caught up with a fresh future air date → not-yet-aired', async () => {
     // The reported bug was a STALE catalog cache (episodes_aired=8 while the
     // user had watched ep 9). The catalog cache fix keeps episodes_aired fresh,
