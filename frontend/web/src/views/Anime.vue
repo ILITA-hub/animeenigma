@@ -438,7 +438,7 @@
               <!-- Task 15 — Unified Player pill (default ON, VITE_UNIFIED_PLAYER_ENABLED=false to hide) -->
               <button
                 v-if="unifiedPlayerEnabled"
-                @click="unifiedSelected = true"
+                @click="unifiedSelected = !unifiedSelected"
                 :aria-pressed="unifiedSelected"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-all inline-flex items-center gap-1.5"
                 :class="unifiedSelected ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/70'"
@@ -448,10 +448,10 @@
               </button>
             </ButtonGroup>
 
-            <!-- Provider sub-tabs -->
+            <!-- Provider sub-tabs — hidden when unified player is active (it has its own source picker) -->
             <!-- UA-063 (UX-12 Phase 5): ButtonGroup wraps provider chips. -->
             <ButtonGroup
-              v-if="videoLanguage === 'ru'"
+              v-if="videoLanguage === 'ru' && !unifiedSelected"
               :label="$t('anime.providerSwitchLabel')"
               container-class="contents"
             >
@@ -488,7 +488,7 @@
                 {{ $t('player.kodikAdfree.tab') }}
               </button>
             </ButtonGroup>
-            <template v-else-if="videoLanguage === 'en' && ourEnglishEnabled">
+            <template v-else-if="videoLanguage === 'en' && ourEnglishEnabled && !unifiedSelected">
               <button
                 @click="videoProvider = 'ourenglish'"
                 :aria-pressed="videoProvider === 'ourenglish'"
@@ -500,7 +500,7 @@
                 {{ $t('player.ourenglish.label') }}
               </button>
             </template>
-            <template v-else-if="videoLanguage === '18+'">
+            <template v-else-if="videoLanguage === '18+' && !unifiedSelected">
               <button
                 @click="videoProvider = 'hanime'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -523,7 +523,7 @@
             </template>
             <!-- Workstream raw-jp / Phase 04 — single-chip group for v0.1.
                  v0.2's hybrid resolver adds 'minio' here. -->
-            <template v-else-if="videoLanguage === 'raw' && rawProviderEnabled">
+            <template v-else-if="videoLanguage === 'raw' && rawProviderEnabled && !unifiedSelected">
               <button
                 @click="onUserPickedProvider('raw')"
                 :aria-pressed="videoProvider === 'raw'"
@@ -537,8 +537,8 @@
             </template>
           </div>
         </div>
-        <!-- Task 15: existing player chain hidden when unified player is selected -->
-        <div class="glass-card p-4 md:p-6" v-show="!unifiedSelected">
+        <!-- Task 15: existing player chain unmounted when unified player is selected (prevents hidden audio) -->
+        <div class="glass-card p-4 md:p-6" v-if="!unifiedSelected">
           <!-- Not-released notice: an announced/upcoming title with no sources
                yet. Replaces the player so users see "premieres on {date}"
                rather than a misleading "no available videos" error. -->
@@ -677,6 +677,7 @@
           :anime="{ title: anime.title, ep: (anime.episodesAired || 1), eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
           :theater="theaterMode"
           :is-hentai="isHentai"
+          :initial-episode="resumeStartEpisode"
           @toggle-theater="setTheater(!theaterMode)"
           @open-episodes="() => {}"
         />
