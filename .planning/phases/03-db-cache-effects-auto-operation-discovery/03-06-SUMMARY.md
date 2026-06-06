@@ -121,3 +121,17 @@ None. The `read_thresholds` hash each refresher reads is empty until the first d
 - FOUND: services/library/internal/config/config.go
 - FOUND commit: 2cbae12a (Task 1)
 - FOUND commit: 93ac3279 (Task 2)
+
+## Task 3 — Human-Verify Checkpoint: APPROVED (2026-06-06)
+
+Live verification against the running production stack (orchestrator-run after merge; user approved):
+
+- **AR-EFFECT-01 (db_write):** ClickHouse `db_write` rows with fine stack-frame operations (`signals.S3Trending.Precompute`, `signals.S5Attribute.persistVector`, `signals.S1ScoreCluster.persistVector`), real tables (`rec_population_signals`, `rec_user_signals`), non-zero `row_count`; `goroutine(unknown)` never-empty fallback observed.
+- **AR-EFFECT-01 (sparse ledger):** `db_read` = 0 rows / 15 min — P95 gate suppresses trivial fast reads (D-01/D-02).
+- **Cache:** ClickHouse `cache` rows miss→hit→success on `search` key_class + `genres` hit (`target_kind=key_class`).
+- **AR-EFFECT-04:** Prometheus `traces_spanmetrics_calls_total` = 15 per-op series; `traces_service_graph_request_total` = 8 edges (gateway→catalog, catalog→postgresql, scheduler→postgresql, …). 13 distinct `traces_*` metric families.
+
+### Runbook finding (for plan/docs)
+Prometheus span-metrics required a container **recreate** (`docker compose up -d --no-deps prometheus`), not `make restart-prometheus` — `--web.enable-remote-write-receiver` is a docker-compose command-line flag, and `docker compose restart` retains the old args. catalog also needed an orphaned-container cleanup (`docker rm -f` + `up -d --no-deps`). `animepahe-resolver` was pre-existing `unhealthy` (unrelated).
+
+**Status: Phase 03 complete — all 4 success criteria proven live.**
