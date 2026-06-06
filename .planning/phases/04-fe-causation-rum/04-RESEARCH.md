@@ -318,7 +318,7 @@ GROUP BY target ORDER BY authoritative_in DESC;
 
 **If you change `flushMs` or `maxBatch`, re-verify A4 — the in-place stamp depends on flush being delayed past the 1.5s window.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the FE "call" register row be emitted for every axios request, or only for semantic/whitelisted actions?**
    - What we know: AR-FE-01 says "stamps each call with the current route + optional semantic action." Every call already mints a trace_id; emitting a register row for *every* call could be high-volume (every poster fetch, every poll).
