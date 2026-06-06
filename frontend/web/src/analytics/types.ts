@@ -16,6 +16,17 @@ export interface AnalyticsEvent {
   el_attrs?: Record<string, string>
   active_ms?: number
   trace_id?: string // stamped by the axios interceptor (Plan 3), links click → backend trace
+  // Register dimensions — mirror the collect.go register fields Plan 1 adds (Phase 4).
+  // All optional: clickstream rows (pageview/click/heartbeat) omit them, matching how
+  // domain.Event defaults these empty. No byte fields here — RUM rows are byte-poor.
+  source?: string
+  route?: string
+  action?: string
+  operation?: string
+  target?: string
+  target_kind?: string
+  requests?: number
+  duration_ms?: number
   properties?: Record<string, unknown>
 }
 
