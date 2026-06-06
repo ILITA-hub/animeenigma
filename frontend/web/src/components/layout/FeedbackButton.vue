@@ -35,6 +35,7 @@
                   : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/80'
               "
             >
+              <!-- bespoke-keep: sr-only radio inside a custom card selector (segmented-toggle pattern) -->
               <input
                 v-model="category"
                 type="radio"

@@ -69,6 +69,7 @@
           </span>
           <span>10</span>
         </div>
+        <!-- bespoke-keep: range slider; no slider primitive in the design system -->
         <input
           type="range"
           min="0"
@@ -92,6 +93,7 @@
         :key="opt.value"
         class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
       >
+        <!-- bespoke-keep: per-provider brand accent (opt.accent); cyan-only Checkbox primitive can't model it -->
         <input
           type="checkbox"
           :value="opt.value"
