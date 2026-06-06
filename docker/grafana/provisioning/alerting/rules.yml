@@ -548,6 +548,71 @@ groups:
           summary: "Scraper provider {{ $labels.provider }} stream_segment + stream DOWN"
           description: "Provider {{ $labels.provider }} has BOTH the stream and stream_segment stages DOWN for 4+ hours — likely real upstream outage or selector drift (orchestrator fallback can no longer mask). Check /api/admin/scraper/health and parser_zero_match_total/parser_ad_decoy_total."
 
+      # AR-REPORT-03 (Phase 5 Plan 05-02): explainable avg+3σ volume-anomaly alert
+      # on the ClickHouse datasource (NOT the Prometheus uid). Alert rules cannot read
+      # dashboard template vars, so σ=3 / window=24h are hardcoded here; the
+      # "Activity Register — Awareness Overview" dashboard panel keeps the tunable
+      # $sigma/$window. Byte/volume baseline filters source='be' AND effect_kind='egress'.
+      - uid: activity-register-volume-anomaly
+        title: Activity Register Volume Anomaly
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: aenigma-clickhouse
+            model:
+              rawSql: |
+                SELECT count() AS anomalies FROM (
+                  WITH hourly AS (
+                    SELECT operation, toStartOfHour(timestamp) AS h, sum(requests) AS req
+                    FROM events
+                    WHERE timestamp >= now() - INTERVAL 24 HOUR
+                      AND effect_kind = 'egress' AND source = 'be'
+                    GROUP BY operation, h
+                  ),
+                  stats AS (
+                    SELECT operation,
+                           avgIf(req, h < toStartOfHour(now())) AS baseline_avg,
+                           stddevPopIf(req, h < toStartOfHour(now())) AS baseline_sd,
+                           anyIf(req, h = toStartOfHour(now() - INTERVAL 1 HOUR)) AS last_req
+                    FROM hourly GROUP BY operation
+                  )
+                  SELECT operation,
+                         last_req > baseline_avg + 3 * baseline_sd AS is_anomaly
+                  FROM stats WHERE baseline_avg > 0
+                ) WHERE is_anomaly
+              format: table
+              queryType: sql
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        for: 5m
+        labels:
+          severity: warning
+          component: activity-register
+        annotations:
+          summary: "Volume anomaly: an operation is far above baseline"
+          description: "An operation's last-hour request volume exceeded its 24h trailing avg+3σ baseline. Open the Activity Register — Awareness Overview dashboard."
+
   # ============================================================================
   # Scraper Self-Healing (v3.1) — Phase 23 Plan 23-03
   # ============================================================================
