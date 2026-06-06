@@ -13,6 +13,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
@@ -1384,5 +1385,101 @@ func TestScraperHandler_GetEpisodes_MetaProviderOmittedOnFailure(t *testing.T) {
 	body := requireJSON(t, resp)
 	if got := metaProvider(t, body); got != "" {
 		t.Errorf("data.meta.provider = %q; want empty (omitted) on failure", got)
+	}
+}
+
+// TestScraperHandler_GetHealth_ExposesRegistryMetadata asserts that
+// /scraper/health emits enabled, up, reason, and description per provider.
+// Task 3 of the unified-player plan: registry metadata must be surfaced
+// alongside the live stage health so the frontend provider table can display
+// whether a provider is administratively disabled (and why) without a
+// separate API call.
+//
+// Setup:
+//   - "animepahe" is disabled in the ProvidersConfig with reason "CF challenge"
+//     but IS registered (enabled providers with stages up).
+//   - "allanime" is enabled in the ProvidersConfig and its search stage is Up.
+//
+// Assertions:
+//   - providers["animepahe"].enabled == false
+//   - providers["animepahe"].reason != ""
+//   - providers["allanime"].enabled == true
+//   - providers["allanime"].up == true  (at least one stage is up)
+func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Build a ProvidersConfig where animepahe is disabled with a reason.
+	pc := config.NewProvidersConfigForTest([]config.ProviderMeta{
+		{Name: "animepahe", Enabled: false, Reason: "CF challenge", Description: "Cloudflare blocks the sidecar"},
+		{Name: "allanime", Enabled: true, Description: "Primary EN source"},
+	})
+
+	// allanime is up (search stage UP).
+	allanime := &fakeProvider{
+		name: "allanime",
+		health: domain.Health{
+			Provider: "allanime",
+			Stages:   map[string]domain.StageHealth{"search": {Up: true}},
+		},
+	}
+	// animepahe is also registered but disabled per config.
+	animepahe := &fakeProvider{
+		name: "animepahe",
+		health: domain.Health{
+			Provider: "animepahe",
+			Stages:   map[string]domain.StageHealth{"search": {Up: false}},
+		},
+	}
+
+	log := logger.Default()
+	o := service.NewOrchestrator(log, domain.NewRegistry(), nil)
+	o.Register(allanime)
+	o.Register(animepahe)
+	h := NewScraperHandler(o, nil, log)
+	h.WithProvidersConfig(&pc)
+
+	rec := httptest.NewRecorder()
+	h.GetHealth(rec, httptest.NewRequest(http.MethodGet, "/scraper/health", nil))
+	resp := rec.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	}
+
+	// Decode the enriched providers map as raw JSON objects so we can inspect
+	// the new fields without needing a dedicated struct.
+	var wrapper struct {
+		Data struct {
+			Providers map[string]map[string]any `json:"providers"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+
+	// --- animepahe assertions ---
+	pahe, ok := wrapper.Data.Providers["animepahe"]
+	if !ok {
+		t.Fatalf("providers[\"animepahe\"] missing from response")
+	}
+	if enabled, _ := pahe["enabled"].(bool); enabled {
+		t.Errorf("providers[animepahe].enabled = true; want false")
+	}
+	reason, _ := pahe["reason"].(string)
+	if reason == "" {
+		t.Errorf("providers[animepahe].reason is empty; want non-empty reason string")
+	}
+
+	// --- allanime assertions ---
+	alla, ok := wrapper.Data.Providers["allanime"]
+	if !ok {
+		t.Fatalf("providers[\"allanime\"] missing from response")
+	}
+	if enabled, _ := alla["enabled"].(bool); !enabled {
+		t.Errorf("providers[allanime].enabled = false; want true")
+	}
+	if up, _ := alla["up"].(bool); !up {
+		t.Errorf("providers[allanime].up = false; want true (search stage is up)")
 	}
 }

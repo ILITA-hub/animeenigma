@@ -95,6 +95,17 @@ func (p ProvidersConfig) IsEnabled(name string) bool {
 // Meta returns the metadata for a provider (zero value if absent).
 func (p ProvidersConfig) Meta(name string) ProviderMeta { return p.metas[name] }
 
+// NewProvidersConfigForTest constructs a ProvidersConfig from a slice of
+// ProviderMeta entries. Intended only for unit tests that need to drive the
+// handler without a real YAML file.
+func NewProvidersConfigForTest(entries []ProviderMeta) ProvidersConfig {
+	metas := make(map[string]ProviderMeta, len(entries))
+	for _, m := range entries {
+		metas[m.Name] = m
+	}
+	return ProvidersConfig{metas: metas, Source: "test"}
+}
+
 // ProviderRow is a flattened row for metric emission / display.
 type ProviderRow struct {
 	Name        string

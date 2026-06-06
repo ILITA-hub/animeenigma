@@ -573,8 +573,12 @@ func main() {
 	// Phase 17 Plan 03: thread the same in-memory health cache the probe
 	// runner writes to so /scraper/health/admin can read the enriched
 	// per-stage snapshot.
+	// Task 3 (unified player plan): attach the operator ProvidersConfig so
+	// GetHealth can surface enabled/reason/description per provider.
 	scraperHandler := handler.NewScraperHandler(orchestrator, cache, log)
+	scraperHandler.WithProvidersConfig(&cfg.Providers)
 	anime18Handler := handler.NewScraperHandler(adultOrch, cache, log)
+	anime18Handler.WithProvidersConfig(&cfg.Providers)
 	router := transport.NewRouter(scraperHandler, anime18Handler, cfg, log, metricsCollector)
 
 	// Create HTTP server

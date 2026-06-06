@@ -33,6 +33,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/scraper/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/service"
@@ -47,13 +48,19 @@ import (
 // permitted so unit tests that exercise only the public surface can keep
 // using the lighter newTestHandler harness.
 //
+// The optional `providersCfg` field (Task 3 — unified player plan) carries
+// the operator-configured registry metadata (enabled/reason/description) so
+// GetHealth can surface it alongside the live stage snapshot. A nil value is
+// safe: GetHealth degrades gracefully and omits the metadata fields.
+//
 // REVIEW.md WR-11: `now` is injectable so tests can lock the generated_at
 // timestamp in admin responses. Production defaults to time.Now.
 type ScraperHandler struct {
-	svc   *service.Orchestrator
-	cache *health.InMemoryHealthCache
-	log   *logger.Logger
-	now   func() time.Time
+	svc          *service.Orchestrator
+	cache        *health.InMemoryHealthCache
+	providersCfg *config.ProvidersConfig
+	log          *logger.Logger
+	now          func() time.Time
 }
 
 // NewScraperHandler builds a ScraperHandler. The cache argument may be nil
@@ -71,6 +78,14 @@ func (h *ScraperHandler) SetNow(now func() time.Time) {
 		now = time.Now
 	}
 	h.now = now
+}
+
+// WithProvidersConfig attaches the operator provider registry to the handler
+// so GetHealth can emit enabled/reason/description per provider. Passing nil
+// is safe — GetHealth will omit the metadata fields gracefully.
+// Production callers should call this once during startup (see main.go).
+func (h *ScraperHandler) WithProvidersConfig(cfg *config.ProvidersConfig) {
+	h.providersCfg = cfg
 }
 
 // errorCode constants surface in `error.code` for every non-2xx response.
@@ -329,6 +344,41 @@ func (h *ScraperHandler) GetStream(w http.ResponseWriter, r *http.Request) {
 // known issue tracked in ISS-021 and intentionally NOT changed here.)
 const playabilityFreshTTL = 30 * time.Minute
 
+// providerEnriched is the per-provider JSON shape emitted by GetHealth.
+// It extends domain.Health with registry metadata (Task 3 — unified player
+// plan): enabled/reason/description from ProvidersConfig plus a top-level
+// `up` bool derived from live stage data.
+//
+// JSON field ordering mirrors the existing shape: provider and stages remain
+// first so downstream consumers that parse the existing fields continue to
+// work. The four new fields are additive and optional — a nil ProvidersConfig
+// leaves them at zero values (enabled=false, empty strings).
+type providerEnriched struct {
+	// Existing fields — preserved verbatim from domain.Health.
+	Provider string                    `json:"provider"`
+	Stages   map[string]domain.StageHealth `json:"stages"`
+	// Registry metadata (Task 3).
+	Enabled     bool   `json:"enabled"`
+	Up          bool   `json:"up"`
+	Reason      string `json:"reason,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// healthUp derives a coarse boolean "is this provider up?" from its live
+// stage snapshot. A provider is considered up when at least one of its
+// non-segment stages (search, episodes, servers, stream) is Up=true.
+// stream_segment is excluded because it is a probe-only oracle and starts
+// as false until the first probe tick — including it would flip every newly
+// booted provider to down.
+func healthUp(h domain.Health) bool {
+	for stage, sh := range h.Stages {
+		if stage != health.StageStreamSegment && sh.Up {
+			return true
+		}
+	}
+	return false
+}
+
 // GetHealth handles GET /scraper/health — the public per-provider snapshot.
 //
 // ISS-021: each provider's HealthCheck() self-report only reflects API liveness
@@ -339,6 +389,10 @@ const playabilityFreshTTL = 30 * time.Minute
 // segment) onto each provider and expose a per-provider `playable` summary so
 // the table reflects real playability. Providers with no fresh oracle data are
 // OMITTED from `playable` (absent = unknown, not a fake green/red).
+//
+// Task 3 (unified player plan): each entry now also carries `enabled`, `up`,
+// `reason`, and `description` from the operator ProvidersConfig. These fields
+// are additive — existing fields (provider, stages) are unchanged.
 func (h *ScraperHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	snap := h.svc.HealthSnapshot(r.Context())
 
@@ -378,8 +432,30 @@ func (h *ScraperHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Build enriched per-provider entries (Task 3). If no ProvidersConfig is
+	// wired, the new fields default to zero values (enabled=false, empty
+	// strings) — callers that don't set WithProvidersConfig still get a valid
+	// response; only the metadata fields are missing.
+	enriched := make(map[string]providerEnriched, len(snap))
+	for prov, ph := range snap {
+		entry := providerEnriched{
+			Provider: ph.Provider,
+			Stages:   ph.Stages,
+			Enabled:  true, // default: enabled unless registry says otherwise
+			Up:       healthUp(ph),
+		}
+		if h.providersCfg != nil {
+			meta := h.providersCfg.Meta(prov)
+			// IsEnabled defaults to true for absent providers; reflect that.
+			entry.Enabled = h.providersCfg.IsEnabled(prov)
+			entry.Reason = meta.Reason
+			entry.Description = meta.Description
+		}
+		enriched[prov] = entry
+	}
+
 	httputil.OK(w, map[string]any{
-		"providers": snap,
+		"providers": enriched,
 		"playable":  playable,
 	})
 }
