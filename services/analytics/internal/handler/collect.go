@@ -53,6 +53,19 @@ type wireEvent struct {
 	ActiveMS   int               `json:"active_ms"`
 	TraceID    string            `json:"trace_id"`
 	Properties json.RawMessage   `json:"properties"`
+
+	// --- Activity-register attribution fields (Phase 04, FE causation) ---
+	// snake_case tags MUST match Plan 02's FE wire (types.ts). Deliberately
+	// NO byte fields here: the FE wire carries no bytes, so fe_rum rows are
+	// structurally byte-poor (RESEARCH Pattern 3). Never reintroduce a `rows`
+	// field — the schema measure is `row_count`.
+	Source     string `json:"source"`
+	Operation  string `json:"operation"`
+	Action     string `json:"action"`
+	Target     string `json:"target"`
+	TargetKind string `json:"target_kind"`
+	Requests   int    `json:"requests"`
+	DurationMS int    `json:"duration_ms"`
 }
 
 type wireEnvelope struct {
@@ -97,6 +110,25 @@ func (h *CollectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(we.Properties) > 0 {
 			props = string(we.Properties)
 		}
+
+		// --- FE register-field attribution mapping (Phase 04) ---
+		// Server-side source whitelist (T-04-01): accept ONLY "fe"/"fe_rum".
+		// Anything else (forged "be"/"evil"/empty) yields an empty Source so
+		// the clickhouse_store default keeps backend-recorded rows
+		// authoritative — a forged beacon can never inject an attribution
+		// origin or poison register/byte pivots.
+		feSource := whitelistSource(we.Source)
+		feAccuracy := ""
+		if feSource == "fe_rum" {
+			feAccuracy = "approximate"
+		}
+		// AR-FE-01: action is the optional semantic label — only used to fill
+		// the operation slot when no explicit operation was provided.
+		feOperation := capString(we.Operation)
+		if feOperation == "" {
+			feOperation = capString(we.Action)
+		}
+
 		ev := domain.Event{
 			EventID:     uuid.NewString(),
 			EventType:   domain.EventType(we.EventType),
@@ -112,6 +144,17 @@ func (h *CollectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			UserAgent:  env.Ctx.UserAgent, ScreenW: env.Ctx.ScreenW, ScreenH: env.Ctx.ScreenH,
 			IPHash:  ipHash,
 			TraceID: we.TraceID, Properties: props,
+
+			// Activity-register attribution dimensions. Source is whitelisted;
+			// fe_rum carries accuracy="approximate". No byte field is mapped —
+			// BytesIn/BytesOut stay zero (structural byte-poverty, T-04-02).
+			Source:     feSource,
+			Accuracy:   feAccuracy,
+			Operation:  feOperation,
+			Target:     capString(we.Target),
+			TargetKind: capString(we.TargetKind),
+			Requests:   we.Requests,
+			DurationMS: we.DurationMS,
 		}
 		if err := ev.Validate(); err != nil {
 			continue // skip the bad event, keep the rest
@@ -120,6 +163,35 @@ func (h *CollectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxFieldLen bounds each public-beacon register string field to cap
+// cardinality (T-04-03, V5 Input Validation) before it reaches the store.
+const maxFieldLen = 256
+
+// whitelistSource normalizes the public-beacon source. Only the two FE
+// attribution origins are honored; every other value (including a forged
+// "be" or "evil", or empty) returns "" so the store's source="be" default
+// keeps backend-recorded rows authoritative (T-04-01).
+func whitelistSource(s string) string {
+	switch s {
+	case "fe", "fe_rum":
+		return s
+	default:
+		return ""
+	}
+}
+
+// capString truncates a public-beacon string to maxFieldLen runes.
+func capString(s string) string {
+	if len(s) <= maxFieldLen {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= maxFieldLen {
+		return s
+	}
+	return string(r[:maxFieldLen])
 }
 
 func clientIP(r *http.Request) string {
