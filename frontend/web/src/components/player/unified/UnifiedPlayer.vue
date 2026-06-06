@@ -21,10 +21,11 @@
       class="absolute inset-0 w-full h-full object-contain z-[1]"
       playsinline
       preload="metadata"
-      @play="state.playing.value = true"
-      @pause="state.playing.value = false"
+      @play="onVideoPlay"
+      @pause="onVideoPause"
       @ended="onEnded"
       @click="togglePlay"
+      @volumechange="onVolumeChange"
     />
 
     <!-- Subtitle overlay -->
@@ -460,21 +461,49 @@ const duration = ref(0)
 const bufferedPct = ref(0)
 let rafId: number | null = null
 
-function tick() {
+function writeProgress() {
   const v = videoRef.value
-  if (v) {
-    currentTime.value = v.currentTime
-    const dur = v.duration || 0
-    duration.value = dur
-    if (dur > 0) {
-      state.progress.value = (v.currentTime / dur) * 100
-    }
-    // Buffered
-    if (v.buffered.length > 0 && dur > 0) {
-      bufferedPct.value = (v.buffered.end(v.buffered.length - 1) / dur) * 100
-    }
+  if (!v) return
+  currentTime.value = v.currentTime
+  const dur = v.duration || 0
+  duration.value = dur
+  if (dur > 0) {
+    state.progress.value = (v.currentTime / dur) * 100
   }
+  // Buffered
+  if (v.buffered.length > 0 && dur > 0) {
+    bufferedPct.value = (v.buffered.end(v.buffered.length - 1) / dur) * 100
+  }
+}
+
+function tick() {
+  writeProgress()
   rafId = requestAnimationFrame(tick)
+}
+
+function startRaf() {
+  if (rafId === null) {
+    rafId = requestAnimationFrame(tick)
+  }
+}
+
+function stopRaf() {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
+  // One final write so progress/time are up-to-date while paused
+  writeProgress()
+}
+
+function onVideoPlay() {
+  state.playing.value = true
+  startRaf()
+}
+
+function onVideoPause() {
+  state.playing.value = false
+  stopRaf()
 }
 
 // ─── Next episode logic ───────────────────────────────────────────────────────
@@ -531,6 +560,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   const provider = state.combo.value.provider
   if (!provider) return
   sourceError.value = null
+  isResolving.value = true
   const token = ++resolveToken
   try {
     const stream = await resolver.resolveStream(
@@ -549,6 +579,10 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     sourceError.value = isNotAvailable
       ? "This source isn't available yet"
       : 'Stream unavailable'
+  } finally {
+    if (token === resolveToken) {
+      isResolving.value = false
+    }
   }
 }
 
@@ -589,9 +623,7 @@ const chosenSubFormat = computed<'ass' | 'srt' | 'vtt' | null>(() => {
   return null
 })
 
-const subLangsAvailable = computed(() =>
-  state.subLang.value === 'off' ? ['off'] : ['off', 'en', 'ru', 'ja'],
-)
+const subLangsAvailable = computed(() => ['off', 'en', 'ru', 'ja'])
 
 function onSelectSubTrack(track: SubTrack) {
   chosenSub.value = track
@@ -627,6 +659,9 @@ function onSeek(pct: number) {
   const v = videoRef.value
   if (!v || !v.duration) return
   v.currentTime = (pct / 100) * v.duration
+  // Write progress immediately so the scrub bar reflects the new position
+  // even while paused (rAF loop is stopped when paused).
+  writeProgress()
 }
 
 function onSetVolume(vol: number) {
@@ -645,6 +680,15 @@ function onSetSpeed(speed: number) {
   state.speed.value = speed
   const v = videoRef.value
   if (v) v.playbackRate = speed
+}
+
+function onVolumeChange() {
+  const v = videoRef.value
+  if (!v) return
+  // Sync state from element — covers PiP / media-session external changes.
+  // Only write state here; the set-volume path writes to the element.
+  state.volume.value = Math.round(v.volume * 100)
+  state.muted.value = v.muted
 }
 
 function onTogglePip() {
@@ -671,7 +715,6 @@ function onToggleFullscreen() {
 
 onMounted(() => {
   start()
-  rafId = requestAnimationFrame(tick)
   // Apply initial volume
   const v = videoRef.value
   if (v) {
@@ -683,10 +726,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (rafId !== null) {
-    cancelAnimationFrame(rafId)
-    rafId = null
-  }
+  stopRaf()
   clearNextEpTimer()
 })
 </script>
