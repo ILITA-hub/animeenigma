@@ -435,6 +435,17 @@
               >
                 {{ $t('player.raw.tab') }}
               </button>
+              <!-- Task 15 — Unified Player pill (default ON, VITE_UNIFIED_PLAYER_ENABLED=false to hide) -->
+              <button
+                v-if="unifiedPlayerEnabled"
+                @click="unifiedSelected = true"
+                :aria-pressed="unifiedSelected"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all inline-flex items-center gap-1.5"
+                :class="unifiedSelected ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/70'"
+              >
+                {{ $t('player.unified.tab') }}
+                <span class="text-[10px] px-1 rounded bg-cyan-500/20 text-cyan-400">{{ $t('player.unified.beta') }}</span>
+              </button>
             </ButtonGroup>
 
             <!-- Provider sub-tabs -->
@@ -526,7 +537,8 @@
             </template>
           </div>
         </div>
-        <div class="glass-card p-4 md:p-6">
+        <!-- Task 15: existing player chain hidden when unified player is selected -->
+        <div class="glass-card p-4 md:p-6" v-show="!unifiedSelected">
           <!-- Not-released notice: an announced/upcoming title with no sources
                yet. Replaces the player so users see "premieres on {date}"
                rather than a misleading "no available videos" error. -->
@@ -657,6 +669,17 @@
             </RawPlayer>
           </template>
         </div>
+        <!-- Task 15: Unified player mounts as a sibling AFTER the existing chain;
+             glass-card above is v-show="!unifiedSelected" so only one renders. -->
+        <UnifiedPlayer
+          v-if="unifiedSelected && unifiedPlayerEnabled"
+          :anime-id="anime.id"
+          :anime="{ title: anime.title, ep: (anime.episodesAired || 1), eps: (anime.totalEpisodes || anime.episodesAired || 1), still: anime.coverImage }"
+          :theater="theaterMode"
+          :is-hentai="isHentai"
+          @toggle-theater="setTheater(!theaterMode)"
+          @open-episodes="() => {}"
+        />
       </section>
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
@@ -1092,6 +1115,10 @@ const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
 // sources". Default OFF; flip VITE_ANIMELIB_ENABLED=true to restore the chip
 // if upstream brings direct video back.
 const animeLibEnabled = import.meta.env.VITE_ANIMELIB_ENABLED === 'true'
+// Unified player (Task 15) — single-surface player; default ON, set
+// VITE_UNIFIED_PLAYER_ENABLED=false to disable for dark-ship.
+const UnifiedPlayer = defineAsyncComponent(() => import('@/components/player/unified/UnifiedPlayer.vue'))
+const unifiedPlayerEnabled = import.meta.env.VITE_UNIFIED_PLAYER_ENABLED !== 'false'
 // Workstream watch-together / Phase 02 Plan 02.9 (WT-SHELL-05) — lazy-loaded
 // invite button. Keeps Anime.vue's eager bundle clean — InviteButton pulls in
 // the watch-together api client + types + toast composable transitively, paid
@@ -1232,6 +1259,9 @@ const _savedLang = localStorage.getItem('preferred_video_language')
 const videoLanguage = ref<VideoLanguage>(
   (VALID_LANGUAGES as readonly string[]).includes(_savedLang ?? '') ? (_savedLang as VideoLanguage) : 'ru'
 )
+// Task 15 — dedicated flag so selecting the unified player never overwrites
+// videoLanguage (which controls all existing-player routing).
+const unifiedSelected = ref(false)
 // Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
 // Phase 24-28 — 'ourenglish' is the scraper-microservice-backed EN provider
 // (failover across gogoanime/animepahe/allanime/animefever/miruro/nineanime).
@@ -2155,6 +2185,8 @@ const retry = () => {
 
 // Language / provider switching
 const switchLanguage = (lang: 'ru' | 'en' | '18+' | 'raw') => {
+  // Deselect unified player whenever user picks an existing language tab.
+  unifiedSelected.value = false
   videoLanguage.value = lang
   // Auto-select first provider in the group
   if (lang === 'ru') {
