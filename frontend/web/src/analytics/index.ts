@@ -6,6 +6,7 @@ import { Transport } from './transport'
 import { extractClick } from './autocapture'
 import { getUserId, setUserId, clearUserId, resetAnon } from './identity'
 import { registerClickForTrace } from './traceContext'
+import { initRum } from './rum'
 
 class Analytics {
   private transport: Transport | null = null
@@ -51,6 +52,9 @@ class Analytics {
 
     this.pagehideListener = () => this.flushNow()
     window.addEventListener('pagehide', this.pagehideListener)
+
+    // RUM resource-timing observer (browser→3rd-party host timings, byte-poor).
+    initRum()
 
     // Initial pageview.
     this.page()
