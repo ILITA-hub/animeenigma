@@ -355,6 +355,42 @@
           "searchPlaceholder": "Поиск аниме..."
         }
       }
+    },
+    "unified": {
+      "tab": "AnimeEnigma",
+      "beta": "Бета",
+      "source": "Источник и перевод",
+      "audio": "Озвучка",
+      "language": "Язык",
+      "team": "Команда",
+      "provider": "Провайдер",
+      "server": "Сервер",
+      "providersAvailable": "Доступно: {n}",
+      "wipHosting": "Мы работаем над собственным хостингом",
+      "temporarilyUnreachable": "Временно недоступно",
+      "only18": "Только для 18+ тайтлов",
+      "playback": "Воспроизведение",
+      "quality": "Качество",
+      "speed": "Скорость",
+      "autoplayNext": "Автовоспроизведение",
+      "autoSkipIntro": "Пропускать опенинг",
+      "subtitles": "Субтитры",
+      "subtitleSettings": "Настройки субтитров",
+      "textSize": "Размер текста",
+      "background": "Фон",
+      "timingOffset": "Смещение тайминга",
+      "browseAll": "Все субтитры",
+      "searchSubs": "Поиск по релизу или группе…",
+      "skipIntro": "Пропустить опенинг",
+      "resume": "Продолжить",
+      "startOver": "Сначала",
+      "watchTogether": "Смотреть вместе",
+      "watchTogetherSoon": "Смотреть вместе — скоро",
+      "wip": "В разработке",
+      "sourceUnavailable": "Этот источник пока недоступен",
+      "streamUnavailable": "Поток недоступен",
+      "retry": "Повторить",
+      "off": "Выкл"
     }
   },
   "search": {

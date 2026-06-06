@@ -355,6 +355,42 @@
           "searchPlaceholder": "アニメを検索..."
         }
       }
+    },
+    "unified": {
+      "tab": "AnimeEnigma",
+      "beta": "ベータ",
+      "source": "ソースと翻訳",
+      "audio": "音声",
+      "language": "言語",
+      "team": "チーム",
+      "provider": "プロバイダー",
+      "server": "サーバー",
+      "providersAvailable": "{n}件利用可能",
+      "wipHosting": "自社ホスティングを開発中です",
+      "temporarilyUnreachable": "一時的に利用できません",
+      "only18": "18歳以上の作品のみ",
+      "playback": "再生",
+      "quality": "画質",
+      "speed": "速度",
+      "autoplayNext": "次を自動再生",
+      "autoSkipIntro": "OPを自動スキップ",
+      "subtitles": "字幕",
+      "subtitleSettings": "字幕設定",
+      "textSize": "文字サイズ",
+      "background": "背景",
+      "timingOffset": "タイミング調整",
+      "browseAll": "すべての字幕",
+      "searchSubs": "リリースまたはグループで検索…",
+      "skipIntro": "OPをスキップ",
+      "resume": "続きから",
+      "startOver": "最初から",
+      "watchTogether": "一緒に視聴",
+      "watchTogetherSoon": "一緒に視聴 — 近日公開",
+      "wip": "開発中",
+      "sourceUnavailable": "このソースはまだ利用できません",
+      "streamUnavailable": "ストリームを利用できません",
+      "retry": "再試行",
+      "off": "オフ"
     }
   },
   "search": {

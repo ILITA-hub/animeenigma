@@ -355,6 +355,42 @@
           "searchPlaceholder": "Search anime..."
         }
       }
+    },
+    "unified": {
+      "tab": "AnimeEnigma",
+      "beta": "Beta",
+      "source": "Source & translation",
+      "audio": "Audio",
+      "language": "Language",
+      "team": "Team",
+      "provider": "Provider",
+      "server": "Server",
+      "providersAvailable": "{n} available",
+      "wipHosting": "We are working on our own hosting",
+      "temporarilyUnreachable": "Temporarily unreachable",
+      "only18": "Only for 18+ titles",
+      "playback": "Playback",
+      "quality": "Quality",
+      "speed": "Speed",
+      "autoplayNext": "Autoplay next",
+      "autoSkipIntro": "Auto-skip intro",
+      "subtitles": "Subtitles",
+      "subtitleSettings": "Subtitle settings",
+      "textSize": "Text size",
+      "background": "Background",
+      "timingOffset": "Timing offset",
+      "browseAll": "Browse all subtitles",
+      "searchSubs": "Search by release or group…",
+      "skipIntro": "Skip Intro",
+      "resume": "Resume",
+      "startOver": "Start over",
+      "watchTogether": "Watch Together",
+      "watchTogetherSoon": "Watch Together — coming soon",
+      "wip": "WIP",
+      "sourceUnavailable": "This source isn't available yet",
+      "streamUnavailable": "Stream unavailable",
+      "retry": "Retry",
+      "off": "Off"
     }
   },
   "search": {
