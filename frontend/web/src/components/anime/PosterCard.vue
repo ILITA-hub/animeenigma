@@ -81,14 +81,15 @@
           data-testid="play-cluster"
           class="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
         >
-          <span
-            class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(0,212,255,0.5)]"
-            aria-hidden="true"
+          <router-link
+            :to="model.href"
+            :aria-label="model.title"
+            class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(0,212,255,0.5)] pointer-events-auto transition-all duration-200 hover:bg-cyan-500 hover:rotate-[12deg] hover:scale-110"
           >
-            <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M8 5v14l11-7z" />
             </svg>
-          </span>
+          </router-link>
           <AnimeKebab
             :menu-open="menuOpen"
             class="static opacity-100 scale-100 w-12 h-12"

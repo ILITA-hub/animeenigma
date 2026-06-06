@@ -56,9 +56,9 @@ const kickerLabel = computed(() =>
   text-decoration: none;
   color: inherit;
   border: 1px solid var(--line);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.mtile:hover { transform: translateY(-2px); box-shadow: var(--accent-glow); border-color: var(--accent-line); }
+.mtile:hover { box-shadow: var(--accent-glow); border-color: var(--accent-line); }
 .mtile:focus-visible { outline: 2px solid var(--brand-cyan); outline-offset: 2px; }
 
 .mtile-ovl { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); opacity: 0; transition: opacity 0.2s ease; z-index: 1; pointer-events: none; }
