@@ -236,7 +236,7 @@
                       <!-- Score (inline edit) -->
                       <td class="py-3 px-2 text-center">
                         <template v-if="isOwnProfile">
-                          <div v-if="editingScore === anime.anime_id" class="w-20">
+                          <div v-if="editingScore === anime.anime_id" class="w-14">
                             <Input
                               type="number"
                               size="sm"
@@ -245,6 +245,7 @@
                               @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
                               @keydown.enter="(e: KeyboardEvent) => { (e.target as HTMLInputElement).blur(); }"
                               @keydown.escape="editingScore = null"
+                              class="text-center text-cyan-400"
                             />
                           </div>
                           <button
@@ -271,7 +272,7 @@
                             class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
                             :disabled="(anime.episodes || 0) <= 0"
                           >-</button>
-                          <div class="w-20">
+                          <div class="w-12">
                             <Input
                               type="number"
                               size="sm"
@@ -303,7 +304,7 @@
                           size="sm"
                           :model-value="formatDateForInput(anime.started_at)"
                           @change="(e: Event) => updateAnimeDate(anime.anime_id, 'started_at', (e.target as HTMLInputElement).value)"
-                          class="text-xs"
+                          class="text-xs py-1"
                         />
                         <span v-else class="text-white/60 text-xs">
                           {{ formatDateDisplay(anime.started_at) }}
@@ -316,7 +317,7 @@
                           size="sm"
                           :model-value="formatDateForInput(anime.completed_at)"
                           @change="(e: Event) => updateAnimeDate(anime.anime_id, 'completed_at', (e.target as HTMLInputElement).value)"
-                          class="text-xs"
+                          class="text-xs py-1"
                         />
                         <span v-else class="text-white/60 text-xs">
                           {{ formatDateDisplay(anime.completed_at) }}
@@ -390,7 +391,7 @@
                       <!-- Score edit popover for grid (z-40 keeps it above the kebab) -->
                       <div
                         v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
-                        class="absolute top-2 right-2 z-40 w-20"
+                        class="absolute top-2 right-2 z-40 w-14"
                         @click.prevent.stop
                       >
                         <Input
@@ -401,6 +402,7 @@
                           @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
                           @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
                           @keydown.escape="editingScoreGrid = null"
+                          class="text-center text-warning"
                         />
                       </div>
 

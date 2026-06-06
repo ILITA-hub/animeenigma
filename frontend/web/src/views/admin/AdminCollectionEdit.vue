@@ -185,7 +185,7 @@
               <div class="flex items-center gap-2 flex-shrink-0">
                 <label class="text-white/50 text-xs">{{ $t('admin.collections.itemSortOrder') }}</label>
                 <div class="w-16">
-                  <Input :model-value="String(item.sort_order)" type="number" size="sm" min="0" class="bg-black/40 text-right" @change="(e: Event) => onUpdateSort(item, (e.target as HTMLInputElement).valueAsNumber)" />
+                  <Input :model-value="String(item.sort_order ?? 0)" type="number" size="sm" min="0" class="bg-black/40 text-right" @change="(e: Event) => onUpdateSort(item, (e.target as HTMLInputElement).valueAsNumber)" />
                 </div>
                 <button
                   type="button"
