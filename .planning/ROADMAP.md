@@ -20,7 +20,7 @@
 - [x] **Phase 2: BE Egress Recorder** — Async batched effect recorder at the `WrapTransport` outbound seam + OTel baggage; retrofit non-shared HTTP clients; per-(stream-session, host) HLS aggregation. (completed 2026-06-05)
 - [x] **Phase 3: DB/Cache Effects + Auto Operation Discovery** — otel-GORM DB-write effects, cache hit/miss effects, stack-frame operation attribution, Tempo span-metrics + service graph. (completed 2026-06-06)
 - [x] **Phase 4: FE Causation + RUM** — Wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (flagged approximate). (completed 2026-06-06)
-- [ ] **Phase 5: Reports & Dashboards** — Grafana wide-event pivot tables (template vars = any dimension), the "from → choke-point → effects" report, anomaly flagging, awareness overview.
+- [x] **Phase 5: Reports & Dashboards** — Grafana wide-event pivot tables (template vars = any dimension), the "from → choke-point → effects" report, anomaly flagging, awareness overview. (completed 2026-06-06)
 - [ ] **Phase 6: Consolidation → Topology A** — OTel Collector ClickHouse exporter for traces + logs; retire Tempo + Loki; keep Prometheus + Grafana. Deliberately last (register proven before SPOF consolidation).
 
 ## Phase Details
@@ -106,7 +106,7 @@ Plans:
 Plans:
 - [x] 05-01-PLAN.md — Wide-event pivot dashboard (AR-REPORT-01) + from→choke-point→effects flow report (AR-REPORT-02)
 - [x] 05-02-PLAN.md — Awareness overview dashboard + explainable volume-anomaly panel (AR-REPORT-04, AR-REPORT-03) + provisioned ClickHouse alert rule
-- [ ] 05-03-PLAN.md — Live Grafana phase gate: reload, dry-run all panel SQL, inject synthetic spike, confirm all four reports + anomaly alert (autonomous: false)
+- [x] 05-03-PLAN.md — Live Grafana phase gate: reload, dry-run all panel SQL, inject synthetic spike, confirm all four reports + anomaly alert (autonomous: false)
 **Metrics**: `UXΔ = +2 (Better)` (this is where awareness becomes usable — the admin-facing payoff of the whole register) · `CDI = 0.06 * 21` (Grafana dashboards + template vars + anomaly rules; new dashboards on an existing Grafana, no code-structure disruption, but a large authoring effort to get the pivots right) · `MVQ = Dragon 88%/86%` (the showy high-impact centerpiece — the register made human-readable; high match, strong slop-resistance if the pivots are genuinely insightful rather than panel-spam)
 **UI hint**: yes
 
@@ -143,5 +143,5 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
 | 3 | v4.0 | 6/6 | Complete   | 2026-06-06 |
 | 4 | v4.0 | 4/4 | Complete   | 2026-06-06 |
-| 5 | v4.0 | 2/3 | In Progress|  |
+| 5 | v4.0 | 3/3 | Complete   | 2026-06-06 |
 | 6 | v4.0 | 0/? | Not started | — |
