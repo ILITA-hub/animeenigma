@@ -66,6 +66,123 @@ func TestCollect_AcceptsBatch(t *testing.T) {
 	}
 }
 
+// TestCollectMapsFERegisterFields proves AR-FE-01: an FE-originated beacon
+// row lands in the register with its own source/operation/target populated,
+// not silently mis-tagged as a backend (source='be') clickstream row.
+func TestCollectMapsFERegisterFields(t *testing.T) {
+	sink := &capturingSink{}
+	h := NewCollectHandler(sink, "test-salt")
+
+	body := `{"anonymous_id":"a1","session_id":"s1","events":[
+	  {"event_type":"custom","event_name":"fe_call","source":"fe",
+	   "operation":"catalog GET /api/anime/{id}","target":"/api/anime/123",
+	   "target_kind":"route"}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/collect", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	if sink.count() != 1 {
+		t.Fatalf("expected 1 event, got %d", sink.count())
+	}
+	sink.mu.Lock()
+	ev := sink.events[0]
+	sink.mu.Unlock()
+
+	if ev.Source != "fe" {
+		t.Fatalf("Source not mapped: want %q, got %q", "fe", ev.Source)
+	}
+	if ev.Operation == "" {
+		t.Fatalf("Operation must be populated, got empty")
+	}
+	if ev.Target == "" {
+		t.Fatalf("Target must be populated, got empty")
+	}
+	if ev.TargetKind != "route" {
+		t.Fatalf("TargetKind not mapped: got %q", ev.TargetKind)
+	}
+}
+
+// TestFERUMRowCarriesZeroBytes proves AR-FE-03: an FE RUM row carries its
+// requests+duration_ms, is tagged accuracy='approximate', and is structurally
+// byte-poor (BytesIn==0 && BytesOut==0) so it can never contaminate
+// authoritative byte aggregations.
+func TestFERUMRowCarriesZeroBytes(t *testing.T) {
+	sink := &capturingSink{}
+	h := NewCollectHandler(sink, "test-salt")
+
+	body := `{"anonymous_id":"a1","session_id":"s1","events":[
+	  {"event_type":"custom","event_name":"fe_rum","source":"fe_rum",
+	   "target":"cdn.example.com","target_kind":"host",
+	   "requests":4,"duration_ms":320}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/collect", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	if sink.count() != 1 {
+		t.Fatalf("expected 1 event, got %d", sink.count())
+	}
+	sink.mu.Lock()
+	ev := sink.events[0]
+	sink.mu.Unlock()
+
+	if ev.Source != "fe_rum" {
+		t.Fatalf("Source: want %q, got %q", "fe_rum", ev.Source)
+	}
+	if ev.Accuracy != "approximate" {
+		t.Fatalf("Accuracy: want %q, got %q", "approximate", ev.Accuracy)
+	}
+	if ev.Requests != 4 {
+		t.Fatalf("Requests: want 4, got %d", ev.Requests)
+	}
+	if ev.DurationMS != 320 {
+		t.Fatalf("DurationMS: want 320, got %d", ev.DurationMS)
+	}
+	// CRITICAL byte-poverty invariant: an fe_rum row must never carry bytes.
+	if ev.BytesIn != 0 || ev.BytesOut != 0 {
+		t.Fatalf("fe_rum row must be byte-poor: BytesIn=%d BytesOut=%d", ev.BytesIn, ev.BytesOut)
+	}
+}
+
+// TestCollectRejectsForgedSource proves T-04-01: a forged beacon source that
+// is not in the {fe, fe_rum} whitelist is normalized to empty so it is never
+// written as-is (and the store's source='be' default keeps BE rows
+// authoritative).
+func TestCollectRejectsForgedSource(t *testing.T) {
+	sink := &capturingSink{}
+	h := NewCollectHandler(sink, "test-salt")
+
+	body := `{"anonymous_id":"a1","session_id":"s1","events":[
+	  {"event_type":"custom","event_name":"forged","source":"evil",
+	   "operation":"x","target":"y"},
+	  {"event_type":"custom","event_name":"forged_be","source":"be"}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/collect", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	for _, ev := range sink.events {
+		if ev.Source == "evil" || ev.Source == "be" {
+			t.Fatalf("forged source must be normalized to empty, got %q", ev.Source)
+		}
+		if ev.Source != "" {
+			t.Fatalf("non-whitelisted source must normalize to empty, got %q", ev.Source)
+		}
+	}
+}
+
 func TestCollect_RejectsMalformed(t *testing.T) {
 	h := NewCollectHandler(&capturingSink{}, "salt")
 	req := httptest.NewRequest(http.MethodPost, "/collect", strings.NewReader("not json"))
