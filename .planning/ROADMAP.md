@@ -84,7 +84,12 @@
   1. The axios interceptor sends the active `trace_id` to the analytics collector and stamps each call with the current route + optional semantic action — verified by an FE call appearing in the register joined (same `trace_id`) to its backend effects. (AR-FE-01)
   2. Click auto-capture events carry `trace_id` so a click joins to the backend traces/effects it triggers — verified by a captured click event and its downstream BE effect sharing the same `trace_id`. (AR-FE-02)
   3. A `PerformanceObserver` beacons browser→3rd-party resource timings (host, count, timing) flagged `source=fe_rum, accuracy=approx`; a dashboard/query proves these rows are **never summed** with authoritative BE bytes (e.g. byte aggregations filter `source=be`). (AR-FE-03)
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 04-01-PLAN.md — Backend: collect.go FE register field-mapping + source whitelist + byte-poverty tests (AR-FE-01/03)
+- [ ] 04-02-PLAN.md — FE: AnalyticsEvent wire-type extension + rum.ts PerformanceObserver (host-only, byte-poor fe_rum rows) + spec (AR-FE-03)
+- [ ] 04-03-PLAN.md — FE: axios interceptor emits source='fe' call row sharing the call's trace_id; click↔trace stamp proof (AR-FE-01/02)
+- [ ] 04-04-PLAN.md — Live ClickHouse phase-gate (non-autonomous): prove trace_id join + click→effect join + source=be byte filter
 **Metrics**: `UXΔ = +1 (Better)` (closes the FE→BE causation last mile; RUM gives real client-side perf signal) · `CDI = 0.08 * 13` (frontend axios interceptor + click-capture + a `PerformanceObserver`; extends the existing `traceparent` minting, contained to the FE analytics layer) · `MVQ = Griffin 80%/85%` (joins frontend causation to the backend register into one trace-linked form; the `accuracy=approx` discipline is the crafted, slop-resistant detail)
 **UI hint**: yes
 
