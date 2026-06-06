@@ -8,11 +8,12 @@
  *
  * Wired adapters
  * ──────────────
- * • scraperAdapter  — covers all SCRAPER_IDS (EN + 18anime scraper path)
+ * • scraperAdapter  — covers all SCRAPER_IDS (EN scraper chain, NOT 18anime)
  *   using scraperApi.getEpisodes / getServers / getStream (resp.data.data envelope).
  * • rawAdapter      — covers 'raw' (AllAnime JP) using rawApi.getEpisodes /
  *   getStream (resp.data?.data ?? resp.data envelope).
- * • anime18Adapter  — covers '18anime' NON-scraper path using anime18Api.getEpisodes /
+ * • anime18Adapter  — covers '18anime' via the SEPARATE anime18Api backend
+ *   (/anime18/* routes), NOT the scraper chain. Uses anime18Api.getEpisodes /
  *   getStream (resp.data?.data || resp.data envelope).
  * • kodikAdapter    — covers 'kodik' (RU ad-free HLS path) using kodikApi.getTranslations /
  *   getStream; stream URLs are wrapped through the HLS proxy for CORS (resp.data?.data ?? resp.data).
@@ -149,14 +150,20 @@ export const SCRAPER_IDS = new Set<string>([
   'miruro',
   'nineanime',
   'animepahe',
-  '18anime', // the 18anime SCRAPER path (separate from the anime18Api path below)
+  // NOTE: '18anime' is NOT in this set — it routes to the anime18Api backend
+  // (/anime18/* routes), which is a separate orchestrator from the EN scraper chain.
 ])
 
 // ─── Adapters ────────────────────────────────────────────────────────────────
 
-function makeScraperAdapter(api: typeof scraperApi): ProviderAdapter {
+/**
+ * Closes over an optional `prefer` provider id so that `listEpisodes` can
+ * forward it directly to the scraper API without leaking it through the
+ * `ProviderAdapter` interface (which only receives `animeId`).
+ */
+function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAdapter {
   return {
-    async listEpisodes(animeId: string, prefer?: string): Promise<EpisodeOption[]> {
+    async listEpisodes(animeId: string): Promise<EpisodeOption[]> {
       const resp = await api.getEpisodes(animeId, prefer)
       const env = resp.data?.data as ScraperEnvelope | undefined
       const eps: ScraperEpisode[] = env?.episodes ?? []
@@ -169,15 +176,15 @@ function makeScraperAdapter(api: typeof scraperApi): ProviderAdapter {
     },
 
     async resolveStream(animeId: string, ep: EpisodeOption, combo: Combo): Promise<StreamResult> {
-      const prefer = combo.provider || undefined
+      const resolvedPrefer = combo.provider || prefer
       const episodeId = String(ep.key)
 
       // 1. Fetch servers for this episode
-      const sResp = await api.getServers(animeId, episodeId, prefer)
+      const sResp = await api.getServers(animeId, episodeId, resolvedPrefer)
       const sEnv = sResp.data?.data as ScraperEnvelope | undefined
       const srvs: ScraperServer[] = sEnv?.servers ?? []
       if (srvs.length === 0) {
-        throw new NotAvailableError(combo.provider, 'has no servers for this episode')
+        throw new NotAvailableError(combo.provider || prefer || 'scraper', 'has no servers for this episode')
       }
 
       // Pick the server matching combo.server, or fall back to the first sub/raw
@@ -189,11 +196,11 @@ function makeScraperAdapter(api: typeof scraperApi): ProviderAdapter {
       const category: 'sub' | 'dub' = selectedSrv.type === 'dub' ? 'dub' : 'sub'
 
       // 2. Fetch stream
-      const stResp = await api.getStream(animeId, episodeId, serverId, category, prefer)
+      const stResp = await api.getStream(animeId, episodeId, serverId, category, resolvedPrefer)
       const stEnv = stResp.data?.data as ScraperEnvelope | undefined
       const stream = stEnv?.stream
       if (!stream?.sources?.length) {
-        throw new NotAvailableError(combo.provider, 'returned no stream sources')
+        throw new NotAvailableError(combo.provider || prefer || 'scraper', 'returned no stream sources')
       }
 
       const source = stream.sources[0]
@@ -204,22 +211,6 @@ function makeScraperAdapter(api: typeof scraperApi): ProviderAdapter {
         servers: srvs.map((s) => ({ id: s.id, label: s.name })),
       }
     },
-  }
-}
-
-/**
- * Curried overload used internally — allows passing `prefer` through
- * `listEpisodes` for the scraper adapter without changing the ProviderAdapter
- * interface (the interface only has `animeId`).
- */
-function makeScraperAdapterWithPrefer(
-  api: typeof scraperApi,
-  prefer: string | undefined,
-): ProviderAdapter {
-  const base = makeScraperAdapter(api)
-  return {
-    listEpisodes: (animeId) => (base as any).listEpisodes(animeId, prefer),
-    resolveStream: base.resolveStream.bind(base),
   }
 }
 
@@ -267,7 +258,7 @@ function makeAnime18Adapter(api: typeof anime18Api): ProviderAdapter {
       const response = await api.getStream(animeId, slug)
       const data: Anime18Source | undefined = response.data?.data || response.data
       if (!data?.url) {
-        throw new NotAvailableError('18anime-direct', 'returned no stream URL')
+        throw new NotAvailableError('18anime', 'returned no stream URL')
       }
       return {
         url: data.url,
@@ -294,9 +285,11 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
       if (!Array.isArray(translations) || translations.length === 0) {
         return []
       }
-      // Use the first translation to determine episode count
-      const first = translations[0]
-      return Array.from({ length: first.episodes_count }, (_, i) => {
+      // Use the MAX across all translations so no episode is silently hidden
+      // when teams cover different ranges (e.g. translation A has 12 eps,
+      // translation B has 24 eps — using only [0] would hide eps 13-24).
+      const maxCount = Math.max(0, ...translations.map((t) => t.episodes_count ?? 0))
+      return Array.from({ length: maxCount }, (_, i) => {
         const n = i + 1
         return { key: n, label: n, number: n }
       })
@@ -336,11 +329,12 @@ export interface ProviderResolver {
  * `makeResolver(deps)` — injectable factory for testing.
  *
  * Dispatching rules:
- * - provider === 'kodik'       → kodikAdapter (requires deps.kodikApi)
- * - provider in SCRAPER_IDS   → scraperAdapter (requires deps.scraperApi)
- * - provider === 'raw'         → rawAdapter (requires deps.rawApi)
- * - provider === '18anime-direct' → anime18Adapter (requires deps.anime18Api)
- * - anything else              → NotAvailableError
+ * - provider === 'kodik'     → kodikAdapter (requires deps.kodikApi)
+ * - provider in SCRAPER_IDS → scraperAdapter (requires deps.scraperApi)
+ * - provider === 'raw'       → rawAdapter (requires deps.rawApi)
+ * - provider === '18anime'   → anime18Adapter via anime18Api (/anime18/* backend,
+ *                              NOT the EN scraper chain; requires deps.anime18Api)
+ * - anything else            → NotAvailableError
  */
 export function makeResolver(deps: ResolverDeps): ProviderResolver {
   const UNAVAILABLE_PROVIDERS = new Set<string>([
@@ -365,7 +359,7 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
       if (!deps.scraperApi) {
         throw new NotAvailableError(provider, 'not available (scraperApi dep missing)')
       }
-      return makeScraperAdapterWithPrefer(deps.scraperApi, provider)
+      return makeScraperAdapter(deps.scraperApi, provider)
     }
 
     if (provider === 'raw') {
@@ -375,7 +369,7 @@ export function makeResolver(deps: ResolverDeps): ProviderResolver {
       return makeRawAdapter(deps.rawApi)
     }
 
-    if (provider === '18anime-direct') {
+    if (provider === '18anime') {
       if (!deps.anime18Api) {
         throw new NotAvailableError(provider, 'not available (anime18Api dep missing)')
       }
