@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v4.0
-milestone_name: milestone
+milestone_name: Activity Register (ClickHouse unified event plane)
 current_plan: 1
-status: completed
+status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-06-06T01:25:48.736Z"
-last_activity: 2026-06-06 -- Phase 03 marked complete
+last_updated: "2026-06-06T05:22:47.336Z"
+last_activity: 2026-06-06 -- Phase 04 execution started
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 13
+  total_plans: 17
   completed_plans: 13
   percent: 50
 ---
@@ -19,10 +19,10 @@ progress:
 
 ## Current Position
 
-Phase: 03 — COMPLETE
-Plan: 1 of 6
-Status: Phase 03 complete
-Last activity: 2026-06-06 -- Phase 03 marked complete
+Phase: 04 (fe-causation-rum) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 04
+Last activity: 2026-06-06 -- Phase 04 execution started
 
 ## Progress
 

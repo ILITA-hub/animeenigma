@@ -86,8 +86,8 @@
   3. A `PerformanceObserver` beacons browser→3rd-party resource timings (host, count, timing) flagged `source=fe_rum, accuracy=approx`; a dashboard/query proves these rows are **never summed** with authoritative BE bytes (e.g. byte aggregations filter `source=be`). (AR-FE-03)
 **Plans**: 4 plans
 Plans:
-- [ ] 04-01-PLAN.md — Backend: collect.go FE register field-mapping + source whitelist + byte-poverty tests (AR-FE-01/03)
-- [ ] 04-02-PLAN.md — FE: AnalyticsEvent wire-type extension + rum.ts PerformanceObserver (host-only, byte-poor fe_rum rows) + spec (AR-FE-03)
+- [x] 04-01-PLAN.md — Backend: collect.go FE register field-mapping + source whitelist + byte-poverty tests (AR-FE-01/03)
+- [x] 04-02-PLAN.md — FE: AnalyticsEvent wire-type extension + rum.ts PerformanceObserver (host-only, byte-poor fe_rum rows) + spec (AR-FE-03)
 - [ ] 04-03-PLAN.md — FE: axios interceptor emits source='fe' call row sharing the call's trace_id; click↔trace stamp proof (AR-FE-01/02)
 - [ ] 04-04-PLAN.md — Live ClickHouse phase-gate (non-autonomous): prove trace_id join + click→effect join + source=be byte filter
 **Metrics**: `UXΔ = +1 (Better)` (closes the FE→BE causation last mile; RUM gives real client-side perf signal) · `CDI = 0.08 * 13` (frontend axios interceptor + click-capture + a `PerformanceObserver`; extends the existing `traceparent` minting, contained to the FE analytics layer) · `MVQ = Griffin 80%/85%` (joins frontend causation to the backend register into one trace-linked form; the `accuracy=approx` discipline is the crafted, slop-resistant detail)
@@ -138,6 +138,6 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
 | 3 | v4.0 | 6/6 | Complete   | 2026-06-06 |
-| 4 | v4.0 | 0/? | Not started | — |
+| 4 | v4.0 | 2/4 | In Progress|  |
 | 5 | v4.0 | 0/? | Not started | — |
 | 6 | v4.0 | 0/? | Not started | — |
