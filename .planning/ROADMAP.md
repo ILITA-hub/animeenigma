@@ -18,7 +18,7 @@
 
 - [x] **Phase 1: ClickHouse Foundation + EventStore Swap** — Stand up ClickHouse, define the wide-event schema (1 row per effect), implement the ClickHouse `EventStore` behind the existing interface, migrate the clickstream onto it. (completed 2026-06-05)
 - [x] **Phase 2: BE Egress Recorder** — Async batched effect recorder at the `WrapTransport` outbound seam + OTel baggage; retrofit non-shared HTTP clients; per-(stream-session, host) HLS aggregation. (completed 2026-06-05)
-- [ ] **Phase 3: DB/Cache Effects + Auto Operation Discovery** — otel-GORM DB-write effects, cache hit/miss effects, stack-frame operation attribution, Tempo span-metrics + service graph.
+- [x] **Phase 3: DB/Cache Effects + Auto Operation Discovery** — otel-GORM DB-write effects, cache hit/miss effects, stack-frame operation attribution, Tempo span-metrics + service graph. (completed 2026-06-06)
 - [ ] **Phase 4: FE Causation + RUM** — Wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (flagged approximate).
 - [ ] **Phase 5: Reports & Dashboards** — Grafana wide-event pivot tables (template vars = any dimension), the "from → choke-point → effects" report, anomaly flagging, awareness overview.
 - [ ] **Phase 6: Consolidation → Topology A** — OTel Collector ClickHouse exporter for traces + logs; retire Tempo + Loki; keep Prometheus + Grafana. Deliberately last (register proven before SPOF consolidation).
@@ -73,7 +73,7 @@
 - [x] 03-03-PLAN.md — GORM DB-effect callbacks (db_write always, db_read P95-gated) + in-memory ReadGate snapshot (Wave 2, AR-EFFECT-01)
 - [x] 03-04-PLAN.md — Cache aggregator (HLSSessions clone) + key-class classifier + cache.go hit/miss hooks (Wave 2, AR-EFFECT-02)
 - [x] 03-05-PLAN.md — Daily ClickHouse P95 → read_thresholds Redis hash + scheduler cron + ThresholdRefresher ticker (Wave 3, AR-EFFECT-01)
-- [ ] 03-06-PLAN.md — Per-service boot wiring (7 GORM + catalog cache; gateway N/A — rate-limit cache bypasses libs/cache) + live ClickHouse/Prometheus/Grafana phase-gate verification (Wave 4, AR-EFFECT-01..04, non-autonomous)
+- [x] 03-06-PLAN.md — Per-service boot wiring (7 GORM + catalog cache; gateway N/A — rate-limit cache bypasses libs/cache) + live ClickHouse/Prometheus/Grafana phase-gate verification (Wave 4, AR-EFFECT-01..04, non-autonomous)
 **Metrics**: `UXΔ = +1 (Better)` (operation-level cost attribution; the "expensive popular button" insight derives from here) · `CDI = 0.14 * 21` (GORM hook + cache hook + a `runtime.Callers` attribution helper + a Tempo config flag; new-but-compatible patterns across the DB/cache libs, attribution is the novel piece) · `MVQ = Griffin 85%/84%` (elegantly fuses GORM hooks, cache hooks, stack-walking, and Tempo span-metrics into one attribution story; strong slop-resistance)
 
 ### Phase 4: FE Causation + RUM
@@ -132,7 +132,7 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 21-28 | v3.1 | — | ✅ Complete | 2026-05-13 → 2026-06-04 |
 | 1 | v4.0 | 3/3 | Complete   | 2026-06-05 |
 | 2 | v4.0 | 4/4 | Complete   | 2026-06-05 |
-| 3 | v4.0 | 5/6 | In Progress|  |
+| 3 | v4.0 | 6/6 | Complete   | 2026-06-06 |
 | 4 | v4.0 | 0/? | Not started | — |
 | 5 | v4.0 | 0/? | Not started | — |
 | 6 | v4.0 | 0/? | Not started | — |
