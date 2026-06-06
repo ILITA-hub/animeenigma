@@ -32,6 +32,19 @@ src/components/player/SubtitleOverlay.vue:#ffcccc:default subtitle outline/secon
 src/components/player/unified/PlayerScrubBar.vue:#fff:scrub-bar thumb is solid white per pixel-spec (player.css) — functional non-theme chrome on dark video bg
 src/components/player/unified/PlayerScrubBar.vue:#fff:preview-time overlay text on rgba(0,0,0,0.7) dark-glass — always-dark backdrop, not a theme surface
 
+# --- Unified player overlay + control bar chrome (Task 12, always dark video bg) --
+# All #fff uses: text/icon color on player chrome (always-dark video backdrop) — no theme token for this non-theme surface
+# #08080f: brand base color fallback (same as BrandMark canonical-fine fallback)
+# #ff4d8d: brand-pink identity hue — provider-identity color (Hanime/pink exempt per DESIGN-SYSTEM.md)
+src/components/player/unified/PlayerControlBar.vue:#fff:icon/text color on player control-bar chrome (always-dark video bg) — functional, non-theme surface
+src/components/player/unified/overlays/BigPlayButton.vue:#fff:big-play SVG icon on player chrome (always-dark video backdrop) — functional, non-theme surface
+src/components/player/unified/overlays/SkipIntroChip.vue:#fff:skip-intro chip fg and hover bg (player chrome on dark video) — functional, non-theme surface
+src/components/player/unified/overlays/SkipIntroChip.vue:#08080f:skip-intro chip hover text-on-white fallback in var(--color-base,#08080f) — canonical-fine fallback
+src/components/player/unified/overlays/NextEpisodeCard.vue:#fff:next-episode card fg color on dark glass — player chrome, always-dark backdrop
+src/components/player/unified/overlays/NextEpisodeCard.vue:#08080f:next-ep play-btn text-on-cyan fallback in var(--color-base,#08080f) — canonical-fine fallback
+src/components/player/unified/overlays/WatchTogetherButton.vue:#fff:WIP badge + icon color on player chrome (dark video bg) — functional non-theme surface
+src/components/player/unified/overlays/WatchTogetherButton.vue:#ff4d8d:WIP badge background — brand-pink identity hue (same family as Hanime player accent; provider-identity exempt)
+
 # --- Brand / near-base chrome hex (BrandMark, Navbar) --------------------------
 src/components/layout/BrandMark.vue:#08080f:brand base color fallback in var(--color-base,#08080f) — canonical-fine fallback
 src/components/layout/Navbar.vue:#1a3a4a:avatar teal gradient START — novel chrome hue, no token within tolerance
