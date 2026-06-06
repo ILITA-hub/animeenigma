@@ -537,7 +537,7 @@ The live gate needs a controllable volume spike. Two options for the plan to cho
 | A3 | The CH plugin version in the image supports `$__conditionalAll` + `$__timeFilter_ms` (docs are "latest") | Patterns 1-3 | LOW-MED — `$__timeFilter`/`$__conditionalAll` are long-standing; `$__timeFilter_ms` is newer. If `_ms` is absent, plain `$__timeFilter` works (the table already uses it in product-analytics.json). Verify by opening the query editor once. |
 | A4 | `make restart-grafana` re-runs the entrypoint copy of provisioning (so a new alert rule in rules.yml is re-read) | Validation / Pitfall 4 | LOW — entrypoint copies provisioning-tpl on every container start (docker-compose.yml:382-383); restart = container restart. If a rule edit doesn't apply, fall back to a one-off `docker compose up -d --force-recreate grafana`. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Visual flow (Sankey) for AR-REPORT-02?**
    - Known: the table + row-grouping transform satisfies the requirement with zero new plugins.
