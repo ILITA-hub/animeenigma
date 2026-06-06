@@ -31,7 +31,7 @@
                 autocomplete="off"
                 spellcheck="false"
                 :aria-busy="isSubmitting"
-                class="bg-white/10 font-mono pr-9"
+                class="bg-white/10 border-white/20 font-mono pr-9"
                 required
               />
               <!-- Phase 12 / UA-092: spinner while the navigation is in flight. -->

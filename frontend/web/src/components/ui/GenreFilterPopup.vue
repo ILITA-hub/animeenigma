@@ -60,6 +60,7 @@
             type="text"
             size="sm"
             :placeholder="searchPlaceholder"
+            class="focus:border-cyan-500/30"
             @keydown="handleSearchKeydown"
           />
         </div>
