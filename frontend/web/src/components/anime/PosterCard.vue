@@ -7,13 +7,19 @@
       :aria-label="model.title"
     />
 
-    <div class="card-hover rounded-xl overflow-hidden bg-white/5 border border-white/10 pointer-events-none">
+    <div class="rounded-xl overflow-hidden bg-white/5 border border-white/10 pointer-events-none transition-[border-color,box-shadow] duration-200 group-hover:border-white/20 group-hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
       <PosterImage
         :src="model.coverImage"
         :alt="model.title"
         ratio="2/3"
         scrim
       >
+        <!-- Hover dim — lets the centered controls read against bright posters -->
+        <div
+          class="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+          aria-hidden="true"
+        />
+
         <!-- Top-left: quality + DUB + ONGOING stack -->
         <div class="absolute top-2 left-2 flex flex-col items-start gap-1">
           <Badge v-if="model.quality" variant="default" size="sm" :overlay="true">{{ model.quality }}</Badge>
@@ -92,11 +98,11 @@
       </PosterImage>
 
       <!-- Content -->
-      <div class="p-3">
-        <h3 class="font-medium text-white line-clamp-2 mb-1 group-hover:text-cyan-400 transition-colors">
+      <div class="px-2.5 pt-2.5 pb-3">
+        <h3 class="font-medium text-white line-clamp-2 mb-1 text-[13px] leading-[1.3] min-h-[2.6em] group-hover:text-cyan-400 transition-colors">
           {{ model.title }}
         </h3>
-        <div class="flex items-center gap-2 text-xs text-white/50">
+        <div class="flex items-center gap-1 text-[11px] text-white/50 whitespace-nowrap overflow-hidden min-h-[1.5em]">
           <span v-if="model.year">{{ model.year }}</span>
           <span v-if="model.year && model.episodes" class="text-white/30">•</span>
           <span v-if="model.episodes">{{ model.episodes }} {{ episodeLabel }}</span>

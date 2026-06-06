@@ -1,6 +1,9 @@
 <template>
   <router-link :to="model.href" class="mtile group">
     <PosterImage :src="model.coverImage" :alt="model.title" ratio="16/9" rounded="lg" scrim>
+      <!-- Hover dim so the play control reads against bright posters -->
+      <div class="mtile-ovl" aria-hidden="true" />
+
       <!-- Centered play, hover reveal -->
       <span class="mtile-play" aria-hidden="true">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z" /></svg>
@@ -57,6 +60,9 @@ const kickerLabel = computed(() =>
 }
 .mtile:hover { transform: translateY(-2px); box-shadow: var(--accent-glow); border-color: var(--accent-line); }
 .mtile:focus-visible { outline: 2px solid var(--brand-cyan); outline-offset: 2px; }
+
+.mtile-ovl { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); opacity: 0; transition: opacity 0.2s ease; z-index: 1; pointer-events: none; }
+.mtile:hover .mtile-ovl { opacity: 1; }
 
 .mtile-play {
   position: absolute;

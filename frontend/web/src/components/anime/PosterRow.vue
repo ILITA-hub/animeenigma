@@ -168,13 +168,16 @@ const nextEpLabel = computed(() =>
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* reserve space so the 1-line title never collides with the rank / hover kebab */
+  padding-right: 30px;
 }
 .prow:hover .title { color: var(--brand-cyan); }
 
-.meta { font-size: 11px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* nowrap meta + chips → fixed row height → info aligns across columns (design lock) */
+.meta { font-size: 11px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
 .sep { opacity: 0.5; }
 
-.chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.chips { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; overflow: hidden; }
 .chip {
   font-family: var(--f-mono);
   font-size: 10px;
@@ -197,7 +200,6 @@ const nextEpLabel = computed(() =>
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 2px;
 }
 
 .rank {
