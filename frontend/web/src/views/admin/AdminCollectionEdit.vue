@@ -49,12 +49,7 @@
             <label class="block text-white/70 text-xs uppercase mb-1">
               {{ $t('admin.collections.fieldSlug') }}
             </label>
-            <input
-              v-model="form.slug"
-              type="text"
-              class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              :placeholder="$t('admin.collections.slugPlaceholder')"
-            />
+            <Input v-model="form.slug" type="text" class="bg-black/40" :placeholder="$t('admin.collections.slugPlaceholder')" />
           </div>
 
           <!-- Titles -->
@@ -63,32 +58,19 @@
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleEn') }} *
               </label>
-              <input
-                v-model="form.title"
-                type="text"
-                required
-                class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              />
+              <Input v-model="form.title" type="text" class="bg-black/40" required />
             </div>
             <div>
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleRu') }}
               </label>
-              <input
-                v-model="form.title_ru"
-                type="text"
-                class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              />
+              <Input v-model="form.title_ru" type="text" class="bg-black/40" />
             </div>
             <div>
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleJp') }}
               </label>
-              <input
-                v-model="form.title_jp"
-                type="text"
-                class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              />
+              <Input v-model="form.title_jp" type="text" class="bg-black/40" />
             </div>
           </div>
 
@@ -97,12 +79,7 @@
             <label class="block text-white/70 text-xs uppercase mb-1">
               {{ $t('admin.collections.fieldCover') }}
             </label>
-            <input
-              v-model="form.cover_image_url"
-              type="url"
-              class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              placeholder="https://…"
-            />
+            <Input v-model="form.cover_image_url" type="url" class="bg-black/40" placeholder="https://…" />
             <div v-if="form.cover_image_url" class="mt-2">
               <img
                 :src="form.cover_image_url"
@@ -167,13 +144,7 @@
 
           <!-- Picker -->
           <div class="mb-4">
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              :placeholder="$t('admin.collections.itemSearchPlaceholder')"
-              @input="onSearch"
-            />
+            <Input v-model="searchQuery" type="text" class="bg-black/40" :placeholder="$t('admin.collections.itemSearchPlaceholder')" @input="onSearch" />
             <div v-if="searchResults.length > 0" class="mt-2 max-h-60 overflow-y-auto rounded border border-white/10 bg-black/60">
               <button
                 v-for="r in searchResults"
@@ -242,6 +213,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
+import Input from '@/components/ui/Input.vue'
 import {
   adminApi,
   animeApi,

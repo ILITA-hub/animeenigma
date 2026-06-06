@@ -138,10 +138,11 @@ const debouncedSearch = useDebounceFn(async (query: string) => {
   }
 }, 300)
 
-function onInput(value: string) {
-  emit('update:modelValue', value)
+function onInput(value: string | number) {
+  const str = String(value)
+  emit('update:modelValue', str)
   highlightedIndex.value = -1
-  debouncedSearch(value)
+  debouncedSearch(str)
 }
 
 function closeDropdown() {

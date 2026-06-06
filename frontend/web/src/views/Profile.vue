@@ -141,12 +141,9 @@
 
               <!-- View Toggle + Sort -->
               <div class="flex items-center justify-end gap-2">
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  :placeholder="$t('profile.watchlist.searchPlaceholder')"
-                  class="flex-shrink-0 w-48 px-3 py-2 rounded-full text-sm bg-white/5 text-white/80 border border-transparent focus:border-cyan-500/30 focus:outline-none placeholder-white/40 mr-auto"
-                >
+                <div class="flex-shrink-0 w-48 mr-auto">
+                  <Input v-model="searchQuery" type="text" :placeholder="$t('profile.watchlist.searchPlaceholder')" class="rounded-full" />
+                </div>
                 <!-- Sort -->
                 <div class="w-36">
                   <Select
@@ -499,13 +496,9 @@
                   <div>
                     <label class="block text-white/60 text-sm mb-2">MyAnimeList</label>
                     <div class="flex gap-2">
-                      <input
-                        v-model="malUsername"
-                        type="text"
-                        :placeholder="$t('profile.import.malPlaceholder')"
-                        class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
-                        :disabled="malSync.importing"
-                      />
+                      <div class="flex-1">
+                        <Input v-model="malUsername" type="text" :placeholder="$t('profile.import.malPlaceholder')" class="bg-white/10" :disabled="malSync.importing" />
+                      </div>
                       <Button
                         variant="primary"
                         :disabled="!malUsername || malSync.importing"
@@ -550,13 +543,9 @@
                   <div>
                     <label class="block text-white/60 text-sm mb-2">Shikimori</label>
                     <div class="flex gap-2">
-                      <input
-                        v-model="shikimoriNickname"
-                        type="text"
-                        :placeholder="$t('profile.import.shikimoriPlaceholder')"
-                        class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
-                        :disabled="shikimoriSync.importing"
-                      />
+                      <div class="flex-1">
+                        <Input v-model="shikimoriNickname" type="text" :placeholder="$t('profile.import.shikimoriPlaceholder')" class="bg-white/10" :disabled="shikimoriSync.importing" />
+                      </div>
                       <Button
                         variant="primary"
                         :disabled="!shikimoriNickname || shikimoriSync.importing"
@@ -630,15 +619,8 @@
                   <div>
                     <label class="block text-white/60 text-sm mb-2">{{ $t('profile.profileLink') }}</label>
                     <div class="flex gap-2">
-                      <div class="flex-1 flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
-                        <span class="px-3 text-white/60 text-sm">/user/</span>
-                        <input
-                          v-model="publicId"
-                          type="text"
-                          placeholder="your-username"
-                          class="flex-1 bg-transparent py-2 pr-3 text-white placeholder-white/40 focus:outline-none"
-                          :disabled="savingPublicId"
-                        />
+                      <div class="flex-1">
+                        <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="savingPublicId" />
                       </div>
                       <Button
                         variant="primary"
@@ -1035,7 +1017,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
+import { Badge, Button, Input, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'

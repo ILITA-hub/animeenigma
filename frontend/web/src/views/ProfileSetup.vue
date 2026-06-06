@@ -16,14 +16,9 @@
             <label class="block text-white/60 text-sm mb-2 text-left">{{ $t('profileSetup.profileLink') }}</label>
             <div class="flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
               <span class="px-3 text-white/40 text-sm">/user/</span>
-              <input
-                v-model="publicId"
-                type="text"
-                placeholder="your-username"
-                class="flex-1 bg-transparent py-3 pr-3 text-white placeholder-white/40 focus:outline-none"
-                :disabled="saving"
-                @keyup.enter="save"
-              />
+              <div class="flex-1">
+                <Input v-model="publicId" type="text" placeholder="your-username" class="bg-transparent border-0" :disabled="saving" @keyup.enter="save" />
+              </div>
             </div>
             <p v-if="error" class="text-pink-400 text-xs mt-2 text-left">{{ error }}</p>
             <p class="text-white/40 text-xs mt-2 text-left">
@@ -58,7 +53,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { Button } from '@/components/ui'
+import { Button, Input } from '@/components/ui'
 import { userApi } from '@/api/client'
 
 interface ApiError {

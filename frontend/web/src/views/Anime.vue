@@ -304,12 +304,9 @@
           <div v-if="authStore.isAdmin && showShikimoriEdit" class="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
             <div class="flex items-center gap-3">
               <label class="text-white/60 text-sm whitespace-nowrap">Shikimori ID:</label>
-              <input
-                v-model="editShikimoriId"
-                type="text"
-                class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
-                :placeholder="$t('anime.examplePlaceholder')"
-              />
+              <div class="flex-1">
+                <Input v-model="editShikimoriId" type="text" :placeholder="$t('anime.examplePlaceholder')" />
+              </div>
               <Button
                 @click="saveShikimoriId"
                 :disabled="savingShikimoriId"
@@ -1053,7 +1050,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem } from '@/components/ui'
+import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Input } from '@/components/ui'
 import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'

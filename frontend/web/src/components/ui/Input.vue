@@ -46,7 +46,7 @@ import { cn } from '@/lib/utils'
 defineOptions({ inheritAttrs: false })
 
 interface Props {
-  modelValue?: string
+  modelValue?: string | number
   type?: 'text' | 'email' | 'password' | 'search' | 'number' | 'tel' | 'url' | 'date'
   placeholder?: string
   label?: string
@@ -70,12 +70,12 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
+  'update:modelValue': [value: string | number]
 }>()
 
 const model = computed({
   get: () => props.modelValue,
-  set: (value: string) => emit('update:modelValue', value),
+  set: (value: string | number) => emit('update:modelValue', value),
 })
 
 const focused = ref(false)

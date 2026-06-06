@@ -48,22 +48,10 @@
         </h2>
         <form class="glass-card p-4 mb-4 flex flex-wrap gap-3 items-end" @submit.prevent="handleSearch">
           <div class="flex-1 min-w-[260px]">
-            <input
-              v-model="searchQuery"
-              type="text"
-              :placeholder="$t('player.adminLibrary.search.placeholder')"
-              :aria-label="$t('player.adminLibrary.search.placeholder')"
-              class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            />
+            <Input v-model="searchQuery" type="text" :placeholder="$t('player.adminLibrary.search.placeholder')" :aria-label="$t('player.adminLibrary.search.placeholder')" />
           </div>
           <div class="w-32">
-            <input
-              v-model.number="searchMalId"
-              type="number"
-              placeholder="MAL ID"
-              aria-label="MAL ID"
-              class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            />
+            <Input v-model.number="searchMalId" type="number" placeholder="MAL ID" aria-label="MAL ID" />
           </div>
           <Button
             type="submit"
@@ -225,12 +213,13 @@
             >
               <div class="text-white text-sm font-medium truncate mb-2" :title="job.title">{{ job.title }}</div>
               <div class="relative">
-                <input
+                <Input
                   v-model="pendingLinkSearchQueries[job.id]"
                   type="text"
+                  size="sm"
                   :placeholder="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
                   :aria-label="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
-                  class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-warning"
+                  class="focus:ring-warning"
                   @input="onPendingLinkInput(job.id)"
                 />
                 <ul
@@ -267,6 +256,7 @@ import { adminLibraryApi, animeApi } from '@/api/client'
 import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload } from '@/types/library'
 import Badge from '@/components/ui/Badge.vue'
 import Button from '@/components/ui/Button.vue'
+import Input from '@/components/ui/Input.vue'
 
 // Phase 5 (LIB-09): RawLibrary admin view.
 //
@@ -287,7 +277,7 @@ const health = ref<LibraryHealth | null>(null)
 const errorBanner = ref<string | null>(null)
 
 const searchQuery = ref('')
-const searchMalId = ref<number | null>(null)
+const searchMalId = ref<number | undefined>(undefined)
 const searchResults = ref<Release[]>([])
 const searching = ref(false)
 
