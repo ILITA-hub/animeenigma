@@ -29,21 +29,7 @@
       :label="$t('browse.filters.section.format')"
       :count="filters.kind.value ? 1 : 0"
     >
-      <label
-        v-for="opt in kindOptions"
-        :key="opt.value || 'any-kind'"
-        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
-      >
-        <input
-          type="radio"
-          name="kind-filter"
-          :value="opt.value"
-          :checked="filters.kind.value === opt.value"
-          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-          @change="onKindChange(opt.value)"
-        />
-        <span>{{ opt.label }}</span>
-      </label>
+      <RadioGroup :model-value="filters.kind.value" :options="kindOptions" @update:model-value="(v) => onKindChange(v as Kind)" />
     </FilterSection>
 
     <!-- Status — single-select radio -->
@@ -51,21 +37,7 @@
       :label="$t('browse.filters.section.status')"
       :count="filters.status.value ? 1 : 0"
     >
-      <label
-        v-for="opt in statusOptions"
-        :key="opt.value || 'any-status'"
-        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
-      >
-        <input
-          type="radio"
-          name="status-filter"
-          :value="opt.value"
-          :checked="filters.status.value === opt.value"
-          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-          @change="onStatusChange(opt.value)"
-        />
-        <span>{{ opt.label }}</span>
-      </label>
+      <RadioGroup :model-value="filters.status.value" :options="statusOptions" @update:model-value="onStatusChange" />
     </FilterSection>
 
     <!-- Year range -->
@@ -136,21 +108,7 @@
       :label="$t('browse.filters.section.sort')"
       :count="filters.sort.value !== 'popularity' ? 1 : 0"
     >
-      <label
-        v-for="opt in sortOptions"
-        :key="opt.value"
-        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
-      >
-        <input
-          type="radio"
-          name="sort-filter"
-          :value="opt.value"
-          :checked="filters.sort.value === opt.value"
-          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-          @change="onSortChange(opt.value)"
-        />
-        <span>{{ opt.label }}</span>
-      </label>
+      <RadioGroup :model-value="filters.sort.value" :options="sortOptions" @update:model-value="(v) => onSortChange(v as Sort)" />
     </FilterSection>
 
     <!-- Reset -->
@@ -185,8 +143,7 @@ import {
 } from '@/composables/useBrowseFilters'
 import FilterSection from './FilterSection.vue'
 import { getLocalizedGenre } from '@/utils/title'
-import Input from '@/components/ui/Input.vue'
-import Checkbox from '@/components/ui/Checkbox.vue'
+import { Input, Checkbox, RadioGroup } from '@/components/ui'
 
 // Phase 15 (UX-31) — Browse.vue passes the genre list down (no
 // duplicate fetch) and the parent's useBrowseFilters instance so the
