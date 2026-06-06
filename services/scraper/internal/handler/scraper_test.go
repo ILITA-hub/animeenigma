@@ -1489,3 +1489,42 @@ func TestScraperHandler_GetHealth_ExposesRegistryMetadata(t *testing.T) {
 		t.Errorf("providers[allanime].description = %q; want %q", desc, "Primary EN source")
 	}
 }
+
+// TestHealthUp_ExcludesStreamSegmentColdStart verifies the cold-start exclusion
+// rule in healthUp: stream_segment is a probe-only oracle that starts as false
+// until the first tick, so it MUST NOT be counted when deriving the coarse "up"
+// bool — otherwise every freshly-booted provider would flash as down.
+//
+// Two cases are locked:
+//  1. Only stream_segment up → up=false  (cold-start: no API stages have fired yet)
+//  2. search up (alongside stream_segment down) → up=true  (at least one API stage healthy)
+func TestHealthUp_ExcludesStreamSegmentColdStart(t *testing.T) {
+	t.Parallel()
+
+	// Case 1: only stream_segment is up; all API stages absent.
+	// Expected: healthUp → false (stream_segment is excluded).
+	coldStart := domain.Health{
+		Provider: "testprov",
+		Stages: map[string]domain.StageHealth{
+			health.StageStreamSegment: {Up: true},
+		},
+	}
+	if got := healthUp(coldStart); got {
+		t.Errorf("healthUp(stream_segment-only up) = true; want false "+
+			"(stream_segment must not count toward the up signal — cold-start exclusion)")
+	}
+
+	// Case 2: search is up; stream_segment is down.
+	// Expected: healthUp → true (a real API stage is healthy).
+	searchUp := domain.Health{
+		Provider: "testprov",
+		Stages: map[string]domain.StageHealth{
+			health.StageSearch:        {Up: true},
+			health.StageStreamSegment: {Up: false},
+		},
+	}
+	if got := healthUp(searchUp); !got {
+		t.Errorf("healthUp(search up, stream_segment down) = false; want true "+
+			"(search is a counted API stage)")
+	}
+}

@@ -352,7 +352,8 @@ const playabilityFreshTTL = 30 * time.Minute
 // JSON field ordering mirrors the existing shape: provider and stages remain
 // first so downstream consumers that parse the existing fields continue to
 // work. The four new fields are additive and optional — a nil ProvidersConfig
-// leaves them at zero values (enabled=false, empty strings).
+// leaves enabled at its zero value (true, matching IsEnabled for absent
+// providers); reason and description are empty strings.
 type providerEnriched struct {
 	// Existing fields — preserved verbatim from domain.Health.
 	Provider string                    `json:"provider"`
@@ -370,8 +371,8 @@ type providerEnriched struct {
 // stream_segment is excluded because it is a probe-only oracle and starts
 // as false until the first probe tick — including it would flip every newly
 // booted provider to down.
-func healthUp(h domain.Health) bool {
-	for stage, sh := range h.Stages {
+func healthUp(ph domain.Health) bool {
+	for stage, sh := range ph.Stages {
 		if stage != health.StageStreamSegment && sh.Up {
 			return true
 		}
@@ -433,7 +434,7 @@ func (h *ScraperHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build enriched per-provider entries (Task 3). If no ProvidersConfig is
-	// wired, the new fields default to zero values (enabled=false, empty
+	// wired, the new fields default to enabled=true (matching IsEnabled for absent
 	// strings) — callers that don't set WithProvidersConfig still get a valid
 	// response; only the metadata fields are missing.
 	enriched := make(map[string]providerEnriched, len(snap))
