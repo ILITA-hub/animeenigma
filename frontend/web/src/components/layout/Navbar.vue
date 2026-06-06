@@ -51,22 +51,26 @@
               </svg>
             </button>
             <div v-else class="flex items-center gap-2">
-              <div class="relative">
-                <input
+              <div class="relative w-64">
+                <Input
                   ref="searchInputRef"
                   v-model="searchQuery"
                   type="text"
+                  size="sm"
                   :placeholder="$t('search.placeholder')"
-                  class="w-64 px-3 py-1.5 pl-9 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:bg-white/15 transition-all"
+                  class="bg-white/10 border-white/20 focus:border-cyan-400/50 focus:bg-white/15"
                   @input="onSearchInput"
                   @keydown.enter="goToSearch"
                   @keydown.escape="closeSearch"
                   @keydown.down.prevent="highlightNext"
                   @keydown.up.prevent="highlightPrev"
-                />
-                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                >
+                  <template #prefix>
+                    <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </template>
+                </Input>
                 <!-- Autocomplete Dropdown -->
                 <Transition name="dropdown">
                   <div
@@ -322,6 +326,7 @@ import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
+import { Input } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell.vue'
 import BrandMark from '@/components/layout/BrandMark.vue'
 
@@ -419,7 +424,7 @@ const searchOpen = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<Array<{ id: string; title: string; coverImage: string; releaseYear?: number; totalEpisodes?: number; rating?: number }>>([])
 const highlightedIndex = ref(-1)
-const searchInputRef = ref<HTMLInputElement | null>(null)
+const searchInputRef = ref<{ focus: () => void } | null>(null)
 const searchContainerRef = ref<HTMLElement | null>(null)
 
 const openSearch = async () => {

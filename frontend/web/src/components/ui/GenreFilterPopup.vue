@@ -54,12 +54,12 @@
       >
         <!-- Search Input -->
         <div class="p-2 border-b border-white/10">
-          <input
+          <Input
             ref="searchRef"
             v-model="search"
             type="text"
+            size="sm"
             :placeholder="searchPlaceholder"
-            class="w-full px-3 py-1.5 text-sm bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/30"
             @keydown="handleSearchKeydown"
           />
         </div>
@@ -125,6 +125,7 @@
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { getGenreEmoji } from '@/utils/genre-emoji'
 import { getLocalizedGenre } from '@/utils/title'
+import { Input } from '@/components/ui'
 
 export interface GenreOption {
   id: string
@@ -160,7 +161,7 @@ const isOpen = ref(false)
 const search = ref('')
 const focusedIndex = ref(-1)
 const wrapperRef = ref<HTMLElement | null>(null)
-const searchRef = ref<HTMLInputElement | null>(null)
+const searchRef = ref<{ focus: () => void } | null>(null)
 
 const selectedGenre = computed(() =>
   props.genres.find(g => g.id === props.modelValue)

@@ -21,16 +21,17 @@
               {{ $t('admin.recs.pickerLabel') }}
             </label>
             <div class="relative">
-              <input
+              <Input
                 id="rec-user-id"
                 ref="searchInputRef"
                 v-model="input"
                 type="text"
+                size="sm"
                 :placeholder="$t('admin.recs.pickerPlaceholder')"
                 autocomplete="off"
                 spellcheck="false"
                 :aria-busy="isSubmitting"
-                class="w-full px-3 py-2 pr-9 rounded-lg bg-white/10 border border-white/20 text-white font-mono text-sm placeholder-white/30 focus:outline-none focus:border-cyan-400/60 focus-visible:ring-2 focus-visible:ring-cyan-400"
+                class="bg-white/10 font-mono pr-9"
                 required
               />
               <!-- Phase 12 / UA-092: spinner while the navigation is in flight. -->
@@ -97,12 +98,13 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Button from '@/components/ui/Button.vue'
+import { Input } from '@/components/ui'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const input = ref('')
 // Phase 12 / UA-091: autofocus the search input on mount.
-const searchInputRef = ref<HTMLInputElement | null>(null)
+const searchInputRef = ref<{ focus: () => void } | null>(null)
 // Phase 12 / UA-092: track submit-in-flight so the spinner can render
 // while the SPA router resolves the next route.
 const isSubmitting = ref(false)
