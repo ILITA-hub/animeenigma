@@ -279,6 +279,7 @@
                               :model-value="String(anime.episodes || 0)"
                               min="0"
                               :max="animeTotalEpisodes(anime) || 9999"
+                              class="h-6 py-0 text-center text-xs bg-white/10"
                               @blur="(e: Event) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
                               @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
                             />
