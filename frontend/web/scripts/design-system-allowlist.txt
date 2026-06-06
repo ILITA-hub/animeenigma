@@ -28,6 +28,10 @@ src/components/browse/BrowseSidebar.vue:#f97316:AniLib provider-identity hue (or
 src/components/player/SubtitleOverlay.vue:#ffffff:default subtitle text color (render default), not a theme token
 src/components/player/SubtitleOverlay.vue:#ffcccc:default subtitle outline/secondary color (render default), not a theme token
 
+# --- PlayerScrubBar player chrome (always on dark video backdrop) ---------------
+src/components/player/unified/PlayerScrubBar.vue:#fff:scrub-bar thumb is solid white per pixel-spec (player.css) — functional non-theme chrome on dark video bg
+src/components/player/unified/PlayerScrubBar.vue:#fff:preview-time overlay text on rgba(0,0,0,0.7) dark-glass — always-dark backdrop, not a theme surface
+
 # --- Brand / near-base chrome hex (BrandMark, Navbar) --------------------------
 src/components/layout/BrandMark.vue:#08080f:brand base color fallback in var(--color-base,#08080f) — canonical-fine fallback
 src/components/layout/Navbar.vue:#1a3a4a:avatar teal gradient START — novel chrome hue, no token within tolerance
