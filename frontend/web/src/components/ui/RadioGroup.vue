@@ -7,11 +7,13 @@
     <label
       v-for="opt in options"
       :key="opt.value || '__any__'"
-      class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
+      :class="['flex items-center gap-2 text-sm py-0.5 transition-colors',
+               disabled
+                 ? 'text-white/30 cursor-not-allowed'
+                 : 'text-white/70 hover:text-white cursor-pointer']"
     >
       <RadioGroupItem
         :value="opt.value"
-        :disabled="disabled"
         class="h-4 w-4 shrink-0 rounded-full border border-input data-[state=checked]:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
       >
         <RadioGroupIndicator class="h-2 w-2 rounded-full bg-primary" />
