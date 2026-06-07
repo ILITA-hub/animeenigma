@@ -42,6 +42,8 @@ func newTestDB(t *testing.T) *gorm.DB {
 			id TEXT PRIMARY KEY,
 			mal_id TEXT,
 			name_ru TEXT,
+			name_en TEXT,
+			name TEXT,
 			updated_at DATETIME,
 			deleted_at DATETIME
 		)
@@ -82,16 +84,33 @@ func seedWatchHistory(t *testing.T, db *gorm.DB, animeID string, watchedAt time.
 // extra response headers. status overrides the 200 default for /scraper/servers
 // when non-zero.
 type fakeScraperConfig struct {
-	servers     []map[string]any
-	streamURL   string
-	extraHdrs   map[string]string
-	serversCode int // 0 → 200
-	streamCode  int
+	servers      []map[string]any
+	streamURL    string
+	extraHdrs    map[string]string
+	serversCode  int // 0 → 200
+	streamCode   int
+	episodesCode int // 0 → 200 (returns a default episode)
 }
 
 func newFakeScraper(t *testing.T, cfg fakeScraperConfig) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.HandleFunc("/scraper/episodes", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.episodesCode != 0 {
+			w.WriteHeader(cfg.episodesCode)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"data": map[string]any{
+				"episodes": []map[string]any{
+					{"id": "anime-episode-1", "number": 1, "title": "Episode 1"},
+				},
+				"meta": map[string]any{"tried": []string{"gogoanime"}},
+			},
+		})
+	})
 	mux.HandleFunc("/scraper/servers", func(w http.ResponseWriter, r *http.Request) {
 		if cfg.serversCode != 0 {
 			w.WriteHeader(cfg.serversCode)

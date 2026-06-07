@@ -22,6 +22,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -64,10 +65,16 @@ const (
 // to query, and Title is a human-readable name persisted in the per-run
 // log (empty when the anime isn't in our local `animes` table — the
 // anchors fall back to the MAL ID then).
+//
+// NameEN (English title) and NameRomaji (romaji name from `name` column) are
+// forwarded to /scraper/* as `title` + `title_alt` so providers with
+// English-only search indexes (gogoanime, animefever) can resolve the anime.
 type canaryAnime struct {
-	Slot  string
-	MALID int
-	Title string
+	Slot       string
+	MALID      int
+	Title      string // name_ru — human-readable log label
+	NameEN     string // name_en — primary provider search title
+	NameRomaji string // name   — romaji fallback
 }
 
 // TupleResult is a single (provider, server, anime_slot) probe outcome.
@@ -121,6 +128,20 @@ type streamEnvelope struct {
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers,omitempty"`
 		} `json:"stream"`
+	} `json:"data"`
+}
+
+// scraperEpisode is a single episode entry from /scraper/episodes.
+type scraperEpisode struct {
+	ID     string `json:"id"`
+	Number int    `json:"number"`
+}
+
+// episodesEnvelope is the /scraper/episodes wire shape.
+type episodesEnvelope struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Episodes []scraperEpisode `json:"episodes"`
 	} `json:"data"`
 }
 
@@ -265,9 +286,11 @@ func (j *ScraperPlayabilityCanaryJob) run(ctx context.Context, applyJitter bool)
 func (j *ScraperPlayabilityCanaryJob) composeAnimeList(ctx context.Context) ([]canaryAnime, error) {
 	list := make([]canaryAnime, 0, 5)
 
-	// Anchors first. Title comes from a single-row lookup against `animes`.
-	frieren := canaryAnime{Slot: "anchor_frieren", MALID: AnchorFrierenMAL, Title: j.lookupTitle(ctx, AnchorFrierenMAL)}
-	onePiece := canaryAnime{Slot: "anchor_one_piece", MALID: AnchorOnePieceMAL, Title: j.lookupTitle(ctx, AnchorOnePieceMAL)}
+	// Anchors first. All title forms come from a single-row lookup.
+	fRu, fEN, fRomaji := j.lookupTitles(ctx, AnchorFrierenMAL)
+	frieren := canaryAnime{Slot: "anchor_frieren", MALID: AnchorFrierenMAL, Title: fRu, NameEN: fEN, NameRomaji: fRomaji}
+	opRu, opEN, opRomaji := j.lookupTitles(ctx, AnchorOnePieceMAL)
+	onePiece := canaryAnime{Slot: "anchor_one_piece", MALID: AnchorOnePieceMAL, Title: opRu, NameEN: opEN, NameRomaji: opRomaji}
 	list = append(list, frieren, onePiece)
 
 	recents := j.recentFromWatchHistory(ctx)
@@ -290,25 +313,25 @@ func (j *ScraperPlayabilityCanaryJob) composeAnimeList(ctx context.Context) ([]c
 	return list, nil
 }
 
-// lookupTitle returns the russian title for the given MAL ID, or empty
-// string when not present. Best-effort — errors are swallowed because the
-// title is purely for the JSON log's human readability.
+// lookupTitles returns (nameRu, nameEN, nameRomaji) for the given MAL ID.
+// Best-effort — errors are swallowed; all three fields are used for provider
+// search resolution, not just logging. nameEN is the primary provider search
+// title (gogoanime/animefever need English); nameRomaji is the fallback.
 //
-// The production `animes` schema stores mal_id as varchar (string), so we
-// pass the int formatted as a decimal string. The `name_ru` column is the
-// Russian title (NOT `russian` — schema drift caught during smoke).
-func (j *ScraperPlayabilityCanaryJob) lookupTitle(ctx context.Context, malID int) string {
+// Schema: mal_id is varchar(50). name_ru = Russian title, name_en = English,
+// name = romaji (original Japanese romanisation).
+func (j *ScraperPlayabilityCanaryJob) lookupTitles(ctx context.Context, malID int) (nameRu, nameEN, nameRomaji string) {
 	if j.db == nil {
-		return ""
+		return "", "", ""
 	}
-	var title string
+	var ru, en, romaji sql.NullString
 	row := j.db.WithContext(ctx).Raw(
-		`SELECT name_ru FROM animes WHERE mal_id = ? LIMIT 1`, fmt.Sprintf("%d", malID),
+		`SELECT name_ru, name_en, name FROM animes WHERE mal_id = ? LIMIT 1`, fmt.Sprintf("%d", malID),
 	).Row()
-	if err := row.Scan(&title); err != nil {
-		return ""
+	if err := row.Scan(&ru, &en, &romaji); err != nil {
+		return "", "", ""
 	}
-	return title
+	return ru.String, en.String, romaji.String
 }
 
 // recentFromWatchHistory returns the 3 most-recently-watched distinct
@@ -328,7 +351,7 @@ func (j *ScraperPlayabilityCanaryJob) recentFromWatchHistory(ctx context.Context
 	// last 24h, then join + order. Works on both sqlite (tests) and
 	// Postgres (prod).
 	rows, err := j.db.WithContext(ctx).Raw(`
-		SELECT a.mal_id, a.name_ru, last_watched
+		SELECT a.mal_id, a.name_ru, a.name_en, a.name, last_watched
 		FROM (
 			SELECT anime_id, MAX(watched_at) AS last_watched
 			FROM watch_history
@@ -349,13 +372,15 @@ func (j *ScraperPlayabilityCanaryJob) recentFromWatchHistory(ctx context.Context
 		var (
 			malIDStr sql.NullString
 			nameRu   sql.NullString
+			nameEN   sql.NullString
+			name     sql.NullString
 			// last_watched is scanned as interface{} because sqlite returns
 			// MAX(DATETIME) as string (driver.Value type) while Postgres returns
 			// it as time.Time. The canary only uses this column for ORDER BY
 			// in SQL — never for arithmetic in Go — so the loose type is safe.
 			lastWatched interface{}
 		)
-		if err := rows.Scan(&malIDStr, &nameRu, &lastWatched); err != nil {
+		if err := rows.Scan(&malIDStr, &nameRu, &nameEN, &name, &lastWatched); err != nil {
 			j.log.Warnw("canary recentFromWatchHistory row scan failed", "error", err)
 			continue
 		}
@@ -363,7 +388,7 @@ func (j *ScraperPlayabilityCanaryJob) recentFromWatchHistory(ctx context.Context
 		if malID == 0 {
 			continue
 		}
-		out = append(out, canaryAnime{MALID: malID, Title: nameRu.String})
+		out = append(out, canaryAnime{MALID: malID, Title: nameRu.String, NameEN: nameEN.String, NameRomaji: name.String})
 	}
 	return out
 }
@@ -383,7 +408,7 @@ func (j *ScraperPlayabilityCanaryJob) recentFromAnimeList(ctx context.Context) [
 		return nil
 	}
 	rows, err := j.db.WithContext(ctx).Raw(`
-		SELECT mal_id, name_ru
+		SELECT mal_id, name_ru, name_en, name
 		FROM animes
 		WHERE deleted_at IS NULL AND mal_id IS NOT NULL AND mal_id != ''
 		ORDER BY updated_at DESC
@@ -399,15 +424,17 @@ func (j *ScraperPlayabilityCanaryJob) recentFromAnimeList(ctx context.Context) [
 		var (
 			malIDStr sql.NullString
 			nameRu   sql.NullString
+			nameEN   sql.NullString
+			name     sql.NullString
 		)
-		if err := rows.Scan(&malIDStr, &nameRu); err != nil {
+		if err := rows.Scan(&malIDStr, &nameRu, &nameEN, &name); err != nil {
 			continue
 		}
 		malID := parseMALID(malIDStr.String)
 		if malID == 0 {
 			continue
 		}
-		out = append(out, canaryAnime{MALID: malID, Title: nameRu.String})
+		out = append(out, canaryAnime{MALID: malID, Title: nameRu.String, NameEN: nameEN.String, NameRomaji: name.String})
 	}
 	return out
 }
@@ -432,36 +459,45 @@ func parseMALID(s string) int {
 // /scraper/servers itself fails, emits a single sentinel
 // (server="_unreachable", reason="cdn_unreachable") tuple so the alert
 // rule layer has something to match.
+//
+// Episode resolution: before querying servers, probeOne calls
+// /scraper/episodes to obtain a provider-specific episode ID (e.g.
+// "one-piece-episode-1"). Passing the bare numeric "1" to /scraper/servers
+// was the root cause of the canary's zero_match regression (ISS-025):
+// gogoanime builds its URL as baseURL+"/"+episodeID, so numeric "1" fetches
+// a non-episode page with no embed links.
 func (j *ScraperPlayabilityCanaryJob) probeOne(ctx context.Context, a canaryAnime) []TupleResult {
-	servers, err := j.fetchServers(ctx, a.MALID)
-	if err != nil {
-		j.log.Warnw("canary /scraper/servers failed", "anime_slot", a.Slot, "mal_id", a.MALID, "error", err)
+	sentinel := func(reason streamprobe.Reason) []TupleResult {
 		return []TupleResult{{
 			Provider:  canaryProviderLabel,
 			Server:    sentinelServerUnreachable,
 			Result:    "fail",
-			Reason:    string(streamprobe.ReasonCDNUnreachable),
-			AnimeSlot: a.Slot,
-			AnimeID:   a.MALID,
-			Title:     a.Title,
-		}}
-	}
-	if len(servers) == 0 {
-		// Empty server list is itself a regression signal.
-		return []TupleResult{{
-			Provider:  canaryProviderLabel,
-			Server:    sentinelServerUnreachable,
-			Result:    "fail",
-			Reason:    string(streamprobe.ReasonZeroMatch),
+			Reason:    string(reason),
 			AnimeSlot: a.Slot,
 			AnimeID:   a.MALID,
 			Title:     a.Title,
 		}}
 	}
 
+	episodeID, err := j.fetchEpisodeID(ctx, a)
+	if err != nil {
+		j.log.Warnw("canary /scraper/episodes failed", "anime_slot", a.Slot, "mal_id", a.MALID, "error", err)
+		return sentinel(streamprobe.ReasonCDNUnreachable)
+	}
+
+	servers, err := j.fetchServers(ctx, a, episodeID)
+	if err != nil {
+		j.log.Warnw("canary /scraper/servers failed", "anime_slot", a.Slot, "mal_id", a.MALID, "error", err)
+		return sentinel(streamprobe.ReasonCDNUnreachable)
+	}
+	if len(servers) == 0 {
+		// Empty server list is itself a regression signal.
+		return sentinel(streamprobe.ReasonZeroMatch)
+	}
+
 	out := make([]TupleResult, 0, len(servers))
 	for _, s := range servers {
-		t := j.probeServer(ctx, a, s)
+		t := j.probeServer(ctx, a, s, episodeID)
 		out = append(out, t)
 	}
 	return out
@@ -469,7 +505,7 @@ func (j *ScraperPlayabilityCanaryJob) probeOne(ctx context.Context, a canaryAnim
 
 // probeServer runs the full /scraper/stream → streamprobe.Probe chain for a
 // single (anime, server) pair and returns a populated TupleResult.
-func (j *ScraperPlayabilityCanaryJob) probeServer(ctx context.Context, a canaryAnime, s scraperServer) TupleResult {
+func (j *ScraperPlayabilityCanaryJob) probeServer(ctx context.Context, a canaryAnime, s scraperServer, episodeID string) TupleResult {
 	t := TupleResult{
 		Provider:  canaryProviderLabel,
 		Server:    s.ID,
@@ -477,7 +513,7 @@ func (j *ScraperPlayabilityCanaryJob) probeServer(ctx context.Context, a canaryA
 		AnimeID:   a.MALID,
 		Title:     a.Title,
 	}
-	streamURL, hdrs, err := j.fetchStream(ctx, a.MALID, s.ID)
+	streamURL, hdrs, err := j.fetchStream(ctx, a, s.ID, episodeID)
 	if err != nil {
 		t.Result = "fail"
 		t.Reason = string(streamprobe.ReasonCDNUnreachable)
@@ -501,11 +537,74 @@ func (j *ScraperPlayabilityCanaryJob) probeServer(ctx context.Context, a canaryA
 	return t
 }
 
-// fetchServers calls /scraper/servers?animeId=<mal>&episode=1 and returns
-// the parsed server list. Non-200 + decode errors surface as an error so
-// the caller can record the sentinel.
-func (j *ScraperPlayabilityCanaryJob) fetchServers(ctx context.Context, malID int) ([]scraperServer, error) {
-	u := fmt.Sprintf("%s/scraper/servers?mal_id=%d&episode=1", strings.TrimRight(j.config.ScraperBaseURL, "/"), malID)
+// canaryTitleParams builds the url.Values for title + title_alt from a
+// canaryAnime's title fields. Providers like gogoanime use English-only title
+// search; passing the correct title is what separates a 200+empty-list from a
+// real server list.
+func canaryTitleParams(a canaryAnime) url.Values {
+	q := url.Values{}
+	primary := a.NameEN
+	if primary == "" {
+		primary = a.NameRomaji
+	}
+	if primary == "" {
+		primary = a.Title
+	}
+	if primary != "" {
+		q.Set("title", primary)
+	}
+	// Collect non-primary alternatives for title_alt (comma-separated).
+	var alts []string
+	for _, t := range []string{a.NameRomaji, a.Title} {
+		if t != "" && t != primary {
+			alts = append(alts, t)
+		}
+	}
+	if len(alts) > 0 {
+		q.Set("title_alt", strings.Join(alts, ","))
+	}
+	return q
+}
+
+// fetchEpisodeID calls /scraper/episodes to resolve a provider-specific
+// episode ID for episode 1 (e.g. "one-piece-episode-1" for gogoanime).
+// Returns the ID string, or an error when the endpoint fails or returns
+// an empty list.
+func (j *ScraperPlayabilityCanaryJob) fetchEpisodeID(ctx context.Context, a canaryAnime) (string, error) {
+	q := canaryTitleParams(a)
+	q.Set("mal_id", fmt.Sprintf("%d", a.MALID))
+	q.Set("limit", "1")
+	u := strings.TrimRight(j.config.ScraperBaseURL, "/") + "/scraper/episodes?" + q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", fmt.Errorf("build /scraper/episodes request: %w", err)
+	}
+	resp, err := j.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("/scraper/episodes: %w", err)
+	}
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("/scraper/episodes returned %d", resp.StatusCode)
+	}
+	var env episodesEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		return "", fmt.Errorf("decode /scraper/episodes: %w", err)
+	}
+	if len(env.Data.Episodes) == 0 {
+		return "", fmt.Errorf("/scraper/episodes returned empty list")
+	}
+	return env.Data.Episodes[0].ID, nil
+}
+
+// fetchServers calls /scraper/servers with the proper episode ID and title
+// params. Non-200 + decode errors surface as an error so the caller can
+// record the sentinel.
+func (j *ScraperPlayabilityCanaryJob) fetchServers(ctx context.Context, a canaryAnime, episodeID string) ([]scraperServer, error) {
+	q := canaryTitleParams(a)
+	q.Set("mal_id", fmt.Sprintf("%d", a.MALID))
+	q.Set("episode", episodeID)
+	u := strings.TrimRight(j.config.ScraperBaseURL, "/") + "/scraper/servers?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build /scraper/servers request: %w", err)
@@ -525,11 +624,14 @@ func (j *ScraperPlayabilityCanaryJob) fetchServers(ctx context.Context, malID in
 	return env.Data.Servers, nil
 }
 
-// fetchStream calls /scraper/stream?mal_id=<mal>&episode=1&server=<id> and
-// returns (url, headers, nil) on success.
-func (j *ScraperPlayabilityCanaryJob) fetchStream(ctx context.Context, malID int, serverID string) (string, map[string]string, error) {
-	u := fmt.Sprintf("%s/scraper/stream?mal_id=%d&episode=1&server=%s",
-		strings.TrimRight(j.config.ScraperBaseURL, "/"), malID, serverID)
+// fetchStream calls /scraper/stream with the proper episode ID and title
+// params and returns (url, headers, nil) on success.
+func (j *ScraperPlayabilityCanaryJob) fetchStream(ctx context.Context, a canaryAnime, serverID, episodeID string) (string, map[string]string, error) {
+	q := canaryTitleParams(a)
+	q.Set("mal_id", fmt.Sprintf("%d", a.MALID))
+	q.Set("episode", episodeID)
+	q.Set("server", serverID)
+	u := strings.TrimRight(j.config.ScraperBaseURL, "/") + "/scraper/stream?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("build /scraper/stream request: %w", err)
