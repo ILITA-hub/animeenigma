@@ -38,6 +38,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
   const genres = computed(() => availableGenres(opts.animes.value))
 
   const monthCells = computed<DayCellModel[]>(() => {
+    void opts.loggedIn.value // track login state so priority re-sorts on auth change
     const days = monthGridDays(viewDate.value)
     const { start, end } = monthGridRange(viewDate.value)
     const all = occurrencesInRange(filteredAnimes.value, start, end)
@@ -55,13 +56,14 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
   })
 
   const weekColumns = computed<DayCellModel[]>(() => {
+    void opts.loggedIn.value // track login state (keeps parity with monthCells)
     const days = weekDays(viewDate.value)
     const start = startOfDay(days[0])
     const end = new Date(start.getTime() + WEEK_MS)
     const all = occurrencesInRange(filteredAnimes.value, start, end)
     return days.map((date) => ({
       date,
-      inCurrentMonth: true,
+      inCurrentMonth: date.getMonth() === viewDate.value.getMonth(),
       isToday: isSameDay(date, opts.now.value),
       occurrences: sortByTime(all.filter((o) => isSameDay(o.date, date))),
     }))
