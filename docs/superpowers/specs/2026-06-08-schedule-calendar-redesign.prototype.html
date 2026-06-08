@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Расписание — прототип</title>
+<style>
+  :root { color-scheme: dark; --cy:#00d4ff; --cy5:#00b8e6; --violet:#a78bfa; --base:#08080f; --surface:#11111c; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:20px; background:var(--base); color:#fff; font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  h2 { margin:0 0 4px; font-family:Manrope,Inter,sans-serif; } .hint { color:rgba(255,255,255,.5); font-size:12px; margin:0 0 16px; }
+
+  .cal { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; max-width:1080px; }
+  .top { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .left { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .title { font-size:18px; font-weight:600; min-width:130px; }
+  .nav { display:flex; gap:6px; }
+  .btn { height:32px; min-width:32px; padding:0 8px; border-radius:8px; background:rgba(255,255,255,.06); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:13px; border:none; cursor:pointer; }
+  .btn:hover { background:rgba(255,255,255,.12); }
+  .today { color:var(--cy); border:1px solid rgba(34,211,238,.4); background:none; }
+  .seg { display:flex; background:rgba(255,255,255,.06); border-radius:9px; padding:3px; }
+  .seg-btn { font-size:12px; padding:6px 13px; border-radius:7px; color:rgba(255,255,255,.6); border:none; background:none; cursor:pointer; }
+  .seg-btn.active { background:var(--cy); color:#06202a; font-weight:600; }
+
+  .fbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:9px; background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.06); border-radius:10px; margin-bottom:9px; }
+  .search { flex:1; min-width:160px; display:flex; align-items:center; gap:7px; background:rgba(255,255,255,.06); border-radius:8px; padding:7px 10px; }
+  .search input { background:none; border:none; outline:none; color:#fff; font-size:13px; width:100%; }
+  .search input::placeholder { color:rgba(255,255,255,.4); }
+  .fbtn { position:relative; display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(255,255,255,.8); background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:7px 11px; cursor:pointer; white-space:nowrap; user-select:none; }
+  .fbtn:hover { background:rgba(255,255,255,.1); }
+  .fbtn.on { background:rgba(34,211,238,.14); border-color:rgba(34,211,238,.5); color:var(--cy); }
+  .ca { opacity:.5; font-size:10px; }
+  .menu { position:absolute; top:calc(100% + 6px); left:0; width:210px; background:#141926; border:1px solid rgba(255,255,255,.14); border-radius:10px; padding:6px; box-shadow:0 18px 40px rgba(0,0,0,.5); z-index:30; }
+  .menu.hidden { display:none; }
+  .mi { display:flex; align-items:center; gap:8px; font-size:13px; padding:7px 8px; border-radius:7px; cursor:pointer; color:#fff; }
+  .mi:hover { background:rgba(255,255,255,.06); }
+  .ck { width:15px; height:15px; border-radius:4px; border:1px solid rgba(255,255,255,.3); display:flex; align-items:center; justify-content:center; font-size:10px; flex:none; }
+  .mi.sel .ck { background:var(--cy); border-color:var(--cy); color:#06202a; }
+
+  .chips { display:flex; gap:7px; align-items:center; flex-wrap:wrap; margin-bottom:12px; min-height:24px; }
+  .chips .lbl { font-size:11px; color:rgba(255,255,255,.4); }
+  .chip { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--cy); background:rgba(34,211,238,.12); border:1px solid rgba(34,211,238,.35); border-radius:20px; padding:4px 10px; }
+  .chip .x { cursor:pointer; opacity:.7; }
+  .reset { font-size:12px; color:rgba(255,255,255,.5); cursor:pointer; text-decoration:underline; }
+  .count { font-size:11px; color:rgba(255,255,255,.35); margin-left:auto; }
+
+  /* grids */
+  .dowrow, .grid7 { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .dowrow { margin-bottom:6px; }
+  .dow { text-align:center; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,255,255,.45); }
+
+  .cell { min-height:150px; background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:10px; cursor:pointer; transition:background .12s, border-color .12s; position:relative; overflow:hidden; }
+  .cell:hover { background:rgba(255,255,255,.045); border-color:rgba(255,255,255,.12); }
+  .cell.out { background:transparent; border-color:rgba(255,255,255,.03); cursor:default; }
+  .cell.out:hover { border-color:rgba(255,255,255,.03); }
+  .cell.out .num { color:rgba(255,255,255,.22); }
+  .cell.today::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--cy),var(--violet)); }
+  .num { font-size:12px; color:rgba(255,255,255,.55); margin-bottom:7px; font-family:Manrope,Inter,sans-serif; }
+  .cell.today .num { color:var(--cy); font-weight:700; }
+
+  .row { display:flex; gap:8px; align-items:center; padding:6px 0; border-top:1px solid rgba(255,255,255,.05); }
+  .row:first-of-type { border-top:none; padding-top:0; }
+  .row img { width:28px; height:38px; border-radius:5px; object-fit:cover; flex:none; background:#222; }
+  .row .nm { font-size:10px; line-height:1.2; color:#fff; font-weight:500; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .row .me { font-size:9px; color:rgba(255,255,255,.45); margin-top:1px; }
+  .row .me b { color:var(--cy5); font-weight:600; }
+  .more { font-size:10px; color:rgba(255,255,255,.5); margin-top:6px; }
+  .cellempty { font-size:10px; color:rgba(255,255,255,.2); text-align:center; padding-top:12px; }
+
+  /* week */
+  .wcol { background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:10px; min-height:220px; position:relative; overflow:hidden; transition:background .12s,border-color .12s; }
+  .wcol.clickable { cursor:pointer; }
+  .wcol.clickable:hover { background:rgba(255,255,255,.045); border-color:rgba(255,255,255,.12); }
+  .whead { text-align:center; padding:4px 0 9px; border-bottom:1px solid rgba(255,255,255,.05); margin-bottom:9px; }
+  .wdow { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,255,255,.45); }
+  .wdate { font-size:16px; font-weight:600; margin-top:2px; font-family:Manrope,Inter,sans-serif; }
+  .wcol.today::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--cy),var(--violet)); }
+  .wcol.today .wdow, .wcol.today .wdate { color:var(--cy); }
+  .wrow { display:flex; gap:9px; align-items:center; padding:7px 0; border-top:1px solid rgba(255,255,255,.05); }
+  .wrow:first-of-type { border-top:none; padding-top:0; }
+  .wrow img { width:32px; height:44px; border-radius:6px; object-fit:cover; flex:none; background:#222; }
+  .wrow .nm { font-size:11px; color:#fff; font-weight:500; line-height:1.2; transition:color .1s; }
+  .wrow .me { font-size:10px; color:rgba(255,255,255,.45); margin-top:2px; }
+  .wrow .me b { color:var(--cy5); font-weight:600; }
+
+  /* table */
+  table { width:100%; border-collapse:collapse; }
+  thead th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:rgba(255,255,255,.5); padding:9px 12px; border-bottom:1px solid rgba(255,255,255,.1); cursor:pointer; white-space:nowrap; }
+  thead th .ar { color:var(--cy); font-size:10px; }
+  tbody td { padding:9px 12px; border-bottom:1px solid rgba(255,255,255,.05); font-size:13px; }
+  tbody tr.dt:hover { background:rgba(255,255,255,.04); cursor:pointer; }
+  tbody tr.today td { background:rgba(34,211,238,.06); }
+  .anime { display:flex; gap:10px; align-items:center; }
+  .anime img { width:30px; height:40px; border-radius:5px; object-fit:cover; flex:none; background:#222; }
+  .anm { font-weight:600; font-size:13px; }
+  .asub { font-size:11px; color:rgba(255,255,255,.45); }
+  .badge { font-size:9px; padding:2px 6px; border-radius:6px; background:rgba(34,211,238,.15); color:var(--cy); margin-left:6px; white-space:nowrap; }
+  .time { color:var(--cy); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .tot { color:rgba(255,255,255,.4); }
+  .star { color:#fbbf24; }
+  .watch { font-size:12px; color:#06202a; background:var(--cy); font-weight:600; padding:6px 11px; border-radius:8px; border:none; cursor:pointer; white-space:nowrap; }
+  .grouprow td { background:rgba(255,255,255,.02); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,255,255,.5); padding:6px 12px; }
+  .empty { text-align:center; color:rgba(255,255,255,.4); padding:40px; font-size:14px; }
+
+  /* modal */
+  .scrim { position:fixed; inset:0; background:rgba(5,8,16,.7); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; padding:18px; z-index:50; }
+  .scrim.hidden { display:none; }
+  .dlg { width:460px; max-width:100%; max-height:84vh; overflow:auto; background:#111726; border:1px solid rgba(255,255,255,.12); border-radius:16px; box-shadow:0 30px 80px rgba(0,0,0,.6); }
+  .dhead { position:sticky; top:0; background:#111726; padding:16px 18px 12px; display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.08); }
+  .dtitle { font-size:17px; font-weight:600; } .dsub { font-size:12px; color:var(--cy); margin-top:3px; }
+  .dx { cursor:pointer; color:rgba(255,255,255,.6); font-size:18px; }
+  .dbody { padding:12px 18px 18px; }
+  .dcard { display:flex; gap:12px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:10px; margin-bottom:10px; align-items:center; }
+  .dcard:hover { background:rgba(255,255,255,.08); }
+  .dcard img { width:54px; height:76px; border-radius:8px; object-fit:cover; flex:none; background:#222; }
+  .dcard .t { font-size:14px; font-weight:600; } .dcard .m { font-size:12px; color:var(--cy); margin-top:3px; } .dcard .s { font-size:11px; color:rgba(255,255,255,.5); margin-top:2px; }
+  .dcard .go { margin-left:auto; }
+
+  .toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); background:#1b2233; border:1px solid rgba(34,211,238,.4); color:#fff; padding:10px 16px; border-radius:10px; font-size:13px; opacity:0; transition:.25s; z-index:80; pointer-events:none; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:640px){
+    .cell { min-height:84px; }
+    .row { flex-direction:column; gap:2px; padding:2px; }
+    .row .txt { display:none; }     /* mobile month = compact posters only */
+    .row img { width:100%; height:auto; aspect-ratio:3/4; }
+    .grid7 { gap:3px; }
+    .colhide { display:none; }       /* hide score + action in table */
+  }
+</style>
+</head>
+<body>
+  <h2>Расписание — рабочий прототип</h2>
+  <p class="hint">Тыкай всё: переключатель видов, ‹ › / Сегодня, фильтры, клик по дню (модалка), сортировку таблицы. Сузь окно браузера — увидишь мобильный месяц. «Сегодня» = 8 июня 2026.</p>
+
+  <div class="cal">
+    <div class="top">
+      <div class="left">
+        <div class="title" id="title">—</div>
+        <div class="nav"><button class="btn" onclick="shift(-1)">‹</button><button class="btn" onclick="shift(1)">›</button></div>
+        <button class="btn today" onclick="goToday()">Сегодня</button>
+      </div>
+      <div class="seg">
+        <button class="seg-btn" data-v="month" onclick="setView('month')">Месяц</button>
+        <button class="seg-btn" data-v="week" onclick="setView('week')">Неделя</button>
+        <button class="seg-btn" data-v="table" onclick="setView('table')">Таблица</button>
+      </div>
+    </div>
+
+    <div class="fbar">
+      <div class="search"><span style="opacity:.5">🔍</span><input id="search" placeholder="Поиск по названию…" oninput="onSearch(this.value)"></div>
+      <div class="fbtn" id="b-mylist" onclick="toggleMyList()">★ Мой список</div>
+      <div class="fbtn" id="b-genre" onclick="openMenu(event,'genre')">Жанр <span class="ca">▾</span><div class="menu hidden" id="m-genre"></div></div>
+      <div class="fbtn" id="b-type" onclick="openMenu(event,'type')">Тип <span class="ca">▾</span><div class="menu hidden" id="m-type"></div></div>
+    </div>
+    <div class="chips" id="chips"></div>
+
+    <div id="view"></div>
+  </div>
+
+  <div class="scrim hidden" id="scrim" onclick="if(event.target===this)closeDay()">
+    <div class="dlg">
+      <div class="dhead"><div><div class="dtitle" id="dtitle"></div><div class="dsub" id="dsub"></div></div><div class="dx" onclick="closeDay()">✕</div></div>
+      <div class="dbody" id="dbody"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+//// ---------- mock data ----------
+// dow: 0=Mon .. 6=Sun ; providers: russian|subs|english|raw ; list: watching|planned|''
+const ANIME = [
+  {id:'a1', nm:'Кайдзю №8', or:'Kaiju No. 8', sd:'kaiju', dow:0, time:'17:00', aired:9, total:12, score:8.4, kind:'TV', genres:['Экшен','Фэнтези'], prov:['russian','english','subs'], list:'watching'},
+  {id:'a2', nm:'Фрирен', or:'Sousou no Frieren', sd:'frieren', dow:2, time:'23:00', aired:22, total:28, score:9.3, kind:'TV', genres:['Фэнтези','Драма'], prov:['english','subs'], list:'planned'},
+  {id:'a3', nm:'Данданадан', or:'Dandadan', sd:'dandadan', dow:4, time:'00:26', aired:7, total:12, score:8.6, kind:'TV', genres:['Экшен','Комедия'], prov:['russian','english'], list:''},
+  {id:'a4', nm:'Ван-Пис', or:'One Piece', sd:'onepiece', dow:5, time:'11:00', aired:1142, total:0, score:8.7, kind:'TV', genres:['Экшен','Приключения'], prov:['russian','english'], list:'watching'},
+  {id:'a5', nm:'Оясуми Пунпун', or:'Oyasumi Punpun', sd:'punpun', dow:5, time:'22:00', aired:3, total:13, score:8.9, kind:'TV', genres:['Драма'], prov:['subs'], list:''},
+  {id:'a6', nm:'Семья шпиона', or:'Spy x Family', sd:'spy', dow:5, time:'23:00', aired:8, total:12, score:8.5, kind:'TV', genres:['Комедия','Экшен'], prov:['russian','english','subs'], list:'watching'},
+  {id:'a7', nm:'Сакамото Дэйз', or:'Sakamoto Days', sd:'sakamoto', dow:5, time:'23:30', aired:11, total:0, score:8.0, kind:'TV', genres:['Экшен','Комедия'], prov:['russian','english'], list:''},
+  {id:'a8', nm:'Магическая битва', or:'Jujutsu Kaisen', sd:'jujutsu', dow:5, time:'00:00', aired:4, total:23, score:8.8, kind:'TV', genres:['Экшен'], prov:['russian','english','subs'], list:'planned'},
+  {id:'a9', nm:'Гачиакута', or:'Gachiakuta', sd:'gachi', dow:6, time:'22:30', aired:8, total:24, score:7.9, kind:'TV', genres:['Экшен','Фэнтези'], prov:['russian','english'], list:''},
+  {id:'a10', nm:'Лунный путь', or:'Tsukimichi', sd:'tsuki', dow:1, time:'20:00', aired:5, total:12, score:7.5, kind:'TV', genres:['Фэнтези','Приключения'], prov:['raw','subs'], list:''},
+  {id:'a11', nm:'Монолог фармацевта', or:'Apothecary Diaries', sd:'apothecary', dow:3, time:'21:00', aired:10, total:24, score:9.1, kind:'TV', genres:['Драма','Детектив'], prov:['russian','english','subs'], list:'watching'},
+  {id:'a12', nm:'Драгон Квест', or:'Dragon Quest ONA', sd:'dq', dow:4, time:'19:00', aired:6, total:12, score:7.7, kind:'ONA', genres:['Приключения'], prov:['english'], list:''},
+];
+const GENRES = ['Экшен','Фэнтези','Драма','Комедия','Приключения','Детектив'];
+const TYPES = ['TV','ONA','Фильм','OVA'];
+const LOGGED_IN = true;
+
+const MN = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const MG = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const DOWS = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+const DOWF = ['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
+const TODAY = new Date(2026,5,8);
+const DAY = 86400000;
+
+//// ---------- state ----------
+let view='month';
+let viewDate=new Date(TODAY);
+let filters={ search:'', myList:false, genres:new Set(), types:new Set() };
+let sortKey='date', sortDir=1;
+
+//// ---------- helpers ----------
+function img(sd,w,h){ return 'https://picsum.photos/seed/'+sd+'/'+w+'/'+h; }
+function jsDay(dow){ return (dow+1)%7; }            // our Mon0 -> JS getDay
+function sameDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
+function plural(n){ const a=n%10,b=n%100; if(a===1&&b!==11)return'серия'; if(a>=2&&a<=4&&(b<10||b>=20))return'серии'; return'серий'; }
+function listLabel(s){ return s==='watching'?'Смотрю':s==='planned'?'В планах':''; }
+
+function filteredAnime(){
+  return ANIME.filter(a=>{
+    if(filters.search && !(a.nm.toLowerCase().includes(filters.search.toLowerCase())||a.or.toLowerCase().includes(filters.search.toLowerCase()))) return false;
+    if(filters.myList && !(a.list==='watching'||a.list==='planned')) return false;
+    if(filters.genres.size && !a.genres.some(g=>filters.genres.has(g))) return false;
+    if(filters.types.size && !filters.types.has(a.kind)) return false;
+    return true;
+  });
+}
+// anchor occurrence (this-week airing >= today) for an anime
+function anchorDate(a){
+  let d=new Date(TODAY); let guard=0;
+  while(d.getDay()!==jsDay(a.dow) && guard++<8){ d=new Date(d.getTime()+DAY); }
+  return new Date(d.getFullYear(),d.getMonth(),d.getDate());
+}
+// occurrences of filtered anime on a given date D
+function occOn(D, arr){
+  const out=[];
+  arr.forEach(a=>{
+    if(D.getDay()!==jsDay(a.dow)) return;
+    const anc=anchorDate(a);
+    const weeks=Math.round((new Date(D.getFullYear(),D.getMonth(),D.getDate())-anc)/(7*DAY));
+    const ep=a.aired+1+weeks;
+    if(ep<1) return;
+    if(a.total>0 && ep>a.total) return;
+    const [hh,mm]=a.time.split(':').map(Number);
+    out.push({a, ep, time:a.time, dt:new Date(D.getFullYear(),D.getMonth(),D.getDate(),hh,mm)});
+  });
+  return out;
+}
+// hybrid sort (my-list first when logged in), then by time
+function sortCell(occ){
+  return occ.slice().sort((x,y)=>{
+    if(LOGGED_IN){
+      const wx=(x.a.list==='watching'||x.a.list==='planned')?0:1;
+      const wy=(y.a.list==='watching'||y.a.list==='planned')?0:1;
+      if(wx!==wy) return wx-wy;
+    }
+    return x.dt-y.dt;
+  });
+}
+function sortTime(occ){ return occ.slice().sort((x,y)=>x.dt-y.dt); }
+
+//// ---------- render ----------
+function render(){
+  document.querySelectorAll('.seg-btn').forEach(b=>b.classList.toggle('active', b.dataset.v===view));
+  renderTitle(); renderChips();
+  const arr=filteredAnime();
+  if(view==='month') renderMonth(arr);
+  else if(view==='week') renderWeek(arr);
+  else renderTable(arr);
+}
+function renderTitle(){
+  if(view==='week' || view==='table'){
+    const s=weekStart(viewDate), e=new Date(s.getTime()+6*DAY);
+    document.getElementById('title').textContent = s.getDate()+'–'+e.getDate()+' '+MG[e.getMonth()];
+  } else {
+    document.getElementById('title').textContent = MN[viewDate.getMonth()]+' '+viewDate.getFullYear();
+  }
+}
+function weekStart(d){ const off=(d.getDay()+6)%7; const s=new Date(d.getFullYear(),d.getMonth(),d.getDate()-off); return s; }
+
+function renderMonth(arr){
+  const y=viewDate.getFullYear(), m=viewDate.getMonth();
+  const first=new Date(y,m,1); const start=(first.getDay()+6)%7;
+  const dim=new Date(y,m+1,0).getDate();
+  const weeks=Math.ceil((start+dim)/7);
+  let h='<div class="dowrow">'+DOWS.map(d=>'<div class="dow">'+d+'</div>').join('')+'</div><div class="grid7">';
+  for(let i=0;i<weeks*7;i++){
+    const D=new Date(y,m,1-start+i);
+    const inM=D.getMonth()===m;
+    const today=sameDay(D,TODAY);
+    const occ=inM?sortCell(occOn(D,arr)):[];
+    let c='<div class="cell'+(inM?'':' out')+(today?' today':'')+'"'+(inM&&occ.length?' onclick="openDay('+D.getFullYear()+','+D.getMonth()+','+D.getDate()+')"':'')+'>';
+    c+='<div class="num">'+D.getDate()+(today?' · сегодня':(D.getDate()===1?' '+MG[D.getMonth()]:''))+'</div>';
+    occ.slice(0,3).forEach(o=>{ c+='<div class="row"><img src="'+img(o.a.sd,60,80)+'"><div class="txt"><div class="nm">'+o.a.nm+'</div><div class="me"><b>'+o.ep+'</b> серия · '+o.time+'</div></div></div>'; });
+    if(occ.length>3) c+='<div class="more">+'+(occ.length-3)+' ещё</div>';
+    c+='</div>';
+    h+=c;
+  }
+  h+='</div>';
+  document.getElementById('view').innerHTML=h;
+}
+
+function renderWeek(arr){
+  const s=weekStart(viewDate);
+  let h='<div class="grid7">';
+  for(let i=0;i<7;i++){
+    const D=new Date(s.getFullYear(),s.getMonth(),s.getDate()+i);
+    const today=sameDay(D,TODAY);
+    const occ=sortTime(occOn(D,arr));
+    const clk=occ.length?' onclick="openDay('+D.getFullYear()+','+D.getMonth()+','+D.getDate()+')"':'';
+    h+='<div class="wcol'+(today?' today':'')+(occ.length?' clickable':'')+'"'+clk+'><div class="whead"><div class="wdow">'+DOWS[i]+'</div><div class="wdate">'+D.getDate()+'</div></div>';
+    if(!occ.length) h+='<div class="cellempty">—</div>';
+    occ.forEach(o=>{ h+='<div class="wrow"><img src="'+img(o.a.sd,68,92)+'"><div><div class="nm">'+o.a.nm+'</div><div class="me"><b>'+o.ep+'</b> серия · '+o.time+'</div></div></div>'; });
+    h+='</div>';
+  }
+  h+='</div>';
+  document.getElementById('view').innerHTML=h;
+}
+
+function renderTable(arr){
+  // gather occurrences across the current week (Mon..Sun)
+  const s=weekStart(viewDate);
+  let all=[];
+  for(let i=0;i<7;i++){ all=all.concat(occOn(new Date(s.getFullYear(),s.getMonth(),s.getDate()+i),arr)); }
+  if(!all.length){ document.getElementById('view').innerHTML='<div class="empty">Ничего не найдено под фильтры</div>'; return; }
+  // sort
+  const cmp={ name:(x,y)=>x.a.nm.localeCompare(y.a.nm), date:(x,y)=>x.dt-y.dt, ep:(x,y)=>x.ep-y.ep, score:(x,y)=>x.a.score-y.a.score }[sortKey];
+  all.sort((x,y)=>cmp(x,y)*sortDir);
+  const ar=(k)=>sortKey===k?(sortDir>0?' <span class="ar">▲</span>':' <span class="ar">▼</span>'):'';
+  let h='<table><thead><tr>'
+    +'<th style="width:42%" onclick="setSort(\'name\')">Аниме'+ar('name')+'</th>'
+    +'<th onclick="setSort(\'date\')">Дата · время'+ar('date')+'</th>'
+    +'<th onclick="setSort(\'ep\')">Серия'+ar('ep')+'</th>'
+    +'<th class="colhide" onclick="setSort(\'score\')">Оценка'+ar('score')+'</th>'
+    +'<th class="colhide"></th></tr></thead><tbody>';
+  let lastDay='';
+  all.forEach(o=>{
+    const grp=sortKey==='date';
+    if(grp){
+      const key=o.dt.toDateString();
+      if(key!==lastDay){ lastDay=key; const dn=(o.dt.getDay()+6)%7; const td=sameDay(o.dt,TODAY)?' · сегодня':''; h+='<tr class="grouprow"><td colspan="5">'+DOWF[dn]+', '+o.dt.getDate()+' '+MG[o.dt.getMonth()]+td+'</td></tr>'; }
+    }
+    const dn=(o.dt.getDay()+6)%7;
+    const bdg=o.a.list?'<span class="badge">'+listLabel(o.a.list)+'</span>':'';
+    h+='<tr class="dt'+(sameDay(o.dt,TODAY)?' today':'')+'" onclick="goAnime(\''+o.a.id+'\',\''+o.a.nm+'\','+o.ep+')">'
+      +'<td><div class="anime"><img src="'+img(o.a.sd,60,80)+'"><div><div class="anm">'+o.a.nm+bdg+'</div><div class="asub">'+o.a.or+'</div></div></div></td>'
+      +'<td><span style="color:rgba(255,255,255,.5);font-size:11px;">'+DOWS[dn]+'</span> '+o.dt.getDate()+' '+MG[o.dt.getMonth()]+' · <span class="time">'+o.time+'</span></td>'
+      +'<td>'+o.ep+(o.a.total>0?' <span class="tot">/ '+o.a.total+'</span>':'')+'</td>'
+      +'<td class="colhide"><span class="star">★</span> '+o.a.score.toFixed(1)+'</td>'
+      +'<td class="colhide"><button class="watch" onclick="event.stopPropagation();goAnime(\''+o.a.id+'\',\''+o.a.nm+'\','+o.ep+')">Смотреть</button></td></tr>';
+  });
+  h+='</tbody></table>';
+  document.getElementById('view').innerHTML=h;
+}
+
+//// ---------- modal ----------
+function openDay(y,m,d){
+  const D=new Date(y,m,d);
+  const occ=sortTime(occOn(D,filteredAnime()));
+  if(!occ.length) return;
+  const dn=(D.getDay()+6)%7;
+  document.getElementById('dtitle').textContent=DOWF[dn]+', '+d+' '+MG[m];
+  document.getElementById('dsub').textContent=occ.length+' '+plural(occ.length);
+  let b='';
+  occ.forEach(o=>{
+    const bdg=o.a.list?'<span class="badge">'+listLabel(o.a.list)+'</span>':'';
+    b+='<div class="dcard"><img src="'+img(o.a.sd,108,152)+'"><div><div class="t">'+o.a.nm+bdg+'</div><div class="m">Серия '+o.ep+'</div><div class="s">'+o.time+' МСК · ★ '+o.a.score.toFixed(1)+'</div></div>'
+      +'<button class="watch go" onclick="goAnime(\''+o.a.id+'\',\''+o.a.nm+'\','+o.ep+')">Смотреть</button></div>';
+  });
+  document.getElementById('dbody').innerHTML=b;
+  document.getElementById('scrim').classList.remove('hidden');
+}
+function closeDay(){ document.getElementById('scrim').classList.add('hidden'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeDay(); });
+
+//// ---------- nav / view ----------
+function setView(v){ view=v; closeMenus(); render(); }
+function shift(dir){ if(view==='week'||view==='table'){ viewDate=new Date(viewDate.getTime()+dir*7*DAY); } else { viewDate=new Date(viewDate.getFullYear(),viewDate.getMonth()+dir,1); } render(); }
+function goToday(){ viewDate=new Date(TODAY); render(); }
+function setSort(k){ if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir=1; } render(); }
+
+//// ---------- filters ----------
+function onSearch(v){ filters.search=v; render(); }
+function toggleMyList(){ filters.myList=!filters.myList; document.getElementById('b-mylist').classList.toggle('on',filters.myList); render(); }
+function buildMenus(){
+  document.getElementById('m-genre').innerHTML=GENRES.map(g=>'<div class="mi'+(filters.genres.has(g)?' sel':'')+'" onclick="toggleSet(event,\'genres\',\''+g+'\')"><span class="ck">'+(filters.genres.has(g)?'✓':'')+'</span>'+g+'</div>').join('');
+  document.getElementById('m-type').innerHTML=TYPES.map(t=>'<div class="mi'+(filters.types.has(t)?' sel':'')+'" onclick="toggleSet(event,\'types\',\''+t+'\')"><span class="ck">'+(filters.types.has(t)?'✓':'')+'</span>'+t+'</div>').join('');
+}
+function openMenu(e,which){ e.stopPropagation(); const id='m-'+which; const el=document.getElementById(id); const wasHidden=el.classList.contains('hidden'); closeMenus(); if(wasHidden){ buildMenus(); el.classList.remove('hidden'); } }
+function closeMenus(){ ['m-genre','m-type'].forEach(i=>document.getElementById(i).classList.add('hidden')); }
+document.addEventListener('click',()=>closeMenus());
+function toggleSet(e,key,val){ e.stopPropagation(); const s=filters[key]; s.has(val)?s.delete(val):s.add(val); document.getElementById(key==='genres'?'b-genre':'b-type').classList.toggle('on',s.size>0); buildMenus(); render(); }
+
+function renderChips(){
+  const c=[];
+  if(filters.search) c.push(['Поиск: '+filters.search, ()=>{filters.search='';document.getElementById('search').value='';}]);
+  if(filters.myList) c.push(['★ Мой список', ()=>{filters.myList=false;document.getElementById('b-mylist').classList.remove('on');}]);
+  filters.genres.forEach(g=>c.push([g, ()=>{filters.genres.delete(g); if(!filters.genres.size)document.getElementById('b-genre').classList.remove('on');}]));
+  filters.types.forEach(t=>c.push([t, ()=>{filters.types.delete(t); if(!filters.types.size)document.getElementById('b-type').classList.remove('on');}]));
+  const el=document.getElementById('chips');
+  if(!c.length){ el.innerHTML='<span class="lbl">Фильтры не выбраны</span><span class="count" id="cnt"></span>'; updateCount(); return; }
+  let h='<span class="lbl">Активно:</span>';
+  c.forEach((x,i)=>{ h+='<span class="chip" data-i="'+i+'">'+x[0]+' <span class="x">✕</span></span>'; });
+  h+='<span class="reset" onclick="resetFilters()">Сбросить всё</span><span class="count" id="cnt"></span>';
+  el.innerHTML=h;
+  el.querySelectorAll('.chip').forEach(ch=>{ ch.querySelector('.x').onclick=()=>{ c[+ch.dataset.i][1](); render(); }; });
+  updateCount();
+}
+function updateCount(){ const el=document.getElementById('cnt'); if(el) el.textContent=filteredAnime().length+' из '+ANIME.length+' тайтлов'; }
+function resetFilters(){ filters={search:'',myList:false,genres:new Set(),types:new Set()}; document.getElementById('search').value=''; ['b-mylist','b-genre','b-type'].forEach(i=>document.getElementById(i).classList.remove('on')); render(); }
+
+//// ---------- nav helpers ----------
+function goAnime(id,nm,ep){ toast('→ /anime/'+id+' · '+nm+' (серия '+ep+')'); }
+let toastT;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1800); }
+
+setView('month');
+</script>
+</body>
+</html>
