@@ -81,6 +81,31 @@ Repointed Grafana's trace + log surface from Tempo/Loki onto ClickHouse and prov
 
 The native logs↔traces link is **configured correctly** on the datasource, but the `TraceId` column in `analytics.otel_logs` is currently **empty** (0 rows with a non-empty `TraceId`). The filelog receiver (06-01) ingests container stdout as a plain `Body` string; the app's `trace_id` is embedded inside the JSON log line (`libs/logger/logger.go:92`) and is NOT promoted into the OTel `TraceId` column. So the link target exists and renders log/trace views independently, but the *click-through correlation* won't resolve until filelog parses the inner JSON and maps `trace_id → TraceId`. This is an upstream **filelog-config** gap (06-01 receiver), not a datasource/dashboard gap — flagged here so 06-03 (and any follow-up) can decide whether to enhance the filelog operator before/after Tempo+Loki removal. The Loki link being replaced had the same practical limitation framing. Logs render; traces render; trace→logs config is in place.
 
+#### RESOLVED 2026-06-08 (follow-up fix, commit `3eb9622b`)
+
+The `otel_logs.TraceId`-empty caveat above is now **fixed** — the native logs↔traces click-through resolves end-to-end. Done entirely in the filelog receiver (`infra/otel/collector-config.yaml`); no datasource/dashboard change was needed (06-02's `traceToLogs`/`logsToTrace` config was already correct, it just had no `TraceId` to join on).
+
+**Root cause nuance:** the app log line is zap **console** format (`TS \t LEVEL \t caller \t message \t {json}`), **NOT** a JSON object — so a plain `json_parser` on the inner line could not have worked. The `trace_id` (32 hex) and `span_id` (16 hex) are embedded inside the trailing `{...}` only when `libs/logger` ran with a span-bearing context (`logger.go:92-93`).
+
+**Fix:** after the existing `move(attributes.log → body)`, added two `if`-guarded stanza operators:
+1. `regex_parser` (`if: body matches "\"trace_id\""`) — extracts `trace_id`/`span_id` from `body` into attributes. The `if` guard means it runs ONLY on lines that carry a trace_id, so untraced metrics/health lines don't spam regex no-match errors and correctly keep an empty `TraceId`.
+2. `trace_parser` (`if: attributes.trace_id != nil`) — promotes those hex attributes into the OTel record's `TraceId`/`SpanId`, which the clickhouseexporter writes into the `otel_logs.TraceId`/`SpanId` columns.
+
+Plain human-readable `Body` is preserved untouched.
+
+**Live verification (production, after `otelcol validate` exits 0 + `up -d --no-deps --force-recreate otel-collector`):**
+
+| Check | Result |
+|-------|--------|
+| `otelcol validate` (pre-recreate guard, RESEARCH Pitfall 5) | exits 0 |
+| collector after recreate | Up, no regex/trace parser errors (only the pre-existing benign 0.0.0.0 DoS warning) |
+| `otel_logs` (5m) with non-empty `TraceId` | **34** (was 0) |
+| `otel_logs` (5m) with empty `TraceId` | 2342 (untraced metrics/health lines correctly stay empty) |
+| `otel_logs` TraceId/SpanId shape | 32-hex / 16-hex, valid |
+| `Body` preservation | intact (full `TS\tINFO\tcaller\tmessage\t{...}` line) |
+| **`otel_logs` INNER JOIN `otel_traces` ON `TraceId`** | **resolves** — e.g. trace `27f94cca…` → service `scraper`, span `GET /scraper/health` (correlation links to a real trace) |
+| Tempo / Loki / Promtail | all still Up (gate intact, untouched) |
+
 ## Deviations from Plan
 
 None — the plan's preferred lowest-churn path (extend `aenigma-clickhouse` in place) was viable, so no fresh-uid datasource was needed. Tasks executed exactly as written. The one item to surface is the carried-forward caveat above (otel_logs `TraceId` population), which is a 06-01 filelog observation, not a deviation in this plan's work.
