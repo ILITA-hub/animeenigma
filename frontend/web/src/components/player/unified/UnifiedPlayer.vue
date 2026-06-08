@@ -20,7 +20,7 @@
       ref="videoRef"
       class="absolute inset-0 w-full h-full object-contain z-[1]"
       playsinline
-      preload="metadata"
+      preload="auto"
       @play="onVideoPlay"
       @pause="onVideoPause"
       @ended="onEnded"

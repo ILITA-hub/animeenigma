@@ -1,8 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import { makeResolver } from './useProviderResolver'
 
+/** Parse the query params of a `/api/streaming/hls-proxy?...` URL. */
+function proxyParams(url: string): URLSearchParams {
+  expect(url.startsWith('/api/streaming/hls-proxy?')).toBe(true)
+  return new URLSearchParams(url.split('?')[1])
+}
+
 describe('useProviderResolver', () => {
-  it('dispatches to the scraper adapter for an EN provider', async () => {
+  it('dispatches to the scraper adapter for an EN provider and proxies the stream with its Referer', async () => {
     const scraperApi = {
       getEpisodes: vi.fn().mockResolvedValue({
         data: {
@@ -24,6 +30,7 @@ describe('useProviderResolver', () => {
           data: {
             stream: {
               sources: [{ url: 'http://x/m3u8', type: 'hls' }],
+              headers: { Referer: 'https://allmanga.to' },
             },
           },
         },
@@ -40,7 +47,67 @@ describe('useProviderResolver', () => {
       team: null,
     })
     expect(stream.type).toBe('hls')
+    // The raw CDN url must NOT be handed to the <video>/hls.js directly — it has
+    // to be wrapped through the backend HLS proxy so the required Referer can be
+    // injected (the CDN 403s / hangs without it).
+    const params = proxyParams(stream.url)
+    expect(params.get('url')).toBe('http://x/m3u8')
+    expect(params.get('referer')).toBe('https://allmanga.to')
+    expect(params.get('type')).toBeNull() // hls → no type=mp4 marker
     expect(scraperApi.getEpisodes).toHaveBeenCalledWith('anime-uuid', 'allanime')
+  })
+
+  it('marks scraper MP4 streams with type=mp4 in the proxy url', async () => {
+    const scraperApi = {
+      getEpisodes: vi.fn().mockResolvedValue({
+        data: { data: { episodes: [{ id: 'e1', number: 1 }] } },
+      }),
+      getServers: vi.fn().mockResolvedValue({
+        data: { data: { servers: [{ id: 'Yt-mp4', name: 'Yt-mp4', type: 'sub' }] } },
+      }),
+      getStream: vi.fn().mockResolvedValue({
+        data: {
+          data: {
+            stream: {
+              sources: [{ url: 'https://tools.fast4speed.rsvp/v/1', type: 'mp4' }],
+              headers: { Referer: 'https://allmanga.to' },
+            },
+          },
+        },
+      }),
+    }
+    const resolver = makeResolver({ scraperApi } as any)
+    const eps = await resolver.listEpisodes('allanime', 'uuid')
+    const stream = await resolver.resolveStream('allanime', 'uuid', eps[0], {
+      audio: 'sub', lang: 'en', provider: 'allanime', server: 'Yt-mp4', team: null,
+    })
+    expect(stream.type).toBe('mp4')
+    const params = proxyParams(stream.url)
+    expect(params.get('url')).toBe('https://tools.fast4speed.rsvp/v/1')
+    expect(params.get('referer')).toBe('https://allmanga.to')
+    expect(params.get('type')).toBe('mp4')
+  })
+
+  it('proxies the raw (AllAnime JP) stream with the allmanga.to Referer', async () => {
+    const rawApi = {
+      getEpisodes: vi.fn().mockResolvedValue({
+        data: { data: { episodes: [{ id: 'r1', number: 1, title: 'Ep 1' }], available: true, source: 'allanime' } },
+      }),
+      getStream: vi.fn().mockResolvedValue({
+        data: { data: { url: 'https://tools.fast4speed.rsvp/raw/1', type: 'mp4' } },
+      }),
+    }
+    const resolver = makeResolver({ rawApi } as any)
+    const eps = await resolver.listEpisodes('raw', 'uuid')
+    const stream = await resolver.resolveStream('raw', 'uuid', eps[0], {
+      audio: 'sub', lang: 'ja', provider: 'raw', server: '', team: null,
+    })
+    expect(stream.type).toBe('mp4')
+    const params = proxyParams(stream.url)
+    expect(params.get('url')).toBe('https://tools.fast4speed.rsvp/raw/1')
+    expect(params.get('referer')).toBe('https://allmanga.to/')
+    expect(params.get('type')).toBe('mp4')
+    expect(rawApi.getStream).toHaveBeenCalledWith('uuid', 1)
   })
 
   it('throws a typed error for a disabled/unwired provider', async () => {
@@ -55,7 +122,7 @@ describe('useProviderResolver', () => {
         data: { data: [{ slug: 'ep-1', number: 1 }] },
       }),
       getStream: vi.fn().mockResolvedValue({
-        data: { data: { url: 'http://x/h.m3u8', is_hls: true, quality: '720p' } },
+        data: { data: { url: 'http://x/h.m3u8', referer: 'https://18anime.ref', is_hls: true, quality: '720p' } },
       }),
     }
     const resolver = makeResolver({ scraperApi, anime18Api } as any)
@@ -74,7 +141,10 @@ describe('useProviderResolver', () => {
     })
     expect(anime18Api.getStream).toHaveBeenCalledWith('uuid', 'ep-1')
     expect(scraperApi.getStream).not.toHaveBeenCalled()
-    expect(stream.url).toBe('http://x/h.m3u8')
+    // Must be proxied with the source's Referer (mp4upload etc. require it).
+    const params = proxyParams(stream.url)
+    expect(params.get('url')).toBe('http://x/h.m3u8')
+    expect(params.get('referer')).toBe('https://18anime.ref')
     expect(stream.type).toBe('hls')
   })
 

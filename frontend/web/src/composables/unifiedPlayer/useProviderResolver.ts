@@ -204,9 +204,11 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
       }
 
       const source = stream.sources[0]
+      const type: 'hls' | 'mp4' = source.type === 'mp4' ? 'mp4' : 'hls'
+      const referer = stream.headers?.Referer || stream.headers?.referer || ''
       return {
-        url: source.url,
-        type: source.type === 'mp4' ? 'mp4' : 'hls',
+        url: buildProxyUrl(source.url, referer, type),
+        type,
         headers: stream.headers,
         servers: srvs.map((s) => ({ id: s.id, label: s.name })),
       }
@@ -233,9 +235,12 @@ function makeRawAdapter(api: typeof rawApi): ProviderAdapter {
       if (!stream?.url) {
         throw new NotAvailableError('raw', 'returned no stream URL')
       }
+      const type: 'hls' | 'mp4' = stream.type ?? 'hls'
+      // AllAnime's fast4speed.rsvp CDN requires Referer: https://allmanga.to/
+      // (mirrors the legacy RawPlayer). The proxy injects it.
       return {
-        url: stream.url,
-        type: stream.type ?? 'hls',
+        url: buildProxyUrl(stream.url, 'https://allmanga.to/', type),
+        type,
       }
     },
   }
@@ -260,9 +265,11 @@ function makeAnime18Adapter(api: typeof anime18Api): ProviderAdapter {
       if (!data?.url) {
         throw new NotAvailableError('18anime', 'returned no stream URL')
       }
+      const type: 'hls' | 'mp4' = data.is_hls ? 'hls' : 'mp4'
+      // mp4upload (and other 18anime CDNs) require the source-carried Referer.
       return {
-        url: data.url,
-        type: data.is_hls ? 'hls' : 'mp4',
+        url: buildProxyUrl(data.url, data.referer ?? '', type),
+        type,
       }
     },
   }
@@ -270,10 +277,22 @@ function makeAnime18Adapter(api: typeof anime18Api): ProviderAdapter {
 
 // ─── Kodik proxy helper ───────────────────────────────────────────────────────
 
-function buildProxyUrl(url: string, referer: string): string {
+/**
+ * Wrap an upstream CDN url through the backend HLS proxy so the proxy can
+ * inject the required `Referer` header and handle CORS / range requests.
+ *
+ * EVERY external stream must go through this — handing a raw CDN url straight
+ * to `<video>`/hls.js makes the browser send no Referer, and refer-gated CDNs
+ * (allmanga.to's fast4speed.rsvp, mp4upload, kwik, …) then 403 or hang at 0:00.
+ *
+ * `streamType === 'mp4'` adds the `type=mp4` marker the proxy uses to pick its
+ * progressive-MP4 (range-passthrough) code path instead of m3u8 rewriting.
+ */
+function buildProxyUrl(url: string, referer: string, streamType?: 'hls' | 'mp4'): string {
   const params = new URLSearchParams()
   params.set('url', url)
   if (referer) params.set('referer', referer)
+  if (streamType === 'mp4') params.set('type', 'mp4')
   return `/api/streaming/hls-proxy?${params.toString()}`
 }
 
