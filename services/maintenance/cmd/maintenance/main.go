@@ -803,8 +803,14 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		s.state.SetCooldown("restart", affectedService, 10*time.Minute)
 	}
 
-	// Send response to Telegram
+	// Send response to Telegram. Never leave a report with an empty body — a
+	// categorised-only message (e.g. a feature request that won't be auto-built)
+	// must still get a human-readable acknowledgement, not just a 👍 reaction.
 	replyHTML := result.ReplyHTML
+	if strings.TrimSpace(replyHTML) == "" {
+		replyHTML = fmt.Sprintf("<b>✅ Acknowledged</b>\n%s — logged and categorised as <b>%s</b>. No automatic action was taken.",
+			escTelegram(result.Issue.Title), escTelegram(result.Issue.Category))
+	}
 	if !strings.Contains(replyHTML, issueID) {
 		replyHTML += fmt.Sprintf("\n\n<b>Issue:</b> %s", issueID)
 	}
@@ -833,7 +839,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 	}
 
 	switch result.Tier {
-	case domain.TierAutoFix, domain.TierEscalate, domain.TierInfoOnly:
+	case domain.TierAutoFix, domain.TierEscalate, domain.TierInfoOnly, domain.TierResolved:
 		sendFunc(replyHTML)
 
 	case domain.TierButtonFix:
@@ -879,6 +885,14 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 				AlertMessageID:    msg.MessageID,
 			})
 		}
+
+	default:
+		// Unknown/empty tier from Claude — never leave a report unanswered.
+		// Always send the (acknowledgement) reply so a 👍 reaction is never
+		// the only response a user/admin sees.
+		log.Warnw("unhandled analysis tier — sending fallback acknowledgement",
+			"tier", result.Tier, "issue_id", issueID)
+		sendFunc(replyHTML)
 	}
 }
 
