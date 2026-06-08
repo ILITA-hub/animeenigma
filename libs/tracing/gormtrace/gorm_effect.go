@@ -123,6 +123,7 @@ func recordWrite(d *gorm.DB, sink tracing.EffectSink) {
 		Requests:   1,
 		DurationMS: durationMS(d),
 		UserID:     tracing.UserIDFromContext(ctx),
+		TraceID:    tracing.TraceIDFromContext(ctx),
 	}
 	sink.Record(e.WithOperationPCs(op))
 }
@@ -164,6 +165,7 @@ func recordRead(d *gorm.DB, sink tracing.EffectSink, gate ReadGate) {
 		DurationMS: durMS,
 		Operation:  operation,
 		UserID:     tracing.UserIDFromContext(d.Statement.Context),
+		TraceID:    tracing.TraceIDFromContext(d.Statement.Context),
 	}
 	// Carry the captured PCs so the Producer can resolve the fine operation async
 	// (it falls back to the coarse Operation we set above).

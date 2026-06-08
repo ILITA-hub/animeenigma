@@ -43,6 +43,7 @@ type wireEffect struct {
 	Target     string `json:"target"`
 	UserID     string `json:"user_id"`
 	AnimeID    string `json:"anime_id"`
+	TraceID    string `json:"trace_id"`
 	Status     int    `json:"status"`
 	Requests   int    `json:"requests"`
 	BytesIn    int    `json:"bytes_in"`
@@ -98,6 +99,7 @@ func (h *EffectsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Source:     "be",
 			Accuracy:   "exact",
 			AnimeID:    we.AnimeID,
+			TraceID:    we.TraceID,
 
 			Requests:   requests,
 			BytesIn:    we.BytesIn,

@@ -9,7 +9,21 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// TraceIDFromContext returns the active span's 32-hex-char OTel trace id, or ""
+// when ctx carries no valid span context. This is the FE↔BE / effect↔span bridge
+// (AR-FE-02): every effect recorded under a real span carries its trace id so
+// analytics.events.trace_id can join analytics.otel_traces.TraceId. Exported so
+// db/cache effect builders in other packages (gormtrace) can stamp it too.
+func TraceIDFromContext(ctx context.Context) string {
+	sc := trace.SpanFromContext(ctx).SpanContext()
+	if !sc.IsValid() || !sc.HasTraceID() {
+		return ""
+	}
+	return sc.TraceID().String()
+}
 
 // baggageKeyUserID is the baggage member key that must NEVER ride the outbound
 // wire (T-02-PII). user_id rides the private non-propagated ctx value
@@ -128,6 +142,9 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	origin, _ := ReadBaggage(ctx)
 	userID := UserIDFromContext(ctx)
 	provider := ProviderFromContext(ctx)
+	// Trace id of the active span (set by otelhttp's server middleware upstream).
+	// Captured here so the egress effect row joins to the BE trace (AR-FE-02).
+	traceID := TraceIDFromContext(ctx)
 
 	// D-08: operation is now stack-frame-PRIMARY. Capture the program counters
 	// synchronously here (cheap, no symbol resolution — D-11); the Producer
@@ -161,6 +178,7 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 			EffectKind: "egress",
 			Host:       host,
 			Provider:   provider,
+			TraceID:    traceID,
 			Target:     host,
 			// TargetKind left empty → post() labels egress rows "host".
 			Status:     status,

@@ -16,6 +16,7 @@ type Effect struct {
 	Target     string // concrete target (host for egress; table/key-class for db/cache)
 	TargetKind string // "host" | "table" | "key_class" — how Target is interpreted
 	AnimeID    string // optional anime UUID this effect concerns (db/cache rows)
+	TraceID    string // OTel trace id of the span this effect ran under (FE↔BE / effect↔span bridge, AR-FE-02/AR-STORE-03). Empty when no valid span context.
 	Status     int    // HTTP status code (egress); 0 for non-egress
 
 	// Measures.
