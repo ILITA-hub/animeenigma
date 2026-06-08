@@ -1,5 +1,5 @@
 <template>
-  <DialogRoot :open="modelValue" @update:open="onOpenUpdate">
+  <DialogRoot :open="modelValue" :modal="modal" @update:open="onOpenUpdate">
     <DialogPortal>
       <DialogOverlay
         class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-200 data-[state=open]:opacity-100 data-[state=closed]:opacity-0"
@@ -70,6 +70,13 @@ interface Props {
   closable?: boolean
   closeOnBackdrop?: boolean
   closeOnEsc?: boolean
+  // modal=false makes Reka use the NON-modal DialogContent, which does NOT set
+  // `body { pointer-events: none }`. Reka 2.9.8's modal DismissableLayer leaks
+  // that style on close (its restore is gated on `size === 1`, but Vue runs the
+  // layer-delete cleanup before the restore cleanup, so the restore is skipped
+  // and the page becomes unscrollable/unclickable after the first close).
+  // Background scroll is still locked by useBodyScrollLock while open.
+  modal?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -77,6 +84,7 @@ const props = withDefaults(defineProps<Props>(), {
   closable: true,
   closeOnBackdrop: true,
   closeOnEsc: true,
+  modal: true,
 })
 
 const emit = defineEmits<{

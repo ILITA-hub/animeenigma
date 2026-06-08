@@ -1,6 +1,6 @@
 <!-- frontend/web/src/components/schedule/DayModal.vue -->
 <template>
-  <Modal :model-value="modelValue" :title="headerTitle" size="md" @update:model-value="$emit('update:modelValue', $event)">
+  <Modal :model-value="modelValue" :title="headerTitle" size="md" :modal="false" @update:model-value="$emit('update:modelValue', $event)">
     <p class="text-xs text-primary -mt-2 mb-3">{{ subtitle }}</p>
     <div class="space-y-2.5">
       <router-link

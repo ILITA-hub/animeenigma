@@ -13,7 +13,10 @@
         <div class="text-base font-semibold font-display" :class="c.isToday ? 'text-primary' : 'text-foreground'">{{ c.date.getDate() }}</div>
       </div>
       <div v-if="!c.occurrences.length" class="text-[10px] text-white/20 text-center pt-3">—</div>
-      <EpisodeRow v-for="o in c.occurrences" :key="o.anime.id + ':' + o.episode" :occurrence="o" />
+      <EpisodeRow v-for="o in c.occurrences.slice(0, 4)" :key="o.anime.id + ':' + o.episode" :occurrence="o" size="lg" />
+      <div v-if="c.occurrences.length > 4" class="text-[11px] text-muted-foreground mt-1.5 text-center">
+        {{ $t('schedule.more', { n: c.occurrences.length - 4 }) }}
+      </div>
     </div>
   </div>
 </template>

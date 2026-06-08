@@ -25,7 +25,7 @@ export interface UseScheduleCalendarOptions {
 const WEEK_MS = 7 * 86400000
 
 export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
-  const view = ref<ScheduleView>('month')
+  const view = ref<ScheduleView>('week')
   const viewDate = ref<Date>(startOfDay(opts.now.value))
   const filters = reactive(emptyFilters())
   const sortKey = ref<TableSortKey>('date')
