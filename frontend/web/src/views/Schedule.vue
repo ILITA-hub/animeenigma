@@ -1,193 +1,140 @@
+<!-- frontend/web/src/views/Schedule.vue -->
 <template>
-  <div class="min-h-screen bg-base pt-20">
+  <div class="min-h-screen bg-background pt-20">
     <div class="container mx-auto px-4 py-8">
-      <h1 class="text-3xl font-bold text-white mb-8">{{ $t('schedule.title') }}</h1>
-
-      <!-- Loading -->
-      <div v-if="loading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-
-      <!-- Schedule by day -->
-      <div v-else-if="scheduleByDay.length > 0" class="space-y-8">
-        <div v-for="day in scheduleByDay" :key="day.dayName" class="glass-card p-6">
-          <h2 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-            <span class="w-3 h-3 rounded-full" :class="day.isToday ? 'bg-cyan-500' : 'bg-white/30'"></span>
-            {{ day.dayName }}
-            <span v-if="day.isToday" class="text-sm text-cyan-400 font-normal">{{ $t('schedule.today') }}</span>
-          </h2>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            <router-link
-              v-for="anime in day.animes"
-              :key="anime.id"
-              :to="`/anime/${anime.id}`"
-              class="relative flex gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors group"
-              @touchstart="(e) => onScheduleTouchstart(e, anime)"
-              @touchmove="onScheduleTouchmove"
-              @touchend="onScheduleTouchend"
-            >
-              <AnimeKebab
-                :menu-open="contextMenu.visible && String(contextMenu.anime?.id) === String(anime.id)"
-                @open="(el) => openScheduleMenuAt(el, anime)"
-              />
-              <img
-                :src="anime.poster_url || '/placeholder.svg'"
-                :alt="getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp)"
-                class="w-16 h-24 object-cover rounded"
-              />
-              <div class="flex-1 min-w-0">
-                <h3 class="text-white font-medium truncate">{{ getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) }}</h3>
-                <p class="text-white/60 text-sm mt-1">
-                  {{ $t('schedule.episode', { n: (anime.episodes_aired || 0) + 1 }) }}
-                </p>
-                <p class="text-cyan-400 text-sm mt-1">
-                  {{ formatTime(anime.next_episode_at ?? '') }}
-                </p>
-              </div>
-            </router-link>
+      <div class="flex items-center justify-between gap-3 flex-wrap mb-5">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h1 class="text-2xl font-bold text-foreground font-display min-w-[130px]">{{ headerTitle }}</h1>
+          <div class="flex gap-1.5">
+            <button class="h-8 w-8 rounded-lg bg-white/[0.06] hover:bg-white/12 flex items-center justify-center" @click="cal.shift(-1)">‹</button>
+            <button class="h-8 w-8 rounded-lg bg-white/[0.06] hover:bg-white/12 flex items-center justify-center" @click="cal.shift(1)">›</button>
           </div>
+          <button class="h-8 px-3 rounded-lg text-primary border border-primary/40 text-xs" @click="cal.goToday()">{{ $t('schedule.todayBtn') }}</button>
+        </div>
+        <div class="flex bg-white/[0.06] rounded-lg p-0.5">
+          <button v-for="v in views" :key="v" class="text-xs px-3.5 py-1.5 rounded-md transition-colors"
+            :class="cal.view.value === v ? 'bg-primary text-primary-foreground font-semibold' : 'text-muted-foreground'"
+            @click="cal.setView(v)">{{ $t('schedule.view' + cap(v)) }}</button>
         </div>
       </div>
 
-      <!-- No schedule -->
-      <div v-else class="text-center py-12">
-        <p class="text-white/60">{{ $t('schedule.noData') }}</p>
-        <p class="text-white/60 text-sm mt-2">{{ $t('schedule.hint') }}</p>
+      <ScheduleFilters
+        :filters="cal.filters"
+        :genres="cal.genres.value"
+        :logged-in="loggedIn"
+        :match-count="cal.filteredAnimes.value.length"
+        :total="schedule.length"
+        @reset="cal.resetFilters()"
+      />
+
+      <div v-if="loading" class="flex justify-center py-12">
+        <div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
       </div>
+
+      <template v-else>
+        <MonthView v-if="cal.view.value === 'month'" :cells="cal.monthCells.value" @open="openDay" />
+        <WeekView v-else-if="cal.view.value === 'week'" :columns="cal.weekColumns.value" @open="openDay" />
+        <TableView v-else :rows="cal.tableRows.value" :sort-key="cal.sortKey.value" :sort-dir="cal.sortDir.value" @sort="cal.setSort($event)" />
+
+        <div v-if="isEmpty" class="text-center py-12 text-muted-foreground">{{ $t('schedule.empty') }}</div>
+      </template>
     </div>
 
-    <AnimeContextMenu
-      :visible="contextMenu.visible"
-      :x="contextMenu.x"
-      :y="contextMenu.y"
-      :anchor-el="contextMenu.anchorEl"
-      :anime="contextMenu.anime"
-      :list-status="contextMenu.listStatus"
-      :site-rating="contextMenu.siteRating"
-      @update:visible="contextMenu.visible = $event"
-    />
+    <DayModal v-model="modalOpen" :date="modalDate" :occurrences="modalOccurrences" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
-import { getLocalizedTitle } from '@/utils/title'
-import { useContextMenu } from '@/composables/useContextMenu'
-import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
+import { useWatchlistStore } from '@/stores/watchlist'
+import { useAuthStore } from '@/stores/auth'
+import { useScheduleCalendar, type ScheduleView } from '@/composables/useScheduleCalendar'
+import type { ScheduleAnime, Occurrence } from '@/composables/schedule/types'
+import { isSameDay } from '@/composables/schedule/calendarGrid'
+import ScheduleFilters from '@/components/schedule/ScheduleFilters.vue'
+import MonthView from '@/components/schedule/MonthView.vue'
+import WeekView from '@/components/schedule/WeekView.vue'
+import TableView from '@/components/schedule/TableView.vue'
+import DayModal from '@/components/schedule/DayModal.vue'
 
-interface ScheduleAnime {
-  id: string
-  name?: string
-  name_ru?: string
-  name_jp?: string
-  poster_url?: string
-  next_episode_at?: string | null
-  episodes_aired?: number
-}
-
-const { t, locale } = useI18n()
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const { fetchSchedule, loading } = useAnime()
+const watchlist = useWatchlistStore()
+const auth = useAuthStore()
+
 const schedule = ref<ScheduleAnime[]>([])
+const now = ref(new Date())
+const loggedIn = computed(() => auth.isAuthenticated)
 
-const {
-  contextMenu,
-  openAtElement: openScheduleCtx,
-  onTouchstart: onScheduleCtxTouchstart,
-  onTouchmove: onScheduleTouchmove,
-  onTouchend: onScheduleTouchend,
-} = useContextMenu()
-
-function ctxAnimeFromSchedule(anime: ScheduleAnime) {
-  return {
-    id: anime.id,
-    title: getLocalizedTitle(anime.name, anime.name_ru, anime.name_jp) || 'Anime',
-    name: anime.name,
-    nameRu: anime.name_ru,
-    nameJp: anime.name_jp,
-    coverImage: anime.poster_url || '',
-  }
-}
-
-function openScheduleMenuAt(el: HTMLElement, anime: ScheduleAnime) {
-  // Schedule has no watchlist or rating data wired — pass null for both.
-  // The menu still lets the user set a status; pre-selection is just unavailable.
-  openScheduleCtx(el, ctxAnimeFromSchedule(anime), { listStatus: null, siteRating: null })
-}
-
-function onScheduleTouchstart(event: TouchEvent, anime: ScheduleAnime) {
-  onScheduleCtxTouchstart(event, ctxAnimeFromSchedule(anime), { listStatus: null, siteRating: null })
-}
-
-const dayNames = computed(() => [t('schedule.days.sunday'), t('schedule.days.monday'), t('schedule.days.tuesday'), t('schedule.days.wednesday'), t('schedule.days.thursday'), t('schedule.days.friday'), t('schedule.days.saturday')])
-
-const scheduleByDay = computed(() => {
-  if (!schedule.value.length) return []
-
-  const today = new Date()
-  const todayDay = today.getDay()
-
-  // Group by day of week
-  const grouped: Record<number, ScheduleAnime[]> = {}
-
-  for (const anime of schedule.value) {
-    if (!anime.next_episode_at) continue
-    const date = new Date(anime.next_episode_at)
-    const day = date.getDay()
-    if (!grouped[day]) grouped[day] = []
-    grouped[day].push(anime)
-  }
-
-  // Sort each day's anime by time
-  for (const day in grouped) {
-    grouped[day].sort((a, b) =>
-      new Date(a.next_episode_at ?? 0).getTime() - new Date(b.next_episode_at ?? 0).getTime()
-    )
-  }
-
-  // Create ordered list starting from today
-  const result = []
-  for (let i = 0; i < 7; i++) {
-    const dayIndex = (todayDay + i) % 7
-    if (grouped[dayIndex] && grouped[dayIndex].length > 0) {
-      result.push({
-        dayIndex,
-        dayName: dayNames.value[dayIndex],
-        isToday: i === 0,
-        animes: grouped[dayIndex]
-      })
-    }
-  }
-
-  return result
+const cal = useScheduleCalendar({
+  animes: computed(() => schedule.value),
+  now,
+  statusOf: (id: string) => watchlist.getStatus(id),
+  loggedIn,
 })
 
-const formatTime = (dateStr: string) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const localeMap: Record<string, string> = { ru: 'ru-RU', en: 'en-US', ja: 'ja-JP' }
-  const timeStr = date.toLocaleTimeString(localeMap[locale.value] || 'en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Europe/Moscow'
-  })
-  return t('schedule.timeMsk', { time: timeStr })
+const views: ScheduleView[] = ['month', 'week', 'table']
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const headerTitle = computed(() => formatHeader())
+
+const isEmpty = computed(() => {
+  if (cal.view.value === 'table') return cal.tableRows.value.length === 0
+  if (cal.view.value === 'week') return cal.weekColumns.value.every(c => c.occurrences.length === 0)
+  return cal.monthCells.value.every(c => c.occurrences.length === 0)
+})
+
+function formatHeader(): string {
+  const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
+  const d = cal.viewDate.value
+  if (cal.view.value === 'week' || cal.view.value === 'table') {
+    const off = (d.getDay() + 6) % 7
+    const s = new Date(d.getFullYear(), d.getMonth(), d.getDate() - off)
+    const e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6)
+    return `${s.getDate()}–${e.getDate()} ${t('schedule.monthsGenitive.' + months[e.getMonth()])}`
+  }
+  return `${t('schedule.monthsNominative.' + months[d.getMonth()])} ${d.getFullYear()}`
 }
 
-let active = true
+const modalOpen = ref(false)
+const modalDate = ref<Date | null>(null)
+function openDay(date: Date) {
+  modalDate.value = date
+  modalOpen.value = true
+}
+const modalOccurrences = computed<Occurrence[]>(() => {
+  if (!modalDate.value) return []
+  const src = cal.view.value === 'week' ? cal.weekColumns.value : cal.monthCells.value
+  const cell = src.find(c => isSameDay(c.date, modalDate.value as Date))
+  return cell ? cell.occurrences : []
+})
+
+function readQuery() {
+  const v = route.query.view as string | undefined
+  if (v === 'month' || v === 'week' || v === 'table') cal.setView(v)
+  const dstr = route.query.date as string | undefined
+  if (dstr) {
+    const d = new Date(dstr)
+    if (!Number.isNaN(d.getTime())) cal.viewDate.value = d
+  }
+}
+watch([cal.view, cal.viewDate], () => {
+  const d = cal.viewDate.value
+  const dstr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  router.replace({ query: { ...route.query, view: cal.view.value, date: dstr } })
+})
 
 onMounted(async () => {
+  readQuery()
+  if (loggedIn.value) watchlist.fetchStatuses().catch(() => {})
   try {
-    const data = await fetchSchedule()
-    if (active) schedule.value = data
+    schedule.value = await fetchSchedule()
   } catch (err) {
     console.error('Failed to fetch schedule:', err)
   }
-})
-
-onBeforeUnmount(() => {
-  active = false
 })
 </script>
