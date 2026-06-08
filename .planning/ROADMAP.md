@@ -21,7 +21,7 @@
 - [x] **Phase 3: DB/Cache Effects + Auto Operation Discovery** — otel-GORM DB-write effects, cache hit/miss effects, stack-frame operation attribution, Tempo span-metrics + service graph. (completed 2026-06-06)
 - [x] **Phase 4: FE Causation + RUM** — Wire `trace_id` into analytics events, axios route/action tagging, `PerformanceObserver` browser→3rd-party RUM (flagged approximate). (completed 2026-06-06)
 - [x] **Phase 5: Reports & Dashboards** — Grafana wide-event pivot tables (template vars = any dimension), the "from → choke-point → effects" report, anomaly flagging, awareness overview. (completed 2026-06-06)
-- [ ] **Phase 6: Consolidation → Topology A** — OTel Collector ClickHouse exporter for traces + logs; retire Tempo + Loki; keep Prometheus + Grafana. Deliberately last (register proven before SPOF consolidation).
+- [x] **Phase 6: Consolidation → Topology A** — OTel Collector ClickHouse exporter for traces + logs; retire Tempo + Loki; keep Prometheus + Grafana. Deliberately last (register proven before SPOF consolidation). (completed 2026-06-08)
 
 ## Phase Details
 
@@ -122,7 +122,7 @@ Plans:
 Plans:
 - [x] 06-01-PLAN.md — Additive: OTel Collector ClickHouse traces+logs exporters + filelog receiver + spanmetrics/servicegraph connectors→Prometheus, alongside Tempo (Wave 1, AR-CONS-01/02/03)
 - [x] 06-02-PLAN.md — Repoint: ClickHouse trace+log datasource (OTel mode) + backend-tracing.json repointed off TraceQL + render-verify, Tempo/Loki still present (Wave 2, AR-CONS-01/02)
-- [ ] 06-03-PLAN.md — Destructive cutover (non-autonomous, human render gate): remove Tempo/tempo-init/Loki/Promtail + datasources + configs, drop otlp/tempo, final AR-CONS-01/02/03 verification (Wave 3)
+- [x] 06-03-PLAN.md — Destructive cutover (non-autonomous, human render gate): remove Tempo/tempo-init/Loki/Promtail + datasources + configs, drop otlp/tempo, final AR-CONS-01/02/03 verification (Wave 3)
 **Metrics**: `UXΔ = +1 (Better)` (lower ops surface + unified querying; user benefit indirect via reliability) · `CDI = 0.10 * 21` (retires two stateful services and repoints their datasources/dashboards; new-but-compatible topology, gated/reversible until cutover — the risk is concentration onto the ClickHouse SPOF) · `MVQ = Phoenix 82%/85%` (rises-from-ashes consolidation — three stores collapse into one; the deliberate last-phase sequencing is the slop-resistant craft)
 
 ## Backlog / Reserved Future
@@ -148,4 +148,4 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 3 | v4.0 | 6/6 | Complete   | 2026-06-06 |
 | 4 | v4.0 | 4/4 | Complete   | 2026-06-06 |
 | 5 | v4.0 | 3/3 | Complete   | 2026-06-06 |
-| 6 | v4.0 | 2/3 | In Progress|  |
+| 6 | v4.0 | 3/3 | Complete   | 2026-06-08 |

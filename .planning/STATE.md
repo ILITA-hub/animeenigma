@@ -3,36 +3,47 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Activity Register (ClickHouse unified event plane)
 current_plan: 3
-status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-06-08T01:38:18.989Z"
+status: verifying
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-06-08T02:03:02.771Z"
 last_activity: 2026-06-08
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 23
-  completed_plans: 22
-  percent: 83
+  completed_plans: 23
+  percent: 100
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 06 (consolidation-topology-a) — EXECUTING
-Plan: 3 of 3
-Status: Ready to execute
+Phase: 06 (consolidation-topology-a) — COMPLETE (ready for verification)
+Plan: 3 of 3 (final)
+Status: Phase complete — ready for verification
 Last activity: 2026-06-08
 
 ## Progress
 
-**Phases Complete:** 5 / 6
-**Current Plan:** 3
+**Phases Complete:** 6 / 6
+**Current Plan:** 3 (final)
 
 ## Session Continuity
 
-**Stopped At:** Completed 06-02-PLAN.md
+**Stopped At:** Completed 06-03-PLAN.md
 **Resume File:** None
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Tasks | Files |
+| ----- | ---- | -------- | ----- | ----- |
+| 06    | 03   | ~8 min   | 4     | 6     |
+
+## Decisions
+
+- [Phase 06]: 06-03 — Topology A complete: ClickHouse is the single event/trace/log plane; the OTel Collector spanmetrics/servicegraph connectors are the sole span-metrics writer to Prometheus (Tempo/Loki/Promtail retired).
+- [Phase 06]: 06-03 — Used `deleteDatasources` provisioning to prune the `editable:false` Tempo+Loki datasources; block removal alone leaves them in Grafana's DB and the API refuses read-only deletes.
 
 ## Notes
 
