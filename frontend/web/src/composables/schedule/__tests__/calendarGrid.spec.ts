@@ -23,6 +23,11 @@ describe('weekStart (Monday-first)', () => {
   it('Sunday returns the preceding Monday', () => {
     expect(iso(weekStart(new Date(2026, 5, 14)))).toBe('2026-06-08')
   })
+  it('mid-week days (Tue..Sat) all return the same Monday', () => {
+    for (const day of [9, 10, 11, 12, 13]) { // Tue..Sat of week containing Mon 2026-06-08
+      expect(iso(weekStart(new Date(2026, 5, day)))).toBe('2026-06-08')
+    }
+  })
 })
 
 describe('weekDays', () => {
@@ -45,6 +50,16 @@ describe('monthGridDays', () => {
     expect(iso(days[0])).toBe('2026-06-29')
     expect(days.length % 7).toBe(0)
   })
+  it('February 2026 starts Sunday -> grid begins Jan 26 (Mon) and ends Mar 1 (Sun)', () => {
+    const days = monthGridDays(new Date(2026, 1, 1))
+    expect(iso(days[0])).toBe('2026-01-26')
+    expect(iso(days[days.length - 1])).toBe('2026-03-01')
+    expect(days.length % 7).toBe(0)
+  })
+  it('July 2026 grid last cell is Aug 2 (Sun)', () => {
+    const days = monthGridDays(new Date(2026, 6, 1))
+    expect(iso(days[days.length - 1])).toBe('2026-08-02')
+  })
 })
 
 describe('monthGridRange', () => {
@@ -52,5 +67,9 @@ describe('monthGridRange', () => {
     const { start, end } = monthGridRange(new Date(2026, 6, 1))
     expect(iso(start)).toBe('2026-06-29')
     expect(iso(end)).toBe('2026-08-03')
+  })
+  it('June 2026 (Monday-start): start is June 1', () => {
+    const { start } = monthGridRange(new Date(2026, 5, 1))
+    expect(iso(start)).toBe('2026-06-01')
   })
 })
