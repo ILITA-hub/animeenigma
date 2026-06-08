@@ -9,7 +9,7 @@
     >
       {{ label }}<span class="opacity-50 text-[10px]">▾</span>
     </button>
-    <div v-if="open" class="absolute top-[calc(100%+6px)] left-0 z-30 w-52 rounded-xl border border-white/14 bg-elevated p-1.5 shadow-2xl">
+    <div v-if="open" class="absolute top-[calc(100%+6px)] left-0 z-50 w-52 rounded-xl border border-white/10 bg-popover text-popover-foreground p-1.5 shadow-xl shadow-black/30">
       <button
         v-for="opt in options"
         :key="opt.value"
