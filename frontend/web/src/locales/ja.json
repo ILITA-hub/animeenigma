@@ -890,6 +890,8 @@
     "feedback": {
       "title": "ユーザーフィードバック",
       "subtitle": "フィードバックボタンから寄せられたアイデア・バグ・問題。",
+      "viewTable": "テーブル",
+      "viewKanban": "カンバン",
       "refresh": "更新",
       "total": "合計 {n} 件",
       "view": "表示",

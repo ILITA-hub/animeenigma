@@ -9,6 +9,25 @@
           <p class="text-white/60 text-sm mt-1">{{ $t('admin.feedback.subtitle') }}</p>
         </div>
         <div class="flex items-center gap-3">
+          <!-- View toggle: table / kanban -->
+          <div class="inline-flex rounded-md border border-white/10 overflow-hidden">
+            <button
+              type="button"
+              class="px-3 py-2 text-sm font-medium transition"
+              :class="viewMode === 'table' ? 'bg-cyan-500/80 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'"
+              @click="setViewMode('table')"
+            >
+              {{ $t('admin.feedback.viewTable') }}
+            </button>
+            <button
+              type="button"
+              class="px-3 py-2 text-sm font-medium transition"
+              :class="viewMode === 'kanban' ? 'bg-cyan-500/80 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'"
+              @click="setViewMode('kanban')"
+            >
+              {{ $t('admin.feedback.viewKanban') }}
+            </button>
+          </div>
           <span class="text-white/50 text-sm">{{ $t('admin.feedback.total', { n: total }) }}</span>
           <button
             type="button"
@@ -38,6 +57,7 @@
           @change="applyFilters"
         />
         <Select
+          v-if="viewMode === 'table'"
           v-model="filterStatus"
           size="sm"
           :options="statusOptions"
@@ -65,7 +85,7 @@
       </div>
 
       <!-- Table -->
-      <div v-else class="glass-card overflow-x-auto">
+      <div v-else-if="viewMode === 'table'" class="glass-card overflow-x-auto">
         <table class="w-full text-sm text-white">
           <thead class="bg-black/40 backdrop-blur">
             <tr class="text-white/70 text-xs uppercase">
@@ -120,8 +140,54 @@
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div v-if="!isLoading && total > pageSize" class="flex items-center justify-center gap-4 mt-6 text-sm text-white/70">
+      <!-- Kanban -->
+      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div
+          v-for="col in kanbanColumns"
+          :key="col.status"
+          class="glass-card p-3 transition-colors"
+          :class="dragOverStatus === col.status ? 'ring-2 ring-cyan-400/60' : ''"
+          @dragover.prevent="dragOverStatus = col.status"
+          @drop="onDrop(col.status)"
+        >
+          <div class="flex items-center justify-between mb-3 px-1">
+            <span class="px-2 py-0.5 rounded text-xs font-semibold uppercase" :class="statusClass(col.status)">
+              {{ statusLabel(col.status) }}
+            </span>
+            <span class="text-white/40 text-xs font-mono">{{ col.items.length }}</span>
+          </div>
+
+          <div class="space-y-2 min-h-[80px]">
+            <div
+              v-for="r in col.items"
+              :key="r.id"
+              draggable="true"
+              class="rounded-lg bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 p-3 cursor-grab active:cursor-grabbing transition"
+              :class="draggingId === r.id ? 'opacity-40' : ''"
+              @dragstart="onDragStart(r.id, $event)"
+              @dragend="onDragEnd"
+              @click="openDetail(r.id)"
+            >
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
+                  {{ categoryLabel(r.category) }}
+                </span>
+                <span class="text-white/40 text-[10px] whitespace-nowrap">{{ formatDate(r.timestamp, r.id) }}</span>
+              </div>
+              <p class="text-white/80 text-xs line-clamp-3 break-words">{{ r.description || '—' }}</p>
+              <div class="flex items-center justify-between gap-2 mt-2 text-[11px] text-white/50">
+                <span class="truncate">{{ r.username || r.user_id }}</span>
+                <span v-if="r.player_type && r.player_type !== 'feedback'" class="text-white/30">{{ r.player_type }}</span>
+              </div>
+            </div>
+
+            <p v-if="col.items.length === 0" class="text-white/30 text-xs text-center py-4">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pagination (table only) -->
+      <div v-if="!isLoading && viewMode === 'table' && total > pageSize" class="flex items-center justify-center gap-4 mt-6 text-sm text-white/70">
         <button
           type="button"
           class="px-3 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-40"
@@ -232,7 +298,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Select from '@/components/ui/Select.vue'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
@@ -248,6 +314,62 @@ const {
 } = useAdminFeedback()
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+// --- View mode (table | kanban), persisted in localStorage ---
+const VIEW_KEY = 'admin_feedback_view'
+type ViewMode = 'table' | 'kanban'
+const viewMode = ref<ViewMode>(
+  typeof localStorage !== 'undefined' && localStorage.getItem(VIEW_KEY) === 'kanban' ? 'kanban' : 'table',
+)
+
+function setViewMode(m: ViewMode): void {
+  if (viewMode.value === m) return
+  viewMode.value = m
+  try {
+    localStorage.setItem(VIEW_KEY, m)
+  } catch {
+    // localStorage can throw in privacy modes — ignore.
+  }
+  // Kanban shows every status as a column, so drop the status filter and pull
+  // a bigger page (columns should be ~complete, not just the table's page).
+  page.value = 1
+  pageSize.value = m === 'kanban' ? 200 : 50
+  if (m === 'kanban') filterStatus.value = 'all'
+  refresh()
+}
+
+// --- Kanban: group the loaded rows into status columns ---
+const STATUS_ORDER: FeedbackStatus[] = ['new', 'in_progress', 'resolved']
+const kanbanColumns = computed(() =>
+  STATUS_ORDER.map((status) => ({
+    status,
+    items: items.value.filter((i) => i.status === status),
+  })),
+)
+
+// --- Native HTML5 drag-and-drop between columns ---
+const draggingId = ref<string | null>(null)
+const dragOverStatus = ref<string | null>(null)
+
+function onDragStart(id: string, e: DragEvent): void {
+  draggingId.value = id
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+}
+function onDragEnd(): void {
+  draggingId.value = null
+  dragOverStatus.value = null
+}
+function onDrop(status: FeedbackStatus): void {
+  const id = draggingId.value
+  draggingId.value = null
+  dragOverStatus.value = null
+  if (!id) return
+  const row = items.value.find((i) => i.id === id)
+  if (row && row.status !== status) setStatus(id, status)
+}
 
 const PLAYER_TYPES = ['feedback', 'kodik', 'animelib', 'ourenglish', 'hanime', 'raw']
 
@@ -326,5 +448,12 @@ function pretty(v: unknown): string {
   }
 }
 
-onMounted(refresh)
+onMounted(() => {
+  // Honor a persisted kanban preference on first load: wider page + no status filter.
+  if (viewMode.value === 'kanban') {
+    pageSize.value = 200
+    filterStatus.value = 'all'
+  }
+  refresh()
+})
 </script>

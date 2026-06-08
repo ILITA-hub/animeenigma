@@ -890,6 +890,8 @@
     "feedback": {
       "title": "User Feedback",
       "subtitle": "Ideas, bugs and issues submitted via the site feedback button.",
+      "viewTable": "Table",
+      "viewKanban": "Kanban",
       "refresh": "Refresh",
       "total": "{n} total",
       "view": "View",
