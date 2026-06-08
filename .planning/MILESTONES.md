@@ -1,10 +1,40 @@
 # Milestones
 
+## v4.0 Activity Register (ClickHouse unified event plane) (Shipped: 2026-06-08)
+
+**Phases completed:** 6 phases, 23 plans, 31 tasks
+
+**Key accomplishments:**
+
+- Stood up a live, host-bound ClickHouse 26.3.12.3 instance with native Prometheus self-metrics on :9363 and a clickhouse-backup 2.7.0 sidecar whose backup/restore procedure was dry-run-verified end-to-end — satisfying AR-STORE-01 as the storage foundation for the v4 Activity Register.
+- 1. [Rule 3 - Blocking] Pinned older CH dep versions to avoid a workspace-wide go directive bump
+- The live analytics clickstream now dual-writes to both Postgres and ClickHouse (`ANALYTICS_STORE_BACKEND=dualwrite`, PG source of truth + reversible), a new `aenigma-clickhouse` Grafana datasource is provisioned, and all 6 product-analytics panels render from ClickHouse `events_resolved` — proven by a live smoke event reaching both stores (AR-STORE-04).
+- The BE effect-ingestion path that did not exist before: domain.Event now carries effect dimensions+measures, InsertBatch populates the (previously zeroed) ClickHouse effect columns, POST /internal/effects ingests effect batches into the existing batcher, and libs/tracing gained a recording RoundTripper + non-blocking producer + PII-safe baggage/ctx attribution helpers.
+- The four previously-uninstrumented outbound clients (Kodik extractor, OpenSubtitles, idmapping ARM/AniList, and the scraper BaseHTTPClient across all 7 providers) now route through the recording transport — the leaf modules via injected transports that keep them zero-dependency at go 1.22, and the scraper path additionally carrying a private-ctx stream-provider tag the recorder reads for `target = provider + host`.
+- HLS-proxy egress now aggregates to ONE effect row per (stream-session, host) instead of one row per ~6s segment: a per-manifest crypto/rand `?sess=` token (injected in `rewriteHLSURL`) correlates a watch's segment GETs into a bounded, idle-reaped in-memory tally that emits a single summed `tracing.Effect` on session end — and the proxy now counts both `bytes_in` (upstream `resp.Body` via a no-buffer `countReader`) and `bytes_out` (client sink).
+- The PII boundary is now hardened and proven (user_id never rides outbound wire baggage — only origin/operation do, end-to-end), the egress Producer + SeedMiddleware are wired into catalog/scraper (streaming/analytics were already wired), and the full BE egress recorder is verified LIVE in ClickHouse: real per-client scraper egress rows, ONE aggregated HLS row per (session,host), and ClickHouse `count(user_id != '') = 0`.
+- Task 1 (TDD) — `attribution.go` + tests:
+- Task 1 (TDD) — `readgate.go` + tests:
+- Task 1 (TDD) — `keyclass.go` + tests:
+- Task 1 — analytics compute + publish (`cf856046`):
+- Task 1 (`2cbae12a`) — GlobalSink getter + DB-effect callbacks + ReadGate + ThresholdRefresher across 7 GORM services:
+- 1. [Rule 3 - Blocking] Missing context file `04-PATTERNS.md`
+- 1. [Rule 1 — Verification hygiene] Reworded `rum.ts` comments to avoid literal byte-field tokens
+- Task 1 — automated pre-gate: COMPLETE.
+- One-liner:
+- Authored the two table-driven Activity Register reports as pure declarative Grafana JSON over the already-provisioned aenigma-clickhouse datasource: a wide-event PIVOT dashboard whose $group_by template var regroups the table by ANY dimension live, and a from->choke-point->effects FLOW report rendering origin->operation->per-target requests + bytes.
+- Task 1 — automated reload + dry-run: COMPLETE.
+- 1. [Rule 3 - Blocking] spanmetrics connector duplicate-dimension config error
+- 1. [Rule 3 - Blocking] Provisioned read-only Tempo+Loki datasources not pruned by block removal
+
+---
+
 ## v3.1 Scraper Self-Healing — CLOSED 2026-06-04
 
 **Status:** Shipped & closed. Original ship 2026-05-13 (Phases 21-23, tagged `v3.1`); reopened 2026-05-19 for Phases 24-28; all reopened phases shipped (SUMMARYs on disk). Closed 2026-06-04 to start root **v4 (Activity Register)**.
 
 **Reopened phases delivered (24-28):**
+
 - **Phase 24 — EN Reconnect:** restored `EnglishPlayer.vue` + EN tab + language/provider type unions + i18n; per-provider end-to-end verification gate.
 - **Phase 25 — Audit Findings Resolution:** closed BLK-INT-01 (hls3 host auto-discovery) + W-INT-01..03.
 - **Phase 26 — Provider Expansion:** AllAnime lifted into scraper providers; AnimeKai revival; 2026 source sweep.
@@ -46,6 +76,7 @@
 | 26 | Provider Expansion | SCRAPER-HEAL-25..28 | Lift `services/catalog/internal/parser/allanime/` into `services/scraper/internal/providers/allanime/`, fresh 2026 candidate research, resurrect AnimeKai with in-house MegaUp token generator (carried from v3.0 Phase 19) |
 
 **Phase 21-23 deliverables that DID ship and DID NOT regress** (unchanged, no rework needed):
+
 - `libs/streamprobe/` package + 7-Reason classification + hardcoded ad-CDN blocklist
 - gogoanime server priority + per-server fallback + Redis winning-server cache
 - `parser_unplayable_total` + `parser_ad_decoy_total` metrics
@@ -57,6 +88,7 @@
 - Maintenance-prompt Patterns 6/7 + Scraper Playability Regression section
 
 **Phase 21 deliverable that DID ship and DID regress** (Phase 24 restores):
+
 - `frontend/web/src/components/player/EnglishPlayer.vue` three-phase loader (SCRAPER-HEAL-08) — file deleted 2026-05-18 in commit fe3b487 alongside HiAnime/Consumet. Recoverable from git history (`git show 8424e99:frontend/web/src/components/player/EnglishPlayer.vue` = 1973 lines, last good state).
 
 **Reopening trace:** see `.planning/milestones/v3.1-REOPENING.md` for the full chronology + commit references + decision rationale.
