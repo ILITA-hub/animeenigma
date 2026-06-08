@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Activity Register (ClickHouse unified event plane)
 current_plan: 3
-status: verifying
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-06-08T02:03:02.771Z"
+status: milestone_complete
+stopped_at: Milestone complete (Phase 06 was final phase)
+last_updated: 2026-06-08T02:11:17.471Z
 last_activity: 2026-06-08
 progress:
   total_phases: 6
@@ -19,15 +19,15 @@ progress:
 
 ## Current Position
 
-Phase: 06 (consolidation-topology-a) — COMPLETE (ready for verification)
+Phase: 06
 Plan: 3 of 3 (final)
-Status: Phase complete — ready for verification
+Status: Milestone complete
 Last activity: 2026-06-08
 
 ## Progress
 
 **Phases Complete:** 6 / 6
-**Current Plan:** 3 (final)
+**Current Plan:** Not started
 
 ## Session Continuity
 
