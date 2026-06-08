@@ -4,7 +4,7 @@
   "title": "Backend Tracing",
   "uid": "backend-tracing",
   "tags": ["tracing", "backend"],
-  "description": "Tempo trace explorer (distributed tracing, OTel → Tempo). The per-service latency-p95 and 5xx-rate timeseries that used to live here were exact duplicates of the 'Service Overview' row in 'Services / Overview' (animeenigma-services) — removed 2026-06-03 to de-duplicate. Use that dashboard for RED metrics; use this one to drill into individual slow traces.",
+  "description": "ClickHouse trace explorer (distributed tracing, OTel → OTel Collector → ClickHouse analytics.otel_traces). Phase 6 (06-02) repointed this dashboard off Tempo onto the ClickHouse datasource (uid aenigma-clickhouse, grafana-clickhouse-datasource OTel trace builder) as part of the gated observability consolidation — Tempo stays live as the safety net until 06-03. Parity note: Tempo's TraceQL ('{ duration > 1s }') has no direct equivalent in ClickHouse; the slow-trace use case is expressed via the CH plugin's OTel trace query / SQL (WHERE Duration > 1e9 ns over analytics.otel_traces). The per-service latency-p95 and 5xx-rate timeseries that used to live here were exact duplicates of the 'Service Overview' row in 'Services / Overview' (animeenigma-services) — removed 2026-06-03 to de-duplicate. Use that dashboard for RED metrics; use this one to drill into individual slow traces.",
   "timezone": "",
   "schemaVersion": 39,
   "time": { "from": "now-6h", "to": "now" },
@@ -13,10 +13,38 @@
     {
       "type": "traces",
       "title": "Recent slow traces (>1s)",
-      "datasource": { "type": "tempo", "uid": "aenigma-tempo" },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "gridPos": { "h": 18, "w": 24, "x": 0, "y": 0 },
       "targets": [
-        { "queryType": "traceqlSearch", "query": "{ duration > 1s }", "limit": 50 }
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+          "queryType": "traces",
+          "pluginVersion": "4.17.0",
+          "editorType": "sql",
+          "rawSql": "SELECT TraceId AS traceID, ServiceName AS serviceName, SpanName AS operationName, Timestamp AS startTime, Duration / 1000000 AS duration FROM analytics.otel_traces WHERE ParentSpanId = '' AND Duration > 1000000000 ORDER BY Timestamp DESC LIMIT 50",
+          "format": "trace",
+          "builderOptions": {
+            "database": "analytics",
+            "table": "otel_traces",
+            "queryType": "traces",
+            "mode": "trace",
+            "otelEnabled": true,
+            "otelVersion": "latest",
+            "limit": 50,
+            "filters": [
+              {
+                "key": "Duration",
+                "type": "Int64",
+                "condition": "AND",
+                "operator": ">",
+                "value": 1000000000,
+                "filterType": "custom"
+              }
+            ],
+            "orderBy": [{ "name": "Timestamp", "dir": "DESC" }]
+          }
+        }
       ]
     }
   ]
