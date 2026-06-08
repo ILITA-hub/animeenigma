@@ -1,0 +1,69 @@
+<!-- frontend/web/src/components/schedule/ScheduleFilters.vue -->
+<template>
+  <div>
+    <div class="flex items-center gap-2 flex-wrap p-2.5 rounded-xl border border-white/[0.06] bg-white/[0.025] mb-2.5">
+      <div class="flex-1 min-w-[160px] flex items-center gap-2 rounded-lg bg-white/[0.06] px-2.5 py-1.5">
+        <span class="opacity-50">🔍</span>
+        <input
+          :value="filters.search"
+          :placeholder="$t('schedule.searchPlaceholder')"
+          class="bg-transparent border-0 outline-none text-foreground text-sm w-full placeholder:text-muted-foreground"
+          @input="filters.search = ($event.target as HTMLInputElement).value"
+        />
+      </div>
+      <button
+        v-if="loggedIn"
+        type="button"
+        class="flex items-center gap-1.5 text-xs rounded-lg border px-2.5 py-1.5 transition-colors"
+        :class="filters.myList ? 'bg-primary/15 border-primary/50 text-primary' : 'bg-white/[0.06] border-white/10 text-foreground/80 hover:bg-white/10'"
+        @click="filters.myList = !filters.myList"
+      >★ {{ $t('schedule.myList') }}</button>
+      <FilterDropdown :label="$t('schedule.genre')" :options="genreOptions" :selected="filters.genres" @toggle="toggleSet(filters.genres, $event)" />
+      <FilterDropdown :label="$t('schedule.type')" :options="typeOptions" :selected="filters.types" @toggle="toggleSet(filters.types, $event)" />
+    </div>
+
+    <div class="flex items-center gap-2 flex-wrap mb-3 min-h-6">
+      <template v-if="activeChips.length">
+        <span class="text-[11px] text-muted-foreground">{{ $t('schedule.activeFilters') }}</span>
+        <span v-for="chip in activeChips" :key="chip.key" class="flex items-center gap-1.5 text-xs text-primary bg-primary/15 border border-primary/35 rounded-full px-2.5 py-1">
+          {{ chip.label }}<span class="cursor-pointer opacity-70" @click="chip.remove()">✕</span>
+        </span>
+        <span class="text-xs text-muted-foreground underline cursor-pointer" @click="$emit('reset')">{{ $t('schedule.resetAll') }}</span>
+      </template>
+      <span v-else class="text-[11px] text-muted-foreground">{{ $t('schedule.noFilters') }}</span>
+      <span class="text-[11px] text-white/35 ml-auto">{{ $t('schedule.countOf', { n: matchCount, total }) }}</span>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import FilterDropdown from './FilterDropdown.vue'
+import type { ScheduleFilterState, ScheduleGenre } from '@/composables/schedule/types'
+
+const props = defineProps<{
+  filters: ScheduleFilterState
+  genres: ScheduleGenre[]
+  loggedIn: boolean
+  matchCount: number
+  total: number
+}>()
+defineEmits<{ reset: [] }>()
+const { t, locale } = useI18n()
+
+const TYPES = ['TV', 'ONA', 'Movie', 'OVA']
+const genreOptions = computed(() => props.genres.filter(g => g.name).map(g => ({ value: g.name as string, label: (locale.value === 'ru' && g.russian) ? g.russian : (g.name as string) })))
+const typeOptions = computed(() => TYPES.map(v => ({ value: v, label: v })))
+
+function toggleSet(set: Set<string>, v: string) { set.has(v) ? set.delete(v) : set.add(v) }
+
+const activeChips = computed(() => {
+  const chips: { key: string; label: string; remove: () => void }[] = []
+  if (props.filters.search) chips.push({ key: 'q', label: `${t('schedule.searchChip')}: ${props.filters.search}`, remove: () => (props.filters.search = '') })
+  if (props.filters.myList) chips.push({ key: 'mine', label: `★ ${t('schedule.myList')}`, remove: () => (props.filters.myList = false) })
+  props.filters.genres.forEach(g => chips.push({ key: 'g:' + g, label: genreOptions.value.find(o => o.value === g)?.label ?? g, remove: () => props.filters.genres.delete(g) }))
+  props.filters.types.forEach(ty => chips.push({ key: 't:' + ty, label: ty, remove: () => props.filters.types.delete(ty) }))
+  return chips
+})
+</script>
