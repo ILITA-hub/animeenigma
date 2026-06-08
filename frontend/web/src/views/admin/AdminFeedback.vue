@@ -84,7 +84,7 @@
               class="border-t border-white/10 hover:bg-white/5 cursor-pointer transition"
               @click="openDetail(r.id)"
             >
-              <td class="px-3 py-2 whitespace-nowrap">
+              <td class="px-3 py-2 whitespace-nowrap border-l-4" :class="statusAccentBorder(r.status)">
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
                   {{ categoryLabel(r.category) }}
                 </span>
@@ -96,12 +96,15 @@
               <td class="px-3 py-2 text-white/70 max-w-md truncate">{{ r.description || '—' }}</td>
               <td class="px-3 py-2 whitespace-nowrap text-white/50 text-xs">{{ formatDate(r.timestamp, r.id) }}</td>
               <td class="px-3 py-2 whitespace-nowrap" @click.stop>
-                <Select
-                  size="xs"
-                  :model-value="r.status"
-                  :options="statusChangeOptions"
-                  @change="(v) => setStatus(r.id, v as FeedbackStatus)"
-                />
+                <select
+                  :value="r.status"
+                  :class="['rounded px-2 py-1 text-[11px] font-medium cursor-pointer outline-none transition-colors', statusSelectClass(r.status)]"
+                  @change="setStatus(r.id, ($event.target as HTMLSelectElement).value as FeedbackStatus)"
+                >
+                  <option class="bg-popover text-white" value="new">{{ statusLabel('new') }}</option>
+                  <option class="bg-popover text-white" value="in_progress">{{ statusLabel('in_progress') }}</option>
+                  <option class="bg-popover text-white" value="resolved">{{ statusLabel('resolved') }}</option>
+                </select>
               </td>
               <td class="px-3 py-2 text-right">
                 <button
@@ -198,14 +201,15 @@
           <!-- Change status -->
           <div class="flex items-center gap-3 pt-2">
             <span class="text-white/50 text-xs uppercase">{{ $t('admin.feedback.columns.status') }}</span>
-            <div class="w-44">
-              <Select
-                size="xs"
-                :model-value="detail.status"
-                :options="statusChangeOptions"
-                @change="(v) => setStatus(detail!.id, v as FeedbackStatus)"
-              />
-            </div>
+            <select
+              :value="detail.status"
+              :class="['rounded px-3 py-1.5 text-xs font-medium cursor-pointer outline-none transition-colors', statusSelectClass(detail.status)]"
+              @change="setStatus(detail!.id, ($event.target as HTMLSelectElement).value as FeedbackStatus)"
+            >
+              <option class="bg-popover text-white" value="new">{{ statusLabel('new') }}</option>
+              <option class="bg-popover text-white" value="in_progress">{{ statusLabel('in_progress') }}</option>
+              <option class="bg-popover text-white" value="resolved">{{ statusLabel('resolved') }}</option>
+            </select>
           </div>
 
           <!-- Collapsible diagnostics -->
@@ -263,11 +267,6 @@ const statusOptions = computed(() => [
   { value: 'in_progress', label: statusLabel('in_progress') },
   { value: 'resolved', label: statusLabel('resolved') },
 ])
-const statusChangeOptions = computed(() => [
-  { value: 'new', label: statusLabel('new') },
-  { value: 'in_progress', label: statusLabel('in_progress') },
-  { value: 'resolved', label: statusLabel('resolved') },
-])
 
 function categoryLabel(c: string): string {
   if (c === 'bug' || c === 'issue' || c === 'feature') return t(`admin.feedback.category.${c}`)
@@ -291,6 +290,22 @@ function statusClass(s: string): string {
     case 'resolved': return 'bg-success/20 text-success'
     case 'in_progress': return 'bg-warning/20 text-warning'
     default: return 'bg-info/20 text-info'
+  }
+}
+// Colored <select> control reflecting the current status at a glance.
+function statusSelectClass(s: string): string {
+  switch (s) {
+    case 'resolved': return 'bg-success/20 text-success border border-success/40'
+    case 'in_progress': return 'bg-warning/20 text-warning border border-warning/40'
+    default: return 'bg-info/20 text-info border border-info/40'
+  }
+}
+// Left accent border on each list row, colored by status.
+function statusAccentBorder(s: string): string {
+  switch (s) {
+    case 'resolved': return 'border-success'
+    case 'in_progress': return 'border-warning'
+    default: return 'border-info'
   }
 }
 
