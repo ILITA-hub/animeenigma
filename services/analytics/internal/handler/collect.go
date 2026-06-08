@@ -111,6 +111,37 @@ func (h *CollectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			props = string(we.Properties)
 		}
 
+		// AR-FE-01/AR-FE-03 collector tolerance: older/looser FE builds nest the
+		// register fields inside `properties` (analytics.track(name, props) buried
+		// {source, trace_id, operation, target, target_kind, accuracy, action}
+		// there) instead of at the top level. Lift any register field that is
+		// empty at the top level from the properties map BEFORE defaults/whitelist
+		// run — so a `source` of "fe"/"fe_rum" carried in properties is honored and
+		// RUM rows are NOT misclassified as "be". Robust regardless of FE redeploy.
+		if len(we.Properties) > 0 {
+			var pm map[string]any
+			if err := json.Unmarshal(we.Properties, &pm); err == nil {
+				if we.Source == "" {
+					we.Source = propStr(pm, "source")
+				}
+				if we.TraceID == "" {
+					we.TraceID = propStr(pm, "trace_id")
+				}
+				if we.Operation == "" {
+					we.Operation = propStr(pm, "operation")
+				}
+				if we.Action == "" {
+					we.Action = propStr(pm, "action")
+				}
+				if we.Target == "" {
+					we.Target = propStr(pm, "target")
+				}
+				if we.TargetKind == "" {
+					we.TargetKind = propStr(pm, "target_kind")
+				}
+			}
+		}
+
 		// --- FE register-field attribution mapping (Phase 04) ---
 		// Server-side source whitelist (T-04-01): accept ONLY "fe"/"fe_rum".
 		// Anything else (forged "be"/"evil"/empty) yields an empty Source so
@@ -180,6 +211,19 @@ func whitelistSource(s string) string {
 	default:
 		return ""
 	}
+}
+
+// propStr reads a string value from a decoded properties map, returning "" when
+// the key is absent or not a string. Used by the collector-tolerance fallback
+// (AR-FE-01/AR-FE-03) so register fields nested in `properties` by a looser FE
+// build are still honored.
+func propStr(pm map[string]any, key string) string {
+	if v, ok := pm[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // capString truncates a public-beacon string to maxFieldLen runes.
