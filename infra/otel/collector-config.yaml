@@ -52,7 +52,11 @@ receivers:
         if: 'body matches "\"trace_id\""'
         parse_from: body
         parse_to: attributes
-        regex: '"trace_id":\s*"(?P<trace_id>[0-9a-f]{32})",\s*"span_id":\s*"(?P<span_id>[0-9a-f]{16})"'
+        # WR-03: allow intervening JSON fields between trace_id and span_id
+        # (`.*` instead of requiring them adjacent) so correlation survives any
+        # service that injects extra With() fields between the two — the prior
+        # adjacency-only pattern would silently drop SpanId for those lines.
+        regex: '"trace_id":\s*"(?P<trace_id>[0-9a-f]{32})".*"span_id":\s*"(?P<span_id>[0-9a-f]{16})"'
       # Promote the extracted hex IDs into the OTel log record's TraceId/SpanId
       # fields, which the clickhouseexporter writes into otel_logs.TraceId/SpanId.
       # This is what makes Grafana's native logs↔traces click-through (06-02) resolve.
