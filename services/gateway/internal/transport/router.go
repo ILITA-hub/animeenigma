@@ -168,9 +168,7 @@ func NewRouterWithCleanup(
 <body>
     <h1>AnimeEnigma Admin</h1>
     <a href="/admin/grafana/">Grafana - Metrics & Dashboards</a>
-    <a href="/admin/prometheus/">Prometheus - Metrics Database</a>
-    <a href="/admin/grafana/explore?orgId=1&left=%7B%22datasource%22:%22Loki%22%7D">Loki - Log Explorer (via Grafana)</a>
-    <a href="/admin/recs/">Rec Engine Debug — per-user signal breakdown, force-recompute, S11 audit</a>
+    <a href="/admin/recs/">Recommendation Engine Debugger</a>
 </body>
 </html>`))
 		})
