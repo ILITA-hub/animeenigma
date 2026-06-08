@@ -78,6 +78,21 @@ datasources:
   # warning above; reusing a uid orphaned 14 alert rules before). The product-
   # analytics dashboard binds its 6 panels to this exact uid. Requires the
   # grafana-clickhouse-datasource plugin (GF_INSTALL_PLUGINS in compose).
+  #
+  # Phase 6 (06-02): EXTENDED in place (lowest-churn, NO new uid — avoids the
+  # orphaned-uid hazard entirely) to also serve traces (analytics.otel_traces)
+  # and logs (analytics.otel_logs) in OTel mode, so the one CH datasource now
+  # carries events + traces + logs. This replaces the Tempo trace store and the
+  # Loki log store for Grafana's trace/log views (Tempo + Loki datasources above
+  # STAY through the gate — they are removed only in 06-03). OTel tables are
+  # produced by the OTel Collector clickhouseexporter (06-01); their column
+  # layout (TraceId/SpanId/Duration[ns]/ServiceName/… + logs Timestamp/TraceId/
+  # SeverityText/Body/…) matches what the plugin's OTel builder expects.
+  #
+  # Logs<->traces correlation is configured NATIVELY here on trace_id, replacing
+  # the Loki derivedField -> aenigma-tempo link: traces->logs (traceToLogs) and
+  # logs->traces (logsToTrace) both resolve against this same datasource (uid
+  # ${__datasource.uid} -> self) because logs carry TraceId.
   - name: ClickHouse
     uid: aenigma-clickhouse
     type: grafana-clickhouse-datasource
@@ -94,5 +109,37 @@ datasources:
       # supplied to the grafana container env in docker-compose.yml.
       username: ${CLICKHOUSE_USER}
       defaultDatabase: analytics
+      # OTel trace view (plugin v4.x): trace-ID search + slow-trace builder over
+      # analytics.otel_traces. otelEnabled=true makes the trace builder pre-fill
+      # the OTel column mapping for the exporter's standard schema.
+      traces:
+        defaultDatabase: analytics
+        defaultTable: otel_traces
+        otelEnabled: true
+        otelVersion: latest
+        durationColumn: Duration
+        durationUnit: nanoseconds
+        traceIdColumn: TraceId
+        spanIdColumn: SpanId
+        operationNameColumn: SpanName
+        serviceNameColumn: ServiceName
+        startTimeColumn: Timestamp
+      # OTel log view over analytics.otel_logs. otelEnabled=true maps the
+      # exporter's standard log columns (Timestamp/Body/SeverityText/TraceId/…).
+      logs:
+        defaultDatabase: analytics
+        defaultTable: otel_logs
+        otelEnabled: true
+        otelVersion: latest
+        timeColumn: Timestamp
+        levelColumn: SeverityText
+        messageColumn: Body
+      # Native logs<->traces linking on trace_id (replaces Loki derivedField ->
+      # Tempo). Both directions resolve to THIS datasource (self) since events,
+      # traces, and logs all live in ClickHouse and logs carry TraceId.
+      traceToLogs:
+        datasourceUid: aenigma-clickhouse
+      logsToTrace:
+        datasourceUid: aenigma-clickhouse
     secureJsonData:
       password: ${CLICKHOUSE_PASSWORD}
