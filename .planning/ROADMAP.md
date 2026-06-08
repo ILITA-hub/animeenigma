@@ -120,7 +120,7 @@ Plans:
   3. Prometheus + Grafana remain unchanged as the metrics + alerting + rendering layer — verified by existing alerts still firing and existing metric dashboards still rendering after the consolidation. (AR-CONS-03)
 **Plans**: 3 plans (3 waves — gated cutover)
 Plans:
-- [ ] 06-01-PLAN.md — Additive: OTel Collector ClickHouse traces+logs exporters + filelog receiver + spanmetrics/servicegraph connectors→Prometheus, alongside Tempo (Wave 1, AR-CONS-01/02/03)
+- [x] 06-01-PLAN.md — Additive: OTel Collector ClickHouse traces+logs exporters + filelog receiver + spanmetrics/servicegraph connectors→Prometheus, alongside Tempo (Wave 1, AR-CONS-01/02/03)
 - [ ] 06-02-PLAN.md — Repoint: ClickHouse trace+log datasource (OTel mode) + backend-tracing.json repointed off TraceQL + render-verify, Tempo/Loki still present (Wave 2, AR-CONS-01/02)
 - [ ] 06-03-PLAN.md — Destructive cutover (non-autonomous, human render gate): remove Tempo/tempo-init/Loki/Promtail + datasources + configs, drop otlp/tempo, final AR-CONS-01/02/03 verification (Wave 3)
 **Metrics**: `UXΔ = +1 (Better)` (lower ops surface + unified querying; user benefit indirect via reliability) · `CDI = 0.10 * 21` (retires two stateful services and repoints their datasources/dashboards; new-but-compatible topology, gated/reversible until cutover — the risk is concentration onto the ClickHouse SPOF) · `MVQ = Phoenix 82%/85%` (rises-from-ashes consolidation — three stores collapse into one; the deliberate last-phase sequencing is the slop-resistant craft)
@@ -148,4 +148,4 @@ After v4.0 ships, run `/gsd-new-milestone` to start the next cycle. Prior-milest
 | 3 | v4.0 | 6/6 | Complete   | 2026-06-06 |
 | 4 | v4.0 | 4/4 | Complete   | 2026-06-06 |
 | 5 | v4.0 | 3/3 | Complete   | 2026-06-06 |
-| 6 | v4.0 | 0/3 | Planned | — |
+| 6 | v4.0 | 1/3 | In Progress|  |
