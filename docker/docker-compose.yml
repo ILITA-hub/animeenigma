@@ -946,7 +946,6 @@ volumes:
   meilisearch_data:
   prometheus_data:
   grafana_data:
-  loki_data:
   player_reports:
   # workstream raw-jp / v0.2 — library service. Both transient by spec;
   # local driver is correct. library_torrents holds in-progress + completed
@@ -954,7 +953,6 @@ volumes:
   # ffmpeg encode scratch dir before HLS segments land in MinIO (Phase 4).
   library_torrents:
   library_minio_staging:
-  tempo_data:
   # v4.0 Activity Register Phase 1 (AR-STORE-01) — ClickHouse data + backups.
   # Backups live under /var/lib/clickhouse/backup INSIDE this volume so
   # clickhouse-backup can hardlink from shadow/ (no cross-device link error).
