@@ -14,7 +14,7 @@ A logged-in user opens the home page and sees a personalized "Up Next for you" r
 - ✅ **v2.0 Recommendations Engine** — shipped 2026-05-07 (Phases 9-14)
 - ✅ **v3.0 Universal Anime Scraper** — shipped 2026-05-18 (Phases 15-20); scraper microservice with provider failover replacing HiAnime + Consumet
 - ✅ **v3.1 Scraper Self-Healing** — shipped + closed 2026-06-04 (Phases 21-28, tagged `v3.1`; reopened 24-28 + `18anime` group) — see `.planning/MILESTONES.md`
-- 🟢 **v4.0 Activity Register (ClickHouse unified event plane)** — started 2026-06-04; Phase 1 (ClickHouse foundation + EventStore swap) ✅ and Phase 2 (BE Egress Recorder) ✅ complete 2026-06-05 — async batched effect recorder live at the `WrapTransport` seam with OTel baggage; egress effect rows + per-(session,host) HLS aggregation verified in ClickHouse
+- ✅ **v4.0 Activity Register (ClickHouse unified event plane)** — shipped 2026-06-08 (Phases 1-6) — a pivotable register of every platform action and its egress/DB/cache effects on a ClickHouse wide-event store, surfaced as Grafana reports; FE→BE causation joins on one `trace_id` (live-verified, 15,904 effect↔span matches). Phase 6 consolidated trace/log/event onto ClickHouse and retired Tempo + Loki (Prometheus + Grafana kept). 16/16 requirements satisfied — see `.planning/milestones/v4.0-ROADMAP.md`
 
 ## Current Milestone: v4.0 Activity Register (ClickHouse unified event plane)
 
@@ -192,4 +192,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-05 — v4.0 Phase 2 (BE Egress Recorder) complete; egress effect recording live across catalog/scraper/streaming with per-(session,host) HLS aggregation.*
+*Last updated: 2026-06-08 — v4.0 Activity Register milestone SHIPPED (Phases 1-6); ClickHouse is the single trace/log/event plane, Tempo + Loki retired, FE→BE trace_id causation join live-verified.*
