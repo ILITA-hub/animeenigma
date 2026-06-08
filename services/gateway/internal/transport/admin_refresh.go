@@ -1,5 +1,5 @@
 // admin_refresh.go — transparent access-token refresh for browser-driven admin
-// tools (Grafana, Prometheus, Loki) served under /admin/*.
+// tools (Grafana, Prometheus) served under /admin/*.
 //
 // Why this exists:
 //

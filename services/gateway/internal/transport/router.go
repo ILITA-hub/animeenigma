@@ -176,7 +176,6 @@ func NewRouterWithCleanup(
 
 		r.HandleFunc("/grafana/*", proxyHandler.ProxyToGrafana)
 		r.HandleFunc("/prometheus/*", proxyHandler.ProxyToPrometheus)
-		r.HandleFunc("/loki/*", proxyHandler.ProxyToLoki)
 
 		// Phase 14: /admin/recs/* falls through to the web service so the Vue
 		// SPA's AdminRecs.vue route can render. Without this, chi would 404 any

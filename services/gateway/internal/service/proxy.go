@@ -136,9 +136,6 @@ func (s *ProxyService) Forward(r *http.Request, service string) (*http.Response,
 		if !strings.HasPrefix(path, "/prometheus") {
 			path = "/prometheus" + path
 		}
-	case "loki":
-		// /admin/loki/... -> /... (Loki serves from root)
-		path = strings.TrimPrefix(path, "/admin/loki")
 	case "scraper":
 		// Phase 17 Plan 03: gateway-side admin debug routes.
 		//   /api/admin/scraper/health → /scraper/health/admin (the admin
@@ -260,8 +257,6 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 		return s.serviceURLs.GrafanaService, nil
 	case "prometheus":
 		return s.serviceURLs.PrometheusService, nil
-	case "loki":
-		return s.serviceURLs.LokiService, nil
 	case "web":
 		return s.serviceURLs.WebService, nil
 	default:
