@@ -887,6 +887,59 @@
     "markNextWatched": "Mark episode {n} watched"
   },
   "admin": {
+    "feedback": {
+      "title": "User Feedback",
+      "subtitle": "Ideas, bugs and issues submitted via the site feedback button.",
+      "refresh": "Refresh",
+      "total": "{n} total",
+      "view": "View",
+      "prev": "Prev",
+      "next": "Next",
+      "empty": "No feedback yet.",
+      "errorGeneric": "Failed to load feedback.",
+      "filters": {
+        "type": "Player",
+        "category": "Category",
+        "status": "Status",
+        "allTypes": "All players",
+        "allCategories": "All categories",
+        "allStatuses": "All statuses"
+      },
+      "columns": {
+        "category": "Category",
+        "type": "Player",
+        "user": "User",
+        "description": "Description",
+        "date": "Date",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "category": {
+        "bug": "Bug",
+        "issue": "Issue",
+        "feature": "Idea",
+        "other": "Feedback"
+      },
+      "status": {
+        "new": "New",
+        "in_progress": "In progress",
+        "resolved": "Resolved"
+      },
+      "detail": {
+        "title": "Feedback details",
+        "user": "User",
+        "anime": "Anime",
+        "episode": "Episode",
+        "server": "Server",
+        "error": "Error",
+        "url": "Page URL",
+        "browser": "Browser",
+        "updatedBy": "Status changed by",
+        "console": "Console logs",
+        "network": "Network logs",
+        "html": "Page HTML"
+      }
+    },
     "recs": {
       "title": "Recs Debug",
       "breadcrumb": "User",

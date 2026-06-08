@@ -293,6 +293,20 @@ func NewRouterWithCleanup(
 			r.HandleFunc("/admin/scraper/*", proxyHandler.ProxyToScraper)
 		})
 
+		// Admin feedback browser routes — proxied to the PLAYER service (the
+		// report archive lives there). MUST be registered BEFORE the generic
+		// /admin/* → catalog group below (same "specific-before-general" gotcha
+		// as /admin/scraper/*). Both the bare list path and the wildcard are
+		// registered so `/api/admin/reports` and `/api/admin/reports/{id}...`
+		// both reach player. Player applies the same JWT + admin gates again.
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.Use(AdminRoleMiddleware)
+			r.HandleFunc("/admin/reports", proxyHandler.ProxyToPlayer)
+			r.HandleFunc("/admin/reports/*", proxyHandler.ProxyToPlayer)
+		})
+
 		// Admin routes (protected, proxied to catalog) — MUST stay AFTER the
 		// more-specific /admin/scraper/* group above.
 		r.Group(func(r chi.Router) {

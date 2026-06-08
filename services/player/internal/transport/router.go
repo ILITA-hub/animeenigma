@@ -29,6 +29,7 @@ func NewRouter(
 	overrideHandler *handler.OverrideHandler,
 	recsHandler *handler.RecsHandler,
 	adminRecsHandler *handler.AdminRecsHandler, // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02)
+	adminReportsHandler *handler.AdminReportsHandler, // admin feedback browser
 	recEventsHandler *handler.RecEventsHandler, // Phase 14 (REC-EVAL-01)
 	internalListHandler *handler.InternalListHandler, // hero-spotlight v1.0 Phase 3
 	jwtConfig authz.JWTConfig,
@@ -170,6 +171,21 @@ func NewRouter(
 			r.Get("/{user_id}", adminRecsHandler.GetAdminRecs)
 			r.Post("/{user_id}/recompute", adminRecsHandler.ForceRecompute)
 		})
+
+		// Admin feedback browser: read + triage the on-disk user feedback /
+		// error reports that SubmitReport persists. Admin-role-gated (gateway
+		// applies the same gates again — defense-in-depth). Explicit paths (not
+		// a nested Route with Get("/")) so the bare `/admin/reports` list path
+		// matches without a trailing-slash redirect.
+		if adminReportsHandler != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(jwtConfig))
+				r.Use(AdminRoleMiddleware)
+				r.Get("/admin/reports", adminReportsHandler.List)
+				r.Get("/admin/reports/{id}", adminReportsHandler.Get)
+				r.Patch("/admin/reports/{id}/status", adminReportsHandler.SetStatus)
+			})
+		}
 
 		// Phase 14 (REC-EVAL-01): public telemetry endpoint. JWT-OPTIONAL —
 		// anonymous trending CTR data is valid per CONTEXT.md §C4. The handler

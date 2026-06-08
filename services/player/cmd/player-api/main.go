@@ -373,6 +373,8 @@ func main() {
 	prefHandler := handler.NewPreferenceHandler(prefService, log)
 	overrideHandler := handler.NewOverrideHandler(log)
 	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir, cfg.Maintenance.URL)
+	// Admin feedback browser reads the same on-disk report archive (REPORTS_DIR).
+	adminReportsHandler := handler.NewAdminReportsHandler(log, cfg.Reports.Dir)
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
 
@@ -410,7 +412,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, recEventsHandler, internalListHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, adminReportsHandler, recEventsHandler, internalListHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

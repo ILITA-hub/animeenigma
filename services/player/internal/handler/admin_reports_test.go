@@ -1,0 +1,205 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/go-chi/chi/v5"
+)
+
+// writeReport drops a minimal report JSON into dir using the production
+// filename shape `{ts}_{user}_{type}.json`.
+func writeReport(t *testing.T, dir, ts, user, ptype string, body map[string]interface{}) string {
+	t.Helper()
+	if body == nil {
+		body = map[string]interface{}{}
+	}
+	body["username"] = user
+	body["player_type"] = ptype
+	body["timestamp"] = ts
+	data, _ := json.MarshalIndent(body, "", "  ")
+	name := ts + "_" + user + "_" + ptype + ".json"
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+	return strings.TrimSuffix(name, ".json")
+}
+
+func newTestReportsHandler(t *testing.T) (*AdminReportsHandler, string) {
+	t.Helper()
+	dir := t.TempDir()
+	return NewAdminReportsHandler(logger.Default(), dir), dir
+}
+
+type listResp struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Items    []reportMeta `json:"items"`
+		Total    int          `json:"total"`
+		Page     int          `json:"page"`
+		PageSize int          `json:"page_size"`
+	} `json:"data"`
+}
+
+func TestAdminReports_List_SortFilterPaginate(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	writeReport(t, dir, "2026-06-01T10-00-00", "alice", "feedback", map[string]interface{}{"category": "bug", "description": "old bug"})
+	writeReport(t, dir, "2026-06-03T10-00-00", "bob", "feedback", map[string]interface{}{"category": "feature", "description": "new idea"})
+	writeReport(t, dir, "2026-06-02T10-00-00", "carol", "kodik", map[string]interface{}{"category": "issue", "description": "mid issue"})
+	// sidecar status + decoy files must be ignored by the listing.
+	_ = os.WriteFile(filepath.Join(dir, statusFileName), []byte(`{}`), 0600)
+	_ = os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0600)
+
+	// Unfiltered: newest first by timestamp prefix.
+	r := httptest.NewRequest(http.MethodGet, "/api/admin/reports", nil)
+	w := httptest.NewRecorder()
+	h.List(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var resp listResp
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v (body=%s)", err, w.Body.String())
+	}
+	if resp.Data.Total != 3 {
+		t.Fatalf("total = %d, want 3", resp.Data.Total)
+	}
+	if resp.Data.Items[0].Username != "bob" {
+		t.Errorf("first item = %q, want bob (newest)", resp.Data.Items[0].Username)
+	}
+	if resp.Data.Items[0].Status != "new" {
+		t.Errorf("default status = %q, want new", resp.Data.Items[0].Status)
+	}
+
+	// Category filter.
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?category=bug", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	resp = listResp{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Items[0].Username != "alice" {
+		t.Errorf("category filter: total=%d items=%v", resp.Data.Total, resp.Data.Items)
+	}
+
+	// Type filter.
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?type=kodik", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	resp = listResp{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Items[0].PlayerType != "kodik" {
+		t.Errorf("type filter: total=%d", resp.Data.Total)
+	}
+
+	// Pagination.
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?page=1&page_size=2", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	resp = listResp{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 3 || len(resp.Data.Items) != 2 {
+		t.Errorf("paginate: total=%d items=%d, want total=3 items=2", resp.Data.Total, len(resp.Data.Items))
+	}
+}
+
+func TestAdminReports_SetStatus_RoundTripAndFilter(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	id := writeReport(t, dir, "2026-06-05T12-00-00", "dave", "feedback", map[string]interface{}{"category": "bug", "description": "x"})
+
+	// PATCH status -> resolved.
+	body := strings.NewReader(`{"status":"resolved"}`)
+	r := httptest.NewRequest(http.MethodPatch, "/api/admin/reports/"+id+"/status", body)
+	r = withURLParam(r, "id", id)
+	r = r.WithContext(authz.ContextWithClaims(r.Context(), &authz.Claims{Username: "admin1"}))
+	w := httptest.NewRecorder()
+	h.SetStatus(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("set status code = %d (body=%s)", w.Code, w.Body.String())
+	}
+
+	// Sidecar file should reflect it.
+	raw, _ := os.ReadFile(filepath.Join(dir, statusFileName))
+	if !strings.Contains(string(raw), "resolved") || !strings.Contains(string(raw), "admin1") {
+		t.Fatalf("sidecar missing status/updater: %s", raw)
+	}
+
+	// List now filters by status=resolved.
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?status=resolved", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	var resp listResp
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Items[0].Status != "resolved" {
+		t.Errorf("status filter: total=%d", resp.Data.Total)
+	}
+}
+
+func TestAdminReports_SetStatus_InvalidEnum(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	id := writeReport(t, dir, "2026-06-05T12-00-00", "dave", "feedback", nil)
+	r := httptest.NewRequest(http.MethodPatch, "/x", strings.NewReader(`{"status":"banana"}`))
+	r = withURLParam(r, "id", id)
+	w := httptest.NewRecorder()
+	h.SetStatus(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("invalid status code = %d, want 400", w.Code)
+	}
+}
+
+func TestAdminReports_PathTraversalRejected(t *testing.T) {
+	h, _ := newTestReportsHandler(t)
+	for _, bad := range []string{"../secret", "..%2fsecret", "a/b", `a\b`, "_status", "with.dot"} {
+		r := httptest.NewRequest(http.MethodGet, "/x", nil)
+		r = withURLParam(r, "id", bad)
+		w := httptest.NewRecorder()
+		h.Get(w, r)
+		if w.Code == http.StatusOK {
+			t.Errorf("id %q: expected rejection, got 200", bad)
+		}
+	}
+}
+
+func TestAdminReports_Get_FullPayload(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	id := writeReport(t, dir, "2026-06-05T12-00-00", "erin", "feedback", map[string]interface{}{
+		"category":    "feature",
+		"description": "full description here",
+		"page_html":   "<html></html>",
+	})
+	r := httptest.NewRequest(http.MethodGet, "/api/admin/reports/"+id, nil)
+	r = withURLParam(r, "id", id)
+	w := httptest.NewRecorder()
+	h.Get(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get code = %d", w.Code)
+	}
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data["page_html"] != "<html></html>" {
+		t.Errorf("detail missing page_html: %v", resp.Data["page_html"])
+	}
+	if resp.Data["status"] != "new" {
+		t.Errorf("detail status = %v, want new", resp.Data["status"])
+	}
+	if resp.Data["id"] != id {
+		t.Errorf("detail id = %v, want %s", resp.Data["id"], id)
+	}
+}
+
+// withURLParam injects a chi URL param into the request context for handler
+// unit tests (mirrors how chi populates it during routing).
+func withURLParam(r *http.Request, key, val string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add(key, val)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+}

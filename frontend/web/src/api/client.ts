@@ -3,6 +3,7 @@ import { hookAxiosDiagnostics } from '@/utils/diagnostics'
 import { getOrCreateAnonId } from '@/utils/anonId'
 import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/preference'
 import type { CreateJobPayload } from '@/types/library'
+import type { FeedbackListResponse, FeedbackDetail, FeedbackStatus } from '@/types/feedback'
 import { newTraceparent } from '@/analytics/traceparent'
 import { stampTrace } from '@/analytics/traceContext'
 import { analytics } from '@/analytics'
@@ -548,6 +549,14 @@ export const adminApi = {
     apiClient.post<CollectionItem | { data: CollectionItem }>(`/admin/collections/${id}/items`, body),
   removeCollectionItem: (id: string, animeId: string) =>
     apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
+  // Admin feedback browser — user feedback/error reports (player service,
+  // /api/admin/reports). Responses use the standard {success,data} envelope.
+  listReports: (params?: { category?: string; status?: string; type?: string; page?: number; page_size?: number }) =>
+    apiClient.get<FeedbackListResponse | { data: FeedbackListResponse }>('/admin/reports', { params }),
+  getReport: (id: string) =>
+    apiClient.get<FeedbackDetail | { data: FeedbackDetail }>(`/admin/reports/${encodeURIComponent(id)}`),
+  setReportStatus: (id: string, status: FeedbackStatus) =>
+    apiClient.patch(`/admin/reports/${encodeURIComponent(id)}/status`, { status }),
 }
 
 // Phase 5 (LIB-09) — Raw Library admin API. All routes are admin-gated

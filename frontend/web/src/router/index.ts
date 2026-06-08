@@ -166,6 +166,13 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // Admin feedback browser — read + triage user feedback / error reports.
+    path: '/admin/feedback',
+    name: 'admin-feedback',
+    component: () => import('@/views/admin/AdminFeedback.vue'),
+    meta: { titleKey: 'admin.feedback.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     // Phase 17 (UX-33) — public editorial collection detail page.
     path: '/collections/:slug',
     name: 'collection-detail',

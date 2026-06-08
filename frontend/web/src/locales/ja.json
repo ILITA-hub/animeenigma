@@ -887,6 +887,59 @@
     "markNextWatched": "第{n}話を視聴済みにする"
   },
   "admin": {
+    "feedback": {
+      "title": "ユーザーフィードバック",
+      "subtitle": "フィードバックボタンから寄せられたアイデア・バグ・問題。",
+      "refresh": "更新",
+      "total": "合計 {n} 件",
+      "view": "表示",
+      "prev": "前へ",
+      "next": "次へ",
+      "empty": "まだフィードバックはありません。",
+      "errorGeneric": "フィードバックの読み込みに失敗しました。",
+      "filters": {
+        "type": "プレイヤー",
+        "category": "カテゴリ",
+        "status": "ステータス",
+        "allTypes": "すべてのプレイヤー",
+        "allCategories": "すべてのカテゴリ",
+        "allStatuses": "すべてのステータス"
+      },
+      "columns": {
+        "category": "カテゴリ",
+        "type": "プレイヤー",
+        "user": "ユーザー",
+        "description": "説明",
+        "date": "日付",
+        "status": "ステータス",
+        "actions": "操作"
+      },
+      "category": {
+        "bug": "バグ",
+        "issue": "問題",
+        "feature": "アイデア",
+        "other": "フィードバック"
+      },
+      "status": {
+        "new": "新規",
+        "in_progress": "対応中",
+        "resolved": "解決済み"
+      },
+      "detail": {
+        "title": "フィードバックの詳細",
+        "user": "ユーザー",
+        "anime": "アニメ",
+        "episode": "エピソード",
+        "server": "サーバー",
+        "error": "エラー",
+        "url": "ページURL",
+        "browser": "ブラウザ",
+        "updatedBy": "ステータス変更者",
+        "console": "コンソールログ",
+        "network": "ネットワークログ",
+        "html": "ページHTML"
+      }
+    },
     "recs": {
       "title": "Recs Debug",
       "breadcrumb": "User",

@@ -68,6 +68,7 @@ type testGateway struct {
 	router        http.Handler
 	scraperGotURL chan string
 	catalogGotURL chan string
+	playerGotURL  chan string
 	teardown      func()
 }
 
@@ -86,6 +87,12 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"success":true}`))
 	}))
+	playerGot := make(chan string, 4)
+	playerBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		playerGot <- r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
+	}))
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{Host: "127.0.0.1", Port: 0},
@@ -94,6 +101,7 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 			AuthService:    "http://auth-unused:8080", // JWT validation is in-process; no auth call needed for non-ak_ tokens
 			CatalogService: catalogBackend.URL,
 			ScraperService: scraperBackend.URL,
+			PlayerService:  playerBackend.URL,
 		},
 		RateLimit: config.RateLimitConfig{
 			RequestsPerSecond: 1000, // High so test traffic never trips it
@@ -119,9 +127,11 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 		router:        router,
 		scraperGotURL: scraperGot,
 		catalogGotURL: catalogGot,
+		playerGotURL:  playerGot,
 		teardown: func() {
 			scraperBackend.Close()
 			catalogBackend.Close()
+			playerBackend.Close()
 		},
 	}
 }
@@ -374,5 +384,54 @@ func TestRouter_AdminScraperRoutedBeforeCatalogAdmin(t *testing.T) {
 	case got := <-gw.catalogGotURL:
 		t.Errorf("catalog backend received the request — /admin/scraper/* must precede /admin/* in the router: %q", got)
 	default:
+	}
+}
+
+// TestRouter_AdminReportsRoutedToPlayer — the admin feedback browser lives in
+// the player service, so /api/admin/reports (and its sub-paths) MUST reach
+// player, not the generic /admin/* → catalog group. Spies on both backends so
+// a route-ordering regression fails loudly.
+func TestRouter_AdminReportsRoutedToPlayer(t *testing.T) {
+	gw := buildTestGatewayRouter(t)
+	defer gw.teardown()
+
+	token := signTestJWT(t, authz.RoleAdmin)
+	for _, path := range []string{"/api/admin/reports", "/api/admin/reports/2026-06-05T12-00-00_alice_feedback"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.RemoteAddr = "10.0.0.5:1234"
+		rec := httptest.NewRecorder()
+		gw.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("path %q: status = %d; want 200 (body=%q)", path, rec.Code, rec.Body.String())
+		}
+		select {
+		case <-gw.playerGotURL:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("path %q: player backend never received the request (route-ordering regression?)", path)
+		}
+		select {
+		case got := <-gw.catalogGotURL:
+			t.Errorf("path %q: catalog received it — /admin/reports* must precede /admin/* → catalog: %q", path, got)
+		default:
+		}
+	}
+}
+
+// TestRouter_AdminReportsRequiresAdmin — non-admin JWT must be 403 at the gateway.
+func TestRouter_AdminReportsRequiresAdmin(t *testing.T) {
+	gw := buildTestGatewayRouter(t)
+	defer gw.teardown()
+
+	token := signTestJWT(t, authz.RoleUser)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/reports", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.RemoteAddr = "10.0.0.6:1234"
+	rec := httptest.NewRecorder()
+	gw.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("non-admin status = %d; want 403", rec.Code)
 	}
 }
