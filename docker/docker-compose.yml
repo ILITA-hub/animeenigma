@@ -361,13 +361,29 @@ services:
     container_name: animeenigma-otel-collector
     restart: unless-stopped
     command: ["--config=/etc/otel/collector-config.yaml"]
+    environment:
+      # v4.0 Phase 6 (06-01): the collector now exports to ClickHouse. Its config
+      # reads ${env:CLICKHOUSE_USER}/${env:CLICKHOUSE_PASSWORD} from this container
+      # env. Mirror the grafana/clickhouse :- default pattern; must match the
+      # clickhouse service creds. No new secret committed — supplied from docker/.env.
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-analytics}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-changeme}
     volumes:
       - ../infra/otel/collector-config.yaml:/etc/otel/collector-config.yaml:ro
+      # filelog receiver reads docker json-file logs (mirrors promtail's mount).
+      # Files, not the docker.sock — read-only.
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     ports:
       - "127.0.0.1:4317:4317" # OTLP gRPC (services export here)
       - "127.0.0.1:4318:4318" # OTLP HTTP
     depends_on:
+      # Tempo STAYS during the gated cutover (06-03 removes it). ClickHouse +
+      # Prometheus added as the new export targets.
       tempo:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      prometheus:
         condition: service_healthy
 
   grafana:
