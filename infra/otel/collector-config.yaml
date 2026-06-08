@@ -62,10 +62,11 @@ processors:
 # pipeline and produce a metrics pipeline.
 connectors:
   spanmetrics:
-    # Preserve the Phase-3 per-operation RED dimension (mirrors tempo.yaml:59).
+    # The OTel spanmetrics connector ALWAYS emits service.name + span.name as
+    # built-in dimensions (listing them here is a "duplicate dimension" config
+    # error, unlike Tempo's processor which needs them spelled out). Only the
+    # EXTRA Phase-3 per-operation RED dimension goes here (mirrors tempo.yaml:59).
     dimensions:
-      - name: service.name
-      - name: span.name
       - name: operation
   servicegraph:
     dimensions: [service.name]
