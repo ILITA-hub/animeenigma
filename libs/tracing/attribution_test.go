@@ -92,15 +92,15 @@ func TestOperationResolve(t *testing.T) {
 		op := CaptureOperationPCs(ctx)
 		got := op.Resolve()
 		// origin "scheduler.refresh" with no service/job hint becomes a
-		// goroutine(<origin>) shaped label.
+		// goroutine/<origin> shaped label.
 		if got == "" {
 			t.Fatalf("resolve returned empty string; must never be empty")
 		}
 		if !strings.Contains(got, "scheduler.refresh") {
 			t.Fatalf("expected origin name to carry %q, got %q", "scheduler.refresh", got)
 		}
-		if !strings.HasPrefix(got, "goroutine(") && !strings.HasPrefix(got, "scheduled_job(") {
-			t.Fatalf("expected goroutine(...)/scheduled_job(...) shape, got %q", got)
+		if got != "goroutine/scheduler.refresh" {
+			t.Fatalf("expected goroutine/<origin> shape, got %q", got)
 		}
 	})
 
@@ -108,11 +108,8 @@ func TestOperationResolve(t *testing.T) {
 		ctx := SeedBaggage(context.Background(), "scheduled_job:nightly-p95", "")
 		op := CaptureOperationPCs(ctx)
 		got := op.Resolve()
-		if !strings.HasPrefix(got, "scheduled_job(") {
-			t.Fatalf("expected scheduled_job(...) shape for a job origin, got %q", got)
-		}
-		if !strings.Contains(got, "nightly-p95") {
-			t.Fatalf("expected job name in origin label, got %q", got)
+		if got != "scheduled_job/nightly-p95" {
+			t.Fatalf("expected scheduled_job/<name> shape for a job origin, got %q", got)
 		}
 	})
 
@@ -122,8 +119,8 @@ func TestOperationResolve(t *testing.T) {
 		if got == "" {
 			t.Fatalf("resolve over an empty ctx returned empty string; must be non-empty")
 		}
-		if !strings.HasPrefix(got, "goroutine(") && !strings.HasPrefix(got, "scheduled_job(") {
-			t.Fatalf("expected goroutine(unknown)-shaped default, got %q", got)
+		if got != "goroutine/unknown" {
+			t.Fatalf("expected goroutine/unknown default, got %q", got)
 		}
 	})
 

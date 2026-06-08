@@ -40,8 +40,8 @@ func CaptureOperationPCs(ctx context.Context) Operation {
 //
 //  1. nearest */internal/service/* stack frame, normalized to "<pkg>.<Func>";
 //  2. else the baggage operation (ReadBaggage), if non-empty;
-//  3. else an origin name shaped goroutine(<name>) / scheduled_job(<name>),
-//     defaulting to goroutine(unknown).
+//  3. else an origin name shaped goroutine/<name> / scheduled_job/<name>,
+//     defaulting to goroutine/unknown.
 //
 // It runs on the async Producer side because runtime.CallersFrames symbol
 // resolution is materially more expensive than the PC capture (Pitfall 2).
@@ -138,9 +138,12 @@ func serviceLabelFromPath(pkgPath string) string {
 }
 
 // originName builds the final never-empty fallback label from the origin baggage
-// member: scheduled_job(<name>) when the origin denotes a scheduled job,
-// otherwise goroutine(<name>). Defaults to goroutine(unknown) when no origin is
-// present.
+// member: scheduled_job/<name> when the origin denotes a scheduled job,
+// otherwise goroutine/<name>. Defaults to goroutine/unknown when no origin is
+// present. The "<channel>/<purpose>" slash shape (vs the older parenthesised
+// form) makes a frame-less background effect read like a path — the purpose is
+// the thing after the slash — so a seeded origin renders e.g.
+// "scheduled_job/recs-precompute" or "goroutine/spotlight-snapshot".
 func originName(ctx context.Context) string {
 	origin := "unknown"
 	if ctx != nil {
@@ -149,9 +152,28 @@ func originName(ctx context.Context) string {
 		}
 	}
 	if isScheduledJobOrigin(origin) {
-		return "scheduled_job(" + strings.TrimPrefix(origin, "scheduled_job:") + ")"
+		return "scheduled_job/" + trimJobPrefix(origin)
 	}
-	return "goroutine(" + origin + ")"
+	return "goroutine/" + strings.TrimPrefix(origin, "goroutine:")
+}
+
+// FallbackOperationName returns the never-empty origin-shaped operation label
+// for a ctx that carries no resolvable service-frame and no baggage operation —
+// e.g. "goroutine/spotlight-snapshot", "scheduled_job/recs-precompute", or the
+// "goroutine/unknown" default. Effect resolution (Operation.Resolve) uses it as
+// its last fallback; the cache aggregator calls it directly so a frame-less
+// cache effect carries the SAME shape as a frame-less egress/db effect (one
+// consistent register dimension instead of a bare raw origin).
+func FallbackOperationName(ctx context.Context) string {
+	return originName(ctx)
+}
+
+// trimJobPrefix strips the scheduled-job origin prefix ("scheduled_job:" or
+// "job:") so only the bare purpose remains for the slash label.
+func trimJobPrefix(origin string) string {
+	origin = strings.TrimPrefix(origin, "scheduled_job:")
+	origin = strings.TrimPrefix(origin, "job:")
+	return origin
 }
 
 // isScheduledJobOrigin reports whether an origin label denotes a background

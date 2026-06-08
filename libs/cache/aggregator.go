@@ -94,15 +94,15 @@ func (a *CacheAggregator) Observe(ctx context.Context, keyClass, result string) 
 	if a.sink == nil {
 		return
 	}
-	// Cheap ctx read OUTSIDE the lock. ReadBaggage falls back to the origin-shaped
-	// label when no operation is seeded, so op is effectively never empty; guard
-	// anyway so a row never carries an empty operation.
-	origin, op := tracing.ReadBaggage(ctx)
+	// Cheap ctx read OUTSIDE the lock. When no operation is seeded we fall back to
+	// the SAME origin-shaped label the effect resolver uses
+	// (tracing.FallbackOperationName → "goroutine/<purpose>" /
+	// "scheduled_job/<purpose>", defaulting to "goroutine/unknown"), so a
+	// frame-less cache effect reads identically to a frame-less egress/db effect
+	// instead of leaking a bare raw origin or the literal "unknown".
+	_, op := tracing.ReadBaggage(ctx)
 	if op == "" {
-		op = origin
-	}
-	if op == "" {
-		op = "unknown"
+		op = tracing.FallbackOperationName(ctx)
 	}
 	now := a.now()
 	key := counterKey{keyClass: keyClass, result: result, operation: op}

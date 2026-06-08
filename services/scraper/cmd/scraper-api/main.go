@@ -563,6 +563,10 @@ func main() {
 	// gauges + provider_probe_last_tick_timestamp{provider} heartbeat on
 	// every tick (15 min ± 20% jitter).
 	probeCtx, probeCancel := context.WithCancel(context.Background())
+	// Seed a named origin so the probe's egress effects attribute to
+	// "scheduled_job/scraper-health-probe" instead of "goroutine/unknown" (the
+	// probe runs off any request, so its ctx carries no SeedMiddleware baggage).
+	probeCtx = tracing.SeedBaggage(probeCtx, "scheduled_job:scraper-health-probe", "")
 	for _, p := range providers {
 		runner := health.NewProbeRunner(p, health.DefaultGoldenPool, cache, log)
 		go runner.Start(probeCtx)

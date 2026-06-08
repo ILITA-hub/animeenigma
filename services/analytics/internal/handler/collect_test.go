@@ -210,3 +210,80 @@ func TestCollect_SkipsInvalidEventsButAcceptsRest(t *testing.T) {
 		t.Fatalf("expected 1 valid event, got %d", sink.count())
 	}
 }
+
+func TestNormalizePath(t *testing.T) {
+	cases := map[string]string{
+		"/anime/3b9f1c2d-4e5a-6b7c-8d9e-0f1a2b3c4d5e": "/anime/{id}",
+		"/anime/12345":                "/anime/{id}",
+		"/anime/12345/episode/7":      "/anime/{id}/episode/{id}",
+		"/home":                       "/home",
+		"/anime/12345?tab=info#top":   "/anime/{id}",
+		"":                            "",
+		"/":                           "/",
+	}
+	for in, want := range cases {
+		if got := normalizePath(in); got != want {
+			t.Errorf("normalizePath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestClickstreamOperation(t *testing.T) {
+	cases := []struct {
+		etype, path, elTag, name string
+		want                     string
+	}{
+		{"pageview", "/anime/12345", "", "", "pageview /anime/{id}"},
+		{"heartbeat", "/home", "", "", "heartbeat /home"},
+		{"click", "", "BUTTON", "", "click button"},
+		{"click", "", "", "", "click"},
+		{"identify", "", "", "", "identify"},
+		{"custom", "", "", "video_play", "custom video_play"},
+		{"custom", "", "", "", "custom"},
+		{"", "/x", "", "", ""},
+		{"weird", "", "", "", "weird"},
+	}
+	for _, c := range cases {
+		if got := clickstreamOperation(c.etype, c.path, c.elTag, c.name); got != c.want {
+			t.Errorf("clickstreamOperation(%q,%q,%q,%q) = %q, want %q", c.etype, c.path, c.elTag, c.name, got, c.want)
+		}
+	}
+}
+
+// TestCollect_DerivesClickstreamOperation: an autocapture pageview with no
+// explicit register operation gets a meaningful derived dimension (never empty).
+func TestCollect_DerivesClickstreamOperation(t *testing.T) {
+	sink := &capturingSink{}
+	h := NewCollectHandler(sink, "salt")
+	body := `{"anonymous_id":"a1","session_id":"s1","events":[
+	  {"event_type":"pageview","path":"/anime/3b9f1c2d-4e5a-6b7c-8d9e-0f1a2b3c4d5e"}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/collect", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if sink.count() != 1 {
+		t.Fatalf("expected 1 event, got %d", sink.count())
+	}
+	if got := sink.events[0].Operation; got != "pageview /anime/{id}" {
+		t.Fatalf("derived Operation = %q, want %q", got, "pageview /anime/{id}")
+	}
+}
+
+// TestCollect_ExplicitOperationWins: an event carrying an explicit operation is
+// not overridden by the derivation.
+func TestCollect_ExplicitOperationWins(t *testing.T) {
+	sink := &capturingSink{}
+	h := NewCollectHandler(sink, "salt")
+	body := `{"anonymous_id":"a1","session_id":"s1","events":[
+	  {"event_type":"custom","event_name":"x","source":"fe","operation":"explicit op"}
+	]}`
+	req := httptest.NewRequest(http.MethodPost, "/collect", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if sink.count() != 1 {
+		t.Fatalf("expected 1 event, got %d", sink.count())
+	}
+	if got := sink.events[0].Operation; got != "explicit op" {
+		t.Fatalf("Operation = %q, want explicit op", got)
+	}
+}

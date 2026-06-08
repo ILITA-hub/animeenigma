@@ -8,6 +8,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 )
 
 // Aggregator-level constants — HSB-BE-03 (per-card) and HSB-BE-04 (overall).
@@ -196,7 +197,11 @@ func (a *Aggregator) Resolve(ctx context.Context, userID *string) (*Response, er
 	// ≥1 card to avoid baking an empty result into a 24h snapshot that
 	// would mask a transient zero-card outage.
 	if len(cards) > 0 {
-		go a.saveSnapshot(context.Background(), userID, resp)
+		// Detached ctx (request ctx is about to be cancelled), but seed a named
+		// origin so the snapshot's cache effect attributes to
+		// "goroutine/spotlight-snapshot [success]" instead of the bare
+		// "unknown [success]".
+		go a.saveSnapshot(tracing.SeedBaggage(context.Background(), "spotlight-snapshot", ""), userID, resp)
 	}
 
 	a.log.Infow("spotlight.aggregated",

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	"gorm.io/gorm"
 )
 
@@ -182,6 +183,10 @@ func (o *UserOrchestrator) TriggerForUser(ctx context.Context, userID UserID) er
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), triggerPrecomputeTimeout)
 		defer cancel()
+		// Seed a named origin so frame-less db_writes from this detached
+		// fire-and-forget precompute attribute to "goroutine/recs-trigger"
+		// instead of "goroutine/unknown".
+		bgCtx = tracing.SeedBaggage(bgCtx, "recs-trigger", "")
 
 		if err := o.precompute.RunForUser(bgCtx, userID); err != nil {
 			o.log.Errorw("recs trigger precompute failed", "user_id", userID, "error", err)

@@ -245,7 +245,10 @@ func main() {
 		)
 		// 60-minute cadence per CONTEXT.md decisions §Population cron.
 		// Boot tick runs immediately so cold start has data within seconds.
-		popOrch.Start(cronCtx, 60*time.Minute)
+		// Seed a named origin so frame-less db_writes on this cron attribute to
+		// "scheduled_job/recs-population" instead of "goroutine/unknown" (the
+		// resolvable signals.* stack-frame labels still win where present).
+		popOrch.Start(tracing.SeedBaggage(cronCtx, "scheduled_job:recs-population", ""), 60*time.Minute)
 	}
 
 	// Phase 11: rec engine USER signal cron (6-hour ticker) + debounced
@@ -271,7 +274,9 @@ func main() {
 		// 6-hour cadence per CONTEXT.md decisions §User-Signal Cron.
 		// Boot tick runs immediately so logged-in users get fresh signals
 		// within seconds of redeploy.
-		userOrch.Start(cronCtx, 6*time.Hour)
+		// Seeded origin → frame-less writes attribute to
+		// "scheduled_job/recs-user-precompute" instead of "goroutine/unknown".
+		userOrch.Start(tracing.SeedBaggage(cronCtx, "scheduled_job:recs-user-precompute", ""), 6*time.Hour)
 	}
 
 	// Phase 13 (REC-SIG-06): rec engine CO-OCCURRENCE cron (24-hour ticker).
@@ -281,7 +286,9 @@ func main() {
 	// runtime). Per CONTEXT.md decisions §B4.
 	{
 		coOccOrch := recs.NewCoOccurrenceOrchestrator(db.DB, log)
-		coOccOrch.Start(cronCtx, 24*time.Hour)
+		// Seeded origin → frame-less writes attribute to
+		// "scheduled_job/recs-cooccurrence" instead of "goroutine/unknown".
+		coOccOrch.Start(tracing.SeedBaggage(cronCtx, "scheduled_job:recs-cooccurrence", ""), 24*time.Hour)
 	}
 
 	// Phase 3 backfill: synthesize watch_progress.completed=true rows for legacy

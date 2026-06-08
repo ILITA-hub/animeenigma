@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -159,6 +160,16 @@ func (h *CollectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if feOperation == "" {
 			feOperation = capString(we.Action)
 		}
+		// AR-FE-01b: autocapture events (pageview/click/heartbeat/identify) and
+		// bare custom track()s carry no explicit operation/action, which would
+		// leave the register `dimension` empty in the pivot. Derive a meaningful,
+		// bounded-cardinality label from the event type + a normalized
+		// path/element/name discriminator (UUID/numeric id segments collapse to
+		// {id}, mirroring the BE "catalog GET /api/anime/{id}" style) so no
+		// clickstream row ships an empty dimension.
+		if feOperation == "" {
+			feOperation = capString(clickstreamOperation(we.EventType, we.Path, we.ElTag, we.EventName))
+		}
 
 		ev := domain.Event{
 			EventID:     uuid.NewString(),
@@ -224,6 +235,68 @@ func propStr(pm map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+// uuidSegment matches a canonical UUID path segment; numericSegment matches a
+// purely numeric one. Both are collapsed to "{id}" by normalizePath so a
+// per-anime / per-id route does not explode the clickstream dimension's
+// cardinality.
+var (
+	uuidSegment    = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	numericSegment = regexp.MustCompile(`^\d+$`)
+)
+
+// normalizePath strips any query/hash and collapses UUID/numeric path segments
+// to "{id}", so "/anime/3b9f…-uuid" and "/anime/123" both become "/anime/{id}".
+// An empty/whitespace path returns "".
+func normalizePath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if i := strings.IndexAny(p, "?#"); i >= 0 {
+		p = p[:i]
+	}
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		if uuidSegment.MatchString(s) || numericSegment.MatchString(s) {
+			segs[i] = "{id}"
+		}
+	}
+	return strings.Join(segs, "/")
+}
+
+// clickstreamOperation derives a meaningful, low-cardinality `operation`
+// (register dimension) for an autocapture clickstream event that carried no
+// explicit register operation/action. It mirrors the BE effect style: the event
+// type plus a normalized discriminator. An empty event type yields "" (such an
+// event fails Validate and is dropped upstream anyway).
+func clickstreamOperation(eventType, path, elTag, eventName string) string {
+	switch eventType {
+	case "pageview":
+		return joinOperation("pageview", normalizePath(path))
+	case "heartbeat":
+		return joinOperation("heartbeat", normalizePath(path))
+	case "click":
+		return joinOperation("click", strings.ToLower(strings.TrimSpace(elTag)))
+	case "identify":
+		return "identify"
+	case "custom":
+		return joinOperation("custom", strings.TrimSpace(eventName))
+	case "":
+		return ""
+	default:
+		return eventType
+	}
+}
+
+// joinOperation joins a prefix and an optional suffix with a single space,
+// returning just the prefix when the suffix is empty.
+func joinOperation(prefix, suffix string) string {
+	if suffix == "" {
+		return prefix
+	}
+	return prefix + " " + suffix
 }
 
 // capString truncates a public-beacon string to maxFieldLen runes.

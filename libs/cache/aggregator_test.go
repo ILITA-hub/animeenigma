@@ -99,7 +99,7 @@ func TestAggregatorCoarseOpNeverEmpty(t *testing.T) {
 	agg := NewCacheAggregator(sink, 0, 0)
 
 	// Baggage with origin only, no operation.
-	ctx := tracing.SeedBaggage(context.Background(), "scheduled_job(refresh)", "")
+	ctx := tracing.SeedBaggage(context.Background(), "scheduled_job:refresh", "")
 	agg.Observe(ctx, "anime:top", "hit")
 	agg.flushAll()
 
@@ -109,6 +109,11 @@ func TestAggregatorCoarseOpNeverEmpty(t *testing.T) {
 	}
 	if got[0].Operation == "" {
 		t.Fatalf("Operation must fall back to a non-empty value, got empty")
+	}
+	// The frame-less fallback now carries the shared origin-shaped label +
+	// cache result, identical to the effect resolver's shape.
+	if got[0].Operation != "scheduled_job/refresh [hit]" {
+		t.Fatalf("Operation = %q, want %q", got[0].Operation, "scheduled_job/refresh [hit]")
 	}
 }
 
