@@ -23,7 +23,7 @@ function mountModal() {
         Modal: { template: '<div><slot /></div>' },
         Button: { template: '<button><slot /></button>' },
       },
-      mocks: { $t: (k: string, a?: unknown, b?: Record<string, unknown>) => k },
+      mocks: { $t: (k: string) => k },
     },
   })
 }
