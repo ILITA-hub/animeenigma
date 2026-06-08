@@ -169,6 +169,7 @@ func NewRouterWithCleanup(
     <h1>AnimeEnigma Admin</h1>
     <a href="/admin/grafana/">Grafana - Metrics & Dashboards</a>
     <a href="/admin/recs/">Recommendation Engine Debugger</a>
+    <a href="/admin/feedback">User Feedback - Ideas & Bug Reports</a>
 </body>
 </html>`))
 		})
@@ -192,6 +193,17 @@ func NewRouterWithCleanup(
 		// + AdminRoleMiddleware above.
 		r.HandleFunc("/collections", proxyHandler.ProxyToWeb)
 		r.HandleFunc("/collections/*", proxyHandler.ProxyToWeb)
+
+		// Admin feedback browser SPA route (/admin/feedback) — same
+		// fall-through as /recs and /collections so AdminFeedback.vue renders.
+		// Without it chi 404s the browser navigation before the SPA loads.
+		r.HandleFunc("/feedback", proxyHandler.ProxyToWeb)
+		r.HandleFunc("/feedback/*", proxyHandler.ProxyToWeb)
+
+		// Raw-library admin SPA route (/admin/raw-library) — same fall-through
+		// (was missing, so the page 404'd at the gateway).
+		r.HandleFunc("/raw-library", proxyHandler.ProxyToWeb)
+		r.HandleFunc("/raw-library/*", proxyHandler.ProxyToWeb)
 	})
 
 	// API routes

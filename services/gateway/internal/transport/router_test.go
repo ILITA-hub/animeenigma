@@ -69,6 +69,7 @@ type testGateway struct {
 	scraperGotURL chan string
 	catalogGotURL chan string
 	playerGotURL  chan string
+	webGotURL     chan string
 	teardown      func()
 }
 
@@ -93,6 +94,12 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
 	}))
+	webGot := make(chan string, 4)
+	webBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		webGot <- r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html></html>`))
+	}))
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{Host: "127.0.0.1", Port: 0},
@@ -102,6 +109,7 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 			CatalogService: catalogBackend.URL,
 			ScraperService: scraperBackend.URL,
 			PlayerService:  playerBackend.URL,
+			WebService:     webBackend.URL,
 		},
 		RateLimit: config.RateLimitConfig{
 			RequestsPerSecond: 1000, // High so test traffic never trips it
@@ -128,10 +136,12 @@ func buildTestGatewayRouter(t *testing.T) *testGateway {
 		scraperGotURL: scraperGot,
 		catalogGotURL: catalogGot,
 		playerGotURL:  playerGot,
+		webGotURL:     webGot,
 		teardown: func() {
 			scraperBackend.Close()
 			catalogBackend.Close()
 			playerBackend.Close()
+			webBackend.Close()
 		},
 	}
 }
@@ -415,6 +425,34 @@ func TestRouter_AdminReportsRoutedToPlayer(t *testing.T) {
 		case got := <-gw.catalogGotURL:
 			t.Errorf("path %q: catalog received it — /admin/reports* must precede /admin/* → catalog: %q", path, got)
 		default:
+		}
+	}
+}
+
+// TestRouter_AdminFeedbackPageFallsThroughToWeb — the browser route
+// /admin/feedback (NOT /api/admin/...) must fall through to the web SPA so
+// AdminFeedback.vue renders. Without the fall-through chi 404s the navigation
+// before the SPA loads (the bug that hid the page). Mirrors the /recs and
+// /collections fall-throughs.
+func TestRouter_AdminFeedbackPageFallsThroughToWeb(t *testing.T) {
+	gw := buildTestGatewayRouter(t)
+	defer gw.teardown()
+
+	token := signTestJWT(t, authz.RoleAdmin)
+	for _, path := range []string{"/admin/feedback", "/admin/raw-library"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.RemoteAddr = "10.0.0.7:1234"
+		rec := httptest.NewRecorder()
+		gw.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("path %q: status = %d; want 200 (body=%q)", path, rec.Code, rec.Body.String())
+		}
+		select {
+		case <-gw.webGotURL:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("path %q: web backend never received the request (missing /admin fall-through?)", path)
 		}
 	}
 }
