@@ -47,8 +47,8 @@ Each maps to a roadmap phase (1–6).
 
 ### Consolidation — topology A (Phase 6)
 
-- [ ] **AR-CONS-01**: OTel Collector exports traces to ClickHouse; **Tempo is retired** (datasource + container removed; backend-tracing dashboard repointed).
-- [ ] **AR-CONS-02**: Logs are shipped to ClickHouse; **Loki is retired** (datasource + container removed; log views repointed).
+- [ ] **AR-CONS-01**: OTel Collector exports traces to ClickHouse; **Tempo is retired** (datasource + container removed; backend-tracing dashboard repointed). _(06-02: traces in CH + dashboard repointed & rendering ✓; Tempo retirement pending 06-03.)_
+- [ ] **AR-CONS-02**: Logs are shipped to ClickHouse; **Loki is retired** (datasource + container removed; log views repointed). _(06-02: logs in CH + log view repointed & rendering ✓; Loki retirement pending 06-03.)_
 - [ ] **AR-CONS-03**: Prometheus + Grafana remain the metrics + alerting + rendering layer (unchanged).
 
 ## v2 / Deferred
