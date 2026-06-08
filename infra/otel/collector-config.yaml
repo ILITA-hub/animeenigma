@@ -152,6 +152,12 @@ service:
       exporters: [clickhouse/logs]
     metrics/spanmetrics:
       receivers: [spanmetrics, servicegraph]
+      # WR-02: include memory_limiter so this connector-output pipeline
+      # participates in the collector's backpressure budget (without it the
+      # connectors keep materialising metric points during a heap spike,
+      # contributing to the OOM the limiter is meant to prevent). batch
+      # smooths the remote-write into Prometheus.
+      processors: [memory_limiter, batch]
       exporters: [prometheusremotewrite]
   telemetry:
     logs:
