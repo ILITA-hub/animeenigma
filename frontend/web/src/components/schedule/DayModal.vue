@@ -37,6 +37,7 @@ const { t } = useI18n()
 
 const sorted = computed(() => sortByTime(props.occurrences))
 const headerTitle = computed(() => (props.date ? formatDayTitle(props.date, t) : ''))
-const subtitle = computed(() => t('schedule.episodeCountPlural', { n: props.occurrences.length }))
+// vue-i18n pluralization: the count selects the branch and is auto-exposed as {n}
+const subtitle = computed(() => t('schedule.episodeCountPlural', props.occurrences.length))
 const titleOf = (o: Occurrence) => getLocalizedTitle(o.anime.name, o.anime.name_ru, o.anime.name_jp)
 </script>
