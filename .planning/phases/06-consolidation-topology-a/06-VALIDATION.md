@@ -1,9 +1,9 @@
 ---
 phase: 6
 slug: consolidation-topology-a
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: planned
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-08
 ---
 
@@ -42,12 +42,16 @@ created: 2026-06-08
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 06-XX-XX | TBD | 1 | AR-CONS-01 | — | traces exported to ClickHouse `otel_traces` | operational | live ClickHouse query returns rows for recent trace window | ❌ W0 | ⬜ pending |
-| 06-XX-XX | TBD | 1 | AR-CONS-02 | — | logs shipped to ClickHouse `otel_logs` (Promtail retired) | operational | live ClickHouse query returns recent log rows | ❌ W0 | ⬜ pending |
-| 06-XX-XX | TBD | 2 | AR-CONS-01 | — | backend-tracing dashboard repointed to CH, renders | operational | Grafana datasource `/health` 200 + dashboard panel returns data | ❌ W0 | ⬜ pending |
-| 06-XX-XX | TBD | 2 | AR-CONS-02 | — | log views repointed to CH, render | operational | Grafana CH log query returns rows | ❌ W0 | ⬜ pending |
-| 06-XX-XX | TBD | 3 | AR-CONS-03 | — | Prometheus alerts still fire, metric dashboards render | operational | `/prometheus/api/v1/rules` shows active rules; metric panels return data | ❌ W0 | ⬜ pending |
-| 06-XX-XX | TBD | 3 | AR-CONS-01/02 | — | Tempo + Loki containers + datasources removed | operational | `docker compose ps` shows no tempo/loki; Grafana has no tempo/loki datasource | ❌ W0 | ⬜ pending |
+| 06-01-T1 | 06-01 | 1 | AR-CONS-01/02/03 | T-06-01 | collector config adds CH traces+logs exporters, filelog, spanmetrics/servicegraph connectors (Tempo kept) | operational | `grep` confirms exporters/receiver/connectors present + otlp/tempo retained | ✅ | ⬜ pending |
+| 06-01-T2 | 06-01 | 1 | AR-CONS-01/02 | T-06-02 | otel-collector gets CH creds env + docker-log mount + depends_on | operational | `docker compose config` exits 0 | ✅ | ⬜ pending |
+| 06-01-T3 | 06-01 | 1 | AR-CONS-01/02/03 | T-06-01 | traces+logs land in CH; span-metrics reach Prometheus; config validates | operational | `otelcol validate` 0; `SELECT count() FROM otel_traces/otel_logs`>0; `traces_spanmetrics_calls_total`>0 | ✅ | ⬜ pending |
+| 06-02-T1 | 06-02 | 2 | AR-CONS-01/02 | T-06-06 | CH trace+log datasource (OTel mode) provisioned, fresh/extended uid | operational | datasource health OK; `grep otel_traces/otel_logs` present | ✅ | ⬜ pending |
+| 06-02-T2 | 06-02 | 2 | AR-CONS-01 | T-06-06 | backend-tracing.json repointed to CH, no TraceQL | operational | `grep` CH datasource + no traceqlSearch + valid JSON | ✅ | ⬜ pending |
+| 06-02-T3 | 06-02 | 2 | AR-CONS-01/02 | — | repointed trace+log views render from CH (visual DS-NF-06) | operational+manual | live CH query has rows + manual browser render | ✅ | ⬜ pending |
+| 06-03-T1 | 06-03 | 3 | AR-CONS-01/02 | T-06-08 | human render gate BEFORE destructive removal | manual | human approves CH render + span-metrics present | ✅ | ⬜ pending |
+| 06-03-T2 | 06-03 | 3 | AR-CONS-01/02 | T-06-09 | drop otlp/tempo; delete tempo/loki/promtail services + depends_on | operational | no otlp/tempo; no loki/promtail/tempo services; `docker compose config` 0 | ✅ | ⬜ pending |
+| 06-03-T3 | 06-03 | 3 | AR-CONS-01/02 | T-06-06 | remove Tempo+Loki datasources + orphaned configs | operational | no aenigma-tempo/aenigma-loki; tempo/loki/promtail config files deleted | ✅ | ⬜ pending |
+| 06-03-T4 | 06-03 | 3 | AR-CONS-01/02/03 | T-06-12 | cutover applied; final AR-CONS-01/02/03 verification | operational+manual | no tempo/loki/promtail containers; no alert rule in `error`; metric dashboards render | ✅ | ⬜ pending |
 
 *Final per-task map is filled by the planner. Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -83,4 +87,4 @@ created: 2026-06-08
 - [ ] Feedback latency < 120s
 - [ ] `nyquist_compliant: true` set in frontmatter once planner fills the map
 
-**Approval:** pending
+**Approval:** planner-filled 2026-06-08
