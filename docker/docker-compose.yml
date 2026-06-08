@@ -360,6 +360,12 @@ services:
     image: otel/opentelemetry-collector-contrib:0.103.1
     container_name: animeenigma-otel-collector
     restart: unless-stopped
+    # The contrib image runs as uid 10001 by default, but /var/lib/docker/containers
+    # is 0710 root:root (per-container log dirs are 0700) — a non-root user can't
+    # traverse them, so the filelog receiver fails with "permission denied". Run as
+    # root so it can read the docker json-file logs (mirrors the grafana service's
+    # user:"0"). The host log mount is read-only; OTLP/CH/Prometheus edges unchanged.
+    user: "0"
     command: ["--config=/etc/otel/collector-config.yaml"]
     environment:
       # v4.0 Phase 6 (06-01): the collector now exports to ClickHouse. Its config
