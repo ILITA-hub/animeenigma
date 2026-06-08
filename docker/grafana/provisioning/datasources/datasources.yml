@@ -14,19 +14,10 @@ datasources:
     isDefault: true
     editable: false
 
-  - name: Loki
-    uid: aenigma-loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
-    jsonData:
-      derivedFields:
-        - name: TraceID
-          matcherType: label
-          matcherRegex: trace_id
-          datasourceUid: aenigma-tempo
-          url: '$${__value.raw}'
-    editable: false
+  # Phase 6 (06-03) — the Loki datasource and its derivedFields trace correlation
+  # were REMOVED at the Topology-A cutover. Logs now render from the ClickHouse
+  # datasource (analytics.otel_logs); logs<->traces correlation is native on the
+  # ClickHouse datasource (trace_id).
 
   - name: PostgreSQL
     uid: aenigma-postgres
@@ -43,35 +34,13 @@ datasources:
       password: postgres
     editable: false
 
-  - name: Tempo
-    type: tempo
-    uid: aenigma-tempo
-    access: proxy
-    url: http://tempo:3200
-    jsonData:
-      tracesToLogsV2:
-        datasourceUid: aenigma-loki
-        spanStartTimeShift: '-5m'
-        spanEndTimeShift: '5m'
-        filterByTraceID: true
-        filterBySpanID: false
-      nodeGraph:
-        enabled: true
-      # AR-EFFECT-04 (D-12): resolve the Tempo metrics_generator output against
-      # Prometheus. serviceMap renders the service graph from traces_service_graph_*
-      # and tracesToMetrics surfaces the per-operation RED metrics from
-      # traces_spanmetrics_*. Both bind to the existing Prometheus uid (must stay
-      # PBFA97CFB590B2093 — see the header warning; reusing/renaming it orphaned
-      # 14 alert rules before).
-      serviceMap:
-        datasourceUid: PBFA97CFB590B2093
-      tracesToMetrics:
-        datasourceUid: PBFA97CFB590B2093
-        spanStartTimeShift: '-2m'
-        spanEndTimeShift: '2m'
-        queries:
-          - name: 'RED rate'
-            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags}[$$__rate_interval]))'
+  # Phase 6 (06-03) — the Tempo datasource was REMOVED at the Topology-A cutover.
+  # Traces now render from the ClickHouse datasource below (analytics.otel_traces,
+  # OTel trace builder). The Tempo serviceMap / tracesToMetrics convenience config
+  # was the ONLY consumer of the
+  # traces_spanmetrics_* / traces_service_graph_* metric names (RESEARCH Pitfall 1,
+  # verified) — no alert rule or dashboard panel queries them, so its removal does
+  # not break any firing alert or rendered panel.
 
   # v4 Activity Register (01-03): ClickHouse clickstream store. The uid
   # aenigma-clickhouse is BRAND NEW — never reuse aenigma-postgres (the header
@@ -82,17 +51,15 @@ datasources:
   # Phase 6 (06-02): EXTENDED in place (lowest-churn, NO new uid — avoids the
   # orphaned-uid hazard entirely) to also serve traces (analytics.otel_traces)
   # and logs (analytics.otel_logs) in OTel mode, so the one CH datasource now
-  # carries events + traces + logs. This replaces the Tempo trace store and the
-  # Loki log store for Grafana's trace/log views (Tempo + Loki datasources above
-  # STAY through the gate — they are removed only in 06-03). OTel tables are
-  # produced by the OTel Collector clickhouseexporter (06-01); their column
-  # layout (TraceId/SpanId/Duration[ns]/ServiceName/… + logs Timestamp/TraceId/
-  # SeverityText/Body/…) matches what the plugin's OTel builder expects.
+  # carries events + traces + logs. As of the 06-03 cutover this is the SOLE trace
+  # and log store for Grafana (the Tempo + Loki datasources were removed above).
+  # OTel tables are produced by the OTel Collector clickhouseexporter (06-01); their
+  # column layout (TraceId/SpanId/Duration[ns]/ServiceName/… + logs Timestamp/
+  # TraceId/SeverityText/Body/…) matches what the plugin's OTel builder expects.
   #
-  # Logs<->traces correlation is configured NATIVELY here on trace_id, replacing
-  # the Loki derivedField -> aenigma-tempo link: traces->logs (traceToLogs) and
-  # logs->traces (logsToTrace) both resolve against this same datasource (uid
-  # ${__datasource.uid} -> self) because logs carry TraceId.
+  # Logs<->traces correlation is configured NATIVELY here on trace_id: traces->logs
+  # (traceToLogs) and logs->traces (logsToTrace) both resolve against this same
+  # datasource (self) because logs carry TraceId.
   - name: ClickHouse
     uid: aenigma-clickhouse
     type: grafana-clickhouse-datasource
