@@ -152,7 +152,7 @@
 import { ref } from 'vue'
 import Switch from '@/components/ui/Switch.vue'
 
-const props = defineProps<{
+defineProps<{
   quality: string
   qualities: string[]
   speed: number

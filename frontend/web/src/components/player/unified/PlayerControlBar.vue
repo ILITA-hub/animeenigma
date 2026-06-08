@@ -213,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
+defineProps<{
   playing: boolean
   currentTime: number
   duration: number

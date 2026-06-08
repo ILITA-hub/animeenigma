@@ -267,7 +267,7 @@ const props = defineProps<{
   initialEpisode?: number
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'toggle-theater'): void
   (e: 'open-episodes'): void
 }>()
