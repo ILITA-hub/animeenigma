@@ -314,19 +314,18 @@ curl -s 'http://localhost:9090/prometheus/api/v1/rules' | jq '.data.groups[].rul
 | A4 | Logs TTL of 7d / traces TTL of 14d is the desired retention | Pitfall 3, Stack | LOW — mirrors current Loki/Tempo retention; confirm with user if longer unified retention is wanted (this server is self-hosted, disk-bound). |
 | A5 | Docker json-file log path/format (`/var/lib/docker/containers/*/*-json.log`) matches the production daemon | Pattern 1, Pitfall 2 | MEDIUM — Promtail uses docker.sock SD, not the file path; confirm the host's log driver is json-file (default) and the glob matches before relying on filelog. Fallback: keep docker.sock-based collection or a `dockerstats`/`journald` receiver. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Single unified retention vs per-signal TTL?**
    - What we know: exporter `ttl` is per-instance; current retention is traces 14d / logs 7d.
-   - What's unclear: whether the user wants one number now that it's one store.
-   - Recommendation: two named exporter instances (336h / 168h) to preserve current behavior; revisit in a v2 if a unified policy is preferred.
+   - RESOLVED: two named ClickHouse exporter instances (336h traces / 168h logs) preserve current behavior — implemented in 06-01 T1. A unified policy is deferred to v2.
 
 2. **Keep the MinIO `tempo` bucket / `*_data` volumes, or reclaim?**
-   - Recommendation: leave them through the gate; reclaim (`mc rb local/tempo`, `docker volume rm …_tempo_data …_loki_data`) only after verified cutover. Not on the critical path.
+   - RESOLVED: leave them through the gate; reclaim (`mc rb local/tempo`, `docker volume rm …_tempo_data …_loki_data`) only after verified cutover — handled as optional post-cutover cleanup in 06-03 T4. Not on the critical path.
 
 3. **Is the service-graph node graph actually used by anyone?**
    - What we know: only referenced in datasources.yml, no dashboard panel.
-   - Recommendation: regenerate the metrics via the connector (cheap), but don't invest in rebuilding a Grafana nodeGraph panel unless asked.
+   - RESOLVED: regenerate the metrics via the OTel connector (cheap, keeps AR-CONS-03 safe), but do NOT rebuild a Grafana nodeGraph panel — no panel consumes it today.
 
 ## Environment Availability
 
