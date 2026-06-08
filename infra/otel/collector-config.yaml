@@ -22,6 +22,10 @@ receivers:
   # json_parser + move(attributes.log -> body) unwraps the envelope so Body is the
   # raw message, not the JSON wrapper (RESEARCH Pitfall 2). start_at: end avoids
   # replaying the entire historical log backlog on first start.
+  # A regex_parser + trace_parser then promote the app line's trace_id/span_id
+  # (emitted by libs/logger when a span is in context) into the record's
+  # TraceId/SpanId so otel_logs.TraceId is populated and Grafana's native
+  # logs↔traces correlation (06-02) resolves.
   filelog:
     include: [ /var/lib/docker/containers/*/*-json.log ]
     start_at: end
@@ -37,6 +41,29 @@ receivers:
       - type: move
         from: attributes.log
         to: body
+      # 06 trace↔log correlation fix: the app line is zap CONSOLE format
+      # (TS \t LEVEL \t caller \t message \t {json fields}), NOT a JSON object,
+      # so a json_parser on the inner line won't work. The trace_id (32 hex) and
+      # span_id (16 hex) live inside the trailing {...} when libs/logger ran with a
+      # span-bearing context (logger.go:92-93). Extract them with a regex_parser —
+      # gated by `if` so it ONLY runs on lines that actually carry a trace_id
+      # (otherwise regex_parser logs a no-match error on every metrics/health line,
+      # and untraced lines correctly keep an empty TraceId). parse_to attributes so
+      # the raw human-readable Body is preserved untouched.
+      - type: regex_parser
+        if: 'body matches "\"trace_id\""'
+        parse_from: body
+        parse_to: attributes
+        regex: '"trace_id":\s*"(?P<trace_id>[0-9a-f]{32})",\s*"span_id":\s*"(?P<span_id>[0-9a-f]{16})"'
+      # Promote the extracted hex IDs into the OTel log record's TraceId/SpanId
+      # fields, which the clickhouseexporter writes into otel_logs.TraceId/SpanId.
+      # This is what makes Grafana's native logs↔traces click-through (06-02) resolve.
+      - type: trace_parser
+        if: 'attributes.trace_id != nil'
+        trace_id:
+          parse_from: attributes.trace_id
+        span_id:
+          parse_from: attributes.span_id
 
 processors:
   memory_limiter:
