@@ -27,6 +27,13 @@ receivers:
     start_at: end
     operators:
       - type: json_parser
+        # The docker json-file driver writes RFC3339Nano in the "time" field. Parse it
+        # into the record timestamp — WITHOUT this, Timestamp defaults to epoch 0
+        # (1970), and the exporter's 168h TTL on toDateTime(Timestamp) instantly
+        # expires every row (total_rows climbs but count()=0). [Rule 1 bug, caught live]
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%fZ'
       - type: move
         from: attributes.log
         to: body
