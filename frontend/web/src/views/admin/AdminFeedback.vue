@@ -248,17 +248,17 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.v
 const PLAYER_TYPES = ['feedback', 'kodik', 'animelib', 'ourenglish', 'hanime', 'raw']
 
 const typeOptions = computed(() => [
-  { value: '', label: t('admin.feedback.filters.allTypes') },
+  { value: 'all', label: t('admin.feedback.filters.allTypes') },
   ...PLAYER_TYPES.map((v) => ({ value: v, label: v })),
 ])
 const categoryOptions = computed(() => [
-  { value: '', label: t('admin.feedback.filters.allCategories') },
+  { value: 'all', label: t('admin.feedback.filters.allCategories') },
   { value: 'bug', label: categoryLabel('bug') },
   { value: 'issue', label: categoryLabel('issue') },
   { value: 'feature', label: categoryLabel('feature') },
 ])
 const statusOptions = computed(() => [
-  { value: '', label: t('admin.feedback.filters.allStatuses') },
+  { value: 'all', label: t('admin.feedback.filters.allStatuses') },
   { value: 'new', label: statusLabel('new') },
   { value: 'in_progress', label: statusLabel('in_progress') },
   { value: 'resolved', label: statusLabel('resolved') },

@@ -37,9 +37,12 @@ export function useAdminFeedback() {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
-  const filterCategory = ref('')
-  const filterStatus = ref('')
-  const filterType = ref('')
+  // 'all' is the sentinel for "no filter" — reka-ui's SelectItem forbids an
+  // empty-string value, so the "All …" options use 'all' and we normalize it
+  // away before hitting the API.
+  const filterCategory = ref('all')
+  const filterStatus = ref('all')
+  const filterType = ref('all')
 
   const detail = ref<FeedbackDetail | null>(null)
   const isDetailLoading = ref(false)
@@ -49,10 +52,11 @@ export function useAdminFeedback() {
     isLoading.value = true
     error.value = null
     try {
+      const norm = (v: string) => (v && v !== 'all' ? v : undefined)
       const res = await adminApi.listReports({
-        category: filterCategory.value || undefined,
-        status: filterStatus.value || undefined,
-        type: filterType.value || undefined,
+        category: norm(filterCategory.value),
+        status: norm(filterStatus.value),
+        type: norm(filterType.value),
         page: page.value,
         page_size: pageSize.value,
       })

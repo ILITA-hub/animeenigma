@@ -55,6 +55,15 @@ describe('useAdminFeedback', () => {
     expect(fb.error.value).toBeNull()
   })
 
+  it('normalizes the default "all" sentinel to no filter params', async () => {
+    listSpy.mockResolvedValue(listEnvelope([]))
+    const fb = useAdminFeedback()
+    await fb.refresh()
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ category: undefined, status: undefined, type: undefined }),
+    )
+  })
+
   it('passes active filters as query params and resets to page 1 via applyFilters', async () => {
     listSpy.mockResolvedValue(listEnvelope([]))
     const fb = useAdminFeedback()
