@@ -73,7 +73,20 @@ class Analytics {
   }
 
   track(name: string, props?: Record<string, unknown>): void {
-    this.enqueue({ event_type: 'custom', event_name: name, timestamp: nowISO(), path: location.pathname, properties: props })
+    // Lift activity-register fields (source, trace_id, operation, target, …) to
+    // the TOP LEVEL of the event so the collector's wireEvent reads them directly
+    // (AR-FE-01/AR-FE-03). Without this, register fields stay buried in
+    // `properties` and the FE→BE trace_id join returns 0 rows. Arbitrary
+    // user-supplied props stay under `properties`.
+    const { register, rest } = liftRegisterFields(props)
+    this.enqueue({
+      event_type: 'custom',
+      event_name: name,
+      timestamp: nowISO(),
+      path: location.pathname,
+      ...register,
+      properties: rest,
+    })
   }
 
   identify(userId: string): void {
@@ -116,6 +129,49 @@ class Analytics {
 
 function nowISO(): string {
   return new Date().toISOString()
+}
+
+// The activity-register keys the collector's wireEvent reads at the TOP LEVEL of
+// an analytics event (services/analytics handler/collect.go). These must NOT be
+// buried under `properties` or the FE→BE trace_id join returns 0 rows. `route`
+// is FE-only context the collector folds into operation; it is carried top-level
+// too since the collector tolerates it. Keep this list in sync with the
+// wireEvent + AnalyticsEvent register fields.
+const REGISTER_KEYS = [
+  'source',
+  'trace_id',
+  'operation',
+  'action',
+  'route',
+  'target',
+  'target_kind',
+  'requests',
+  'duration_ms',
+] as const
+
+// liftRegisterFields splits a props bag into the typed register fields (lifted to
+// the event top level) and the remaining arbitrary props (kept under
+// `properties`). Returns rest=undefined when nothing arbitrary remains so the
+// serialized event omits an empty properties object.
+function liftRegisterFields(props?: Record<string, unknown>): {
+  register: Partial<AnalyticsEvent>
+  rest: Record<string, unknown> | undefined
+} {
+  if (!props) return { register: {}, rest: undefined }
+  const register: Record<string, unknown> = {}
+  const rest: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(props)) {
+    if (v === undefined) continue // skip undefined so JSON omits the key entirely
+    if ((REGISTER_KEYS as readonly string[]).includes(k)) {
+      register[k] = v
+    } else {
+      rest[k] = v
+    }
+  }
+  return {
+    register: register as Partial<AnalyticsEvent>,
+    rest: Object.keys(rest).length > 0 ? rest : undefined,
+  }
 }
 
 // type re-export for callers
