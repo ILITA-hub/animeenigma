@@ -19,7 +19,6 @@
         @click="filters.myList = !filters.myList"
       >★ {{ $t('schedule.myList') }}</button>
       <FilterDropdown :label="$t('schedule.genre')" :options="genreOptions" :selected="filters.genres" searchable :search-placeholder="$t('schedule.searchPlaceholder')" :empty-text="$t('schedule.empty')" @toggle="toggleSet(filters.genres, $event)" />
-      <FilterDropdown :label="$t('schedule.type')" :options="typeOptions" :selected="filters.types" @toggle="toggleSet(filters.types, $event)" />
     </div>
 
     <div class="flex items-center gap-2 flex-wrap mb-3 min-h-6">
@@ -52,9 +51,7 @@ const props = defineProps<{
 defineEmits<{ reset: [] }>()
 const { t, locale } = useI18n()
 
-const TYPES = ['TV', 'ONA', 'Movie', 'OVA']
 const genreOptions = computed(() => props.genres.filter(g => g.name).map(g => ({ value: g.name as string, label: (locale.value === 'ru' && g.name_ru) ? g.name_ru : (g.name as string) })))
-const typeOptions = computed(() => TYPES.map(v => ({ value: v, label: v })))
 
 function toggleSet(set: Set<string>, v: string) { set.has(v) ? set.delete(v) : set.add(v) }
 
@@ -63,7 +60,6 @@ const activeChips = computed(() => {
   if (props.filters.search) chips.push({ key: 'q', label: `${t('schedule.searchChip')}: ${props.filters.search}`, remove: () => (props.filters.search = '') })
   if (props.filters.myList) chips.push({ key: 'mine', label: `★ ${t('schedule.myList')}`, remove: () => (props.filters.myList = false) })
   props.filters.genres.forEach(g => chips.push({ key: 'g:' + g, label: genreOptions.value.find(o => o.value === g)?.label ?? g, remove: () => props.filters.genres.delete(g) }))
-  props.filters.types.forEach(ty => chips.push({ key: 't:' + ty, label: ty, remove: () => props.filters.types.delete(ty) }))
   return chips
 })
 </script>
