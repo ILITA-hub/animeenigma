@@ -12,7 +12,7 @@ function mountFilters(over = {}) {
   return {
     filters,
     w: mount(ScheduleFilters, {
-      props: { filters, genres: [{ name: 'Action', russian: 'Экшен' }], loggedIn: true, matchCount: 5, total: 12, ...over },
+      props: { filters, genres: [{ name: 'Action', name_ru: 'Экшен' }], loggedIn: true, matchCount: 5, total: 12, ...over },
       global: { mocks: { $t: (k: string, n?: Record<string, unknown>) => (n ? `${k}:${JSON.stringify(n)}` : k) } },
     }),
   }

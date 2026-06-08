@@ -4,7 +4,8 @@
 export interface ScheduleGenre {
   id?: string
   name?: string
-  russian?: string
+  /** Russian label — the catalog serializes this as `name_ru`. */
+  name_ru?: string
 }
 
 /** One ongoing anime row from GET /api/anime/schedule. */

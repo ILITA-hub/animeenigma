@@ -18,7 +18,7 @@
         :class="filters.myList ? 'bg-primary/15 border-primary/50 text-primary' : 'bg-white/[0.06] border-white/10 text-foreground/80 hover:bg-white/10'"
         @click="filters.myList = !filters.myList"
       >★ {{ $t('schedule.myList') }}</button>
-      <FilterDropdown :label="$t('schedule.genre')" :options="genreOptions" :selected="filters.genres" @toggle="toggleSet(filters.genres, $event)" />
+      <FilterDropdown :label="$t('schedule.genre')" :options="genreOptions" :selected="filters.genres" searchable :search-placeholder="$t('schedule.searchPlaceholder')" :empty-text="$t('schedule.empty')" @toggle="toggleSet(filters.genres, $event)" />
       <FilterDropdown :label="$t('schedule.type')" :options="typeOptions" :selected="filters.types" @toggle="toggleSet(filters.types, $event)" />
     </div>
 
@@ -53,7 +53,7 @@ defineEmits<{ reset: [] }>()
 const { t, locale } = useI18n()
 
 const TYPES = ['TV', 'ONA', 'Movie', 'OVA']
-const genreOptions = computed(() => props.genres.filter(g => g.name).map(g => ({ value: g.name as string, label: (locale.value === 'ru' && g.russian) ? g.russian : (g.name as string) })))
+const genreOptions = computed(() => props.genres.filter(g => g.name).map(g => ({ value: g.name as string, label: (locale.value === 'ru' && g.name_ru) ? g.name_ru : (g.name as string) })))
 const typeOptions = computed(() => TYPES.map(v => ({ value: v, label: v })))
 
 function toggleSet(set: Set<string>, v: string) { set.has(v) ? set.delete(v) : set.add(v) }
