@@ -8,10 +8,7 @@
   "uid": "activity-register-overview",
   "title": "Activity Register — Awareness Overview",
   "description": "AR-REPORT-04 awareness overview (top operations + top external dependencies + active anomalies) carrying the AR-REPORT-03 explainable avg+Nσ volume-anomaly panel. ClickHouse analytics.events. Byte/anomaly measures filter source='be' AND effect_kind='egress' (AR-FE-03). Tune the anomaly sensitivity with the $sigma / $window dashboard vars.",
-  "tags": [
-    "activity-register",
-    "awareness"
-  ],
+  "tags": ["activity-register"],
   "time": {
     "from": "now-24h",
     "to": "now"

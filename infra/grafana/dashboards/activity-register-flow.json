@@ -8,10 +8,7 @@
   "uid": "activity-register-flow",
   "title": "Activity Register — Flow (from → choke-point → effects)",
   "description": "AR-REPORT-02 from → choke-point → effects over ClickHouse analytics.events: origin → operation → per-target requests + bytes. Byte aggregation filters effect_kind='egress' AND source='be' so only authoritative egress bytes are counted (AR-FE-03); fe_rum approximate rows are excluded. A Grafana groupBy row-grouping transform renders the origin → operation drill shape. DEFERRED: a literal Sankey / node-graph visual flow is intentionally NOT shipped — it needs a community panel plugin (a GF_INSTALL_PLUGINS addition + container recreate, a real Wave-0 cost). The table + row-grouping transform fully satisfies AR-REPORT-02; the Sankey is a noted future enhancement (research Open Question 1), not a silent scope reduction.",
-  "tags": [
-    "activity-register",
-    "flow"
-  ],
+  "tags": ["activity-register"],
   "time": {
     "from": "now-24h",
     "to": "now"

@@ -290,7 +290,7 @@
   ],
   "schemaVersion": 39,
   "style": "dark",
-  "tags": ["playback", "health", "scraper", "players"],
+  "tags": ["playback", "scraper"],
   "templating": {
     "list": [
       {

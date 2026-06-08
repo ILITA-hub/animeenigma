@@ -285,7 +285,7 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["analytics", "clickstream", "ingest"],
+  "tags": ["analytics"],
   "templating": {
     "list": [
       {

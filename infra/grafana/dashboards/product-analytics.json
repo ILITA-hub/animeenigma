@@ -8,10 +8,7 @@
   "uid": "product-analytics",
   "title": "Product Analytics (Clickstream)",
   "description": "Clickstream over the ClickHouse events_resolved view (v4 Activity Register, 01-03). person_id = identified user if known, else anonymous.",
-  "tags": [
-    "analytics",
-    "clickstream"
-  ],
+  "tags": ["analytics"],
   "time": {
     "from": "now-7d",
     "to": "now"
@@ -188,7 +185,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "aenigma-clickhouse"
       },
-      "title": "Top clicked elements",
+      "title": "Top clicked elements (by label)",
       "type": "table",
       "gridPos": {
         "h": 8,
@@ -212,7 +209,7 @@
           "format": "table",
           "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT el_selector, count() AS clicks FROM events_resolved WHERE event_type = 'click' AND el_selector != '' AND $__timeFilter(timestamp) GROUP BY el_selector ORDER BY clicks DESC LIMIT 25"
+          "rawSql": "SELECT if(el_text != '', el_text, concat('⟨', el_tag, ' — no text⟩')) AS label, any(el_selector) AS sample_selector, count() AS clicks FROM events_resolved WHERE event_type = 'click' AND $__timeFilter(timestamp) GROUP BY label ORDER BY clicks DESC LIMIT 25"
         }
       ]
     },

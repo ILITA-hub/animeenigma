@@ -385,7 +385,7 @@
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": ["image-proxy", "monitoring"],
+  "tags": ["platform", "image-proxy"],
   "templating": {
     "list": [
       {

@@ -2990,10 +2990,7 @@
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": [
-    "animeenigma",
-    "monitoring"
-  ],
+  "tags": ["platform"],
   "templating": {
     "list": []
   },

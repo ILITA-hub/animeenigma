@@ -707,7 +707,7 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["watch-together", "v1.0"],
+  "tags": ["watch-together"],
   "templating": {
     "list": [
       {

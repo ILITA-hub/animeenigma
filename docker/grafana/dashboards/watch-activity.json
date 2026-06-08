@@ -249,7 +249,7 @@
   ],
   "refresh": "5m",
   "schemaVersion": 38,
-  "tags": ["watch", "activity", "player"],
+  "tags": ["playback"],
   "templating": {
     "list": [
       {

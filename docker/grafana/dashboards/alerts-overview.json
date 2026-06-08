@@ -89,7 +89,7 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["alerts", "observability"],
+  "tags": ["alerts"],
   "templating": { "list": [] },
   "refresh": "1m",
   "time": { "from": "now-6h", "to": "now" },

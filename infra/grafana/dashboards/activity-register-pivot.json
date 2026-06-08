@@ -8,10 +8,7 @@
   "uid": "activity-register-pivot",
   "title": "Activity Register — Pivot",
   "description": "AR-REPORT-01 wide-event pivot over ClickHouse analytics.events. Switch the $group_by template var to regroup the table by ANY dimension (origin, operation, effect_kind, target_kind, target, source) live. The $effect_kind / $origin / $target dropdowns self-discover live values via SELECT DISTINCT. Byte measure uses sumIf(..., source='be') so fe_rum approximate rows never contaminate authoritative byte totals (AR-FE-03).",
-  "tags": [
-    "activity-register",
-    "pivot"
-  ],
+  "tags": ["activity-register"],
   "time": {
     "from": "now-24h",
     "to": "now"

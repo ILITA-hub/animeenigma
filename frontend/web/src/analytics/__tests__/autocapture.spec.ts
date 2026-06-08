@@ -56,6 +56,7 @@ describe('extractClick', () => {
     expect(c).not.toBeNull()
     expect(c!.el_tag).toBe('button')
     expect(c!.el_selector).toContain('button#buy')
+    // visible own text wins over aria-label
     expect(c!.el_text).toBe('Buy now')
     expect(c!.el_attrs).toEqual({ 'data-plan': 'pro' })
   })
@@ -64,5 +65,83 @@ describe('extractClick', () => {
     const el = document.createElement('button')
     el.setAttribute('data-no-track', '')
     expect(extractClick(el)).toBeNull()
+  })
+
+  // --- Fix 3: climb to the nearest meaningful (interactive) ancestor ---
+  it('climbs from an inner svg/icon to the enclosing button', () => {
+    const btn = document.createElement('button')
+    btn.className = 'arrow-next'
+    btn.setAttribute('aria-label', 'Next episode')
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    svg.appendChild(path)
+    btn.appendChild(svg)
+    // user actually clicked the <path> inside the icon
+    const c = extractClick(path as unknown as Element)
+    expect(c!.el_tag).toBe('button')
+    expect(c!.el_selector).toContain('button.arrow-next')
+    expect(c!.el_text).toBe('Next episode')
+  })
+
+  it('collapses a multi-span anchor (split logo) into one labelled target', () => {
+    const a = document.createElement('a')
+    a.className = 'brand-link'
+    const wrap = document.createElement('span')
+    const b1 = document.createElement('span')
+    b1.textContent = 'Anime'
+    const b2 = document.createElement('span')
+    b2.textContent = 'Enigma'
+    wrap.append(b1, b2)
+    a.appendChild(wrap)
+    // clicking either half resolves to the same anchor + label
+    expect(extractClick(b1)!.el_tag).toBe('a')
+    expect(extractClick(b2)!.el_text).toBe('AnimeEnigma')
+    expect(extractClick(b1)!.el_selector).toContain('a.brand-link')
+  })
+
+  // --- Fix 1: attribute fallback chain for TEXTLESS elements ---
+  it('falls back to aria-label when there is no visible text', () => {
+    const btn = document.createElement('button')
+    btn.setAttribute('aria-label', 'Play')
+    expect(extractClick(btn)!.el_text).toBe('Play')
+  })
+
+  it('falls back to placeholder for an empty input', () => {
+    const input = document.createElement('input')
+    input.setAttribute('placeholder', 'Search anime…')
+    expect(extractClick(input)!.el_text).toBe('Search anime…')
+  })
+
+  it('prefers an explicit data-track label over everything', () => {
+    const btn = document.createElement('button')
+    btn.textContent = 'Смотреть'
+    btn.setAttribute('data-track', 'episode-play')
+    expect(extractClick(btn)!.el_text).toBe('episode-play')
+  })
+
+  it('labels a textless non-interactive element by tag, not by name', () => {
+    const video = document.createElement('video')
+    expect(extractClick(video)!.el_text).toBe('⟨video⟩')
+  })
+
+  // --- Fix 2: never sweep deep subtree text (the page-text / JS-comment leak) ---
+  it('does NOT capture deep subtree text when clicking a bare container', () => {
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<header>Обратная связь</header><script>// Disable native scroll restoration</script>' +
+      '<main><p>' + 'word '.repeat(100) + '</p></main>'
+    const c = extractClick(root)
+    // a plain container with no own text → tag label, NOT the giant subtree blob
+    expect(c!.el_text).toBe('⟨div⟩')
+    expect(c!.el_text.length).toBeLessThan(20)
+  })
+
+  it('caps subtree-derived labels for interactive controls', () => {
+    const a = document.createElement('a')
+    const span = document.createElement('span')
+    span.textContent = 'x'.repeat(300)
+    a.appendChild(span)
+    const c = extractClick(a)
+    expect(c!.el_text.length).toBeLessThanOrEqual(80)
   })
 })

@@ -1327,11 +1327,7 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": [
-    "recs",
-    "preferences",
-    "consolidated"
-  ],
+  "tags": ["recs"],
   "templating": {
     "list": [
       {

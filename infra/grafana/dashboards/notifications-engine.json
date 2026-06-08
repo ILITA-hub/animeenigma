@@ -360,7 +360,7 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["notifications", "observability"],
+  "tags": ["notifications"],
   "templating": {
     "list": [
       {

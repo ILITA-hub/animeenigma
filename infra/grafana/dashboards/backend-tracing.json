@@ -3,7 +3,7 @@
   "editable": true,
   "title": "Backend Tracing",
   "uid": "backend-tracing",
-  "tags": ["tracing", "backend"],
+  "tags": ["tracing"],
   "description": "ClickHouse trace explorer (distributed tracing, OTel → OTel Collector → ClickHouse analytics.otel_traces). Phase 6 (06-02) repointed this dashboard off Tempo onto the ClickHouse datasource (uid aenigma-clickhouse, grafana-clickhouse-datasource OTel trace builder) as part of the gated observability consolidation — Tempo stays live as the safety net until 06-03. Parity note: Tempo's TraceQL ('{ duration > 1s }') has no direct equivalent in ClickHouse; the slow-trace use case is expressed via the CH plugin's OTel trace query / SQL (WHERE Duration > 1e9 ns over analytics.otel_traces). The per-service latency-p95 and 5xx-rate timeseries that used to live here were exact duplicates of the 'Service Overview' row in 'Services / Overview' (animeenigma-services) — removed 2026-06-03 to de-duplicate. Use that dashboard for RED metrics; use this one to drill into individual slow traces.",
   "timezone": "",
   "schemaVersion": 39,
