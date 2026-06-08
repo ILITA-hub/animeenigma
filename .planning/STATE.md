@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v4.0
-milestone_name: milestone
+milestone_name: Activity Register (ClickHouse unified event plane)
 current_plan: 1
-status: completed
+status: paused
 stopped_at: Phase 3 context gathered
-last_updated: "2026-06-08T00:44:00.361Z"
+last_updated: "2026-06-08T00:46:58.832Z"
 last_activity: 2026-06-08 -- Phase 05 marked complete
 progress:
   total_phases: 6
@@ -21,7 +21,7 @@ progress:
 
 Phase: 05 — COMPLETE
 Plan: 1 of ?
-Status: Phase 05 complete
+Status: v4.0 paused at 5/6 — Phase 6 (consolidation) deferred by user; Ph4/5 visual gates deferred
 Last activity: 2026-06-08 -- Phase 05 marked complete
 
 ## Progress
