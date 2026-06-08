@@ -50,4 +50,22 @@ describe('useScheduleCalendar', () => {
       expect(r.date < new Date(2026, 5, 15)).toBe(true)
     }
   })
+
+  it('week view floats the logged-in user\'s list titles to the top of a day (hybrid sort)', () => {
+    const sameDay: ScheduleAnime[] = [
+      { id: 'early', name: 'Early', episodes_aired: 0, episodes_count: 12, next_episode_at: '2026-06-08T14:00:00Z' },
+      { id: 'fav', name: 'Fav', episodes_aired: 0, episodes_count: 12, next_episode_at: '2026-06-08T20:00:00Z' },
+    ]
+    const cal = useScheduleCalendar({
+      animes: ref(sameDay),
+      now: ref(new Date(2026, 5, 8)),
+      statusOf: (id) => (id === 'fav' ? 'watching' : null),
+      loggedIn: ref(true),
+    })
+    cal.setView('week')
+    const monday = cal.weekColumns.value.find((c) => c.occurrences.length === 2)!
+    // 'fav' airs later (20:00 vs 14:00) but is in the user's list → must be first.
+    expect(monday.occurrences[0].anime.id).toBe('fav')
+    expect(monday.occurrences[1].anime.id).toBe('early')
+  })
 })

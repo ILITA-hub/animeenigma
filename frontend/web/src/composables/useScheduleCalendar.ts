@@ -3,7 +3,7 @@ import { computed, reactive, ref, type Ref } from 'vue'
 import type { ScheduleAnime, Occurrence, TableSortKey } from './schedule/types'
 import { emptyFilters } from './schedule/types'
 import { occurrencesInRange } from './schedule/projection'
-import { applyFilters, availableGenres, sortByTime, sortCellHybrid } from './schedule/filterSort'
+import { applyFilters, availableGenres, sortCellHybrid } from './schedule/filterSort'
 import { monthGridDays, monthGridRange, weekDays, weekStart, startOfDay, isSameDay } from './schedule/calendarGrid'
 
 export type ScheduleView = 'month' | 'week' | 'table'
@@ -65,7 +65,10 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
       date,
       inCurrentMonth: date.getMonth() === viewDate.value.getMonth(),
       isToday: isSameDay(date, opts.now.value),
-      occurrences: sortByTime(all.filter((o) => isSameDay(o.date, date))),
+      // Hybrid sort (user's list first, then by time) so watched/planned titles
+      // float to the top of each day — matters now that the week view is the
+      // default and caps each day at 4 rows.
+      occurrences: sortCellHybrid(all.filter((o) => isSameDay(o.date, date)), isPriority),
     }))
   })
 
