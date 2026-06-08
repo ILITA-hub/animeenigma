@@ -41,4 +41,10 @@ describe('DayCell', () => {
     await w.trigger('click')
     expect(w.emitted('open')).toBeFalsy()
   })
+  it('does not emit when out of month, even with episodes', async () => {
+    const occ = [{ anime: a('1'), episode: 1, date: new Date(2026, 5, 13) }]
+    const w = mountCell(model({ inCurrentMonth: false, occurrences: occ }))
+    await w.trigger('click')
+    expect(w.emitted('open')).toBeFalsy()
+  })
 })
