@@ -110,7 +110,7 @@ function progressPct(item: ContinueWatchingItem): number {
 .cw-row {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(280px, 1fr);
+  grid-auto-columns: minmax(280px, 360px);
   gap: 14px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;

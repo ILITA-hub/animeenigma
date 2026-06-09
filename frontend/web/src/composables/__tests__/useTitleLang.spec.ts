@@ -6,9 +6,11 @@ import { useTitleLang } from '@/composables/useTitleLang'
 
 const ANIME = {
   id: '1',
+  title: 'Sousou no Frieren',
   name: 'Sousou no Frieren',
   nameRu: 'Провожающая в последний путь Фрирен',
   nameJp: '葬送のフリーレン',
+  coverImage: '',
 }
 
 afterEach(() => {

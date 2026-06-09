@@ -8,7 +8,7 @@
           :value="filters.search"
           :placeholder="$t('schedule.searchPlaceholder')"
           class="bg-transparent border-0 outline-none text-foreground text-sm w-full placeholder:text-muted-foreground"
-          @input="filters.search = ($event.target as HTMLInputElement).value"
+          @input="setSearch(($event.target as HTMLInputElement).value)"
         />
       </div>
       <button
@@ -16,7 +16,7 @@
         type="button"
         class="flex items-center gap-1.5 text-xs rounded-lg border px-2.5 py-1.5 transition-colors"
         :class="filters.myList ? 'bg-primary/15 border-primary/50 text-primary' : 'bg-white/[0.06] border-white/10 text-foreground/80 hover:bg-white/10'"
-        @click="filters.myList = !filters.myList"
+        @click="toggleMyList()"
       >★ {{ $t('schedule.myList') }}</button>
       <FilterDropdown :label="$t('schedule.genre')" :options="genreOptions" :selected="filters.genres" searchable :search-placeholder="$t('schedule.searchPlaceholder')" :empty-text="$t('schedule.empty')" @toggle="toggleSet(filters.genres, $event)" />
     </div>
@@ -53,13 +53,19 @@ const { t, locale } = useI18n()
 
 const genreOptions = computed(() => props.genres.filter(g => g.name).map(g => ({ value: g.name as string, label: (locale.value === 'ru' && g.name_ru) ? g.name_ru : (g.name as string) })))
 
+// filters is a shared reactive object from the parent composable; direct
+// mutation of its nested fields is intentional (same-reference shared state).
+/* eslint-disable vue/no-mutating-props */
+function setSearch(v: string) { props.filters.search = v }
+function toggleMyList() { props.filters.myList = !props.filters.myList }
 function toggleSet(set: Set<string>, v: string) { set.has(v) ? set.delete(v) : set.add(v) }
 
 const activeChips = computed(() => {
   const chips: { key: string; label: string; remove: () => void }[] = []
-  if (props.filters.search) chips.push({ key: 'q', label: `${t('schedule.searchChip')}: ${props.filters.search}`, remove: () => (props.filters.search = '') })
-  if (props.filters.myList) chips.push({ key: 'mine', label: `★ ${t('schedule.myList')}`, remove: () => (props.filters.myList = false) })
+  if (props.filters.search) chips.push({ key: 'q', label: `${t('schedule.searchChip')}: ${props.filters.search}`, remove: () => { props.filters.search = '' } })
+  if (props.filters.myList) chips.push({ key: 'mine', label: `★ ${t('schedule.myList')}`, remove: () => { props.filters.myList = false } })
   props.filters.genres.forEach(g => chips.push({ key: 'g:' + g, label: genreOptions.value.find(o => o.value === g)?.label ?? g, remove: () => props.filters.genres.delete(g) }))
   return chips
 })
+/* eslint-enable vue/no-mutating-props */
 </script>
