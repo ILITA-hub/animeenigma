@@ -472,6 +472,12 @@ services:
       NOTIFICATIONS_SERVICE_URL: http://notifications:8090
       WATCH_TOGETHER_SERVICE_URL: http://watch-together:8091
       ANALYTICS_SERVICE_URL: http://analytics:8092
+      GACHA_SERVICE_URL: http://gacha:8093
+      # Dark-ship admin-gate (spec §12). While true, /api/gacha/* requires the
+      # admin role — regular users get 403, the лудка is invisible to them.
+      # The global-update release flips this to "false" (env change +
+      # `make restart-gateway`, no rebuild) to open it to all authenticated users.
+      GACHA_ADMIN_ONLY: "true"
       GRAFANA_SERVICE_URL: http://grafana:3000
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
@@ -822,6 +828,41 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8091/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # workstream gacha (Лудка), Phase 1 — «Энигмы» economy substrate on port
+  # 8093 (next free after analytics:8092). Wallet + idempotent ledger only;
+  # cards/banners/pulls land in later phases. GACHA_ENABLED=false dark-ships
+  # the backend (credit endpoint no-ops, service still boots).
+  gacha:
+    build:
+      context: ..
+      dockerfile: services/gacha/Dockerfile
+    container_name: animeenigma-gacha
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8093
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: animeenigma
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      REDIS_HOST: redis
+      GACHA_ENABLED: "true"
+      GACHA_STARTER_BONUS: "300"
+      TRACING_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8093:8093"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8093/health"]
       interval: 30s
       timeout: 5s
       retries: 3
