@@ -26,6 +26,13 @@ type Config struct {
 	// these vars. Defaults: off + empty.
 	SystemBannerActive  bool
 	SystemBannerMessage string
+	// GachaAdminOnly is the gacha (Лудка) dark-ship gate (spec §12). When
+	// true, the /api/gacha/* route group additionally requires the admin
+	// role, so the лудка is forbidden/invisible to regular users on the
+	// live site until the bundled global-update release. Flip to false (env
+	// GACHA_ADMIN_ONLY=false + restart-gateway) to open it to all
+	// authenticated users. Default true.
+	GachaAdminOnly bool
 }
 
 type ServerConfig struct {
@@ -62,6 +69,11 @@ type ServiceURLs struct {
 	// erasure endpoint (/internal/erase) is Docker-network-only and is
 	// intentionally never registered at the gateway (D-05 security model).
 	AnalyticsService string
+	// GachaService — workstream gacha (Лудка), Phase 1. Port 8093. Exposes
+	// /api/gacha/* (JWT; admin-gated during dark-ship). The internal credit
+	// endpoint (/internal/gacha/credit) is Docker-network-only and never
+	// registered at the gateway (D-05 security model).
+	GachaService string
 	WebService           string
 	// Admin panel services
 	GrafanaService    string
@@ -113,6 +125,7 @@ func Load() (*Config, error) {
 			NotificationsService: getEnv("NOTIFICATIONS_SERVICE_URL", "http://notifications:8090"),
 			WatchTogetherService: getEnv("WATCH_TOGETHER_SERVICE_URL", "http://watch-together:8091"),
 			AnalyticsService:     getEnv("ANALYTICS_SERVICE_URL", "http://analytics:8092"),
+			GachaService:         getEnv("GACHA_SERVICE_URL", "http://gacha:8093"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),
@@ -139,6 +152,8 @@ func Load() (*Config, error) {
 		// Phase 11 / UX-24 — system-status banner env vars.
 		SystemBannerActive:  getEnvBool("SYSTEM_BANNER_ACTIVE", false),
 		SystemBannerMessage: getEnv("SYSTEM_BANNER_MESSAGE", ""),
+		// Gacha (Лудка) dark-ship admin-gate — default true (spec §12).
+		GachaAdminOnly: getEnvBool("GACHA_ADMIN_ONLY", true),
 	}
 
 	// DevMode is only permitted in known development environments. Any

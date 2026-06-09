@@ -486,6 +486,26 @@ func NewRouterWithCleanup(
 			})
 		})
 
+		// Gacha (Лудка) service routes — workstream gacha, Phase 1.
+		// JWT-required (logged-in-only; guests blocked via BlockGuestRole).
+		// DARK-SHIP: while cfg.GachaAdminOnly is true the group ALSO requires
+		// the admin role, so the лудка is forbidden/invisible to regular users
+		// on the live site until the bundled global-update release (spec §12).
+		// Flip GACHA_ADMIN_ONLY=false to open it to all authenticated users.
+		// The internal credit endpoint (/internal/gacha/credit) is NOT
+		// registered here — Docker-network-only (D-05).
+		r.Route("/gacha", func(r chi.Router) {
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
+				r.Use(BlockGuestRoleMiddleware)
+				if cfg.GachaAdminOnly {
+					r.Use(AdminRoleMiddleware)
+				}
+				r.Get("/wallet", proxyHandler.ProxyToGacha)
+			})
+		})
+
 		// Library service routes (workstream raw-jp / v0.2). Phase 2 adds
 		// /search behind admin auth; /health remains public so the docker
 		// healthcheck + ops probes still work without credentials. All other

@@ -79,6 +79,14 @@ func (h *ProxyHandler) ProxyToNotifications(w http.ResponseWriter, r *http.Reque
 	h.proxy(w, r, "notifications")
 }
 
+// ProxyToGacha proxies requests to the gacha service (workstream gacha / Лудка,
+// Phase 1). Only /api/gacha/* is exposed; /internal/gacha/credit is reachable
+// solely from inside the Docker network because this gateway never registers a
+// route under /internal/* for it (D-05 security model).
+func (h *ProxyHandler) ProxyToGacha(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "gacha")
+}
+
 // ProxyToAnalytics proxies clickstream ingestion to the analytics service
 // (Plan 1). Only POST /api/analytics/collect is exposed — it is PUBLIC (no
 // JWT) so anonymous visitors are tracked. The internal erasure endpoint
