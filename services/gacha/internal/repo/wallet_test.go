@@ -104,3 +104,42 @@ func TestCredit_EmptyRefAlwaysApplies(t *testing.T) {
 		t.Errorf("balance = %d; want 100 (empty ref not deduped)", w.Balance)
 	}
 }
+
+func TestGrantStarterOnce_GrantsOnFirstCallOnly(t *testing.T) {
+	db := newTestDB(t)
+	r := NewWalletRepository(db)
+	ctx := context.Background()
+
+	if _, err := r.GetOrCreate(ctx, testUser); err != nil {
+		t.Fatalf("GetOrCreate: %v", err)
+	}
+
+	// First call must win the CAS and credit 300.
+	granted, err := r.GrantStarterOnce(ctx, testUser, 300)
+	if err != nil {
+		t.Fatalf("GrantStarterOnce (1st): %v", err)
+	}
+	if !granted {
+		t.Fatal("first GrantStarterOnce must return granted=true")
+	}
+	w, _ := r.GetOrCreate(ctx, testUser)
+	if w.Balance != 300 {
+		t.Errorf("balance = %d; want 300 after grant", w.Balance)
+	}
+	if !w.StarterGranted {
+		t.Error("starter_granted must be true after grant")
+	}
+
+	// Second call must lose the CAS and NOT double-credit.
+	granted2, err := r.GrantStarterOnce(ctx, testUser, 300)
+	if err != nil {
+		t.Fatalf("GrantStarterOnce (2nd): %v", err)
+	}
+	if granted2 {
+		t.Fatal("second GrantStarterOnce must return granted=false (already done)")
+	}
+	w2, _ := r.GetOrCreate(ctx, testUser)
+	if w2.Balance != 300 {
+		t.Errorf("balance = %d; want 300 (no double-credit)", w2.Balance)
+	}
+}

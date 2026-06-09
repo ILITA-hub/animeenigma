@@ -57,15 +57,37 @@ func (r *WalletRepository) Credit(
 	return applied, err
 }
 
-// MarkStarterGranted flips starter_granted to true and returns whether THIS
-// call did the flip (false if it was already true). Used to grant the
-// starter bonus exactly once. Atomic compare-and-set via WHERE guard.
-func (r *WalletRepository) MarkStarterGranted(ctx context.Context, userID string) (didGrant bool, err error) {
-	res := r.db.WithContext(ctx).Model(&domain.Wallet{}).
-		Where("user_id = ? AND starter_granted = ?", userID, false).
-		Update("starter_granted", true)
-	if res.Error != nil {
-		return false, res.Error
-	}
-	return res.RowsAffected == 1, nil
+// GrantStarterOnce atomically flips starter_granted true AND credits the
+// wallet in a single transaction. Returns granted=true only if THIS call did
+// the flip — subsequent calls return granted=false and are no-ops. If the CAS
+// wins but the ledger insert is a duplicate (e.g. a partial replay), the
+// balance update is skipped via ON CONFLICT DO NOTHING so balances stay
+// consistent.
+func (r *WalletRepository) GrantStarterOnce(ctx context.Context, userID string, amount int64) (granted bool, err error) {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// CAS: flip starter_granted false→true only once.
+		res := tx.Model(&domain.Wallet{}).
+			Where("user_id = ? AND starter_granted = ?", userID, false).
+			Update("starter_granted", true)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			// Already granted — nothing to do; commit as a no-op.
+			return nil
+		}
+		// Won the CAS: write the ledger entry and bump the balance.
+		entry := domain.LedgerEntry{UserID: userID, Delta: amount, Reason: domain.ReasonStarter, Ref: "starter"}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&entry).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&domain.Wallet{}).
+			Where("user_id = ?", userID).
+			UpdateColumn("balance", gorm.Expr("balance + ?", amount)).Error; err != nil {
+			return err
+		}
+		granted = true
+		return nil
+	})
+	return granted, err
 }

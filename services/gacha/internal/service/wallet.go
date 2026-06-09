@@ -31,14 +31,11 @@ func (s *WalletService) GetOrCreate(ctx context.Context, userID string) (*domain
 		return nil, err
 	}
 	if s.enabled && !w.StarterGranted && s.starterBonus > 0 {
-		didGrant, err := s.repo.MarkStarterGranted(ctx, userID)
+		granted, err := s.repo.GrantStarterOnce(ctx, userID, s.starterBonus)
 		if err != nil {
 			return nil, err
 		}
-		if didGrant {
-			if _, err := s.repo.Credit(ctx, userID, s.starterBonus, domain.ReasonStarter, "starter"); err != nil {
-				return nil, err
-			}
+		if granted {
 			s.log.Infow("granted gacha starter bonus", "user_id", userID, "amount", s.starterBonus)
 		}
 		// Re-read so the returned wallet reflects the grant.

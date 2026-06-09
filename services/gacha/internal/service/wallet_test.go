@@ -91,7 +91,7 @@ func TestCredit_DisabledServiceNoops(t *testing.T) {
 	s := newSvc(t)
 	s.enabled = false
 	ctx := context.Background()
-	s.GetOrCreate(ctx, u) // starter still 0 because disabled? see note
+	s.GetOrCreate(ctx, u) // no starter granted — service is disabled
 	applied, err := s.Credit(ctx, u, 22, domain.ReasonEpisodeWatched, "a:1")
 	if err != nil {
 		t.Fatalf("disabled credit err: %v", err)
