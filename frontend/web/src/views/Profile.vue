@@ -1304,6 +1304,7 @@ const sortOptions = computed<SelectOption[]>(() => [
   { value: 'score', label: t('profile.sort.score') },
   { value: 'progress', label: t('profile.sort.progress') },
   { value: 'status', label: t('profile.sort.status') },
+  { value: 'genre', label: t('profile.sort.genre') },
 ])
 
 // Map frontend sort keys to backend column names
@@ -1313,6 +1314,7 @@ const backendSortKey = computed(() => {
     score: 'score',
     progress: 'episodes',
     status: 'status',
+    genre: 'genre',
   }
   return map[sortKey.value] || 'updated_at'
 })
