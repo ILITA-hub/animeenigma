@@ -229,6 +229,16 @@ func NewRouterWithCleanup(
 		r.Post("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
 		r.Delete("/anime/{animeId}/reviews", proxyHandler.ProxyToPlayer)
 		r.Get("/anime/{animeId}/rating", proxyHandler.ProxyToPlayer)
+		// AUTO-408 — toggle an emoji reaction on a review. Auth-gated like
+		// comment mutations (JWT validation + per-user rate limit + guest
+		// block); the player applies AuthMiddleware again downstream. Must be
+		// registered BEFORE the /anime/* → catalog catch-all below.
+		r.Group(func(r chi.Router) {
+			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+			r.Use(userRateLimit)
+			r.Use(BlockGuestRoleMiddleware)
+			r.Post("/anime/{animeId}/reviews/{reviewId}/reactions/{emoji}", proxyHandler.ProxyToPlayer)
+		})
 
 		// Phase 14 (ui-ux-audit / UX-28) — soft social-proof follower count
 		// proxied to player. Public, no JWT required. Must be registered BEFORE

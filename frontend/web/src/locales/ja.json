@@ -116,6 +116,25 @@
       "planToWatchFlag": "📺 {watched}/{total}話 · {status} ⚠️",
       "planToWatchOpenFlag": "📺 {watched}話 · {status} ⚠️"
     },
+    "reactions": {
+      "toggle": "リアクション",
+      "login_prompt": "リアクションするにはログインしてください",
+      "error": "リアクションを保存できませんでした — もう一度お試しください",
+      "names": {
+        "like": "いいね",
+        "love": "ラブ",
+        "melting": "とろける",
+        "sick": "うっ",
+        "sneeze": "くしゃみ",
+        "mindblown": "衝撃",
+        "woozy": "ふらふら",
+        "devil": "悪魔",
+        "clown": "ピエロ",
+        "starstruck": "感激",
+        "smirk": "ニヤリ",
+        "adore": "大好き"
+      }
+    },
     "editReview": "レビューを編集",
     "yourRating": "あなたの評価",
     "reviewPlaceholder": "このアニメについて感想を共有してください...",

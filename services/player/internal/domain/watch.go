@@ -97,10 +97,49 @@ type AnimeListEntry struct {
 	CompletedAt  *time.Time `json:"completed_at,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+	// Reactions is a TRANSIENT (non-persisted) projection of this row's emoji
+	// reactions, populated by ReviewService for the review endpoints. `gorm:"-"`
+	// keeps it out of all SQL; `json:"-"` keeps it off the watchlist wire shape
+	// (the review handler copies it into reviewResponse.Reactions). AUTO-408.
+	Reactions []ReactionCount `gorm:"-" json:"-"`
 }
 
 func (AnimeListEntry) TableName() string {
 	return "anime_list"
+}
+
+// ReviewReaction is a single user's emoji reaction to a review (an anime_list
+// row that qualifies as a review). One row per (review, user, emoji); the
+// compound UNIQUE index makes toggling idempotent. The FK to anime_list(id)
+// with ON DELETE CASCADE is enforced via raw SQL in cmd/player-api/main.go
+// (GORM does not infer FKs from struct tags alone). AUTO-408.
+type ReviewReaction struct {
+	ID        string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ReviewID  string    `gorm:"type:uuid;not null;index;uniqueIndex:idx_review_reaction_unique,priority:1" json:"review_id"`
+	UserID    string    `gorm:"type:uuid;not null;uniqueIndex:idx_review_reaction_unique,priority:2" json:"user_id"`
+	Emoji     string    `gorm:"size:10;not null;uniqueIndex:idx_review_reaction_unique,priority:3" json:"emoji"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (ReviewReaction) TableName() string { return "review_reactions" }
+
+// ReactionCount is the per-emoji aggregate attached to a review in API
+// responses. ReactedByMe is true when the requesting (authenticated) viewer
+// has reacted with this emoji on the review; always false for anonymous
+// viewers. AUTO-408.
+type ReactionCount struct {
+	Emoji       string `json:"emoji"`
+	Count       int    `json:"count"`
+	ReactedByMe bool   `json:"reacted_by_me"`
+}
+
+// AllowedReactionEmojis is the fixed 12-emoji palette the review-reaction
+// endpoint accepts. Toggling any emoji outside this set is rejected with
+// InvalidInput. AUTO-408 (admin @tNeymik request).
+var AllowedReactionEmojis = map[string]bool{
+	"👍": true, "❤️": true, "🫠": true, "🤮": true,
+	"🤧": true, "🤯": true, "🥴": true, "😈": true,
+	"🤡": true, "🤩": true, "😏": true, "🥰": true,
 }
 
 // WatchHistory records a watched episode with full combo context

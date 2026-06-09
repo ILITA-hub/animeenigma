@@ -85,6 +85,15 @@ func setupReviewHandlerTestDB(t *testing.T) (*ReviewHandler, *gorm.DB) {
 			created_at DATETIME,
 			deleted_at DATETIME
 		)`,
+		// AUTO-408 — reactions table queried by GetAnimeReviews/GetUserReview.
+		`CREATE TABLE review_reactions (
+			id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+			review_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			emoji TEXT NOT NULL,
+			created_at DATETIME,
+			UNIQUE (review_id, user_id, emoji)
+		)`,
 	}
 	for _, s := range stmts {
 		require.NoError(t, db.Exec(s).Error)
@@ -126,9 +135,11 @@ var allowedReviewKeys = map[string]bool{
 	"score":       true,
 	"review_text": true,
 	"created_at":  true,
-	"status":      true, // Steam-style review-context (2026-05-21)
-	"episodes":    true, // Steam-style review-context (2026-05-21)
-	"anime":       true,
+	"status":       true, // Steam-style review-context (2026-05-21)
+	"episodes":     true, // Steam-style review-context (2026-05-21)
+	"anime":        true,
+	"reactions":    true, // emoji reactions (AUTO-408)
+	"my_reactions": true, // viewer's reacted-emoji subset (AUTO-408)
 }
 
 // forbiddenLeakKeys are the AnimeListEntry-only keys that MUST NOT appear

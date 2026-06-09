@@ -83,6 +83,10 @@ func main() {
 		// New `comments` table for the comments feature; domain struct in
 		// services/player/internal/domain/comment.go.
 		&domain.Comment{},
+		// AUTO-408 — emoji reactions on reviews. FK to anime_list(id) with
+		// ON DELETE CASCADE is added via raw SQL below (GORM doesn't infer FKs
+		// from struct tags alone).
+		&domain.ReviewReaction{},
 		&domain.SyncJob{},
 		&domain.ActivityEvent{},
 		&domain.RecUserSignals{},
@@ -191,6 +195,17 @@ func main() {
 				ON rec_user_signals (last_computed)`,
 			`CREATE INDEX IF NOT EXISTS idx_rec_co_occurrence_seed
 				ON rec_completion_co_occurrence (seed_anime_id, co_count DESC)`,
+			// AUTO-408 — review_reactions.review_id → anime_list(id) ON DELETE
+			// CASCADE so removing a review/list row cleans up its reactions.
+			// Postgres 16 has no ADD CONSTRAINT IF NOT EXISTS for FKs, so guard
+			// with a pg_constraint probe. Idempotent.
+			`DO $$ BEGIN
+				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'review_reactions_review_id_fkey') THEN
+					ALTER TABLE review_reactions
+						ADD CONSTRAINT review_reactions_review_id_fkey
+						FOREIGN KEY (review_id) REFERENCES anime_list(id) ON DELETE CASCADE;
+				END IF;
+			END $$;`,
 		}
 		for _, sql := range stmts {
 			if err := db.DB.Exec(sql).Error; err != nil {

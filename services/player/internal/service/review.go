@@ -97,15 +97,71 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 }
 
 // GetAnimeReviews returns every anime_list row for the anime that qualifies
-// as a "review" (score>0 OR review_text!='').
-func (s *ReviewService) GetAnimeReviews(ctx context.Context, animeID string) ([]*domain.AnimeListEntry, error) {
-	return s.listRepo.GetReviewsByAnime(ctx, animeID)
+// as a "review" (score>0 OR review_text!=''), each with its emoji reactions
+// attached. viewerUserID (nil for anonymous) drives the per-emoji
+// ReactedByMe flag. AUTO-408.
+func (s *ReviewService) GetAnimeReviews(ctx context.Context, animeID string, viewerUserID *string) ([]*domain.AnimeListEntry, error) {
+	entries, err := s.listRepo.GetReviewsByAnime(ctx, animeID)
+	if err != nil {
+		return nil, err
+	}
+	return s.attachReactions(ctx, entries, viewerUserID)
 }
 
 // GetUserReview returns the current user's review (or errors.NotFound when
-// the row is absent or empty-on-both).
+// the row is absent or empty-on-both), with reactions attached and
+// ReactedByMe resolved for the requesting user. AUTO-408.
 func (s *ReviewService) GetUserReview(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
-	return s.listRepo.GetUserReview(ctx, userID, animeID)
+	entry, err := s.listRepo.GetUserReview(ctx, userID, animeID)
+	if err != nil {
+		return nil, err
+	}
+	viewer := userID
+	if _, err := s.attachReactions(ctx, []*domain.AnimeListEntry{entry}, &viewer); err != nil {
+		return nil, err
+	}
+	return entry, nil
+}
+
+// attachReactions populates entry.Reactions in-place for each entry by fetching
+// aggregated counts in a single batched query. A nil/empty input is a no-op.
+// AUTO-408.
+func (s *ReviewService) attachReactions(ctx context.Context, entries []*domain.AnimeListEntry, viewerUserID *string) ([]*domain.AnimeListEntry, error) {
+	if len(entries) == 0 {
+		return entries, nil
+	}
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		ids = append(ids, e.ID)
+	}
+	counts, err := s.listRepo.GetReactionCounts(ctx, ids, viewerUserID)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "failed to load review reactions")
+	}
+	for _, e := range entries {
+		e.Reactions = counts[e.ID]
+	}
+	return entries, nil
+}
+
+// ToggleReaction adds or removes the (review, user, emoji) reaction and returns
+// the resulting added flag plus the review's fresh reaction counts (with
+// ReactedByMe resolved for this user). Rejects emojis outside the fixed
+// 12-emoji palette. AUTO-408.
+func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, userID, emoji string) (bool, []domain.ReactionCount, error) {
+	if !domain.AllowedReactionEmojis[emoji] {
+		return false, nil, errors.InvalidInput("unsupported reaction emoji")
+	}
+	added, err := s.listRepo.ToggleReaction(ctx, reviewID, userID, emoji)
+	if err != nil {
+		return false, nil, errors.Wrap(err, errors.CodeInternal, "failed to toggle reaction")
+	}
+	viewer := userID
+	counts, err := s.listRepo.GetReactionCounts(ctx, []string{reviewID}, &viewer)
+	if err != nil {
+		return false, nil, errors.Wrap(err, errors.CodeInternal, "failed to load reaction counts")
+	}
+	return added, counts[reviewID], nil
 }
 
 // GetUserReviews returns every anime_list row for the user that qualifies

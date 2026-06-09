@@ -601,6 +601,12 @@ export const reviewApi = {
   // Get batch ratings for multiple anime
   getBatchRatings: (animeIds: string[]) =>
     apiClient.post('/anime/ratings/batch', { anime_ids: animeIds }),
+  // Toggle an emoji reaction on a review (auth required). The emoji is
+  // percent-encoded into the path; returns { added, counts }. AUTO-408.
+  toggleReaction: (animeId: string, reviewId: string, emoji: string) =>
+    apiClient.post(
+      `/anime/${animeId}/reviews/${reviewId}/reactions/${encodeURIComponent(emoji)}`,
+    ),
 }
 
 export const commentApi = {

@@ -207,8 +207,15 @@ func NewRouter(
 
 		// Anime reviews routes
 		r.Route("/anime/{animeId}", func(r chi.Router) {
+			// Public reviews listing — wrapped in OptionalAuthMiddleware so a
+			// logged-in viewer's previously-made emoji reactions come back
+			// highlighted (reacted_by_me) on first load, while anonymous
+			// callers still get the full list. AUTO-408.
+			r.Group(func(r chi.Router) {
+				r.Use(OptionalAuthMiddleware(jwtConfig))
+				r.Get("/reviews", reviewHandler.GetAnimeReviews)
+			})
 			// Public routes
-			r.Get("/reviews", reviewHandler.GetAnimeReviews)
 			r.Get("/rating", reviewHandler.GetAnimeRating)
 			// Phase 1 (workstream: social) plan 04 — public comment listing.
 			// MUST live outside the AuthMiddleware-protected group below so
@@ -226,6 +233,8 @@ func NewRouter(
 				r.Post("/reviews", reviewHandler.CreateOrUpdateReview)
 				r.Get("/reviews/me", reviewHandler.GetUserReview)
 				r.Delete("/reviews", reviewHandler.DeleteReview)
+				// AUTO-408 — toggle an emoji reaction on a review.
+				r.Post("/reviews/{reviewId}/reactions/{emoji}", reviewHandler.ReactToReview)
 				// Phase 1 (workstream: social) plan 04 — comment mutations.
 				r.Post("/comments", commentHandler.CreateComment)
 				r.Patch("/comments/{commentId}", commentHandler.UpdateComment)

@@ -116,6 +116,25 @@
       "planToWatchFlag": "📺 {watched}/{total} · {status} ⚠️",
       "planToWatchOpenFlag": "📺 {watched} eps · {status} ⚠️"
     },
+    "reactions": {
+      "toggle": "React",
+      "login_prompt": "Sign in to react",
+      "error": "Couldn't save your reaction — please retry",
+      "names": {
+        "like": "Like",
+        "love": "Love",
+        "melting": "Melting",
+        "sick": "Sick",
+        "sneeze": "Sneezing",
+        "mindblown": "Mind blown",
+        "woozy": "Woozy",
+        "devil": "Devious",
+        "clown": "Clown",
+        "starstruck": "Star-struck",
+        "smirk": "Smirk",
+        "adore": "Adore"
+      }
+    },
     "editReview": "Edit review",
     "yourRating": "Your rating",
     "reviewPlaceholder": "Share your thoughts about this anime...",

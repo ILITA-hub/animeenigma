@@ -467,6 +467,87 @@ func (r *ListRepository) GetBatchAnimeRatings(ctx context.Context, animeIDs []st
 	return out, nil
 }
 
+// ToggleReaction adds the (review, user, emoji) reaction if absent, or removes
+// it if already present. Returns added=true when a new row was inserted,
+// added=false when an existing reaction was toggled off. The UNIQUE
+// (review_id, user_id, emoji) index makes this race-safe: the insert either
+// wins (added) or conflicts (existing → delete). AUTO-408.
+func (r *ListRepository) ToggleReaction(ctx context.Context, reviewID, userID, emoji string) (bool, error) {
+	res := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "review_id"}, {Name: "user_id"}, {Name: "emoji"}},
+		DoNothing: true,
+	}).Create(&domain.ReviewReaction{
+		ReviewID: reviewID,
+		UserID:   userID,
+		Emoji:    emoji,
+	})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	if res.RowsAffected > 0 {
+		return true, nil // freshly inserted → reaction added
+	}
+	// Conflict (RowsAffected==0) → the reaction already existed; toggle it off.
+	del := r.db.WithContext(ctx).
+		Where("review_id = ? AND user_id = ? AND emoji = ?", reviewID, userID, emoji).
+		Delete(&domain.ReviewReaction{})
+	return false, del.Error
+}
+
+// GetReactionCounts returns per-review aggregated reaction counts for the given
+// review IDs, keyed by review_id. When viewerUserID is non-nil, ReactedByMe is
+// set per emoji for that viewer. Reviews with no reactions are absent from the
+// map (the handler treats absence as an empty slice). AUTO-408.
+func (r *ListRepository) GetReactionCounts(ctx context.Context, reviewIDs []string, viewerUserID *string) (map[string][]domain.ReactionCount, error) {
+	out := make(map[string][]domain.ReactionCount)
+	if len(reviewIDs) == 0 {
+		return out, nil
+	}
+
+	var rows []struct {
+		ReviewID string `gorm:"column:review_id"`
+		Emoji    string `gorm:"column:emoji"`
+		Count    int    `gorm:"column:count"`
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&domain.ReviewReaction{}).
+		Select("review_id, emoji, COUNT(*) AS count").
+		Where("review_id IN ?", reviewIDs).
+		Group("review_id, emoji").
+		Order("count DESC, emoji ASC").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	// Resolve the viewer's own reactions across these reviews in one query.
+	mine := make(map[string]bool) // key: reviewID + "\x00" + emoji
+	if viewerUserID != nil {
+		var myRows []struct {
+			ReviewID string `gorm:"column:review_id"`
+			Emoji    string `gorm:"column:emoji"`
+		}
+		if err := r.db.WithContext(ctx).
+			Model(&domain.ReviewReaction{}).
+			Select("review_id, emoji").
+			Where("review_id IN ? AND user_id = ?", reviewIDs, *viewerUserID).
+			Scan(&myRows).Error; err != nil {
+			return nil, err
+		}
+		for _, m := range myRows {
+			mine[m.ReviewID+"\x00"+m.Emoji] = true
+		}
+	}
+
+	for _, row := range rows {
+		out[row.ReviewID] = append(out[row.ReviewID], domain.ReactionCount{
+			Emoji:       row.Emoji,
+			Count:       row.Count,
+			ReactedByMe: mine[row.ReviewID+"\x00"+row.Emoji],
+		})
+	}
+	return out, nil
+}
+
 func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 

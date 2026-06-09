@@ -48,22 +48,43 @@ type reviewResponse struct {
 	Status   string            `json:"status"`
 	Episodes int               `json:"episodes"`
 	Anime    *domain.AnimeInfo `json:"anime,omitempty"`
+	// Reactions — per-emoji aggregate counts (with reacted_by_me for the
+	// requesting viewer). MyReactions is the convenience subset of emojis the
+	// viewer has reacted with, consumed by the frontend's `viewer-reacted`
+	// prop. Both always present (never null) so the UI can bind safely.
+	// AUTO-408.
+	Reactions   []domain.ReactionCount `json:"reactions"`
+	MyReactions []string               `json:"my_reactions"`
 }
 
 // toReviewResponse projects an AnimeListEntry into the wire-stable
 // reviewResponse shape. Used by every review endpoint that returns JSON.
 func toReviewResponse(e *domain.AnimeListEntry) reviewResponse {
+	// Normalize reactions to a non-nil slice so JSON encodes `[]` not `null`,
+	// and derive the viewer's reacted-emoji subset for the `my_reactions` field.
+	reactions := e.Reactions
+	if reactions == nil {
+		reactions = []domain.ReactionCount{}
+	}
+	myReactions := make([]string, 0, len(reactions))
+	for _, rc := range reactions {
+		if rc.ReactedByMe {
+			myReactions = append(myReactions, rc.Emoji)
+		}
+	}
 	return reviewResponse{
-		ID:         e.ID,
-		UserID:     e.UserID,
-		AnimeID:    e.AnimeID,
-		Username:   e.Username,
-		Score:      e.Score,
-		ReviewText: e.ReviewText,
-		CreatedAt:  e.CreatedAt,
-		Status:     e.Status,
-		Episodes:   e.Episodes,
-		Anime:      e.Anime,
+		ID:          e.ID,
+		UserID:      e.UserID,
+		AnimeID:     e.AnimeID,
+		Username:    e.Username,
+		Score:       e.Score,
+		ReviewText:  e.ReviewText,
+		CreatedAt:   e.CreatedAt,
+		Status:      e.Status,
+		Episodes:    e.Episodes,
+		Anime:       e.Anime,
+		Reactions:   reactions,
+		MyReactions: myReactions,
 	}
 }
 
@@ -149,13 +170,53 @@ func (h *ReviewHandler) GetAnimeReviews(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	entries, err := h.reviewService.GetAnimeReviews(r.Context(), animeID)
+	// Optional auth: when a valid JWT rode along (player's OptionalAuthMiddleware
+	// decoded it), resolve the viewer so each reaction carries reacted_by_me.
+	// Anonymous callers get viewerID=nil → all reacted_by_me=false. AUTO-408.
+	var viewerID *string
+	if claims, ok := authz.ClaimsFromContext(r.Context()); ok && claims != nil {
+		uid := claims.UserID
+		viewerID = &uid
+	}
+
+	entries, err := h.reviewService.GetAnimeReviews(r.Context(), animeID, viewerID)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
 	httputil.OK(w, toReviewResponses(entries))
+}
+
+// ReactToReview toggles the calling user's emoji reaction on a review.
+// POST /api/anime/{animeId}/reviews/{reviewId}/reactions/{emoji} — auth
+// required. Returns { added: bool, counts: []ReactionCount } where `added`
+// reports whether the reaction was added (true) or removed (false). AUTO-408.
+func (h *ReviewHandler) ReactToReview(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	reviewID := chi.URLParam(r, "reviewId")
+	emoji := chi.URLParam(r, "emoji")
+	if animeID == "" || reviewID == "" || emoji == "" {
+		httputil.BadRequest(w, "anime_id, review_id and emoji are required")
+		return
+	}
+
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	added, counts, err := h.reviewService.ToggleReaction(r.Context(), animeID, reviewID, claims.UserID, emoji)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	if counts == nil {
+		counts = []domain.ReactionCount{}
+	}
+
+	httputil.OK(w, map[string]interface{}{"added": added, "counts": counts})
 }
 
 // GetAnimeRating returns the average rating for an anime

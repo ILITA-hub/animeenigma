@@ -116,6 +116,25 @@
       "planToWatchFlag": "📺 {watched}/{total} · {status} ⚠️",
       "planToWatchOpenFlag": "📺 {watched} сер. · {status} ⚠️"
     },
+    "reactions": {
+      "toggle": "Реакция",
+      "login_prompt": "Войдите, чтобы оставить реакцию",
+      "error": "Не удалось сохранить реакцию — попробуйте ещё раз",
+      "names": {
+        "like": "Нравится",
+        "love": "Любовь",
+        "melting": "Растаял",
+        "sick": "Тошнит",
+        "sneeze": "Чихаю",
+        "mindblown": "Взрыв мозга",
+        "woozy": "Поплыл",
+        "devil": "Дьявол",
+        "clown": "Клоун",
+        "starstruck": "В восторге",
+        "smirk": "Ухмылка",
+        "adore": "Обожаю"
+      }
+    },
     "editReview": "Изменить отзыв",
     "yourRating": "Ваша оценка",
     "reviewPlaceholder": "Поделитесь своими впечатлениями об аниме...",
