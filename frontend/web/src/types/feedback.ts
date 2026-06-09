@@ -1,7 +1,9 @@
 // Admin feedback browser types — mirror the player service contract in
 // services/player/internal/handler/admin_reports.go.
 
-export type FeedbackStatus = 'new' | 'in_progress' | 'resolved' | 'not_relevant'
+// 'ai_done' is a transparent automation state: an AI agent believes the item is
+// done, pending human verification before promotion to 'resolved'.
+export type FeedbackStatus = 'new' | 'in_progress' | 'ai_done' | 'resolved' | 'not_relevant'
 
 // FeedbackListItem is one light list row (no heavy diagnostics).
 export interface FeedbackListItem {

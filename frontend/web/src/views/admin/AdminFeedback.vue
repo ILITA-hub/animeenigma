@@ -123,6 +123,7 @@
                 >
                   <option class="bg-popover text-white" value="new">{{ statusLabel('new') }}</option>
                   <option class="bg-popover text-white" value="in_progress">{{ statusLabel('in_progress') }}</option>
+                  <option class="bg-popover text-white" value="ai_done">{{ statusLabel('ai_done') }}</option>
                   <option class="bg-popover text-white" value="resolved">{{ statusLabel('resolved') }}</option>
                   <option class="bg-popover text-white" value="not_relevant">{{ statusLabel('not_relevant') }}</option>
                 </select>
@@ -142,7 +143,7 @@
       </div>
 
       <!-- Kanban -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div
           v-for="col in kanbanColumns"
           :key="col.status"
@@ -341,7 +342,7 @@ function setViewMode(m: ViewMode): void {
 }
 
 // --- Kanban: group the loaded rows into status columns ---
-const STATUS_ORDER: FeedbackStatus[] = ['new', 'in_progress', 'resolved', 'not_relevant']
+const STATUS_ORDER: FeedbackStatus[] = ['new', 'in_progress', 'ai_done', 'resolved', 'not_relevant']
 const kanbanColumns = computed(() =>
   STATUS_ORDER.map((status) => ({
     status,
@@ -389,6 +390,7 @@ const statusOptions = computed(() => [
   { value: 'all', label: t('admin.feedback.filters.allStatuses') },
   { value: 'new', label: statusLabel('new') },
   { value: 'in_progress', label: statusLabel('in_progress') },
+  { value: 'ai_done', label: statusLabel('ai_done') },
   { value: 'resolved', label: statusLabel('resolved') },
   { value: 'not_relevant', label: statusLabel('not_relevant') },
 ])
@@ -398,7 +400,7 @@ function categoryLabel(c: string): string {
   return t('admin.feedback.category.other')
 }
 function statusLabel(s: string): string {
-  if (s === 'new' || s === 'in_progress' || s === 'resolved' || s === 'not_relevant') return t(`admin.feedback.status.${s}`)
+  if (s === 'new' || s === 'in_progress' || s === 'ai_done' || s === 'resolved' || s === 'not_relevant') return t(`admin.feedback.status.${s}`)
   return s
 }
 
@@ -413,6 +415,7 @@ function categoryClass(c: string): string {
 function statusClass(s: string): string {
   switch (s) {
     case 'resolved': return 'bg-success/20 text-success'
+    case 'ai_done': return 'bg-indigo-500/20 text-indigo-300'
     case 'in_progress': return 'bg-warning/20 text-warning'
     case 'not_relevant': return 'bg-muted text-muted-foreground'
     default: return 'bg-info/20 text-info'
@@ -422,6 +425,7 @@ function statusClass(s: string): string {
 function statusSelectClass(s: string): string {
   switch (s) {
     case 'resolved': return 'bg-success/20 text-success border border-success/40'
+    case 'ai_done': return 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/40'
     case 'in_progress': return 'bg-warning/20 text-warning border border-warning/40'
     case 'not_relevant': return 'bg-muted text-muted-foreground border border-muted-foreground/40'
     default: return 'bg-info/20 text-info border border-info/40'
@@ -431,6 +435,7 @@ function statusSelectClass(s: string): string {
 function statusAccentBorder(s: string): string {
   switch (s) {
     case 'resolved': return 'border-success'
+    case 'ai_done': return 'border-indigo-400'
     case 'in_progress': return 'border-warning'
     case 'not_relevant': return 'border-muted-foreground'
     default: return 'border-info'

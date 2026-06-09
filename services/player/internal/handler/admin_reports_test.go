@@ -154,6 +154,30 @@ func TestAdminReports_SetStatus_InvalidEnum(t *testing.T) {
 	}
 }
 
+func TestAdminReports_SetStatus_AIDoneAccepted(t *testing.T) {
+	h, dir := newTestReportsHandler(t)
+	id := writeReport(t, dir, "2026-06-05T12-00-00", "dave", "feedback", map[string]interface{}{"category": "bug", "description": "x"})
+
+	body := strings.NewReader(`{"status":"ai_done"}`)
+	r := httptest.NewRequest(http.MethodPatch, "/api/admin/reports/"+id+"/status", body)
+	r = withURLParam(r, "id", id)
+	r = r.WithContext(authz.ContextWithClaims(r.Context(), &authz.Claims{Username: "agent"}))
+	w := httptest.NewRecorder()
+	h.SetStatus(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("set ai_done code = %d (body=%s)", w.Code, w.Body.String())
+	}
+
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?status=ai_done", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	var resp listResp
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Items[0].Status != "ai_done" {
+		t.Errorf("ai_done filter: total=%d", resp.Data.Total)
+	}
+}
+
 func TestAdminReports_PathTraversalRejected(t *testing.T) {
 	h, _ := newTestReportsHandler(t)
 	for _, bad := range []string{"../secret", "..%2fsecret", "a/b", `a\b`, "_status", "with.dot"} {

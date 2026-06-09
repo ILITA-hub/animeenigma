@@ -816,6 +816,12 @@
     "searchShikimori": "Shikimoriで検索",
     "refreshShikimori": "Shikimoriから更新",
     "resultsHeading": "結果",
+    "titleLang": {
+      "label": "タイトル",
+      "auto": "自動",
+      "ru": "RU",
+      "en": "EN"
+    },
     "filters": {
       "title": "フィルター",
       "reset": "すべてのフィルターをリセット",
@@ -975,6 +981,7 @@
       "status": {
         "new": "新規",
         "in_progress": "対応中",
+        "ai_done": "AI完了",
         "resolved": "解決済み",
         "not_relevant": "対象外"
       },

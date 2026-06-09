@@ -816,6 +816,12 @@
     "searchShikimori": "Search on Shikimori",
     "refreshShikimori": "Refresh from Shikimori",
     "resultsHeading": "Results",
+    "titleLang": {
+      "label": "Titles",
+      "auto": "Auto",
+      "ru": "RU",
+      "en": "EN"
+    },
     "filters": {
       "title": "Filters",
       "reset": "Reset all filters",
@@ -975,6 +981,7 @@
       "status": {
         "new": "New",
         "in_progress": "In progress",
+        "ai_done": "AI says done",
         "resolved": "Resolved",
         "not_relevant": "Not relevant"
       },

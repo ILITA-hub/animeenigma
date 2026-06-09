@@ -123,6 +123,26 @@
               </button>
             </div>
 
+            <!-- Title-language toggle: read English/romaji titles when RU names aren't recognizable -->
+            <div class="mb-4 flex items-center justify-end gap-2">
+              <span class="text-xs text-white/40">{{ $t('browse.titleLang.label') }}</span>
+              <div
+                class="inline-flex rounded-md border border-white/10 overflow-hidden"
+                role="group"
+                :aria-label="$t('browse.titleLang.label')"
+              >
+                <button
+                  v-for="opt in titleLangOptions"
+                  :key="opt"
+                  type="button"
+                  class="px-2.5 py-1 text-xs font-medium transition-colors"
+                  :class="titleLang === opt ? 'bg-cyan-500/20 text-cyan-300' : 'text-white/50 hover:text-white hover:bg-white/5'"
+                  :aria-pressed="titleLang === opt"
+                  @click="setTitleLang(opt)"
+                >{{ $t('browse.titleLang.' + opt) }}</button>
+              </div>
+            </div>
+
             <!-- Results Grid -->
             <!-- UA-048 (UX-11 Phase 4): sr-only h2 to satisfy heading-order. -->
             <h2 class="sr-only">{{ $t('browse.resultsHeading') }}</h2>
@@ -222,6 +242,7 @@ import { useFocusTrap } from '@/composables/useFocusTrap'
 import { animeApi } from '@/api/client'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { getLocalizedGenre } from '@/utils/title'
+import { useTitleLang, type TitleLang } from '@/composables/useTitleLang'
 import { useSiteRatings } from '@/composables/useSiteRatings'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useAnimeProgress } from '@/composables/useAnimeProgress'
@@ -236,6 +257,11 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { animeList, loading, error, fetchAnimeList, searchAnime, paginationMeta } = useAnime()
+
+// Catalog title-language toggle (Auto/RU/EN) — Russian titles aren't always
+// recognizable, so users can pin English/romaji names independent of UI locale.
+const { titleLang, setTitleLang } = useTitleLang()
+const titleLangOptions: TitleLang[] = ['auto', 'ru', 'en']
 
 // Phase 9 (UX-16): bulk per-card progress for the Browse grid.
 const browseIds = computed(() => animeList.value.map((a: { id: string | number }) => String(a.id)))

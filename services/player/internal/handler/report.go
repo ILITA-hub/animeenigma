@@ -88,6 +88,7 @@ func (h *ReportHandler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 		report.PageHTML = report.PageHTML[:500*1024] + "...[truncated]"
 	}
 
+	// Lean INFO line — identity + classification only, no sensitive/verbose fields.
 	h.log.Infow("error report received",
 		"user_id", claims.UserID,
 		"username", claims.Username,
@@ -97,6 +98,13 @@ func (h *ReportHandler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 		"anime_name", report.AnimeName,
 		"episode_number", report.EpisodeNumber,
 		"server_name", report.ServerName,
+		"console_logs_size", len(report.ConsoleLogs),
+		"network_logs_size", len(report.NetworkLogs),
+		"page_html_size", len(report.PageHTML),
+	)
+	// Sensitive/verbose payload (signed stream URL, free-text, UA) at DEBUG only.
+	h.log.Debugw("error report detail",
+		"username", claims.Username,
 		"stream_url", report.StreamURL,
 		"error_message", report.ErrorMessage,
 		"description", report.Description,
@@ -105,9 +113,6 @@ func (h *ReportHandler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 		"screen_size", report.ScreenSize,
 		"language", report.Language,
 		"timestamp", report.Timestamp,
-		"console_logs_size", len(report.ConsoleLogs),
-		"network_logs_size", len(report.NetworkLogs),
-		"page_html_size", len(report.PageHTML),
 	)
 
 	// Save report to disk

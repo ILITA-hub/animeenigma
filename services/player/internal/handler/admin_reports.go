@@ -48,7 +48,9 @@ const (
 
 // validFeedbackStatus is the allowlist of triage states. "not_relevant" marks
 // reports/ideas that won't be acted on (obsolete, out of scope, won't-do).
-var validFeedbackStatus = map[string]bool{"new": true, "in_progress": true, "resolved": true, "not_relevant": true}
+// "ai_done" is a transparent automation state: an AI agent believes the item is
+// done, pending human verification before it's promoted to "resolved".
+var validFeedbackStatus = map[string]bool{"new": true, "in_progress": true, "ai_done": true, "resolved": true, "not_relevant": true}
 
 // reportIDRe guards against path traversal. IDs are derived from on-disk
 // filenames (timestamp_username_playertype, already sanitized at write time),
@@ -285,7 +287,7 @@ func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !validFeedbackStatus[req.Status] {
-		httputil.BadRequest(w, "invalid status (expected new|in_progress|resolved|not_relevant)")
+		httputil.BadRequest(w, "invalid status (expected new|in_progress|ai_done|resolved|not_relevant)")
 		return
 	}
 	if _, err := os.Stat(path); err != nil {

@@ -1,4 +1,10 @@
 import { getLocalizedTitle, getLocalizedGenre } from '@/utils/title'
+import { useTitleLang } from '@/composables/useTitleLang'
+
+// Reading `.value` inside the mappers (which run in template/computed reactive
+// contexts) tracks the dep, so flipping the catalog title-language toggle
+// re-renders every card title instantly.
+const { titleLang } = useTitleLang()
 import type { AnimeCardModel, CardExtras } from '@/types/card'
 
 // Minimal structural shapes the mappers accept. We intentionally keep these
@@ -62,7 +68,7 @@ export function fromCatalogAnime(a: CatalogAnimeLike, extras?: CardExtras): Anim
     href: `/anime/${id}`,
     title:
       a.name || a.nameRu || a.nameJp
-        ? getLocalizedTitle(a.name, a.nameRu, a.nameJp)
+        ? getLocalizedTitle(a.name, a.nameRu, a.nameJp, titleLang.value)
         : a.title,
     coverImage: a.coverImage || PLACEHOLDER,
     year: a.releaseYear || undefined,
@@ -88,7 +94,7 @@ export function fromHomeAnime(a: HomeAnimeLike, extras?: CardExtras): AnimeCardM
   return {
     id,
     href: `/anime/${id}`,
-    title: getLocalizedTitle(a.name, a.name_ru, a.name_jp) || '',
+    title: getLocalizedTitle(a.name, a.name_ru, a.name_jp, titleLang.value) || '',
     coverImage: a.poster_url || PLACEHOLDER,
     year: a.year || undefined,
     episodes: a.episodes_count || undefined,
@@ -110,7 +116,7 @@ export function fromContinueWatching(item: ContinueWatchingLike): AnimeCardModel
   return {
     id,
     href: `/anime/${id}?episode=${item.episode_number}`,
-    title: getLocalizedTitle(a.name, a.name_ru, a.name_jp) || '',
+    title: getLocalizedTitle(a.name, a.name_ru, a.name_jp, titleLang.value) || '',
     coverImage: a.poster_url || PLACEHOLDER,
     episodes: a.episodes_count || undefined,
     // For continue-watching the "next episode" slot carries the resume episode;

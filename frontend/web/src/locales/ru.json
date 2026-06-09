@@ -816,6 +816,12 @@
     "searchShikimori": "Поиск на Shikimori",
     "refreshShikimori": "Обновить с Shikimori",
     "resultsHeading": "Результаты",
+    "titleLang": {
+      "label": "Названия",
+      "auto": "Авто",
+      "ru": "РУ",
+      "en": "EN"
+    },
     "filters": {
       "title": "Фильтры",
       "reset": "Сбросить все фильтры",
@@ -975,6 +981,7 @@
       "status": {
         "new": "Новое",
         "in_progress": "В работе",
+        "ai_done": "ИИ: готово",
         "resolved": "Решено",
         "not_relevant": "Неактуально"
       },
