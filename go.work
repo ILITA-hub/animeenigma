@@ -18,6 +18,7 @@ use (
 	./services/analytics
 	./services/auth
 	./services/catalog
+	./services/gacha
 	./services/gateway
 	./services/library
 	./services/maintenance
