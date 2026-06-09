@@ -36,6 +36,7 @@ COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 COPY services/watch-together/go.mod services/watch-together/go.sum* ./services/watch-together/
 COPY services/analytics/go.mod services/analytics/go.sum* ./services/analytics/
+COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
 
 # Download dependencies
 RUN cd services/gateway && go mod download

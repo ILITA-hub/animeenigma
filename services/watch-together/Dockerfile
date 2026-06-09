@@ -35,6 +35,7 @@ COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/mainten
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 COPY services/watch-together/go.mod services/watch-together/go.sum* ./services/watch-together/
 COPY services/analytics/go.mod services/analytics/go.sum* ./services/analytics/
+COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
 
 RUN cd services/watch-together && go mod download
 
