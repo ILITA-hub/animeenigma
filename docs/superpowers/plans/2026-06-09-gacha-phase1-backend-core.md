@@ -51,9 +51,9 @@ Design spec: `docs/superpowers/specs/2026-06-09-gacha-ludka-design.md`.
 | `go.work` | add `./services/gacha` to `use (...)` |
 | `services/*/Dockerfile` (ALL service Dockerfiles) | add `COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/` |
 | `docker/docker-compose.yml` | new `gacha` service block (port 8093) + `GACHA_SERVICE_URL` env on gateway |
-| `services/gateway/internal/config/config.go` | add `GachaService` to `ServiceURLs` + env load |
+| `services/gateway/internal/config/config.go` | add `GachaService` to `ServiceURLs` + `GachaAdminOnly` bool + env load |
 | `services/gateway/internal/handler/proxy.go` | add `ProxyToGacha` |
-| `services/gateway/internal/transport/router.go` | mount `/api/gacha/*` → `ProxyToGacha` (JWT-gated group) |
+| `services/gateway/internal/transport/router.go` | mount `/api/gacha/*` → `ProxyToGacha` (JWT group; admin-gated while `GachaAdminOnly`) |
 | `services/gateway/internal/service/proxy.go` (proxy map) | add `"gacha"` → `cfg.Services.GachaService` |
 | `Makefile` | add `gacha` to `SERVICES :=`; add health-check line |
 
@@ -1323,12 +1323,17 @@ Insert after the `watch-together` service block (keep service blocks grouped):
       retries: 3
 ```
 
-- [ ] **Step 2: Add `GACHA_SERVICE_URL` to the gateway service env**
+- [ ] **Step 2: Add `GACHA_SERVICE_URL` + `GACHA_ADMIN_ONLY` to the gateway env**
 
 In the `gateway` service's `environment:` block (near `NOTIFICATIONS_SERVICE_URL`/`WATCH_TOGETHER_SERVICE_URL`), add:
 
 ```yaml
       GACHA_SERVICE_URL: http://gacha:8093
+      # Dark-ship admin-gate (spec §12). While true, /api/gacha/* requires the
+      # admin role — regular users get 403, the лудка is invisible to them.
+      # The global-update release flips this to "false" (env change +
+      # `make restart-gateway`, no rebuild) to open it to all authenticated users.
+      GACHA_ADMIN_ONLY: "true"
 ```
 
 - [ ] **Step 3: Validate compose syntax**
@@ -1370,6 +1375,25 @@ And in the `Services: ServiceURLs{ ... }` literal in `Load()`:
 			GachaService: getEnv("GACHA_SERVICE_URL", "http://gacha:8093"),
 ```
 
+Then add a top-level config field for the dark-ship admin-gate. Add to the
+`Config` struct (near other feature toggles; if none exist, add it directly):
+
+```go
+	// GachaAdminOnly is the dark-ship gate (spec §12). When true, /api/gacha/*
+	// requires the admin role; when false, any authenticated user. Flipped to
+	// false at the global-update release. Default true.
+	GachaAdminOnly bool
+```
+
+And populate it in `Load()` (mirror the gateway's existing bool-env helper —
+`grep -n "func getEnvBool\|getEnvBool(" services/gateway/internal/config/config.go`;
+if the gateway has no bool helper, use the same `getEnvBool` body from
+`services/gacha/internal/config/config.go` Task 2):
+
+```go
+		GachaAdminOnly: getEnvBool("GACHA_ADMIN_ONLY", true),
+```
+
 - [ ] **Step 2: Find how the proxy resolves the service name → URL**
 
 Run: `grep -rn "\"notifications\"\|NotificationsService\|case \"" services/gateway/internal/service/proxy.go`
@@ -1389,22 +1413,30 @@ func (h *ProxyHandler) ProxyToGacha(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-- [ ] **Step 4: Mount the `/api/gacha/*` route group (JWT-gated)**
+- [ ] **Step 4: Mount the `/api/gacha/*` route group (JWT + dark-ship admin-gate)**
 
-In `services/gateway/internal/transport/router.go`, near the notifications route group, add a JWT-protected group. (Find the notifications group — `grep -n "Route(\"/notifications\"" services/gateway/internal/transport/router.go` — and mirror its auth middleware usage.)
+In `services/gateway/internal/transport/router.go`, near the notifications route group, add a JWT-protected group that ALSO applies the admin-role middleware while `cfg.GachaAdminOnly` is true (spec §12 dark-ship). First read the existing groups to grab two exact symbols:
+- the JWT auth middleware the `/notifications` group uses — `grep -n "Route(\"/notifications\"" services/gateway/internal/transport/router.go` then read its `r.Use(...)` line.
+- the admin-role middleware the `/admin` group uses — `grep -n "AdminRoleMiddleware\|Route(\"/admin\"" services/gateway/internal/transport/router.go`.
 
 ```go
-		// Gacha (Лудка) routes — workstream gacha, Phase 1. All JWT-gated:
-		// the лудка is logged-in-only (guests are blocked at the API). The
+		// Gacha (Лудка) routes — workstream gacha, Phase 1.
+		// JWT-gated (logged-in-only; guests blocked at the API). During the
+		// dark-ship window (cfg.GachaAdminOnly == true) the group ALSO requires
+		// the admin role, so the лудка is invisible/forbidden to regular users
+		// on the live site until the global-update release (spec §12). The
 		// internal credit endpoint (/internal/gacha/credit) is NOT registered
-		// here — Docker-network-only.
+		// here — it is Docker-network-only.
 		r.Route("/gacha", func(r chi.Router) {
-			r.Use(<AUTH_MIDDLEWARE>) // same middleware the /notifications group uses
+			r.Use(<AUTH_MIDDLEWARE>) // same JWT middleware the /notifications group uses
+			if cfg.GachaAdminOnly {
+				r.Use(<ADMIN_ROLE_MIDDLEWARE>) // same admin middleware the /admin group uses
+			}
 			r.Get("/wallet", proxyHandler.ProxyToGacha)
 		})
 ```
 
-Replace `<AUTH_MIDDLEWARE>` with the exact JWT middleware reference the existing `/notifications` group uses (read those lines first so the symbol matches — e.g. `AuthMiddleware(cfg.JWT)` or a shared `authMW`).
+Replace `<AUTH_MIDDLEWARE>` and `<ADMIN_ROLE_MIDDLEWARE>` with the exact symbols read above (e.g. `AuthMiddleware(cfg.JWT)` and `AdminRoleMiddleware`). Ensure `cfg` (the gateway `*config.Config`) is in scope where this group is mounted — if the router function doesn't already receive it, thread `cfg.GachaAdminOnly` in as a bool param (mirror how other boot-time toggles reach the router).
 
 - [ ] **Step 5: Build the gateway**
 
@@ -1495,10 +1527,25 @@ docker compose -f docker/docker-compose.yml exec -T postgres \
 ```
 Expected: one row, `balance = 22` (the internal credit path does NOT grant the starter bonus — that's the `GetOrCreate` service path used by the JWT wallet endpoint, exercised in Phase 5).
 
-- [ ] **Step 7: Verify the gateway blocks the wallet endpoint without a JWT**
+- [ ] **Step 7: Verify the gateway gate (no-JWT → 401; non-admin → 403 during dark-ship)**
 
-Run: `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/gacha/wallet`
+No credentials → unauthorized:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/gacha/wallet
+```
 Expected: `401`.
+
+Dark-ship admin-gate (spec §12) — a NON-admin token must be forbidden while
+`GACHA_ADMIN_ONLY=true`. Use the permanent non-admin `ui_audit_bot` API key
+(`UI_AUDIT_API_KEY` in `docker/.env`; it is a regular user, not admin):
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "Authorization: Bearer ${UI_AUDIT_API_KEY}" \
+  http://localhost:8000/api/gacha/wallet
+```
+Expected: `403` (regular user blocked — the лудка is invisible to non-admins on
+the live site). An admin token would instead get `200` with the wallet JSON
+(+ starter bonus granted) — that is the path the Phase 5 frontend exercises.
 
 - [ ] **Step 8: Final commit (if any wiring tweaks were needed)**
 
@@ -1523,7 +1570,8 @@ git commit -m "build(gacha): Phase 1 deploy verification + wiring fixups" || ech
 - ✅ One-time starter bonus (spec §5.2, decision #18 cold-start) — Task 5.
 - ✅ Internal credit endpoint (spec §3.3, §8) — Task 6, router Task 7.
 - ✅ Public wallet endpoint, JWT-gated / logged-in-only (decision #19) — Tasks 6, 7, 12.
-- ✅ Backend dark-ship flag `GACHA_ENABLED` (decision #20) — Task 2, honored in service Task 5.
+- ✅ Dark-ship admin-gate (decision #20, spec §12): `/api/gacha/*` requires admin role while `GACHA_ADMIN_ONLY=true` — Task 12 (gateway config + route group), compose env Task 11, verified Task 14 Step 7. Flip to `false` at the global-update release (env + `restart-gateway`, no rebuild).
+- ✅ Backend `GACHA_ENABLED` no-op toggle (independent of the admin-gate; lets the credit endpoint go dormant) — Task 2, honored in service Task 5.
 - ✅ Gateway routing, compose, Makefile, all-Dockerfiles gotcha — Tasks 10–13.
 - ⏭ Cards / groups / banners / pulls / collection / earning-hooks / frontend — explicitly DEFERRED to Phases 2–5 (see Phase Series).
 
