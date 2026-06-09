@@ -35,9 +35,16 @@ func NewRouter(
 	r.Use(httputil.CORS([]string{"*"}))
 	r.Use(middleware.RealIP)
 
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+	// Register GET + HEAD: the docker-compose healthcheck probes /health with
+	// `wget --spider` (an HTTP HEAD). chi does NOT auto-route HEAD to a GET
+	// handler, so a GET-only /health returns 405 to the probe and marks the
+	// container permanently "unhealthy" (the latent bug behind notifications'
+	// 9000+ failing-streak). Handling HEAD too makes the healthcheck pass.
+	healthFn := func(w http.ResponseWriter, _ *http.Request) {
 		httputil.OK(w, map[string]string{"status": "ok"})
-	})
+	}
+	r.Get("/health", healthFn)
+	r.Head("/health", healthFn)
 	r.Get("/metrics", func(w http.ResponseWriter, req *http.Request) {
 		metrics.Handler().ServeHTTP(w, req)
 	})
