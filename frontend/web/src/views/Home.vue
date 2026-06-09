@@ -49,6 +49,11 @@
          we just always mount it here. -->
     <ContinueWatchingRow />
 
+    <!-- Recommendations rail (notebook 12:04:05). "Trending now" for anonymous,
+         "Up Next for you" once logged in. Self-gating: hidden when there are no
+         recs, so it sits quietly below Continue-Watching. -->
+    <RecsRow />
+
     <!-- Three Columns Layout -->
     <div class="px-4 lg:px-8 max-w-7xl mx-auto mb-6">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -173,6 +178,7 @@ import { AnimeContextMenu } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'
 import ContinueWatchingRow from '@/components/home/ContinueWatchingRow.vue'
+import RecsRow from '@/components/home/RecsRow.vue'
 // Phase 17 (UX-33) — admin-curated editorial collections home row.
 import CollectionsRow from '@/components/home/CollectionsRow.vue'
 import SystemStatusBanner from '@/components/home/SystemStatusBanner.vue'
