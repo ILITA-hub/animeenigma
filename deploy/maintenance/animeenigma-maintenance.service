@@ -10,8 +10,15 @@ ExecStart=/data/animeenigma/bin/maintenance
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=1230
-MemoryMax=2G
-TasksMax=50
+# Resource ceilings sized for the APPLY path, not just the poller: a fix that
+# runs /animeenigma-after-update shells out to `make redeploy-*` + local
+# bunx tsc/vitest/eslint, fanning out many short-lived PIDs/threads on an
+# 8-core box. The old TasksMax=50 was exhausted (pids.events:max hit 216×),
+# which made node's own pthread_create() fail with EAGAIN → V8 abort() →
+# SIGABRT/core-dump with empty stderr (looked like a mysterious "core dumped").
+# Memory was never the limiter (peak ~990M of 2G, oom_kill=0). See ISS-029.
+MemoryMax=6G
+TasksMax=infinity
 EnvironmentFile=/data/animeenigma/docker/maintenance.env
 StandardOutput=journal
 StandardError=journal
