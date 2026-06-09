@@ -956,7 +956,8 @@
       "status": {
         "new": "New",
         "in_progress": "In progress",
-        "resolved": "Resolved"
+        "resolved": "Resolved",
+        "not_relevant": "Not relevant"
       },
       "detail": {
         "title": "Feedback details",

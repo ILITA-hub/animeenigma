@@ -956,7 +956,8 @@
       "status": {
         "new": "Новое",
         "in_progress": "В работе",
-        "resolved": "Решено"
+        "resolved": "Решено",
+        "not_relevant": "Неактуально"
       },
       "detail": {
         "title": "Детали обращения",

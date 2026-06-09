@@ -956,7 +956,8 @@
       "status": {
         "new": "新規",
         "in_progress": "対応中",
-        "resolved": "解決済み"
+        "resolved": "解決済み",
+        "not_relevant": "対象外"
       },
       "detail": {
         "title": "フィードバックの詳細",
