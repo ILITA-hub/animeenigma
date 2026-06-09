@@ -8,7 +8,7 @@
 
 ## Возможности
 
-- **Мультисорсовый стриминг** — 4 видео-провайдера: Kodik (RU iframe), AnimeLib (RU MP4), HiAnime (EN HLS), Consumet (EN HLS), плюс собственное хранилище MinIO
+- **Мультисорсовый стриминг** — 5 видео-плееров: Kodik (RU iframe), AnimeLib (RU MP4), OurEnglish (EN HLS через мультипровайдерный scraper-фейловер), Raw (оригинальная JP-озвучка, HLS), Hanime (18+ HLS), плюс собственное хранилище MinIO
 - **Каталог по запросу** — Данные об аниме загружаются из Shikimori в реальном времени при поиске
 - **Японские субтитры** — Оверлей с выделяемым текстом (ASS/SRT/VTT) через Jimaku.cc
 - **Рейтинг OP/ED** — Оценка и просмотр опенингов и эндингов аниме
@@ -44,26 +44,27 @@
        │                     │
        │    ┌────────┬───────┼────────┐
        │    ▼        ▼       ▼        ▼
-       │ Kodik  AnimeLib  HiAnime  Consumet
-       │ (iframe) (MP4)    (HLS)    (HLS)
+       │ Kodik  AnimeLib  OurEnglish  Raw
+       │ (iframe) (MP4)    (HLS)     (HLS)
        └────┘
 ```
 
 ### Видео плееры
 
-Платформа имеет 4 видео-плеера, каждый для своего источника:
+Платформа имеет 5 видео-плееров, каждый для своего источника:
 
 | Плеер | Язык | Технология | Особенности |
 |-------|------|-----------|-------------|
 | **Kodik** | RU | Iframe | Без прямого управления видео |
 | **AnimeLib** | RU | HTML5 MP4 (или Kodik fallback) | Выбор качества |
-| **HiAnime** | EN | HLS через Video.js | JP субтитры, качество, трекинг |
-| **Consumet** | EN | HLS через Video.js | JP субтитры, качество, трекинг |
+| **OurEnglish** | EN | HTML5 + hls.js (HLS) | Scraper-фейловер по провайдерам, JP субтитры, качество, трекинг |
+| **Raw** | JP | HTML5 + hls.js (HLS/MP4) | Оригинальная JP-озвучка, JP субтитры (Jimaku и др.), качество |
+| **Hanime** | 18+ | HTML5 + hls.js (HLS) | Выбор качества, трекинг |
 
 Видео получается тремя способами:
 
 1. **Iframe (Kodik)** — Фронтенд встраивает плеер Kodik напрямую
-2. **Проксированный поток (HiAnime, Consumet, AnimeLib)** — Бэкенд проксирует HLS/MP4 для CORS
+2. **Проксированный поток (OurEnglish, Raw, AnimeLib, Hanime)** — Бэкенд проксирует HLS/MP4 для CORS + подстановка Referer
 3. **Собственное хранилище (MinIO)** — Загруженные админом видео
 
 ### Каталог по запросу
@@ -74,7 +75,7 @@
 2. Сервис каталога запрашивает Shikimori GraphQL API
 3. Результаты сопоставляются по **японскому названию** как первичному ключу
 4. Метаданные аниме сохраняются в PostgreSQL для будущих запросов
-5. Источники видео определяются через парсеры (Kodik, AnimeLib, HiAnime, Consumet)
+5. Источники видео определяются через парсеры (Kodik, AnimeLib) и scraper-сервис OurEnglish (фейловер gogoanime → animepahe → allanime → animefever → miruro → nineanime)
 
 ## Быстрый старт
 
@@ -202,7 +203,7 @@ animeenigma/
 | `JIMAKU_API_KEY` | API ключ Jimaku.cc для JP субтитров | Для поддержки JP субтитров |
 | `TELEGRAM_ADMIN_CHAT_ID` | Telegram chat ID для уведомлений | Для уведомлений о репортах |
 
-HiAnime и Consumet настраиваются через sidecar-контейнеры в docker-compose. AnimeLib не требует API-ключа.
+OurEnglish обслуживается микросервисом `scraper` (со stealth-sidecar `animepahe-resolver`) — API-ключ не нужен. AnimeLib и Raw не требуют API-ключа.
 
 ### Пример `.env`
 

@@ -8,7 +8,7 @@ A self-hosted anime streaming platform with MAL/Shikimori integration. Built as 
 
 ## Features
 
-- **Multi-Source Streaming** — 4 video providers: Kodik (RU iframe), AnimeLib (RU MP4), HiAnime (EN HLS), Consumet (EN HLS), plus self-hosted MinIO storage
+- **Multi-Source Streaming** — 5 video players: Kodik (RU iframe), AnimeLib (RU MP4), OurEnglish (EN HLS via a multi-provider scraper failover), Raw (original-audio JP HLS), Hanime (18+ HLS), plus self-hosted MinIO storage
 - **On-Demand Catalog** — Anime data is fetched from Shikimori in real-time when searching
 - **Japanese Subtitles** — Selectable-text JP subtitle overlay (ASS/SRT/VTT) via Jimaku.cc
 - **OP/ED Ratings** — Rate and browse anime openings and endings
@@ -44,26 +44,27 @@ A self-hosted anime streaming platform with MAL/Shikimori integration. Built as 
        │                     │
        │    ┌────────┬───────┼────────┐
        │    ▼        ▼       ▼        ▼
-       │ Kodik  AnimeLib  HiAnime  Consumet
-       │ (iframe) (MP4)    (HLS)    (HLS)
+       │ Kodik  AnimeLib  OurEnglish  Raw
+       │ (iframe) (MP4)    (HLS)     (HLS)
        └────┘
 ```
 
 ### Video Players
 
-The platform has 4 video players, each targeting a different source:
+The platform has 5 video players, each targeting a different source:
 
 | Player | Language | Video Tech | Features |
 |--------|----------|-----------|----------|
 | **Kodik** | RU | Iframe embed | No direct video control |
 | **AnimeLib** | RU | HTML5 MP4 (or Kodik fallback) | Quality selection |
-| **HiAnime** | EN | HLS via Video.js | JP subs, quality selection, progress tracking |
-| **Consumet** | EN | HLS via Video.js | JP subs, quality selection, progress tracking |
+| **OurEnglish** | EN | HTML5 + hls.js (HLS) | Multi-provider scraper failover, JP subs, quality, progress tracking |
+| **Raw** | JP | HTML5 + hls.js (HLS/MP4) | Original-audio JP, JP subs (Jimaku + others), quality |
+| **Hanime** | 18+ | HTML5 + hls.js (HLS) | Quality selection, progress tracking |
 
 Videos are obtained in three ways:
 
 1. **Iframe (Kodik)** — Frontend embeds Kodik player directly
-2. **Proxied Stream (HiAnime, Consumet, AnimeLib)** — Backend proxies HLS/MP4 streams for CORS
+2. **Proxied Stream (OurEnglish, Raw, AnimeLib, Hanime)** — Backend proxies HLS/MP4 streams for CORS + Referer injection
 3. **Self-hosted Storage (MinIO)** — Admin-uploaded videos
 
 ### On-Demand Catalog
@@ -74,7 +75,7 @@ The anime database is **NOT pre-populated**. Instead:
 2. Catalog service queries Shikimori GraphQL API
 3. Results are matched by **Japanese name** as the primary key
 4. Anime metadata is stored in PostgreSQL for future queries
-5. Video sources are resolved via parsers (Kodik, AnimeLib, HiAnime, Consumet)
+5. Video sources are resolved via parsers (Kodik, AnimeLib) and the OurEnglish scraper service (gogoanime → animepahe → allanime → animefever → miruro → nineanime failover)
 
 ## Quick Start
 
@@ -202,7 +203,7 @@ Services are configured via environment variables. See `internal/config/config.g
 | `JIMAKU_API_KEY`      | Jimaku.cc API key for JP subtitles   | For JP subtitle support   |
 | `TELEGRAM_ADMIN_CHAT_ID` | Telegram chat ID for admin notifications | For error report alerts |
 
-HiAnime and Consumet are configured via their sidecar containers in docker-compose. AnimeLib requires no API key.
+OurEnglish is served by the `scraper` microservice (with the `animepahe-resolver` stealth sidecar) — no API key required. AnimeLib and Raw require no API key.
 
 ### Example `.env`
 
