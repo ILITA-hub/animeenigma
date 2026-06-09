@@ -1559,6 +1559,37 @@ git commit -m "build(gacha): Phase 1 deploy verification + wiring fixups" || ech
 > Russian-Trump-mode changelog to Phase 5 when the лудка becomes visible. Still
 > push after committing (realtime-backup convention).
 
+### Execution outcome (2026-06-09) — gateway redeploy DEFERRED to the bundled release
+
+Tasks 1–13 implemented, reviewed (spec PASS + quality APPROVED + gate REVIEW
+PASS), committed, pushed. Task 14 partially executed:
+
+- ✅ `make redeploy-gacha` — gacha service live on prod, `127.0.0.1:8093`,
+  container **healthy**.
+- ✅ Internal credit smoke proved idempotency LIVE (`applied:true` then
+  `applied:false`; balance 22 not 44; ledger count 1).
+- ✅ Postgres wallet row confirmed.
+- ⏸ **`make redeploy-gateway` intentionally NOT run.** The gateway image builds
+  from the working tree, which carries **unrelated uncommitted parallel work**
+  (an admin-dashboard SPA migration in `router.go` + a go.mod bump). Redeploying
+  now would bake that half-finished work into prod and risk breaking `/admin`.
+  The gateway routing + admin-gate code is committed & pushed; it activates at
+  the **bundled global release** (when the gateway is next redeployed cleanly,
+  alongside the frontend and the `GACHA_ADMIN_ONLY=false` flip). Until then
+  `/api/gacha/*` simply 404s at the gateway — strictly *more* invisible, fully
+  consistent with dark-ship. The live 401/403 gate check moves to activation
+  time; the gate LOGIC was already verified by independent review.
+
+### Extra fix shipped — `fix(gacha): answer HEAD on /health`
+
+The compose healthcheck probes `/health` with `wget --spider` (HTTP HEAD), but
+chi doesn't auto-route HEAD to a GET handler → 405 → container marked unhealthy.
+This is a **latent project-wide bug** (notifications sits at a 9000+ healthcheck
+failing-streak for the same reason). Fixed for gacha by registering HEAD on
+`/health`; gacha now reports `healthy`. Other services still carry the latent
+bug — candidate follow-up (fix their `/health` HEAD handling or switch the
+compose healthcheck from `--spider` to a GET).
+
 ---
 
 ## Self-Review
