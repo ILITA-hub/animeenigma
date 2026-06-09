@@ -116,6 +116,25 @@
       "planToWatchFlag": "📺 {watched}/{total}話 · {status} ⚠️",
       "planToWatchOpenFlag": "📺 {watched}話 · {status} ⚠️"
     },
+    "reactions": {
+      "toggle": "リアクション",
+      "login_prompt": "リアクションするにはログインしてください",
+      "error": "リアクションを保存できませんでした — もう一度お試しください",
+      "names": {
+        "like": "いいね",
+        "love": "ラブ",
+        "melting": "とろける",
+        "sick": "うっ",
+        "sneeze": "くしゃみ",
+        "mindblown": "衝撃",
+        "woozy": "ふらふら",
+        "devil": "悪魔",
+        "clown": "ピエロ",
+        "starstruck": "感激",
+        "smirk": "ニヤリ",
+        "adore": "大好き"
+      }
+    },
     "editReview": "レビューを編集",
     "yourRating": "あなたの評価",
     "reviewPlaceholder": "このアニメについて感想を共有してください...",
@@ -706,6 +725,15 @@
       "friday": "金曜日",
       "saturday": "土曜日"
     },
+    "daysWhen": {
+      "sunday": "日曜日",
+      "monday": "月曜日",
+      "tuesday": "火曜日",
+      "wednesday": "水曜日",
+      "thursday": "木曜日",
+      "friday": "金曜日",
+      "saturday": "土曜日"
+    },
     "viewMonth": "月",
     "viewWeek": "週",
     "viewTable": "表",
@@ -909,6 +937,16 @@
     "markNextWatched": "第{n}話を視聴済みにする"
   },
   "admin": {
+    "dashboard": {
+      "title": "管理ダッシュボード",
+      "subtitle": "監視・デバッグ・コンテンツ管理のための運用ツール。",
+      "grafana": "Grafana",
+      "grafanaDesc": "メトリクス、ダッシュボード、サービス稼働状況。",
+      "recsDesc": "ユーザーのレコメンドを確認し、強制再計算する。",
+      "feedbackDesc": "ユーザーのアイデア・バグ・エラー報告を確認・整理する。",
+      "collectionsDesc": "編集部のアニメコレクションを編集・公開する。",
+      "rawLibraryDesc": "生の日本語エピソード用のセルフホスト型 torrent → HLS パイプライン。"
+    },
     "feedback": {
       "title": "ユーザーフィードバック",
       "subtitle": "フィードバックボタンから寄せられたアイデア・バグ・問題。",

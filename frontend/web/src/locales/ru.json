@@ -116,6 +116,25 @@
       "planToWatchFlag": "📺 {watched}/{total} · {status} ⚠️",
       "planToWatchOpenFlag": "📺 {watched} сер. · {status} ⚠️"
     },
+    "reactions": {
+      "toggle": "Реакция",
+      "login_prompt": "Войдите, чтобы оставить реакцию",
+      "error": "Не удалось сохранить реакцию — попробуйте ещё раз",
+      "names": {
+        "like": "Нравится",
+        "love": "Любовь",
+        "melting": "Растаял",
+        "sick": "Тошнит",
+        "sneeze": "Чихаю",
+        "mindblown": "Взрыв мозга",
+        "woozy": "Поплыл",
+        "devil": "Дьявол",
+        "clown": "Клоун",
+        "starstruck": "В восторге",
+        "smirk": "Ухмылка",
+        "adore": "Обожаю"
+      }
+    },
     "editReview": "Изменить отзыв",
     "yourRating": "Ваша оценка",
     "reviewPlaceholder": "Поделитесь своими впечатлениями об аниме...",
@@ -135,7 +154,7 @@
     "nextEpisode": "Эп. {episode}:",
     "todayAt": "Сегодня в {time} МСК",
     "tomorrowAt": "Завтра в {time} МСК",
-    "dayAtTime": "В {day} в {time} МСК",
+    "dayAtTime": "{day} {time} МСК",
     "timeMsk": "{time} МСК",
     "save": "Сохранить",
     "examplePlaceholder": "например: 59459",
@@ -706,6 +725,15 @@
       "friday": "Пятница",
       "saturday": "Суббота"
     },
+    "daysWhen": {
+      "sunday": "В Воскресенье",
+      "monday": "В Понедельник",
+      "tuesday": "Во Вторник",
+      "wednesday": "В Среду",
+      "thursday": "В Четверг",
+      "friday": "В Пятницу",
+      "saturday": "В Субботу"
+    },
     "viewMonth": "Месяц",
     "viewWeek": "Неделя",
     "viewTable": "Таблица",
@@ -909,6 +937,16 @@
     "markNextWatched": "Отметить серию {n} просмотренной"
   },
   "admin": {
+    "dashboard": {
+      "title": "Панель администратора",
+      "subtitle": "Инструменты оператора для мониторинга, отладки и управления контентом.",
+      "grafana": "Grafana",
+      "grafanaDesc": "Метрики, дашборды и здоровье сервисов.",
+      "recsDesc": "Просмотр и принудительный пересчёт рекомендаций пользователя.",
+      "feedbackDesc": "Чтение и сортировка идей, багов и отчётов об ошибках.",
+      "collectionsDesc": "Курирование и публикация редакционных подборок аниме.",
+      "rawLibraryDesc": "Свой пайплайн торрент → HLS для оригинальных японских серий."
+    },
     "feedback": {
       "title": "Обратная связь",
       "subtitle": "Идеи, баги и проблемы, присланные через кнопку обратной связи.",

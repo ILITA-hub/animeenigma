@@ -116,6 +116,25 @@
       "planToWatchFlag": "📺 {watched}/{total} · {status} ⚠️",
       "planToWatchOpenFlag": "📺 {watched} eps · {status} ⚠️"
     },
+    "reactions": {
+      "toggle": "React",
+      "login_prompt": "Sign in to react",
+      "error": "Couldn't save your reaction — please retry",
+      "names": {
+        "like": "Like",
+        "love": "Love",
+        "melting": "Melting",
+        "sick": "Sick",
+        "sneeze": "Sneezing",
+        "mindblown": "Mind blown",
+        "woozy": "Woozy",
+        "devil": "Devious",
+        "clown": "Clown",
+        "starstruck": "Star-struck",
+        "smirk": "Smirk",
+        "adore": "Adore"
+      }
+    },
     "editReview": "Edit review",
     "yourRating": "Your rating",
     "reviewPlaceholder": "Share your thoughts about this anime...",
@@ -706,6 +725,15 @@
       "friday": "Friday",
       "saturday": "Saturday"
     },
+    "daysWhen": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
     "viewMonth": "Month",
     "viewWeek": "Week",
     "viewTable": "Table",
@@ -909,6 +937,16 @@
     "markNextWatched": "Mark episode {n} watched"
   },
   "admin": {
+    "dashboard": {
+      "title": "Admin Dashboard",
+      "subtitle": "Operator tools for monitoring, debugging and content management.",
+      "grafana": "Grafana",
+      "grafanaDesc": "Metrics, dashboards and service health.",
+      "recsDesc": "Inspect and force-recompute a user's recommendations.",
+      "feedbackDesc": "Read and triage user ideas, bugs and error reports.",
+      "collectionsDesc": "Curate and publish editorial anime collections.",
+      "rawLibraryDesc": "Self-hosted torrent → HLS pipeline for raw-JP episodes."
+    },
     "feedback": {
       "title": "User Feedback",
       "subtitle": "Ideas, bugs and issues submitted via the site feedback button.",

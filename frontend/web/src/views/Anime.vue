@@ -820,6 +820,13 @@
               </div>
             </div>
             <p v-if="review.review_text" class="text-white/70 whitespace-pre-wrap">{{ review.review_text }}</p>
+            <ReviewReactions
+              class="mt-3"
+              :review-id="review.id"
+              :anime-id="anime.id"
+              :initial-reactions="review.reactions"
+              :viewer-reacted="review.my_reactions"
+            />
           </div>
         </div>
 
@@ -1079,6 +1086,7 @@ import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
 import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem } from '@/components/ui'
 import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
+import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import { Carousel } from '@/components/carousel'
 import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
@@ -1170,6 +1178,10 @@ interface Review {
   anime?: {
     episodes_count?: number
   }
+  // Emoji reactions (AUTO-408). `reactions` carries per-emoji counts +
+  // reacted_by_me; `my_reactions` is the viewer's reacted-emoji subset.
+  reactions?: { emoji: string; count: number; reacted_by_me: boolean }[]
+  my_reactions?: string[]
 }
 
 interface Comment {
@@ -1714,7 +1726,7 @@ const formatNextEpisode = (dateStr: string) => {
   if (diffDays === 1) return t('anime.tomorrowAt', { time: timeStr })
   if (diffDays > 1 && diffDays < 7) {
     const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    return t('anime.dayAtTime', { day: t(`schedule.days.${dayKeys[date.getDay()]}`), time: timeStr })
+    return t('anime.dayAtTime', { day: t(`schedule.daysWhen.${dayKeys[date.getDay()]}`), time: timeStr })
   }
   return t('anime.timeMsk', { time: date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }) })
 }
