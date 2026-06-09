@@ -43,20 +43,30 @@ export function useBrowseFilters() {
   function readUrl() {
     const qry = route.query
     q.value = (typeof qry.q === 'string' ? qry.q : '') || ''
-    genres.value = ((qry.genre as string) || '')
+    // Guard array assignments: only replace the ref when content actually
+    // changes. router.replace({page: N}) hits this watcher but leaves filter
+    // params untouched — assigning a new [] here would dirty apiParams and
+    // fire the Browse.vue deep watcher, resetting currentPage to 1.
+    const newGenres = ((qry.genre as string) || '')
       .split(',')
       .map(s => s.trim())
       .filter(Boolean)
+    if (newGenres.join(',') !== genres.value.join(',')) {
+      genres.value = newGenres
+    }
     const rawKind = typeof qry.kind === 'string' ? (qry.kind as Kind) : ''
     kind.value = KIND_VALUES.includes(rawKind) ? rawKind : ''
     const rawStatus = (typeof qry.status === 'string' ? qry.status : '') as Status
     status.value = (STATUS_VALUES as readonly string[]).includes(rawStatus) ? rawStatus : ''
     yearFrom.value = qry.year_from ? parseInt(qry.year_from as string, 10) || null : null
     yearTo.value = qry.year_to ? parseInt(qry.year_to as string, 10) || null : null
-    providers.value = ((qry.providers as string) || '')
+    const newProviders = ((qry.providers as string) || '')
       .split(',')
       .map(s => s.trim().toLowerCase())
       .filter((p): p is Provider => PROVIDER_VALUES.includes(p as Provider))
+    if (newProviders.join(',') !== providers.value.join(',')) {
+      providers.value = newProviders
+    }
     const rawSort = typeof qry.sort === 'string' ? (qry.sort as Sort) : 'popularity'
     sort.value = SORT_VALUES.includes(rawSort) ? rawSort : 'popularity'
     scoreMin.value = qry.score_min ? parseFloat(qry.score_min as string) || null : null
