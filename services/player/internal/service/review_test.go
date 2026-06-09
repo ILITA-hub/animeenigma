@@ -42,7 +42,7 @@ func setupReviewServiceTestDB(t *testing.T) (*ReviewService, *gorm.DB) {
 		)`,
 		`CREATE TABLE anime_genres (anime_id TEXT, genre_id TEXT)`,
 		`CREATE TABLE anime_list (
-			id TEXT PRIMARY KEY,
+			id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
 			user_id TEXT NOT NULL,
 			anime_id TEXT NOT NULL,
 			status TEXT DEFAULT 'watching',
@@ -78,6 +78,15 @@ func setupReviewServiceTestDB(t *testing.T) (*ReviewService, *gorm.DB) {
 			created_at DATETIME,
 			deleted_at DATETIME
 		)`,
+		`CREATE TABLE review_reactions (
+			id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+			review_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			emoji TEXT NOT NULL,
+			username TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (review_id, user_id, emoji)
+		)`,
 	}
 	for _, s := range stmts {
 		require.NoError(t, db.Exec(s).Error)
@@ -109,7 +118,7 @@ func TestReviewService_CreateOrUpdateReview_EmitsActivityOnce(t *testing.T) {
 	svc, db := setupReviewServiceTestDB(t)
 	ctx := context.Background()
 
-	got, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", &domain.CreateReviewRequest{
+	got, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
 		AnimeID:    "anime-1",
 		Score:      8,
 		ReviewText: "loved it",
@@ -130,13 +139,13 @@ func TestReviewService_CreateOrUpdateReview_DedupsWithinSameDay(t *testing.T) {
 	svc, db := setupReviewServiceTestDB(t)
 	ctx := context.Background()
 
-	_, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", &domain.CreateReviewRequest{
+	_, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
 		AnimeID: "anime-1", Score: 7, ReviewText: "ok",
 	})
 	require.NoError(t, err)
 
 	// Same day, same (user, anime) — should DEDUP.
-	_, err = svc.CreateOrUpdateReview(ctx, "user-A", "alice", &domain.CreateReviewRequest{
+	_, err = svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
 		AnimeID: "anime-1", Score: 9, ReviewText: "actually amazing",
 	})
 	require.NoError(t, err)
@@ -159,7 +168,7 @@ func TestReviewService_DeleteReview_ClearsScoreAndText(t *testing.T) {
 	svc, db := setupReviewServiceTestDB(t)
 	ctx := context.Background()
 
-	_, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", &domain.CreateReviewRequest{
+	_, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
 		AnimeID: "anime-1", Score: 8, ReviewText: "good",
 	})
 	require.NoError(t, err)
@@ -181,10 +190,90 @@ func TestReviewService_CreateOrUpdateReview_ScoreValidation(t *testing.T) {
 	ctx := context.Background()
 
 	for _, bad := range []int{0, -1, 11, 100} {
-		_, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", &domain.CreateReviewRequest{
+		_, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
 			AnimeID: "anime-1", Score: bad, ReviewText: "x",
 		})
 		assert.Error(t, err, "score=%d must be rejected", bad)
 	}
 	assert.EqualValues(t, 0, activityRowCount(t, db, "user-A", "anime-1", "review"))
+}
+
+// TestReviewService_ToggleReaction_BlocksSelfReaction — AUTO-408: you cannot
+// react to your own review.
+func TestReviewService_ToggleReaction_BlocksSelfReaction(t *testing.T) {
+	svc, _ := setupReviewServiceTestDB(t)
+	ctx := context.Background()
+
+	rev, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
+		AnimeID: "anime-1", Score: 8, ReviewText: "mine",
+	})
+	require.NoError(t, err)
+
+	_, _, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-A", "alice", "👍")
+	require.Error(t, err, "must reject reacting to your own review")
+}
+
+// TestReviewService_ToggleReaction_OnePerPerson — AUTO-408: one reaction per
+// (review, user). A new emoji replaces the prior; the same emoji toggles off.
+func TestReviewService_ToggleReaction_OnePerPerson(t *testing.T) {
+	svc, _ := setupReviewServiceTestDB(t)
+	ctx := context.Background()
+
+	rev, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
+		AnimeID: "anime-1", Score: 8, ReviewText: "x",
+	})
+	require.NoError(t, err)
+
+	// bob adds 👍
+	added, counts, err := svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "👍")
+	require.NoError(t, err)
+	assert.True(t, added)
+	require.Len(t, counts, 1)
+	assert.Equal(t, "👍", counts[0].Emoji)
+
+	// bob switches to ❤️ → still exactly one reaction, now ❤️, attributed to bob
+	added, counts, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "❤️")
+	require.NoError(t, err)
+	assert.True(t, added)
+	require.Len(t, counts, 1, "switching must not stack reactions")
+	assert.Equal(t, "❤️", counts[0].Emoji)
+	assert.Equal(t, 1, counts[0].Count)
+	assert.Equal(t, []string{"bob"}, counts[0].Users, "who-reacted shows bob")
+
+	// bob clicks ❤️ again → removed
+	added, counts, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "❤️")
+	require.NoError(t, err)
+	assert.False(t, added)
+	assert.Len(t, counts, 0)
+}
+
+// TestReviewService_AdminReview_AutoSystemThumbsUp — AUTO-408: an admin-authored
+// review is auto-seeded with the System «AnimeEnigma» 👍.
+func TestReviewService_AdminReview_AutoSystemThumbsUp(t *testing.T) {
+	svc, _ := setupReviewServiceTestDB(t)
+	ctx := context.Background()
+
+	_, err := svc.CreateOrUpdateReview(ctx, "admin-1", "boss", true, &domain.CreateReviewRequest{
+		AnimeID: "anime-1", Score: 10, ReviewText: "great",
+	})
+	require.NoError(t, err)
+
+	entries, err := svc.GetAnimeReviews(ctx, "anime-1", nil)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Len(t, entries[0].Reactions, 1)
+	rc := entries[0].Reactions[0]
+	assert.Equal(t, "👍", rc.Emoji)
+	assert.Equal(t, 1, rc.Count)
+	assert.Equal(t, []string{domain.SystemReactionUsername}, rc.Users)
+
+	// A normal-user review gets NO auto reaction.
+	_, err = svc.CreateOrUpdateReview(ctx, "user-Z", "zoe", false, &domain.CreateReviewRequest{
+		AnimeID: "anime-2", Score: 6, ReviewText: "meh",
+	})
+	require.NoError(t, err)
+	entries, err = svc.GetAnimeReviews(ctx, "anime-2", nil)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Len(t, entries[0].Reactions, 0, "non-admin review has no auto 👍")
 }

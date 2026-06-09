@@ -36,7 +36,7 @@ func NewReviewService(listRepo *repo.ListRepository, activityRepo *repo.Activity
 // emission block matches the pre-refactor behavior verbatim — per-day
 // dedup via ActivityRepository.GetTodayByUserAnimeType, OldValue carries
 // "new"/"update"/"score" markers as before.
-func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, username string, req *domain.CreateReviewRequest) (*domain.AnimeListEntry, error) {
+func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, username string, isAdmin bool, req *domain.CreateReviewRequest) (*domain.AnimeListEntry, error) {
 	// Validation rule unchanged from pre-refactor: score must be 1..10.
 	if req.Score < 1 || req.Score > 10 {
 		return nil, errors.InvalidInput("score must be between 1 and 10")
@@ -51,6 +51,14 @@ func (s *ReviewService) CreateOrUpdateReview(ctx context.Context, userID, userna
 	entry, err := s.listRepo.UpsertReview(ctx, userID, req.AnimeID, username, req.Score, req.ReviewText)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.CodeInternal, "failed to save review")
+	}
+
+	// AUTO-408 — admin-authored reviews get an automatic System «AnimeEnigma» 👍
+	// (idempotent). Best-effort: a seed failure must never fail the review write.
+	if isAdmin && entry != nil {
+		if err := s.listRepo.SeedSystemReaction(ctx, entry.ID); err != nil {
+			s.log.Errorw("failed to seed system reaction on admin review", "review_id", entry.ID, "error", err)
+		}
 	}
 
 	// Record review activity event (deduplicated per day) — logic preserved
@@ -144,15 +152,27 @@ func (s *ReviewService) attachReactions(ctx context.Context, entries []*domain.A
 	return entries, nil
 }
 
-// ToggleReaction adds or removes the (review, user, emoji) reaction and returns
-// the resulting added flag plus the review's fresh reaction counts (with
-// ReactedByMe resolved for this user). Rejects emojis outside the fixed
-// 12-emoji palette. AUTO-408.
-func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, userID, emoji string) (bool, []domain.ReactionCount, error) {
+// ToggleReaction sets/replaces/removes the caller's single reaction on a review
+// (one reaction per person — see repo.ToggleReaction) and returns the added flag
+// plus the review's fresh reaction counts. Rejects emojis outside the fixed
+// 12-emoji palette and blocks reacting to your own review. username is
+// denormalized onto the reaction for the who-reacted popover. AUTO-408.
+func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, userID, username, emoji string) (bool, []domain.ReactionCount, error) {
 	if !domain.AllowedReactionEmojis[emoji] {
 		return false, nil, errors.InvalidInput("unsupported reaction emoji")
 	}
-	added, err := s.listRepo.ToggleReaction(ctx, reviewID, userID, emoji)
+	// No self-reactions. AUTO-408.
+	authorID, err := s.listRepo.GetReviewAuthorID(ctx, reviewID)
+	if err != nil {
+		return false, nil, errors.Wrap(err, errors.CodeInternal, "failed to resolve review author")
+	}
+	if authorID == "" {
+		return false, nil, errors.NotFound("review not found")
+	}
+	if authorID == userID {
+		return false, nil, errors.Forbidden("cannot react to your own review")
+	}
+	added, err := s.listRepo.ToggleReaction(ctx, reviewID, userID, username, emoji)
 	if err != nil {
 		return false, nil, errors.Wrap(err, errors.CodeInternal, "failed to toggle reaction")
 	}

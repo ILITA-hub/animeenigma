@@ -826,6 +826,7 @@
               :anime-id="anime.id"
               :initial-reactions="review.reactions"
               :viewer-reacted="review.my_reactions"
+              :is-own-review="review.user_id === authStore.user?.id"
             />
           </div>
         </div>
@@ -1180,7 +1181,7 @@ interface Review {
   }
   // Emoji reactions (AUTO-408). `reactions` carries per-emoji counts +
   // reacted_by_me; `my_reactions` is the viewer's reacted-emoji subset.
-  reactions?: { emoji: string; count: number; reacted_by_me: boolean }[]
+  reactions?: { emoji: string; count: number; reacted_by_me: boolean; users?: string[] }[]
   my_reactions?: string[]
 }
 

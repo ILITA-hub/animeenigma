@@ -125,7 +125,7 @@ func (h *ReviewHandler) CreateOrUpdateReview(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	entry, err := h.reviewService.CreateOrUpdateReview(r.Context(), claims.UserID, claims.Username, &req)
+	entry, err := h.reviewService.CreateOrUpdateReview(r.Context(), claims.UserID, claims.Username, claims.Role == authz.RoleAdmin, &req)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -207,7 +207,7 @@ func (h *ReviewHandler) ReactToReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	added, counts, err := h.reviewService.ToggleReaction(r.Context(), animeID, reviewID, claims.UserID, emoji)
+	added, counts, err := h.reviewService.ToggleReaction(r.Context(), animeID, reviewID, claims.UserID, claims.Username, emoji)
 	if err != nil {
 		httputil.Error(w, err)
 		return

@@ -109,8 +109,12 @@ func (AnimeListEntry) TableName() string {
 }
 
 // ReviewReaction is a single user's emoji reaction to a review (an anime_list
-// row that qualifies as a review). One row per (review, user, emoji); the
-// compound UNIQUE index makes toggling idempotent. The FK to anime_list(id)
+// row that qualifies as a review). The platform enforces ONE reaction per
+// (review, user) at the application layer (toggle = replace-or-remove); the DB
+// keeps the legacy (review, user, emoji) unique index until the deferred
+// historical multi-reactions are cleaned, after which it can tighten to
+// (review, user). Username is denormalized (captured at react time) so the
+// "who reacted" popover needs no users-table join. The FK to anime_list(id)
 // with ON DELETE CASCADE is enforced via raw SQL in cmd/player-api/main.go
 // (GORM does not infer FKs from struct tags alone). AUTO-408.
 type ReviewReaction struct {
@@ -118,19 +122,33 @@ type ReviewReaction struct {
 	ReviewID  string    `gorm:"type:uuid;not null;index;uniqueIndex:idx_review_reaction_unique,priority:1" json:"review_id"`
 	UserID    string    `gorm:"type:uuid;not null;uniqueIndex:idx_review_reaction_unique,priority:2" json:"user_id"`
 	Emoji     string    `gorm:"size:10;not null;uniqueIndex:idx_review_reaction_unique,priority:3" json:"emoji"`
+	Username  string    `gorm:"size:64" json:"username"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 func (ReviewReaction) TableName() string { return "review_reactions" }
 
+// System reaction identity — the reserved «AnimeEnigma» pseudo-user that owns
+// the auto-👍 seeded on admin-authored reviews. NOT a real users-table row;
+// the fixed sentinel UUID + denormalized username let it appear in reactions
+// (and the who-reacted popover) without impersonating anyone. The
+// one-per-(review,user) rule covers it too — it only ever sets 👍 once. AUTO-408.
+const (
+	SystemReactionUserID   = "00000000-0000-0000-0000-0000a01e0608" // reserved, non-allocatable
+	SystemReactionUsername = "AnimeEnigma"
+	SystemReactionEmoji    = "👍"
+)
+
 // ReactionCount is the per-emoji aggregate attached to a review in API
 // responses. ReactedByMe is true when the requesting (authenticated) viewer
-// has reacted with this emoji on the review; always false for anonymous
-// viewers. AUTO-408.
+// has reacted with this emoji on the review. Users is the ordered list of
+// reactor display names (for the Discord/TG-style "who reacted" popover); the
+// System reactor appears as «AnimeEnigma». AUTO-408.
 type ReactionCount struct {
-	Emoji       string `json:"emoji"`
-	Count       int    `json:"count"`
-	ReactedByMe bool   `json:"reacted_by_me"`
+	Emoji       string   `json:"emoji"`
+	Count       int      `json:"count"`
+	ReactedByMe bool     `json:"reacted_by_me"`
+	Users       []string `json:"users"`
 }
 
 // AllowedReactionEmojis is the fixed 12-emoji palette the review-reaction

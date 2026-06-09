@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,7 +21,22 @@ var allowedSortFields = map[string]bool{
 	"status":     true,
 	"episodes":   true,
 	"title":      true, // handled specially via JOIN
+	"genre":      true, // handled specially via representative-genre subquery
 }
+
+// genreSortJoin derives one representative (alphabetically-first) genre per anime
+// so the my-list query can ORDER BY a real column. Genres are many-to-many
+// (anime_genres → genres) with no denormalized column. We deliberately use a
+// joined derived-table column rather than a correlated subquery in ORDER BY:
+// GORM applies a raw subquery string passed to .Order() unreliably (it gets
+// silently dropped, leaving the default order), whereas a qualified joined column
+// — like the existing animes.name title sort — is applied correctly. The LEFT
+// JOIN is 1:1 (GROUP BY anime_id) so it never changes the row Count. Anime with
+// no genres yield NULL min_genre (Postgres sorts NULLs last ASC, first DESC).
+const genreSortJoin = "LEFT JOIN (SELECT ag.anime_id, MIN(g.name) AS min_genre FROM anime_genres ag JOIN genres g ON g.id = ag.genre_id GROUP BY ag.anime_id) genre_sort ON genre_sort.anime_id = anime_list.anime_id"
+
+// genreSortOrderColumn is the ORDER BY target the join above exposes.
+const genreSortOrderColumn = "genre_sort.min_genre"
 
 // sanitizedOrderClause returns a safe ORDER BY clause built from validated
 // sort field and direction. If either value is invalid, it falls back to
@@ -33,8 +49,11 @@ func sanitizedOrderClause(sort, order string) string {
 	if dir != "ASC" && dir != "DESC" {
 		dir = "DESC"
 	}
-	if sort == "title" {
+	switch sort {
+	case "title":
 		return "animes.name " + dir
+	case "genre":
+		return genreSortOrderColumn + " " + dir
 	}
 	return "anime_list." + sort + " " + dir
 }
@@ -42,6 +61,11 @@ func sanitizedOrderClause(sort, order string) string {
 // isTitleSort returns true when the requested sort requires a JOIN with animes.
 func isTitleSort(sort string) bool {
 	return sort == "title"
+}
+
+// isGenreSort returns true when the requested sort requires the derived genre join.
+func isGenreSort(sort string) bool {
+	return sort == "genre"
 }
 
 type ListRepository struct {
@@ -204,6 +228,9 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status,
 	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
 	if needsAnimesJoin {
 		base = base.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
+	}
+	if isGenreSort(params.Sort) {
+		base = base.Joins(genreSortJoin)
 	}
 	if search != "" {
 		like := "%" + search + "%"
@@ -467,83 +494,132 @@ func (r *ListRepository) GetBatchAnimeRatings(ctx context.Context, animeIDs []st
 	return out, nil
 }
 
-// ToggleReaction adds the (review, user, emoji) reaction if absent, or removes
-// it if already present. Returns added=true when a new row was inserted,
-// added=false when an existing reaction was toggled off. The UNIQUE
-// (review_id, user_id, emoji) index makes this race-safe: the insert either
-// wins (added) or conflicts (existing → delete). AUTO-408.
-func (r *ListRepository) ToggleReaction(ctx context.Context, reviewID, userID, emoji string) (bool, error) {
-	res := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "review_id"}, {Name: "user_id"}, {Name: "emoji"}},
-		DoNothing: true,
-	}).Create(&domain.ReviewReaction{
-		ReviewID: reviewID,
-		UserID:   userID,
-		Emoji:    emoji,
+// ToggleReaction enforces ONE reaction per (review, user): clicking the SAME
+// emoji you already have removes it (added=false); clicking a DIFFERENT emoji
+// replaces whatever you had (added=true); with none set it inserts (added=true).
+// It clears ALL of the user's existing rows on the review first, so a legacy
+// multi-reaction collapses to the single new choice on first interaction.
+// username is denormalized for the who-reacted popover. Runs in a transaction
+// so the replace is atomic. AUTO-408.
+func (r *ListRepository) ToggleReaction(ctx context.Context, reviewID, userID, username, emoji string) (added bool, err error) {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing []domain.ReviewReaction
+		if e := tx.Where("review_id = ? AND user_id = ?", reviewID, userID).Find(&existing).Error; e != nil {
+			return e
+		}
+		// Exactly the same single reaction → toggle it off.
+		if len(existing) == 1 && existing[0].Emoji == emoji {
+			added = false
+			return tx.Where("review_id = ? AND user_id = ?", reviewID, userID).
+				Delete(&domain.ReviewReaction{}).Error
+		}
+		// Otherwise replace: drop everything this user had, set the new one.
+		if len(existing) > 0 {
+			if e := tx.Where("review_id = ? AND user_id = ?", reviewID, userID).
+				Delete(&domain.ReviewReaction{}).Error; e != nil {
+				return e
+			}
+		}
+		added = true
+		return tx.Create(&domain.ReviewReaction{
+			ReviewID: reviewID, UserID: userID, Emoji: emoji, Username: username,
+		}).Error
 	})
-	if res.Error != nil {
-		return false, res.Error
+	return added, err
+}
+
+// SeedSystemReaction idempotently adds the System «AnimeEnigma» 👍 to a review
+// (used for admin-authored reviews). No-op if it already exists. AUTO-408.
+func (r *ListRepository) SeedSystemReaction(ctx context.Context, reviewID string) error {
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&domain.ReviewReaction{
+			ReviewID: reviewID,
+			UserID:   domain.SystemReactionUserID,
+			Emoji:    domain.SystemReactionEmoji,
+			Username: domain.SystemReactionUsername,
+		}).Error
+}
+
+// GetReviewAuthorID returns the user_id that authored a review (anime_list row),
+// or "" if the review doesn't exist. Used to block self-reactions. AUTO-408.
+func (r *ListRepository) GetReviewAuthorID(ctx context.Context, reviewID string) (string, error) {
+	var ids []string
+	if err := r.db.WithContext(ctx).Model(&domain.AnimeListEntry{}).
+		Where("id = ?", reviewID).Limit(1).Pluck("user_id", &ids).Error; err != nil {
+		return "", err
 	}
-	if res.RowsAffected > 0 {
-		return true, nil // freshly inserted → reaction added
+	if len(ids) == 0 {
+		return "", nil
 	}
-	// Conflict (RowsAffected==0) → the reaction already existed; toggle it off.
-	del := r.db.WithContext(ctx).
-		Where("review_id = ? AND user_id = ? AND emoji = ?", reviewID, userID, emoji).
-		Delete(&domain.ReviewReaction{})
-	return false, del.Error
+	return ids[0], nil
 }
 
 // GetReactionCounts returns per-review aggregated reaction counts for the given
-// review IDs, keyed by review_id. When viewerUserID is non-nil, ReactedByMe is
-// set per emoji for that viewer. Reviews with no reactions are absent from the
-// map (the handler treats absence as an empty slice). AUTO-408.
+// review IDs, keyed by review_id. Each ReactionCount carries the ordered list
+// of reactor display names (Users) for the who-reacted popover. When
+// viewerUserID is non-nil, ReactedByMe is set per emoji for that viewer.
+// Reviews with no reactions are absent from the map. AUTO-408.
 func (r *ListRepository) GetReactionCounts(ctx context.Context, reviewIDs []string, viewerUserID *string) (map[string][]domain.ReactionCount, error) {
 	out := make(map[string][]domain.ReactionCount)
 	if len(reviewIDs) == 0 {
 		return out, nil
 	}
 
-	var rows []struct {
-		ReviewID string `gorm:"column:review_id"`
-		Emoji    string `gorm:"column:emoji"`
-		Count    int    `gorm:"column:count"`
-	}
+	// Fetch the raw rows and aggregate in Go — portable across Postgres/SQLite
+	// (no string_agg) and lets us build counts + reactor names + reacted_by_me
+	// from a single query. Reactions per review are few, so this is cheap.
+	var rows []domain.ReviewReaction
 	if err := r.db.WithContext(ctx).
-		Model(&domain.ReviewReaction{}).
-		Select("review_id, emoji, COUNT(*) AS count").
 		Where("review_id IN ?", reviewIDs).
-		Group("review_id, emoji").
-		Order("count DESC, emoji ASC").
-		Scan(&rows).Error; err != nil {
+		Order("created_at ASC").
+		Find(&rows).Error; err != nil {
 		return nil, err
 	}
 
-	// Resolve the viewer's own reactions across these reviews in one query.
-	mine := make(map[string]bool) // key: reviewID + "\x00" + emoji
-	if viewerUserID != nil {
-		var myRows []struct {
-			ReviewID string `gorm:"column:review_id"`
-			Emoji    string `gorm:"column:emoji"`
+	type agg struct {
+		count       int
+		users       []string
+		reactedByMe bool
+	}
+	perReview := make(map[string]map[string]*agg) // reviewID -> emoji -> agg
+	emojiOrder := make(map[string][]string)        // reviewID -> emoji first-seen order
+	for _, rr := range rows {
+		byEmoji := perReview[rr.ReviewID]
+		if byEmoji == nil {
+			byEmoji = make(map[string]*agg)
+			perReview[rr.ReviewID] = byEmoji
 		}
-		if err := r.db.WithContext(ctx).
-			Model(&domain.ReviewReaction{}).
-			Select("review_id, emoji").
-			Where("review_id IN ? AND user_id = ?", reviewIDs, *viewerUserID).
-			Scan(&myRows).Error; err != nil {
-			return nil, err
+		a := byEmoji[rr.Emoji]
+		if a == nil {
+			a = &agg{}
+			byEmoji[rr.Emoji] = a
+			emojiOrder[rr.ReviewID] = append(emojiOrder[rr.ReviewID], rr.Emoji)
 		}
-		for _, m := range myRows {
-			mine[m.ReviewID+"\x00"+m.Emoji] = true
+		a.count++
+		if rr.Username != "" {
+			a.users = append(a.users, rr.Username)
+		}
+		if viewerUserID != nil && rr.UserID == *viewerUserID {
+			a.reactedByMe = true
 		}
 	}
 
-	for _, row := range rows {
-		out[row.ReviewID] = append(out[row.ReviewID], domain.ReactionCount{
-			Emoji:       row.Emoji,
-			Count:       row.Count,
-			ReactedByMe: mine[row.ReviewID+"\x00"+row.Emoji],
+	for reviewID, byEmoji := range perReview {
+		list := make([]domain.ReactionCount, 0, len(byEmoji))
+		for _, emoji := range emojiOrder[reviewID] {
+			a := byEmoji[emoji]
+			list = append(list, domain.ReactionCount{
+				Emoji: emoji, Count: a.count, ReactedByMe: a.reactedByMe, Users: a.users,
+			})
+		}
+		// Stable display order: most-reacted first, then emoji for ties.
+		sort.SliceStable(list, func(i, j int) bool {
+			if list[i].Count != list[j].Count {
+				return list[i].Count > list[j].Count
+			}
+			return list[i].Emoji < list[j].Emoji
 		})
+		out[reviewID] = list
 	}
 	return out, nil
 }
@@ -559,6 +635,9 @@ func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, user
 	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
 	if needsAnimesJoin {
 		base = base.Joins("LEFT JOIN animes ON animes.id = anime_list.anime_id")
+	}
+	if isGenreSort(params.Sort) {
+		base = base.Joins(genreSortJoin)
 	}
 	if search != "" {
 		like := "%" + search + "%"
