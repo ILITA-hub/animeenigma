@@ -1,9 +1,15 @@
 <template>
   <div
+    ref="rootRef"
     class="pl"
     :class="{ 'pl--theater': theater }"
     :style="{ '--prov': activeProviderHue }"
+    tabindex="0"
+    role="region"
+    aria-label="Video player. Space to play or pause, arrow keys to seek and adjust volume."
     @click.self="closeMenus"
+    @mouseenter="isPointerInside = true"
+    @mouseleave="isPointerInside = false"
     data-test="unified-player"
   >
     <!-- Poster / still background -->
@@ -129,7 +135,6 @@
       :provider-name="activeProviderName"
       :provider-hue="activeProviderHue"
       :audio-label="audioLabel"
-      :theater="theater"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"
       @set-volume="onSetVolume"
@@ -138,7 +143,6 @@
       @toggle-subs="toggleMenu('subs')"
       @toggle-settings="toggleMenu('settings')"
       @toggle-pip="onTogglePip"
-      @toggle-theater="$emit('toggle-theater')"
       @toggle-fullscreen="onToggleFullscreen"
     />
 
@@ -154,56 +158,56 @@
       />
     </div>
 
-    <!-- Source panel -->
-    <SourcePanel
-      v-if="openMenu === 'source'"
-      :rows="rows"
-      :audio="state.combo.value.audio"
-      :lang="state.combo.value.lang"
-      :team="state.combo.value.team"
-      :provider="state.combo.value.provider"
-      :server="state.combo.value.server"
-      :servers="resolvedServers"
-      :teams="[]"
-      @click.stop
-      @update:audio="state.setAudio"
-      @update:lang="state.setLang"
-      @update:team="state.setTeam"
-      @select-provider="onSelectProvider"
-      @select-server="state.setServer"
-    />
+    <!-- Source panel (floating, top-right) -->
+    <div v-if="openMenu === 'source'" class="pl-floating pl-floating--source" @click.stop>
+      <SourcePanel
+        :rows="rows"
+        :audio="state.combo.value.audio"
+        :lang="state.combo.value.lang"
+        :team="state.combo.value.team"
+        :provider="state.combo.value.provider"
+        :server="state.combo.value.server"
+        :servers="resolvedServers"
+        :teams="[]"
+        @update:audio="state.setAudio"
+        @update:lang="state.setLang"
+        @update:team="state.setTeam"
+        @select-provider="onSelectProvider"
+        @select-server="state.setServer"
+      />
+    </div>
 
-    <!-- Playback settings menu -->
-    <PlaybackSettingsMenu
-      v-if="openMenu === 'settings'"
-      :quality="state.quality.value"
-      :qualities="['Auto']"
-      :speed="state.speed.value"
-      :speeds="[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]"
-      :auto-next="state.autoNext.value"
-      :auto-skip="state.autoSkip.value"
-      @click.stop
-      @update:quality="v => { state.quality.value = v }"
-      @update:speed="onSetSpeed"
-      @update:auto-next="v => { state.autoNext.value = v }"
-      @update:auto-skip="v => { state.autoSkip.value = v }"
-    />
+    <!-- Playback settings menu (floating, above control bar) -->
+    <div v-if="openMenu === 'settings'" class="pl-floating pl-floating--btnmenu" @click.stop>
+      <PlaybackSettingsMenu
+        :quality="state.quality.value"
+        :qualities="['Auto']"
+        :speed="state.speed.value"
+        :speeds="[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]"
+        :auto-next="state.autoNext.value"
+        :auto-skip="state.autoSkip.value"
+        @update:quality="v => { state.quality.value = v }"
+        @update:speed="onSetSpeed"
+        @update:auto-next="v => { state.autoNext.value = v }"
+        @update:auto-skip="v => { state.autoSkip.value = v }"
+      />
+    </div>
 
-    <!-- Subtitles menu -->
-    <SubtitlesMenu
-      v-if="openMenu === 'subs'"
-      :sub-lang="state.subLang.value"
-      :sub-langs="subLangsAvailable"
-      :sub-size="state.subSize.value"
-      :sub-bg="state.subBg.value"
-      :sub-offset="state.subOffset.value"
-      @click.stop
-      @update:sub-lang="v => { state.subLang.value = v as 'off' | 'en' | 'ru' | 'ja' }"
-      @update:sub-size="v => { state.subSize.value = v }"
-      @update:sub-bg="v => { state.subBg.value = v }"
-      @update:sub-offset="v => { state.subOffset.value = v }"
-      @open-browse="browseOpen = true"
-    />
+    <!-- Subtitles menu (floating, above control bar) -->
+    <div v-if="openMenu === 'subs'" class="pl-floating pl-floating--btnmenu" @click.stop>
+      <SubtitlesMenu
+        :sub-lang="state.subLang.value"
+        :sub-langs="subLangsAvailable"
+        :sub-size="state.subSize.value"
+        :sub-bg="state.subBg.value"
+        :sub-offset="state.subOffset.value"
+        @update:sub-lang="v => { state.subLang.value = v as 'off' | 'en' | 'ru' | 'ja' }"
+        @update:sub-size="v => { state.subSize.value = v }"
+        @update:sub-bg="v => { state.subBg.value = v }"
+        @update:sub-offset="v => { state.subOffset.value = v }"
+        @open-browse="browseOpen = true"
+      />
+    </div>
 
     <!-- Browse subtitles modal -->
     <BrowseSubsModal
@@ -243,6 +247,7 @@ import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
 import { useProviderResolver } from '@/composables/unifiedPlayer/useProviderResolver'
 import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'
+import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
 import { providerById } from './providerRegistry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
@@ -275,6 +280,8 @@ defineEmits<{
 // ─── Core state ──────────────────────────────────────────────────────────────
 
 const videoRef = ref<HTMLVideoElement | null>(null)
+const rootRef = ref<HTMLElement | null>(null)
+const isPointerInside = ref(false)
 const state = usePlayerState()
 const engine = useVideoEngine(videoRef)
 const resolver = useProviderResolver()
@@ -702,12 +709,73 @@ function onTogglePip() {
 }
 
 function onToggleFullscreen() {
-  const el = videoRef.value?.parentElement
+  const el = rootRef.value ?? videoRef.value?.parentElement
   if (!el) return
   if (document.fullscreenElement) {
     void document.exitFullscreen()
   } else {
     void el.requestFullscreen()
+  }
+}
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+// Listen on window but only act when the pointer is over the player or focus is
+// inside it — so space/arrows control THIS player without hijacking the page.
+
+function playerIsActive(): boolean {
+  if (isPointerInside.value) return true
+  const root = rootRef.value
+  return !!(root && document.activeElement && root.contains(document.activeElement))
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (!playerIsActive()) return
+
+  if (e.key === 'Escape') {
+    if (openMenu.value !== null || browseOpen.value) {
+      closeMenus()
+      e.preventDefault()
+    }
+    return
+  }
+
+  const action = mapKeyToAction(e)
+  if (!action) return
+  e.preventDefault()
+
+  switch (action.type) {
+    case 'play-pause':
+      togglePlay()
+      break
+    case 'seek-rel':
+      onSeekRel(action.value)
+      break
+    case 'vol-rel': {
+      const next = Math.max(0, Math.min(100, state.volume.value + action.value))
+      if (state.muted.value && action.value > 0) onToggleMute()
+      onSetVolume(next)
+      break
+    }
+    case 'seek-pct': {
+      const v = videoRef.value
+      if (v && v.duration) {
+        v.currentTime = (action.value / 100) * v.duration
+        writeProgress()
+      }
+      break
+    }
+    case 'mute':
+      onToggleMute()
+      break
+    case 'fullscreen':
+      onToggleFullscreen()
+      break
+    case 'subs':
+      toggleMenu('subs')
+      break
+    case 'pip':
+      onTogglePip()
+      break
   }
 }
 
@@ -723,11 +791,13 @@ onMounted(() => {
   }
   // Bootstrap episode selection so it's ready before provider resolves
   initSelectedEpisode()
+  window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
   stopRaf()
   clearNextEpTimer()
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
@@ -842,13 +912,74 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* Scrub bar override position — sits inside control bar area */
+/* Scrub bar override position — sits ABOVE the button row with a clear gap so
+   the buttons' hover/focus outlines never overlap the progress track. The
+   button row is 40px tall starting 12px from the bottom (top edge ≈ 52px), so
+   58px leaves a 6px breathing band. */
 .pl-scrub-overlay {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 44px; /* sits just above the button row */
+  bottom: 58px;
   z-index: 7;
   padding: 0 16px;
+}
+
+/* Keyboard focus ring on the player shell (tabindex=0 for hotkeys). */
+.pl:focus {
+  outline: none;
+}
+
+.pl:focus-visible {
+  outline: 2px solid var(--brand-cyan);
+  outline-offset: -2px;
+}
+
+/* Floating menu cards (source / settings / subtitles) — anchored over the
+   video so they actually appear; without a positioned wrapper the bare menu
+   components rendered in static flow and were invisible. */
+.pl-floating {
+  position: absolute;
+  z-index: 12;
+  border-radius: var(--r-lg, 12px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  animation: pl-pop 0.18s ease;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Source panel: larger, top-right under the header. */
+.pl-floating--source {
+  top: 64px;
+  right: 14px;
+  width: 320px;
+  max-height: calc(100% - 130px);
+}
+
+/* Settings / subtitles: compact card floating above the control-bar buttons. */
+.pl-floating--btnmenu {
+  right: 14px;
+  bottom: 76px;
+  padding: 6px;
+  max-height: calc(100% - 130px);
+}
+
+@keyframes pl-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 680px) {
+  .pl-floating--source {
+    width: calc(100% - 28px);
+  }
 }
 </style>

@@ -1,0 +1,75 @@
+/**
+ * playerHotkeys — pure keyboard-shortcut mapping for the unified player.
+ *
+ * Kept as a standalone pure function so the key→action contract is unit-tested
+ * without mounting the player. UnifiedPlayer.vue attaches a `keydown` listener
+ * scoped to its own root element and dispatches the returned action.
+ */
+
+export type HotkeyAction =
+  | { type: 'play-pause' }
+  | { type: 'seek-rel'; value: number }
+  | { type: 'vol-rel'; value: number }
+  | { type: 'seek-pct'; value: number }
+  | { type: 'mute' }
+  | { type: 'fullscreen' }
+  | { type: 'subs' }
+  | { type: 'pip' }
+
+const SEEK_STEP = 5
+const VOL_STEP = 5
+
+/**
+ * Translate a keyboard event into a player action, or null if the key is not a
+ * shortcut (or focus is in a text field, where typing must not be hijacked).
+ */
+export function mapKeyToAction(e: KeyboardEvent): HotkeyAction | null {
+  // Never intercept keystrokes meant for a text field.
+  const target = e.target as HTMLElement | null
+  if (target) {
+    const tag = (target.tagName || '').toUpperCase()
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) {
+      return null
+    }
+  }
+
+  const key = e.key
+
+  // Digit 0-9 → seek to that decile of the timeline.
+  if (key.length === 1 && key >= '0' && key <= '9') {
+    return { type: 'seek-pct', value: Number(key) * 10 }
+  }
+
+  switch (key) {
+    case ' ':
+    case 'Spacebar': // legacy Edge/IE
+      return { type: 'play-pause' }
+    case 'ArrowLeft':
+      return { type: 'seek-rel', value: -SEEK_STEP }
+    case 'ArrowRight':
+      return { type: 'seek-rel', value: SEEK_STEP }
+    case 'ArrowUp':
+      return { type: 'vol-rel', value: VOL_STEP }
+    case 'ArrowDown':
+      return { type: 'vol-rel', value: -VOL_STEP }
+  }
+
+  switch (key.toLowerCase()) {
+    case 'k':
+      return { type: 'play-pause' }
+    case 'j':
+      return { type: 'seek-rel', value: -SEEK_STEP }
+    case 'l':
+      return { type: 'seek-rel', value: SEEK_STEP }
+    case 'm':
+      return { type: 'mute' }
+    case 'f':
+      return { type: 'fullscreen' }
+    case 'c':
+      return { type: 'subs' }
+    case 'p':
+      return { type: 'pip' }
+    default:
+      return null
+  }
+}

@@ -11,7 +11,6 @@ const baseProps = {
   providerName: 'AllAnime',
   providerHue: '#00d4ff',
   audioLabel: 'Sub',
-  theater: false,
 }
 
 describe('PlayerControlBar', () => {
@@ -49,16 +48,16 @@ describe('PlayerControlBar', () => {
     expect(pill.text()).toContain('Sub')
   })
 
-  it('emits seek-rel with -10 when back button is clicked', async () => {
+  it('emits seek-rel with -5 when back button is clicked', async () => {
     const w = mount(PlayerControlBar, { props: baseProps })
     await w.find('[data-test="seek-back"]').trigger('click')
-    expect(w.emitted('seek-rel')?.[0]).toEqual([-10])
+    expect(w.emitted('seek-rel')?.[0]).toEqual([-5])
   })
 
-  it('emits seek-rel with +10 when forward button is clicked', async () => {
+  it('emits seek-rel with +5 when forward button is clicked', async () => {
     const w = mount(PlayerControlBar, { props: baseProps })
     await w.find('[data-test="seek-fwd"]').trigger('click')
-    expect(w.emitted('seek-rel')?.[0]).toEqual([10])
+    expect(w.emitted('seek-rel')?.[0]).toEqual([5])
   })
 
   it('formats and displays time labels', () => {
@@ -67,15 +66,8 @@ describe('PlayerControlBar', () => {
     expect(w.find('[data-test="time-duration"]').text()).toBe('23:41')
   })
 
-  it('emits toggle-theater with the theater button', async () => {
+  it('does not render a theater-mode button (hidden by request)', () => {
     const w = mount(PlayerControlBar, { props: baseProps })
-    await w.find('[data-test="toggle-theater"]').trigger('click')
-    expect(w.emitted('toggle-theater')).toBeTruthy()
-  })
-
-  it('theater button has is-open class when theater=true', () => {
-    const w = mount(PlayerControlBar, { props: { ...baseProps, theater: true } })
-    const btn = w.find('[data-test="toggle-theater"]')
-    expect(btn.classes()).toContain('is-open')
+    expect(w.find('[data-test="toggle-theater"]').exists()).toBe(false)
   })
 })

@@ -20,37 +20,35 @@
         </svg>
       </button>
 
-      <!-- −10s (hidden on mobile via CSS) -->
+      <!-- −5s (hidden on mobile via CSS) — circular replay arrow w/ "5" inside -->
       <button
         class="pl-icon pl-skip-back"
-        aria-label="Back 10 seconds"
+        aria-label="Back 5 seconds"
         data-test="seek-back"
-        @click="emit('seek-rel', -10)"
+        @click="emit('seek-rel', -5)"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
           aria-hidden="true"
         >
-          <path d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4z" fill="currentColor" stroke="none" />
-          <path d="M4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" fill="currentColor" stroke="none" />
-          <text x="7.5" y="23.5" font-size="5.5" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" text-anchor="middle">10</text>
+          <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
+          <text x="12.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
       </button>
 
-      <!-- +10s (hidden on mobile via CSS) -->
+      <!-- +5s (hidden on mobile via CSS) — circular forward arrow w/ "5" inside -->
       <button
         class="pl-icon pl-skip-fwd"
-        aria-label="Forward 10 seconds"
+        aria-label="Forward 5 seconds"
         data-test="seek-fwd"
-        @click="emit('seek-rel', 10)"
+        @click="emit('seek-rel', 5)"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
           aria-hidden="true"
         >
-          <path d="M11.934 11.2a1 1 0 010 1.6l-5.334 4A1 1 0 015 16V8a1 1 0 011.6-.8l5.334 4z" fill="currentColor" stroke="none" />
-          <path d="M19.934 11.2a1 1 0 010 1.6l-5.334 4A1 1 0 0113 16V8a1 1 0 011.6-.8l5.334 4z" fill="currentColor" stroke="none" />
-          <text x="16.5" y="23.5" font-size="5.5" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" text-anchor="middle">10</text>
+          <path d="M4 4v6h6M4 10a8 8 0 11-1 4" style="transform: scaleX(-1); transform-origin: center" />
+          <text x="11.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
       </button>
 
@@ -90,8 +88,8 @@
           type="range"
           class="pl-vol-range"
           min="0"
-          max="1"
-          step="0.05"
+          max="100"
+          step="1"
           :value="muted ? 0 : volume"
           aria-label="Volume"
           data-test="volume-slider"
@@ -176,23 +174,6 @@
         </svg>
       </button>
 
-      <!-- Theater mode -->
-      <button
-        class="pl-icon"
-        :class="{ 'is-open': theater }"
-        :aria-label="theater ? 'Exit theater mode' : 'Theater mode'"
-        :aria-pressed="theater"
-        data-test="toggle-theater"
-        @click="emit('toggle-theater')"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3" />
-        </svg>
-      </button>
-
       <!-- Fullscreen (hidden on mobile via CSS) -->
       <button
         class="pl-icon pl-fs-btn"
@@ -222,7 +203,6 @@ defineProps<{
   providerName: string
   providerHue: string
   audioLabel: string
-  theater: boolean
 }>()
 
 const emit = defineEmits<{
@@ -234,7 +214,6 @@ const emit = defineEmits<{
   (e: 'toggle-subs'): void
   (e: 'toggle-settings'): void
   (e: 'toggle-pip'): void
-  (e: 'toggle-theater'): void
   (e: 'toggle-fullscreen'): void
 }>()
 
