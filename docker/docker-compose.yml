@@ -648,6 +648,12 @@ services:
       REPORTS_DIR: /data/reports
       MAINTENANCE_URL: http://host-gateway:8087
       TRACING_ENABLED: "true"
+      # Gacha (Лудка) Phase 4 — fire-and-forget «Энигмы» credits to the gacha
+      # service on episode-watched / title-completed. Producer is non-blocking
+      # + drop-on-full; a gacha outage never affects player. Idempotency is
+      # gacha-side (unique (user,reason,ref) ledger index).
+      GACHA_INTERNAL_URL: http://gacha:8093
+      GACHA_CREDIT_ENABLED: "true"
     extra_hosts:
       - "host-gateway:host-gateway"
     volumes:

@@ -525,6 +525,9 @@ func NewRouterWithCleanup(
 				r.Get("/banners", proxyHandler.ProxyToGacha)
 				r.Post("/banners/{id}/pull", proxyHandler.ProxyToGacha)
 				r.Get("/collection", proxyHandler.ProxyToGacha)
+
+				// Daily streak claim (Phase 4).
+				r.Post("/daily", proxyHandler.ProxyToGacha)
 			})
 		})
 
