@@ -477,7 +477,7 @@ services:
       # admin role — regular users get 403, the лудка is invisible to them.
       # The global-update release flips this to "false" (env change +
       # `make restart-gateway`, no rebuild) to open it to all authenticated users.
-      GACHA_ADMIN_ONLY: "true"
+      GACHA_ADMIN_ONLY: "${GACHA_ADMIN_ONLY:-true}"
       GRAFANA_SERVICE_URL: http://grafana:3000
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
@@ -998,6 +998,9 @@ services:
         VITE_API_URL: /api
         VITE_RAW_PROVIDER_ENABLED: "true"
         VITE_ANIME18_ENABLED: "true"
+        # Gacha dark-ship gate (spec §12): unset/true ⇒ UI admin-only.
+        # Release flip: set VITE_GACHA_ADMIN_ONLY=false in docker/.env + make redeploy-web.
+        VITE_GACHA_ADMIN_ONLY: "${VITE_GACHA_ADMIN_ONLY:-true}"
     container_name: animeenigma-web
     restart: unless-stopped
     ports:

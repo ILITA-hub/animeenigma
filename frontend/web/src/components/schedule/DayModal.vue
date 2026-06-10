@@ -13,7 +13,11 @@
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold text-foreground line-clamp-2">{{ titleOf(o) }}</div>
           <div class="text-xs text-primary mt-1">{{ $t('schedule.episode', { n: o.episode }) }}</div>
-          <div class="text-[11px] text-muted-foreground mt-0.5">{{ formatAirTime(o.date) }} {{ $t('schedule.mskSuffix') }} · ★ {{ (o.anime.score ?? 0).toFixed(1) }}</div>
+          <div class="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+            <span>{{ formatAirTime(o.date) }} {{ $t('schedule.mskSuffix') }} ·</span>
+            <Star class="size-2.5 text-warning" fill="currentColor" aria-hidden="true" />
+            <span>{{ (o.anime.score ?? 0).toFixed(1) }}</span>
+          </div>
         </div>
         <Button variant="default" size="sm" class="ml-auto flex-none" tabindex="-1">{{ $t('schedule.watch') }}</Button>
       </router-link>
@@ -24,6 +28,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Star } from 'lucide-vue-next'
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
 import type { Occurrence } from '@/composables/schedule/types'
