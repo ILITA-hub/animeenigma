@@ -235,6 +235,12 @@ func NewRouter(
 				r.Delete("/reviews", reviewHandler.DeleteReview)
 				// AUTO-408 — toggle an emoji reaction on a review.
 				r.Post("/reviews/{reviewId}/reactions/{emoji}", reviewHandler.ReactToReview)
+				// AUTO-408 — admin moderation: remove a specific user's
+				// reaction. Admin-role-gated (handler re-checks too).
+				r.Group(func(r chi.Router) {
+					r.Use(AdminRoleMiddleware)
+					r.Delete("/reviews/{reviewId}/reactions/{emoji}/users/{userId}", reviewHandler.AdminRemoveReaction)
+				})
 				// Phase 1 (workstream: social) plan 04 — comment mutations.
 				r.Post("/comments", commentHandler.CreateComment)
 				r.Patch("/comments/{commentId}", commentHandler.UpdateComment)

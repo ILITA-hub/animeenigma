@@ -143,12 +143,22 @@ const (
 // responses. ReactedByMe is true when the requesting (authenticated) viewer
 // has reacted with this emoji on the review. Users is the ordered list of
 // reactor display names (for the Discord/TG-style "who reacted" popover); the
-// System reactor appears as «AnimeEnigma». AUTO-408.
+// System reactor appears as «AnimeEnigma». Reactors mirrors Users but carries
+// the user IDs too, so the admin moderation UI can target a specific user's
+// reaction for removal. AUTO-408.
 type ReactionCount struct {
-	Emoji       string   `json:"emoji"`
-	Count       int      `json:"count"`
-	ReactedByMe bool     `json:"reacted_by_me"`
-	Users       []string `json:"users"`
+	Emoji       string         `json:"emoji"`
+	Count       int            `json:"count"`
+	ReactedByMe bool           `json:"reacted_by_me"`
+	Users       []string       `json:"users"`
+	Reactors    []ReactionUser `json:"reactors"`
+}
+
+// ReactionUser identifies a single reactor inside a ReactionCount aggregate
+// (admin moderation needs the user ID, not just the display name).
+type ReactionUser struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
 }
 
 // AllowedReactionEmojis is the fixed 12-emoji palette the review-reaction

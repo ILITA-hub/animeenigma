@@ -226,6 +226,11 @@ func NewRouterWithCleanup(
 			r.Use(userRateLimit)
 			r.Use(BlockGuestRoleMiddleware)
 			r.Post("/anime/{animeId}/reviews/{reviewId}/reactions/{emoji}", proxyHandler.ProxyToPlayer)
+			// AUTO-408 — admin moderation: remove a specific user's reaction.
+			// The player enforces the admin role downstream (AdminRoleMiddleware
+			// + handler re-check); the gateway gate here is JWT-validity only,
+			// same as the toggle route above.
+			r.Delete("/anime/{animeId}/reviews/{reviewId}/reactions/{emoji}/users/{userId}", proxyHandler.ProxyToPlayer)
 		})
 
 		// Phase 14 (ui-ux-audit / UX-28) — soft social-proof follower count
