@@ -41,7 +41,7 @@
       </div>
 
       <!-- Filters -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Select
           v-model="filterType"
           size="sm"
@@ -64,6 +64,14 @@
           :label="$t('admin.feedback.filters.status')"
           @change="applyFilters"
         />
+        <Input
+          v-model="filterUsername"
+          size="sm"
+          type="search"
+          clearable
+          :label="$t('admin.feedback.filters.username')"
+          :placeholder="$t('admin.feedback.filters.usernamePlaceholder')"
+        />
       </div>
 
       <!-- Error states -->
@@ -76,7 +84,7 @@
 
       <!-- Loading -->
       <div v-if="isLoading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <!-- Empty state -->
@@ -102,7 +110,7 @@
               v-for="r in items"
               :key="r.id"
               class="border-t border-white/10 hover:bg-white/5 cursor-pointer transition"
-              @click="openDetail(r.id)"
+              @click="openReport(r.id)"
             >
               <td class="px-3 py-2 whitespace-nowrap border-l-4" :class="statusAccentBorder(r.status)">
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
@@ -131,11 +139,21 @@
                   <option class="bg-popover text-white" value="not_relevant">{{ statusLabel('not_relevant') }}</option>
                 </select>
               </td>
-              <td class="px-3 py-2 text-right">
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                <button
+                  type="button"
+                  class="p-1.5 rounded bg-white/10 hover:bg-white/20 align-middle mr-2"
+                  :title="copiedId === r.id ? $t('admin.feedback.copied') : $t('admin.feedback.copyLink')"
+                  :aria-label="$t('admin.feedback.copyLink')"
+                  @click.stop="copyReportLink(r.id)"
+                >
+                  <Check v-if="copiedId === r.id" class="w-3.5 h-3.5 text-success" />
+                  <LinkIcon v-else class="w-3.5 h-3.5 text-white/70" />
+                </button>
                 <button
                   type="button"
                   class="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-xs"
-                  @click.stop="openDetail(r.id)"
+                  @click.stop="openReport(r.id)"
                 >
                   {{ $t('admin.feedback.view') }}
                 </button>
@@ -171,7 +189,7 @@
               :class="draggingId === r.id ? 'opacity-40' : ''"
               @dragstart="onDragStart(r.id, $event)"
               @dragend="onDragEnd"
-              @click="openDetail(r.id)"
+              @click="openReport(r.id)"
             >
               <div class="flex items-center justify-between gap-2 mb-1.5">
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase" :class="categoryClass(r.category)">
@@ -220,16 +238,16 @@
     <div
       v-if="detail || isDetailLoading || detailError"
       class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4 pt-20"
-      @click.self="closeDetail"
+      @click.self="closeReport"
     >
       <div class="glass-card w-full max-w-3xl p-4 md:p-6 lg:p-8 my-8">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">{{ $t('admin.feedback.detail.title') }}</h2>
-          <button type="button" class="text-white/60 hover:text-white text-2xl leading-none" @click="closeDetail">×</button>
+          <button type="button" class="text-white/60 hover:text-white text-2xl leading-none" @click="closeReport">×</button>
         </div>
 
         <div v-if="isDetailLoading" class="flex justify-center py-12">
-          <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+          <Spinner size="lg" />
         </div>
         <p v-else-if="detailError" class="text-destructive py-4">
           {{ $te(detailError) ? $t(detailError) : detailError }}
@@ -244,6 +262,21 @@
               {{ statusLabel(detail.status) }}
             </span>
             <span class="text-white/50 text-xs">{{ formatDate(detail.timestamp, detail.id) }}</span>
+          </div>
+
+          <!-- Report ID + shareable deep link -->
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-white/40 text-xs uppercase">{{ $t('admin.feedback.detail.id') }}</span>
+            <code class="px-2 py-0.5 rounded bg-black/30 text-cyan-300 text-xs font-mono break-all">{{ detail.id }}</code>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-xs text-white/80"
+              @click="copyReportLink(detail.id)"
+            >
+              <Check v-if="copiedId === detail.id" class="w-3.5 h-3.5 text-success" />
+              <LinkIcon v-else class="w-3.5 h-3.5" />
+              {{ copiedId === detail.id ? $t('admin.feedback.copied') : $t('admin.feedback.copyLink') }}
+            </button>
           </div>
 
           <!-- Description -->
@@ -338,23 +371,70 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Select from '@/components/ui/Select.vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Check, Link as LinkIcon } from 'lucide-vue-next'
 import { adminApi } from '@/api/client'
+import Input from '@/components/ui/Input.vue'
+import Select from '@/components/ui/Select.vue'
+import { Spinner } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
 import type { FeedbackStatus } from '@/types/feedback'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
 const {
   items, total, page, pageSize, isLoading, error,
-  filterCategory, filterStatus, filterType,
+  filterCategory, filterStatus, filterType, filterUsername,
   detail, isDetailLoading, detailError,
   refresh, applyFilters, setPage, openDetail, closeDetail, setStatus,
 } = useAdminFeedback()
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+// Username filter is free-text — debounce so we don't refetch per keystroke.
+let usernameDebounce: ReturnType<typeof setTimeout> | null = null
+watch(filterUsername, () => {
+  if (usernameDebounce) clearTimeout(usernameDebounce)
+  usernameDebounce = setTimeout(() => applyFilters(), 300)
+})
+onUnmounted(() => {
+  if (usernameDebounce) clearTimeout(usernameDebounce)
+})
+
+// --- Deep-linking: /admin/feedback?id=<report-id> opens that report ---
+// openReport/closeReport wrap the composable's openDetail/closeDetail and keep
+// the `id` query param in sync so any open report has a shareable URL.
+function openReport(id: string): void {
+  if (route.query.id !== id) router.replace({ query: { ...route.query, id } })
+  openDetail(id)
+}
+function closeReport(): void {
+  if (route.query.id) {
+    const q = { ...route.query }
+    delete q.id
+    router.replace({ query: q })
+  }
+  closeDetail()
+}
+
+// Copy a shareable deep link for a report; copiedId drives transient ✓ feedback.
+const copiedId = ref<string | null>(null)
+let copiedTimeout: ReturnType<typeof setTimeout> | null = null
+async function copyReportLink(id: string): Promise<void> {
+  const url = `${window.location.origin}/admin/feedback?id=${encodeURIComponent(id)}`
+  try {
+    await navigator.clipboard.writeText(url)
+    copiedId.value = id
+    if (copiedTimeout) clearTimeout(copiedTimeout)
+    copiedTimeout = setTimeout(() => (copiedId.value = null), 1500)
+  } catch {
+    // Clipboard can be unavailable (insecure context) — ignore silently.
+  }
+}
 
 // --- View mode (table | kanban), persisted in localStorage ---
 const VIEW_KEY = 'admin_feedback_view'
@@ -548,5 +628,9 @@ onMounted(() => {
     filterStatus.value = 'all'
   }
   refresh()
+  // Deep link: ?id=<report-id> opens that report's detail straight away.
+  const qid = route.query.id
+  const id = Array.isArray(qid) ? qid[0] : qid
+  if (typeof id === 'string' && id !== '') openDetail(id)
 })
 </script>

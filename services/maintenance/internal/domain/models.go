@@ -142,13 +142,13 @@ type ClassifiedBatch struct {
 
 // AnalysisResult is what Claude returns (structured JSON).
 type AnalysisResult struct {
-	Tier         FixTier       `json:"tier"`
-	Risk         FixRisk       `json:"risk,omitempty"`
-	Diagnosis    Diagnosis     `json:"diagnosis"`
-	ActionsTaken []Action      `json:"actions_taken"`
-	FixPlan      *FixPlan      `json:"fix_plan,omitempty"`
-	ReplyHTML    string        `json:"reply_html"`
-	Issue        IssueInfo     `json:"issue"`
+	Tier          FixTier   `json:"tier"`
+	Risk          FixRisk   `json:"risk,omitempty"`
+	Diagnosis     Diagnosis `json:"diagnosis"`
+	ActionsTaken  []Action  `json:"actions_taken"`
+	FixPlan       *FixPlan  `json:"fix_plan,omitempty"`
+	ReplyMarkdown string    `json:"reply_markdown"`
+	Issue         IssueInfo `json:"issue"`
 }
 
 type Diagnosis struct {
@@ -195,21 +195,21 @@ type ReportRequest struct {
 
 // Issue stored in issues.json.
 type Issue struct {
-	ID                string      `json:"id"`
-	CreatedAt         string      `json:"created_at"`
-	ResolvedAt        string      `json:"resolved_at,omitempty"`
-	Source            string      `json:"source"`
+	ID                string        `json:"id"`
+	CreatedAt         string        `json:"created_at"`
+	ResolvedAt        string        `json:"resolved_at,omitempty"`
+	Source            string        `json:"source"`
 	Category          IssueCategory `json:"category"`
-	Priority          string      `json:"priority"`
-	Status            IssueStatus `json:"status"`
-	Title             string      `json:"title"`
-	Reporter          string      `json:"reporter"`
-	TelegramMessageID int         `json:"telegram_message_id"`
-	AffectedService   string      `json:"affected_service,omitempty"`
-	Actions           []Action    `json:"actions"`
-	Resolution        string      `json:"resolution,omitempty"`
-	FeedbackID        string      `json:"feedback_id,omitempty"`  // /admin/feedback entry mirroring this issue
-	Attachments       []string    `json:"attachments,omitempty"`  // host paths of downloaded attachments
+	Priority          string        `json:"priority"`
+	Status            IssueStatus   `json:"status"`
+	Title             string        `json:"title"`
+	Reporter          string        `json:"reporter"`
+	TelegramMessageID int           `json:"telegram_message_id"`
+	AffectedService   string        `json:"affected_service,omitempty"`
+	Actions           []Action      `json:"actions"`
+	Resolution        string        `json:"resolution,omitempty"`
+	FeedbackID        string        `json:"feedback_id,omitempty"` // /admin/feedback entry mirroring this issue
+	Attachments       []string      `json:"attachments,omitempty"` // host paths of downloaded attachments
 }
 
 // IssueDB is the issues.json file structure.
@@ -220,16 +220,16 @@ type IssueDB struct {
 
 // State is the maintenance-state.json file structure.
 type State struct {
-	LastUpdateID       int64                       `json:"last_update_id"`
-	LastPollAt         string                      `json:"last_poll_at,omitempty"`
-	SessionStarted     string                      `json:"session_started,omitempty"`
-	ReactionsSupported bool                        `json:"reactions_supported"`
-	BotUserID          int64                       `json:"bot_user_id"`
-	ActiveAlerts       map[string]ActiveAlert       `json:"active_alerts"`
-	Cooldowns          map[string]string            `json:"cooldowns"`
-	FixAttemptCounts   map[string]FixAttemptCount   `json:"fix_attempt_counts"`
-	LastFixPerService  map[string]LastFix           `json:"last_fix_per_service"`
-	PendingFixes       map[string]PendingFix        `json:"pending_fixes"`
+	LastUpdateID       int64                      `json:"last_update_id"`
+	LastPollAt         string                     `json:"last_poll_at,omitempty"`
+	SessionStarted     string                     `json:"session_started,omitempty"`
+	ReactionsSupported bool                       `json:"reactions_supported"`
+	BotUserID          int64                      `json:"bot_user_id"`
+	ActiveAlerts       map[string]ActiveAlert     `json:"active_alerts"`
+	Cooldowns          map[string]string          `json:"cooldowns"`
+	FixAttemptCounts   map[string]FixAttemptCount `json:"fix_attempt_counts"`
+	LastFixPerService  map[string]LastFix         `json:"last_fix_per_service"`
+	PendingFixes       map[string]PendingFix      `json:"pending_fixes"`
 }
 
 type ActiveAlert struct {

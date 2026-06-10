@@ -146,12 +146,14 @@ func (h *AdminReportsHandler) safeReportPath(id string) (string, bool) {
 }
 
 // List returns a paginated, optionally filtered slice of feedback rows,
-// newest first. Query params: category, status, type, page, page_size.
+// newest first. Query params: category, status, type, username (case-insensitive
+// substring match), page, page_size.
 func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	fCategory := q.Get("category")
 	fStatus := q.Get("status")
 	fType := q.Get("type")
+	fUsername := strings.ToLower(strings.TrimSpace(q.Get("username")))
 
 	page, _ := strconv.Atoi(q.Get("page"))
 	if page < 1 {
@@ -217,6 +219,9 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if fStatus != "" && m.Status != fStatus {
+			continue
+		}
+		if fUsername != "" && !strings.Contains(strings.ToLower(m.Username), fUsername) {
 			continue
 		}
 		all = append(all, m)

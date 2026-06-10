@@ -141,7 +141,7 @@ func main() {
 	}
 
 	// Send startup message
-	tg.SendMessage("🤖 <b>Maintenance service started</b>\nMonitoring alerts (Grafana API) + user messages (Telegram).")
+	tg.SendMessage("🤖 *Maintenance service started*\nMonitoring alerts (Grafana API) + user messages (Telegram).")
 	log.Infow("startup message sent")
 
 	// Set up graceful shutdown
@@ -151,13 +151,13 @@ func main() {
 
 	// Start polling loop
 	svc := &service{
-		tg:          tg,
-		gf:          gf,
-		disp:        disp,
-		state:       stateMgr,
-		cfg:         cfg,
-		workChan:    workChan,
-		fb:          feedback.NewClient(cfg.PlayerInternalURL, log),
+		tg:       tg,
+		gf:       gf,
+		disp:     disp,
+		state:    stateMgr,
+		cfg:      cfg,
+		workChan: workChan,
+		fb:       feedback.NewClient(cfg.PlayerInternalURL, log),
 	}
 
 	go svc.run(ctx)
@@ -172,20 +172,20 @@ func main() {
 	defer shutdownCancel()
 	server.Shutdown(shutdownCtx)
 
-	tg.SendMessage("🤖 <b>Maintenance service stopping</b>")
+	tg.SendMessage("🤖 *Maintenance service stopping*")
 	stateMgr.Save()
 	log.Infow("shutdown complete")
 }
 
 type service struct {
-	tg          *telegram.Client
-	gf          *grafana.Client
-	disp        *dispatcher.Dispatcher
-	state       *state.Manager
-	cfg         *config.Config
-	workChan    chan workItem
-	fb          *feedback.Client
-	mu          sync.Mutex
+	tg       *telegram.Client
+	gf       *grafana.Client
+	disp     *dispatcher.Dispatcher
+	state    *state.Manager
+	cfg      *config.Config
+	workChan chan workItem
+	fb       *feedback.Client
+	mu       sync.Mutex
 }
 
 // workItem carries either Telegram updates, Grafana alerts, HTTP reports, or webhook events to the processor.
@@ -447,7 +447,7 @@ func (s *service) checkResolvedAlerts(currentAlerts []domain.ClassifiedMessage) 
 				duration = time.Since(firstSeen).Truncate(time.Second).String()
 			}
 			s.tg.SendMessage(fmt.Sprintf(
-				"<b>✅ Alert Resolved</b>\n<b>Alert:</b> %s (%s)\n<b>Duration:</b> %s\n<b>Issue:</b> %s",
+				"*✅ Alert Resolved*\n*Alert:* %s (%s)\n*Duration:* %s\n*Issue:* %s",
 				active.AlertUID, active.Service, duration, active.IssueID,
 			))
 		}
@@ -481,7 +481,7 @@ func (s *service) resolveAlertFromWebhook(key string, wa domain.GrafanaWebhookAl
 		duration = time.Since(firstSeen).Truncate(time.Second).String()
 	}
 	s.tg.SendMessage(fmt.Sprintf(
-		"<b>✅ Alert Resolved</b>\n<b>Alert:</b> %s (%s)\n<b>Duration:</b> %s\n<b>Issue:</b> %s",
+		"*✅ Alert Resolved*\n*Alert:* %s (%s)\n*Duration:* %s\n*Issue:* %s",
 		active.AlertUID, active.Service, duration, active.IssueID,
 	))
 	s.state.Save()
@@ -558,9 +558,9 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		// For webhook-sourced alerts (MessageID == 0), post 🔴 Firing notification
 		if msg.Type == domain.MessageAlertFiring && msg.MessageID == 0 && len(msg.Alerts) > 0 {
 			alert := msg.Alerts[0]
-			fireHTML := fmt.Sprintf("<b>🔴 Firing</b>\n<b>%s</b>\n%s\n%s",
+			fireMsg := fmt.Sprintf("*🔴 Firing*\n*%s*\n%s\n%s",
 				escTelegram(alert.Name), escTelegram(alert.Summary), escTelegram(alert.Description))
-			if sentID, err := s.tg.SendMessage(fireHTML); err == nil {
+			if sentID, err := s.tg.SendMessage(fireMsg); err == nil {
 				msg.MessageID = sentID
 			} else {
 				log.Errorw("webhook failed to send firing message", "error", err)
@@ -600,7 +600,7 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 					"message_id", msg.MessageID,
 				)
 			}
-			s.tg.SendReply(msg.MessageID, fmt.Sprintf("<b>⚠️ Analysis failed</b>\n%s", truncateForTelegram(err.Error())))
+			s.tg.SendReply(msg.MessageID, fmt.Sprintf("*⚠️ Analysis failed*\n%s", truncateForTelegram(err.Error())))
 			continue
 		}
 
@@ -666,42 +666,42 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 		case "feature":
 			emoji, label = "💡", "Feature Request"
 		}
-		b.WriteString(fmt.Sprintf("%s <b>%s</b>\n\n", emoji, label))
+		b.WriteString(fmt.Sprintf("%s *%s*\n\n", emoji, label))
 	} else {
-		b.WriteString("🚨 <b>Player Error Report</b>\n\n")
+		b.WriteString("🚨 *Player Error Report*\n\n")
 	}
-	b.WriteString(fmt.Sprintf("👤 <b>User:</b> %s (ID: %s)\n", escTelegram(report.Username), escTelegram(report.UserID)))
+	b.WriteString(fmt.Sprintf("👤 *User:* %s (ID: %s)\n", escTelegram(report.Username), escTelegram(report.UserID)))
 	if !isFeedback {
-		b.WriteString(fmt.Sprintf("🎬 <b>Player:</b> %s\n", escTelegram(report.PlayerType)))
+		b.WriteString(fmt.Sprintf("🎬 *Player:* %s\n", escTelegram(report.PlayerType)))
 	}
 	if report.AnimeName != "" {
-		b.WriteString(fmt.Sprintf("📺 <b>Anime:</b> %s\n", escTelegram(report.AnimeName)))
+		b.WriteString(fmt.Sprintf("📺 *Anime:* %s\n", escTelegram(report.AnimeName)))
 	}
 	if report.EpisodeNumber != nil {
-		b.WriteString(fmt.Sprintf("📋 <b>Episode:</b> %d\n", *report.EpisodeNumber))
+		b.WriteString(fmt.Sprintf("📋 *Episode:* %d\n", *report.EpisodeNumber))
 	}
 	if report.ServerName != "" {
-		b.WriteString(fmt.Sprintf("🖥 <b>Server:</b> %s\n", escTelegram(report.ServerName)))
+		b.WriteString(fmt.Sprintf("🖥 *Server:* %s\n", escTelegram(report.ServerName)))
 	}
 	if report.ErrorMessage != "" {
 		msg := report.ErrorMessage
 		if len(msg) > 200 {
 			msg = msg[:200] + "..."
 		}
-		b.WriteString(fmt.Sprintf("\n⚠️ <b>Error:</b> <code>%s</code>\n", escTelegram(msg)))
+		b.WriteString(fmt.Sprintf("\n⚠️ *Error:* `%s`\n", escTelegram(msg)))
 	}
 	if report.Description != "" {
 		desc := report.Description
 		if len(desc) > 500 {
 			desc = desc[:500] + "..."
 		}
-		b.WriteString(fmt.Sprintf("\n💬 <b>Description:</b>\n%s\n", escTelegram(desc)))
+		b.WriteString(fmt.Sprintf("\n💬 *Description:*\n%s\n", escTelegram(desc)))
 	}
 	if report.URL != "" {
 		b.WriteString(fmt.Sprintf("\n🔗 %s", escTelegram(report.URL)))
 	}
 	if report.ReportFile != "" {
-		b.WriteString(fmt.Sprintf("\n📁 <code>%s</code>", escTelegram(report.ReportFile)))
+		b.WriteString(fmt.Sprintf("\n📁 `%s`", escTelegram(report.ReportFile)))
 	}
 
 	// Post to Telegram — maintenance bot owns this message
@@ -771,7 +771,7 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 				"message_id", msgID,
 			)
 		}
-		s.tg.SendReply(msgID, fmt.Sprintf("<b>⚠️ Analysis failed</b>\n%s", truncateForTelegram(err.Error())))
+		s.tg.SendReply(msgID, fmt.Sprintf("*⚠️ Analysis failed*\n%s", truncateForTelegram(err.Error())))
 		return
 	}
 
@@ -1014,27 +1014,27 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 	// Send response to Telegram. Never leave a report with an empty body — a
 	// categorised-only message (e.g. a feature request that won't be auto-built)
 	// must still get a human-readable acknowledgement, not just a 👍 reaction.
-	replyHTML := result.ReplyHTML
-	if strings.TrimSpace(replyHTML) == "" {
-		replyHTML = fmt.Sprintf("<b>✅ Acknowledged</b>\n%s — logged and categorised as <b>%s</b>. No automatic action was taken.",
+	replyText := result.ReplyMarkdown
+	if strings.TrimSpace(replyText) == "" {
+		replyText = fmt.Sprintf("*✅ Acknowledged*\n%s — logged and categorised as *%s*. No automatic action was taken.",
 			escTelegram(result.Issue.Title), escTelegram(result.Issue.Category))
 	}
-	if !strings.Contains(replyHTML, issueID) {
-		replyHTML += fmt.Sprintf("\n\n<b>Issue:</b> %s", issueID)
+	if !strings.Contains(replyText, issueID) {
+		replyText += fmt.Sprintf("\n\n*Issue:* %s", issueID)
 	}
 	if msg.FeedbackID != "" {
-		replyHTML += fmt.Sprintf("\n<b>Feedback:</b> <a href=\"%s/admin/feedback?id=%s\">%s</a>",
-			s.cfg.FeedbackBaseURL, url.QueryEscape(msg.FeedbackID), escTelegram(msg.FeedbackID))
+		replyText += fmt.Sprintf("\n*Feedback:* [%s](%s/admin/feedback?id=%s)",
+			escTelegram(msg.FeedbackID), s.cfg.FeedbackBaseURL, url.QueryEscape(msg.FeedbackID))
 	}
 
 	// sendFunc: reply to existing message, or send standalone if from Grafana API (no message_id)
-	sendFunc := func(html string) (int, error) {
+	sendFunc := func(text string) (int, error) {
 		var replyID int
 		var sendErr error
 		if msg.MessageID > 0 {
-			replyID, sendErr = s.tg.SendReply(msg.MessageID, html)
+			replyID, sendErr = s.tg.SendReply(msg.MessageID, text)
 		} else {
-			replyID, sendErr = s.tg.SendMessage(html)
+			replyID, sendErr = s.tg.SendMessage(text)
 		}
 		if sendErr != nil {
 			log.Errorw("telegram failed to send reply",
@@ -1052,7 +1052,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 
 	switch result.Tier {
 	case domain.TierAutoFix, domain.TierEscalate, domain.TierInfoOnly, domain.TierResolved:
-		sendFunc(replyHTML)
+		sendFunc(replyText)
 		s.fb.TrySetStatus(msg.FeedbackID, feedbackStatusForTier(result.Tier))
 
 	case domain.TierButtonFix:
@@ -1060,7 +1060,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		// fix autonomously instead of waiting for an admin button. The diagnosis is
 		// still posted first (no buttons), then applyFix executes + reports the result.
 		if apply, label, _ := s.decideAutoApply(msg, result); apply && result.FixPlan != nil {
-			replyToID, _ := sendFunc(replyHTML)
+			replyToID, _ := sendFunc(replyText)
 			log.Infow("auto-applying fix",
 				"issue_id", issueID,
 				"label", label,
@@ -1086,14 +1086,25 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 			{Text: "🔧 Apply Fix", CallbackData: "fix:" + issueID},
 			{Text: "❌ Dismiss", CallbackData: "dismiss:" + issueID},
 		}
-		var sentMsgID int
-		var err error
-		if msg.MessageID > 0 {
-			sentMsgID, err = s.tg.SendReplyWithButtons(msg.MessageID, replyHTML, buttons)
+		sentMsgID, err := s.tg.SendReplyWithButtons(msg.MessageID, replyText, buttons)
+		if err != nil {
+			// Never let an approval request vanish silently (AUTO-422 root
+			// cause): log the failure and fall back to a buttonless reply so
+			// the admin still sees the diagnosis and the issue ID.
+			log.Errorw("telegram failed to send approval buttons",
+				"issue_id", issueID,
+				"error", err,
+			)
+			sentMsgID, _ = sendFunc(replyText + "\n\n⚠️ Approval buttons could not be delivered — the fix plan is saved; ask the bot to re-send it.")
 		} else {
-			sentMsgID, err = s.tg.SendReplyWithButtons(0, replyHTML, buttons)
+			log.Infow("approval buttons sent",
+				"message_id", sentMsgID,
+				"issue_id", issueID,
+			)
 		}
-		if err == nil && result.FixPlan != nil {
+		// Record the pending fix even when Telegram delivery failed — the plan
+		// must survive so it can be re-sent or applied manually.
+		if result.FixPlan != nil {
 			s.state.AddPendingFix(issueID, domain.PendingFix{
 				IssueID:           issueID,
 				ProposedAt:        time.Now().UTC().Format(time.RFC3339),
@@ -1110,7 +1121,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		// the only response a user/admin sees.
 		log.Warnw("unhandled analysis tier — sending fallback acknowledgement",
 			"tier", result.Tier, "issue_id", issueID)
-		sendFunc(replyHTML)
+		sendFunc(replyText)
 		s.fb.TrySetStatus(msg.FeedbackID, feedback.StatusInProgress)
 	}
 }
@@ -1128,11 +1139,11 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 	result, err := s.disp.ExecuteFix(ctx, fix)
 	elapsed := time.Since(analyzeStart).Round(time.Second)
 
-	reply := func(html string) {
+	reply := func(text string) {
 		if replyToID != 0 {
-			s.tg.SendReply(replyToID, html)
+			s.tg.SendReply(replyToID, text)
 		} else {
-			s.tg.SendMessage(html)
+			s.tg.SendMessage(text)
 		}
 	}
 
@@ -1143,7 +1154,7 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 		}
 		// Work attempted but not done — keep the feedback entry open.
 		s.fb.TrySetStatus(fix.FeedbackID, feedback.StatusInProgress)
-		reply(fmt.Sprintf("<b>❌ Fix failed</b> (%s)\n%s", approver, truncateForTelegram(err.Error())))
+		reply(fmt.Sprintf("*❌ Fix failed* (%s)\n%s", approver, truncateForTelegram(err.Error())))
 		return
 	}
 
@@ -1154,11 +1165,11 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 	if replyToID != 0 {
 		s.tg.SetReaction(replyToID, "👍")
 	}
-	replyHTML := result.ReplyHTML
-	if replyHTML == "" {
-		replyHTML = fmt.Sprintf("<b>🔧 Fix Applied</b> (%s)\n\n<b>Issue:</b> %s", approver, issueID)
+	replyText := result.ReplyMarkdown
+	if replyText == "" {
+		replyText = fmt.Sprintf("*🔧 Fix Applied* (%s)\n\n*Issue:* %s", approver, issueID)
 	}
-	reply(replyHTML)
+	reply(replyText)
 	log.Infow("telegram fix result sent", "issue_id", issueID)
 	s.state.UpdateIssue(issueID, func(issue *domain.Issue) {
 		issue.Status = domain.StatusResolved
@@ -1311,7 +1322,7 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 			issue.Resolution = fmt.Sprintf("Dismissed by @%s", msg.From.Username)
 		})
 		s.fb.TrySetStatus(fix.FeedbackID, feedback.StatusNotRelevant)
-		s.tg.SendReply(fix.AlertMessageID, fmt.Sprintf("<b>Issue %s dismissed</b> by @%s", issueID, msg.From.Username))
+		s.tg.SendReply(fix.AlertMessageID, fmt.Sprintf("*Issue %s dismissed* by @%s", issueID, msg.From.Username))
 	}
 }
 
@@ -1324,9 +1335,9 @@ func (s *service) escalateBatch(batch domain.ClassifiedBatch) {
 	}
 
 	html := fmt.Sprintf(
-		"<b>⚠️ Multi-Service Outage Detected</b>\n\n"+
-			"<b>Affected alerts:</b> %s\n"+
-			"<b>Count:</b> 3+ services\n\n"+
+		"*⚠️ Multi-Service Outage Detected*\n\n"+
+			"*Affected alerts:* %s\n"+
+			"*Count:* 3+ services\n\n"+
 			"Automated fixes disabled — likely infrastructure issue.\n"+
 			"Manual investigation required.",
 		strings.Join(alertNames, ", "),
@@ -1376,10 +1387,14 @@ func (s *service) isSuppressed(alertKey string) bool {
 	return false
 }
 
+// escTelegram neutralises Telegram Markdown control characters in dynamic
+// content. Backticks are swapped for apostrophes (a backslash escape is not
+// honoured inside code spans), the rest are backslash-escaped.
 func escTelegram(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "`", "'")
+	s = strings.ReplaceAll(s, "*", "\\*")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	s = strings.ReplaceAll(s, "[", "\\[")
 	return s
 }
 
