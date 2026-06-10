@@ -18,7 +18,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, type HTMLAttributes } from 'vue'
+import { ref, computed, watch, type HTMLAttributes } from 'vue'
 import { cn } from '@/lib/utils'
 import {
   avatarVariants, avatarInitials, avatarDotSize, avatarDotColor,
@@ -35,5 +35,6 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), { size: 'md' })
 const errored = ref(false)
+watch(() => props.src, () => { errored.value = false })
 const initials = computed(() => avatarInitials(props.name))
 </script>

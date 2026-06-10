@@ -44,4 +44,12 @@ describe('Avatar.vue', () => {
     const w = mount(Avatar, { props: { name: 'A' } })
     expect(w.find('.bg-success').exists()).toBe(false)
   })
+  it('retries the image when src changes after an error', async () => {
+    const w = mount(Avatar, { props: { src: 'https://x/broken.png', name: 'Al B' } })
+    await w.find('img').trigger('error')
+    expect(w.find('img').exists()).toBe(false)
+    await w.setProps({ src: 'https://x/new.png' })
+    expect(w.find('img').exists()).toBe(true)
+    expect(w.find('img').attributes('src')).toBe('https://x/new.png')
+  })
 })
