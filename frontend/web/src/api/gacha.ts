@@ -40,8 +40,7 @@ export interface GachaBanner {
   id: string
   name: string
   description: string
-  art_path: string
-  /** Separately uploaded slider/spin-page background image key. */
+  /** Single banner background image key (slider/spin-page). */
   backdrop_path?: string
   is_standard: boolean
   enabled: boolean
@@ -107,8 +106,7 @@ export interface BannerView {
   id: string
   name: string
   description: string
-  art_path: string
-  /** Separately uploaded slider/spin-page background image key. */
+  /** Single banner background image key (slider/spin-page). */
   backdrop_path?: string
   is_standard: boolean
   cards: BannerCardView[]
@@ -163,8 +161,7 @@ export interface UpdateCardRequest {
 export interface CreateBannerRequest {
   name: string
   description?: string
-  art_path?: string
-  /** Optional slider/spin-page backdrop image key. */
+  /** Single banner background image key (slider/spin-page). */
   backdrop_path?: string
   is_standard?: boolean
   enabled?: boolean
@@ -176,8 +173,7 @@ export interface CreateBannerRequest {
 export interface UpdateBannerRequest {
   name?: string
   description?: string
-  art_path?: string
-  /** Optional slider/spin-page backdrop image key. */
+  /** Single banner background image key (slider/spin-page). */
   backdrop_path?: string
   is_standard?: boolean
   enabled?: boolean

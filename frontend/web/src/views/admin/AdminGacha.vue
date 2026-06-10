@@ -539,64 +539,32 @@
         </div>
       </div>
 
-      <!-- Banner art + backdrop upload slots (file OR URL) -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <!-- Hero art -->
-        <div data-testid="banner-art-slot">
-          <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_art') }}</label>
-          <div v-if="bannerForm.art_path" class="mb-2">
-            <img
-              :src="cardImageUrl(bannerForm.art_path)"
-              alt="Banner art preview"
-              class="w-full h-24 object-cover rounded border border-white/20"
-            />
-          </div>
-          <div class="flex flex-col gap-2">
-            <label
-              class="inline-flex items-center gap-1.5 cursor-pointer rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm font-medium text-white transition"
-            >
-              <Upload class="size-4" aria-hidden="true" />
-              {{ $t('gacha.admin.card_image_or') }}
-              <input type="file" accept="image/*" class="sr-only" @change="onBannerArtFile" />
-            </label>
-            <Input
-              v-model="bannerArtUrl"
-              :placeholder="$t('gacha.admin.card_image_url_placeholder')"
-              @blur="onBannerArtUrlBlur"
-            />
-          </div>
-          <p v-if="bannerArtError" class="text-destructive text-xs mt-1">{{ $t('gacha.admin.upload_error') }}</p>
-          <p v-if="uploadingBannerArt" class="text-muted-foreground text-xs mt-1">{{ $t('gacha.admin.upload_uploading') }}</p>
+      <!-- Backdrop «Задник» — single banner image slot -->
+      <div data-testid="banner-backdrop-slot">
+        <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_backdrop') }}</label>
+        <div v-if="bannerForm.backdrop_path" class="mb-2">
+          <img
+            :src="cardImageUrl(bannerForm.backdrop_path)"
+            alt="Banner backdrop preview"
+            class="w-full h-24 object-cover rounded border border-white/20"
+          />
         </div>
-
-        <!-- Backdrop «Задник» -->
-        <div data-testid="banner-backdrop-slot">
-          <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_backdrop') }}</label>
-          <p class="text-white/40 text-xs mb-2">{{ $t('gacha.admin.banner_backdrop_hint') }}</p>
-          <div v-if="bannerForm.backdrop_path" class="mb-2">
-            <img
-              :src="cardImageUrl(bannerForm.backdrop_path)"
-              alt="Banner backdrop preview"
-              class="w-full h-24 object-cover rounded border border-white/20"
-            />
-          </div>
-          <div class="flex flex-col gap-2">
-            <label
-              class="inline-flex items-center gap-1.5 cursor-pointer rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm font-medium text-white transition"
-            >
-              <Upload class="size-4" aria-hidden="true" />
-              {{ $t('gacha.admin.card_image_or') }}
-              <input type="file" accept="image/*" class="sr-only" @change="onBannerBackdropFile" />
-            </label>
-            <Input
-              v-model="bannerBackdropUrl"
-              :placeholder="$t('gacha.admin.card_image_url_placeholder')"
-              @blur="onBannerBackdropUrlBlur"
-            />
-          </div>
-          <p v-if="bannerBackdropError" class="text-destructive text-xs mt-1">{{ $t('gacha.admin.upload_error') }}</p>
-          <p v-if="uploadingBannerBackdrop" class="text-muted-foreground text-xs mt-1">{{ $t('gacha.admin.upload_uploading') }}</p>
+        <div class="flex flex-col gap-2">
+          <label
+            class="inline-flex items-center gap-1.5 cursor-pointer rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm font-medium text-white transition"
+          >
+            <Upload class="size-4" aria-hidden="true" />
+            {{ $t('gacha.admin.card_image_or') }}
+            <input type="file" accept="image/*" class="sr-only" @change="onBannerBackdropFile" />
+          </label>
+          <Input
+            v-model="bannerBackdropUrl"
+            :placeholder="$t('gacha.admin.card_image_url_placeholder')"
+            @blur="onBannerBackdropUrlBlur"
+          />
         </div>
+        <p v-if="bannerBackdropError" class="text-destructive text-xs mt-1">{{ $t('gacha.admin.upload_error') }}</p>
+        <p v-if="uploadingBannerBackdrop" class="text-muted-foreground text-xs mt-1">{{ $t('gacha.admin.upload_uploading') }}</p>
       </div>
 
       <!-- Banner cards section -->
@@ -1098,45 +1066,10 @@ const showBannerDialog = ref(false)
 const editBanner = ref<GachaBanner | null>(null)
 const savingBanner = ref(false)
 
-// Banner art + backdrop upload state (file-or-URL, same flow as card image).
-const bannerArtUrl = ref('')        // user-typed URL for the hero art slot
+// Backdrop upload state (file-or-URL, same flow as card image).
 const bannerBackdropUrl = ref('')   // user-typed URL for the backdrop slot
-const uploadingBannerArt = ref(false)
 const uploadingBannerBackdrop = ref(false)
-const bannerArtError = ref(false)
 const bannerBackdropError = ref(false)
-
-async function onBannerArtFile(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  uploadingBannerArt.value = true
-  bannerArtError.value = false
-  try {
-    const res = await gachaAdminApi.uploadFile(file, 'banners')
-    const data = (res as { data?: { data?: { image_path?: string } } }).data
-    bannerForm.value.art_path = data?.data?.image_path ?? ''
-  } catch {
-    bannerArtError.value = true
-  } finally {
-    uploadingBannerArt.value = false
-  }
-}
-
-async function onBannerArtUrlBlur() {
-  const url = bannerArtUrl.value.trim()
-  if (!url) return
-  uploadingBannerArt.value = true
-  bannerArtError.value = false
-  try {
-    const res = await gachaAdminApi.uploadUrl(url, 'banners')
-    const data = (res as { data?: { data?: { image_path?: string } } }).data
-    bannerForm.value.art_path = data?.data?.image_path ?? ''
-  } catch {
-    bannerArtError.value = true
-  } finally {
-    uploadingBannerArt.value = false
-  }
-}
 
 async function onBannerBackdropFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -1279,14 +1212,12 @@ const bannerForm = ref({
   active_from: '',
   active_to: '',
   sort_order: 0,
-  art_path: '',       // hero/slider art (preserved across edits)
-  backdrop_path: '',  // separately uploaded slider backdrop (new slot)
+  backdrop_path: '',  // single banner background image (slider/spin-page)
 })
 
 function openBannerCreate() {
   editBanner.value = null
-  bannerForm.value = { name: '', description: '', is_standard: false, enabled: true, active_from: '', active_to: '', sort_order: 0, art_path: '', backdrop_path: '' }
-  bannerArtUrl.value = ''
+  bannerForm.value = { name: '', description: '', is_standard: false, enabled: true, active_from: '', active_to: '', sort_order: 0, backdrop_path: '' }
   bannerBackdropUrl.value = ''
   bannerCurrentCardIds.value = []
   bannerPickerOpen.value = false
@@ -1303,10 +1234,8 @@ async function openBannerEdit(banner: GachaBanner) {
     active_from: banner.active_from ?? '',
     active_to: banner.active_to ?? '',
     sort_order: banner.sort_order ?? 0,
-    art_path: banner.art_path ?? '',
     backdrop_path: banner.backdrop_path ?? '',
   }
-  bannerArtUrl.value = ''
   bannerBackdropUrl.value = ''
   bannerCurrentCardIds.value = []
   bannerPickerOpen.value = false
@@ -1336,9 +1265,8 @@ async function saveBanner() {
       active_from: bannerForm.value.active_from || undefined,
       active_to: bannerForm.value.active_to || undefined,
       sort_order: bannerForm.value.sort_order,
-      // Carry art_path + backdrop_path so editing a banner doesn't wipe them
-      // (backend UpdateBanner overwrites both fields from the request body).
-      art_path: bannerForm.value.art_path,
+      // Carry backdrop_path so editing a banner doesn't wipe it
+      // (backend UpdateBanner overwrites the field from the request body).
       backdrop_path: bannerForm.value.backdrop_path,
     }
     if (editBanner.value) {

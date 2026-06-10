@@ -1048,7 +1048,13 @@
         "console": "Логи консоли",
         "network": "Сетевые логи",
         "html": "HTML страницы",
-        "id": "ID"
+        "id": "ID",
+        "attachments": "Вложения",
+        "attachmentLoadError": "Не удалось загрузить вложение",
+        "download": "Скачать",
+        "forwardedFrom": "Переслано от",
+        "replyTo": "В ответ на",
+        "fromAdmin": "от админа"
       },
       "copyLink": "Скопировать ссылку",
       "copied": "Скопировано"
@@ -1474,9 +1480,8 @@
       "group_add_cards": "Добавить карточки",
       "banner_name": "Название",
       "banner_description": "Описание",
-      "banner_art": "Арт баннера",
       "banner_backdrop": "Задник",
-      "banner_backdrop_hint": "Фон слайдера/страницы крутки. По умолчанию — арт баннера.",
+      "banner_backdrop_hint": "Фоновое изображение слайдера/страницы крутки.",
       "banner_standard": "Стандартный (всегда активен)",
       "banner_enabled": "Активен",
       "banner_active_from": "Активен с",

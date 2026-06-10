@@ -87,7 +87,6 @@ function makeBanner(overrides: Partial<GachaBanner> = {}): GachaBanner {
     id: 'banner-1',
     name: 'Test Banner',
     description: '',
-    art_path: '',
     is_standard: false,
     enabled: true,
     sort_order: 0,
@@ -247,18 +246,18 @@ describe('AdminGacha', () => {
     )
   })
 
-  it('banner dialog renders art + backdrop upload slots', async () => {
+  it('banner dialog renders backdrop upload slot', async () => {
     const wrapper = mountComponent()
     await flushPromises()
     type Vm = { openBannerCreate: () => void }
     const vm = wrapper.vm as unknown as Vm
     vm.openBannerCreate()
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[data-testid="banner-art-slot"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="banner-backdrop-slot"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="banner-art-slot"]').exists()).toBe(false)
   })
 
-  it('saveBanner payload carries art_path + backdrop_path (no wipe on edit)', async () => {
+  it('saveBanner payload carries backdrop_path (no wipe on edit)', async () => {
     const { gachaAdminApi } = await import('@/api/gacha')
     vi.mocked(gachaAdminApi.updateBanner).mockResolvedValue({
       data: { success: true, data: makeBanner() },
@@ -271,15 +270,15 @@ describe('AdminGacha', () => {
     type Vm = {
       openBannerEdit: (b: GachaBanner) => Promise<void>
       saveBanner: () => Promise<void>
-      bannerForm: { art_path: string; backdrop_path: string }
+      bannerForm: { backdrop_path: string }
     }
     const vm = wrapper.vm as unknown as Vm
-    await vm.openBannerEdit(makeBanner({ id: 'b9', art_path: 'banners/art.webp', backdrop_path: 'banners/bd.webp' }))
+    await vm.openBannerEdit(makeBanner({ id: 'b9', backdrop_path: 'banners/bd.webp' }))
     await flushPromises()
     await vm.saveBanner()
     expect(vi.mocked(gachaAdminApi.updateBanner)).toHaveBeenCalledWith(
       'b9',
-      expect.objectContaining({ art_path: 'banners/art.webp', backdrop_path: 'banners/bd.webp' }),
+      expect.objectContaining({ backdrop_path: 'banners/bd.webp' }),
     )
   })
 

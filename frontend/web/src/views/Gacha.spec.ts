@@ -29,7 +29,6 @@ function makeBanner(over: Partial<BannerView> = {}): BannerView {
     id: 'b1',
     name: 'Banner One',
     description: 'desc',
-    art_path: '',
     backdrop_path: '',
     is_standard: false,
     cards: [],

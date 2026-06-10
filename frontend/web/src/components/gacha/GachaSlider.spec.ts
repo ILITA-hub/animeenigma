@@ -17,7 +17,6 @@ function makeBanner(over: Partial<BannerView> = {}): BannerView {
     id: 'b1',
     name: 'Banner One',
     description: 'desc',
-    art_path: '',
     backdrop_path: '',
     is_standard: false,
     cards: [],
@@ -50,20 +49,14 @@ describe('GachaSlider', () => {
     expect(slides[0].classes()).not.toContain('on')
   })
 
-  it('uses backdrop_path over art_path for the slide background', () => {
-    const w = mountSlider([makeBanner({ backdrop_path: 'banners/bd.webp', art_path: 'banners/art.webp' })])
+  it('uses backdrop_path as the slide background', () => {
+    const w = mountSlider([makeBanner({ backdrop_path: 'banners/bd.webp' })])
     const art = w.find('.art')
     expect(art.attributes('style')).toContain('banners/bd.webp')
-    expect(art.attributes('style')).not.toContain('banners/art.webp')
   })
 
-  it('falls back to art_path when no backdrop', () => {
-    const w = mountSlider([makeBanner({ backdrop_path: '', art_path: 'banners/art.webp' })])
-    expect(w.find('.art').attributes('style')).toContain('banners/art.webp')
-  })
-
-  it('shows the gradient fallback when neither image is set', () => {
-    const w = mountSlider([makeBanner({ backdrop_path: '', art_path: '' })])
+  it('shows the gradient fallback when no backdrop is set', () => {
+    const w = mountSlider([makeBanner({ backdrop_path: '' })])
     expect(w.find('.art-fallback').exists()).toBe(true)
   })
 

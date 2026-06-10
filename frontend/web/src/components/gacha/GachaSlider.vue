@@ -1,6 +1,6 @@
 <template>
   <!-- Hero banner slider: per-banner backdrop, arrows + dots, bottom scrim.
-       Background priority: backdrop_path → art_path → gradient fallback.
+       Background: backdrop_path → gradient fallback.
        Ported from the v21 .heroC mock. -->
   <div class="hero-slider">
     <div
@@ -76,8 +76,7 @@ const emit = defineEmits<{
 }>()
 
 function bannerBg(banner: BannerView): string {
-  const path = banner.backdrop_path || banner.art_path
-  return path ? cardImageUrl(path) : ''
+  return banner.backdrop_path ? cardImageUrl(banner.backdrop_path) : ''
 }
 
 function select(i: number) {

@@ -1048,7 +1048,13 @@
         "console": "コンソールログ",
         "network": "ネットワークログ",
         "html": "ページHTML",
-        "id": "ID"
+        "id": "ID",
+        "attachments": "添付ファイル",
+        "attachmentLoadError": "添付ファイルを読み込めませんでした",
+        "download": "ダウンロード",
+        "forwardedFrom": "転送元",
+        "replyTo": "返信先",
+        "fromAdmin": "管理者から"
       },
       "copyLink": "リンクをコピー",
       "copied": "コピーしました"
@@ -1474,9 +1480,8 @@
       "group_add_cards": "カードを追加",
       "banner_name": "名前",
       "banner_description": "説明",
-      "banner_art": "バナーアート",
       "banner_backdrop": "背景",
-      "banner_backdrop_hint": "スライダー／ガチャ画面の背景。未設定時はバナーアートになります。",
+      "banner_backdrop_hint": "スライダー／ガチャ画面の背景画像。",
       "banner_standard": "スタンダード（常時開催）",
       "banner_enabled": "有効",
       "banner_active_from": "開始日時",

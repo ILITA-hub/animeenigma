@@ -1048,7 +1048,13 @@
         "console": "Console logs",
         "network": "Network logs",
         "html": "Page HTML",
-        "id": "ID"
+        "id": "ID",
+        "attachments": "Attachments",
+        "attachmentLoadError": "Failed to load attachment",
+        "download": "Download",
+        "forwardedFrom": "Forwarded from",
+        "replyTo": "In reply to",
+        "fromAdmin": "from admin"
       },
       "copyLink": "Copy link",
       "copied": "Copied"
@@ -1474,9 +1480,8 @@
       "group_add_cards": "Add cards",
       "banner_name": "Name",
       "banner_description": "Description",
-      "banner_art": "Banner Art",
       "banner_backdrop": "Backdrop",
-      "banner_backdrop_hint": "Slider/spin-page background. Falls back to the banner art.",
+      "banner_backdrop_hint": "Slider/spin-page background image.",
       "banner_standard": "Standard (always-on)",
       "banner_enabled": "Enabled",
       "banner_active_from": "Active from",
