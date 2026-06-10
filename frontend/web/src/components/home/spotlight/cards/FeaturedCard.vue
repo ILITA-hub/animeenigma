@@ -9,7 +9,9 @@
       - released/other → "Featured today" + "Start watching"
   -->
   <article class="featured-hero">
-    <div class="featured-bg" :style="{ backgroundImage: posterBg }" aria-hidden="true" />
+    <div class="featured-bg" aria-hidden="true">
+      <img v-if="posterSrc" :src="posterSrc" alt="" loading="lazy" decoding="async" />
+    </div>
     <div class="featured-content">
       <p class="featured-eyebrow">
         <span class="pulse" aria-hidden="true" />
@@ -68,8 +70,8 @@ const locale = computed(() => {
 
 // w=640 ≈ the native width of Shikimori originals (~700px) — the hero was
 // already upscaling, so this trades nothing visually for a ~7× smaller LCP.
-const posterBg = computed(() =>
-  props.data.anime.poster_url ? `url("${cardPosterUrl(props.data.anime.poster_url, 640)}")` : 'none',
+const posterSrc = computed(() =>
+  props.data.anime.poster_url ? cardPosterUrl(props.data.anime.poster_url, 640) : '',
 )
 
 const parsedDescription = computed(() =>
@@ -105,7 +107,8 @@ const watchTo = computed(() =>
 <style scoped>
 /* Values transcribed from the design handoff (.hero* rules). */
 .featured-hero { position: relative; width: 100%; height: 100%; overflow: hidden; }
-.featured-bg { position: absolute; inset: 0; background-size: cover; background-position: center 30%; filter: saturate(105%); }
+.featured-bg { position: absolute; inset: 0; }
+.featured-bg img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; filter: saturate(105%); }
 .featured-bg::after {
   content: ""; position: absolute; inset: 0;
   background:

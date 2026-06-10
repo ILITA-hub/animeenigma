@@ -27,6 +27,8 @@
       :src="blurSrc"
       alt=""
       aria-hidden="true"
+      loading="lazy"
+      decoding="async"
       class="absolute inset-0 w-full h-full object-cover scale-110"
       :style="POSTER_BLUR_STYLE"
     />

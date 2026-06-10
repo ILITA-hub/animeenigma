@@ -209,7 +209,7 @@ exports[`SpotlightBackdrop > poster-blur snapshot with mock URL 1`] = `
     fall back to the gradient-mesh of the same accent so the card never
     renders against a fully transparent background.
   -->
-<div class="absolute inset-0 overflow-hidden pointer-events-none"><img src="/api/streaming/image-proxy?url=https%3A%2F%2Fshikimori.one%2Fposter.jpg&amp;w=128" alt="" aria-hidden="true" class="absolute inset-0 w-full h-full object-cover scale-110" style="filter: blur(40px) saturate(1.2); opacity: 0.4;">
+<div class="absolute inset-0 overflow-hidden pointer-events-none"><img src="/api/streaming/image-proxy?url=https%3A%2F%2Fshikimori.one%2Fposter.jpg&amp;w=128" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover scale-110" style="filter: blur(40px) saturate(1.2); opacity: 0.4;">
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->
   <div aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
