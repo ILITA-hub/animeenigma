@@ -46,8 +46,9 @@ describe('TelegramNewsCard (v1.1-polish)', () => {
   it.each([1, 2, 3])('renders %i post tiles for %i entries', (n) => {
     const data = { posts: Array.from({ length: n }, (_, i) => post(i + 1)) }
     const wrapper = mountCard({ data })
-    // Inner post tiles carry the tg-tile class; outer wrapper does not.
-    const inner = wrapper.findAll('article.tg-tile')
+    // Inner post tiles carry a stable testid (the shell root is an
+    // <article> as well, so a bare tag selector would over-count).
+    const inner = wrapper.findAll('[data-testid="tg-post-tile"]')
     expect(inner.length).toBe(n)
   })
 
@@ -60,15 +61,12 @@ describe('TelegramNewsCard (v1.1-polish)', () => {
     expect(mesh.exists()).toBe(true)
   })
 
-  it('renders SpotlightIcon name="telegram" in the header with aria-label', () => {
+  it('renders the telegram SpotlightIcon in the shell kicker', () => {
     const data = { posts: [post(1)] }
     const wrapper = mountCard({ data })
-    // The icon SVG carries the forwarded class; SpotlightIcon root <svg>
-    // ships aria-hidden="true" by default, but the caller also passes
-    // aria-label="Telegram" which goes onto the root via $attrs (inheritAttrs
-    // is false in SpotlightIcon so $attrs lands on the <svg>).
-    const tgIcon = wrapper.find('svg[aria-label="Telegram"]')
-    expect(tgIcon.exists()).toBe(true)
+    const icons = wrapper.findAllComponents({ name: 'SpotlightIcon' })
+    const tg = icons.filter((i) => i.props('name') === 'telegram')
+    expect(tg.length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows the @anime_enigma channel attribution', () => {
@@ -128,12 +126,12 @@ describe('TelegramNewsCard (v1.1-polish)', () => {
     expect(anchors[0].attributes('rel')).toBe('noopener noreferrer')
   })
 
-  it('anchor wears .cta-text + data-accent="sky" (Phase 01 CTA system)', () => {
+  it('anchor wears the Button link-variant classes (DS alignment)', () => {
     const data = { posts: [post(1)] }
     const wrapper = mountCard({ data })
     const anchor = wrapper.find('a')
-    expect(anchor.classes()).toContain('cta-text')
-    expect(anchor.attributes('data-accent')).toBe('sky')
+    expect(anchor.classes()).toContain('text-cyan-400')
+    expect(anchor.attributes('data-accent')).toBeUndefined()
   })
 
   it('omits anchor entirely when post.link is absent', () => {

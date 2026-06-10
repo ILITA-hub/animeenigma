@@ -1,33 +1,28 @@
 <template>
   <!--
-    Workstream hero-spotlight — v1.1-polish Phase 03 (HSB-V11-RT-01..04).
-
-    Discovery-themed refactor of the RandomTailCard:
-      - <article> hosts a SpotlightBackdrop (variant="poster-blur") layer
-        plus a purple secondary overlay so the card reads as "discovery"
-        rather than the cyan "anime of day" sibling.
-      - Promoted kicker now leads with a <SpotlightIcon name="shuffle" />
-        in brand-violet, with a brand-violet label.
-      - Desktop subtitle is one of 4 rotating taglines (i18n
-        spotlight.randomTail.taglines[]), picked at mount via Math.random.
-        Falls back to spotlight.randomTail.subtitle when the array is
-        absent / empty so we never render a raw key.
-      - Mount-time shuffle-deck animation (5 staggered gradient cards),
-        gated on `prefers-reduced-motion: reduce`. Self-clears 1000ms
-        post-mount.
-      - Primary CTA is a purple .cta-hero with the shuffle icon.
+    Workstream hero-spotlight — DS alignment 2026-06-10, batch 1 (spec:
+    2026-06-10-spotlight-ds-alignment-design.md). Discovery card rebuilt on
+    SpotlightCardShell: single shell kicker (violet, shuffle icon) replaces
+    the old mobile/desktop dual kicker, score + genres render as overlay
+    Badges (the backdrop is poster imagery), the CTA is a Button-variant
+    router-link pinned to the bottom-left corner. The mount-time
+    shuffle-deck animation and the rotating tagline are kept as-is.
   -->
-  <article class="relative w-full h-full overflow-hidden">
-    <SpotlightBackdrop
-      variant="poster-blur"
-      :poster-url="data.anime.poster_url"
-    />
-    <!-- Purple-tinted secondary overlay differentiates RandomTail from
+  <SpotlightCardShell
+    accent="violet"
+    icon="shuffle"
+    :kicker="t('spotlight.randomTail.title')"
+    backdrop="poster-blur"
+    :poster-url="data.anime.poster_url"
+  >
+    <!-- Violet-tinted secondary overlay differentiates RandomTail from
          the cyan FeaturedCard backdrop without re-fetching the poster. -->
-    <div
-      aria-hidden="true"
-      class="absolute inset-0 bg-gradient-to-r from-brand-violet/30 via-transparent to-transparent"
-    />
+    <template #background-extra>
+      <div
+        aria-hidden="true"
+        class="absolute inset-0 bg-gradient-to-r from-brand-violet/30 via-transparent to-transparent"
+      />
+    </template>
 
     <!-- Mount-time shuffle-deck animation. Skipped entirely when the user
          has opted into reduced motion, both via the v-if (no DOM cost) and
@@ -48,23 +43,10 @@
       </div>
     </div>
 
-    <div
-      class="relative z-10 w-full h-full flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-4 lg:p-6 md:items-center"
-    >
-      <header class="md:hidden">
-        <div class="flex items-center gap-2 mb-1">
-          <SpotlightIcon name="shuffle" class="w-4 h-4 text-brand-violet" />
-          <p
-            class="text-brand-violet text-[10px] uppercase tracking-[0.18em] font-semibold"
-          >
-            {{ t('spotlight.randomTail.title') }}
-          </p>
-        </div>
-      </header>
-
+    <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-4 md:gap-6 md:items-center">
       <router-link
         :to="`/anime/${data.anime.id}`"
-        class="flex-shrink-0 self-center md:self-center w-32 md:w-44 lg:w-56 group"
+        class="flex-shrink-0 self-center w-24 md:w-32 lg:w-40 group"
       >
         <div
           class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-brand-violet/20 transition-shadow duration-300 group-hover:shadow-brand-violet/40"
@@ -74,96 +56,87 @@
             :alt="getLocalizedTitle(data.anime.name, data.anime.name_ru, data.anime.name_jp)"
             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
+            decoding="async"
           />
         </div>
       </router-link>
 
-      <div class="flex-1 flex flex-col justify-between gap-3 min-w-0">
-        <div>
-          <div class="hidden md:flex items-center gap-2 mb-2">
-            <SpotlightIcon name="shuffle" class="w-4 h-4 text-brand-violet" />
-            <p
-              class="text-brand-violet text-[10px] uppercase tracking-[0.18em] font-semibold"
-            >
-              {{ t('spotlight.randomTail.title') }}
-            </p>
-          </div>
+      <div class="flex-1 min-w-0">
+        <p
+          class="hidden md:block text-sm text-muted-foreground mb-2 font-medium"
+          data-testid="random-tail-tagline"
+        >
+          {{ tagline }}
+        </p>
+        <h3
+          class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2"
+        >
+          {{
+            getLocalizedTitle(
+              data.anime.name,
+              data.anime.name_ru,
+              data.anime.name_jp,
+            )
+          }}
+        </h3>
+
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <Badge v-if="data.anime.score" variant="warning" size="sm" overlay>
+            <template #icon>
+              <Star class="size-3" fill="currentColor" aria-hidden="true" />
+            </template>
+            {{ data.anime.score?.toFixed(1) }}
+          </Badge>
           <p
-            class="hidden md:block text-sm rt-muted mb-2 font-medium"
-            data-testid="random-tail-tagline"
-          >
-            {{ tagline }}
-          </p>
-          <h3
-            class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2"
+            v-if="data.anime.episodes_count"
+            class="text-sm text-muted-foreground font-medium"
           >
             {{
-              getLocalizedTitle(
-                data.anime.name,
-                data.anime.name_ru,
-                data.anime.name_jp,
-              )
+              t('spotlight.featured.episodesLabel', {
+                n: data.anime.episodes_count,
+              })
             }}
-          </h3>
-
-          <div class="mt-2 flex flex-wrap items-center gap-2">
-            <span
-              v-if="data.anime.score"
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-warning/20 text-warning"
-            >
-              <Star class="size-3" fill="currentColor" aria-hidden="true" />
-              {{ data.anime.score?.toFixed(1) }}
-            </span>
-            <p
-              v-if="data.anime.episodes_count"
-              class="text-sm rt-muted font-medium"
-            >
-              {{
-                t('spotlight.featured.episodesLabel', {
-                  n: data.anime.episodes_count,
-                })
-              }}
-            </p>
-          </div>
-
-          <div
-            v-if="data.anime.genres?.length"
-            class="mt-3 flex flex-wrap gap-1"
-          >
-            <span
-              v-for="g in data.anime.genres.slice(0, 3)"
-              :key="g.id"
-              class="px-2 py-0.5 text-xs font-medium rt-chip"
-            >
-              {{ locale === 'ru' ? g.russian || g.name : g.name || g.russian }}
-            </span>
-          </div>
+          </p>
         </div>
 
-        <div class="flex flex-wrap gap-2 mt-3">
-          <router-link
-            :to="`/anime/${data.anime.id}`"
-            class="cta-hero"
-            data-accent="purple"
+        <div
+          v-if="data.anime.genres?.length"
+          class="mt-3 flex flex-wrap gap-1.5"
+        >
+          <Badge
+            v-for="g in data.anime.genres.slice(0, 3)"
+            :key="g.id"
+            size="sm"
+            overlay
           >
-            {{ t('spotlight.randomTail.discoverCta') }}
-            <SpotlightIcon name="shuffle" class="w-4 h-4" />
-          </router-link>
+            {{ locale === 'ru' ? g.russian || g.name : g.name || g.russian }}
+          </Badge>
         </div>
       </div>
     </div>
-  </article>
+
+    <template #cta>
+      <router-link
+        :to="`/anime/${data.anime.id}`"
+        :class="[buttonVariants({ variant: 'default', size: 'md' }), 'text-sm']"
+      >
+        {{ t('spotlight.randomTail.discoverCta') }}
+        <Shuffle class="w-4 h-4" aria-hidden="true" />
+      </router-link>
+    </template>
+  </SpotlightCardShell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMediaQuery } from '@vueuse/core'
-import { Star } from 'lucide-vue-next'
+import { Shuffle, Star } from 'lucide-vue-next'
 import { getLocalizedTitle } from '@/utils/title'
 import type { RandomTailData } from '@/types/spotlight'
-import SpotlightBackdrop from '../SpotlightBackdrop.vue'
-import SpotlightIcon from '../SpotlightIcon.vue'
+import Badge from '@/components/ui/Badge.vue'
+import { buttonVariants } from '@/components/ui/button-variants'
+import SpotlightCardShell from '../SpotlightCardShell.vue'
 import { cardPosterUrl } from '@/composables/useImageProxy'
 
 defineProps<{ data: RandomTailData }>()
@@ -222,15 +195,3 @@ onBeforeUnmount(() => {
   }
 })
 </script>
-
-<style scoped>
-/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign).
-   Swap hardcoded gray values for semantic design tokens. */
-.rt-muted { color: var(--muted-foreground); }
-.rt-chip {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--line);
-  color: var(--ink-2);
-  border-radius: var(--r-sm);
-}
-</style>

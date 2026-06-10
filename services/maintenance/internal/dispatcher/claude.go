@@ -293,6 +293,23 @@ func (d *Dispatcher) buildAnalysisPrompt(msg domain.ClassifiedMessage) string {
 	sb.WriteString(fmt.Sprintf("**From:** @%s (ID: %d, bot: %v)\n", msg.From.Username, msg.From.ID, msg.From.IsBot))
 	sb.WriteString(fmt.Sprintf("**Message text:**\n```\n%s\n```\n\n", msg.Text))
 
+	if msg.ForwardedFrom != "" {
+		sb.WriteString(fmt.Sprintf("**Forwarded from:** %s\n", msg.ForwardedFrom))
+	}
+	if msg.ReplyToText != "" {
+		sb.WriteString(fmt.Sprintf("**In reply to:** %s\n", msg.ReplyToText))
+	}
+	if msg.FeedbackID != "" {
+		sb.WriteString(fmt.Sprintf("**Feedback entry:** %s (already created in /admin/feedback — its status is driven automatically; do not create another)\n", msg.FeedbackID))
+	}
+
+	if downloaded := attachmentLines(msg.Attachments); len(downloaded) > 0 {
+		sb.WriteString("\n**Attachments (downloaded to disk — use the Read tool to inspect images/files):**\n")
+		for _, line := range downloaded {
+			sb.WriteString(line)
+		}
+	}
+
 	if len(msg.Alerts) > 0 {
 		sb.WriteString("**Parsed alerts:**\n")
 		for _, a := range msg.Alerts {
@@ -303,6 +320,18 @@ func (d *Dispatcher) buildAnalysisPrompt(msg domain.ClassifiedMessage) string {
 
 	sb.WriteString("\nAnalyze this issue. Follow the maintenance guide above. Return your response as structured JSON.")
 	return sb.String()
+}
+
+// attachmentLines renders downloaded attachments as prompt bullet lines.
+func attachmentLines(attachments []domain.Attachment) []string {
+	var out []string
+	for _, a := range attachments {
+		if a.LocalPath == "" {
+			continue
+		}
+		out = append(out, fmt.Sprintf("- %s (%s, %s)\n", a.LocalPath, a.Kind, a.MimeType))
+	}
+	return out
 }
 
 // buildFixPrompt constructs the prompt for executing an admin-approved fix.

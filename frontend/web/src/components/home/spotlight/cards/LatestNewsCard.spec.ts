@@ -4,9 +4,9 @@
  * Vitest spec for the LatestNewsCard refactor. Phase 02 spec verified
  * the message-passthrough layout; Phase 07 layers on:
  *
- *   1. Single-root <article> + SpotlightBackdrop (gradient-mesh amber).
+ *   1. Single-root <article> + SpotlightBackdrop (gradient-mesh violet).
  *   2. Per-entry type icon (feat→sparkles, fix→wrench, perf→lightning).
- *   3. Per-entry type pill (cyan / green / amber accents from cardTokens).
+ *   3. Per-entry type pill (cyan / success / warning accents from cardTokens).
  *   4. Relative date via Intl.RelativeTimeFormat (locale-aware).
  *   5. The Phase 02 sentence-splitter regex is removed from the source.
  *
@@ -72,12 +72,12 @@ describe('LatestNewsCard — root + backdrop', () => {
     expect(wrapper.element.tagName).toBe('ARTICLE')
   })
 
-  it('wraps the foreground in a SpotlightBackdrop with gradient-mesh + amber accent', () => {
+  it('wraps the foreground in a SpotlightBackdrop with gradient-mesh + violet accent', () => {
     const wrapper = mountCard({ data: mock5 })
-    // Two markers: the backdrop component's mesh testid + the amber
+    // Two markers: the backdrop component's mesh testid + the violet
     // tinted radial-gradient class string (proves accent prop wired).
     expect(wrapper.find('[data-testid="spotlight-backdrop-mesh"]').exists()).toBe(true)
-    expect(wrapper.html()).toMatch(/rgba\(251,191,36/)
+    expect(wrapper.html()).toMatch(/rgba\(167,139,250/)
   })
 })
 
@@ -127,32 +127,32 @@ describe('LatestNewsCard — per-entry type icon + pill', () => {
     expect(html).toMatch(/M12 3v3M12 18v3/)
     // cyan pill accent
     expect(html).toContain('bg-cyan-500/20')
-    expect(html).toContain('text-cyan-200')
+    expect(html).toContain('text-cyan-400')
     // pill text is the i18n key (mock t() echoes)
     expect(wrapper.text()).toContain('spotlight.latestNews.typeFeat')
   })
 
-  it('fix entry renders wrench icon + green-accented pill', () => {
+  it('fix entry renders wrench icon + success-accented pill', () => {
     const wrapper = mountCard({
       data: { entries: [{ date: '2026-05-21', type: 'fix', message: 'Bug squashed.' }] },
     })
     const html = wrapper.html()
     // wrench signature path
     expect(html).toMatch(/M14 7a4 4 0 1 1 3\.6 3\.96L9 19\.5/)
-    expect(html).toContain('bg-green-500/20')
-    expect(html).toContain('text-green-200')
+    expect(html).toContain('bg-success/15')
+    expect(html).toContain('text-success')
     expect(wrapper.text()).toContain('spotlight.latestNews.typeFix')
   })
 
-  it('perf entry renders lightning icon + amber-accented pill', () => {
+  it('perf entry renders lightning icon + warning-accented pill', () => {
     const wrapper = mountCard({
       data: { entries: [{ date: '2026-05-21', type: 'perf', message: 'Faster!' }] },
     })
     const html = wrapper.html()
     // lightning signature path
     expect(html).toMatch(/M13 2 3 14h7l-1 8/)
-    expect(html).toContain('bg-amber-500/20')
-    expect(html).toContain('text-amber-200')
+    expect(html).toContain('bg-warning/15')
+    expect(html).toContain('text-warning')
     expect(wrapper.text()).toContain('spotlight.latestNews.typePerf')
   })
 

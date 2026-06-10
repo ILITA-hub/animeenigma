@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лудка · как в реальности · v2</title>
+<style>
+  :root{
+    --base:#08080f; --surface-2:#161623; --cyan:#00d4ff; --fg:#fff;
+    --ink-2:rgba(255,255,255,.78); --ink-4:rgba(255,255,255,.36);
+    --teal:#2dd4bf; --indigo:#818cf8; --orange:#fb923c; --rose:#fb7185;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scrollbar-color:rgba(255,255,255,.2) transparent}
+  body{background:var(--base);color:var(--fg);font-family:Inter,-apple-system,"Noto Sans",sans-serif;padding-top:64px;min-height:100vh}
+  a{color:inherit;text-decoration:none;cursor:pointer}
+  .wrap{max-width:80rem;margin:0 auto;padding:0 1rem}
+
+  /* ── navbar (glass-nav replica) + variant switcher ── */
+  .glass-nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(0,0,0,.4);backdrop-filter:blur(24px)}
+  .nav-inner{max-width:80rem;margin:0 auto;padding:0 1rem;height:64px;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+  .brand{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:1.05rem;white-space:nowrap}
+  .brand .mark{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--cyan),#7c3aed);display:grid;place-items:center;font-size:.8rem}
+  .nav-links{display:flex;gap:1.15rem;color:var(--ink-2);font-size:.9rem;font-weight:500}
+  .nav-links .active{color:var(--cyan)}
+  .nav-right{display:flex;align-items:center;gap:.7rem}
+  .enigma-chip{display:flex;align-items:center;gap:.35rem;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.35);color:var(--cyan);border-radius:999px;padding:.25rem .7rem;font-size:.82rem;font-weight:600;white-space:nowrap}
+  .avatar{width:32px;height:32px;border-radius:999px;background:linear-gradient(135deg,#f472b6,#7c3aed);flex:none}
+  .switcher{display:flex;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:3px;gap:2px}
+  .switcher button{border:none;background:transparent;color:var(--ink-2);font-weight:600;font-size:.8rem;padding:.3rem .8rem;border-radius:999px;cursor:pointer}
+  .switcher button.on{background:var(--cyan);color:#000}
+
+  /* ── shared page bits ── */
+  .page-head{display:flex;align-items:end;justify-content:space-between;gap:1rem;margin:1.6rem 0 1.1rem;flex-wrap:wrap}
+  h1{font-size:1.6rem;font-weight:600}
+  .daily{display:flex;align-items:center;gap:.9rem;background:rgba(22,22,35,.7);border:1px solid rgba(255,255,255,.1);border-radius:1rem;padding:.65rem 1rem}
+  .daily .streak{font-size:.78rem;color:var(--ink-2)}
+  .daily .streak b{color:var(--orange)}
+  .btn{display:inline-flex;align-items:center;gap:.4rem;border-radius:.7rem;font-weight:600;cursor:pointer;border:none;font-size:.9rem}
+  .btn-primary{background:var(--cyan);color:#000;padding:.6rem 1.4rem}
+  .btn-primary:hover{filter:brightness(1.1)}
+  .btn-ghost{background:rgba(255,255,255,.08);color:#fff;padding:.6rem 1.1rem;border:1px solid rgba(255,255,255,.15)}
+  .btn-sm{padding:.4rem .9rem;font-size:.82rem}
+  .badge{font-size:.7rem;font-weight:600;padding:.18rem .55rem;border-radius:.4rem}
+  .b-std{background:rgba(0,212,255,.18);color:var(--cyan)}
+  .b-event{background:rgba(251,113,133,.18);color:var(--rose)}
+
+  .art{position:absolute;inset:0;background-size:cover;background-position:center}
+  .art.a1{background:linear-gradient(120deg,#0b3a55,#114b69 30%,#7c3aed)}
+  .art.a2{background:linear-gradient(120deg,#551b3a,#8e2a55 45%,#fb7185)}
+  .art.a3{background:linear-gradient(120deg,#1d4044,#0f766e 50%,#2dd4bf)}
+  .art::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 75% 25%,rgba(255,255,255,.16),transparent 55%)}
+  .scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,8,15,.1) 0%,rgba(8,8,15,.3) 55%,rgba(8,8,15,.92) 100%)}
+  .char{position:absolute;right:6%;bottom:0;width:26%;max-width:230px;aspect-ratio:3/5;border-radius:1rem 1rem 0 0;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.05));display:grid;place-items:center;font-size:3.4rem}
+
+  .arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:5;width:42px;height:42px;border-radius:999px;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:1.15rem;cursor:pointer;display:grid;place-items:center}
+  .arrow:hover{border-color:var(--cyan);color:var(--cyan)}
+  .arrow.l{left:.9rem}.arrow.r{right:.9rem}
+  .dots{position:absolute;bottom:.9rem;left:50%;transform:translateX(-50%);display:flex;gap:.45rem;z-index:5}
+  .dot{width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,.3);cursor:pointer;transition:.25s}
+  .dot.on{width:22px;background:var(--cyan)}
+  .slide{position:absolute;inset:0;opacity:0;transition:opacity .45s;pointer-events:none}
+  .slide.on{opacity:1;pointer-events:auto}
+  .slide .meta{position:absolute;left:2rem;bottom:1.7rem;max-width:55%;z-index:4}
+  .slide .meta h3{font-size:1.7rem;font-weight:600;margin:.4rem 0 .35rem}
+  .slide .meta p{font-size:.9rem;color:var(--ink-2);margin-bottom:.95rem}
+
+  /* A: hero */
+  .heroA{position:relative;height:380px;border-radius:1.25rem;overflow:hidden;border:1px solid rgba(255,255,255,.1)}
+  /* B: rail */
+  .rail{display:flex;gap:1rem;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:.6rem}
+  .rail::-webkit-scrollbar{height:6px}.rail::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+  .cardB{position:relative;flex:0 0 360px;height:210px;border-radius:1rem;overflow:hidden;border:1px solid rgba(255,255,255,.1);scroll-snap-align:start;cursor:pointer;transition:transform .2s,border-color .2s}
+  .cardB:hover{transform:translateY(-3px);border-color:rgba(0,212,255,.5)}
+  .cardB .meta{position:absolute;left:1rem;bottom:.9rem;right:1rem}
+  .cardB h3{font-size:1.05rem;font-weight:600;margin:.3rem 0 .1rem}
+  .cardB p{font-size:.78rem;color:var(--ink-2)}
+  /* C: hero + dock */
+  .heroC{position:relative;height:340px;border-radius:1.25rem 1.25rem 0 0;overflow:hidden;border:1px solid rgba(255,255,255,.1);border-bottom:none}
+  .dock{border:1px solid rgba(255,255,255,.1);border-top:none;border-radius:0 0 1.25rem 1.25rem;background:rgba(22,22,35,.65);backdrop-filter:blur(12px);padding:1.1rem 1.5rem;display:flex;flex-wrap:wrap;align-items:center;gap:1.2rem;justify-content:space-between}
+  .pity{flex:1;min-width:230px}
+  .pity .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.1);margin-top:.45rem;overflow:hidden}
+  .pity .fill{height:100%;background:linear-gradient(90deg,var(--cyan),#7c3aed);transition:width .4s}
+
+  /* pool grid (shared below selection) */
+  .pool-h{display:flex;align-items:center;justify-content:space-between;margin:2.2rem 0 1rem}
+  .pool-h h2{font-size:1.1rem;font-weight:600}
+  .pool{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.9rem;margin-bottom:4rem}
+  .pcard{border-radius:.9rem;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:var(--surface-2)}
+  .pcard .img{aspect-ratio:3/4;display:grid;place-items:center;font-size:2.2rem}
+  .pcard .nm{padding:.4rem .5rem .5rem;font-size:.74rem;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+  .r-ssr{color:var(--orange)}.r-sr{color:var(--indigo)}.r-r{color:var(--teal)}.r-n{color:var(--ink-4)}
+  .owned{font-size:.66rem;color:var(--cyan)}
+  .variant{display:none}.variant.on{display:block}
+  @media(max-width:760px){.nav-links{display:none}.heroA{height:280px}.slide .meta{max-width:75%;left:1.1rem}.char{display:none}}
+</style>
+</head>
+<body>
+
+<header class="glass-nav"><div class="nav-inner">
+  <div class="brand"><div class="mark">🎴</div> AnimeEnigma</div>
+  <nav class="nav-links"><a>Главная</a><a>Каталог</a><a>Расписание</a><a class="active">Лудка</a><a>Комнаты</a></nav>
+  <div class="nav-right">
+    <div class="switcher" title="Переключатель вариантов (только для макета)">
+      <button class="on" onclick="setV('A',this)">A</button>
+      <button onclick="setV('B',this)">B</button>
+      <button onclick="setV('C',this)">C</button>
+    </div>
+    <span class="enigma-chip">◆ 1 240</span><div class="avatar"></div>
+  </div>
+</div></header>
+
+<div class="wrap">
+  <!-- page header: title + daily claim (real page furniture, same everywhere) -->
+  <div class="page-head">
+    <h1>Лудка</h1>
+    <div class="daily">
+      <div><div style="font-size:.84rem;font-weight:600">Ежедневный бонус</div>
+        <div class="streak">Стрик: <b>4 дня</b> · +30 к базе</div></div>
+      <button class="btn btn-primary btn-sm">Получить ◆ 80</button>
+    </div>
+  </div>
+
+  <!-- ═══ VARIANT A: hero slider → /gacha/:id ═══ -->
+  <div class="variant on" id="vA">
+    <div class="heroA" id="heroA">
+      <div class="slide on"><div class="art a1"></div><div class="scrim"></div><div class="char">⚔️</div>
+        <div class="meta"><span class="badge b-std">СТАНДАРТНЫЙ</span><h3>Вечный баннер</h3><p>Все карточки коллекции. Без срока действия.</p>
+        <button class="btn btn-primary">Крутить</button></div></div>
+      <div class="slide"><div class="art a2"></div><div class="scrim"></div><div class="char">🌸</div>
+        <div class="meta"><span class="badge b-event">ИВЕНТ · до 24.06</span><h3>Магическая битва</h3><p>Годжо, Сукуна и компания.</p>
+        <button class="btn btn-primary">Крутить</button></div></div>
+      <div class="slide"><div class="art a3"></div><div class="scrim"></div><div class="char">🗡️</div>
+        <div class="meta"><span class="badge b-event">ИВЕНТ · до 30.06</span><h3>Клинок</h3><p>Летний дроп истребителей демонов.</p>
+        <button class="btn btn-primary">Крутить</button></div></div>
+      <button class="arrow l" onclick="goA(-1)">‹</button><button class="arrow r" onclick="goA(1)">›</button>
+      <div class="dots" id="dotsA"></div>
+    </div>
+  </div>
+
+  <!-- ═══ VARIANT B: card rail → /gacha/:id ═══ -->
+  <div class="variant" id="vB">
+    <div class="rail">
+      <div class="cardB"><div class="art a1"></div><div class="scrim"></div><div class="meta"><span class="badge b-std">СТАНДАРТНЫЙ</span><h3>Вечный баннер</h3><p>Все карточки коллекции</p></div></div>
+      <div class="cardB"><div class="art a2"></div><div class="scrim"></div><div class="meta"><span class="badge b-event">ИВЕНТ · до 24.06</span><h3>Магическая битва</h3><p>Годжо, Сукуна и компания</p></div></div>
+      <div class="cardB"><div class="art a3"></div><div class="scrim"></div><div class="meta"><span class="badge b-event">ИВЕНТ · до 30.06</span><h3>Клинок</h3><p>Летний дроп</p></div></div>
+      <div class="cardB" style="opacity:.55;cursor:default"><div class="art a1" style="filter:grayscale(.7)"></div><div class="scrim"></div><div class="meta"><span class="badge b-event">СКОРО</span><h3>Реинкарнация</h3><p>Анонс</p></div></div>
+    </div>
+  </div>
+
+  <!-- ═══ VARIANT C: slider + spin dock, pool below ═══ -->
+  <div class="variant" id="vC">
+    <div class="heroC">
+      <div class="slide on" id="slideC"><div class="art a2"></div><div class="scrim"></div><div class="char">🌸</div>
+        <div class="meta" style="bottom:1.2rem"><span class="badge b-event" id="badgeC">ИВЕНТ · до 24.06</span><h3 id="nameC">Магическая битва</h3></div></div>
+      <button class="arrow l" onclick="goC(-1)">‹</button><button class="arrow r" onclick="goC(1)">›</button>
+      <div class="dots" id="dotsC"></div>
+    </div>
+    <div class="dock">
+      <div class="pity">
+        <div style="display:flex;justify-content:space-between;font-size:.8rem"><span style="color:var(--ink-2)">До гаранта SSR</span><b id="pityC">73 / 90</b></div>
+        <div class="bar"><div class="fill" id="fillC" style="width:81%"></div></div>
+      </div>
+      <div style="display:flex;gap:.7rem">
+        <button class="btn btn-ghost">Крутить ×1 · <span style="color:var(--cyan)">◆ 100</span></button>
+        <button class="btn btn-primary">Крутить ×10 · ◆ 900</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- pool — on the real page this is below the selection (A/B: of the OPENED banner page; C: right here) -->
+  <div class="pool-h"><h2>Карточки баннера</h2><span style="font-size:.8rem;color:var(--ink-4)">выбито 3 из 8</span></div>
+  <div class="pool">
+    <div class="pcard"><div class="img" style="background:linear-gradient(160deg,#3a2a55,#7c3aed)">🧙</div><div class="nm">Годжо <span class="r-ssr">SSR</span></div><span class="owned" style="padding:0 .5rem .4rem;display:block">✓ выбито</span></div>
+    <div class="pcard"><div class="img" style="background:linear-gradient(160deg,#552a3a,#fb7185)">👹</div><div class="nm">Сукуна <span class="r-ssr">SSR</span></div><span style="padding:0 .5rem .4rem;display:block;font-size:.66rem;color:var(--ink-4)">не выбито</span></div>
+    <div class="pcard"><div class="img" style="background:linear-gradient(160deg,#2a3a55,#818cf8)">🐆</div><div class="nm">Тодо <span class="r-sr">SR</span></div><span class="owned" style="padding:0 .5rem .4rem;display:block">✓ выбито</span></div>
+    <div class="pcard"><div class="img" style="background:linear-gradient(160deg,#1d4044,#2dd4bf)">🧂</div><div class="nm">Нанами <span class="r-sr">SR</span></div><span style="padding:0 .5rem .4rem;display:block;font-size:.66rem;color:var(--ink-4)">не выбито</span></div>
+    <div class="pcard"><div class="img" style="background:linear-gradient(160deg,#243",#444)">🐶</div><div class="nm">Мегуми <span class="r-r">R</span></div><span class="owned" style="padding:0 .5rem .4rem;display:block">✓ выбито</span></div>
+    <div class="pcard"><div class="img" style="background:linear-gradient(160deg,#332,#665)">🔨</div><div class="nm">Нобара <span class="r-r">R</span></div><span style="padding:0 .5rem .4rem;display:block;font-size:.66rem;color:var(--ink-4)">не выбито</span></div>
+    <div class="pcard"><div class="img" style="background:#222;filter:brightness(.55)">👤</div><div class="nm">??? <span class="r-n">N</span></div><span style="padding:0 .5rem .4rem;display:block;font-size:.66rem;color:var(--ink-4)">не выбито</span></div>
+    <div class="pcard"><div class="img" style="background:#222;filter:brightness(.55)">👤</div><div class="nm">??? <span class="r-n">N</span></div><span style="padding:0 .5rem .4rem;display:block;font-size:.66rem;color:var(--ink-4)">не выбито</span></div>
+  </div>
+</div>
+
+<script>
+  // variant switcher in header
+  function setV(v,btn){
+    document.querySelectorAll('.variant').forEach(el=>el.classList.toggle('on', el.id==='v'+v));
+    document.querySelectorAll('.switcher button').forEach(b=>b.classList.toggle('on', b===btn));
+  }
+  // A slider
+  const slidesA=[...document.querySelectorAll('#heroA .slide')];const dotsA=document.getElementById('dotsA');let iA=0;
+  slidesA.forEach((_,i)=>{const d=document.createElement('div');d.className='dot'+(i?'':' on');d.onclick=()=>setA(i);dotsA.appendChild(d)});
+  function setA(i){iA=(i+slidesA.length)%slidesA.length;slidesA.forEach((s,k)=>s.classList.toggle('on',k===iA));[...dotsA.children].forEach((d,k)=>d.classList.toggle('on',k===iA))}
+  function goA(d){setA(iA+d)}
+  let tA=setInterval(()=>goA(1),7000);
+  const hA=document.getElementById('heroA');
+  hA.addEventListener('mouseenter',()=>clearInterval(tA));hA.addEventListener('mouseleave',()=>tA=setInterval(()=>goA(1),7000));
+  // C slider (banner switch updates dock pity too — demo data)
+  const C=[{a:'a2',n:'Магическая битва',b:'ИВЕНТ · до 24.06',p:[73,90]},{a:'a3',n:'Клинок',b:'ИВЕНТ · до 30.06',p:[12,90]},{a:'a1',n:'Вечный баннер',b:'СТАНДАРТНЫЙ',p:[41,90]}];
+  const dotsC=document.getElementById('dotsC');let iC=0;
+  C.forEach((_,i)=>{const d=document.createElement('div');d.className='dot'+(i?'':' on');d.onclick=()=>setC(i);dotsC.appendChild(d)});
+  function setC(i){iC=(i+C.length)%C.length;const c=C[iC];
+    document.querySelector('#slideC .art').className='art '+c.a;
+    document.getElementById('nameC').textContent=c.n;
+    const b=document.getElementById('badgeC');b.textContent=c.b;b.className='badge '+(c.b.startsWith('СТАНД')?'b-std':'b-event');
+    document.getElementById('pityC').textContent=c.p[0]+' / '+c.p[1];
+    document.getElementById('fillC').style.width=Math.round(c.p[0]/c.p[1]*100)+'%';
+    [...dotsC.children].forEach((d,k)=>d.classList.toggle('on',k===iC));}
+  function goC(d){setC(iC+d)}
+</script>
+</body>
+</html>

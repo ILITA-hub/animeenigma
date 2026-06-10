@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,6 +19,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/dispatcher"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/feedback"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/grafana"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/state"
 	"github.com/ILITA-hub/animeenigma/services/maintenance/internal/telegram"
@@ -154,6 +157,7 @@ func main() {
 		state:    stateMgr,
 		cfg:      cfg,
 		workChan: workChan,
+		fb:       feedback.NewClient(cfg.PlayerInternalURL, log),
 	}
 
 	go svc.run(ctx)
@@ -180,6 +184,7 @@ type service struct {
 	state    *state.Manager
 	cfg      *config.Config
 	workChan chan workItem
+	fb       *feedback.Client
 	mu       sync.Mutex
 }
 
@@ -218,13 +223,36 @@ func (s *service) run(ctx context.Context) {
 					}
 				}
 				s.state.UpdateOffset(maxID)
-				// Send each update individually for one-by-one processing
-				for _, u := range updates {
+				// Send updates grouped by media_group_id (Telegram album), one
+				// group per workItem, so an album reaches ClassifyBatch as a
+				// unit and merges into a single relevant message.
+				var group []telegram.Update
+				flush := func() bool {
+					if len(group) == 0 {
+						return true
+					}
 					select {
 					case <-ctx.Done():
-						return
-					case workChan <- workItem{telegramUpdates: []telegram.Update{u}}:
+						return false
+					case workChan <- workItem{telegramUpdates: group}:
+						group = nil
+						return true
 					}
+				}
+				for _, u := range updates {
+					if len(group) > 0 {
+						prev := group[len(group)-1]
+						sameAlbum := u.Message != nil && prev.Message != nil &&
+							u.Message.MediaGroupID != "" &&
+							u.Message.MediaGroupID == prev.Message.MediaGroupID
+						if !sameAlbum && !flush() {
+							return
+						}
+					}
+					group = append(group, u)
+				}
+				if !flush() {
+					return
 				}
 			}
 		}
@@ -282,13 +310,16 @@ func (s *service) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case work := <-workChan:
-			// Separate sources while draining
-			var telegramQueue []telegram.Update
+			// Separate sources while draining. Telegram updates stay grouped
+			// per workItem (one group == one message or one album).
+			var telegramGroups [][]telegram.Update
 			var grafanaAlerts []domain.ClassifiedMessage
 			var reports []domain.ReportRequest
 			var webhookEvents []domain.GrafanaWebhookPayload
 
-			telegramQueue = append(telegramQueue, work.telegramUpdates...)
+			if len(work.telegramUpdates) > 0 {
+				telegramGroups = append(telegramGroups, work.telegramUpdates)
+			}
 			grafanaAlerts = append(grafanaAlerts, work.grafanaAlerts...)
 			reports = append(reports, work.reports...)
 			webhookEvents = append(webhookEvents, work.webhookEvents...)
@@ -297,7 +328,9 @@ func (s *service) run(ctx context.Context) {
 			for {
 				select {
 				case more := <-workChan:
-					telegramQueue = append(telegramQueue, more.telegramUpdates...)
+					if len(more.telegramUpdates) > 0 {
+						telegramGroups = append(telegramGroups, more.telegramUpdates)
+					}
 					grafanaAlerts = append(grafanaAlerts, more.grafanaAlerts...)
 					reports = append(reports, more.reports...)
 					webhookEvents = append(webhookEvents, more.webhookEvents...)
@@ -363,17 +396,17 @@ func (s *service) run(ctx context.Context) {
 				}
 			}
 
-			// Process Telegram updates one at a time
-			for i, u := range telegramQueue {
+			// Process Telegram update groups one at a time
+			for i, group := range telegramGroups {
 				select {
 				case <-ctx.Done():
 					return
 				default:
 				}
-				s.processWork(ctx, workItem{telegramUpdates: []telegram.Update{u}})
+				s.processWork(ctx, workItem{telegramUpdates: group})
 
 				// Cooldown between messages (pacing + allows Grafana interleave)
-				if i < len(telegramQueue)-1 {
+				if i < len(telegramGroups)-1 {
 					select {
 					case <-ctx.Done():
 						return
@@ -496,6 +529,14 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 		default:
 		}
 
+		// FIRST THING for a human Telegram message: mirror it into the
+		// /admin/feedback store (entry + attachments, status=new) before any
+		// analysis, so the admin database always has the raw report even if
+		// Claude later fails or times out.
+		if msg.Type == domain.MessageAdminMessage || msg.Type == domain.MessageUserIssue {
+			s.mirrorToFeedback(&msg)
+		}
+
 		// Dedup: check if this alert is already being tracked
 		if msg.Type == domain.MessageAlertFiring && len(msg.Alerts) > 0 {
 			alert := msg.Alerts[0]
@@ -540,6 +581,7 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 			"type", msg.Type,
 			"priority", msg.Priority,
 		)
+		s.fb.TrySetStatus(msg.FeedbackID, feedback.StatusInProgress)
 		analyzeStart := time.Now()
 		result, err := s.disp.Analyze(ctx, msg)
 		elapsed := time.Since(analyzeStart).Round(time.Second)
@@ -549,6 +591,9 @@ func (s *service) processWork(ctx context.Context, work workItem) {
 				"duration", elapsed,
 				"error", err,
 			)
+			// Analysis never ran to completion — the entry goes back to "new"
+			// so it isn't stranded as in_progress in the admin board.
+			s.fb.TrySetStatus(msg.FeedbackID, feedback.StatusNew)
 			if !s.tg.SetReaction(msg.MessageID, "💔") {
 				log.Warnw("failed to set reaction",
 					"emoji", "💔",
@@ -687,18 +732,29 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	// info_only (acknowledged, no fix). report.Category (bug|issue|feature) is passed
 	// to Claude so it can classify correctly.
 
+	// HTTP reports already live in the feedback store — the player service
+	// saved the entry before forwarding here. Derive its id from the report
+	// file path so the bot can drive that entry's status through the same
+	// lifecycle as Telegram-born entries.
+	feedbackID := ""
+	if report.ReportFile != "" {
+		feedbackID = strings.TrimSuffix(filepath.Base(report.ReportFile), ".json")
+	}
+
 	// Build ClassifiedMessage for Claude analysis
 	msg := domain.ClassifiedMessage{
-		MessageID: msgID,
-		Type:      domain.MessageErrorReport,
-		Priority:  domain.P2,
-		Text:      b.String(),
-		From:      domain.User{Username: report.Username},
-		RawJSON:   fmt.Sprintf(`{"report": {"player":"%s","category":"%s","anime":"%s","error":"%s","description":"%s","server":"%s","url":"%s","file":"%s"}}`, report.PlayerType, report.Category, report.AnimeName, report.ErrorMessage, report.Description, report.ServerName, report.URL, report.ReportFile),
+		MessageID:  msgID,
+		Type:       domain.MessageErrorReport,
+		Priority:   domain.P2,
+		Text:       b.String(),
+		From:       domain.User{Username: report.Username},
+		FeedbackID: feedbackID,
+		RawJSON:    fmt.Sprintf(`{"report": {"player":"%s","category":"%s","anime":"%s","error":"%s","description":"%s","server":"%s","url":"%s","file":"%s"}}`, report.PlayerType, report.Category, report.AnimeName, report.ErrorMessage, report.Description, report.ServerName, report.URL, report.ReportFile),
 	}
 
 	// Invoke Claude
 	log.Infow("analyzing report", "message_id", msgID, "category", report.Category)
+	s.fb.TrySetStatus(feedbackID, feedback.StatusInProgress)
 	analyzeStart := time.Now()
 	result, err := s.disp.Analyze(ctx, msg)
 	elapsed := time.Since(analyzeStart).Round(time.Second)
@@ -708,6 +764,7 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 			"duration", elapsed,
 			"error", err,
 		)
+		s.fb.TrySetStatus(feedbackID, feedback.StatusNew)
 		if !s.tg.SetReaction(msgID, "💔") {
 			log.Warnw("failed to set reaction",
 				"emoji", "💔",
@@ -744,6 +801,148 @@ func (s *service) processReport(ctx context.Context, report domain.ReportRequest
 	log.Infow("report processing complete", "message_id", msgID)
 }
 
+// mirrorToFeedback creates the /admin/feedback entry for a human Telegram
+// message — the FIRST step of handling, before any analysis. It downloads the
+// message's attachments from Telegram to the host (so the Claude dispatcher
+// can Read them) and uploads each into the entry. All failures are
+// WARN-and-continue: the feedback store must never block message handling.
+func (s *service) mirrorToFeedback(msg *domain.ClassifiedMessage) {
+	username := msg.From.Username
+	if username == "" {
+		username = fmt.Sprintf("id%d", msg.From.ID)
+	}
+
+	meta := map[string]interface{}{
+		"message_id": msg.MessageID,
+		"chat_id":    msg.ChatID,
+	}
+	if msg.ForwardedFrom != "" {
+		meta["forwarded_from"] = msg.ForwardedFrom
+	}
+	if msg.ReplyToText != "" {
+		meta["reply_to"] = msg.ReplyToText
+	}
+	if s.isAdminMessage(*msg) {
+		meta["from_admin"] = true
+	}
+
+	description := msg.Text
+	if strings.TrimSpace(description) == "" {
+		description = "<no text — see attachments>"
+	}
+
+	id, err := s.fb.Create(feedback.CreateRequest{
+		Username:     username,
+		UserID:       fmt.Sprintf("tg:%d", msg.From.ID),
+		PlayerType:   "telegram",
+		Category:     classifier.GuessCategory(msg.Text),
+		Description:  description,
+		Source:       "telegram",
+		TelegramMeta: meta,
+	})
+	if err != nil {
+		log.Warnw("feedback entry creation failed — continuing without mirror",
+			"message_id", msg.MessageID,
+			"error", err,
+		)
+		return
+	}
+	msg.FeedbackID = id
+	log.Infow("feedback entry created", "feedback_id", id, "message_id", msg.MessageID, "attachments", len(msg.Attachments))
+
+	s.downloadAndAttach(msg)
+}
+
+// downloadAndAttach pulls each Telegram attachment to the host attachments
+// dir (for Claude) and uploads a copy into the feedback entry (for the admin
+// UI). Per-file failures are logged and skipped.
+func (s *service) downloadAndAttach(msg *domain.ClassifiedMessage) {
+	if len(msg.Attachments) == 0 {
+		return
+	}
+	baseDir := resolveProjectPath(s.cfg.Claude.ProjectRoot, s.cfg.AttachmentsDir)
+	dir := filepath.Join(baseDir, msg.FeedbackID)
+	if msg.FeedbackID == "" {
+		dir = filepath.Join(baseDir, fmt.Sprintf("msg-%d", msg.MessageID))
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		log.Warnw("attachments dir creation failed", "dir", dir, "error", err)
+		return
+	}
+
+	for i := range msg.Attachments {
+		a := &msg.Attachments[i]
+		f, err := s.tg.GetFile(a.FileID)
+		if err != nil {
+			log.Warnw("telegram getFile failed", "file_id", a.FileID, "name", a.FileName, "error", err)
+			continue
+		}
+		data, err := s.tg.DownloadFile(f.FilePath)
+		if err != nil {
+			log.Warnw("telegram download failed", "file_id", a.FileID, "name", a.FileName, "error", err)
+			continue
+		}
+
+		name := sanitizeLocalFilename(a.FileName)
+		local := filepath.Join(dir, name)
+		if err := os.WriteFile(local, data, 0600); err != nil {
+			log.Warnw("attachment local write failed", "path", local, "error", err)
+		} else {
+			a.LocalPath = local
+		}
+
+		if msg.FeedbackID != "" {
+			stored, err := s.fb.UploadAttachment(msg.FeedbackID, name, data)
+			if err != nil {
+				log.Warnw("attachment upload to feedback store failed",
+					"feedback_id", msg.FeedbackID, "name", name, "error", err)
+			} else {
+				a.StoredName = stored
+			}
+		}
+		log.Infow("attachment saved",
+			"feedback_id", msg.FeedbackID,
+			"name", name,
+			"kind", a.Kind,
+			"bytes", len(data),
+			"local_path", a.LocalPath,
+		)
+	}
+}
+
+// sanitizeLocalFilename keeps a filesystem-safe basename, preserving the extension.
+func sanitizeLocalFilename(s string) string {
+	s = filepath.Base(s)
+	s = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			return r
+		}
+		return '_'
+	}, s)
+	s = strings.Trim(s, "._")
+	if s == "" {
+		s = "attachment"
+	}
+	if len(s) > 128 {
+		s = s[len(s)-128:]
+	}
+	return s
+}
+
+// feedbackStatusForTier maps an analysis outcome onto the feedback-store
+// lifecycle: applied fixes are "ai_done" (await human verification), answered
+// info requests are "resolved", anything still needing work stays "in_progress".
+func feedbackStatusForTier(tier domain.FixTier) string {
+	switch tier {
+	case domain.TierAutoFix:
+		return feedback.StatusAIDone
+	case domain.TierInfoOnly, domain.TierResolved:
+		return feedback.StatusResolved
+	default: // button_fix (pending), escalate, unknown
+		return feedback.StatusInProgress
+	}
+}
+
 func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage, result *domain.AnalysisResult) {
 	// Create issue
 	source := "grafana_alert"
@@ -764,6 +963,13 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		affectedService = msg.Alerts[0].Service
 	}
 
+	var attachmentPaths []string
+	for _, a := range msg.Attachments {
+		if a.LocalPath != "" {
+			attachmentPaths = append(attachmentPaths, a.LocalPath)
+		}
+	}
+
 	issueID := s.state.CreateIssue(domain.Issue{
 		Source:            source,
 		Category:          domain.IssueCategory(result.Issue.Category),
@@ -774,6 +980,8 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		TelegramMessageID: msg.MessageID,
 		AffectedService:   affectedService,
 		Actions:           result.ActionsTaken,
+		FeedbackID:        msg.FeedbackID,
+		Attachments:       attachmentPaths,
 	})
 	log.Infow("issue created",
 		"issue_id", issueID,
@@ -814,6 +1022,10 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 	if !strings.Contains(replyText, issueID) {
 		replyText += fmt.Sprintf("\n\n*Issue:* %s", issueID)
 	}
+	if msg.FeedbackID != "" {
+		replyText += fmt.Sprintf("\n*Feedback:* [%s](%s/admin/feedback?id=%s)",
+			escTelegram(msg.FeedbackID), s.cfg.FeedbackBaseURL, url.QueryEscape(msg.FeedbackID))
+	}
 
 	// sendFunc: reply to existing message, or send standalone if from Grafana API (no message_id)
 	sendFunc := func(text string) (int, error) {
@@ -841,6 +1053,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 	switch result.Tier {
 	case domain.TierAutoFix, domain.TierEscalate, domain.TierInfoOnly, domain.TierResolved:
 		sendFunc(replyText)
+		s.fb.TrySetStatus(msg.FeedbackID, feedbackStatusForTier(result.Tier))
 
 	case domain.TierButtonFix:
 		// Active auto-fix: when the risk gate allows (see decideAutoApply), apply the
@@ -860,10 +1073,14 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 				ProposedAt:     time.Now().UTC().Format(time.RFC3339),
 				FixPlan:        *result.FixPlan,
 				AlertMessageID: msg.MessageID,
+				FeedbackID:     msg.FeedbackID,
 			}
 			s.applyFix(ctx, replyToID, issueID, fix, label)
 			return
 		}
+
+		// Pending admin approval — work is still open.
+		s.fb.TrySetStatus(msg.FeedbackID, feedback.StatusInProgress)
 
 		buttons := []telegram.InlineButton{
 			{Text: "🔧 Apply Fix", CallbackData: "fix:" + issueID},
@@ -894,6 +1111,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 				FixPlan:           *result.FixPlan,
 				TelegramMessageID: sentMsgID,
 				AlertMessageID:    msg.MessageID,
+				FeedbackID:        msg.FeedbackID,
 			})
 		}
 
@@ -904,6 +1122,7 @@ func (s *service) handleResult(ctx context.Context, msg domain.ClassifiedMessage
 		log.Warnw("unhandled analysis tier — sending fallback acknowledgement",
 			"tier", result.Tier, "issue_id", issueID)
 		sendFunc(replyText)
+		s.fb.TrySetStatus(msg.FeedbackID, feedback.StatusInProgress)
 	}
 }
 
@@ -933,6 +1152,8 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 		if replyToID != 0 {
 			s.tg.SetReaction(replyToID, "💔")
 		}
+		// Work attempted but not done — keep the feedback entry open.
+		s.fb.TrySetStatus(fix.FeedbackID, feedback.StatusInProgress)
 		reply(fmt.Sprintf("*❌ Fix failed* (%s)\n%s", approver, truncateForTelegram(err.Error())))
 		return
 	}
@@ -959,6 +1180,9 @@ func (s *service) applyFix(ctx context.Context, replyToID int, issueID string, f
 		s.state.RecordFix(fix.FixPlan.Target, string(fix.FixPlan.Type))
 		s.state.SetCooldown(string(fix.FixPlan.Type), fix.FixPlan.Target, 10*time.Minute)
 	}
+	// AI believes the fix landed — "ai_done" awaits human verification in the
+	// admin feedback board before someone promotes it to "resolved".
+	s.fb.TrySetStatus(fix.FeedbackID, feedback.StatusAIDone)
 }
 
 // decideAutoApply implements the risk-gated active auto-fix policy. It returns
@@ -1097,6 +1321,7 @@ func (s *service) handleButtonClick(ctx context.Context, msg domain.ClassifiedMe
 			issue.Status = domain.StatusWontFix
 			issue.Resolution = fmt.Sprintf("Dismissed by @%s", msg.From.Username)
 		})
+		s.fb.TrySetStatus(fix.FeedbackID, feedback.StatusNotRelevant)
 		s.tg.SendReply(fix.AlertMessageID, fmt.Sprintf("*Issue %s dismissed* by @%s", issueID, msg.From.Username))
 	}
 }

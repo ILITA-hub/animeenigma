@@ -343,6 +343,24 @@ The notifications service uses the standard `DB_*` + `JWT_SECRET` + `REDIS_HOST`
 trio. Internal producer endpoint `POST /internal/notifications` is reachable
 only inside the Docker network — the gateway does not proxy `/internal/*`.
 
+## Feedback Triage Statuses (/admin/feedback)
+
+User feedback / error reports live as JSON files on the `docker_player_reports`
+volume; triage statuses in the sidecar `_status.json` (re-read by the player
+service on every request — external writes apply instantly). Statuses:
+`new | in_progress | ai_done | resolved | not_relevant`.
+
+**AI agents are PRE-AUTHORIZED by the project owner (2026-06-10) to set
+`new`, `in_progress`, `ai_done`, and `not_relevant` autonomously** — that is
+the whole point of `ai_done`: "AI believes this is done, awaiting human
+verification". **Only `resolved` is human-only** (the owner promotes
+`ai_done` → `resolved` in the UI after verifying). Use the guarded helper —
+it enforces the human-only rule itself:
+
+```bash
+bin/feedback-status <report-id> <status> [updated_by]   # refuses "resolved"
+```
+
 ## UI Audit Test User (DO NOT DELETE)
 
 Permanent `ui_audit_bot` account (API key, password login, seed data) for UI audits + integration/e2e tests. **DO NOT DELETE / recreate.** Full details, seed contents, and key-rotation steps: [`docs/ui-audit-test-user.md`](docs/ui-audit-test-user.md).
@@ -398,7 +416,7 @@ Tables are auto-created via GORM's `AutoMigrate()` on service startup. For schem
 
 The home page's `HeroSpotlightBlock` (workstream `hero-spotlight`) is a 9-card rotating carousel. To add a 10th card type, touch the following 5 anchors (all from the same package boundaries, ~50 lines total):
 
-1. **Backend resolver** — Create `services/catalog/internal/service/spotlight/cards/{new_type}.go` implementing the `spotlight.Resolver` interface (`Type()` + `Resolve(ctx, userID *string) (*spotlight.Card, error)`). Mirror `anime_of_day.go`'s pattern: manual `cache.Get`/`cache.Set` with `errors.Is(err, cache.ErrNotFound)`, return `(nil, nil)` for ineligible, `(nil, err)` for failure, `(*Card, nil)` for success. Multi-item resolvers MUST apply `spotlight.AdaptiveSlice` (the 1-2-3 layout rule). Login-only resolvers return `(nil, nil)` when `userID == nil`. Always carry the `spotlight:` Redis key prefix for new keys (HSB-NF-03). Add a co-located `_test.go` with handwritten fakes — no testify/mock.
+1. **Backend resolver** — Create `services/catalog/internal/service/spotlight/cards/{new_type}.go` implementing the `spotlight.Resolver` interface (`Type()` + `Resolve(ctx, userID *string) (*spotlight.Card, error)`). Mirror `featured.go`'s pattern (the «Рекомендуем сегодня» card): manual `cache.Get`/`cache.Set` with `errors.Is(err, cache.ErrNotFound)`, return `(nil, nil)` for ineligible, `(nil, err)` for failure, `(*Card, nil)` for success. Multi-item resolvers MUST apply `spotlight.AdaptiveSlice` (the 1-2-3 layout rule). Login-only resolvers return `(nil, nil)` when `userID == nil`. Always carry the `spotlight:` Redis key prefix for new keys (HSB-NF-03). Add a co-located `_test.go` with handwritten fakes — no testify/mock.
 
 2. **Backend Data type** — Add the JSON-shaped `{NewType}Data` struct to `services/catalog/internal/service/spotlight/types.go` extending the Card union. Update `types_test.go` with a round-trip marshal/unmarshal test.
 

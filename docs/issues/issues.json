@@ -1,5 +1,5 @@
 {
-  "last_id": 423,
+  "last_id": 424,
   "issues": [
     {
       "id": "AUTO-001",
@@ -498,7 +498,7 @@
         {
           "action": "docker network connect --alias catalog --alias animeenigma-catalog animeenigma-network animeenigma-catalog",
           "result": "success",
-          "details": "Re-registered both DNS aliases, exit 0, < 1s network blip"
+          "details": "Re-registered both DNS aliases, exit 0, \u003c 1s network blip"
         },
         {
           "action": "curl http://localhost:8000/status/health",
@@ -698,7 +698,7 @@
           "details": "Image built successfully as animeenigma-web-img:latest with correct /api base URL baked into Vite bundle"
         },
         {
-          "action": "docker stop animeenigma-web && docker rm animeenigma-web",
+          "action": "docker stop animeenigma-web \u0026\u0026 docker rm animeenigma-web",
           "result": "success",
           "details": "Old broken container removed"
         },
@@ -713,7 +713,7 @@
           "details": "All 33 JS asset files return 0 matches — no localhost:8000 hardcoded URLs"
         },
         {
-          "action": "curl http://localhost:3003/ && curl http://localhost:3003/health",
+          "action": "curl http://localhost:3003/ \u0026\u0026 curl http://localhost:3003/health",
           "result": "success",
           "details": "Both return HTTP 200 — nginx serving correctly"
         }
@@ -1553,7 +1553,7 @@
         {
           "action": "Edit frontend/web/src/components/LastUpdates.vue",
           "result": "success",
-          "details": "Added `SelectedEntry` interface + `selectedEntry` ref. Replaced the entry `<div>` with a `<button>` wrapping the badge + clipped paragraph, with `@click=\"selectedEntry = {...}\"`, `cursor-pointer`, `group` class, focus styles, and `group-hover:text-white transition-colors` on the message <p>. Added a modal at template root guarded by `v-if=\"selectedEntry\"`: `fixed inset-0 z-50 bg-black/60 backdrop-blur-sm` backdrop, centered glass-card panel showing the type badge, formatted date, full untruncated message with `whitespace-pre-wrap break-words select-text`, and an ✕ close button (aria-label `common.close`). Esc closes via window-level `keydown` listener (mounted/unmounted lifecycle) and `@click.self` on backdrop closes."
+          "details": "Added `SelectedEntry` interface + `selectedEntry` ref. Replaced the entry `\u003cdiv\u003e` with a `\u003cbutton\u003e` wrapping the badge + clipped paragraph, with `@click=\"selectedEntry = {...}\"`, `cursor-pointer`, `group` class, focus styles, and `group-hover:text-white transition-colors` on the message \u003cp\u003e. Added a modal at template root guarded by `v-if=\"selectedEntry\"`: `fixed inset-0 z-50 bg-black/60 backdrop-blur-sm` backdrop, centered glass-card panel showing the type badge, formatted date, full untruncated message with `whitespace-pre-wrap break-words select-text`, and an ✕ close button (aria-label `common.close`). Esc closes via window-level `keydown` listener (mounted/unmounted lifecycle) and `@click.self` on backdrop closes."
         },
         {
           "action": "bunx vue-tsc --noEmit (in frontend/web)",
@@ -2075,7 +2075,7 @@
         {
           "action": "Edited services/scraper/internal/health/probe.go",
           "result": "success",
-          "details": "Added isHLSAllowlistedHost (mirror of libs/videoutils.isHLSDomainAllowed), buildHLSProxyURL, WithProxyBaseURL option, proxyBaseURL field, and SCRAPER_PROBE_PROXY_BASE_URL env override. fetchSegment now detects HLS-allowlisted hosts and rewrites the GET to {base}/api/v1/hls-proxy?url=<encoded>&referer=<encoded>; the upstream Referer is passed via query, not the request header, to avoid double-Referer."
+          "details": "Added isHLSAllowlistedHost (mirror of libs/videoutils.isHLSDomainAllowed), buildHLSProxyURL, WithProxyBaseURL option, proxyBaseURL field, and SCRAPER_PROBE_PROXY_BASE_URL env override. fetchSegment now detects HLS-allowlisted hosts and rewrites the GET to {base}/api/v1/hls-proxy?url=\u003cencoded\u003e\u0026referer=\u003cencoded\u003e; the upstream Referer is passed via query, not the request header, to avoid double-Referer."
         },
         {
           "action": "Added TestProbe_FetchSegmentRoutesAllowlistedHostsThroughProxy + TestProbe_FetchSegmentBypassesProxyForNonAllowlistedHost",
@@ -2093,7 +2093,7 @@
           "details": "provider-health-stream-segment-down: `for: 15m` → `for: 4h`; expression changed from `provider_health_up{stage=\"stream_segment\"}` to `max by (provider) (provider_health_up{stage=~\"stream|stream_segment\"})` — alert now fires ONLY when BOTH stream AND stream_segment are DOWN for the same provider. Summary + description updated accordingly. Grafana's provisioning provider picks up the file change on its next scan (no Grafana restart — forbidden by safety rules)."
         },
         {
-          "action": "DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build scraper && docker stop animeenigma-scraper && docker rm -f animeenigma-scraper && docker compose up -d --no-deps scraper",
+          "action": "DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build scraper \u0026\u0026 docker stop animeenigma-scraper \u0026\u0026 docker rm -f animeenigma-scraper \u0026\u0026 docker compose up -d --no-deps scraper",
           "result": "success",
           "details": "Build succeeded after falling back to legacy builder (buildkit metadata fetch was failing under heavy host load). Container animeenigma-scraper is Up and healthy; /metrics shows provider_probe_last_tick_timestamp advancing (animefever@1779362634, nineanime@1779362632); /health returns {success:true,status:ok}."
         },
@@ -2316,7 +2316,7 @@
         {
           "action": "Edit libs/idmapping/client.go to add tcp4 DialContext",
           "result": "success",
-          "details": "Added context+net imports; wrapped http.Client with &http.Transport{DialContext: forces tcp4} in NewClient(). Single-file change, 14 insertions / 2 deletions."
+          "details": "Added context+net imports; wrapped http.Client with \u0026http.Transport{DialContext: forces tcp4} in NewClient(). Single-file change, 14 insertions / 2 deletions."
         },
         {
           "action": "Rebuild scraper image (docker build -f services/scraper/Dockerfile -t docker-scraper:latest .)",
@@ -2324,7 +2324,7 @@
           "details": "Go build inside container compiled cleanly with the new imports; image tagged docker-scraper:latest. (Note: `docker compose` wrapper was broken in this Docker v29.2.1 install — flag parsing rejected -f; bypassed by invoking /usr/libexec/docker/cli-plugins/docker-compose directly and using plain `docker build` for the build step.)"
         },
         {
-          "action": "Recreate scraper container via docker-compose plugin (stop -> rm -f -> up -d --no-deps)",
+          "action": "Recreate scraper container via docker-compose plugin (stop -\u003e rm -f -\u003e up -d --no-deps)",
           "result": "success",
           "details": "animeenigma-scraper came up healthy in ~15s. /health returned {success:true,data:{status:ok}}."
         },
@@ -2370,7 +2370,7 @@
           "details": "rc.HTTPClient.Jar = jar wired in NewBaseHTTPClient; Do() routes through retryablehttp.Client which honors the jar — cookies from prior GET propagate to POST automatically."
         },
         {
-          "action": "Manual auth-flow reproduction via curl: GET /watch/<slug>?ep=135532 → extract PHPSESSID + ctk → POST /ajax/anime/load_episodes_v2?s=tserver with both",
+          "action": "Manual auth-flow reproduction via curl: GET /watch/\u003cslug\u003e?ep=135532 → extract PHPSESSID + ctk → POST /ajax/anime/load_episodes_v2?s=tserver with both",
           "result": "success",
           "details": "Upstream returned status:true with valid am.vidstream.vip iframe URL. Confirmed AJAX auth + cookie + ctk wiring is functionally correct."
         },
@@ -4064,7 +4064,7 @@
       "telegram_message_id": 2490,
       "actions": [
         {
-          "action": "Edit OurEnglishPlayer.vue — 3-part WT-STATE-04 fix (fromRoomSync param + !fromRoomSync guard; watch(() => props.initialEpisode) reacting to room broadcasts; direct selectEpisode(startEp, true) when joining a room with initialEpisode set)",
+          "action": "Edit OurEnglishPlayer.vue — 3-part WT-STATE-04 fix (fromRoomSync param + !fromRoomSync guard; watch(() =\u003e props.initialEpisode) reacting to room broadcasts; direct selectEpisode(startEp, true) when joining a room with initialEpisode set)",
           "result": "success",
           "details": "Applied exactly per approved plan; git diff = 25 insertions, 5 deletions, single file"
         },
@@ -5579,7 +5579,7 @@
           "details": "All 3 packages ok (spotlight, cards, client). Needed serialization to dodge a transient host fork/exec EAGAIN on the auto-downloaded go1.24.0 toolchain — not a code issue (binary execs fine directly)."
         },
         {
-          "action": "Rebuild + recreate catalog (docker-compose -f docker/docker-compose.yml build catalog && up -d --no-deps catalog)",
+          "action": "Rebuild + recreate catalog (docker-compose -f docker/docker-compose.yml build catalog \u0026\u0026 up -d --no-deps catalog)",
           "result": "success",
           "details": "make redeploy-catalog failed: host lacks the docker compose v2 plugin (only standalone docker-compose present); BuildKit metadata fetch also failed, so built with DOCKER_BUILDKIT=0 classic builder. Container recreated, Up, no startup errors."
         },
@@ -5610,7 +5610,7 @@
         {
           "action": "Edit frontend/web/src/views/Home.vue — added `searchHint` computed using `navigator.platform` to return ⌘K on Mac/iOS and Ctrl K on Windows/Linux",
           "result": "success",
-          "details": "Added `computed` import, added `const searchHint = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K')`, updated template binding"
+          "details": "Added `computed` import, added `const searchHint = computed(() =\u003e /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K')`, updated template binding"
         },
         {
           "action": "bun lint",
@@ -6232,7 +6232,7 @@
         {
           "action": "Edit services/catalog/internal/handler/catalog.go parseFilters()",
           "result": "success",
-          "details": "Replaced direct `filters.GenreIDs = genres` with a loop that splits each query param value on comma, trimming whitespace and empty strings. Handles both ?genre=id1,id2 (comma-joined) and ?genre=id1&genre=id2 (multi-param) forms."
+          "details": "Replaced direct `filters.GenreIDs = genres` with a loop that splits each query param value on comma, trimming whitespace and empty strings. Handles both ?genre=id1,id2 (comma-joined) and ?genre=id1\u0026genre=id2 (multi-param) forms."
         },
         {
           "action": "docker-compose build + restart catalog",
@@ -6394,7 +6394,7 @@
           "result": "Root cause confirmed: numeric episode ID + missing title"
         },
         {
-          "action": "Manual verification: GET /scraper/servers?mal_id=21&title=One+Piece&episode=one-piece-episode-1",
+          "action": "Manual verification: GET /scraper/servers?mal_id=21\u0026title=One+Piece\u0026episode=one-piece-episode-1",
           "result": "Returns 2 gogoanime megaplay servers — confirms fix approach"
         },
         {
@@ -6777,7 +6777,7 @@
         {
           "action": "curl -X POST http://localhost:8085/api/v1/jobs/shikimori-sync",
           "result": "success",
-          "details": "Job completed in <1s: ongoing phase refreshed 1, released phase refreshed 1, total_refreshed=2 total_failed=0. scheduler_job_last_success_timestamp{exported_job=\"shikimori_sync\"} now emitted. Alert expression evaluates to ~25s staleness — well below 90000s threshold."
+          "details": "Job completed in \u003c1s: ongoing phase refreshed 1, released phase refreshed 1, total_refreshed=2 total_failed=0. scheduler_job_last_success_timestamp{exported_job=\"shikimori_sync\"} now emitted. Alert expression evaluates to ~25s staleness — well below 90000s threshold."
         }
       ],
       "resolution": "Alert resolved (webhook notification from Grafana)"
@@ -6944,7 +6944,7 @@
         {
           "action": "Edit OurEnglishPlayer.vue",
           "result": "success",
-          "details": "Imported OtherSubsPanel + SubtitleTrack type; added otherSubsOpen ref, extraSubChoices merge into availableSubChoices, onOtherSubSelected handler (injects synthetic SubChoice w/ explicit format, pins selectedSubKey), cleared injected subs on episode switch; added 'Other subs' toolbar button + wired <OtherSubsPanel> with :anime-id/:episode/:current-track-url/@select-track."
+          "details": "Imported OtherSubsPanel + SubtitleTrack type; added otherSubsOpen ref, extraSubChoices merge into availableSubChoices, onOtherSubSelected handler (injects synthetic SubChoice w/ explicit format, pins selectedSubKey), cleared injected subs on episode switch; added 'Other subs' toolbar button + wired \u003cOtherSubsPanel\u003e with :anime-id/:episode/:current-track-url/@select-track."
         },
         {
           "action": "Update OurEnglishPlayer.spec.ts",
@@ -6964,10 +6964,31 @@
         {
           "action": "git commit + push to main via maintenance worktree (path-scoped, rebased over concurrent push, changelog conflict resolved keeping both entries)",
           "result": "success",
-          "details": "09de86d7..8391bc62 main -> main"
+          "details": "09de86d7..8391bc62 main -\u003e main"
         }
       ],
       "resolution": "Fix applied by auto(risk=medium,bug)"
+    },
+    {
+      "id": "AUTO-424",
+      "created_at": "2026-06-10T12:15:03Z",
+      "resolved_at": "2026-06-10T12:17:37Z",
+      "source": "grafana_alert",
+      "category": "stability",
+      "priority": "P0",
+      "status": "resolved",
+      "title": "Scheduler Sync Stale — post-redeploy metric gap",
+      "reporter": "grafana",
+      "telegram_message_id": 3007,
+      "affected_service": "scheduler",
+      "actions": [
+        {
+          "action": "POST http://localhost:8085/api/v1/jobs/shikimori-sync",
+          "result": "success",
+          "details": "Job triggered at 12:14:09, completed at 12:14:17. scheduler_job_last_success_timestamp{job='shikimori_sync'} now emitted. Alert will clear on next Grafana evaluation."
+        }
+      ],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
     }
   ]
 }

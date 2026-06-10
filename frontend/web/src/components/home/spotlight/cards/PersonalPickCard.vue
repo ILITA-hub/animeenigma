@@ -1,22 +1,20 @@
 <template>
-  <article class="relative w-full h-full overflow-hidden">
+  <SpotlightCardShell
+    accent="cyan"
+    icon="sparkles"
+    :kicker="featured ? title : ''"
+    backdrop="poster-blur"
+    :poster-url="featured?.anime.poster_url ?? ''"
+  >
     <template v-if="featured">
-      <SpotlightBackdrop
-        variant="poster-blur"
-        :poster-url="featured.anime.poster_url"
-        accent="cyan"
-      />
-
-      <div
-        class="relative z-10 w-full h-full grid md:grid-cols-[3fr_2fr] gap-4 md:gap-6 p-4 md:p-6 lg:p-8 min-h-0"
-      >
+      <div class="flex-1 grid md:grid-cols-[3fr_2fr] gap-4 md:gap-6 min-h-0">
         <!-- ── Featured pick ───────────────────────────────────────────── -->
         <router-link
           :to="`/anime/${featured.anime.id}`"
           :aria-label="featuredAriaLabel"
           class="flex flex-col md:flex-row gap-4 group min-h-0"
         >
-          <div class="flex-shrink-0 w-32 md:w-44 lg:w-56 self-center md:self-start">
+          <div class="flex-shrink-0 w-32 md:w-40 lg:w-48 self-center md:self-start">
             <div
               class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-cyan-500/20 group-hover:shadow-cyan-500/40 transition-shadow"
             >
@@ -25,34 +23,29 @@
                 :alt="featuredTitle"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"
+                decoding="async"
               />
             </div>
           </div>
 
           <div class="flex-1 flex flex-col gap-2 min-w-0">
-            <div class="flex items-center gap-2">
-              <SpotlightIcon
-                name="sparkles"
-                class="w-4 h-4 text-cyan-300 flex-shrink-0"
-              />
-              <p
-                class="text-cyan-300 text-[10px] uppercase tracking-[0.18em] font-semibold truncate"
-              >
-                {{ title }}
-              </p>
-            </div>
             <h3
               class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2"
             >
               {{ featuredTitle }}
             </h3>
-            <span
+            <Badge
               v-if="featured.reason_i18n_key"
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-cyan-500/20 text-cyan-200 self-start"
+              variant="primary"
+              size="sm"
+              overlay
+              class="self-start"
             >
-              <SpotlightIcon name="sparkles" class="w-3 h-3" />
+              <template #icon>
+                <SpotlightIcon name="sparkles" class="w-3 h-3" />
+              </template>
               {{ t(featured.reason_i18n_key) }}
-            </span>
+            </Badge>
           </div>
         </router-link>
 
@@ -80,6 +73,7 @@
                   "
                   class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   loading="lazy"
+                  decoding="async"
                 />
               </div>
               <div class="flex-1 flex flex-col gap-1 min-w-0">
@@ -94,7 +88,7 @@
                 </h4>
                 <p
                   v-if="item.reason_i18n_key"
-                  class="text-xs font-medium text-cyan-300/80 truncate"
+                  class="text-xs font-medium text-cyan-400/80 truncate"
                 >
                   {{ t(item.reason_i18n_key) }}
                 </p>
@@ -108,7 +102,10 @@
       <router-link
         v-if="data.items.length > 1"
         :to="moreLinkTo"
-        class="absolute bottom-3 inset-x-3 cta-card text-center justify-center md:hidden z-20"
+        :class="[
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
+          'absolute bottom-3 inset-x-3 justify-center md:hidden z-20',
+        ]"
       >
         {{
           t('spotlight.personalPick.moreLink', {
@@ -117,42 +114,40 @@
         }}
       </router-link>
     </template>
-  </article>
+  </SpotlightCardShell>
 </template>
 
 <script setup lang="ts">
 /**
- * Workstream hero-spotlight — v1.1-polish Phase 04 (HSB-V11-PP-01..04).
+ * Workstream hero-spotlight — v1.1-polish Phase 04 (HSB-V11-PP-01..04);
+ * DS alignment 2026-06-10 (SpotlightCardShell + Badge/Button primitives).
  *
- * Refactor: replace the 3-equal-poster grid with a two-zone layout:
+ * Two-zone layout:
  *   - Featured pick (60% desktop / full mobile): large poster + title +
- *     reason chip, backed by the featured anime's blurred poster.
+ *     reason chip (overlay Badge), backed by the featured anime's blurred
+ *     poster.
  *   - Secondary picks (40% desktop, hidden on mobile): up to 2 stacked
- *     rows with small posters + titles + reason chips.
+ *     rows with small posters + titles + reason lines.
  *
  * Mobile keeps only the featured pick and surfaces a full-width
- * cta-card "+ N more →" footer button.
+ * ghost-Button "+ N more →" footer.
  *
  * Title personalization: when `data.source === 'personal'` and the auth
  * store has a `user.username`, render `titleWithName` with the username
  * interpolated; falls back to `title` (logged-in, no name) or
  * `titleAnon` (anonymous / source='trending').
  *
- * CRITICAL — single-element root: the <template> block intentionally
- * has ONLY one root node (<article>), no top-level v-if, no sibling
- * comment nodes. HeroSpotlightBlock wraps each card in
- * `<transition mode="out-in">`. If the root ever resolves to a comment
- * node — multi-root template OR top-level v-if false — Vue logs
- * "non-element root node that cannot be animated" and the cross-fade
- * silently wedges: the NEXT card's mount never fires, the carousel
- * stays blank after navigation. Conditional content lives INSIDE
- * <article>, never around it. (Phase 04 e2e regression — fixed once.)
+ * CRITICAL — single-element root: SpotlightCardShell's root <article> is
+ * the only root node; conditional content lives INSIDE it, never around
+ * it (Transition mode="out-in" safety — Phase 04 e2e regression).
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle } from '@/utils/title'
 import { useAuthStore } from '@/stores/auth'
-import SpotlightBackdrop from '../SpotlightBackdrop.vue'
+import Badge from '@/components/ui/Badge.vue'
+import { buttonVariants } from '@/components/ui/button-variants'
+import SpotlightCardShell from '../SpotlightCardShell.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
 import type { PersonalPickData } from '@/types/spotlight'
 import { cardPosterUrl } from '@/composables/useImageProxy'

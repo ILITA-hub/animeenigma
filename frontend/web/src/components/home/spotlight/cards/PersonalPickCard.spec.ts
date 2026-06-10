@@ -200,7 +200,8 @@ describe('PersonalPickCard (v1.1-polish two-zone layout)', () => {
     expect(footer).toBeDefined()
     // The footer button is full-width, glass-pill (cta-card), mobile-only.
     const cls = (footer!.attributes('class') ?? '') as string
-    expect(cls).toContain('cta-card')
+    // DS alignment: ghost Button-variant classes replaced .cta-card.
+    expect(cls).toContain('bg-white/5')
     expect(cls).toContain('md:hidden')
   })
 

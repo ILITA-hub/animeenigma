@@ -144,9 +144,9 @@ describe('CarouselDots', () => {
     })
     const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
 
-    // Active dot 1 → random_tail → purple accent
+    // Active dot 1 → random_tail → violet accent (brand triad)
     const activeClasses = dots[1].classes().join(' ')
-    expect(activeClasses).toMatch(/bg-purple-/)
+    expect(activeClasses).toMatch(/bg-brand-violet/)
     expect(activeClasses).toContain('scale-110')
 
     // Inactive dot 0 → glass-on-glass, no accent

@@ -106,12 +106,32 @@ describe('FeaturedCard', () => {
   it('links announced status PRIMARY CTA to anime detail (not watch)', () => {
     const w = mountCard({ data: mk('announced') })
     // Target the primary button specifically — secondary also links to /anime/a1
-    // so a generic link search would pass trivially.
-    const primaryBtn = w.find('.btn-primary-hero')
-    expect(primaryBtn.exists()).toBe(true)
-    const primaryLink = primaryBtn.findComponent(RouterLinkStub)
-    const to = primaryLink.props('to') as string
+    // so a generic link search would pass trivially. The primary CTA carries
+    // the Button-primitive default-variant classes (bg-primary).
+    const primaryLink = w
+      .findAllComponents(RouterLinkStub)
+      .find((l) => l.classes().includes('bg-primary'))
+    expect(primaryLink).toBeDefined()
+    const to = primaryLink!.props('to') as string
     expect(to).toBe('/anime/a1')
+  })
+
+  it('renders DS pills: amber lucide star score badge + neutral genre overlay badges', () => {
+    const data = mk('ongoing', 9)
+    data.anime.genres = [{ id: 'g1', name: 'Action', russian: 'Экшен' }]
+    const w = mountCard({ data })
+    // Score pill: warning variant text + overlay glass bg + lucide star svg.
+    const scoreBadge = w
+      .findAll('span')
+      .find((s) => s.classes().includes('text-amber-400') && s.text().includes('8.4'))
+    expect(scoreBadge).toBeDefined()
+    expect(scoreBadge!.find('svg').exists()).toBe(true)
+    // Ongoing status pill via airedLabel.
+    expect(w.text()).toContain('spotlight.featured.airedLabel')
+    // Genre pill is a neutral overlay badge (dark glass), not a rainbow chip.
+    const genreBadge = w.findAll('span').find((s) => s.text() === 'Action')
+    expect(genreBadge).toBeDefined()
+    expect(genreBadge!.classes().join(' ')).toContain('bg-black/[0.62]')
   })
 
   it('renders the add-to-list secondary CTA', () => {
@@ -124,7 +144,7 @@ describe('FeaturedCard', () => {
     data.anime.description =
       '[character=210882]Цукаса Акэурадзи[/character] мечтал бороться за медали.'
     const w = mountCard({ data })
-    const desc = w.find('.featured-desc')
+    const desc = w.find('[data-testid="featured-desc"]')
     expect(desc.exists()).toBe(true)
     // Must NOT leak the raw BBCode tag (regression: was bound via {{ }} before).
     expect(desc.text()).not.toContain('[character=')

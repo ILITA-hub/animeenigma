@@ -121,7 +121,10 @@
                 </span>
               </td>
               <td class="px-3 py-2 whitespace-nowrap text-white/80">{{ r.username || r.user_id }}</td>
-              <td class="px-3 py-2 text-white/70 max-w-md truncate">{{ r.description || '—' }}</td>
+              <td class="px-3 py-2 text-white/70 max-w-md truncate">
+                <span v-if="r.attachments?.length" class="mr-1 text-white/50" :title="`${r.attachments.length}`">📎{{ r.attachments.length }}</span>
+                {{ r.description || '—' }}
+              </td>
               <td class="px-3 py-2 whitespace-nowrap text-white/50 text-xs">{{ formatDate(r.timestamp, r.id) }}</td>
               <td class="px-3 py-2 whitespace-nowrap" @click.stop>
                 <select
@@ -197,7 +200,10 @@
               <p class="text-white/80 text-xs line-clamp-3 break-words">{{ r.description || '—' }}</p>
               <div class="flex items-center justify-between gap-2 mt-2 text-[11px] text-white/50">
                 <span class="truncate">{{ r.username || r.user_id }}</span>
-                <span v-if="r.player_type && r.player_type !== 'feedback'" class="text-white/30">{{ r.player_type }}</span>
+                <span class="flex items-center gap-1.5 whitespace-nowrap">
+                  <span v-if="r.attachments?.length" class="text-white/40">📎{{ r.attachments.length }}</span>
+                  <span v-if="r.player_type && r.player_type !== 'feedback'" class="text-white/30">{{ r.player_type }}</span>
+                </span>
               </div>
             </div>
 
@@ -299,6 +305,37 @@
             <a :href="detail.url" target="_blank" rel="noopener noreferrer" class="text-cyan-300 hover:underline break-all">{{ detail.url }}</a>
           </div>
 
+          <!-- Telegram context (bot-mirrored entries) -->
+          <div v-if="detail.telegram_meta" class="space-y-1 text-white/70 text-xs bg-black/20 rounded p-2">
+            <div>
+              <span class="text-white/40 uppercase">Telegram</span>
+              <span v-if="detail.telegram_meta.from_admin" class="ml-2 px-1.5 py-0.5 rounded bg-warning/20 text-warning">{{ $t('admin.feedback.detail.fromAdmin') }}</span>
+            </div>
+            <div v-if="detail.telegram_meta.forwarded_from">
+              <span class="text-white/40">{{ $t('admin.feedback.detail.forwardedFrom') }}:</span> {{ detail.telegram_meta.forwarded_from }}
+            </div>
+            <div v-if="detail.telegram_meta.reply_to" class="whitespace-pre-wrap break-words">
+              <span class="text-white/40">{{ $t('admin.feedback.detail.replyTo') }}:</span> {{ detail.telegram_meta.reply_to }}
+            </div>
+          </div>
+
+          <!-- Attachments (blob-fetched with auth, images inline) -->
+          <div v-if="detail.attachments?.length">
+            <div class="text-white/50 text-xs uppercase mb-2">{{ $t('admin.feedback.detail.attachments') }} ({{ detail.attachments.length }})</div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div v-for="a in loadedAttachments" :key="a.name" class="rounded-lg border border-white/10 bg-black/20 overflow-hidden">
+                <a v-if="a.isImage && a.url" :href="a.url" target="_blank" rel="noopener noreferrer">
+                  <img :src="a.url" :alt="a.name" class="w-full h-32 object-cover hover:opacity-80 transition" />
+                </a>
+                <div class="px-2 py-1.5 flex items-center justify-between gap-2 text-xs">
+                  <span class="truncate text-white/70">{{ a.name }}</span>
+                  <span v-if="a.error" class="text-destructive whitespace-nowrap">{{ $t('admin.feedback.detail.attachmentLoadError') }}</span>
+                  <a v-else-if="a.url" :href="a.url" :download="a.name" class="text-cyan-300 hover:underline whitespace-nowrap">{{ $t('admin.feedback.detail.download') }}</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Change status -->
           <div class="flex items-center gap-3 pt-2">
             <span class="text-white/50 text-xs uppercase">{{ $t('admin.feedback.columns.status') }}</span>
@@ -334,10 +371,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Link as LinkIcon } from 'lucide-vue-next'
+import { adminApi } from '@/api/client'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
 import { Spinner } from '@/components/ui'
@@ -454,7 +492,51 @@ function onDrop(status: FeedbackStatus): void {
   if (row && row.status !== status) setStatus(id, status)
 }
 
-const PLAYER_TYPES = ['feedback', 'kodik', 'animelib', 'ourenglish', 'hanime', 'raw']
+// 'telegram' entries are mirrored into the store by the maintenance bot.
+const PLAYER_TYPES = ['feedback', 'telegram', 'kodik', 'animelib', 'ourenglish', 'hanime', 'raw']
+
+// --- Attachments: fetched as blobs (Bearer auth), rendered via object URLs ---
+interface LoadedAttachment {
+  name: string
+  url: string
+  isImage: boolean
+  error?: boolean
+}
+const loadedAttachments = ref<LoadedAttachment[]>([])
+
+function clearAttachmentUrls(): void {
+  for (const a of loadedAttachments.value) {
+    if (a.url) URL.revokeObjectURL(a.url)
+  }
+  loadedAttachments.value = []
+}
+
+watch(detail, async (d) => {
+  clearAttachmentUrls()
+  if (!d?.attachments?.length) return
+  const id = d.id
+  const results = await Promise.all(
+    d.attachments.map(async (name): Promise<LoadedAttachment> => {
+      try {
+        const res = await adminApi.getReportAttachment(id, name)
+        const blob = res.data as Blob
+        return { name, url: URL.createObjectURL(blob), isImage: (blob.type || '').startsWith('image/') }
+      } catch {
+        return { name, url: '', isImage: false, error: true }
+      }
+    }),
+  )
+  // The detail may have been closed/switched while blobs were in flight.
+  if (detail.value?.id === id) {
+    loadedAttachments.value = results
+  } else {
+    for (const a of results) {
+      if (a.url) URL.revokeObjectURL(a.url)
+    }
+  }
+})
+
+onBeforeUnmount(clearAttachmentUrls)
 
 const typeOptions = computed(() => [
   { value: 'all', label: t('admin.feedback.filters.allTypes') },

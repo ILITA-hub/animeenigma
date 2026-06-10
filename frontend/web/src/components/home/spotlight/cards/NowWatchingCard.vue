@@ -1,23 +1,16 @@
 <template>
-  <article class="relative w-full h-full overflow-hidden">
-    <SpotlightBackdrop variant="gradient-mesh" accent="green" />
+  <SpotlightCardShell
+    accent="pink"
+    :kicker="t('spotlight.nowWatching.title')"
+  >
+    <template #kicker-lead>
+      <SpotlightIcon
+        name="pulse"
+        class="w-4 h-4 animate-pulse flex-shrink-0"
+      />
+    </template>
 
-    <div
-      class="relative z-10 w-full h-full flex flex-col gap-3 p-4 md:p-6 lg:p-8"
-    >
-      <header class="flex items-center gap-2">
-        <SpotlightIcon
-          name="pulse"
-          class="w-5 h-5 text-success animate-pulse flex-shrink-0"
-        />
-        <h3
-          class="text-lg md:text-xl font-semibold text-white"
-        >
-          {{ t('spotlight.nowWatching.title') }}
-        </h3>
-      </header>
-
-      <ul class="flex-1 flex flex-col gap-2 min-h-0">
+    <ul class="flex-1 flex flex-col gap-2 min-h-0">
         <li
           v-for="s in data.sessions.slice(0, 3)"
           :key="`${s.public_id}:${s.anime_id}:${s.episode_number}`"
@@ -51,6 +44,7 @@
               class="w-14 object-cover rounded-md flex-shrink-0"
               style="height: 84px"
               loading="lazy"
+              decoding="async"
             />
 
             <!-- Text -->
@@ -60,16 +54,15 @@
               >
                 {{ s.username }}
               </p>
-              <p class="text-xs font-medium nw-subtitle truncate">
+              <p class="text-xs font-medium text-muted-foreground truncate">
                 {{ getLocalizedTitle(s.anime_name, s.anime_name_ru) }} · ep
                 {{ s.episode_number }}
               </p>
             </div>
           </router-link>
         </li>
-      </ul>
-    </div>
-  </article>
+    </ul>
+  </SpotlightCardShell>
 </template>
 
 <script setup lang="ts">
@@ -100,7 +93,7 @@
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle } from '@/utils/title'
 import Avatar from '@/components/ui/Avatar.vue'
-import SpotlightBackdrop from '../SpotlightBackdrop.vue'
+import SpotlightCardShell from '../SpotlightCardShell.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
 import type { NowWatchingData } from '@/types/spotlight'
 import { cardPosterUrl } from '@/composables/useImageProxy'
@@ -139,8 +132,3 @@ function avatarBgClass(username: string): string {
   return PALETTE[Math.abs(hash) % PALETTE.length]
 }
 </script>
-
-<style scoped>
-/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
-.nw-subtitle { color: var(--ink-2); }
-</style>

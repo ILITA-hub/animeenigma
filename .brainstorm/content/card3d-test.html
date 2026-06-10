@@ -1,0 +1,28 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>card3d render test</title>
+<link rel="stylesheet" href="https://animeenigma.ru/assets/CardViewer3D-Dnihz7d9.css">
+<style>body{background:#08080f;margin:0;display:grid;place-items:center;height:100vh}</style>
+</head><body>
+<div class="viewer on t-SSR" data-v-b549e6a2 style="position:static;background:#15151f;width:600px;height:700px;display:grid;place-items:center">
+ <div class="stage" data-v-b549e6a2>
+  <div class="card3d f-SSR" data-v-b549e6a2 id="c" style="animation:none">
+   <div class="cimg" data-v-b549e6a2><div style="width:100%;height:100%;background:linear-gradient(160deg,#3a2a55,#7c3aed);display:grid;place-items:center;font-size:6rem">🧙</div></div>
+   <div class="holo" data-v-b549e6a2></div>
+   <div class="cname" data-v-b549e6a2><span>Годжо</span><span>SSR</span></div>
+   <div class="cedge" data-v-b549e6a2 style="transform:translateZ(-1.6px)"></div>
+   <div class="cedge" data-v-b549e6a2 style="transform:translateZ(-0.8px)"></div>
+   <div class="cedge" data-v-b549e6a2 style="transform:translateZ(0px)"></div>
+   <div class="cedge" data-v-b549e6a2 style="transform:translateZ(0.8px)"></div>
+   <div class="cedge" data-v-b549e6a2 style="transform:translateZ(1.6px)"></div>
+   <div class="cardback" data-v-b549e6a2><div class="emblem" data-v-b549e6a2><span class="dia" data-v-b549e6a2>◆</span></div><span class="wordmark" data-v-b549e6a2>ANIMEENIGMA</span></div>
+  </div>
+ </div>
+</div>
+<div style="position:fixed;bottom:8px;left:8px;color:#888;font-family:monospace" id="lbl"></div>
+<script>
+const c=document.getElementById('c');let a=0;
+const angles=[150,90,180,25];let i=0;
+function setA(x){c.style.transform=`rotateX(6deg) rotateY(${x}deg)`;document.getElementById('lbl').textContent='rotateY='+x}
+setA(150);
+window.next=()=>{i=(i+1)%angles.length;setA(angles[i])}
+</script>
+</body></html>

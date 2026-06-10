@@ -1,75 +1,65 @@
 <template>
-  <article class="relative w-full h-full overflow-hidden">
-    <SpotlightBackdrop variant="gradient-mesh" accent="amber" />
-
-    <div
-      class="relative z-10 w-full h-full flex flex-col gap-3 p-4 md:p-6 lg:p-8"
+  <SpotlightCardShell
+    accent="violet"
+    icon="sparkles"
+    :kicker="t('spotlight.latestNews.title')"
+  >
+    <ul
+      class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 min-h-0"
     >
-      <header class="flex items-baseline justify-between">
-        <div class="flex items-center gap-2">
-          <SpotlightIcon
-            name="sparkles"
-            class="w-5 h-5 text-warning"
-          />
-          <h3
-            class="text-lg md:text-xl font-semibold text-white"
-          >
-            {{ t('spotlight.latestNews.title') }}
-          </h3>
-        </div>
-        <a
-          href="#changelog"
-          class="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors inline-flex items-center gap-1"
-          @click.prevent="scrollToChangelog"
-        >
-          {{ t('spotlight.latestNews.readMore') }}
-          <SpotlightIcon
-            name="play"
-            class="w-3 h-3 rotate-90"
-          />
-        </a>
-      </header>
-
-      <ul
-        class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4"
+      <li
+        v-for="(entry, idx) in data.entries.slice(0, 3)"
+        :key="entry.date + ':' + idx"
+        class="news-tile flex flex-col gap-2 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 backdrop-blur-sm transition min-w-0"
       >
-        <li
-          v-for="(entry, idx) in data.entries.slice(0, 3)"
-          :key="entry.date + ':' + idx"
-          class="news-tile flex flex-col gap-2 p-3 rounded-xl backdrop-blur-sm transition min-w-0"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <SpotlightIcon
-              :name="iconFor(entry.type)"
-              class="w-4 h-4"
-              :class="iconAccentClassFor(entry.type)"
-            />
-            <span
-              v-if="badgeFor(entry.type)"
-              class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-              :class="badgeFor(entry.type)!.accent"
-            >
-              {{ t(badgeFor(entry.type)!.i18nKey) }}
-            </span>
-          </div>
-          <p class="text-xs font-medium news-date">
-            {{ formatEntryDate(entry.date) }}
-          </p>
-          <p
-            class="text-sm font-semibold text-white news-msg flex-1"
+        <div class="flex items-center justify-between gap-2">
+          <SpotlightIcon
+            :name="iconFor(entry.type)"
+            class="w-4 h-4"
+            :class="iconAccentClassFor(entry.type)"
+          />
+          <span
+            v-if="badgeFor(entry.type)"
+            class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
+            :class="badgeFor(entry.type)!.accent"
           >
-            {{ entryTitle(entry.message) }}
-          </p>
-        </li>
-      </ul>
-    </div>
-  </article>
+            {{ t(badgeFor(entry.type)!.i18nKey) }}
+          </span>
+        </div>
+        <p class="text-xs font-medium text-muted-foreground">
+          {{ formatEntryDate(entry.date) }}
+        </p>
+        <p
+          class="text-sm font-semibold text-white news-msg flex-1"
+        >
+          {{ entryTitle(entry.message) }}
+        </p>
+      </li>
+    </ul>
+
+    <template #cta>
+      <a
+        href="#changelog"
+        :class="[buttonVariants({ variant: 'link', size: 'sm' }), 'text-sm']"
+        @click.prevent="scrollToChangelog"
+      >
+        {{ t('spotlight.latestNews.readMore') }}
+        <ArrowDown class="w-3.5 h-3.5" aria-hidden="true" />
+      </a>
+    </template>
+  </SpotlightCardShell>
 </template>
 
 <script setup lang="ts">
+// Workstream hero-spotlight — DS alignment 2026-06-10: SpotlightCardShell
+// kicker (violet), Button link-variant CTA pinned bottom-left, tile
+// surfaces on bg-white/5 + border-white/10 utilities. Type pills keep the
+// tokens.ts class strings (tinted-inline badges on a glass surface).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SpotlightBackdrop from '../SpotlightBackdrop.vue'
+import { ArrowDown } from 'lucide-vue-next'
+import { buttonVariants } from '@/components/ui/button-variants'
+import SpotlightCardShell from '../SpotlightCardShell.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
 import {
   cardTokens,
@@ -146,16 +136,6 @@ function entryTitle(msg: string): string {
 </script>
 
 <style scoped>
-/* Neon Tokyo token replacements (feat/homepage-neon-tokyo-redesign). */
-.news-tile {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--line);
-}
-.news-tile:hover {
-  background: rgba(255, 255, 255, 0.07);
-}
-.news-date { color: var(--muted-foreground); }
-
 /* Show up to 7 lines of the changelog message, then truncate with an
    ellipsis. Defined here (not via a Tailwind line-clamp-[7] utility) because
    Tailwind v4 did not emit that arbitrary value — the explicit rule is

@@ -97,6 +97,19 @@ type AlertInfo struct {
 	Severity    string // "critical" or "warning"
 }
 
+// Attachment is a media file carried by a Telegram message. LocalPath and
+// StoredName are filled in as the bot downloads it to disk and uploads it to
+// the feedback store.
+type Attachment struct {
+	FileID     string `json:"file_id"`
+	FileName   string `json:"file_name"`
+	MimeType   string `json:"mime_type,omitempty"`
+	Kind       string `json:"kind"` // photo | document | video | audio | voice
+	Size       int64  `json:"size,omitempty"`
+	LocalPath  string `json:"local_path,omitempty"`  // host path after download
+	StoredName string `json:"stored_name,omitempty"` // name inside the feedback entry
+}
+
 // ClassifiedMessage is the result of classifying a Telegram update.
 type ClassifiedMessage struct {
 	UpdateID     int64
@@ -110,6 +123,13 @@ type ClassifiedMessage struct {
 	CallbackData string      // for button clicks
 	CallbackID   string      // for answering callbacks
 	RawJSON      string      // original update JSON for passing to Claude
+
+	// Conversation context (Telegram-sourced messages)
+	Attachments   []Attachment // media carried by the message (album-merged)
+	MediaGroupID  string       // non-empty when part of an album
+	ForwardedFrom string       // origin label when the message was forwarded
+	ReplyToText   string       // text/caption of the message this one replies to
+	FeedbackID    string       // id of the feedback-store entry mirroring this message
 }
 
 // ClassifiedBatch groups classified messages by type.
@@ -188,6 +208,8 @@ type Issue struct {
 	AffectedService   string        `json:"affected_service,omitempty"`
 	Actions           []Action      `json:"actions"`
 	Resolution        string        `json:"resolution,omitempty"`
+	FeedbackID        string        `json:"feedback_id,omitempty"` // /admin/feedback entry mirroring this issue
+	Attachments       []string      `json:"attachments,omitempty"` // host paths of downloaded attachments
 }
 
 // IssueDB is the issues.json file structure.
@@ -235,4 +257,5 @@ type PendingFix struct {
 	FixPlan           FixPlan `json:"fix_plan"`
 	TelegramMessageID int     `json:"telegram_message_id"`
 	AlertMessageID    int     `json:"alert_message_id"`
+	FeedbackID        string  `json:"feedback_id,omitempty"` // feedback entry to flip on apply/dismiss
 }

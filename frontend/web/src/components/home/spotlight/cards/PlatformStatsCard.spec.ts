@@ -1,5 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+
+// The DS-aligned card renders its kicker via useI18n — echo-key mock, same
+// pattern as the sibling card specs.
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({
+    t: (key: string, params?: Record<string, unknown>) =>
+      params ? `${key}::${JSON.stringify(params)}` : key,
+    locale: { value: 'ru' },
+  }),
+}))
+
 import PlatformStatsCard from './PlatformStatsCard.vue'
 import type { PlatformStatsData } from '@/types/spotlight'
 

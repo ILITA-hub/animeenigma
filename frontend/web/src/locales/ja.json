@@ -1256,7 +1256,8 @@
       "remindCta": "リマインダー設定",
       "addCta": "リストに追加",
       "scoreLabel": "スコア",
-      "episodesLabel": "{n}話"
+      "episodesLabel": "{n}話",
+      "airedLabel": "第{n}話配信中"
     },
     "randomTail": {
       "title": "ランダムピック",

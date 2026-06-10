@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spotlight × DS — v1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        base: '#08080f', surface: '#11111c', surface2: '#161623', elevated: '#1c1c2c',
+        cyan: {200:'#a5f3ff',300:'#67e8f9',400:'#00d4ff',500:'#00b8e6',600:'#009dcc'},
+        pink: {400:'#ff4d8d',500:'#ff2d7c',600:'#e6196b'},
+        violet:{400:'#a78bfa'},
+        success:'#00ff9d', warning:'#ffd600',
+      },
+      fontFamily: {
+        display: ['Manrope','Inter','sans-serif'],
+        sans: ['Inter','sans-serif'],
+      },
+      boxShadow: {
+        'glow-cyan': '0 0 30px rgba(0,212,255,.3)',
+        'glow-sm-cyan': '0 0 15px rgba(0,212,255,.2)',
+      },
+    }
+  }
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { background:#08080f; color:#fff; font-family:Inter,sans-serif; }
+  .glass-card { background:rgba(255,255,255,.05); backdrop-filter:blur(24px); border:1px solid rgba(255,255,255,.08); }
+  .glass-elevated { background:rgba(255,255,255,.1); backdrop-filter:blur(40px); border:1px solid rgba(255,255,255,.1); box-shadow:0 8px 32px rgba(0,212,255,.1); }
+  .section-kicker { letter-spacing:.14em; }
+  .speclike code { background:rgba(255,255,255,.08); padding:.1em .4em; border-radius:4px; font-size:.85em; }
+  .hero-scrim::after { content:""; position:absolute; inset:0;
+    background: linear-gradient(90deg, rgba(8,8,15,.92) 0%, rgba(8,8,15,.72) 35%, rgba(8,8,15,.25) 65%, rgba(8,8,15,0) 100%),
+                linear-gradient(180deg, rgba(8,8,15,0) 50%, rgba(8,8,15,.65) 100%); }
+  .pulse-dot { width:7px;height:7px;border-radius:9999px;background:#00d4ff;box-shadow:0 0 8px #00d4ff;animation:pp 2s ease-in-out infinite; }
+  @keyframes pp { 50% { opacity:.4 } }
+  table.dh td, table.dh th { padding:.5rem .75rem; vertical-align:top; }
+  .bad { color:#ff7a9c; } .good { color:#5eead4; }
+</style>
+</head>
+<body class="px-6 py-10 max-w-[1280px] mx-auto space-y-16">
+
+<!-- ============ HEADER ============ -->
+<header class="space-y-2">
+  <p class="text-xs uppercase section-kicker text-cyan-400 font-semibold">AnimeEnigma · brainstorm artifact</p>
+  <h1 class="font-display font-semibold text-3xl">Hero Spotlight × Design System — <span class="text-cyan-400">v1</span></h1>
+  <p class="text-white/60 max-w-3xl">Аудит текущих дизайн-решений карусели на главной + предложения по выравниванию на Neon Tokyo DS.
+  Внизу — спека и открытые вопросы. Реализация <b>жёстко заблокирована</b> до утверждения спеки. Пиши заметки по номерам блоков (P-1, A-2…).</p>
+</header>
+
+<!-- ============ ① REUSED PRIMITIVES ============ -->
+<section class="space-y-6">
+  <h2 class="font-display font-semibold text-2xl border-b border-white/10 pb-2">① Переиспользуемые примитивы <span class="text-white/40 text-base">(отрисованы из реальных исходников)</span></h2>
+
+  <div class="grid md:grid-cols-2 gap-6">
+    <!-- Badge -->
+    <div class="glass-card rounded-xl p-6 space-y-4">
+      <p class="text-sm text-white/50 font-medium">Badge — <code class="text-xs">badge-variants.ts</code> (inline, на сплошной поверхности)</p>
+      <div class="flex flex-wrap gap-2">
+        <span class="inline-flex items-center font-medium bg-white/10 text-white/80 px-2.5 py-1 text-sm rounded-md">default</span>
+        <span class="inline-flex items-center font-medium bg-cyan-500/20 text-cyan-400 px-2.5 py-1 text-sm rounded-md">primary</span>
+        <span class="inline-flex items-center font-medium bg-pink-500/20 text-pink-400 px-2.5 py-1 text-sm rounded-md">secondary</span>
+        <span class="inline-flex items-center font-medium bg-emerald-500/20 text-emerald-400 px-2.5 py-1 text-sm rounded-md">success</span>
+        <span class="inline-flex items-center font-medium bg-amber-500/20 text-amber-400 px-2.5 py-1 text-sm rounded-md">warning</span>
+        <span class="inline-flex items-center font-medium bg-purple-500/20 text-purple-400 px-2.5 py-1 text-sm rounded-md">info</span>
+      </div>
+      <p class="text-sm text-white/50 font-medium pt-2">Badge overlay=true — поверх постера (локированное правило inline-vs-overlay, 06-05)</p>
+      <div class="relative h-24 rounded-lg overflow-hidden" style="background:url('https://shikimori.io/uploads/poster/animes/5114/40c4cba552dc60ebf02f8fc373b9a503.jpeg') center 20%/cover">
+        <div class="absolute top-2 left-2 flex gap-2">
+          <span class="inline-flex items-center gap-1 font-medium text-cyan-400 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10"><svg viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3"><path d="M12 2l9 10-9 10L3 12z"/></svg>9.1</span>
+          <span class="inline-flex items-center font-medium text-emerald-400 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">ONGOING</span>
+          <span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">1080p</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Button -->
+    <div class="glass-card rounded-xl p-6 space-y-4">
+      <p class="text-sm text-white/50 font-medium">Button v2.0 — <code class="text-xs">button-variants.ts</code></p>
+      <div class="flex flex-wrap items-center gap-3">
+        <button class="inline-flex items-center justify-center gap-2 font-medium bg-cyan-500 text-[#08111a] rounded-xl px-6 py-3 text-base hover:bg-cyan-400 hover:shadow-glow-cyan active:scale-95 transition-all">default</button>
+        <button class="inline-flex items-center justify-center gap-2 font-medium bg-pink-500 text-white rounded-xl px-6 py-3 text-base hover:bg-pink-400 active:scale-95 transition-all">brand</button>
+        <button class="inline-flex items-center justify-center gap-2 font-medium bg-white/5 hover:bg-white/10 text-white rounded-lg border border-white/10 hover:border-white/20 px-3 py-1.5 text-sm transition-all">ghost sm</button>
+        <button class="inline-flex items-center justify-center gap-2 font-medium bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 text-sm transition-all">soft sm</button>
+        <button class="inline-flex items-center justify-center gap-2 font-medium bg-transparent hover:bg-white/5 text-cyan-400 rounded-xl border border-cyan-400/50 hover:border-cyan-400 px-3 py-1.5 text-sm transition-all">outline sm</button>
+      </div>
+      <p class="text-sm text-white/50 font-medium pt-2">ScoreDiamond ◆ (наш скор) vs Star ★ (Shikimori/MAL) — правило DS §6</p>
+      <div class="flex items-center gap-6 text-sm">
+        <span class="flex items-center gap-1.5 text-cyan-400 font-semibold"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M12 2l9 10-9 10L3 12z"/></svg>8.7 <span class="text-white/40 font-medium">AnimeEnigma</span></span>
+        <span class="flex items-center gap-1.5 text-amber-400 font-semibold"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17l-6.1 3.6 1.4-6.8L2.2 9.1l6.9-.8z"/></svg>9.11 <span class="text-white/40 font-medium">Shikimori</span></span>
+      </div>
+      <p class="text-sm text-white/50 font-medium pt-2">Поверхности: glass-card → glass-elevated · Радиусы: chips sm / cards xl / hero 2xl</p>
+      <div class="flex gap-3">
+        <div class="glass-card rounded-xl px-4 py-3 text-xs text-white/60">glass-card</div>
+        <div class="glass-elevated rounded-xl px-4 py-3 text-xs text-white/60">glass-elevated</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ② DECISION HISTORY ============ -->
+<section class="space-y-4">
+  <h2 class="font-display font-semibold text-2xl border-b border-white/10 pb-2">② История решений</h2>
+  <div class="glass-card rounded-xl overflow-hidden">
+    <table class="dh w-full text-sm">
+      <thead class="bg-white/5 text-white/50 text-left">
+        <tr><th class="w-40">Когда / что</th><th>Исследовано</th><th>Решено</th></tr>
+      </thead>
+      <tbody class="divide-y divide-white/5">
+        <tr><td class="text-white/40">05-21 · spotlight v1.0</td><td>9 типов карточек, карусель 7s, typed dispatch</td><td class="good">Живёт. Механику карусели НЕ трогаем — только визуал.</td></tr>
+        <tr><td class="text-white/40">v1.1-polish · акценты</td><td>Накатили 6-цветную радугу акцентов (cyan/purple/sky/amber/teal/green) через tokens.ts</td><td class="bad">Сегодняшний аудит: радуга живёт в .ts и обходит DS-линт (.vue-only). Кандидат на консолидацию → блок A.</td></tr>
+        <tr><td class="text-white/40">06-04 · Button v2.0</td><td>.btn-* CSS удалён, всё через Button(cva)</td><td class="bad">Spotlight не мигрирован: рукописный <code>.btn-primary-hero</code> (font-weight:700, свой radius) в FeaturedCard.</td></tr>
+        <tr><td class="text-white/40">06-05 · inline vs overlay</td><td>Бейджи на постере = тёмное стекло + accent text; на поверхности = tinted Badge</td><td class="good">ЛОКИРОВАНО юзером. В spotlight НЕ применено → блок B.</td></tr>
+        <tr><td class="text-white/40">06-05+ · lucide миграция</td><td>~190 SVG → lucide; keep-list согласован</td><td class="good">SpotlightIcon — в keep-list, остаётся inline. Не трогаем.</td></tr>
+        <tr><td class="text-white/40">сегодня · аудит</td><td>10/10 SFC — бесповторный scoped-CSS; 1 импорт из ui/ (Avatar); font-weight 700/800 ×4; 27 строк raw rgba(); genre-радуга 12 хью; звезда у Shikimori-скора — циановая</td><td>→ предложения ниже, v1</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ ③ THE THING ============ -->
+<section class="space-y-10">
+  <h2 class="font-display font-semibold text-2xl border-b border-white/10 pb-2">③ Дизайн — предложения v1</h2>
+
+  <!-- A. Accent system -->
+  <div class="space-y-4">
+    <h3 class="font-display font-semibold text-lg"><span class="text-cyan-400">A.</span> Система акцентов карточек</h3>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="glass-card rounded-xl p-4 space-y-3">
+        <p class="text-xs uppercase section-kicker font-semibold text-white/40">A-0 · Сейчас (радуга ×6)</p>
+        <div class="flex flex-wrap gap-1.5 text-xs">
+          <span class="px-2 py-1 rounded bg-cyan-500/30 text-cyan-100">featured</span>
+          <span class="px-2 py-1 rounded bg-purple-500/30 text-purple-100">random</span>
+          <span class="px-2 py-1 rounded bg-cyan-500/30 text-cyan-100">pick</span>
+          <span class="px-2 py-1 rounded bg-sky-500/30 text-sky-100">telegram</span>
+          <span class="px-2 py-1 rounded bg-amber-500/30 text-amber-100">news</span>
+          <span class="px-2 py-1 rounded bg-teal-500/30 text-teal-100">stats</span>
+          <span class="px-2 py-1 rounded bg-green-500/30 text-green-100">watching</span>
+          <span class="px-2 py-1 rounded bg-amber-500/30 text-amber-100">not-yet</span>
+          <span class="px-2 py-1 rounded bg-purple-500/30 text-purple-100">continue</span>
+        </div>
+        <p class="text-xs text-white/50">6 хью вне брендовой триады; sky≈cyan и teal≈green неразличимы; живёт в .ts мимо линта.</p>
+      </div>
+      <div class="glass-card rounded-xl p-4 space-y-3 ring-1 ring-cyan-400/30">
+        <p class="text-xs uppercase section-kicker font-semibold text-cyan-400">A-1 · Брендовая триада (рекомендую)</p>
+        <div class="flex flex-wrap gap-1.5 text-xs">
+          <span class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400">featured · pick · stats — cyan (контент-ядро)</span>
+          <span class="px-2 py-1 rounded bg-pink-500/20 text-pink-400">watching · continue — pink (живое/личное)</span>
+          <span class="px-2 py-1 rounded" style="background:rgba(167,139,250,.2);color:#a78bfa">random · news · telegram · not-yet — violet (мета/сервис)</span>
+        </div>
+        <p class="text-xs text-white/50">Только --brand-cyan / --brand-pink / --brand-violet. Карточки различает ИКОНКА кикера, а не хью. Палитра = весь остальной сайт.</p>
+      </div>
+      <div class="glass-card rounded-xl p-4 space-y-3">
+        <p class="text-xs uppercase section-kicker font-semibold text-white/40">A-2 · Семантические статусы</p>
+        <div class="flex flex-wrap gap-1.5 text-xs">
+          <span class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400">контент — cyan</span>
+          <span class="px-2 py-1 rounded" style="background:rgba(0,255,157,.15);color:#00ff9d">live (watching) — success</span>
+          <span class="px-2 py-1 rounded" style="background:rgba(255,214,0,.15);color:#ffd600">ожидание (not-yet) — warning</span>
+          <span class="px-2 py-1 rounded" style="background:rgba(167,139,250,.2);color:#a78bfa">сервис/новости — violet</span>
+        </div>
+        <p class="text-xs text-white/50">Статусные токены несут смысл (live=зелёный, ждём=жёлтый), но жёлтый кикер крупным планом — спорный вайб.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- B. FeaturedCard current vs proposed -->
+  <div class="space-y-4">
+    <h3 class="font-display font-semibold text-lg"><span class="text-cyan-400">B.</span> FeaturedCard «Рекомендуем сегодня» — текущая vs DS-v1</h3>
+
+    <p class="text-xs uppercase section-kicker font-semibold text-white/40">B-0 · Сейчас (точная рекреация)</p>
+    <div class="relative rounded-2xl overflow-hidden glass-card" style="height:360px">
+      <div class="absolute inset-0 hero-scrim" style="background:url('https://shikimori.io/uploads/poster/animes/5114/40c4cba552dc60ebf02f8fc373b9a503.jpeg') center 30%/cover; filter:saturate(105%)"></div>
+      <div class="absolute inset-0 z-10 flex flex-col justify-end" style="padding:32px 48px; gap:14px; max-width:720px">
+        <p class="flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400" style="font-weight:600"><span class="pulse-dot"></span> FEATURED TODAY <span class="text-white/30">·</span> spring</p>
+        <h3 class="font-display" style="font-weight:800; font-size:clamp(28px,2.6vw,34px); line-height:1.1; letter-spacing:-.02em">Стальной алхимик: Братство<br><span class="text-white/40 text-base" style="font-weight:500">鋼の錬金術師 FULLMETAL ALCHEMIST</span></h3>
+        <div class="flex items-center gap-3 text-sm text-white/70">
+          <span class="flex items-center gap-1 text-cyan-400 font-semibold">★ 9.1</span><span>2009</span><span class="w-1 h-1 rounded-full bg-white/30"></span><span>64 эп.</span>
+          <span class="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-200">Экшен</span>
+          <span class="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-200">Приключения</span>
+          <span class="px-2 py-0.5 rounded text-xs bg-pink-500/20 text-pink-200">Драма</span>
+        </div>
+        <p class="text-sm text-white/60 max-w-xl" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Ремейк одноимённого аниме-сериала «Стальной алхимик» 2003 года, более строго следующий событиям, описанным в манге. В этом мире существуют алхимики…</p>
+        <div class="flex items-center gap-3 pt-1">
+          <button class="inline-flex items-center gap-2.5 text-sm" style="padding:14px 22px;background:#00d4ff;color:#001218;border-radius:12px;font-weight:700">▶ Начать просмотр</button>
+          <button class="inline-flex items-center text-sm text-white/80" style="padding:14px 22px;background:rgba(255,255,255,.08);border-radius:12px;font-weight:600">В список</button>
+        </div>
+      </div>
+      <div class="absolute bottom-3 right-4 z-10 text-[10px] text-white/30 font-mono">font-weight:800 · btn рукописный · ★ циановая у Shikimori-скора · genre-радуга</div>
+    </div>
+
+    <p class="text-xs uppercase section-kicker font-semibold text-cyan-400 pt-2">B-1 · DS-v1 (примитивы, overlay-правило, semibold-шкала)</p>
+    <div class="relative rounded-2xl overflow-hidden glass-card" style="height:360px">
+      <div class="absolute inset-0 hero-scrim" style="background:url('https://shikimori.io/uploads/poster/animes/5114/40c4cba552dc60ebf02f8fc373b9a503.jpeg') center 30%/cover"></div>
+      <div class="absolute inset-0 z-10 flex flex-col justify-end p-4 md:p-6 lg:p-8 gap-3" style="max-width:720px">
+        <p class="flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400 font-semibold"><span class="pulse-dot"></span> Рекомендуем сегодня <span class="text-white/30">·</span> весна</p>
+        <h3 class="font-display font-semibold" style="font-size:clamp(28px,2.6vw,34px); line-height:1.12; letter-spacing:-.01em">Стальной алхимик: Братство<br><span class="text-white/40 text-base font-medium">鋼の錬金術師 FULLMETAL ALCHEMIST</span></h3>
+        <div class="flex items-center gap-2 text-sm text-white/70 flex-wrap">
+          <span class="inline-flex items-center gap-1 font-medium text-amber-400 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">★ 9.11</span>
+          <span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">2009 · 64 эп.</span>
+          <span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">Экшен</span>
+          <span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">Приключения</span>
+          <span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">Драма</span>
+        </div>
+        <p class="text-sm text-white/60 max-w-xl" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Ремейк одноимённого аниме-сериала «Стальной алхимик» 2003 года, более строго следующий событиям, описанным в манге. В этом мире существуют алхимики…</p>
+        <div class="flex items-center gap-3 pt-1">
+          <button class="inline-flex items-center justify-center gap-2 font-medium bg-cyan-500 text-[#08111a] rounded-xl px-6 py-3 text-sm hover:bg-cyan-400 hover:shadow-glow-cyan active:scale-95 transition-all">▶ Начать просмотр</button>
+          <button class="inline-flex items-center justify-center gap-2 font-medium bg-white/5 hover:bg-white/10 text-white rounded-lg border border-white/10 hover:border-white/20 px-3 py-1.5 text-sm transition-all self-center" style="padding:10px 16px">В список</button>
+        </div>
+      </div>
+      <div class="absolute bottom-3 right-4 z-10 text-[10px] text-cyan-400/50 font-mono">Button default+ghost · Badge overlay · ★ amber (Shikimori) · semibold · p-4/6/8</div>
+    </div>
+
+    <!-- Edge cases -->
+    <p class="text-xs uppercase section-kicker font-semibold text-white/40 pt-2">B-edge · Длинный тайтл + светлый постер (DS-v1)</p>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="relative rounded-2xl overflow-hidden glass-card" style="height:280px">
+        <div class="absolute inset-0 hero-scrim" style="background:url('https://shikimori.io/uploads/poster/animes/59970/84dea9617d24f43f6ee77e5a82a1f5a1.jpeg') center 25%/cover"></div>
+        <div class="absolute inset-0 z-10 flex flex-col justify-end p-4 md:p-6 gap-2" style="max-width:640px">
+          <p class="flex items-center gap-2 text-[11px] uppercase tracking-widest text-cyan-400 font-semibold"><span class="pulse-dot"></span> Сейчас выходит</p>
+          <h3 class="font-display font-semibold text-xl" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">О моём перерождении в слизь: Грандиозное возвращение демон-лорда в страну поверженных духов 4</h3>
+          <div class="flex gap-2"><span class="inline-flex items-center gap-1 font-medium text-amber-400 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">★ 8.12</span><span class="inline-flex items-center font-medium text-emerald-400 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">эп. 9 вышел</span></div>
+          <button class="inline-flex w-fit items-center justify-center gap-2 font-medium bg-cyan-500 text-[#08111a] rounded-xl px-4 py-2 text-sm">▶ Смотреть · эп. 6</button>
+        </div>
+      </div>
+      <div class="relative rounded-2xl overflow-hidden glass-card" style="height:280px">
+        <div class="absolute inset-0 hero-scrim" style="background:linear-gradient(120deg,#e8e3d8,#f4f0e6)"></div>
+        <div class="absolute inset-0 z-10 flex flex-col justify-end p-4 md:p-6 gap-2">
+          <p class="flex items-center gap-2 text-[11px] uppercase tracking-widest text-cyan-400 font-semibold"><span class="pulse-dot"></span> Анонс сезона</p>
+          <h3 class="font-display font-semibold text-xl">Светлый постер: скрим держит контраст</h3>
+          <div class="flex gap-2"><span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">2027</span><span class="inline-flex items-center gap-1 font-medium text-amber-400 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">★ —</span></div>
+          <p class="text-xs text-white/50">Overlay-бейджи читаются на любом постере — это и была причина локированного правила.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C. Shared anatomy -->
+  <div class="space-y-4">
+    <h3 class="font-display font-semibold text-lg"><span class="text-cyan-400">C.</span> Общая анатомия всех 9 карточек (SpotlightCardShell)</h3>
+    <div class="grid md:grid-cols-[1fr_320px] gap-4">
+      <div class="glass-card rounded-2xl p-4 md:p-6 lg:p-8 relative" style="min-height:240px">
+        <div class="absolute inset-0 rounded-2xl pointer-events-none" style="background:radial-gradient(at 25% 30%,rgba(0,212,255,.12),transparent 55%)"></div>
+        <div class="relative space-y-3">
+          <p class="flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400 font-semibold">⟡ КИКЕР — иконка + i18n title <span class="text-white/30 normal-case tracking-normal">← слот kicker</span></p>
+          <h3 class="font-display font-semibold text-2xl">Заголовок карточки <span class="text-white/30 text-sm font-medium">← слот title (semibold, font-display)</span></h3>
+          <div class="text-sm text-white/60">Контент-слот: список / тайлы / постер+текст — у каждого типа свой <span class="text-white/30">← слот body</span></div>
+          <div class="flex gap-3 pt-1">
+            <button class="inline-flex items-center justify-center font-medium bg-cyan-500 text-[#08111a] rounded-xl px-4 py-2 text-sm">CTA · Button default</button>
+            <button class="inline-flex items-center justify-center font-medium bg-white/5 text-white rounded-lg border border-white/10 px-3 py-1.5 text-sm self-center">вторичный · ghost</button>
+          </div>
+        </div>
+      </div>
+      <div class="glass-card rounded-xl p-5 text-sm text-white/60 space-y-2">
+        <p class="font-semibold text-white/80">Что даёт шелл:</p>
+        <ul class="list-disc list-inside space-y-1.5 text-xs leading-relaxed">
+          <li>кикер/тайтл/CTA — один код на 9 карточек, паддинг-шкала <code>p-4 md:p-6 lg:p-8</code> в одном месте;</li>
+          <li>фон = <code>SpotlightBackdrop</code> (уже есть, остаётся);</li>
+          <li>акцент приходит из tokens.ts → класс из ТРИАДЫ (блок A);</li>
+          <li>scoped-CSS карточек схлопывается до контент-слота;</li>
+          <li>typed dispatch в HeroSpotlightBlock не меняется.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- D. Misc fixes strip -->
+  <div class="space-y-4">
+    <h3 class="font-display font-semibold text-lg"><span class="text-cyan-400">D.</span> Точечные фиксы</h3>
+    <div class="grid md:grid-cols-3 gap-4 text-sm">
+      <div class="glass-card rounded-xl p-5 space-y-2">
+        <p class="font-semibold">D-1 · Жанровые теги</p>
+        <div class="flex flex-wrap gap-1.5"><span class="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-200">Экшен</span><span class="px-2 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-200">Комедия</span><span class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-200">Повседневность</span></div>
+        <p class="text-xs text-white/40">сейчас: 12-цветная карта по жанрам ↑</p>
+        <div class="flex flex-wrap gap-1.5 pt-1"><span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">Экшен</span><span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">Комедия</span><span class="inline-flex items-center font-medium text-white/80 px-2 py-0.5 text-xs rounded bg-black/[0.62] backdrop-blur-[6px] ring-1 ring-inset ring-white/10">Повседневность</span></div>
+        <p class="text-xs text-cyan-400/70">→ нейтральный overlay-Badge: жанр — мета-инфа, не статус</p>
+      </div>
+      <div class="glass-card rounded-xl p-5 space-y-2">
+        <p class="font-semibold">D-2 · Скор-глифы</p>
+        <p class="text-xs text-white/40">сейчас: <span class="text-cyan-400">★ 9.1</span> — циановая ЗВЕЗДА у Shikimori-скора (нарушает DS §6)</p>
+        <p class="text-xs pt-1">→ <span class="text-amber-400">★ 9.11</span> amber = Shikimori; <span class="text-cyan-400">◆ 8.7</span> cyan ScoreDiamond = наш скор (когда появится в payload)</p>
+      </div>
+      <div class="glass-card rounded-xl p-5 space-y-2">
+        <p class="font-semibold">D-3 · Типографика и rgba</p>
+        <p class="text-xs text-white/40">font-weight 800/700 ×4 → <b class="text-white/80">font-semibold</b> везде (DS-шкала medium/semibold); 27 строк raw rgba() → токены/утилиты при миграции на шелл; CarouselDots/Controls — легитимный bespoke-keep (governance §5), визуал не трогаем кроме touch-target 44px.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ④ SPEC ============ -->
+<section class="space-y-4 speclike">
+  <h2 class="font-display font-semibold text-2xl border-b border-white/10 pb-2">④ Спека (DRAFT v1 — ждёт твоих заметок)</h2>
+  <div class="glass-card rounded-xl p-6 text-sm leading-relaxed space-y-4 text-white/70">
+    <p><b class="text-white">Цель:</b> выровнять hero-spotlight на Neon Tokyo DS без изменения механики карусели и BE-контракта.</p>
+    <ol class="list-decimal list-inside space-y-2">
+      <li><b class="text-white">Акценты:</b> tokens.ts → брендовая триада (A-1): cyan = контент-ядро (featured, personal_pick, platform_stats), pink = живое/личное (now_watching, continue_watching_new), violet = мета/сервис (random_tail, latest_news, telegram_news, not_time_yet). Различение карточек — иконкой кикера. <i class="text-white/40">[или A-2 — реши]</i></li>
+      <li><b class="text-white">SpotlightCardShell.vue:</b> новый общий каркас (кикер + тайтл + body-слот + CTA-ряд), паддинг p-4 md:p-6 lg:p-8, фон через существующий SpotlightBackdrop. Карточки переезжают по одной (Strangler-паттерн), dispatch-цепочка не меняется.</li>
+      <li><b class="text-white">Бейджи:</b> всё, что лежит на постере — Badge overlay=true (правило 06-05); на стекле — tinted Badge. Жанры — нейтральный overlay (D-1).</li>
+      <li><b class="text-white">CTA:</b> Button primitive (default / ghost), убить .btn-primary-hero.</li>
+      <li><b class="text-white">Скоры:</b> Shikimori — amber ★; наш — cyan ◆ ScoreDiamond (D-2).</li>
+      <li><b class="text-white">Типографика:</b> только font-medium/semibold; тайтлы font-display.</li>
+      <li><b class="text-white">Keep:</b> SpotlightIcon (lucide keep-list), CarouselControls/Dots (bespoke-keep §5), скримы/blur бэкдропа, лейзи-загрузка картинок (сегодняшняя).</li>
+    </ol>
+    <p class="pt-2 border-t border-white/10"><b class="text-white">Метрики:</b> UXΔ = +2 (Better) — консистентность с остальным сайтом, ноль новых паттернов · CDI = 0.03 * 13 (spread: только components/home/spotlight/ + tokens.ts; shift низкий — механика нетронута) · MVQ = Griffin 85%/85% (грифон: сшивает существующие примитивы в одно тело, ничего нового не выдумывает).</p>
+    <p class="text-white/40 text-xs">Зеркало: docs/superpowers/specs/2026-06-10-spotlight-ds-alignment-design.md (DRAFT). Реализация — только после твоего «апрув».</p>
+  </div>
+
+  <div class="glass-elevated rounded-xl p-6 text-sm space-y-2">
+    <p class="font-semibold text-white">Открытые вопросы к тебе:</p>
+    <ol class="list-decimal list-inside space-y-1 text-white/70">
+      <li><b>A:</b> триада A-1 или семантика A-2? (или свой вариант)</li>
+      <li><b>B:</b> в DS-v1 у FeaturedCard мета-ряд стал overlay-бейджами — не слишком ли «пилюльно»? Могу оставить голый текст для года/эпизодов, бейджи только скору+статусу.</li>
+      <li><b>C:</b> шелл делаем сразу на все 9 или начинаем с худших трёх (Featured, PlatformStats, RandomTail)?</li>
+      <li>что ИМЕННО из текущих решений не нравится больше всего? — отметь блоки (A-0, B-0, D-1…), чтобы v2 бил точно.</li>
+    </ol>
+  </div>
+</section>
+
+<footer class="text-center text-white/25 text-xs pb-8">spotlight-ds-v1 · 2026-06-10 · обнови страницу после моих правок — сервер всегда отдаёт новейший файл</footer>
+</body>
+</html>

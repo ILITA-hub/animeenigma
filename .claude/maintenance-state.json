@@ -1,22 +1,32 @@
 {
-  "last_update_id": 124398504,
-  "last_poll_at": "2026-06-04T05:19:18Z",
-  "session_started": "2026-06-05T01:37:03Z",
+  "last_update_id": 124398519,
+  "last_poll_at": "2026-06-10T07:23:45Z",
+  "session_started": "2026-06-10T09:57:05Z",
   "reactions_supported": true,
   "bot_user_id": 8609426278,
-  "active_alerts": {},
+  "active_alerts": {
+    "ScraperPlayabilityRegression:gogoanime": {
+      "alert_uid": "ScraperPlayabilityRegression",
+      "service": "gogoanime",
+      "first_seen": "2026-06-08T04:38:09Z",
+      "last_seen": "2026-06-08T04:38:09Z",
+      "issue_id": "AUTO-400",
+      "status": "info_only"
+    }
+  },
   "cooldowns": {
     "alert_refire:Parser Failure Rate:consumet": "2026-04-07T09:13:01+02:00",
     "alert_refire:Parser Failure Rate:hianime": "2026-04-08T10:24:52+02:00",
     "alert_refire:Scheduler Sync Stale:scheduler": "2026-04-07T09:16:01+02:00",
     "code_fix:catalog": "2026-04-05T04:28:06+02:00",
     "code_fix:frontend/web/src/components/LastUpdates.vue": "2026-05-19T08:13:12+02:00",
-    "code_fix:frontend/web/src/components/player/OurEnglishPlayer.vue": "2026-05-25T18:08:16+02:00",
+    "code_fix:frontend/web/src/components/player/OurEnglishPlayer.vue": "2026-06-10T10:36:31+02:00",
     "code_fix:frontend/web/src/components/player/SubtitleOverlay.vue": "2026-04-10T08:24:55+02:00",
     "code_fix:grafana": "2026-04-02T12:14:01+02:00",
     "code_fix:libs/idmapping/client.go + make redeploy-scraper": "2026-05-22T04:04:06+02:00",
     "code_fix:libs/videoutils/proxy.go + services/scraper/": "2026-05-16T09:41:36+02:00",
     "code_fix:services/catalog/internal/service/spotlight/cards/continue_watching_new.go": "2026-06-03T08:44:52+02:00",
+    "code_fix:services/scheduler/internal/jobs/scraper_playability_canary.go": "2026-06-07T05:58:13+02:00",
     "code_fix:services/scraper/internal/embeds/vidstream_vip.go": "2026-05-26T04:06:29+02:00",
     "code_fix:services/scraper/internal/health/probe.go": "2026-05-21T05:47:22+02:00",
     "code_fix:services/scraper/internal/health/probe.go + Grafana alert rule": "2026-05-21T13:39:18+02:00",
@@ -28,9 +38,18 @@
     "redeploy:scraper": "2026-05-21T03:47:54+02:00",
     "redeploy:web": "2026-04-06T09:05:52+02:00",
     "restart:catalog": "2026-04-05T05:09:33+02:00",
-    "restart:scheduler": "2026-06-03T09:00:19+02:00"
+    "restart:scheduler": "2026-06-10T14:25:03+02:00"
   },
-  "fix_attempt_counts": {},
+  "fix_attempt_counts": {
+    "frontend/web/src/components/player/OurEnglishPlayer.vue:frontend/web/src/components/player/OurEnglishPlayer.vue": {
+      "count": 1,
+      "first_at": "2026-06-10T08:14:54Z"
+    },
+    "services/scheduler/internal/jobs/scraper_playability_canary.go:services/scheduler/internal/jobs/scraper_playability_canary.go": {
+      "count": 1,
+      "first_at": "2026-06-07T03:42:12Z"
+    }
+  },
   "last_fix_per_service": {
     "aniwatch": {
       "action": "docker_pull",
@@ -50,7 +69,7 @@
     },
     "frontend/web/src/components/player/OurEnglishPlayer.vue": {
       "action": "code_fix",
-      "at": "2026-05-25T15:58:16Z"
+      "at": "2026-06-10T08:26:31Z"
     },
     "frontend/web/src/components/player/SubtitleOverlay.vue": {
       "action": "code_fix",
@@ -70,7 +89,7 @@
     },
     "scheduler": {
       "action": "auto_fix",
-      "at": "2026-06-03T06:50:19Z"
+      "at": "2026-06-10T12:15:03Z"
     },
     "scraper": {
       "action": "redeploy",
@@ -79,6 +98,10 @@
     "services/catalog/internal/service/spotlight/cards/continue_watching_new.go": {
       "action": "code_fix",
       "at": "2026-06-03T06:34:52Z"
+    },
+    "services/scheduler/internal/jobs/scraper_playability_canary.go": {
+      "action": "code_fix",
+      "at": "2026-06-07T03:48:13Z"
     },
     "services/scraper/internal/embeds/vidstream_vip.go": {
       "action": "code_fix",
@@ -106,18 +129,31 @@
     }
   },
   "pending_fixes": {
-    "AUTO-362": {
-      "issue_id": "AUTO-362",
-      "proposed_at": "2026-06-04T05:26:13Z",
+    "AUTO-417": {
+      "issue_id": "AUTO-417",
+      "proposed_at": "2026-06-10T05:35:03Z",
       "fix_plan": {
         "type": "code_fix",
-        "target": "services/scraper/internal/providers/miruro/",
-        "description": "Miruro secure-pipe sources endpoint changed: streams[].url is now empty; the kwik.cx embed URL appears in the referer field. The dto.go sourcesResponse struct has an embeds[] field ('currently unused — present for forward-compat') — the real stream likely migrated there. Fix: (1) Fetch a live sources response to confirm new wire format (run from inside scraper container: docker exec animeenigma-scraper sh -c 'wget -qO- --header=\"Referer: https://www.miruro.tv/\" \"\u003csecure-pipe-sources-url\u003e\"'). (2) If embeds[] now carries the kwik.cx URL (type='kwik'), add embed extraction via the existing kwik extractor in services/scraper/internal/embeds/. (3) If streams[] now has a different URL field name, update rawStream json tags. (4) Run go test -count=1 ./internal/providers/miruro/... — update goldens if format changed. (5) make redeploy-scraper and verify miruro.stream stage comes up. For nineanime: set enabled: false in docker/scraper-providers.yaml (it is the last-resort provider, probe anime now hits YouTube stubs — noise with no user benefit given allanime+animefever are healthy).",
-        "context": "EN failover chain is allanime→animefever→miruro→nineanime. First two are healthy so users still get EN streams. But miruro and nineanime degradation means 0 fallback depth if allanime or animefever have a bad day. The miruro schema drift is likely from a recent upstream secure-pipe API update rotating the response shape (consistent with the 2026-06 comment in client.go about anilistId becoming required). Nineanime disable is low-risk: it was already the acknowledged last-resort sink per its doc.go.",
-        "verification": "After fix: curl -s http://localhost:8088/metrics | grep 'provider_health_up{provider=\"miruro\",stage=\"stream\"}' should return 1. curl -s http://localhost:8000/api/anime/_/scraper/health should show miruro.stream up=true. For nineanime: verify it no longer appears in the health endpoint after being disabled."
+        "target": "notifications + player + frontend",
+        "description": "Add a 3-stage feedback notification loop: (1) feedback_created on submit, (2) feedback_in_progress when triage starts, (3) feedback_ai_done when robot finishes. Each stage invalidates the previous unread notification for the same report.",
+        "context": "Notifications service already has the DB schema (invalidated_at field), dedupe infrastructure, and /internal/notifications POST endpoint. Report JSON already stores user_id. This is a 7-file change across 3 services + frontend.",
+        "verification": "Submit a test report via /api/player/reports, verify notification appears in GET /api/notifications. Run bin/feedback-status \u003cid\u003e in_progress and verify: (a) feedback_created notification gets invalidated_at set, (b) feedback_in_progress notification appears. Run bin/feedback-status \u003cid\u003e ai_done and verify same invalidation + new notification."
       },
-      "telegram_message_id": 2833,
-      "alert_message_id": 2831
+      "telegram_message_id": 2987,
+      "alert_message_id": 2986
+    },
+    "AUTO-420": {
+      "issue_id": "AUTO-420",
+      "proposed_at": "2026-06-10T06:17:08Z",
+      "fix_plan": {
+        "type": "redeploy",
+        "target": "notifications + player + web",
+        "description": "Deploy the AUTO-417 feedback notification loop by committing the staged implementation, redeploying three services, and running the e2e verification:\n1. git add + commit all AUTO-417 files (notifications domain/handler/repo/service/router, player handler/service, FeedbackStatusCard.vue + spec, tests)\n2. make redeploy-notifications — ships the new feedback_created/in_progress/ai_done notification types + invalidation logic\n3. make redeploy-player — ships FeedbackNotifier (fire-and-forget POST to notifications /internal after report submit + status change)\n4. make redeploy-web — ships FeedbackStatusCard.vue renderer registered in notification-renderers.ts\n5. Verify: submit test report via /api/player/reports with ui_audit_bot key, GET /api/notifications, confirm feedback_created notification appears; run bin/feedback-status \u003cid\u003e in_progress and confirm invalidation + new notification.",
+        "context": "Feature was approved by admin (@tNeymik) as AUTO-417. Implementation complete and tested (all Go tests green, vue-tsc clean). Only blocking step was admin approval of deployment to production.",
+        "verification": "POST /api/player/reports (ui_audit_bot API key) → GET /api/notifications → assert feedback_created present. bin/feedback-status \u003cid\u003e in_progress → GET /api/notifications → assert feedback_created invalidated_at set + feedback_in_progress present. bin/feedback-status \u003cid\u003e ai_done → same chain for ai_done stage."
+      },
+      "telegram_message_id": 2993,
+      "alert_message_id": 2992
     }
   }
 }

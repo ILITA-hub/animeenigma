@@ -57,6 +57,7 @@ const mountPlayer = () =>
         SubtitleOverlay: { template: '<div />' },
         SubtitleSettingsMenu: true,
         EpisodeSelector: { template: '<div />' },
+        OtherSubsPanel: true,
       },
     },
   })
