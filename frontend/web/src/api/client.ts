@@ -551,7 +551,7 @@ export const adminApi = {
     apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
   // Admin feedback browser — user feedback/error reports (player service,
   // /api/admin/reports). Responses use the standard {success,data} envelope.
-  listReports: (params?: { category?: string; status?: string; type?: string; page?: number; page_size?: number }) =>
+  listReports: (params?: { category?: string; status?: string; type?: string; username?: string; page?: number; page_size?: number }) =>
     apiClient.get<FeedbackListResponse | { data: FeedbackListResponse }>('/admin/reports', { params }),
   getReport: (id: string) =>
     apiClient.get<FeedbackDetail | { data: FeedbackDetail }>(`/admin/reports/${encodeURIComponent(id)}`),

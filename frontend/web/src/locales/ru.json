@@ -1009,7 +1009,9 @@
         "status": "Статус",
         "allTypes": "Все плееры",
         "allCategories": "Все категории",
-        "allStatuses": "Все статусы"
+        "allStatuses": "Все статусы",
+        "username": "Пользователь",
+        "usernamePlaceholder": "Фильтр по нику…"
       },
       "columns": {
         "category": "Категория",

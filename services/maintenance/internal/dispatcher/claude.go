@@ -77,7 +77,7 @@ var analysisSchema = `{
       },
       "required": ["type", "target", "description"]
     },
-    "reply_html": {"type": "string"},
+    "reply_markdown": {"type": "string"},
     "issue": {
       "type": "object",
       "properties": {
@@ -89,7 +89,7 @@ var analysisSchema = `{
       "required": ["title", "category", "priority", "status"]
     }
   },
-  "required": ["tier", "diagnosis", "reply_html", "issue"]
+  "required": ["tier", "diagnosis", "reply_markdown", "issue"]
 }`
 
 // Analyze invokes Claude to analyze a maintenance message and return a structured response.

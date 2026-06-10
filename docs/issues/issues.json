@@ -1,5 +1,5 @@
 {
-  "last_id": 418,
+  "last_id": 423,
   "issues": [
     {
       "id": "AUTO-001",
@@ -498,7 +498,7 @@
         {
           "action": "docker network connect --alias catalog --alias animeenigma-catalog animeenigma-network animeenigma-catalog",
           "result": "success",
-          "details": "Re-registered both DNS aliases, exit 0, \u003c 1s network blip"
+          "details": "Re-registered both DNS aliases, exit 0, < 1s network blip"
         },
         {
           "action": "curl http://localhost:8000/status/health",
@@ -698,7 +698,7 @@
           "details": "Image built successfully as animeenigma-web-img:latest with correct /api base URL baked into Vite bundle"
         },
         {
-          "action": "docker stop animeenigma-web \u0026\u0026 docker rm animeenigma-web",
+          "action": "docker stop animeenigma-web && docker rm animeenigma-web",
           "result": "success",
           "details": "Old broken container removed"
         },
@@ -713,7 +713,7 @@
           "details": "All 33 JS asset files return 0 matches — no localhost:8000 hardcoded URLs"
         },
         {
-          "action": "curl http://localhost:3003/ \u0026\u0026 curl http://localhost:3003/health",
+          "action": "curl http://localhost:3003/ && curl http://localhost:3003/health",
           "result": "success",
           "details": "Both return HTTP 200 — nginx serving correctly"
         }
@@ -1553,7 +1553,7 @@
         {
           "action": "Edit frontend/web/src/components/LastUpdates.vue",
           "result": "success",
-          "details": "Added `SelectedEntry` interface + `selectedEntry` ref. Replaced the entry `\u003cdiv\u003e` with a `\u003cbutton\u003e` wrapping the badge + clipped paragraph, with `@click=\"selectedEntry = {...}\"`, `cursor-pointer`, `group` class, focus styles, and `group-hover:text-white transition-colors` on the message \u003cp\u003e. Added a modal at template root guarded by `v-if=\"selectedEntry\"`: `fixed inset-0 z-50 bg-black/60 backdrop-blur-sm` backdrop, centered glass-card panel showing the type badge, formatted date, full untruncated message with `whitespace-pre-wrap break-words select-text`, and an ✕ close button (aria-label `common.close`). Esc closes via window-level `keydown` listener (mounted/unmounted lifecycle) and `@click.self` on backdrop closes."
+          "details": "Added `SelectedEntry` interface + `selectedEntry` ref. Replaced the entry `<div>` with a `<button>` wrapping the badge + clipped paragraph, with `@click=\"selectedEntry = {...}\"`, `cursor-pointer`, `group` class, focus styles, and `group-hover:text-white transition-colors` on the message <p>. Added a modal at template root guarded by `v-if=\"selectedEntry\"`: `fixed inset-0 z-50 bg-black/60 backdrop-blur-sm` backdrop, centered glass-card panel showing the type badge, formatted date, full untruncated message with `whitespace-pre-wrap break-words select-text`, and an ✕ close button (aria-label `common.close`). Esc closes via window-level `keydown` listener (mounted/unmounted lifecycle) and `@click.self` on backdrop closes."
         },
         {
           "action": "bunx vue-tsc --noEmit (in frontend/web)",
@@ -2075,7 +2075,7 @@
         {
           "action": "Edited services/scraper/internal/health/probe.go",
           "result": "success",
-          "details": "Added isHLSAllowlistedHost (mirror of libs/videoutils.isHLSDomainAllowed), buildHLSProxyURL, WithProxyBaseURL option, proxyBaseURL field, and SCRAPER_PROBE_PROXY_BASE_URL env override. fetchSegment now detects HLS-allowlisted hosts and rewrites the GET to {base}/api/v1/hls-proxy?url=\u003cencoded\u003e\u0026referer=\u003cencoded\u003e; the upstream Referer is passed via query, not the request header, to avoid double-Referer."
+          "details": "Added isHLSAllowlistedHost (mirror of libs/videoutils.isHLSDomainAllowed), buildHLSProxyURL, WithProxyBaseURL option, proxyBaseURL field, and SCRAPER_PROBE_PROXY_BASE_URL env override. fetchSegment now detects HLS-allowlisted hosts and rewrites the GET to {base}/api/v1/hls-proxy?url=<encoded>&referer=<encoded>; the upstream Referer is passed via query, not the request header, to avoid double-Referer."
         },
         {
           "action": "Added TestProbe_FetchSegmentRoutesAllowlistedHostsThroughProxy + TestProbe_FetchSegmentBypassesProxyForNonAllowlistedHost",
@@ -2093,7 +2093,7 @@
           "details": "provider-health-stream-segment-down: `for: 15m` → `for: 4h`; expression changed from `provider_health_up{stage=\"stream_segment\"}` to `max by (provider) (provider_health_up{stage=~\"stream|stream_segment\"})` — alert now fires ONLY when BOTH stream AND stream_segment are DOWN for the same provider. Summary + description updated accordingly. Grafana's provisioning provider picks up the file change on its next scan (no Grafana restart — forbidden by safety rules)."
         },
         {
-          "action": "DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build scraper \u0026\u0026 docker stop animeenigma-scraper \u0026\u0026 docker rm -f animeenigma-scraper \u0026\u0026 docker compose up -d --no-deps scraper",
+          "action": "DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build scraper && docker stop animeenigma-scraper && docker rm -f animeenigma-scraper && docker compose up -d --no-deps scraper",
           "result": "success",
           "details": "Build succeeded after falling back to legacy builder (buildkit metadata fetch was failing under heavy host load). Container animeenigma-scraper is Up and healthy; /metrics shows provider_probe_last_tick_timestamp advancing (animefever@1779362634, nineanime@1779362632); /health returns {success:true,status:ok}."
         },
@@ -2316,7 +2316,7 @@
         {
           "action": "Edit libs/idmapping/client.go to add tcp4 DialContext",
           "result": "success",
-          "details": "Added context+net imports; wrapped http.Client with \u0026http.Transport{DialContext: forces tcp4} in NewClient(). Single-file change, 14 insertions / 2 deletions."
+          "details": "Added context+net imports; wrapped http.Client with &http.Transport{DialContext: forces tcp4} in NewClient(). Single-file change, 14 insertions / 2 deletions."
         },
         {
           "action": "Rebuild scraper image (docker build -f services/scraper/Dockerfile -t docker-scraper:latest .)",
@@ -2324,7 +2324,7 @@
           "details": "Go build inside container compiled cleanly with the new imports; image tagged docker-scraper:latest. (Note: `docker compose` wrapper was broken in this Docker v29.2.1 install — flag parsing rejected -f; bypassed by invoking /usr/libexec/docker/cli-plugins/docker-compose directly and using plain `docker build` for the build step.)"
         },
         {
-          "action": "Recreate scraper container via docker-compose plugin (stop -\u003e rm -f -\u003e up -d --no-deps)",
+          "action": "Recreate scraper container via docker-compose plugin (stop -> rm -f -> up -d --no-deps)",
           "result": "success",
           "details": "animeenigma-scraper came up healthy in ~15s. /health returned {success:true,data:{status:ok}}."
         },
@@ -2370,7 +2370,7 @@
           "details": "rc.HTTPClient.Jar = jar wired in NewBaseHTTPClient; Do() routes through retryablehttp.Client which honors the jar — cookies from prior GET propagate to POST automatically."
         },
         {
-          "action": "Manual auth-flow reproduction via curl: GET /watch/\u003cslug\u003e?ep=135532 → extract PHPSESSID + ctk → POST /ajax/anime/load_episodes_v2?s=tserver with both",
+          "action": "Manual auth-flow reproduction via curl: GET /watch/<slug>?ep=135532 → extract PHPSESSID + ctk → POST /ajax/anime/load_episodes_v2?s=tserver with both",
           "result": "success",
           "details": "Upstream returned status:true with valid am.vidstream.vip iframe URL. Confirmed AJAX auth + cookie + ctk wiring is functionally correct."
         },
@@ -4064,7 +4064,7 @@
       "telegram_message_id": 2490,
       "actions": [
         {
-          "action": "Edit OurEnglishPlayer.vue — 3-part WT-STATE-04 fix (fromRoomSync param + !fromRoomSync guard; watch(() =\u003e props.initialEpisode) reacting to room broadcasts; direct selectEpisode(startEp, true) when joining a room with initialEpisode set)",
+          "action": "Edit OurEnglishPlayer.vue — 3-part WT-STATE-04 fix (fromRoomSync param + !fromRoomSync guard; watch(() => props.initialEpisode) reacting to room broadcasts; direct selectEpisode(startEp, true) when joining a room with initialEpisode set)",
           "result": "success",
           "details": "Applied exactly per approved plan; git diff = 25 insertions, 5 deletions, single file"
         },
@@ -5579,7 +5579,7 @@
           "details": "All 3 packages ok (spotlight, cards, client). Needed serialization to dodge a transient host fork/exec EAGAIN on the auto-downloaded go1.24.0 toolchain — not a code issue (binary execs fine directly)."
         },
         {
-          "action": "Rebuild + recreate catalog (docker-compose -f docker/docker-compose.yml build catalog \u0026\u0026 up -d --no-deps catalog)",
+          "action": "Rebuild + recreate catalog (docker-compose -f docker/docker-compose.yml build catalog && up -d --no-deps catalog)",
           "result": "success",
           "details": "make redeploy-catalog failed: host lacks the docker compose v2 plugin (only standalone docker-compose present); BuildKit metadata fetch also failed, so built with DOCKER_BUILDKIT=0 classic builder. Container recreated, Up, no startup errors."
         },
@@ -5610,7 +5610,7 @@
         {
           "action": "Edit frontend/web/src/views/Home.vue — added `searchHint` computed using `navigator.platform` to return ⌘K on Mac/iOS and Ctrl K on Windows/Linux",
           "result": "success",
-          "details": "Added `computed` import, added `const searchHint = computed(() =\u003e /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K')`, updated template binding"
+          "details": "Added `computed` import, added `const searchHint = computed(() => /Mac|iPhone|iPod|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K')`, updated template binding"
         },
         {
           "action": "bun lint",
@@ -6232,7 +6232,7 @@
         {
           "action": "Edit services/catalog/internal/handler/catalog.go parseFilters()",
           "result": "success",
-          "details": "Replaced direct `filters.GenreIDs = genres` with a loop that splits each query param value on comma, trimming whitespace and empty strings. Handles both ?genre=id1,id2 (comma-joined) and ?genre=id1\u0026genre=id2 (multi-param) forms."
+          "details": "Replaced direct `filters.GenreIDs = genres` with a loop that splits each query param value on comma, trimming whitespace and empty strings. Handles both ?genre=id1,id2 (comma-joined) and ?genre=id1&genre=id2 (multi-param) forms."
         },
         {
           "action": "docker-compose build + restart catalog",
@@ -6394,7 +6394,7 @@
           "result": "Root cause confirmed: numeric episode ID + missing title"
         },
         {
-          "action": "Manual verification: GET /scraper/servers?mal_id=21\u0026title=One+Piece\u0026episode=one-piece-episode-1",
+          "action": "Manual verification: GET /scraper/servers?mal_id=21&title=One+Piece&episode=one-piece-episode-1",
           "result": "Returns 2 gogoanime megaplay servers — confirms fix approach"
         },
         {
@@ -6777,7 +6777,7 @@
         {
           "action": "curl -X POST http://localhost:8085/api/v1/jobs/shikimori-sync",
           "result": "success",
-          "details": "Job completed in \u003c1s: ongoing phase refreshed 1, released phase refreshed 1, total_refreshed=2 total_failed=0. scheduler_job_last_success_timestamp{exported_job=\"shikimori_sync\"} now emitted. Alert expression evaluates to ~25s staleness — well below 90000s threshold."
+          "details": "Job completed in <1s: ongoing phase refreshed 1, released phase refreshed 1, total_refreshed=2 total_failed=0. scheduler_job_last_success_timestamp{exported_job=\"shikimori_sync\"} now emitted. Alert expression evaluates to ~25s staleness — well below 90000s threshold."
         }
       ],
       "resolution": "Alert resolved (webhook notification from Grafana)"
@@ -6792,8 +6792,7 @@
       "title": "Schedule: timezone-aware air time display",
       "reporter": "player_service",
       "telegram_message_id": 2985,
-      "actions": [],
-      "feedback_id": "2026-06-10T05-19-37_NANDIorg_9_feedback"
+      "actions": []
     },
     {
       "id": "AUTO-417",
@@ -6805,33 +6804,170 @@
       "title": "Feedback status notification loop for users",
       "reporter": "@tNeymik",
       "telegram_message_id": 2986,
-      "actions": null,
-      "feedback_id": "2026-06-10T05-31-25_tNeymik_telegram"
+      "actions": null
     },
     {
       "id": "AUTO-418",
-      "created_at": "2026-06-10T05:40:57Z",
+      "created_at": "2026-06-10T05:43:35Z",
       "source": "admin_request",
       "category": "correction",
       "priority": "P3",
       "status": "resolved",
-      "title": "Bot mis-categorised feature request (AUTO-417) as bug — corrected to feature",
+      "title": "Bot mis-categorised feature request as bug — corrected",
       "reporter": "@tNeymik",
       "telegram_message_id": 2988,
       "actions": [
         {
-          "action": "Fix category in feedback JSON 2026-06-10T05-31-25_tNeymik_telegram.json: bug → feature",
+          "action": "Fix category in /data/reports/2026-06-10T05-31-25_tNeymik_telegram.json: bug → feature",
           "result": "success",
-          "details": "docker exec sed in-place on /data/reports/2026-06-10T05-31-25_tNeymik_telegram.json; verified category is now feature"
+          "details": "docker exec sed in-place; verified category field is now 'feature'"
         },
         {
           "action": "Set feedback 2026-06-10T05-40-57_tNeymik_telegram status ai_done",
           "result": "success",
-          "details": "bin/feedback-status confirmed ai_done"
+          "details": "bin/feedback-status confirmed transition in_progress → ai_done"
+        },
+        {
+          "action": "Add AUTO-418 correction entry to docs/issues/issues.json, increment last_id to 418",
+          "result": "success",
+          "details": "Documents what was wrong and the fix applied"
+        },
+        {
+          "action": "git commit + push docs/issues/issues.json",
+          "result": "success",
+          "details": "Commit 3b7bc505 pushed to feat/ds-primitives-lucide"
+        }
+      ]
+    },
+    {
+      "id": "AUTO-419",
+      "created_at": "2026-06-10T06:13:42Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_deploy",
+      "title": "AUTO-417 feedback notification loop: implemented, not deployed",
+      "reporter": "player_service",
+      "telegram_message_id": 2990,
+      "actions": []
+    },
+    {
+      "id": "AUTO-420",
+      "created_at": "2026-06-10T06:17:08Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_deploy",
+      "title": "AUTO-417 feedback loop: implemented, not deployed",
+      "reporter": "player_service",
+      "telegram_message_id": 2992,
+      "actions": null
+    },
+    {
+      "id": "AUTO-421",
+      "created_at": "2026-06-10T06:35:41Z",
+      "source": "error_report",
+      "category": "stability",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "AUTO-417 post-reconcile smoke test",
+      "reporter": "player_service",
+      "telegram_message_id": 2994,
+      "actions": [
+        {
+          "action": "Read player logs around 06:28:38",
+          "result": "success",
+          "details": "Confirmed report received, saved, notification loop ran all 3 stages, status transitioned correctly through new→in_progress→ai_done→not_relevant"
+        },
+        {
+          "action": "Read notifications service logs",
+          "result": "success",
+          "details": "3× POST /internal/notifications 200 + 1× POST /internal/notifications/invalidate 200 — matches expected AUTO-417 behaviour exactly"
+        },
+        {
+          "action": "Checked Prometheus up{job=player}",
+          "result": "success",
+          "details": "Value = 1, player healthy after redeploy at 06:28:20"
+        }
+      ]
+    },
+    {
+      "id": "AUTO-422",
+      "created_at": "2026-06-10T07:26:51Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Admin feedback: фильтр по пользователю",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2996,
+      "actions": [
+        {
+          "action": "admin_reports.go: username contains-filter (case-insensitive) + 3 test cases",
+          "result": "success",
+          "details": "go test ./internal/handler -run TestAdminReports green"
+        },
+        {
+          "action": "Frontend: filterUsername in useAdminFeedback.ts + debounced Input in AdminFeedback.vue + i18n en/ru/ja",
+          "result": "success",
+          "details": "vitest 8/8, vue-tsc clean, DS lint pass"
+        },
+        {
+          "action": "make redeploy-player + make redeploy-web + make health",
+          "result": "success",
+          "details": "all 12 services healthy"
+        },
+        {
+          "action": "Playwright smoke vs production (desktop 1440px + mobile 390px)",
+          "result": "success",
+          "details": "input renders; typing tNeymik narrows list to 25/113, all rows match"
+        },
+        {
+          "action": "Root-cause fix for missing approval message (maintenance bot)",
+          "result": "success",
+          "details": "SendReplyWithButtons errors were silently swallowed; now logged + plain-text fallback + pending fix recorded; parse_mode switched HTML→Markdown with rune-safe truncation"
         }
       ],
-      "resolution": "Category corrected. Going forward: read message content before assigning category — feature requests must not be tagged as bugs.",
-      "feedback_id": "2026-06-10T05-40-57_tNeymik_telegram"
+      "resolution": "Fix applied by claude (session): username filter implemented in player admin_reports.go + AdminFeedback.vue, deployed and smoke-tested. Telegram approval-button delivery bug (silent send failure) fixed in the same session: bot now sends Markdown, logs send errors, falls back to plain text."
+    },
+    {
+      "id": "AUTO-423",
+      "created_at": "2026-06-10T08:14:54Z",
+      "source": "error_report",
+      "category": "content-quality",
+      "priority": "P2",
+      "status": "resolved",
+      "title": "OurEnglish player: no Jimaku subtitle panel",
+      "reporter": "player_service",
+      "telegram_message_id": 2997,
+      "actions": [
+        {
+          "action": "Edit OurEnglishPlayer.vue",
+          "result": "success",
+          "details": "Imported OtherSubsPanel + SubtitleTrack type; added otherSubsOpen ref, extraSubChoices merge into availableSubChoices, onOtherSubSelected handler (injects synthetic SubChoice w/ explicit format, pins selectedSubKey), cleared injected subs on episode switch; added 'Other subs' toolbar button + wired <OtherSubsPanel> with :anime-id/:episode/:current-track-url/@select-track."
+        },
+        {
+          "action": "Update OurEnglishPlayer.spec.ts",
+          "result": "success",
+          "details": "Added OtherSubsPanel:true to mount stubs (the child calls useI18n); 3/3 tests pass."
+        },
+        {
+          "action": "vue-tsc --noEmit + design-system-lint + bun lint",
+          "result": "success",
+          "details": "0 type errors project-wide, DS lint PASS (0 violations), bun lint 0 errors (14 pre-existing warnings in unrelated files)."
+        },
+        {
+          "action": "make redeploy-web (code, then changelog) + make health",
+          "result": "success",
+          "details": "All 12 services healthy; served OurEnglishPlayer chunk now contains otherSubs.openButton; changelog entry live in dist."
+        },
+        {
+          "action": "git commit + push to main via maintenance worktree (path-scoped, rebased over concurrent push, changelog conflict resolved keeping both entries)",
+          "result": "success",
+          "details": "09de86d7..8391bc62 main -> main"
+        }
+      ],
+      "resolution": "Fix applied by auto(risk=medium,bug)"
     }
   ]
 }

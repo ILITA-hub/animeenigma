@@ -41,7 +41,7 @@
       </div>
 
       <!-- Filters -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Select
           v-model="filterType"
           size="sm"
@@ -63,6 +63,14 @@
           :options="statusOptions"
           :label="$t('admin.feedback.filters.status')"
           @change="applyFilters"
+        />
+        <Input
+          v-model="filterUsername"
+          size="sm"
+          type="search"
+          clearable
+          :label="$t('admin.feedback.filters.username')"
+          :placeholder="$t('admin.feedback.filters.usernamePlaceholder')"
         />
       </div>
 
@@ -326,10 +334,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Link as LinkIcon } from 'lucide-vue-next'
+import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
 import { Spinner } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
@@ -341,12 +350,22 @@ const router = useRouter()
 
 const {
   items, total, page, pageSize, isLoading, error,
-  filterCategory, filterStatus, filterType,
+  filterCategory, filterStatus, filterType, filterUsername,
   detail, isDetailLoading, detailError,
   refresh, applyFilters, setPage, openDetail, closeDetail, setStatus,
 } = useAdminFeedback()
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+// Username filter is free-text — debounce so we don't refetch per keystroke.
+let usernameDebounce: ReturnType<typeof setTimeout> | null = null
+watch(filterUsername, () => {
+  if (usernameDebounce) clearTimeout(usernameDebounce)
+  usernameDebounce = setTimeout(() => applyFilters(), 300)
+})
+onUnmounted(() => {
+  if (usernameDebounce) clearTimeout(usernameDebounce)
+})
 
 // --- Deep-linking: /admin/feedback?id=<report-id> opens that report ---
 // openReport/closeReport wrap the composable's openDetail/closeDetail and keep

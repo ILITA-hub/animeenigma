@@ -1009,7 +1009,9 @@
         "status": "ステータス",
         "allTypes": "すべてのプレイヤー",
         "allCategories": "すべてのカテゴリ",
-        "allStatuses": "すべてのステータス"
+        "allStatuses": "すべてのステータス",
+        "username": "ユーザー",
+        "usernamePlaceholder": "ユーザー名で絞り込み…"
       },
       "columns": {
         "category": "カテゴリ",

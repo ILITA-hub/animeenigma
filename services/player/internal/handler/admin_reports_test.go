@@ -108,6 +108,37 @@ func TestAdminReports_List_SortFilterPaginate(t *testing.T) {
 	if resp.Data.Total != 3 || len(resp.Data.Items) != 2 {
 		t.Errorf("paginate: total=%d items=%d, want total=3 items=2", resp.Data.Total, len(resp.Data.Items))
 	}
+
+	// Username filter: case-insensitive substring match.
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?username=ALI", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	resp = listResp{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Items[0].Username != "alice" {
+		t.Errorf("username filter: total=%d items=%v, want only alice", resp.Data.Total, resp.Data.Items)
+	}
+
+	// Username filter with no match yields an empty page, and surrounding
+	// whitespace is trimmed before matching.
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?username=%20zzz%20", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	resp = listResp{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 0 {
+		t.Errorf("username no-match: total=%d, want 0", resp.Data.Total)
+	}
+
+	// Username filter combines with category.
+	r = httptest.NewRequest(http.MethodGet, "/api/admin/reports?username=bob&category=feature", nil)
+	w = httptest.NewRecorder()
+	h.List(w, r)
+	resp = listResp{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Data.Total != 1 || resp.Data.Items[0].Username != "bob" {
+		t.Errorf("username+category filter: total=%d, want 1 (bob)", resp.Data.Total)
+	}
 }
 
 func TestAdminReports_SetStatus_RoundTripAndFilter(t *testing.T) {
