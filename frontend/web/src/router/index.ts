@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import i18n from '@/i18n'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
+import { GACHA_ADMIN_ONLY } from '@/utils/gachaGate'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -189,6 +190,25 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Collections.vue'),
     meta: { titleKey: 'collections.title' }
   },
+  // ── Gacha «Лудка» routes (dark-shipped via VITE_GACHA_ADMIN_ONLY) ──────────
+  {
+    path: '/gacha',
+    name: 'gacha',
+    component: () => import('@/views/Gacha.vue'),
+    meta: { titleKey: 'gacha.nav_item', requiresAuth: true, gachaGated: true }
+  },
+  {
+    path: '/gacha/:id',
+    name: 'gacha-banner',
+    component: () => import('@/views/GachaBanner.vue'),
+    meta: { titleKey: 'gacha.nav_item', requiresAuth: true, gachaGated: true }
+  },
+  {
+    path: '/admin/gacha',
+    name: 'admin-gacha',
+    component: () => import('@/views/admin/AdminGacha.vue'),
+    meta: { titleKey: 'gacha.admin.title', requiresAuth: true, requiresAdmin: true }
+  },
   {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
@@ -254,6 +274,17 @@ router.beforeEach((to, _from, next) => {
     }
     next({ name: 'home' })
     return
+  }
+
+  // Gacha «Лудка» gate: gachaGated routes are only visible to admins when
+  // VITE_GACHA_ADMIN_ONLY is true (dark-ship), or to any authenticated user
+  // when false (global release). Non-eligible users are redirected home.
+  if (to.meta.gachaGated) {
+    const gachaVisible = GACHA_ADMIN_ONLY ? authStore.isAdmin : authStore.isAuthenticated
+    if (!gachaVisible) {
+      next({ name: 'home' })
+      return
+    }
   }
 
   next()
