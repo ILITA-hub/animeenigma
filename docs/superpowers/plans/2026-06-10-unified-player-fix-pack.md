@@ -15,11 +15,52 @@
 - Types: `cd /data/animeenigma/frontend/web && bunx tsc --noEmit`
 - DS lint: `bash /data/animeenigma/frontend/web/scripts/design-system-lint.sh`
 
+**Plan review:** reviewed pre-execution (see `2026-06-10-unified-player-fix-pack-REVIEW.md`); C1/H1-H4/M1-M2/L1/L4/L5 amendments are folded into the tasks below.
+
+---
+
+### Task 0: Base `--success` / `--warning` tokens (review H1/H2)
+
+`main.css` defines only the `-foreground`/`-soft` variants; the base tokens the heatmap, DebugHud, and the EXISTING (silently-invisible) `.pl-chapter` markers need do not exist.
+
+**Files:**
+- Modify: `frontend/web/src/styles/main.css:82-85` (`@theme inline` block) and `:402` (Tier-3 block)
+
+- [ ] **Step 1: Add base tokens.** In the Tier-3 block, directly before `--success-foreground: var(--color-base);` (line ~402), add (hues derived from the existing `-soft` rgba values):
+
+```css
+  --success: #00ff9d;
+  --warning: #ffd600;
+```
+
+In the `@theme inline` block, directly before `--color-success-foreground: var(--success-foreground);` (line ~82), add:
+
+```css
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+```
+
+- [ ] **Step 2: Verify the DS lint stays green** (hex in `.css` is not lint-scanned, but run anyway):
+
+Run: `bash /data/animeenigma/frontend/web/scripts/design-system-lint.sh`
+Expected: `ERRORS=0`.
+
+- [ ] **Step 3: Commit + push**
+
+```bash
+cd /data/animeenigma
+git add frontend/web/src/styles/main.css
+git commit -m "fix(ds): add base --success/--warning tokens (heatmap, DebugHud, un-breaks invisible .pl-chapter)"
+git push origin HEAD:feat/ds-primitives-lucide
+```
+
 ---
 
 ### Task 1: ±5s skip-button glyph fix
 
 The digit "5" drifts because the forward button mirrors the whole SVG path with `scaleX(-1)` while the `<text>` is not mirrored, and the two buttons use different x offsets (12.5 vs 11.5).
+
+> **Review C1:** the buttons were migrated to the `<PlayerIconButton>` primitive today by a parallel agent — keep the wrappers EXACTLY as they are; edit ONLY the inner `<svg>` bodies. `data-test` falls through to the primitive's root button, so the test selectors work unchanged.
 
 **Files:**
 - Modify: `frontend/web/src/components/player/unified/PlayerControlBar.vue:30-60`
@@ -47,12 +88,12 @@ The digit "5" drifts because the forward button mirrors the whole SVG path with 
 Run: `cd /data/animeenigma/frontend/web && bunx vitest run src/components/player/unified/PlayerControlBar.spec.ts`
 Expected: FAIL — `back.attributes('x')` is `'12.5'`.
 
-- [ ] **Step 3: Fix the SVGs.** Replace the two skip-button SVG bodies (the digit stays an inline SVG composite — lucide keep-list). Mirror ONLY the path via a `<g>`; both digits at the same centered coordinates:
+- [ ] **Step 3: Fix the SVGs.** Keep the `<PlayerIconButton>` wrappers untouched (review C1); replace ONLY the two inner `<svg>` bodies. Mirror ONLY the path via a `<g>`; both digits at the same centered coordinates:
 
 ```html
       <!-- −5s (hidden on mobile via CSS) — circular replay arrow w/ "5" inside -->
-      <button
-        class="pl-icon pl-skip-back"
+      <PlayerIconButton
+        class="pl-skip-back"
         aria-label="Back 5 seconds"
         data-test="seek-back"
         @click="emit('seek-rel', -5)"
@@ -64,11 +105,11 @@ Expected: FAIL — `back.attributes('x')` is `'12.5'`.
           <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
           <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
-      </button>
+      </PlayerIconButton>
 
       <!-- +5s (hidden on mobile via CSS) — circular forward arrow w/ "5" inside -->
-      <button
-        class="pl-icon pl-skip-fwd"
+      <PlayerIconButton
+        class="pl-skip-fwd"
         aria-label="Forward 5 seconds"
         data-test="seek-fwd"
         @click="emit('seek-rel', 5)"
@@ -82,7 +123,7 @@ Expected: FAIL — `back.attributes('x')` is `'12.5'`.
           </g>
           <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
-      </button>
+      </PlayerIconButton>
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -213,10 +254,13 @@ git push origin HEAD:feat/ds-primitives-lucide
 
 ```ts
 // ─── Buffering indicator ──────────────────────────────────────────────────────
-// waiting/stalled/seeking → on; playing/canplay → off. A 150ms grace window
-// keeps instant in-buffer seeks from flashing the ring. `seeked` only clears
-// when the element actually has decodable data (readyState ≥ 3) — otherwise
-// the following `waiting` keeps the ring up.
+// waiting/seeking → on; playing/canplay → off. A 150ms grace window keeps
+// instant in-buffer seeks from flashing the ring. `seeked` only clears when
+// the element actually has decodable data (readyState ≥ 3) — otherwise the
+// following `waiting` keeps the ring up. We deliberately do NOT bind
+// `stalled` (review H4): browsers fire it spuriously when the download is
+// throttled because the buffer is FULL, and nothing would clear the ring
+// during healthy playback. `timeupdate` self-heals any false positive.
 
 const isBuffering = ref(false)
 const showBuffering = ref(false)
@@ -250,6 +294,14 @@ function onSeeked() {
   const v = videoRef.value
   if (v && v.readyState >= 3) setBuffering(false)
 }
+
+// Self-heal: if time is advancing with decodable data, we are NOT buffering.
+function onTimeUpdate() {
+  const v = videoRef.value
+  if (isBuffering.value && v && v.readyState >= 3 && !v.seeking) {
+    setBuffering(false)
+  }
+}
 ```
 
 - [ ] **Step 2: Bind the events on the `<video>` element** — extend the existing element:
@@ -266,11 +318,11 @@ function onSeeked() {
       @click="togglePlay"
       @volumechange="onVolumeChange"
       @waiting="onBufferStart"
-      @stalled="onBufferStart"
       @seeking="onBufferStart"
       @canplay="onBufferEnd"
       @playing="onBufferEnd"
       @seeked="onSeeked"
+      @timeupdate="onTimeUpdate"
     />
 ```
 
@@ -447,7 +499,7 @@ import EpisodesPanel from './EpisodesPanel.vue'
 type MenuKind = 'source' | 'settings' | 'subs' | 'episodes' | null
 ```
 
-(c) Both top-bar buttons open the drawer — replace `@click="$emit('open-episodes')"` on BOTH the back button and the episode-list button with `@click="toggleMenu('episodes')"` (they're inside `.pl-top` which already stops propagation).
+(c) Both top-bar buttons open the drawer — replace `@click="$emit('open-episodes')"` on BOTH the back button and the episode-list button with `@click="toggleMenu('episodes')"` (they're inside `.pl-top` which already stops propagation). Also change the left chevron's `aria-label="Back"` to `aria-label="Episodes"` — it no longer navigates back (review L4).
 
 (d) Drop the dead emit — the emits block becomes:
 
@@ -470,14 +522,14 @@ defineEmits<{
     </div>
 ```
 
-(f) Selection handler (place near `onSelectProvider`):
+(f) Selection handler (place near `onSelectProvider`). Resolve DIRECTLY (mirrors `goToNextEpisode`) — the combo/episode watcher early-returns while `isResolving` and would silently swallow a click made during an in-flight resolve (review M1). `resolveStreamForEpisode` sets `isResolving` synchronously, so the watcher's deferred fire is deduped, and `resolveToken` arbitrates any race:
 
 ```ts
 function onSelectEpisode(ep: EpisodeOption) {
   openMenu.value = null
   if (selectedEpisode.value?.number === ep.number) return
-  // The audio/lang/server/episode watcher re-resolves the stream.
   selectedEpisode.value = ep
+  void resolveStreamForEpisode(ep)
 }
 ```
 
@@ -699,10 +751,12 @@ with the type import added to the existing import block:
 import type { StreamResult } from '@/types/unifiedPlayer'
 ```
 
-In BOTH `loadEpisodesAndStream()` and `resolveStreamForEpisode()`, right after `await engine.load(stream)` add:
+In BOTH `loadEpisodesAndStream()` and `resolveStreamForEpisode()`, add the assignment BEFORE `await engine.load(stream)`, next to the `resolvedServers.value = ...` line (i.e. inside the freshly token-checked region — placing it after the await would let a superseded resolve clobber the winner's stream, review M2):
 
 ```ts
+    resolvedServers.value = stream.servers ?? []
     currentStream.value = stream
+    await engine.load(stream)
 ```
 
 (b) Quality plumbing (new section after "Active provider display info"):
@@ -732,8 +786,14 @@ const qualityDisplay = computed(() =>
 )
 
 // New stream may not offer the previously-chosen quality — snap back to Auto.
+// If it DOES offer it, re-apply: each load() creates a fresh hls instance
+// that starts at auto, so a pinned level must be re-pinned (review L1).
 watch(qualities, (qs) => {
-  if (!qs.includes(state.quality.value)) state.quality.value = 'Auto'
+  if (!qs.includes(state.quality.value)) {
+    state.quality.value = 'Auto'
+  } else if (state.quality.value !== 'Auto' && mp4Qualities.value.length === 0) {
+    engine.setLevel(state.quality.value)
+  }
 })
 
 function swapMp4Source(url: string) {
@@ -857,8 +917,9 @@ describe('segmentsToChapters', () => {
     expect(segmentsToChapters({ start: 60, end: 150 }, null, 0)).toEqual([])
   })
 
-  it('clamps segments to the duration and drops degenerate ones', () => {
-    expect(segmentsToChapters({ start: 1395, end: 1500 }, null, 1400)).toEqual([])
+  it('clamps segments to the duration and drops degenerate (<1s clamped) ones', () => {
+    // After clamping to 1400s this segment is 0.5s wide → dropped (review H3)
+    expect(segmentsToChapters({ start: 1399.5, end: 1500 }, null, 1400)).toEqual([])
     const [c] = segmentsToChapters({ start: 1300, end: 1500 }, null, 1400)
     expect(c.startPct + c.widthPct).toBeCloseTo(100)
   })
@@ -1778,9 +1839,10 @@ import { usePlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
 const statsEnabled = computed(() => state.hackerMode.value)
 const { stats: playbackStats } = usePlaybackStats(videoRef, statsEnabled)
 
-// HUD shows while paused or while actively buffering/seeking.
+// HUD shows while paused or while actively buffering/seeking. Uses
+// showBuffering (post-150ms-grace) so instant seeks don't flash it (review L5).
 const hudVisible = computed(
-  () => state.hackerMode.value && (!state.playing.value || isBuffering.value),
+  () => state.hackerMode.value && (!state.playing.value || showBuffering.value),
 )
 
 // Scrub-bar heatmap segments — size-tinted (green <300KB, amber <1MB, red ≥1MB).
@@ -1876,7 +1938,7 @@ Expected: all green; DS lint `ERRORS=0`.
   3. Hamburger (top-right) opens the episodes drawer; selecting an episode re-resolves; works in fullscreen.
   4. Settings → Hacker mode ON → HUD on pause, heatmap on scrub bar, mini-stats in gear menu; survives reload (localStorage).
   5. Settings → Quality lists real levels on a multi-variant HLS stream ("Auto · NNNp" while auto).
-  6. Skip chip appears during Frieren's OP (AniSkip has data); chapter markers visible; Auto-skip toggle jumps the OP once.
+  6. Skip chip appears during Frieren's OP (AniSkip has data); chapter markers visibly PAINT on the scrub bar (they were invisible pre-Task-0 — review H2); Auto-skip toggle jumps the OP once.
   7. Known caveat: providers affected by D-07 (fragment stall) will show an endless spinner — that's the pre-existing bug becoming visible, not a regression.
 
 - [ ] **Step 3: Run `/animeenigma-after-update`** (skill): lint/build, `make redeploy-web`, health check, Russian Trump-mode changelog entry in `frontend/web/public/changelog.json`, commit + push.
