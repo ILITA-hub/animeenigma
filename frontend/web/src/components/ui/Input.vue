@@ -45,7 +45,7 @@ defineOptions({ inheritAttrs: false })
 
 interface Props {
   modelValue?: string
-  type?: 'text' | 'email' | 'password' | 'search' | 'number' | 'tel' | 'url'
+  type?: 'text' | 'email' | 'password' | 'search' | 'number' | 'tel' | 'url' | 'date'
   placeholder?: string
   label?: string
   hint?: string

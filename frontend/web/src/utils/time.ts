@@ -43,3 +43,15 @@ export function formatAgo(iso: string, locale: string): string {
     return iso
   }
 }
+
+export function dayStartISO(ymd: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd)
+  if (!m) return undefined
+  return new Date(+m[1], +m[2] - 1, +m[3], 0, 0, 0, 0).toISOString()
+}
+
+export function dayEndISO(ymd: string): string | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd)
+  if (!m) return undefined
+  return new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999).toISOString()
+}

@@ -210,6 +210,13 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'gacha.admin.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // User-facing "my feedback" page — own messages + triage status.
+    path: '/my-feedback',
+    name: 'my-feedback',
+    component: () => import('@/views/MyFeedback.vue'),
+    meta: { titleKey: 'myFeedback.title', requiresAuth: true }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFound.vue'),

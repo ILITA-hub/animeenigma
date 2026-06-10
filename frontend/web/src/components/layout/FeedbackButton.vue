@@ -62,6 +62,16 @@
       <template #footer>
         <Button
           v-if="!submitted"
+          variant="ghost"
+          size="sm"
+          class="mr-auto"
+          @click="goToMyFeedback"
+        >
+          <Inbox class="size-4 mr-1.5" aria-hidden="true" />
+          {{ $t('footer.feedback.viewMine') }}
+        </Button>
+        <Button
+          v-if="!submitted"
           variant="soft"
           size="sm"
           @click="showModal = false"
@@ -97,7 +107,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, CircleCheck } from 'lucide-vue-next'
+import { MessageSquare, CircleCheck, Inbox } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/client'
 import { collectDiagnostics } from '@/utils/diagnostics'
@@ -131,6 +141,11 @@ const descriptionPlaceholderKey = computed(() => {
     default:        return 'footer.feedback.descriptionPlaceholderBug'
   }
 })
+
+function goToMyFeedback() {
+  showModal.value = false
+  router.push({ name: 'my-feedback' })
+}
 
 function handleClick() {
   if (authStore.isAuthenticated) {

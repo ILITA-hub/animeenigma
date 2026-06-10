@@ -466,6 +466,8 @@ export const userApi = {
   updateAvatar: (avatar: string) => apiClient.put('/auth/profile/avatar', { avatar }),
   // Error reporting
   reportError: (data: Record<string, unknown>) => apiClient.post('/users/report', data),
+  listMyReports: (params?: { page?: number; page_size?: number; from?: string; to?: string }) =>
+    apiClient.get('/users/reports', { params }),
   // API Key management
   generateApiKey: () => apiClient.post('/auth/api-key'),
   revokeApiKey: () => apiClient.delete('/auth/api-key'),
