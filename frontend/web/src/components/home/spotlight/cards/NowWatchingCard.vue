@@ -46,7 +46,7 @@
             <!-- Bigger anime poster (56x84) -->
             <img
               v-if="s.poster_url"
-              :src="s.poster_url"
+              :src="cardPosterUrl(s.poster_url, 128)"
               alt=""
               class="w-14 object-cover rounded-md flex-shrink-0"
               style="height: 84px"
@@ -102,6 +102,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import SpotlightBackdrop from '../SpotlightBackdrop.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
 import type { NowWatchingData } from '@/types/spotlight'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 defineProps<{ data: NowWatchingData }>()
 const { t } = useI18n()

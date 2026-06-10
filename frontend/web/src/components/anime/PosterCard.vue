@@ -13,6 +13,7 @@
         :alt="model.title"
         ratio="2/3"
         scrim
+        :proxy-width="384"
       >
         <!-- Hover dim — lets the centered controls read against bright posters -->
         <div

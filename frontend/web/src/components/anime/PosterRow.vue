@@ -21,7 +21,19 @@
       </svg>
     </button>
 
-    <img :src="posterSrc" :alt="model.title" class="poster" loading="lazy" @error="onPosterError" />
+    <div class="poster-wrap">
+      <!-- Glass skeleton — its own element behind the img (cascade-safe), fades out on @load -->
+      <div v-if="!posterLoaded" class="absolute inset-0 sk-drift" aria-hidden="true" data-testid="poster-skeleton" />
+      <img
+        :src="posterSrc"
+        :alt="model.title"
+        class="poster transition-opacity duration-300"
+        :class="posterLoaded ? 'opacity-100' : 'opacity-0'"
+        loading="lazy"
+        @load="posterLoaded = true"
+        @error="onPosterError"
+      />
+    </div>
 
     <div class="body">
       <div class="title truncate" data-testid="row-title">{{ model.title }}</div>
@@ -67,6 +79,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import type { AnimeCardModel } from '@/types/card'
 
 const props = defineProps<{
@@ -93,9 +106,24 @@ const to = computed(() =>
     : props.model.href
 )
 
-const posterFailed = ref(false)
-const posterSrc = computed(() => (!posterFailed.value && props.model.coverImage ? props.model.coverImage : '/placeholder.svg'))
-function onPosterError() { posterFailed.value = true }
+// Fallback chain: resized proxy URL → original upstream URL → placeholder
+const posterFallbackStage = ref(0)
+const posterLoaded = ref(false)
+const posterSrc = computed(() => {
+  const raw = props.model.coverImage
+  if (!raw || posterFallbackStage.value >= 2) return '/placeholder.svg'
+  if (posterFallbackStage.value === 1) return raw
+  return cardPosterUrl(raw, 128)
+})
+function onPosterError() {
+  const raw = props.model.coverImage
+  // Skip the original-URL stage when the proxied URL is the raw URL anyway
+  if (posterFallbackStage.value === 0 && raw && cardPosterUrl(raw, 128) !== raw) {
+    posterFallbackStage.value = 1
+  } else {
+    posterFallbackStage.value = 2
+  }
+}
 
 // Script-level computed labels — avoids $t() in templates (no i18n plugin in unit tests)
 const openMenuLabel = computed(() => t('contextMenu.openMenu'))
@@ -145,17 +173,24 @@ const nextEpLabel = computed(() =>
 }
 .prow:hover { background: rgba(255, 255, 255, 0.03); }
 
-.poster {
+.poster-wrap {
+  position: relative;
   width: 56px;
-  aspect-ratio: 2 / 3;
   height: 84px;
+  aspect-ratio: 2 / 3;
   overflow: hidden;
-  object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--line);
   flex-shrink: 0;
-  position: relative;
   z-index: 1;
+  background: var(--color-surface);
+}
+
+.poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .body { min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; z-index: 1; }

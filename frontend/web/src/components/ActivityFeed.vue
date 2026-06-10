@@ -68,7 +68,7 @@
           aria-hidden="true"
         >
           <img
-            :src="event.anime.poster_url"
+            :src="cardPosterUrl(event.anime.poster_url, 128)"
             :alt="animeName(event)"
             class="feed-poster-img"
             loading="lazy"
@@ -100,6 +100,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { activityApi } from '@/api/client'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import { getLocalizedTitle } from '@/utils/title'
 
 interface ActivityEvent {
