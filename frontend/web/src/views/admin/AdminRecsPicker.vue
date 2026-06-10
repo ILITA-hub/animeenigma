@@ -34,11 +34,13 @@
                 required
               />
               <!-- Phase 12 / UA-092: spinner while the navigation is in flight. -->
-              <div
+              <Spinner
                 v-if="isSubmitting"
-                class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"
+                size="sm"
+                tone="mono"
+                class="absolute right-3 top-1/2 -translate-y-1/2"
                 aria-hidden="true"
-              ></div>
+              />
             </div>
             <!-- Phase 12 / UA-097: empty/help text. Since the picker
                  doesn't have a live result list (single-input form), this
@@ -97,6 +99,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
 
 const router = useRouter()
 const authStore = useAuthStore()

@@ -75,7 +75,7 @@
           @click="submitReport"
         >
           <span v-if="submitting" class="flex items-center gap-2">
-            <span class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <Spinner size="sm" tone="mono" />
             {{ $t('footer.feedback.sending') }}
           </span>
           <span v-else>{{ $t('footer.feedback.submit') }}</span>
@@ -103,6 +103,7 @@ import { userApi } from '@/api/client'
 import { collectDiagnostics } from '@/utils/diagnostics'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
+import { Spinner } from '@/components/ui'
 
 type FeedbackCategory = 'bug' | 'issue' | 'feature'
 

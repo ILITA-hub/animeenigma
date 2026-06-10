@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { buttonVariants } from './button-variants'
 import Button from './Button.vue'
+import Spinner from './Spinner.vue'
 
 describe('buttonVariants', () => {
   it('default variant binds cyan token + radius + hover token', () => {
@@ -121,7 +122,7 @@ describe('Button.vue back-compat', () => {
     expect(fw.classes()).toContain('w-full')
 
     const loading = mount(Button, { props: { loading: true } })
-    expect(loading.find('span.animate-spin').exists()).toBe(true)
+    expect(loading.findComponent(Spinner).exists()).toBe(true)
     expect(loading.attributes('disabled')).toBeDefined()
 
     const withIcon = mount(Button, { slots: { icon: '<i class="my-icon" />' } })

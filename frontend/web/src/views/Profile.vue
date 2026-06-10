@@ -479,10 +479,7 @@
                         :disabled="!malUsername || malSync.importing"
                         @click="importMAL"
                       >
-                        <svg v-if="malSync.importing" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <Spinner v-if="malSync.importing" size="sm" tone="mono" class="mr-2" />
                         {{ malSync.importing ? $t('profile.import.importing') : $t('profile.import.import') }}
                       </Button>
                     </div>
@@ -530,10 +527,7 @@
                         :disabled="!shikimoriNickname || shikimoriSync.importing"
                         @click="importShikimori"
                       >
-                        <svg v-if="shikimoriSync.importing" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <Spinner v-if="shikimoriSync.importing" size="sm" tone="mono" class="mr-2" />
                         {{ shikimoriSync.importing ? $t('profile.import.importing') : $t('profile.import.import') }}
                       </Button>
                     </div>
@@ -576,10 +570,7 @@
                   :disabled="exportingJSON"
                   @click="exportToJSON"
                 >
-                  <svg v-if="exportingJSON" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
+                  <Spinner v-if="exportingJSON" size="sm" tone="mono" class="mr-2" />
                   <Download v-else class="size-4 mr-2" />
                   {{ exportingJSON ? $t('profile.export.exporting') : $t('profile.export.button') }}
                 </Button>
@@ -611,10 +602,7 @@
                         :disabled="!publicId || savingPublicId || publicId === authStore.user?.public_id"
                         @click="savePublicId"
                       >
-                        <svg v-if="savingPublicId" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <Spinner v-if="savingPublicId" size="sm" tone="mono" />
                         <span v-else>{{ $t('profile.save') }}</span>
                       </Button>
                     </div>
@@ -668,10 +656,7 @@
                         :disabled="savingPrivacy"
                         @click="savePrivacy"
                       >
-                        <svg v-if="savingPrivacy" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <Spinner v-if="savingPrivacy" size="sm" tone="mono" class="mr-2" />
                         {{ $t('profile.savePrivacy') }}
                       </Button>
                       <p v-if="privacySuccess" class="text-success text-xs mt-2">{{ $t('profile.privacySaved') }}</p>
@@ -714,10 +699,7 @@
 
                 <!-- Loading state -->
                 <div v-if="apiKeyLoading" class="flex justify-center py-4">
-                  <svg class="w-6 h-6 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
+                  <Spinner size="md" />
                 </div>
 
                 <template v-else>
@@ -900,10 +882,7 @@
                 <p class="text-white/60 text-sm mb-4">{{ $t('profile.advanced.resetDescription') }}</p>
                 <div class="flex flex-col sm:flex-row gap-3">
                   <Button variant="secondary" :disabled="resettingPrefs" @click="onResetLearnedPreferences">
-                    <svg v-if="resettingPrefs" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
+                    <Spinner v-if="resettingPrefs" size="sm" tone="mono" class="mr-2" />
                     {{ resettingPrefs ? $t('profile.advanced.resetting') : $t('profile.advanced.resetButton') }}
                   </Button>
                   <Button variant="ghost" @click="loadTier2View" :disabled="loadingTier2View">
@@ -961,10 +940,7 @@
           :disabled="!avatarPreview || uploadingAvatar"
           @click="uploadAvatar"
         >
-          <svg v-if="uploadingAvatar" class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
+          <Spinner v-if="uploadingAvatar" size="sm" tone="mono" class="mr-2" />
           {{ uploadingAvatar ? $t('profile.avatar.uploading') : $t('profile.avatar.upload') }}
         </Button>
       </template>

@@ -48,7 +48,7 @@
               class="absolute inset-0 flex items-center justify-center"
               aria-hidden="true"
             >
-              <div class="animate-spin h-6 w-6 border-2 border-cyan-500 border-t-transparent rounded-full" />
+              <Spinner size="md" tone="mono" />
             </div>
           </div>
 
@@ -133,6 +133,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
 import QRCode from 'qrcode'
 
 useI18n()

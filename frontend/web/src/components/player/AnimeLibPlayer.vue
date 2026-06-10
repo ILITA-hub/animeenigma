@@ -180,7 +180,7 @@
 
         <!-- Loading translations -->
         <div v-else-if="loadingTranslations" class="flex items-center justify-center py-6">
-          <div class="w-6 h-6 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+          <Spinner size="md" tone="mono" />
         </div>
 
         <!-- No translations -->
