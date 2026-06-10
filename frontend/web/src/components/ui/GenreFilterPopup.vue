@@ -22,21 +22,15 @@
         class="ml-auto p-0.5 rounded hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors"
         @click.stop="clear"
       >
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
+        <X class="size-3.5" aria-hidden="true" />
       </button>
       <!-- Chevron -->
-      <svg
+      <ChevronDown
         v-else
-        class="w-4 h-4 text-white/50 transition-transform duration-200 flex-shrink-0"
+        class="size-4 text-white/50 transition-transform duration-200 flex-shrink-0"
         :class="{ 'rotate-180': isOpen }"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-      </svg>
+        aria-hidden="true"
+      />
     </button>
 
     <!-- Dropdown Popup -->
@@ -74,15 +68,11 @@
             @mouseenter="focusedIndex = -1"
           >
             <span>{{ allLabel }}</span>
-            <svg
+            <Check
               v-if="!modelValue"
-              class="w-4 h-4 text-cyan-400 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
+              class="size-4 text-cyan-400 flex-shrink-0"
+              aria-hidden="true"
+            />
           </li>
           <!-- Genre items -->
           <li
@@ -100,15 +90,11 @@
             </span>
             <span class="flex items-center gap-2 flex-shrink-0">
               <span v-if="g.count" class="text-xs text-white/30">{{ g.count }}</span>
-              <svg
+              <Check
                 v-if="g.id === modelValue"
-                class="w-4 h-4 text-cyan-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
+                class="size-4 text-cyan-400"
+                aria-hidden="true"
+              />
             </span>
           </li>
           <!-- Empty state -->
@@ -123,6 +109,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { Check, ChevronDown, X } from 'lucide-vue-next'
 import { getGenreEmoji } from '@/utils/genre-emoji'
 import { getLocalizedGenre } from '@/utils/title'
 

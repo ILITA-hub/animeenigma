@@ -19,14 +19,10 @@
           </span>
         </SelectValue>
         <SelectIcon as-child>
-          <svg
-            class="w-4 h-4 text-white/50 transition-transform duration-200 data-[state=open]:rotate-180"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
+          <ChevronDown
+            class="size-4 text-white/50 transition-transform duration-200 data-[state=open]:rotate-180"
+            aria-hidden="true"
+          />
         </SelectIcon>
       </SelectTrigger>
 
@@ -46,14 +42,7 @@
             >
               <SelectItemText>{{ option.label }}</SelectItemText>
               <SelectItemIndicator>
-                <svg
-                  class="w-4 h-4 text-cyan-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
+                <Check class="size-4 text-cyan-400" aria-hidden="true" />
               </SelectItemIndicator>
             </SelectItem>
           </SelectViewport>
@@ -65,6 +54,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Check, ChevronDown } from 'lucide-vue-next'
 import {
   SelectRoot,
   SelectTrigger,
