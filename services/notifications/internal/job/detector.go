@@ -129,8 +129,10 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 		return report, err
 	}
 
-	// Step 3 — fan-out per-combo parser lookups.
-	latestPerCombo := make(map[domain.Combo]int, len(combos))
+	// Step 3 — fan-out per-combo parser lookups. The check result carries
+	// both the latest episode number (drives the diff) and the per-player
+	// translation title (rides into the new_episode payload).
+	resultPerCombo := make(map[domain.Combo]service.EpisodeCheckResult, len(combos))
 	var (
 		mu             sync.Mutex
 		parserFailures atomic.Int64
@@ -152,7 +154,7 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 		g.Go(func() error {
 			callCtx, cancel := context.WithTimeout(gctx, timeout)
 			defer cancel()
-			latest, err := j.checker.LatestEpisode(callCtx, combo)
+			result, err := j.checker.LatestEpisode(callCtx, combo)
 			if err != nil {
 				if service.IsEpisodeNotFound(err) {
 					// Not-found is a normal "no episode for this combo
@@ -173,7 +175,7 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 				return nil
 			}
 			mu.Lock()
-			latestPerCombo[combo] = latest
+			resultPerCombo[combo] = result
 			mu.Unlock()
 			return nil
 		})
@@ -190,13 +192,13 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 	// We must drop shikimori_id before keying into snapshotMap, otherwise
 	// every lookup returns hadSnapshot=false and we accidentally bootstrap
 	// every run forever (silent NOTIF-DET-06 violation).
-	affected := make([]domain.Combo, 0, len(latestPerCombo))
-	snapUpdates := make(map[domain.Combo]int, len(latestPerCombo))
+	affected := make([]domain.Combo, 0, len(resultPerCombo))
+	snapUpdates := make(map[domain.Combo]int, len(resultPerCombo))
 	snapKey := func(c domain.Combo) domain.Combo {
 		c.ShikimoriID = ""
 		return c
 	}
-	for combo, latest := range latestPerCombo {
+	for combo, result := range resultPerCombo {
 		key := snapKey(combo)
 		prev, hadSnapshot := snapshotMap[key]
 		if !hadSnapshot {
@@ -204,17 +206,17 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 			// combo, record the snapshot but DO NOT fire a notification —
 			// otherwise every existing user gets spammed about every
 			// in-progress anime on first deploy.
-			snapUpdates[key] = latest
+			snapUpdates[key] = result.Latest
 			continue
 		}
-		if latest <= prev {
+		if result.Latest <= prev {
 			// Never lower the snapshot. Refresh checked_at by re-writing
 			// the same value.
 			snapUpdates[key] = prev
 			continue
 		}
 		// Genuine new episode discovered.
-		snapUpdates[key] = latest
+		snapUpdates[key] = result.Latest
 		affected = append(affected, combo)
 	}
 	report.AffectedCombos = len(affected)
@@ -285,7 +287,7 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 		if !ok {
 			continue
 		}
-		latest := latestPerCombo[combo]
+		result := resultPerCombo[combo]
 		anime, err := getAnime(combo.AnimeID)
 		if err != nil {
 			if j.log != nil {
@@ -296,12 +298,12 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 		}
 		for userID, maxWatched := range users {
 			firstUnwatched := maxWatched + 1
-			if firstUnwatched > latest {
+			if firstUnwatched > result.Latest {
 				// Defensive race guard: the user already watched the new
 				// episode between the parser call and now. NOTIF-DET-07.
 				continue
 			}
-			payload, err := service.BuildNewEpisodePayload(combo, anime, maxWatched, latest, "")
+			payload, err := service.BuildNewEpisodePayload(combo, anime, maxWatched, result.Latest, result.TranslationTitle)
 			if err != nil {
 				if j.log != nil {
 					j.log.Warnw("detector payload build failed",

@@ -25,22 +25,31 @@ import (
 //     Kodik does not surface either of the above
 //  4. 1 if r.Type == "anime" (movies / single-episode releases)
 //
+// The second return value is the translation's display title
+// (Translation.Title, e.g. "AniLibria.TV") — it rides along in the same
+// upstream search response, so surfacing it costs no extra HTTP. Empty when
+// Kodik omits it.
+//
 // Returns 0 + a descriptive error when no result for the translation is
 // found. Callers (the detector) treat that as a per-combo failure (skip,
 // don't abort the run) — see services/notifications/internal/job/detector.go.
-func (c *Client) LatestEpisodeForTranslation(shikimoriID string, translationID int) (int, error) {
+func (c *Client) LatestEpisodeForTranslation(shikimoriID string, translationID int) (int, string, error) {
 	results, err := c.SearchByShikimoriID(shikimoriID)
 	if err != nil {
-		return 0, fmt.Errorf("kodik: search by shikimori_id %q: %w", shikimoriID, err)
+		return 0, "", fmt.Errorf("kodik: search by shikimori_id %q: %w", shikimoriID, err)
 	}
 
 	best := 0
+	title := ""
 	matched := false
 	for _, r := range results {
 		if r.Translation == nil || r.Translation.ID != translationID {
 			continue
 		}
 		matched = true
+		if title == "" {
+			title = r.Translation.Title
+		}
 
 		// Same precedence as GetTranslations (kodik/client.go ~L522).
 		count := r.LastEpisode
@@ -64,7 +73,7 @@ func (c *Client) LatestEpisodeForTranslation(shikimoriID string, translationID i
 	}
 
 	if !matched {
-		return 0, fmt.Errorf("kodik: no translation %d for shikimori %s", translationID, shikimoriID)
+		return 0, "", fmt.Errorf("kodik: no translation %d for shikimori %s", translationID, shikimoriID)
 	}
-	return best, nil
+	return best, title, nil
 }
