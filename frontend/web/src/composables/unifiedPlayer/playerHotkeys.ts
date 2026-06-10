@@ -11,6 +11,7 @@ export type HotkeyAction =
   | { type: 'seek-rel'; value: number }
   | { type: 'vol-rel'; value: number }
   | { type: 'seek-pct'; value: number }
+  | { type: 'sub-offset'; value: number }
   | { type: 'mute' }
   | { type: 'fullscreen' }
   | { type: 'subs' }
@@ -18,6 +19,7 @@ export type HotkeyAction =
 
 const SEEK_STEP = 5
 const VOL_STEP = 5
+const SUB_OFFSET_STEP = 0.1
 
 /**
  * Translate a keyboard event into a player action, or null if the key is not a
@@ -69,6 +71,12 @@ export function mapKeyToAction(e: KeyboardEvent): HotkeyAction | null {
       return { type: 'subs' }
     case 'p':
       return { type: 'pip' }
+    case 'z':
+      // Nudge subtitles earlier (show sooner).
+      return { type: 'sub-offset', value: -SUB_OFFSET_STEP }
+    case 'x':
+      // Nudge subtitles later (show further behind).
+      return { type: 'sub-offset', value: SUB_OFFSET_STEP }
     default:
       return null
   }
