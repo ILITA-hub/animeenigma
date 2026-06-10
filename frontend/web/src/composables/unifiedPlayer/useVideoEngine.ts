@@ -26,6 +26,17 @@ export interface QualityLevel {
   index: number
 }
 
+export interface FragStat {
+  /** media start position of the fragment (sec) */
+  start: number
+  /** fragment duration (sec) */
+  duration: number
+  /** payload size in bytes */
+  size: number
+  /** wall-clock load time in ms */
+  loadMs: number
+}
+
 /**
  * Build the quality menu from hls.js levels: label by height (`720p`),
  * dedupe by label keeping the FIRST hls index for it, sort high→low.
@@ -54,6 +65,8 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
   const fatal = ref<string | null>(null)
   const levels = ref<QualityLevel[]>([])
   const currentLevelLabel = ref('')
+  const fragStats = ref<FragStat[]>([])
+  const bandwidthEstimate = ref(0)
   let hls: any = null
   // Monotonic load generation. `load()` awaits a dynamic import of hls.js, so two
   // calls in quick succession (e.g. a provider change immediately followed by an
@@ -70,6 +83,8 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     fatal.value = null
     levels.value = []
     currentLevelLabel.value = ''
+    fragStats.value = []
+    bandwidthEstimate.value = 0
     destroy()
 
     // Progressive MP4 — native playback. The backend proxy injects Referer and
@@ -119,6 +134,19 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
       const lvl = levels.value.find((l) => l.index === data?.level)
       if (lvl) currentLevelLabel.value = lvl.label
     })
+    hls.on(Hls.Events.FRAG_LOADED, (_e: unknown, data: any) => {
+      const f = data?.frag
+      const st = f?.stats
+      if (!f || !st) return
+      const loadMs = Math.max(0, (st.loading?.end ?? 0) - (st.loading?.start ?? 0))
+      // Rolling window of the last 30 fragments — enough for the hacker-mode
+      // HUD + scrub-bar heatmap without unbounded growth on long episodes.
+      fragStats.value = [
+        ...fragStats.value.slice(-29),
+        { start: f.start ?? 0, duration: f.duration ?? 0, size: st.total ?? 0, loadMs },
+      ]
+      bandwidthEstimate.value = hls?.bandwidthEstimate ?? 0
+    })
     hls.on(Hls.Events.ERROR, (_e: unknown, data: any) => {
       if (!data?.fatal) return
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -151,5 +179,5 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
 
   onUnmounted(destroy)
 
-  return { fatal, load, destroy, levels, currentLevelLabel, setLevel }
+  return { fatal, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate }
 }
