@@ -52,4 +52,26 @@ describe('Avatar.vue', () => {
     expect(w.find('img').exists()).toBe(true)
     expect(w.find('img').attributes('src')).toBe('https://x/new.png')
   })
+  it('supports the hero sizes 2xl/3xl', () => {
+    expect(avatarVariants({ size: '2xl' })).toContain('size-28')
+    expect(avatarVariants({ size: '3xl' })).toContain('size-40')
+  })
+  it('root is rounded-full so class-prop rings follow the circle', () => {
+    const w = mount(Avatar, { props: { name: 'A' } })
+    expect(w.classes()).toContain('rounded-full')
+  })
+  it('fallbackClass overrides the default chip tint', () => {
+    const w = mount(Avatar, { props: { name: 'A', fallbackClass: 'bg-success text-white' } })
+    const chip = w.find('span > span')
+    expect(chip.classes()).toContain('bg-success')
+    expect(chip.classes()).toContain('text-white')
+    expect(chip.classes()).not.toContain('bg-brand-cyan/15')
+  })
+  it('renders overlay slot content', () => {
+    const w = mount(Avatar, {
+      props: { name: 'A' },
+      slots: { default: '<button data-testid="edit">e</button>' },
+    })
+    expect(w.find('[data-testid="edit"]').exists()).toBe(true)
+  })
 })

@@ -170,18 +170,16 @@
           <template v-if="authStore.isAuthenticated">
             <router-link
               to="/profile"
-              class="avatar-nt"
+              class="group flex-shrink-0"
               :aria-label="authStore.user?.username || $t('nav.profile')"
             >
-              <img
-                v-if="authStore.user?.avatar"
-                :src="authStore.user.avatar"
-                :alt="authStore.user.username"
-                class="w-full h-full object-cover"
+              <Avatar
+                :src="authStore.user?.avatar"
+                :name="authStore.user?.username"
+                size="sm"
+                status="online"
+                class="size-9 ring-2 ring-white/10 transition-shadow group-hover:ring-brand-cyan/30"
               />
-              <span v-else class="avatar-initials">{{ userInitials }}</span>
-              <!-- Online dot per handoff .avatar::after -->
-              <span class="avatar-online-dot" aria-hidden="true" />
             </router-link>
           </template>
           <template v-else>
@@ -265,18 +263,12 @@
                 active-class="text-cyan-400 bg-cyan-500/10"
                 @click="mobileMenuOpen = false"
               >
-                <div
-                  class="w-8 h-8 rounded-full overflow-hidden border border-cyan-500/30 flex items-center justify-center flex-shrink-0"
-                  :class="authStore.user?.avatar ? 'bg-surface' : 'bg-cyan-500/20'"
-                >
-                  <img
-                    v-if="authStore.user?.avatar"
-                    :src="authStore.user.avatar"
-                    :alt="authStore.user.username"
-                    class="w-full h-full object-cover"
-                  />
-                  <span v-else class="text-cyan-400 text-sm font-medium">{{ userInitials }}</span>
-                </div>
+                <Avatar
+                  :src="authStore.user?.avatar"
+                  :name="authStore.user?.username"
+                  size="sm"
+                  class="ring-1 ring-cyan-500/30"
+                />
                 {{ $t('nav.profile') }}
               </router-link>
             </template>
@@ -343,6 +335,7 @@ import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
 import { Search, X, ChevronDown, Menu, Gem } from 'lucide-vue-next'
+import Avatar from '@/components/ui/Avatar.vue'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -378,7 +371,6 @@ const navLinks = [
   { to: '/', label: 'nav.home' },
   { to: '/browse', label: 'nav.catalog' },
   { to: '/schedule', label: 'nav.schedule' },
-  { to: '/themes', label: 'nav.themes' },
 ]
 
 const languages = [
@@ -427,12 +419,6 @@ useEventListener(document, 'keydown', (e: KeyboardEvent) => {
   if (e.key === 'Escape' && mobileMenuOpen.value) {
     mobileMenuOpen.value = false
   }
-})
-
-const userInitials = computed(() => {
-  const user = authStore.user
-  if (!user?.username) return '?'
-  return user.username.slice(0, 2).toUpperCase()
 })
 
 const setLocale = (code: string) => {
@@ -709,46 +695,4 @@ onUnmounted(() => {
   color: var(--foreground);
 }
 
-/* ------------------------------------------------------------------ */
-/* Avatar — handoff .avatar with online dot                            */
-/* ------------------------------------------------------------------ */
-.avatar-nt {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #1a3a4a 0%, #0e2030 100%);
-  display: grid;
-  place-items: center;
-  font-size: 16px;
-  border: 2px solid var(--line-strong, rgba(255, 255, 255, 0.12));
-  position: relative;
-  overflow: hidden;
-  text-decoration: none;
-  flex-shrink: 0;
-  transition: border-color 0.15s ease;
-}
-
-.avatar-nt:hover {
-  border-color: var(--accent-line, rgba(0, 212, 255, 0.28));
-}
-
-.avatar-initials {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--brand-cyan);
-  line-height: 1;
-}
-
-/* Online presence dot — bottom-right corner, 8px with green fill + base border */
-.avatar-online-dot {
-  position: absolute;
-  bottom: 1px;
-  right: 1px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--color-success, #00ff9d);
-  border: 2px solid var(--color-base, #08080f);
-  pointer-events: none;
-}
 </style>

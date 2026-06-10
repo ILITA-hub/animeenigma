@@ -26,20 +26,19 @@
         :key="event.id"
         class="feed-item"
       >
-        <!-- 28px user avatar (falls back to the username initial) -->
+        <!-- 28px user avatar (falls back to the username initials) -->
         <router-link
           :to="`/user/${event.public_id || event.user_id}`"
-          class="feed-av"
+          class="flex-shrink-0"
           tabindex="-1"
           aria-hidden="true"
         >
-          <img
-            v-if="event.user_avatar"
+          <Avatar
             :src="event.user_avatar"
-            :alt="event.username"
-            class="feed-av-img"
+            :name="event.username"
+            size="xs"
+            class="size-7 ring-1 ring-white/10"
           />
-          <span v-else class="feed-av-fallback">{{ event.username?.charAt(0)?.toUpperCase() }}</span>
         </router-link>
 
         <!-- Text block -->
@@ -99,6 +98,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Avatar from '@/components/ui/Avatar.vue'
 import { activityApi } from '@/api/client'
 import { cardPosterUrl } from '@/composables/useImageProxy'
 import { getLocalizedTitle } from '@/utils/title'
@@ -271,35 +271,6 @@ onMounted(() => {
      HomeColumn/.item and LastUpdates/.update-row use to clear the same
      scrollbar). Content-box spacing, so it holds for overlay scrollbars too. */
   padding-right: 10px;
-}
-
-/* 28px avatar — uses poster as avatar thumbnail */
-.feed-av {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #1a3a4a, #0e2030);
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  border: 1px solid var(--line-strong);
-  overflow: hidden;
-  text-decoration: none;
-}
-
-.feed-av-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.feed-av-fallback {
-  color: var(--muted-foreground);
-  font-size: 11px;
-  font-weight: 600;
-  font-family: var(--f-display);
 }
 
 /* Text block */

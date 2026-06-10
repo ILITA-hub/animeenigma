@@ -22,21 +22,12 @@
         <div class="relative max-w-4xl mx-auto px-4 pt-24 pb-8">
           <div class="flex flex-col sm:flex-row items-center sm:items-end gap-6">
             <!-- Avatar -->
-            <div class="relative">
-              <div class="w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden ring-4 ring-cyan-500/30 bg-surface">
-                <img
-                  v-if="profileUser.avatar"
-                  :src="profileUser.avatar"
-                  :alt="profileUser.username"
-                  class="w-full h-full object-cover"
-                />
-                <div
-                  v-else
-                  class="w-full h-full flex items-center justify-center text-4xl font-bold text-cyan-400 bg-cyan-500/10"
-                >
-                  {{ userInitials }}
-                </div>
-              </div>
+            <Avatar
+              :src="profileUser.avatar"
+              :name="profileUser.username"
+              size="2xl"
+              class="ring-4 ring-cyan-500/30"
+            >
               <button
                 v-if="isOwnProfile"
                 @click="showAvatarModal = true"
@@ -47,7 +38,7 @@
               >
                 <Pencil class="size-4" aria-hidden="true" />
               </button>
-            </div>
+            </Avatar>
 
             <!-- User Info -->
             <div class="text-center sm:text-left flex-1">
@@ -907,16 +898,12 @@
       <div class="space-y-4">
         <!-- Preview -->
         <div class="flex justify-center">
-          <div class="w-40 h-40 rounded-full overflow-hidden ring-4 ring-cyan-500/30 bg-surface">
-            <img
-              v-if="avatarPreview"
-              :src="avatarPreview"
-              class="w-full h-full object-cover"
-            />
-            <div v-else class="w-full h-full flex items-center justify-center text-5xl font-bold text-cyan-400 bg-cyan-500/10">
-              {{ userInitials }}
-            </div>
-          </div>
+          <Avatar
+            :src="avatarPreview || undefined"
+            :name="profileUser?.username"
+            size="3xl"
+            class="ring-4 ring-cyan-500/30"
+          />
         </div>
         <!-- File Input -->
         <div class="text-center">
@@ -973,7 +960,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Badge, Button, Modal, Tabs, Select, PaginationBar, Spinner, type SelectOption } from '@/components/ui'
+import { Avatar, Badge, Button, Modal, Tabs, Select, PaginationBar, Spinner, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
@@ -1382,11 +1369,6 @@ const watchlistStats = computed(() => {
       completed: stats?.completed ?? publicStatusCounts.value['completed'] ?? 0,
     }
   }
-})
-
-const userInitials = computed(() => {
-  if (!profileUser.value?.username) return '?'
-  return profileUser.value.username.slice(0, 2).toUpperCase()
 })
 
 // Unified import state

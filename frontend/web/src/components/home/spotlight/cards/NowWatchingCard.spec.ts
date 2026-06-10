@@ -184,13 +184,14 @@ describe('NowWatchingCard (v1.1-polish social-identity layout)', () => {
     const w1 = mountCard({ data: data1 })
     const w2 = mountCard({ data: data2 })
 
-    // Pull the bg-* class string off the first row's avatar div.
+    // The hashed bg-* class lands on the DS Avatar's inner fallback chip
+    // (via the fallbackClass prop) — the avatar root's first child.
     const classes1 = w1
       .findComponent(RouterLinkStub)
-      .element.children[0].classList
+      .element.children[0].children[0].classList
     const classes2 = w2
       .findComponent(RouterLinkStub)
-      .element.children[0].classList
+      .element.children[0].children[0].classList
 
     const palette1 = PALETTE.find((c) => classes1.contains(c))
     const palette2 = PALETTE.find((c) => classes2.contains(c))
@@ -212,7 +213,8 @@ describe('NowWatchingCard (v1.1-polish social-identity layout)', () => {
     const rows = wrapper.findAllComponents(RouterLinkStub)
 
     for (const row of rows) {
-      const classList = row.element.children[0].classList
+      // Avatar root → inner fallback chip carries the palette class.
+      const classList = row.element.children[0].children[0].classList
       const hit = PALETTE.find((c) => classList.contains(c))
       expect(
         hit,
