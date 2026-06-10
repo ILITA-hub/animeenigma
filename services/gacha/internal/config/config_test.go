@@ -34,6 +34,35 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 }
 
+func TestLoad_PullDefaults(t *testing.T) {
+	os.Setenv("JWT_SECRET", "x")
+	defer os.Unsetenv("JWT_SECRET")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	e := cfg.Economy
+	cases := []struct {
+		name string
+		got  int64
+		want int64
+	}{
+		{"PullCostX1", e.PullCostX1, 100},
+		{"PullCostX10", e.PullCostX10, 900},
+		{"PityThreshold", int64(e.PityThreshold), 90},
+		{"WeightN", int64(e.WeightN), 69},
+		{"WeightR", int64(e.WeightR), 22},
+		{"WeightSR", int64(e.WeightSR), 8},
+		{"WeightSSR", int64(e.WeightSSR), 1},
+	}
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Errorf("%s = %d; want %d", c.name, c.got, c.want)
+		}
+	}
+}
+
 func TestLoad_StarterBonusOverride(t *testing.T) {
 	os.Setenv("JWT_SECRET", "x")
 	os.Setenv("GACHA_STARTER_BONUS", "500")

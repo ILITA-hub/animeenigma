@@ -40,6 +40,15 @@ func (s ServerConfig) Address() string { return fmt.Sprintf("%s:%d", s.Host, s.P
 // in whole «Энигмы».
 type EconomyConfig struct {
 	StarterBonus int64 // one-time grant on first wallet access (default 300)
+
+	// Phase 3 — pull-engine knobs (spec §5.1/5.3).
+	PullCostX1    int64 // GACHA_PULL_COST_X1, default 100
+	PullCostX10   int64 // GACHA_PULL_COST_X10, default 900 (×10 with the 10% discount)
+	PityThreshold int   // GACHA_PITY_THRESHOLD, default 90 — the Nth pull without SSR is forced SSR
+	WeightN       int   // GACHA_WEIGHT_N, default 69
+	WeightR       int   // GACHA_WEIGHT_R, default 22
+	WeightSR      int   // GACHA_WEIGHT_SR, default 8
+	WeightSSR     int   // GACHA_WEIGHT_SSR, default 1
 }
 
 func Load() (*Config, error) {
@@ -74,7 +83,14 @@ func Load() (*Config, error) {
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Economy: EconomyConfig{
-			StarterBonus: int64(getEnvInt("GACHA_STARTER_BONUS", 300)),
+			StarterBonus:  int64(getEnvInt("GACHA_STARTER_BONUS", 300)),
+			PullCostX1:    int64(getEnvInt("GACHA_PULL_COST_X1", 100)),
+			PullCostX10:   int64(getEnvInt("GACHA_PULL_COST_X10", 900)),
+			PityThreshold: getEnvInt("GACHA_PITY_THRESHOLD", 90),
+			WeightN:       getEnvInt("GACHA_WEIGHT_N", 69),
+			WeightR:       getEnvInt("GACHA_WEIGHT_R", 22),
+			WeightSR:      getEnvInt("GACHA_WEIGHT_SR", 8),
+			WeightSSR:     getEnvInt("GACHA_WEIGHT_SSR", 1),
 		},
 		Storage: videoutils.StorageConfig{
 			Endpoint:        getEnv("MINIO_ENDPOINT", "minio:9000"),
