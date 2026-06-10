@@ -89,6 +89,19 @@ describe('PlayerControlBar', () => {
     expect(w.emitted('seek')?.[0]).toEqual([42])
   })
 
+  it('centers the digit 5 identically in both skip buttons (no drift)', () => {
+    const w = mount(PlayerControlBar, { props: baseProps })
+    const back = w.find('[data-test="seek-back"] text')
+    const fwd = w.find('[data-test="seek-fwd"] text')
+    expect(back.exists()).toBe(true)
+    expect(fwd.exists()).toBe(true)
+    expect(back.attributes('x')).toBe('12')
+    expect(fwd.attributes('x')).toBe('12')
+    expect(back.attributes('y')).toBe(fwd.attributes('y'))
+    expect(back.attributes('text-anchor')).toBe('middle')
+    expect(fwd.attributes('text-anchor')).toBe('middle')
+  })
+
   it('highlights the source pill / CC / gear when their menu is open', () => {
     // Source pill is a bespoke text button — still uses the `.is-open` class.
     const src = mount(PlayerControlBar, { props: { ...baseProps, openMenu: 'source' } })

@@ -38,7 +38,7 @@
           aria-hidden="true"
         >
           <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
-          <text x="12.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
+          <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
       </PlayerIconButton>
 
@@ -53,8 +53,10 @@
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
           aria-hidden="true"
         >
-          <path d="M4 4v6h6M4 10a8 8 0 11-1 4" style="transform: scaleX(-1); transform-origin: center" />
-          <text x="11.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
+          <g style="transform: scaleX(-1); transform-origin: center">
+            <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
+          </g>
+          <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
       </PlayerIconButton>
 
