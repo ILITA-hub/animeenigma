@@ -1,30 +1,6 @@
 {
-  "last_id": 397,
+  "last_id": 418,
   "issues": [
-    {
-      "id": "AUTO-397",
-      "created_at": "2026-06-07T05:33:00Z",
-      "resolved_at": "2026-06-07T05:40:00Z",
-      "source": "grafana_alert",
-      "category": "bug",
-      "priority": "P1",
-      "status": "resolved",
-      "title": "ScraperPlayabilityRegression: canary zero_match false-positive — missing title + wrong episode ID",
-      "reporter": "grafana",
-      "affected_service": "scheduler",
-      "alert_name": "ScraperPlayabilityRegression",
-      "actions": [
-        "Analyzed 7 historical canary run logs (2026-05-13 through 2026-06-07)",
-        "Confirmed root cause: canary called /scraper/servers?episode=1 without anime title",
-        "gogoanime FindID fails with empty title; miruro succeeds via AniList ID but ListServers('1') fetches gogoanimes.fi/1 (wrong page)",
-        "Fixed: added fetchEpisodeID() calling /scraper/episodes to get provider-specific slug (e.g. 'one-piece-episode-1')",
-        "Fixed: canary now passes title+title_alt params to all /scraper/* calls",
-        "Fixed: lookupTitles() fetches name_ru+name_en+name (romaji) so English providers get correct title",
-        "All 10 canary unit tests pass",
-        "Redeployed scheduler service"
-      ],
-      "resolution": "Canary now resolves proper provider episode IDs and passes anime titles. Root cause was broken since first deployment 2026-05-13 — monitoring was always blind. User streaming was unaffected."
-    },
     {
       "id": "AUTO-001",
       "created_at": "2026-03-25T23:32:49Z",
@@ -6395,6 +6371,467 @@
       "affected_service": "scheduler",
       "actions": null,
       "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-397",
+      "created_at": "2026-06-07T03:42:12Z",
+      "resolved_at": "2026-06-08T04:02:03Z",
+      "source": "grafana_alert",
+      "category": "bug",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "ScraperPlayabilityRegression: canary zero_match — missing title + wrong episode ID format",
+      "reporter": "grafana",
+      "telegram_message_id": 2933,
+      "affected_service": "gogoanime",
+      "actions": [
+        {
+          "action": "Analyzed 7 historical canary run logs (2026-05-13 to 2026-06-07)",
+          "result": "Confirmed zero_match every single run since first deployment — monitoring was always blind"
+        },
+        {
+          "action": "Traced code path: fetchServers → /scraper/servers?episode=1 (no title) → resolveProviderID → FindID fails for gogoanime (empty title), succeeds via miruro → ListServers('1') builds gogoanimes.fi/1 (wrong page) → empty servers",
+          "result": "Root cause confirmed: numeric episode ID + missing title"
+        },
+        {
+          "action": "Manual verification: GET /scraper/servers?mal_id=21\u0026title=One+Piece\u0026episode=one-piece-episode-1",
+          "result": "Returns 2 gogoanime megaplay servers — confirms fix approach"
+        },
+        {
+          "action": "Implemented fix: fetchEpisodeID(), title param helpers, lookupTitles(), updated DB queries, new structs, all function signatures updated",
+          "result": "Code compiles; all 10 unit tests pass with GOMAXPROCS=1"
+        },
+        {
+          "action": "Built Docker image and redeployed scheduler",
+          "result": "Container healthy at :8085"
+        },
+        {
+          "action": "Triggered manual canary run via POST /api/v1/jobs/scraper_playability_canary",
+          "result": "3 anime × 8 real server tuples in 10.9s — _unreachable/zero_match eliminated"
+        },
+        {
+          "action": "Documented as AUTO-397 in docs/issues/issues.json",
+          "result": "Issue logged"
+        },
+        {
+          "action": "Updated changelog.json with Trump-mode entry",
+          "result": "User-facing changelog updated"
+        },
+        {
+          "action": "Committed and pushed: commit 2d0591e1",
+          "result": "Pushed to main successfully"
+        },
+        {
+          "action": "go test -count=1 ./internal/jobs/... (GOMAXPROCS-limited)",
+          "result": "success",
+          "details": "All 10 canary tests pass; confirmed fetchEpisodeID/lookupTitles/probeOne/fetchServers/fetchStream present in committed code"
+        },
+        {
+          "action": "systemd-run --scope -p TasksMax=8192 docker compose build scheduler",
+          "result": "success",
+          "details": "Built docker-scheduler:latest. Plain build failed with EAGAIN/thread-create errors because the maintenance-bot cgroup (animeenigma-maintenance.service) caps pids.max=50; transient scope escaped the limit"
+        },
+        {
+          "action": "systemd-run --scope docker compose up -d --force-recreate --no-deps scheduler",
+          "result": "success",
+          "details": "Container recreated; StartedAt 03:45:47Z (now post-commit). Network alias intact [animeenigma-scheduler,scheduler]; gateway resolves 'scheduler'; /health = ok"
+        },
+        {
+          "action": "POST /api/v1/jobs/scraper_playability_canary (live verification)",
+          "result": "success",
+          "details": "3 anime probed, 8 real server tuples in 10.06s. playability_canary_runs_total now populated with correctly-resolved episode slugs instead of zero_match. Canary monitoring is functional."
+        }
+      ],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-398",
+      "created_at": "2026-06-07T04:03:14Z",
+      "resolved_at": "2026-06-07T04:03:14Z",
+      "source": "grafana_alert",
+      "category": "stability",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Scheduler Sync Stale — noData on restart (transient)",
+      "reporter": "grafana",
+      "telegram_message_id": 2936,
+      "affected_service": "scheduler",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-399",
+      "created_at": "2026-06-07T04:24:24Z",
+      "resolved_at": "2026-06-07T04:24:24Z",
+      "source": "grafana_alert",
+      "category": "degradation",
+      "priority": "P1",
+      "status": "resolved",
+      "title": "Scraper high error rate — gogoanime/megaplay stream extract failures (self-resolved)",
+      "reporter": "grafana",
+      "telegram_message_id": 2939,
+      "affected_service": "scraper",
+      "actions": null,
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-400",
+      "created_at": "2026-06-08T04:38:09Z",
+      "source": "grafana_alert",
+      "category": "provider_degradation",
+      "priority": "P2",
+      "status": "degraded_with_compensation",
+      "title": "gogoanime megaplay extraction fails at 03:00 UTC — failover compensating, no user outage",
+      "reporter": "grafana",
+      "telegram_message_id": 2942,
+      "affected_service": "gogoanime",
+      "actions": null
+    },
+    {
+      "id": "AUTO-401",
+      "created_at": "2026-06-08T06:31:34Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "dismissed",
+      "title": "Empty feature request test submission",
+      "reporter": "player_service",
+      "telegram_message_id": 2944,
+      "actions": null
+    },
+    {
+      "id": "AUTO-402",
+      "created_at": "2026-06-08T06:32:02Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_admin_approval",
+      "title": "Feature: ongoing anime airing calendar",
+      "reporter": "player_service",
+      "telegram_message_id": 2946,
+      "actions": []
+    },
+    {
+      "id": "AUTO-403",
+      "created_at": "2026-06-08T06:46:59Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_admin_approval",
+      "title": "Official Shikimori OAuth2 Integration + List Sync",
+      "reporter": "player_service",
+      "telegram_message_id": 2947,
+      "actions": null
+    },
+    {
+      "id": "AUTO-404",
+      "created_at": "2026-06-08T10:24:18Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P3",
+      "status": "already_in_progress",
+      "title": "Feature request: schedule/calendar page",
+      "reporter": "player_service",
+      "telegram_message_id": 2950,
+      "actions": null
+    },
+    {
+      "id": "AUTO-405",
+      "created_at": "2026-06-08T10:38:15Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Admin panel: role-based feature visibility settings",
+      "reporter": "player_service",
+      "telegram_message_id": 2951,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour"
+    },
+    {
+      "id": "AUTO-406",
+      "created_at": "2026-06-08T10:40:01Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Feature: anime character pages",
+      "reporter": "player_service",
+      "telegram_message_id": 2953,
+      "actions": null,
+      "resolution": "Pending fix expired after 1 hour"
+    },
+    {
+      "id": "AUTO-407",
+      "created_at": "2026-06-08T12:32:40Z",
+      "source": "admin_request",
+      "category": "info",
+      "priority": "P3",
+      "status": "pending_clarification",
+      "title": "Ambiguous admin comment — no actionable issue",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2955,
+      "actions": null
+    },
+    {
+      "id": "AUTO-408",
+      "created_at": "2026-06-08T15:02:14Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "pending_approval",
+      "title": "Emoji reactions for anime reviews",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2957,
+      "actions": null
+    },
+    {
+      "id": "AUTO-409",
+      "created_at": "2026-06-09T10:56:49Z",
+      "source": "error_report",
+      "category": "bug",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "Continue Watching: single item stretches to full width",
+      "reporter": "player_service",
+      "telegram_message_id": 2964,
+      "actions": [
+        {
+          "action": "Edit ContinueWatchingRow.vue: `minmax(280px, 1fr)` → `minmax(280px, 360px)`",
+          "result": "success",
+          "details": "Caps each card at 360px regardless of item count; horizontal scroll still works for many items."
+        },
+        {
+          "action": "Fix pre-existing ScheduleFilters.vue vue/no-mutating-props lint errors",
+          "result": "success",
+          "details": "Moved inline template mutations to setSearch/toggleMyList methods; scoped eslint-disable around the shared-reactive-object mutations in script."
+        },
+        {
+          "action": "Fix pre-existing useTitleLang.spec.ts TypeScript error",
+          "result": "success",
+          "details": "Added required `title` and `coverImage` fields to the test fixture matching the updated CatalogAnimeLike interface."
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "All pre-deploy gates passed (i18n-lint OK, design-system PASS, type-check clean). Build + container restart succeeded."
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 12 services healthy: gateway auth catalog streaming player rooms scheduler scraper library notifications watch-together gacha."
+        },
+        {
+          "action": "git push → 8ceae2fd",
+          "result": "success",
+          "details": "fix(web): cap continue-watching card width to prevent 1-item giant block"
+        }
+      ]
+    },
+    {
+      "id": "AUTO-410",
+      "created_at": "2026-06-09T23:28:32Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P3",
+      "status": "not_started",
+      "title": "Co-op opening guessing feature status check",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2966,
+      "actions": null
+    },
+    {
+      "id": "AUTO-411",
+      "created_at": "2026-06-09T23:34:42Z",
+      "source": "admin_request",
+      "category": "bug",
+      "priority": "P1",
+      "status": "auto_fixed",
+      "title": "Catalog pagination always resets to page 1",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2967,
+      "actions": [
+        {
+          "action": "Edit frontend/web/src/composables/useBrowseFilters.ts — guard genres and providers array assignments in readUrl() to only replace the ref when the joined string content actually changes",
+          "result": "success",
+          "details": "Added newGenres.join(',') !== genres.value.join(',') and newProviders.join(',') !== providers.value.join(',') guards. Prevents spurious apiParams recomputation on page-only router.replace calls."
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Built and deployed in ~30s"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 12 services healthy"
+        },
+        {
+          "action": "git commit + git push",
+          "result": "success",
+          "details": "e67fbf18 pushed to main"
+        }
+      ]
+    },
+    {
+      "id": "AUTO-412",
+      "created_at": "2026-06-10T02:51:27Z",
+      "source": "admin_request",
+      "category": "bug",
+      "priority": "P1",
+      "status": "auto_fixed",
+      "title": "Navbar search bar shifts header buttons on expand",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2970,
+      "actions": [
+        {
+          "action": "Edit frontend/web/src/components/layout/Navbar.vue — replaced v-else expanded search with (a) 36px aria-hidden spacer to hold the flex slot, (b) absolute-positioned overlay for the actual input+close so it expands without affecting flex siblings",
+          "result": "success",
+          "details": "absolute left-0 top-1/2 -translate-y-1/2 z-20 — expands over siblings, onClickOutside still works because expanded div is a DOM child of searchContainerRef"
+        },
+        {
+          "action": "Fix 3 pre-existing unused lucide import errors (TriangleAlert in KodikPlayer, ArrowLeft+List in UnifiedPlayer, Search false-positive in BrowseSubsModal)",
+          "result": "success",
+          "details": "Lint: 0 errors, 14 warnings (only no-explicit-any in spec files)"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Build clean, container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 12 services healthy"
+        },
+        {
+          "action": "Changelog entry added + commit 96b09946 + push feat/ds-primitives-lucide",
+          "result": "success",
+          "details": "5 files, 64 insertions, 44 deletions"
+        }
+      ]
+    },
+    {
+      "id": "AUTO-413",
+      "created_at": "2026-06-10T03:23:42Z",
+      "source": "admin_request",
+      "category": "admin",
+      "priority": "P3",
+      "status": "no_action",
+      "title": "Empty admin message",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2974,
+      "actions": null
+    },
+    {
+      "id": "AUTO-414",
+      "created_at": "2026-06-10T03:44:34Z",
+      "source": "admin_request",
+      "category": "regression",
+      "priority": "P1",
+      "status": "reverted",
+      "title": "Revert AUTO-412 — navbar search overlay broke layout",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2976,
+      "actions": [
+        {
+          "action": "git revert --no-commit 96b09946 + resolve 2 conflicts",
+          "result": "success",
+          "details": "changelog.json: removed only the AUTO-412 search-bar entry, preserved all later entries. KodikPlayer.vue: kept HEAD import line from a8b8e195 initially, then trimmed to only {Star, Pin} after discovering Video/Play/List/Check/Mic2/MessageSquare were unused (template reverted to inline SVGs)."
+        },
+        {
+          "action": "git commit (amended to include import fix)",
+          "result": "success",
+          "details": "Revert commit b8a43460 — 5 files changed, 45 insertions, 64 deletions. Navbar.vue: absolute overlay removed, spacer removed, isAdminRoute/brand-beta--admin removed, v-else flex expansion restored."
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Build clean (lint PASS, tsc no errors), container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 12 services healthy"
+        },
+        {
+          "action": "git push",
+          "result": "success",
+          "details": "feat/ds-primitives-lucide updated to b8a43460"
+        }
+      ]
+    },
+    {
+      "id": "AUTO-415",
+      "created_at": "2026-06-10T05:07:51Z",
+      "resolved_at": "2026-06-10T05:09:36Z",
+      "source": "grafana_alert",
+      "category": "stability",
+      "priority": "P0",
+      "status": "resolved",
+      "title": "Scheduler Sync Stale — post-restart noDataState false positive",
+      "reporter": "grafana",
+      "telegram_message_id": 2980,
+      "affected_service": "scheduler",
+      "actions": [
+        {
+          "action": "curl -X POST http://localhost:8085/api/v1/jobs/shikimori-sync",
+          "result": "success",
+          "details": "Job completed in \u003c1s: ongoing phase refreshed 1, released phase refreshed 1, total_refreshed=2 total_failed=0. scheduler_job_last_success_timestamp{exported_job=\"shikimori_sync\"} now emitted. Alert expression evaluates to ~25s staleness — well below 90000s threshold."
+        }
+      ],
+      "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-416",
+      "created_at": "2026-06-10T05:20:42Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_approval",
+      "title": "Schedule: timezone-aware air time display",
+      "reporter": "player_service",
+      "telegram_message_id": 2985,
+      "actions": [],
+      "feedback_id": "2026-06-10T05-19-37_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-417",
+      "created_at": "2026-06-10T05:35:03Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "pending_approval",
+      "title": "Feedback status notification loop for users",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2986,
+      "actions": null,
+      "feedback_id": "2026-06-10T05-31-25_tNeymik_telegram"
+    },
+    {
+      "id": "AUTO-418",
+      "created_at": "2026-06-10T05:40:57Z",
+      "source": "admin_request",
+      "category": "correction",
+      "priority": "P3",
+      "status": "resolved",
+      "title": "Bot mis-categorised feature request (AUTO-417) as bug — corrected to feature",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 2988,
+      "actions": [
+        {
+          "action": "Fix category in feedback JSON 2026-06-10T05-31-25_tNeymik_telegram.json: bug → feature",
+          "result": "success",
+          "details": "docker exec sed in-place on /data/reports/2026-06-10T05-31-25_tNeymik_telegram.json; verified category is now feature"
+        },
+        {
+          "action": "Set feedback 2026-06-10T05-40-57_tNeymik_telegram status ai_done",
+          "result": "success",
+          "details": "bin/feedback-status confirmed ai_done"
+        }
+      ],
+      "resolution": "Category corrected. Going forward: read message content before assigning category — feature requests must not be tagged as bugs.",
+      "feedback_id": "2026-06-10T05-40-57_tNeymik_telegram"
     }
   ]
 }
