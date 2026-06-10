@@ -198,10 +198,10 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'gacha.nav_item', requiresAuth: true, gachaGated: true }
   },
   {
+    // Legacy per-banner route → all-in-one page with the banner preselected.
     path: '/gacha/:id',
     name: 'gacha-banner',
-    component: () => import('@/views/GachaBanner.vue'),
-    meta: { titleKey: 'gacha.nav_item', requiresAuth: true, gachaGated: true }
+    redirect: (to) => ({ path: '/gacha', query: { banner: String(to.params.id) } })
   },
   {
     path: '/admin/gacha',

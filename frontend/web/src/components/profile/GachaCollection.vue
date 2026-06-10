@@ -1,6 +1,6 @@
 <template>
-  <!-- Gacha collection album — per-rarity sections SSR→N with progress and
-       brightness(0) silhouette for unowned cards. -->
+  <!-- Gacha collection album — OWNED cards ONLY, per-rarity sections SSR→N with
+       per-rarity progress and ×N dupe counts. No unowned cards / silhouettes. -->
   <div>
     <!-- Loading state -->
     <div v-if="loadingCollection" class="flex justify-center py-10">
@@ -14,16 +14,18 @@
 
     <!-- Empty state -->
     <div
-      v-else-if="!collection || collection.cards.length === 0"
+      v-else-if="!collection || ownedCards.length === 0"
       class="glass-card p-8 text-center text-muted-foreground"
     >
       {{ $t('gacha.collection_empty') }}
     </div>
 
     <template v-else>
-      <!-- Per-rarity sections, highest first: SSR → SR → R → N -->
+      <!-- Per-rarity sections, highest first: SSR → SR → R → N.
+           Only sections with at least one OWNED card are rendered. -->
       <div
         v-for="rarity in RARITY_SECTIONS"
+        v-show="cardsByRarity[rarity]?.length"
         :key="rarity"
         class="mb-8"
       >
@@ -54,7 +56,7 @@
           </div>
         </div>
 
-        <!-- Card grid for this rarity -->
+        <!-- Owned card grid for this rarity -->
         <div
           v-if="cardsByRarity[rarity]?.length"
           class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3"
@@ -62,39 +64,26 @@
           <div
             v-for="entry in cardsByRarity[rarity]"
             :key="entry.card.id"
-            :data-testid="entry.owned ? 'collection-card-owned' : 'collection-card-unowned'"
+            data-testid="collection-card-owned"
             class="relative rounded-lg overflow-hidden aspect-[2/3] bg-white/5"
           >
-            <!-- Card image — brightness(0) silhouette when unowned -->
             <img
               :src="cardImageUrl(entry.card.image_path)"
-              :alt="entry.owned ? entry.card.name : $t('gacha.collection_unknown')"
+              :alt="entry.card.name"
               class="w-full h-full object-cover"
-              :style="entry.owned ? '' : 'filter: brightness(0)'"
             />
 
             <!-- Rarity border -->
             <div :class="['absolute inset-0 rounded-lg ring-1 ring-inset', rarityRingClass(rarity)]" />
 
-            <!-- Owned: name + count badge -->
-            <template v-if="entry.owned">
-              <div class="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5">
-                <p class="text-white text-[10px] font-medium truncate">{{ entry.card.name }}</p>
-              </div>
-              <span
-                v-if="entry.count > 1"
-                class="absolute top-1 right-1 bg-white/20 text-white text-[10px] font-semibold px-1 rounded"
-              >×{{ entry.count }}</span>
-            </template>
-
-            <!-- Unowned: ??? -->
-            <template v-else>
-              <div class="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5">
-                <p class="text-muted-foreground text-[10px] font-medium truncate text-center">
-                  {{ $t('gacha.collection_unknown') }}
-                </p>
-              </div>
-            </template>
+            <!-- Name + dupe count -->
+            <div class="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5">
+              <p class="text-white text-[10px] font-medium truncate">{{ entry.card.name }}</p>
+            </div>
+            <span
+              v-if="entry.count > 1"
+              class="absolute top-1 right-1 bg-white/20 text-white text-[10px] font-semibold px-1 rounded"
+            >×{{ entry.count }}</span>
           </div>
         </div>
       </div>
@@ -120,11 +109,14 @@ const collection = computed(() => store.collection)
 
 const RARITY_SECTIONS: Rarity[] = ['SSR', 'SR', 'R', 'N']
 
-// Group cards by rarity
+// Owned cards only — the album shows what the user has actually pulled.
+const ownedCards = computed(() => (collection.value?.cards ?? []).filter((e) => e.owned))
+
+// Group OWNED cards by rarity
 const cardsByRarity = computed(() => {
   const c = collection.value
   if (!c) return {} as Record<Rarity, NonNullable<typeof c>['cards']>
-  return c.cards.reduce(
+  return ownedCards.value.reduce(
     (acc, entry) => {
       const r = entry.card.rarity
       if (!acc[r]) acc[r] = []

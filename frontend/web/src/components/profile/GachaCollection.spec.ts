@@ -118,24 +118,35 @@ describe('GachaCollection', () => {
     expect(ownedCards.length).toBeGreaterThan(0)
   })
 
-  it('renders unowned cards with data-testid collection-card-unowned and brightness(0) filter', async () => {
+  it('renders OWNED cards only — no unowned/silhouette cards', async () => {
     const store = useGachaStore()
     store.collection = makeCollection()
     store.loadingCollection = false
     const wrapper = mountComponent()
-    const unownedCards = wrapper.findAll('[data-testid="collection-card-unowned"]')
-    expect(unownedCards.length).toBeGreaterThan(0)
-    // Check that the img inside unowned has brightness(0) filter
-    const img = unownedCards[0].find('img')
-    expect(img.attributes('style')).toContain('brightness(0)')
+    // No unowned testid markup should ever render.
+    expect(wrapper.findAll('[data-testid="collection-card-unowned"]')).toHaveLength(0)
+    // The fixture has 2 owned cards (SSR Hero, R Mage) and 2 unowned.
+    expect(wrapper.findAll('[data-testid="collection-card-owned"]')).toHaveLength(2)
   })
 
-  it('unowned cards show ??? text', async () => {
+  it('does NOT render ??? placeholders or brightness(0) silhouettes', async () => {
     const store = useGachaStore()
     store.collection = makeCollection()
     store.loadingCollection = false
     const wrapper = mountComponent()
-    expect(wrapper.html()).toContain('???')
+    expect(wrapper.html()).not.toContain('???')
+    expect(wrapper.html()).not.toContain('brightness(0)')
+  })
+
+  it('renders only owned card names (not unowned ones)', async () => {
+    const store = useGachaStore()
+    store.collection = makeCollection()
+    store.loadingCollection = false
+    const wrapper = mountComponent()
+    expect(wrapper.html()).toContain('SSR Hero') // owned
+    expect(wrapper.html()).toContain('R Mage')   // owned
+    expect(wrapper.html()).not.toContain('SR Knight') // unowned → hidden
+    expect(wrapper.html()).not.toContain('N Minion')  // unowned → hidden
   })
 
   it('owned cards with count > 1 show a dupe count badge', async () => {
