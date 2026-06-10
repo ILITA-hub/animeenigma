@@ -545,18 +545,41 @@ func (r *ListRepository) GetBatchAnimeRatings(ctx context.Context, animeIDs []st
 	return out, nil
 }
 
-// ToggleReaction enforces ONE reaction per (review, user): clicking the SAME
-// emoji you already have removes it (added=false); clicking a DIFFERENT emoji
-// replaces whatever you had (added=true); with none set it inserts (added=true).
-// It clears ALL of the user's existing rows on the review first, so a legacy
-// multi-reaction collapses to the single new choice on first interaction.
+// ToggleReaction toggles a user's emoji reaction on a review.
+//
+// multi=false (regular users) enforces ONE reaction per (review, user):
+// clicking the SAME emoji you already have removes it (added=false); clicking
+// a DIFFERENT emoji replaces whatever you had (added=true); with none set it
+// inserts (added=true). It clears ALL of the user's existing rows on the
+// review first, so a legacy multi-reaction collapses to the single new choice
+// on first interaction.
+//
+// multi=true (admins) toggles each emoji INDEPENDENTLY: clicking an emoji you
+// already have removes just that one; clicking a new emoji adds it alongside
+// your existing reactions. (The DB's (review, user, emoji) unique index
+// already permits this.)
+//
 // username is denormalized for the who-reacted popover. Runs in a transaction
 // so the replace is atomic. AUTO-408.
-func (r *ListRepository) ToggleReaction(ctx context.Context, reviewID, userID, username, emoji string) (added bool, err error) {
+func (r *ListRepository) ToggleReaction(ctx context.Context, reviewID, userID, username, emoji string, multi bool) (added bool, err error) {
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing []domain.ReviewReaction
 		if e := tx.Where("review_id = ? AND user_id = ?", reviewID, userID).Find(&existing).Error; e != nil {
 			return e
+		}
+		if multi {
+			// Per-emoji independent toggle: remove if present, add otherwise.
+			for _, ex := range existing {
+				if ex.Emoji == emoji {
+					added = false
+					return tx.Where("review_id = ? AND user_id = ? AND emoji = ?", reviewID, userID, emoji).
+						Delete(&domain.ReviewReaction{}).Error
+				}
+			}
+			added = true
+			return tx.Create(&domain.ReviewReaction{
+				ReviewID: reviewID, UserID: userID, Emoji: emoji, Username: username,
+			}).Error
 		}
 		// Exactly the same single reaction → toggle it off.
 		if len(existing) == 1 && existing[0].Emoji == emoji {
@@ -577,6 +600,19 @@ func (r *ListRepository) ToggleReaction(ctx context.Context, reviewID, userID, u
 		}).Error
 	})
 	return added, err
+}
+
+// DeleteUserReaction removes one user's reaction rows on a review — the whole
+// user (all emojis) when emoji is "", or just the given emoji otherwise.
+// Returns the number of rows removed (0 when nothing matched). Admin
+// moderation path. AUTO-408.
+func (r *ListRepository) DeleteUserReaction(ctx context.Context, reviewID, targetUserID, emoji string) (int64, error) {
+	q := r.db.WithContext(ctx).Where("review_id = ? AND user_id = ?", reviewID, targetUserID)
+	if emoji != "" {
+		q = q.Where("emoji = ?", emoji)
+	}
+	res := q.Delete(&domain.ReviewReaction{})
+	return res.RowsAffected, res.Error
 }
 
 // SeedSystemReaction idempotently adds the System «AnimeEnigma» 👍 to a review
@@ -630,6 +666,7 @@ func (r *ListRepository) GetReactionCounts(ctx context.Context, reviewIDs []stri
 	type agg struct {
 		count       int
 		users       []string
+		reactors    []domain.ReactionUser
 		reactedByMe bool
 	}
 	perReview := make(map[string]map[string]*agg) // reviewID -> emoji -> agg
@@ -650,6 +687,7 @@ func (r *ListRepository) GetReactionCounts(ctx context.Context, reviewIDs []stri
 		if rr.Username != "" {
 			a.users = append(a.users, rr.Username)
 		}
+		a.reactors = append(a.reactors, domain.ReactionUser{UserID: rr.UserID, Username: rr.Username})
 		if viewerUserID != nil && rr.UserID == *viewerUserID {
 			a.reactedByMe = true
 		}
@@ -660,7 +698,7 @@ func (r *ListRepository) GetReactionCounts(ctx context.Context, reviewIDs []stri
 		for _, emoji := range emojiOrder[reviewID] {
 			a := byEmoji[emoji]
 			list = append(list, domain.ReactionCount{
-				Emoji: emoji, Count: a.count, ReactedByMe: a.reactedByMe, Users: a.users,
+				Emoji: emoji, Count: a.count, ReactedByMe: a.reactedByMe, Users: a.users, Reactors: a.reactors,
 			})
 		}
 		// Stable display order: most-reacted first, then emoji for ties.

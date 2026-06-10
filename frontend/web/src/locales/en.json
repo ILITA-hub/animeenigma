@@ -122,6 +122,7 @@
       "add": "Add reaction",
       "login_prompt": "Sign in to react",
       "error": "Couldn't save your reaction — please retry",
+      "admin_remove": "Remove {user}'s reaction",
       "names": {
         "like": "Like",
         "love": "Love",

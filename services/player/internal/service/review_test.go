@@ -209,7 +209,7 @@ func TestReviewService_ToggleReaction_BlocksSelfReaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, _, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-A", "alice", "👍")
+	_, _, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-A", "alice", "👍", false)
 	require.Error(t, err, "must reject reacting to your own review")
 }
 
@@ -225,14 +225,14 @@ func TestReviewService_ToggleReaction_OnePerPerson(t *testing.T) {
 	require.NoError(t, err)
 
 	// bob adds 👍
-	added, counts, err := svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "👍")
+	added, counts, err := svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "👍", false)
 	require.NoError(t, err)
 	assert.True(t, added)
 	require.Len(t, counts, 1)
 	assert.Equal(t, "👍", counts[0].Emoji)
 
 	// bob switches to ❤️ → still exactly one reaction, now ❤️, attributed to bob
-	added, counts, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "❤️")
+	added, counts, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "❤️", false)
 	require.NoError(t, err)
 	assert.True(t, added)
 	require.Len(t, counts, 1, "switching must not stack reactions")
@@ -241,10 +241,69 @@ func TestReviewService_ToggleReaction_OnePerPerson(t *testing.T) {
 	assert.Equal(t, []string{"bob"}, counts[0].Users, "who-reacted shows bob")
 
 	// bob clicks ❤️ again → removed
-	added, counts, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "❤️")
+	added, counts, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "❤️", false)
 	require.NoError(t, err)
 	assert.False(t, added)
 	assert.Len(t, counts, 0)
+}
+
+// TestReviewService_ToggleReaction_AdminMulti — AUTO-408: admins may stack
+// MULTIPLE reactions; each emoji toggles independently instead of replacing.
+func TestReviewService_ToggleReaction_AdminMulti(t *testing.T) {
+	svc, _ := setupReviewServiceTestDB(t)
+	ctx := context.Background()
+
+	rev, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
+		AnimeID: "anime-1", Score: 8, ReviewText: "x",
+	})
+	require.NoError(t, err)
+
+	// admin adds 👍 then ❤️ → BOTH stay
+	added, _, err := svc.ToggleReaction(ctx, "anime-1", rev.ID, "admin-1", "boss", "👍", true)
+	require.NoError(t, err)
+	assert.True(t, added)
+	added, counts, err := svc.ToggleReaction(ctx, "anime-1", rev.ID, "admin-1", "boss", "❤️", true)
+	require.NoError(t, err)
+	assert.True(t, added)
+	require.Len(t, counts, 2, "admin reactions must stack")
+	for _, c := range counts {
+		assert.True(t, c.ReactedByMe, "both emojis are the admin's")
+	}
+
+	// admin clicks 👍 again → only 👍 removed, ❤️ stays
+	added, counts, err = svc.ToggleReaction(ctx, "anime-1", rev.ID, "admin-1", "boss", "👍", true)
+	require.NoError(t, err)
+	assert.False(t, added)
+	require.Len(t, counts, 1)
+	assert.Equal(t, "❤️", counts[0].Emoji)
+}
+
+// TestReviewService_AdminRemoveReaction — AUTO-408: an admin can remove a
+// specific user's reaction; counts come back fresh; reactors carry user IDs.
+func TestReviewService_AdminRemoveReaction(t *testing.T) {
+	svc, _ := setupReviewServiceTestDB(t)
+	ctx := context.Background()
+
+	rev, err := svc.CreateOrUpdateReview(ctx, "user-A", "alice", false, &domain.CreateReviewRequest{
+		AnimeID: "anime-1", Score: 8, ReviewText: "x",
+	})
+	require.NoError(t, err)
+
+	_, counts, err := svc.ToggleReaction(ctx, "anime-1", rev.ID, "user-B", "bob", "👍", false)
+	require.NoError(t, err)
+	require.Len(t, counts, 1)
+	require.Len(t, counts[0].Reactors, 1, "reactors must carry the user id for moderation")
+	assert.Equal(t, "user-B", counts[0].Reactors[0].UserID)
+	assert.Equal(t, "bob", counts[0].Reactors[0].Username)
+
+	// admin removes bob's 👍
+	counts, err = svc.AdminRemoveReaction(ctx, "anime-1", rev.ID, "user-B", "👍", "admin-1")
+	require.NoError(t, err)
+	assert.Len(t, counts, 0)
+
+	// removing again is a no-op success (idempotent reconcile)
+	_, err = svc.AdminRemoveReaction(ctx, "anime-1", rev.ID, "user-B", "👍", "admin-1")
+	require.NoError(t, err)
 }
 
 // TestReviewService_AdminReview_AutoSystemThumbsUp — AUTO-408: an admin-authored

@@ -204,7 +204,7 @@ func (h *ReviewHandler) ReactToReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	added, counts, err := h.reviewService.ToggleReaction(r.Context(), animeID, reviewID, claims.UserID, claims.Username, emoji)
+	added, counts, err := h.reviewService.ToggleReaction(r.Context(), animeID, reviewID, claims.UserID, claims.Username, emoji, claims.Role == authz.RoleAdmin)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -214,6 +214,43 @@ func (h *ReviewHandler) ReactToReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.OK(w, map[string]interface{}{"added": added, "counts": counts})
+}
+
+// AdminRemoveReaction removes a specific user's emoji reaction from a review
+// (moderation). DELETE /api/anime/{animeId}/reviews/{reviewId}/reactions/{emoji}/users/{userId}
+// — admin-only (AdminRoleMiddleware on the route). Returns the fresh
+// { counts: []ReactionCount } so the UI can reconcile in place. AUTO-408.
+func (h *ReviewHandler) AdminRemoveReaction(w http.ResponseWriter, r *http.Request) {
+	animeID := chi.URLParam(r, "animeId")
+	reviewID := chi.URLParam(r, "reviewId")
+	emoji := chi.URLParam(r, "emoji")
+	targetUserID := chi.URLParam(r, "userId")
+	if animeID == "" || reviewID == "" || emoji == "" || targetUserID == "" {
+		httputil.BadRequest(w, "anime_id, review_id, emoji and user_id are required")
+		return
+	}
+
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		httputil.Unauthorized(w)
+		return
+	}
+	// Defense-in-depth: the route already applies AdminRoleMiddleware.
+	if claims.Role != authz.RoleAdmin {
+		httputil.Forbidden(w)
+		return
+	}
+
+	counts, err := h.reviewService.AdminRemoveReaction(r.Context(), animeID, reviewID, targetUserID, emoji, claims.UserID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	if counts == nil {
+		counts = []domain.ReactionCount{}
+	}
+
+	httputil.OK(w, map[string]interface{}{"counts": counts})
 }
 
 // GetAnimeRating returns the average rating for an anime

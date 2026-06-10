@@ -607,6 +607,12 @@ export const reviewApi = {
     apiClient.post(
       `/anime/${animeId}/reviews/${reviewId}/reactions/${encodeURIComponent(emoji)}`,
     ),
+  // Admin moderation: remove a specific user's reaction from a review
+  // (admin-only, enforced server-side). Returns { counts }. AUTO-408.
+  adminRemoveReaction: (animeId: string, reviewId: string, emoji: string, userId: string) =>
+    apiClient.delete(
+      `/anime/${animeId}/reviews/${reviewId}/reactions/${encodeURIComponent(emoji)}/users/${userId}`,
+    ),
 }
 
 export const commentApi = {

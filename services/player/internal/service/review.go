@@ -161,12 +161,14 @@ func (s *ReviewService) attachReactions(ctx context.Context, entries []*domain.A
 	return entries, nil
 }
 
-// ToggleReaction sets/replaces/removes the caller's single reaction on a review
-// (one reaction per person — see repo.ToggleReaction) and returns the added flag
-// plus the review's fresh reaction counts. Rejects emojis outside the fixed
-// 12-emoji palette and blocks reacting to your own review. username is
-// denormalized onto the reaction for the who-reacted popover. AUTO-408.
-func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, userID, username, emoji string) (bool, []domain.ReactionCount, error) {
+// ToggleReaction sets/replaces/removes the caller's reaction on a review and
+// returns the added flag plus the review's fresh reaction counts. Regular
+// users get ONE reaction per person (toggle = replace-or-remove); admins
+// (isAdmin) may stack MULTIPLE reactions — each emoji toggles independently
+// (see repo.ToggleReaction). Rejects emojis outside the fixed 12-emoji
+// palette and blocks reacting to your own review. username is denormalized
+// onto the reaction for the who-reacted popover. AUTO-408.
+func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, userID, username, emoji string, isAdmin bool) (bool, []domain.ReactionCount, error) {
 	if !domain.AllowedReactionEmojis[emoji] {
 		return false, nil, errors.InvalidInput("unsupported reaction emoji")
 	}
@@ -181,7 +183,7 @@ func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, u
 	if authorID == userID {
 		return false, nil, errors.Forbidden("cannot react to your own review")
 	}
-	added, err := s.listRepo.ToggleReaction(ctx, reviewID, userID, username, emoji)
+	added, err := s.listRepo.ToggleReaction(ctx, reviewID, userID, username, emoji, isAdmin)
 	if err != nil {
 		return false, nil, errors.Wrap(err, errors.CodeInternal, "failed to toggle reaction")
 	}
@@ -191,6 +193,30 @@ func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, u
 		return false, nil, errors.Wrap(err, errors.CodeInternal, "failed to load reaction counts")
 	}
 	return added, counts[reviewID], nil
+}
+
+// AdminRemoveReaction removes another user's emoji reaction from a review
+// (moderation). Caller MUST be admin-gated at the handler/router layer.
+// Returns the review's fresh reaction counts (reacted_by_me computed for the
+// acting admin). Removing a reaction that's already gone is a no-op success
+// so the UI reconcile stays idempotent. AUTO-408.
+func (s *ReviewService) AdminRemoveReaction(ctx context.Context, animeID, reviewID, targetUserID, emoji, adminUserID string) ([]domain.ReactionCount, error) {
+	authorID, err := s.listRepo.GetReviewAuthorID(ctx, reviewID)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "failed to resolve review author")
+	}
+	if authorID == "" {
+		return nil, errors.NotFound("review not found")
+	}
+	if _, err := s.listRepo.DeleteUserReaction(ctx, reviewID, targetUserID, emoji); err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "failed to remove reaction")
+	}
+	viewer := adminUserID
+	counts, err := s.listRepo.GetReactionCounts(ctx, []string{reviewID}, &viewer)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "failed to load reaction counts")
+	}
+	return counts[reviewID], nil
 }
 
 // GetUserReviews returns every anime_list row for the user that qualifies
