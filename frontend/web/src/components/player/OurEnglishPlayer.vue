@@ -2,7 +2,7 @@
   <div class="ourenglish-player">
     <!-- Loading episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+      <Spinner size="lg" />
     </div>
 
     <!-- Provider chain exhausted -->
@@ -10,9 +10,7 @@
       v-else-if="!available"
       class="text-center py-16 text-white/60"
     >
-      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
       {{ $t('player.ourenglish.unavailable') }}
     </div>
 
@@ -26,7 +24,7 @@
           class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
         >
           <div class="text-center">
-            <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <Spinner size="lg" class="mx-auto mb-3" />
             <p class="text-white/60 text-sm">
               {{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}
             </p>
@@ -49,9 +47,7 @@
           class="absolute inset-0 flex items-center justify-center text-white/70 px-6"
         >
           <div class="text-center max-w-sm">
-            <svg class="w-14 h-14 mx-auto mb-3 text-warning/80" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
+            <CircleAlert class="size-14 mx-auto mb-3 text-warning/80" aria-hidden="true" />
             <p>{{ $t('player.sourceUnavailable') }}</p>
           </div>
         </div>
@@ -62,9 +58,7 @@
           class="absolute inset-0 flex items-center justify-center text-white/40"
         >
           <div class="text-center">
-            <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <Play class="size-16 mx-auto mb-3" aria-hidden="true" />
             <p>{{ $t('player.selectEpisode') }}</p>
           </div>
         </div>
@@ -85,9 +79,7 @@
         <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:flex-wrap">
           <!-- Source provider dropdown (pins a specific scraper provider) -->
           <label class="flex items-center gap-2 text-white/70 text-sm" data-test="source-dropdown">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-            </svg>
+            <SlidersHorizontal class="size-4" aria-hidden="true" />
             {{ $t('player.ourenglish.sourceLabel') }}
           </label>
           <select
@@ -117,10 +109,7 @@
 
           <!-- Subtitle picker -->
           <label class="flex items-center gap-2 text-white/70 text-sm">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12h2m4 0h4M7 8h4m4 0h2" />
-            </svg>
+            <Captions class="size-4" aria-hidden="true" />
             {{ $t('player.subtitlePicker.label') }}
           </label>
           <select
@@ -135,6 +124,14 @@
           </select>
 
           <SubtitleSettingsMenu :has-active-sub="!!activeSubUrl" />
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-100 border border-cyan-400/30 transition-colors"
+            @click="otherSubsOpen = true"
+          >
+            <List class="size-4" aria-hidden="true" />
+            {{ $t('player.otherSubs.openButton') }}
+          </button>
         </div>
 
         <!-- Active provider chip -->
@@ -147,9 +144,7 @@
       <div>
         <div class="flex items-center gap-3 mb-3 flex-wrap">
           <h3 class="text-white/60 text-sm flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
+            <List class="size-4" aria-hidden="true" />
             {{ $t('player.episodesCount', { count: episodes.length }) }}
           </h3>
           <slot name="header-middle" />
@@ -162,16 +157,28 @@
         />
       </div>
     </div>
+
+    <OtherSubsPanel
+      v-model="otherSubsOpen"
+      :anime-id="props.animeId"
+      :episode="selectedEpisode?.number ?? 1"
+      :current-track-url="activeSubUrl"
+      @select-track="onOtherSubSelected"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Video, Play, List, SlidersHorizontal, Captions, CircleAlert } from 'lucide-vue-next'
+import { Spinner } from '@/components/ui'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
+import OtherSubsPanel from './OtherSubsPanel.vue'
 import EpisodeSelector from './EpisodeSelector.vue'
 import type { EpisodeOption } from './EpisodeSelector.types'
+import type { SubtitleTrack } from '@/types/raw'
 import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import { scraperApi } from '@/api/client'
@@ -286,6 +293,7 @@ const AVAILABLE_PROVIDERS = [
 const availableProviders = computed(() => AVAILABLE_PROVIDERS as readonly string[])
 
 const selectedSubKey = ref<string>('')
+const otherSubsOpen = ref(false)
 
 interface SubChoice {
   key: string
@@ -294,22 +302,54 @@ interface SubChoice {
   format: 'ass' | 'srt' | 'vtt' | null
 }
 
-const availableSubChoices = computed<SubChoice[]>(() =>
-  activeTracks.value
+function detectFormat(format: string | undefined, url: string): 'ass' | 'srt' | 'vtt' | null {
+  const ext = (format || url.split('?')[0].split('.').pop() || '').toLowerCase()
+  return ext === 'ass' || ext === 'srt' || ext === 'vtt' ? ext : null
+}
+
+// Subtitle tracks pulled in via the "Other Subs" panel (Jimaku / OpenSubtitles).
+// Kept separate from the embed's own `activeTracks` so an episode switch (which
+// clears activeTracks) also clears these, and so each carries its explicit
+// upstream `format` instead of relying on URL-extension guessing alone.
+const extraSubChoices = ref<SubChoice[]>([])
+
+const availableSubChoices = computed<SubChoice[]>(() => {
+  const fromTracks = activeTracks.value
     .filter(t => t.kind === 'captions' || t.kind === 'subtitles')
-    .map(t => {
+    .map<SubChoice>(t => {
       const url = t.file
-      const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase()
-      const format: 'ass' | 'srt' | 'vtt' | null =
-        ext === 'ass' || ext === 'srt' || ext === 'vtt' ? ext : null
+      const format = detectFormat(undefined, url)
       return {
         key: url,
         label: t.label || (format ? format.toUpperCase() : 'subtitle'),
         url,
         format,
       }
-    }),
-)
+    })
+  const seen = new Set(fromTracks.map(c => c.key))
+  const extras = extraSubChoices.value.filter(c => !seen.has(c.key))
+  return [...fromTracks, ...extras]
+})
+
+// "Other Subs" panel → pick a Jimaku/OpenSubtitles track. Inject a synthetic
+// choice (carrying its explicit format) so the picker can display it, then pin
+// it so SubtitleOverlay (via activeSubUrl/activeSubFormat) renders it.
+function onOtherSubSelected(track: SubtitleTrack) {
+  const url = track.url
+  const format = detectFormat(track.format, url)
+  if (!availableSubChoices.value.some(c => c.key === url)) {
+    extraSubChoices.value = [
+      ...extraSubChoices.value,
+      {
+        key: url,
+        label: track.label || track.release || (format ? format.toUpperCase() : 'subtitle'),
+        url,
+        format,
+      },
+    ]
+  }
+  selectedSubKey.value = url
+}
 
 const activeSubUrl = computed(() => {
   const c = availableSubChoices.value.find(x => x.key === selectedSubKey.value)
@@ -485,6 +525,7 @@ async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
   selectedServerId.value = ''
   selectedSubKey.value = ''
   activeTracks.value = []
+  extraSubChoices.value = []
   disposePlayer()
   try {
     const prefer = activeProvider.value || preferredProvider.value || undefined
