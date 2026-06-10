@@ -17,19 +17,18 @@
     <div class="pl-btns">
 
       <!-- Play / Pause -->
-      <button
-        class="pl-icon"
+      <PlayerIconButton
         :aria-label="playing ? 'Pause' : 'Play'"
         data-test="play-pause"
         @click="emit('toggle-play')"
       >
         <Pause v-if="playing" class="size-5" aria-hidden="true" />
         <Play v-else class="size-5" aria-hidden="true" />
-      </button>
+      </PlayerIconButton>
 
       <!-- −5s (hidden on mobile via CSS) — circular replay arrow w/ "5" inside -->
-      <button
-        class="pl-icon pl-skip-back"
+      <PlayerIconButton
+        class="pl-skip-back"
         aria-label="Back 5 seconds"
         data-test="seek-back"
         @click="emit('seek-rel', -5)"
@@ -41,11 +40,11 @@
           <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
           <text x="12.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
-      </button>
+      </PlayerIconButton>
 
       <!-- +5s (hidden on mobile via CSS) — circular forward arrow w/ "5" inside -->
-      <button
-        class="pl-icon pl-skip-fwd"
+      <PlayerIconButton
+        class="pl-skip-fwd"
         aria-label="Forward 5 seconds"
         data-test="seek-fwd"
         @click="emit('seek-rel', 5)"
@@ -57,12 +56,11 @@
           <path d="M4 4v6h6M4 10a8 8 0 11-1 4" style="transform: scaleX(-1); transform-origin: center" />
           <text x="11.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
-      </button>
+      </PlayerIconButton>
 
       <!-- Volume cluster (hover to expand) -->
       <div class="pl-vol">
-        <button
-          class="pl-icon"
+        <PlayerIconButton
           :aria-label="muted || volume === 0 ? 'Unmute' : 'Mute'"
           data-test="mute"
           @click="emit('toggle-mute')"
@@ -73,7 +71,7 @@
           <Volume1 v-else-if="volume < 0.5" class="size-5" aria-hidden="true" />
           <!-- Volume high -->
           <Volume2 v-else class="size-5" aria-hidden="true" />
-        </button>
+        </PlayerIconButton>
         <input
           type="range"
           class="pl-vol-range"
@@ -110,46 +108,44 @@
       </button>
 
       <!-- Subtitles (CC) -->
-      <button
-        class="pl-icon"
-        :class="{ 'is-open': openMenu === 'subs' }"
+      <PlayerIconButton
+        :active="openMenu === 'subs'"
         aria-label="Subtitles"
         data-test="toggle-subs"
         @click="emit('toggle-subs')"
       >
         <Captions class="size-5" aria-hidden="true" />
-      </button>
+      </PlayerIconButton>
 
       <!-- Settings gear -->
-      <button
-        class="pl-icon"
-        :class="{ 'is-open': openMenu === 'settings' }"
+      <PlayerIconButton
+        :active="openMenu === 'settings'"
         aria-label="Settings"
         data-test="toggle-settings"
         @click="emit('toggle-settings')"
       >
         <Settings class="size-5" aria-hidden="true" />
-      </button>
+      </PlayerIconButton>
 
       <!-- PiP (hidden on mobile via CSS) -->
-      <button
-        class="pl-icon pl-pip-btn"
+      <PlayerIconButton
+        class="pl-pip-btn"
         aria-label="Picture in Picture"
         data-test="toggle-pip"
         @click="emit('toggle-pip')"
       >
         <PictureInPicture2 class="size-5" aria-hidden="true" />
-      </button>
+      </PlayerIconButton>
 
       <!-- Fullscreen (hidden on mobile via CSS) -->
-      <button
-        class="pl-icon pl-fs-btn"
+      <PlayerIconButton
+        class="pl-fs-btn"
         aria-label="Fullscreen"
         data-test="toggle-fullscreen"
         @click="emit('toggle-fullscreen')"
       >
         <Maximize class="size-5" aria-hidden="true" />
-      </button>
+      </PlayerIconButton>
 
     </div>
   </div>
@@ -157,6 +153,7 @@
 
 <script setup lang="ts">
 import PlayerScrubBar from './PlayerScrubBar.vue'
+import PlayerIconButton from './PlayerIconButton.vue'
 import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize } from 'lucide-vue-next'
 
 interface Chapter {
@@ -242,28 +239,11 @@ function onVolumeInput(event: Event) {
   flex: 1;
 }
 
-.pl-icon {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-md);
-  background: transparent;
-  border: 0;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-
-.pl-icon:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.pl-icon.is-open {
-  background: rgba(0, 212, 255, 0.2);
-  color: var(--brand-cyan);
-}
+/* Icon control buttons now live in the <PlayerIconButton> primitive
+   (was `.pl-icon` / `.pl-icon:hover` / `.pl-icon.is-open`). The marker
+   classes below (pl-skip-back/fwd, pl-pip-btn, pl-fs-btn) are kept only for
+   the mobile-trim media query and are passed through via PlayerIconButton's
+   `class` prop. */
 
 /* Volume cluster */
 .pl-vol {
