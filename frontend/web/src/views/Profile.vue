@@ -10,9 +10,7 @@
 
     <!-- Error State -->
     <div v-else-if="error" class="flex flex-col items-center justify-center min-h-screen pt-20 px-4">
-      <svg class="w-16 h-16 text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-      </svg>
+      <TriangleAlert class="size-16 text-white/20 mb-4" />
       <p class="text-white/60 text-lg">{{ error }}</p>
       <router-link to="/" class="mt-4 text-cyan-400 hover:text-cyan-300">
         {{ $t('profile.goHome') }}
@@ -50,9 +48,7 @@
                 :title="$t('profile.uploadAvatar')"
                 class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-cyan-500 flex items-center justify-center text-white shadow-lg hover:bg-cyan-400 transition-colors"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
+                <Pencil class="size-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -77,9 +73,7 @@
                 @click="copyProfileLink"
                 class="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
               >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
+                <Share2 class="size-5" />
                 <span>{{ copied ? $t('profile.copied') : $t('profile.share') }}</span>
               </button>
             </div>
@@ -160,9 +154,7 @@
                   @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'"
                   :title="sortDirection === 'asc' ? 'Ascending' : 'Descending'"
                 >
-                  <svg class="w-5 h-5 transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-                  </svg>
+                  <ArrowUpDown class="size-5 transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" />
                 </button>
                 <button
                   class="p-2 rounded-lg transition-colors"
@@ -170,9 +162,7 @@
                   @click="viewMode = 'table'"
                   title="Table view"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                  </svg>
+                  <List class="size-5" />
                 </button>
                 <button
                   class="p-2 rounded-lg transition-colors"
@@ -180,9 +170,7 @@
                   @click="viewMode = 'grid'"
                   title="Grid view"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                  </svg>
+                  <LayoutGrid class="size-5" />
                 </button>
               </div>
 
@@ -342,9 +330,7 @@
                           class="p-1.5 rounded hover:bg-destructive/20 text-white/30 hover:text-destructive transition-colors"
                           :title="$t('profile.actions.removeFromList')"
                         >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                          <Trash2 class="size-4" />
                         </button>
                       </td>
                     </tr>
@@ -372,9 +358,7 @@
                         @error="(e: Event) => { const img = e.target as HTMLImageElement; if (!img.dataset.fallback) { img.dataset.fallback = '1'; img.src = getImageFallbackUrl(anime.anime?.poster_url || '') } }"
                       />
                       <div v-else class="w-full h-full flex items-center justify-center text-white/20">
-                        <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
+                        <Film class="size-12" />
                       </div>
 
                       <!-- Score Badge — fades on hover so the kebab owns top-right.
@@ -460,9 +444,7 @@
                   </svg>
                 </div>
                 <div v-else class="text-center py-12">
-                  <svg class="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
+                  <Archive class="size-16 mx-auto text-white/20 mb-4" />
                   <p class="text-white/50">{{ $t('profile.empty.filter') }}</p>
                 </div>
               </template>
@@ -479,9 +461,7 @@
             </div>
 
             <div v-else class="text-center py-12">
-              <svg class="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
+              <Archive class="size-16 mx-auto text-white/20 mb-4" />
               <p class="text-white/50 mb-4">{{ isOwnProfile ? $t('profile.empty.watchlist') : $t('profile.listEmpty') }}</p>
               <Button v-if="isOwnProfile" variant="outline" @click="$router.push('/browse')">
                 {{ $t('profile.actions.browseCatalog') }}
@@ -612,9 +592,7 @@
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
+                  <Download v-else class="size-4 mr-2" />
                   {{ exportingJSON ? $t('profile.export.exporting') : $t('profile.export.button') }}
                 </Button>
                 <div v-if="exportError" class="mt-3 p-3 rounded-lg bg-pink-500/20">
@@ -661,9 +639,7 @@
 
                   <!-- Public Link -->
                   <div v-if="authStore.user?.public_id" class="flex items-center gap-2 p-3 bg-white/5 rounded-lg">
-                    <svg class="w-5 h-5 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
+                    <Link class="size-5 text-cyan-400 flex-shrink-0" />
                     <a
                       :href="`/user/${authStore.user.public_id}`"
                       target="_blank"
@@ -675,9 +651,7 @@
                       @click="copyProfileLink"
                       class="ml-auto p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
                     >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
+                      <Copy class="size-4" />
                     </button>
                   </div>
 
@@ -769,12 +743,8 @@
                         :aria-label="$t('profile.settings.apiKeyCopy')"
                         class="flex-shrink-0 p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
                       >
-                        <svg v-if="apiKeyCopied" class="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
+                        <Check v-if="apiKeyCopied" class="size-4 text-success" />
+                        <Copy v-else class="size-4" />
                       </button>
                     </div>
                     <p v-if="apiKeyCopied" class="text-success text-xs">{{ $t('profile.settings.apiKeyCopied') }}</p>
@@ -979,9 +949,7 @@
         <!-- File Input -->
         <div class="text-center">
           <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-white hover:bg-white/20 cursor-pointer transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+            <ImageIcon class="size-5" />
             {{ $t('profile.avatar.selectFile') }}
             <input
               type="file"
@@ -1030,6 +998,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { TriangleAlert, Pencil, Share2, ArrowUpDown, List, LayoutGrid, Trash2, Film, Archive, Download, Link, Copy, Check, Image as ImageIcon } from 'lucide-vue-next'
 import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'

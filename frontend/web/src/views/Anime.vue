@@ -65,9 +65,7 @@
             <!-- Shikimori Rating -->
             <div v-if="anime.rating" class="flex items-center gap-2">
               <div class="flex items-center gap-1 text-warning">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
+                <Star class="size-5" fill="currentColor" />
                 <span class="font-bold text-lg">{{ anime.rating.toFixed(1) }}</span>
               </div>
               <span class="text-white/60 text-sm">Shikimori</span>
@@ -76,9 +74,7 @@
             <!-- Site Rating -->
             <div v-if="siteRating && siteRating.total_reviews > 0" class="flex items-center gap-2">
               <div class="flex items-center gap-1 text-cyan-400">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
+                <Star class="size-5" fill="currentColor" />
                 <span class="font-bold text-lg">{{ siteRating.average_score.toFixed(1) }}</span>
               </div>
               <span class="text-white/60 text-sm">AnimeEnigma ({{ siteRating.total_reviews }})</span>
@@ -101,9 +97,7 @@
               v-if="notReleasedYet"
               class="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-white/5 text-white/70 border border-white/10 cursor-default"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Clock class="size-5" aria-hidden="true" />
               <span>{{ premiereDate ? $t('anime.notReleased.cta', { date: premiereDate }) : $t('anime.notReleased.ctaNoDate') }}</span>
             </div>
             <template v-else>
@@ -115,9 +109,7 @@
                 radius="lg"
                 class="shadow-lg shadow-cyan-500/20"
               >
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                <Play class="size-5" fill="currentColor" aria-hidden="true" />
                 <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
               </Button>
               <!-- Workstream watch-together — discovery-stage Invite mount.
@@ -153,14 +145,10 @@
                   ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30'
                   : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'"
               >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path v-if="currentListStatus" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
+                <Check v-if="currentListStatus" class="size-5" aria-hidden="true" />
+                <Plus v-else class="size-5" aria-hidden="true" />
                 <span>{{ currentListStatus ? statusLabels[currentListStatus] : $t('anime.addToList') }}</span>
-                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showStatusDropdown }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
+                <ChevronDown class="size-4 transition-transform" :class="{ 'rotate-180': showStatusDropdown }" aria-hidden="true" />
               </button>
 
               <!-- Dropdown Menu -->
@@ -190,9 +178,7 @@
                       : 'text-white/80 hover:bg-white/5 hover:text-white'"
                   >
                     {{ label }}
-                    <svg v-if="currentListStatus === status" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
+                    <Check v-if="currentListStatus === status" class="size-4" aria-hidden="true" />
                   </button>
 
                   <!-- Remove from list -->
@@ -202,9 +188,7 @@
                       role="menuitem"
                       class="w-full px-4 py-3 text-left text-sm text-pink-400 hover:bg-pink-500/10 transition-colors flex items-center gap-2"
                     >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
+                      <Trash2 class="size-4" aria-hidden="true" />
                       {{ $t('anime.removeFromList') }}
                     </button>
                   </div>
@@ -218,9 +202,7 @@
               v-if="anime.nextEpisodeAt && anime.status === 'ongoing'"
               class="inline-flex items-center gap-2 h-10 px-3 rounded-lg bg-cyan-500/10 backdrop-blur-xl border border-cyan-500/20"
             >
-              <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Clock class="size-5 text-cyan-400" aria-hidden="true" />
               <span class="text-cyan-400 font-medium">
                 {{ $t('anime.nextEpisode', { episode: (anime.episodesAired || 0) + 1 }) }}
               </span>
@@ -248,9 +230,7 @@
                   :aria-expanded="showAdminMenu"
                   class="absolute top-0 right-4 lg:right-8 z-20 flex items-center justify-center w-10 h-10 rounded-lg bg-pink-500/10 text-pink-400/80 border border-pink-500/25 hover:bg-pink-500/20 hover:text-pink-300 transition-colors"
                 >
-                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                    <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-                  </svg>
+                  <EllipsisVertical class="size-5" aria-hidden="true" />
                 </button>
               </template>
 
@@ -265,9 +245,7 @@
                 class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left cursor-pointer outline-none text-white/70 hover:bg-white/5 hover:text-white data-[highlighted]:bg-white/5 data-[highlighted]:text-white data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed"
                 @select="refreshAnimeData"
               >
-                <svg class="w-4 h-4 flex-shrink-0" :class="{ 'animate-spin': refreshing }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <RefreshCw class="size-4 flex-shrink-0" :class="{ 'animate-spin': refreshing }" aria-hidden="true" />
                 {{ refreshing ? $t('anime.refreshing') : $t('anime.refresh') }}
               </DropdownMenuItem>
 
@@ -279,11 +257,8 @@
                   : 'text-white/70 hover:bg-white/5 hover:text-white data-[highlighted]:text-white'"
                 @select="toggleHidden"
               >
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path v-if="isHidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                </svg>
+                <Eye v-if="isHidden" class="size-4 flex-shrink-0" aria-hidden="true" />
+                <EyeOff v-else class="size-4 flex-shrink-0" aria-hidden="true" />
                 {{ isHidden ? $t('anime.unhide') : $t('anime.hide') }}
               </DropdownMenuItem>
 
@@ -292,9 +267,7 @@
                 class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors text-left cursor-pointer outline-none text-white/70 hover:bg-white/5 hover:text-white data-[highlighted]:bg-white/5 data-[highlighted]:text-white"
                 @select="showShikimoriEdit = !showShikimoriEdit"
               >
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
+                <Pencil class="size-4 flex-shrink-0" aria-hidden="true" />
                 Shikimori ID
               </DropdownMenuItem>
             </DropdownMenu>
@@ -367,9 +340,7 @@
           <div class="flex items-center justify-between gap-3 sm:gap-4">
             <h2 class="text-xl font-semibold text-white">
               <span class="flex items-center gap-2">
-                <svg class="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                <Play class="size-6 text-cyan-400" fill="currentColor" aria-hidden="true" />
                 {{ $t('anime.watch') || 'Смотреть онлайн' }}
               </span>
             </h2>
@@ -546,9 +517,7 @@
             v-if="notReleasedYet"
             class="w-full aspect-video rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-center gap-3 px-6"
           >
-            <svg class="w-12 h-12 text-cyan-400/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+            <Calendar class="size-12 text-cyan-400/80" aria-hidden="true" />
             <p class="text-lg font-semibold text-white">{{ $t('anime.notReleased.title') }}</p>
             <p class="text-sm text-white/60 max-w-md">
               {{ premiereDate ? $t('anime.notReleased.withDate', { date: premiereDate }) : $t('anime.notReleased.noDate') }}
@@ -571,9 +540,7 @@
             <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/40" aria-hidden="true" />
             <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
               <span class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-cyan-500/90 group-hover:bg-cyan-400 text-black flex items-center justify-center shadow-lg transition-colors">
-                <svg class="w-8 h-8 sm:w-10 sm:h-10 ml-1" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                <Play class="size-8 sm:size-10 ml-1" fill="currentColor" aria-hidden="true" />
               </span>
               <span class="text-base sm:text-lg font-semibold">
                 {{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}
@@ -689,9 +656,7 @@
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
-              <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-              </svg>
+              <MessageSquare class="size-6 text-cyan-400" />
               {{ ugcTab === 'comments' ? $t('anime.ugc.commentsTab') : $t('anime.reviews') }}
             </span>
           </h2>
@@ -727,15 +692,12 @@
                 @click="reviewForm.score = star"
                 class="p-0.5 sm:p-1 transition-transform hover:scale-110"
               >
-                <svg
-                  class="w-6 h-6 sm:w-8 sm:h-8 transition-colors"
+                <Star
+                  class="size-6 sm:size-8 transition-colors"
                   :class="star <= reviewForm.score ? 'text-warning' : 'text-white/30'"
                   fill="currentColor"
-                  viewBox="0 0 20 20"
                   aria-hidden="true"
-                >
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
+                />
               </button>
             </div>
             <p v-if="reviewForm.score > 0" class="text-cyan-400 text-sm mt-1">{{ reviewForm.score }}/10</p>
@@ -813,9 +775,7 @@
                 </div>
               </div>
               <div class="flex items-center gap-1 text-warning">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
+                <Star class="size-5" fill="currentColor" />
                 <span class="font-bold">{{ review.score }}</span>
               </div>
             </div>
@@ -937,9 +897,7 @@
                       @click="startEditComment(c)"
                       class="text-white/40 hover:text-cyan-400 p-2 rounded-lg transition-colors"
                     >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
+                      <Pencil class="size-5" aria-hidden="true" />
                     </button>
                     <!-- Delete: own comment OR admin -->
                     <button
@@ -950,9 +908,7 @@
                       @click="deleteCommentItem(c)"
                       class="text-white/40 hover:text-pink-400 hover:bg-pink-500/10 p-2 rounded-lg transition-colors"
                     >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3" />
-                      </svg>
+                      <Trash2 class="size-5" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -1081,6 +1037,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
+import { Star, Clock, Play, Check, Plus, ChevronDown, Trash2, RefreshCw, Eye, EyeOff, Pencil, Calendar, MessageSquare, EllipsisVertical } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
