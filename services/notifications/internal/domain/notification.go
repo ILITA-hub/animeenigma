@@ -21,6 +21,19 @@ const (
 	// that the user has watched at least once. Payload shape:
 	// NewEpisodePayload.
 	TypeNewEpisode NotificationType = "new_episode"
+
+	// Feedback triage loop (AUTO-417): the player service emits one
+	// notification per triage stage of a user-submitted feedback report.
+	// Each stage invalidates the previous stage's unread notification for
+	// the same report (via UpsertRequest.InvalidateDedupeKeys). Payload
+	// shape for all three: FeedbackStatusPayload.
+
+	// TypeFeedbackCreated — "we received your feedback and opened a task".
+	TypeFeedbackCreated NotificationType = "feedback_created"
+	// TypeFeedbackInProgress — "the robot started working on your task".
+	TypeFeedbackInProgress NotificationType = "feedback_in_progress"
+	// TypeFeedbackAIDone — "the robot finished, thanks for the feedback".
+	TypeFeedbackAIDone NotificationType = "feedback_ai_done"
 )
 
 // UserNotification is the per-user notification row.
@@ -53,6 +66,18 @@ type UserNotification struct {
 // heuristic. (GORM would derive "user_notifications" either way; explicit
 // override insulates the schema from future GORM changes.)
 func (UserNotification) TableName() string { return "user_notifications" }
+
+// FeedbackStatusPayload is the JSON shape stored in UserNotification.Payload
+// for the three feedback_* types. ReportID is the on-disk report id
+// (`{ts}_{user}_{type}` — see services/player report.go); Description is a
+// truncated snippet of the user's original feedback text so the card can
+// remind them which report this is about.
+type FeedbackStatusPayload struct {
+	ReportID    string `json:"report_id"`
+	Category    string `json:"category,omitempty"` // bug | issue | feature
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status"` // created | in_progress | ai_done
+}
 
 // NewEpisodePayload is the JSON shape stored in UserNotification.Payload
 // when Type == TypeNewEpisode. Mirrors the design-doc payload spec.

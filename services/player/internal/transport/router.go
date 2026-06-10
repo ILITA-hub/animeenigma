@@ -68,6 +68,16 @@ func NewRouter(
 		r.Get("/internal/users/{user_id}/list", internalListHandler.ListByStatuses)
 	}
 
+	// Internal feedback-status route (AUTO-417). Same trust boundary as
+	// above (gateway never proxies /internal/*; host access only via the
+	// 127.0.0.1-published port). bin/feedback-status calls this so triage
+	// status changes flow through the handler — which both persists the
+	// sidecar file AND dispatches the user-facing stage notification.
+	// "resolved" is refused here (human-only, /admin/feedback UI).
+	if adminReportsHandler != nil {
+		r.Post("/internal/reports/{id}/status", adminReportsHandler.SetStatusInternal)
+	}
+
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Protected routes - user data

@@ -1203,6 +1203,20 @@
       "rangeEp": "Episodes {n}–{m} are out",
       "via": "via {translation}"
     },
+    "feedback": {
+      "created": {
+        "title": "Feedback received — task created",
+        "body": "Thanks! We opened a task for your feedback."
+      },
+      "inProgress": {
+        "title": "Your feedback is in progress",
+        "body": "The robot is already working on your task."
+      },
+      "aiDone": {
+        "title": "Done — thanks to your feedback!",
+        "body": "The robot finished the fix. Thank you for helping make the site better!"
+      }
+    },
     "unknown": {
       "title": "New notification — view in dropdown"
     },
@@ -1439,7 +1453,19 @@
       "upload_error": "Upload failed",
       "cards_empty": "No cards found",
       "groups_empty": "No groups yet",
-      "banners_empty": "No banners yet"
+      "banners_empty": "No banners yet",
+      "banner_add_cards_btn": "Add cards",
+      "banner_picker_title": "Card picker",
+      "banner_picker_search_placeholder": "Search by name or source…",
+      "banner_picker_filter_rarity": "All rarities",
+      "banner_picker_filter_group": "All groups",
+      "banner_picker_already_in_banner": "Already in banner",
+      "banner_picker_select_all": "Select all",
+      "banner_picker_selected": "{n} selected",
+      "banner_picker_add_btn": "Add ({n})",
+      "banner_picker_back": "Back",
+      "banner_picker_empty": "No cards match filters",
+      "banner_new_hint": "Save the banner first to add cards"
     }
   }
 }

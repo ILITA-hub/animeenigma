@@ -1203,6 +1203,20 @@
       "rangeEp": "Вышли серии {n}–{m}",
       "via": "через {translation}"
     },
+    "feedback": {
+      "created": {
+        "title": "Фидбек получен — задача создана",
+        "body": "Спасибо! Мы создали задачу по твоему фидбеку."
+      },
+      "inProgress": {
+        "title": "Твой фидбек в работе",
+        "body": "Робот уже занимается твоей задачей."
+      },
+      "aiDone": {
+        "title": "Готово — благодаря твоему фидбеку!",
+        "body": "Робот закончил работу. Спасибо, что помогаешь делать сайт лучше!"
+      }
+    },
     "unknown": {
       "title": "Новое уведомление — откройте список"
     },
@@ -1439,7 +1453,19 @@
       "upload_error": "Ошибка загрузки",
       "cards_empty": "Карточки не найдены",
       "groups_empty": "Групп пока нет",
-      "banners_empty": "Баннеров пока нет"
+      "banners_empty": "Баннеров пока нет",
+      "banner_add_cards_btn": "Добавить карточки",
+      "banner_picker_title": "Выбор карточек",
+      "banner_picker_search_placeholder": "Поиск по названию или источнику…",
+      "banner_picker_filter_rarity": "Все редкости",
+      "banner_picker_filter_group": "Все группы",
+      "banner_picker_already_in_banner": "Уже в баннере",
+      "banner_picker_select_all": "Выбрать все",
+      "banner_picker_selected": "Выбрано: {n}",
+      "banner_picker_add_btn": "Добавить ({n})",
+      "banner_picker_back": "Назад",
+      "banner_picker_empty": "Нет карточек по фильтрам",
+      "banner_new_hint": "Сначала сохраните баннер, чтобы добавить карточки"
     }
   }
 }

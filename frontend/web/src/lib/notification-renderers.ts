@@ -17,12 +17,17 @@
  */
 import type { Component } from 'vue'
 
+import FeedbackStatusCard from '@/components/notifications/FeedbackStatusCard.vue'
 import NewEpisodeCard from '@/components/notifications/NewEpisodeCard.vue'
 import UnknownNotificationCard from '@/components/notifications/UnknownNotificationCard.vue'
 
 /** Map of `notification.type` → Vue component. */
 export const renderers: Record<string, Component> = {
   new_episode: NewEpisodeCard,
+  // AUTO-417 feedback triage loop — one card renders all three stages.
+  feedback_created: FeedbackStatusCard,
+  feedback_in_progress: FeedbackStatusCard,
+  feedback_ai_done: FeedbackStatusCard,
 }
 
 /**

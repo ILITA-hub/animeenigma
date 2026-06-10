@@ -1203,6 +1203,20 @@
       "rangeEp": "第 {n}–{m} 話が公開されました",
       "via": "{translation} 経由"
     },
+    "feedback": {
+      "created": {
+        "title": "フィードバック受付 — タスクを作成しました",
+        "body": "ありがとうございます！フィードバックのタスクを作成しました。"
+      },
+      "inProgress": {
+        "title": "フィードバック対応中",
+        "body": "ロボットがあなたのタスクに取り組んでいます。"
+      },
+      "aiDone": {
+        "title": "完了 — あなたのフィードバックのおかげです！",
+        "body": "ロボットが修正を完了しました。サイトの改善にご協力いただきありがとうございます！"
+      }
+    },
     "unknown": {
       "title": "新しい通知 — リストで確認"
     },
@@ -1439,7 +1453,19 @@
       "upload_error": "アップロードに失敗しました",
       "cards_empty": "カードが見つかりません",
       "groups_empty": "グループがまだありません",
-      "banners_empty": "バナーがまだありません"
+      "banners_empty": "バナーがまだありません",
+      "banner_add_cards_btn": "カードを追加",
+      "banner_picker_title": "カード選択",
+      "banner_picker_search_placeholder": "名前またはソースで検索…",
+      "banner_picker_filter_rarity": "すべてのレアリティ",
+      "banner_picker_filter_group": "すべてのグループ",
+      "banner_picker_already_in_banner": "すでにバナーに追加済み",
+      "banner_picker_select_all": "すべて選択",
+      "banner_picker_selected": "{n}件選択中",
+      "banner_picker_add_btn": "追加 ({n})",
+      "banner_picker_back": "戻る",
+      "banner_picker_empty": "フィルター条件に合うカードがありません",
+      "banner_new_hint": "カードを追加するには先にバナーを保存してください"
     }
   }
 }

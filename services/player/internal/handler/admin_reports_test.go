@@ -36,7 +36,7 @@ func writeReport(t *testing.T, dir, ts, user, ptype string, body map[string]inte
 func newTestReportsHandler(t *testing.T) (*AdminReportsHandler, string) {
 	t.Helper()
 	dir := t.TempDir()
-	return NewAdminReportsHandler(logger.Default(), dir), dir
+	return NewAdminReportsHandler(logger.Default(), dir, nil), dir
 }
 
 type listResp struct {

@@ -233,6 +233,31 @@ func (r *NotificationRepository) Click(
 	return nil
 }
 
+// InvalidateUnreadByDedupeKeys stamps invalidated_at on a user's active,
+// still-unread notifications matching any of the given dedupe keys. Used by
+// the feedback triage loop: a new stage notification supersedes the previous
+// stage's unread row (per AUTO-417: "if the old notification wasn't read yet,
+// mark it no longer actual"). Already-read rows are intentionally untouched.
+// Returns rows affected.
+func (r *NotificationRepository) InvalidateUnreadByDedupeKeys(
+	ctx context.Context,
+	userID string,
+	dedupeKeys []string,
+) (int64, error) {
+	if len(dedupeKeys) == 0 {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).
+		Model(&domain.UserNotification{}).
+		Where("user_id = ? AND dedupe_key IN ? AND read_at IS NULL AND dismissed_at IS NULL AND invalidated_at IS NULL",
+			userID, dedupeKeys).
+		Update("invalidated_at", time.Now())
+	if res.Error != nil {
+		return 0, apperrors.Wrap(res.Error, apperrors.CodeInternal, "invalidate notifications by dedupe keys")
+	}
+	return res.RowsAffected, nil
+}
+
 // Upsert is the producer path: insert a fresh notification, or update the
 // existing active one for the same (user_id, dedupe_key). Matches the
 // partial uk_user_dedupe index — dismissed rows do not block a new insert.

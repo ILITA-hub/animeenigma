@@ -21,6 +21,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -36,6 +37,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -59,14 +61,17 @@ var reportIDRe = regexp.MustCompile(`^[0-9A-Za-z:_\-]+$`)
 
 // AdminReportsHandler serves the admin feedback browser. It owns the same
 // reportsDir as ReportHandler and a mutex protecting the sidecar status file.
+// notifier (optional) drives the feedback triage notification loop
+// (AUTO-417): status transitions notify the report's author.
 type AdminReportsHandler struct {
 	log        *logger.Logger
 	reportsDir string
+	notifier   *service.FeedbackNotifier
 	mu         sync.Mutex
 }
 
-func NewAdminReportsHandler(log *logger.Logger, reportsDir string) *AdminReportsHandler {
-	return &AdminReportsHandler{log: log, reportsDir: reportsDir}
+func NewAdminReportsHandler(log *logger.Logger, reportsDir string, notifier *service.FeedbackNotifier) *AdminReportsHandler {
+	return &AdminReportsHandler{log: log, reportsDir: reportsDir, notifier: notifier}
 }
 
 // feedbackStatusEntry is one row of the sidecar status map.
@@ -270,10 +275,33 @@ func (h *AdminReportsHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 type setStatusRequest struct {
 	Status string `json:"status"`
+	// UpdatedBy is honored only on the internal route (the admin route takes
+	// the actor from JWT claims). Lets bin/feedback-status attribute writes.
+	UpdatedBy string `json:"updated_by,omitempty"`
 }
 
 // SetStatus upserts the triage status for a report into the sidecar file.
+// Admin route — actor comes from JWT claims; all five statuses allowed.
 func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) {
+	var updatedBy string
+	if claims, ok := authz.ClaimsFromContext(r.Context()); ok && claims != nil {
+		updatedBy = claims.Username
+	}
+	h.setStatusCommon(w, r, updatedBy, false)
+}
+
+// SetStatusInternal handles POST /internal/reports/{id}/status — the
+// Docker-network/localhost-only producer route used by bin/feedback-status
+// (and any AI tooling). Mirrors the script's own guard: "resolved" is
+// human-only and is refused here so the rule is enforced server-side too.
+func (h *AdminReportsHandler) SetStatusInternal(w http.ResponseWriter, r *http.Request) {
+	h.setStatusCommon(w, r, "", true)
+}
+
+// setStatusCommon is the shared core of the admin + internal status routes:
+// validate, persist to the sidecar file, then dispatch the feedback loop
+// notification for the transition (fire-and-forget).
+func (h *AdminReportsHandler) setStatusCommon(w http.ResponseWriter, r *http.Request, updatedBy string, internal bool) {
 	id := chi.URLParam(r, "id")
 	path, ok := h.safeReportPath(id)
 	if !ok {
@@ -290,18 +318,27 @@ func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) 
 		httputil.BadRequest(w, "invalid status (expected new|in_progress|ai_done|resolved|not_relevant)")
 		return
 	}
+	if internal {
+		if req.Status == "resolved" {
+			httputil.BadRequest(w, "'resolved' is human-only — promote via the /admin/feedback UI")
+			return
+		}
+		updatedBy = req.UpdatedBy
+		if updatedBy == "" {
+			updatedBy = "internal"
+		}
+	}
 	if _, err := os.Stat(path); err != nil {
 		httputil.NotFound(w, "report")
 		return
 	}
 
-	var updatedBy string
-	if claims, ok := authz.ClaimsFromContext(r.Context()); ok && claims != nil {
-		updatedBy = claims.Username
-	}
-
 	h.mu.Lock()
 	statuses := h.loadStatuses()
+	prev := "new"
+	if e, ok := statuses[id]; ok && e.Status != "" {
+		prev = e.Status
+	}
 	statuses[id] = feedbackStatusEntry{
 		Status:    req.Status,
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
@@ -316,8 +353,46 @@ func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.log.Infow("feedback status updated", "id", id, "status", req.Status, "by", updatedBy)
-	httputil.OK(w, map[string]interface{}{"id": id, "status": req.Status})
+	h.log.Infow("feedback status updated", "id", id, "status", req.Status, "prev", prev, "by", updatedBy)
+	h.dispatchStatusNotification(id, prev, req.Status)
+	httputil.OK(w, map[string]interface{}{"id": id, "status": req.Status, "previous_status": prev})
+}
+
+// dispatchStatusNotification implements the AUTO-417 triage loop on top of a
+// status transition: in_progress and ai_done notify the report's author
+// (superseding the previous stage's unread notification); not_relevant
+// silently invalidates pending stage notifications; new/resolved and no-op
+// repeats dispatch nothing. Author identity comes from the report JSON.
+func (h *AdminReportsHandler) dispatchStatusNotification(id, prev, status string) {
+	if h.notifier == nil || status == prev {
+		return
+	}
+	path, ok := h.safeReportPath(id)
+	if !ok {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		h.log.Warnw("feedback notify: cannot read report", "id", id, "error", err)
+		return
+	}
+	var report struct {
+		UserID      string `json:"user_id"`
+		Category    string `json:"category"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		h.log.Warnw("feedback notify: cannot parse report", "id", id, "error", err)
+		return
+	}
+
+	switch status {
+	case "in_progress", "ai_done":
+		go h.notifier.NotifyStage(context.Background(),
+			id, report.UserID, report.Category, report.Description, status)
+	case "not_relevant":
+		go h.notifier.InvalidateAll(context.Background(), id, report.UserID)
+	}
 }
 
 // truncateRunes shortens s to at most max runes (UTF-8 safe — Russian text),

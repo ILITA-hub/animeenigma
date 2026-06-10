@@ -21,6 +21,19 @@ type Config struct {
 	Maintenance MaintenanceConfig
 	Tier2       Tier2Config
 	Gacha       GachaConfig
+	Notify      NotifyConfig
+}
+
+// NotifyConfig controls the fire-and-forget feedback-status notification
+// producer (AUTO-417). Mirrors the Gacha producer pattern: a notifications
+// outage must never affect report submission or triage.
+type NotifyConfig struct {
+	// InternalURL is the base URL of the notifications service inside the
+	// Docker network. Paths called: /internal/notifications and
+	// /internal/notifications/invalidate. Default: http://notifications:8090
+	InternalURL string
+	// Enabled toggles the producer; when false all dispatches are dropped.
+	Enabled bool
 }
 
 // GachaConfig controls the fire-and-forget gacha credit producer (Phase 4).
@@ -129,6 +142,10 @@ func Load() (*Config, error) {
 			CreditEpisode: int64(getEnvInt("GACHA_CREDIT_EPISODE", 22)),
 			CreditTitle:   int64(getEnvInt("GACHA_CREDIT_TITLE", 80)),
 			Enabled:       getEnvBool("GACHA_CREDIT_ENABLED", true),
+		},
+		Notify: NotifyConfig{
+			InternalURL: getEnv("NOTIFICATIONS_INTERNAL_URL", "http://notifications:8090"),
+			Enabled:     getEnvBool("FEEDBACK_NOTIFY_ENABLED", true),
 		},
 	}, nil
 }

@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Set the triage status of an /admin/feedback report (sidecar _status.json).
+
+Usage: bin/feedback-status <report-id> <status> [updated_by]
+
+AI agents are ALLOWED (intended, pre-authorized by the project owner) to set:
+  new | in_progress | ai_done | not_relevant
+"ai_done" exists specifically for this: the AI believes the item is done and
+a human verifies before promoting it. The promotion itself — "resolved" — is
+HUMAN-ONLY and this script refuses it; flip it in the /admin/feedback UI.
+
+Primary path (AUTO-417): POST the player service's internal route
+  http://127.0.0.1:8083/internal/reports/{id}/status
+so the status change ALSO dispatches the user-facing stage notification
+(feedback_in_progress / feedback_ai_done) to the report's author. The route
+refuses "resolved" server-side too.
+
+Fallback: if the player service is unreachable, write _status.json directly
+(mirrors services/player/internal/handler/admin_reports.go semantics — the
+handler re-reads the sidecar on every request, so the change still applies
+instantly) — but NO user notification is sent; a warning says so.
+"""
+import json
+import re
+import sys
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+REPORTS_DIR = Path("/var/lib/docker/volumes/docker_player_reports/_data")
+STATUS_FILE = REPORTS_DIR / "_status.json"
+PLAYER_INTERNAL_URL = "http://127.0.0.1:8083"
+AI_ALLOWED = {"new", "in_progress", "ai_done", "not_relevant"}
+ID_RE = re.compile(r"^[0-9A-Za-z:_\-]+$")  # same guard as admin_reports.go
+
+
+def set_via_player(report_id: str, status: str, updated_by: str) -> bool:
+    """POST the player internal status route. Returns True on success."""
+    url = f"{PLAYER_INTERNAL_URL}/internal/reports/{report_id}/status"
+    body = json.dumps({"status": status, "updated_by": updated_by}).encode()
+    req = urllib.request.Request(
+        url, data=body, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError as e:
+        # 4xx = the request itself is wrong (bad id/status) — surface it,
+        # do NOT fall back to a direct write that would bypass validation.
+        detail = e.read().decode(errors="replace")[:300]
+        print(f"player service rejected the update ({e.code}): {detail}",
+              file=sys.stderr)
+        sys.exit(1)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False  # service down — caller falls back to direct write
+
+
+def set_via_file(report_id: str, status: str, updated_by: str) -> str:
+    """Direct sidecar write (legacy path). Returns the previous status."""
+    statuses = {}
+    if STATUS_FILE.is_file():
+        statuses = json.loads(STATUS_FILE.read_text())
+    prev = statuses.get(report_id, {}).get("status", "new")
+    statuses[report_id] = {
+        "status": status,
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "updated_by": updated_by,
+    }
+    STATUS_FILE.write_text(json.dumps(statuses, indent=2, ensure_ascii=False))
+    return prev
+
+
+def main() -> int:
+    if len(sys.argv) < 3:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    report_id, status = sys.argv[1], sys.argv[2]
+    updated_by = sys.argv[3] if len(sys.argv) > 3 else "claude"
+
+    if status == "resolved":
+        print("REFUSED: 'resolved' is human-only — promote ai_done via the "
+              "/admin/feedback UI after verifying.", file=sys.stderr)
+        return 1
+    if status not in AI_ALLOWED:
+        print(f"invalid status {status!r} (allowed: {', '.join(sorted(AI_ALLOWED))})",
+              file=sys.stderr)
+        return 1
+    if not ID_RE.match(report_id) or report_id.startswith("_") or ".." in report_id:
+        print(f"invalid report id {report_id!r}", file=sys.stderr)
+        return 1
+    if not (REPORTS_DIR / f"{report_id}.json").is_file():
+        print(f"report not found: {report_id}", file=sys.stderr)
+        return 1
+
+    if set_via_player(report_id, status, updated_by):
+        print(f"{report_id}: -> {status} (by {updated_by}, via player API "
+              f"— feedback-loop notifications handled)")
+        return 0
+
+    prev = set_via_file(report_id, status, updated_by)
+    print(f"{report_id}: {prev} -> {status} (by {updated_by})")
+    print("WARNING: player service unreachable — status written directly; "
+          "the author's feedback-loop notification was NOT sent.",
+          file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

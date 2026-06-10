@@ -408,9 +408,12 @@ func main() {
 	exportHandler := handler.NewExportHandler(listService, log)
 	prefHandler := handler.NewPreferenceHandler(prefService, log)
 	overrideHandler := handler.NewOverrideHandler(log)
-	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir, cfg.Maintenance.URL)
+	// AUTO-417 — feedback triage notification loop. Fire-and-forget producer
+	// to the notifications service; an outage never affects reports/triage.
+	feedbackNotifier := service.NewFeedbackNotifier(cfg.Notify.InternalURL, cfg.Notify.Enabled, log)
+	reportHandler := handler.NewReportHandler(log, cfg.Telegram.BotToken, cfg.Telegram.AdminChatID, cfg.Reports.Dir, cfg.Maintenance.URL, feedbackNotifier)
 	// Admin feedback browser reads the same on-disk report archive (REPORTS_DIR).
-	adminReportsHandler := handler.NewAdminReportsHandler(log, cfg.Reports.Dir)
+	adminReportsHandler := handler.NewAdminReportsHandler(log, cfg.Reports.Dir, feedbackNotifier)
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
 

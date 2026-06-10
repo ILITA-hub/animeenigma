@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
 )
 
 const maxReportBodySize = 2 * 1024 * 1024 // 2MB
@@ -33,9 +35,10 @@ type ReportHandler struct {
 	telegramEnabled  bool
 	maintenanceURL   string
 	reportsDir       string
+	notifier         *service.FeedbackNotifier
 }
 
-func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reportsDir, maintenanceURL string) *ReportHandler {
+func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reportsDir, maintenanceURL string, notifier *service.FeedbackNotifier) *ReportHandler {
 	enabled := telegramToken != "" && telegramChatID != ""
 	if !enabled {
 		log.Warnw("telegram notifications disabled for error reports", "reason", "missing TELEGRAM_BOT_TOKEN or TELEGRAM_ADMIN_CHAT_ID")
@@ -62,6 +65,7 @@ func NewReportHandler(log *logger.Logger, telegramToken, telegramChatID, reports
 		telegramEnabled:  enabled,
 		maintenanceURL:   maintenanceURL,
 		reportsDir:       reportsDir,
+		notifier:         notifier,
 	}
 }
 
@@ -118,6 +122,14 @@ func (h *ReportHandler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 	// Save report to disk
 	reportFile := h.saveReportToDisk(claims, &report)
 
+	// Feedback loop stage 1 (AUTO-417): tell the author we opened a task.
+	// Fire-and-forget — the notifier handles outages and non-site user ids.
+	if h.notifier != nil && reportFile != "" {
+		reportID := strings.TrimSuffix(filepath.Base(reportFile), ".json")
+		go h.notifier.NotifyStage(context.Background(),
+			reportID, claims.UserID, report.Category, report.Description, "created")
+	}
+
 	// Send to maintenance service (preferred) or fall back to Telegram
 	go func() {
 		if h.maintenanceURL != "" {
@@ -163,6 +175,18 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 	filename := fmt.Sprintf("%s_%s_%s.json", ts, username, report.PlayerType)
 	filePath := filepath.Join(h.reportsDir, filename)
 
+	// Empty diagnostics would make json.RawMessage("") fail the marshal
+	// below ("unexpected end of JSON input") and silently drop the whole
+	// report from disk. Default them to valid empty JSON.
+	consoleLogs := report.ConsoleLogs
+	if strings.TrimSpace(consoleLogs) == "" {
+		consoleLogs = "[]"
+	}
+	networkLogs := report.NetworkLogs
+	if strings.TrimSpace(networkLogs) == "" {
+		networkLogs = "[]"
+	}
+
 	// Build full report with user info
 	fullReport := map[string]interface{}{
 		"user_id":        claims.UserID,
@@ -181,8 +205,8 @@ func (h *ReportHandler) saveReportToDisk(claims *authz.Claims, report *domain.Er
 		"screen_size":    report.ScreenSize,
 		"language":       report.Language,
 		"timestamp":      report.Timestamp,
-		"console_logs":   json.RawMessage(report.ConsoleLogs),
-		"network_logs":   json.RawMessage(report.NetworkLogs),
+		"console_logs":   json.RawMessage(consoleLogs),
+		"network_logs":   json.RawMessage(networkLogs),
 		"page_html":      report.PageHTML,
 	}
 

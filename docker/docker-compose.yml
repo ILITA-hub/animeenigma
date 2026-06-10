@@ -654,6 +654,12 @@ services:
       # gacha-side (unique (user,reason,ref) ledger index).
       GACHA_INTERNAL_URL: http://gacha:8093
       GACHA_CREDIT_ENABLED: "true"
+      # AUTO-417 — feedback triage notification loop: player POSTs stage
+      # notifications (created/in_progress/ai_done) to the notifications
+      # service's /internal/notifications. Fire-and-forget; a notifications
+      # outage never affects report submission or triage.
+      NOTIFICATIONS_INTERNAL_URL: http://notifications:8090
+      FEEDBACK_NOTIFY_ENABLED: "true"
     extra_hosts:
       - "host-gateway:host-gateway"
     volumes:
