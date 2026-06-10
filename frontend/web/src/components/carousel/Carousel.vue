@@ -155,10 +155,17 @@ const getItemKey = (item: unknown, index: number): string | number => {
   return index
 }
 
+// rAF-throttled: reading scrollLeft after the reactive write re-renders the
+// arrow buttons forces a reflow per scroll event during smooth scrolling.
+let scrollRafId = 0
 const handleScroll = () => {
-  if (scrollContainer.value) {
-    scrollPosition.value = scrollContainer.value.scrollLeft
-  }
+  if (scrollRafId) return
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = 0
+    if (scrollContainer.value) {
+      scrollPosition.value = scrollContainer.value.scrollLeft
+    }
+  })
 }
 
 const scrollLeft = () => {

@@ -18,17 +18,19 @@
     </button>
 
     <div class="poster-wrap">
-      <!-- Glass skeleton — its own element behind the img (cascade-safe), fades out on @load -->
-      <div v-if="!posterLoaded" class="absolute inset-0 sk-drift" aria-hidden="true" data-testid="poster-skeleton" />
       <img
         :src="posterSrc"
         :alt="model.title"
-        class="poster transition-opacity duration-300"
-        :class="posterLoaded ? 'opacity-100' : 'opacity-0'"
+        class="poster"
         loading="lazy"
         @load="posterLoaded = true"
         @error="onPosterError"
       />
+      <!-- Glass skeleton — translucent overlay ABOVE the img so the native
+           progressive poster render shows through; fades out on @load -->
+      <Transition name="sk-fade">
+        <div v-if="!posterLoaded" class="absolute inset-0 sk-drift pointer-events-none" aria-hidden="true" data-testid="poster-skeleton" />
+      </Transition>
     </div>
 
     <div class="body">
@@ -163,6 +165,12 @@ const nextEpLabel = computed(() =>
   overflow: hidden;
   flex-shrink: 0;
   align-items: start;
+  /* Skip layout/paint for rows scrolled out of the column list — cuts the
+     whole-page style/layout cost that dominated the 379ms INP click in the
+     2026-06-10 trace. Safe here: the row already clips (overflow:hidden),
+     so the implied paint containment changes nothing visually. */
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 104px;
 }
 .prow:hover { background: rgba(255, 255, 255, 0.03); }
 

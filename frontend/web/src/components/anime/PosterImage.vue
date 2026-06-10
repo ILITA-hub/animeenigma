@@ -4,25 +4,29 @@
     :class="[ratioClass, roundedClass]"
     :style="{ backgroundColor: 'var(--color-surface)' }"
   >
-    <!-- Drift skeleton placeholder — its OWN element, so it never shares a
-         `background` declaration with the container (the cascade bug). -->
-    <div
-      v-if="!loaded"
-      class="absolute inset-0 sk-drift"
-      :class="roundedClass"
-      aria-hidden="true"
-    />
-
     <img
       v-if="src"
       :src="resolvedSrc"
       :alt="alt"
       loading="lazy"
-      class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
-      :class="loaded ? 'opacity-100' : 'opacity-0'"
+      class="absolute inset-0 w-full h-full object-cover"
       @load="loaded = true"
       @error="onError"
     />
+
+    <!-- Drift skeleton — translucent glass OVERLAY above the img, so the
+         browser's native progressive (top-down) poster render stays visible
+         underneath as loading feedback; fades out on @load. Its OWN element,
+         so it never shares a `background` declaration with the container
+         (the cascade bug). -->
+    <Transition name="sk-fade">
+      <div
+        v-if="!loaded"
+        class="absolute inset-0 sk-drift pointer-events-none"
+        :class="roundedClass"
+        aria-hidden="true"
+      />
+    </Transition>
 
     <!-- Optional scrims for legible overlay content on bright posters -->
     <div v-if="scrim" class="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/55 to-transparent" />

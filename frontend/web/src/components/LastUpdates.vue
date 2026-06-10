@@ -476,6 +476,9 @@ onUnmounted(() => {
 /* Changelog group */
 .changelog-group {
   margin-bottom: 8px;
+  /* Text-only blocks inside a scroll list — skip layout/paint offscreen */
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 320px;
 }
 
 .changelog-date {
