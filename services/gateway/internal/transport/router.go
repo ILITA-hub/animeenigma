@@ -519,6 +519,12 @@ func NewRouterWithCleanup(
 					r.Use(AdminRoleMiddleware)
 				}
 				r.Get("/wallet", proxyHandler.ProxyToGacha)
+
+				// Player pull engine (Phase 3): active banners (+my pity),
+				// the pull itself, and the collection album.
+				r.Get("/banners", proxyHandler.ProxyToGacha)
+				r.Post("/banners/{id}/pull", proxyHandler.ProxyToGacha)
+				r.Get("/collection", proxyHandler.ProxyToGacha)
 			})
 		})
 
