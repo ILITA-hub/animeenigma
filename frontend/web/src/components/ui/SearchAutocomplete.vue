@@ -52,7 +52,8 @@
               {{ result.releaseYear || '' }}{{ result.releaseYear && result.totalEpisodes ? ' \u00b7 ' : '' }}{{ result.totalEpisodes ? result.totalEpisodes + ' ' + $t('anime.episodesShort') : '' }}
             </p>
           </div>
-          <span v-if="result.rating" class="text-cyan-400 text-xs font-medium flex-shrink-0">
+          <span v-if="result.rating" class="flex items-center gap-0.5 text-warning text-xs font-medium flex-shrink-0">
+            <Star class="size-3" fill="currentColor" aria-hidden="true" />
             {{ result.rating.toFixed(1) }}
           </span>
         </router-link>
@@ -70,7 +71,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { Search } from 'lucide-vue-next'
+import { Search, Star } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { onClickOutside, useDebounceFn } from '@vueuse/core'
 import { animeApi } from '@/api/client'

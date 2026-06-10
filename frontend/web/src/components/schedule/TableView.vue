@@ -38,7 +38,12 @@
             {{ r.date.getDate() }} {{ monthGen(r.date) }} · <span class="text-primary tabular-nums">{{ time(r.date) }}</span>
           </td>
           <td class="p-3 tabular-nums">{{ r.episode }}<span v-if="(r.anime.episodes_count ?? 0) > 0" class="text-muted-foreground"> / {{ r.anime.episodes_count }}</span></td>
-          <td class="hidden md:table-cell p-3 tabular-nums"><span class="text-warning">★</span> {{ (r.anime.score ?? 0).toFixed(1) }}</td>
+          <td class="hidden md:table-cell p-3 tabular-nums">
+            <span class="inline-flex items-center gap-1">
+              <Star class="size-3 text-warning" fill="currentColor" aria-hidden="true" />
+              {{ (r.anime.score ?? 0).toFixed(1) }}
+            </span>
+          </td>
           <td class="hidden md:table-cell p-3">
             <RouterLink :to="`/anime/${r.anime.id}`" class="inline-block" @click.stop>
               <Button variant="default" size="sm" tabindex="-1">{{ $t('schedule.watch') }}</Button>
@@ -54,6 +59,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Star } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 import type { Occurrence, TableSortKey } from '@/composables/schedule/types'
 import { getLocalizedTitle } from '@/utils/title'

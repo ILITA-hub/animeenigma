@@ -98,7 +98,8 @@
                           {{ result.releaseYear || '' }}{{ result.releaseYear && result.totalEpisodes ? ' \u00b7 ' : '' }}{{ result.totalEpisodes ? result.totalEpisodes + ' \u044d\u043f.' : '' }}
                         </p>
                       </div>
-                      <span v-if="result.rating" class="text-cyan-400 text-xs font-medium flex-shrink-0">
+                      <span v-if="result.rating" class="flex items-center gap-0.5 text-warning text-xs font-medium flex-shrink-0">
+                        <Star class="size-3" fill="currentColor" aria-hidden="true" />
                         {{ result.rating.toFixed(1) }}
                       </span>
                     </router-link>
@@ -334,7 +335,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
-import { Search, X, ChevronDown, Menu, Gem } from 'lucide-vue-next'
+import { Search, X, ChevronDown, Menu, Gem, Star } from 'lucide-vue-next'
 import Avatar from '@/components/ui/Avatar.vue'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
