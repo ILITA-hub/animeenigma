@@ -36,6 +36,7 @@ Goal: collapse divergent implementations into token-bound primitives, satisfying
 | D7 | Alert `dismissible?` prop (default `false`), emits `dismiss` | One prop covers static banners + closeable (form errors, report status). |
 | D8 | Alert colors = **pure semantic tokens** (`bg-*-soft` / `text-*` / `border-*`) | Lint-clean with zero allowlist entries; opposite of Badge's literal-hue exemption (status colors have first-class tokens). |
 | D9 | **Avatar** = img + initials fallback, sizes `xs–xl`, presence dot, AvatarGroup `+N` | WT MemberList shows live presence; member lists/now-watching need overlap stacks. |
+| D10 | Adopt **`lucide-vue-next`** as the icon system **and migrate all existing inline SVGs** to it now | Tree-shaken per-icon (~0.5 KB each), self-hosted by construction (bundled, no runtime CDN), dedupes ~180 hand-inlined repeats (×, chevrons, play…). Bespoke glyphs are exempt (see §8 keep-list). The new components consume lucide; the repo-wide sweep ships in the same effort. |
 
 ---
 
@@ -68,7 +69,7 @@ Goal: collapse divergent implementations into token-bound primitives, satisfying
   - `class?: HTMLAttributes['class']`.
 - **Slots:** `default` (body) · `#icon` (overrides the per-variant default icon).
 - **Emits:** `dismiss` — fired when the × button is clicked. (Parent owns visibility via `v-if`; the component does not self-hide.)
-- **Default icons (lucide-vue-next or inline):** info → `Info`, success → `CircleCheck`, warning → `TriangleAlert`, destructive → `CircleX`. Close → `X`.
+- **Default icons (lucide-vue-next):** info → `Info`, success → `CircleCheck`, warning → `TriangleAlert`, destructive → `CircleX`. Close → `X`. (Per D10 — no longer inline SVG.)
 - **Token bindings (cva):**
   - base: `flex gap-3 p-4 rounded-xl border text-sm items-start`
   - `info`: `bg-info-soft border-info/30` · icon `text-info`
@@ -135,8 +136,54 @@ Verify gates: `bunx vitest run src/components/ui/` · `bunx tsc --noEmit` · `ba
 
 ---
 
+## 8. Icon System — `lucide-vue-next` adoption + migration (D10)
+
+**Why lucide:** per-icon ES modules, tree-shaken by Vite (only imported icons bundle, ~0.3–1 KB each). **Self-hosted by construction** — an npm dep bundled into our JS and served by our nginx; zero runtime CDN/fetch, no icon font, no sprite. Migrating dedupes ~180 hand-inlined repeats (the `×` close glyph alone recurs dozens of times) into shared imports.
+
+**Inventory:** 236 inline `<svg>` across 65 `.vue` files (top: `Profile.vue` 28, `Anime.vue` 21, player components, `SpotlightIcon.vue` 11).
+
+**Keep-list (bespoke — do NOT migrate, no lucide equivalent):**
+- The new **Spinner** dual-arc rings (pure CSS).
+- `components/home/spotlight/SpotlightIcon.vue` and the spotlight glyph set.
+- The AnimeEnigma **score diamond ◆** and MAL **star ★** brand glyphs where used as identity marks.
+- Any provider/brand logo SVG (Kodik, AniLib, Hanime, etc.).
+- Decorative/illustrative one-off paths with no semantic icon meaning.
+
+**Canonical mapping (high-frequency icons):**
+
+| Intent | lucide | Intent | lucide |
+|---|---|---|---|
+| close / × | `X` | chevron down/up | `ChevronDown` / `ChevronUp` |
+| chevron left/right | `ChevronLeft` / `ChevronRight` | play | `Play` |
+| pause | `Pause` | kebab / more-vert | `EllipsisVertical` |
+| more-horiz | `Ellipsis` | clock | `Clock` |
+| bell | `Bell` | search | `Search` |
+| check | `Check` | info | `Info` |
+| warning triangle | `TriangleAlert` | error circle | `CircleX` |
+| success circle | `CircleCheck` | settings/gear | `Settings` |
+| user | `User` | external link | `ExternalLink` |
+| trash | `Trash2` | edit/pencil | `Pencil` |
+| plus | `Plus` | filter | `Filter` |
+
+Icons not in this table: executor picks the closest lucide name from <https://lucide.dev/icons/> by visual match; if none exists, it stays inline (add to keep-list with a one-line reason).
+
+**Per-file migration procedure (applied to each non-keep file):**
+1. For each inline `<svg>`, identify intent → lucide name (table above or lucide.dev).
+2. `import { Name } from 'lucide-vue-next'` in `<script setup>`.
+3. Replace `<svg …>…</svg>` with `<Name :class="…" />`, carrying size/color classes (`size-4`, `text-muted-foreground`, etc.). lucide renders `stroke="currentColor"` so color follows the class.
+4. Preserve a11y: keep any `aria-label`/`aria-hidden`; lucide sets `aria-hidden` by default — add a `<span class="sr-only">` if the SVG conveyed meaning.
+5. `bunx vitest run` for that file's spec (if any) + `bunx tsc --noEmit`.
+6. **In-browser smoke at desktop + mobile** (DS-NF-06) — verify size/alignment/color.
+7. Commit the file (or small batch).
+
+**Guardrail:** add an ESLint `no-restricted-imports` rule forbidding `import * as … from 'lucide-vue-next'` (barrel import would defeat tree-shaking).
+
+**Batching:** migrate by area to keep commits reviewable — (a) `components/ui` + the new components, (b) players, (c) `views/*`, (d) `home/*` + spotlight (non-glyph), (e) `layout` + remainder. Each batch ends with a build + browser smoke + commit.
+
+---
+
 ## 7. Scoring (per `.planning/CONVENTIONS.md`)
 
-- **UXΔ = +2 (Better)** — consistent loading/feedback/identity surfaces; removes divergent ad-hoc treatments.
-- **CDI = 0.015 * 13** — low spread (additive, isolated under `components/ui/`), low shift (no API breakage; migrations are opt-in follow-ups), Effort_Fib 13 (five components + specs + index wiring).
-- **MVQ = Griffin 88%/85%** — composed-from-known-parts (Badge conventions), low slop surface (pure tokens, co-located tests).
+- **UXΔ = +2 (Better)** — consistent loading/feedback/identity surfaces + unified icon system; removes divergent ad-hoc treatments.
+- **CDI = 0.06 * 34** — moderate spread (new primitives isolated under `components/ui/`, BUT the icon migration touches ~65 files), low-moderate shift (component APIs are additive/non-breaking; icon swaps are visual-only), Effort_Fib 34 (five components + lucide adoption + 65-file SVG sweep with per-file smokes).
+- **MVQ = Griffin 86%/82%** — composed-from-known-parts (Badge conventions + mechanical icon swap), main slop risk is the long migration tail (mitigated by per-file browser smoke + keep-list).
