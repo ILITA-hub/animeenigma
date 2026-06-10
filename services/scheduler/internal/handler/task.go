@@ -56,9 +56,9 @@ func (h *TaskHandler) CreateExportJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.Created(w, map[string]interface{}{
-		"data": job.ToResponse(),
-	})
+	// httputil.Created already wraps the payload in a top-level "data" key —
+	// callers (player service) decode the job directly from there.
+	httputil.Created(w, job.ToResponse())
 }
 
 // CreateTasks creates anime load tasks for an export job
@@ -110,11 +110,67 @@ func (h *TaskHandler) GetExportJobStatus(w http.ResponseWriter, r *http.Request)
 		h.log.Warnw("failed to get task stats", "export_id", exportID, "error", err)
 	}
 
-	response := job.ToResponse()
-	httputil.OK(w, map[string]interface{}{
-		"data":  response,
-		"stats": stats,
-	})
+	// Job fields at the top of "data" (what the player service decodes),
+	// with detailed task stats embedded alongside.
+	httputil.OK(w, struct {
+		*domain.ExportJobResponse
+		Stats *domain.TaskStats `json:"stats,omitempty"`
+	}{job.ToResponse(), stats})
+}
+
+// CancelExportJob cancels an active export job (and drops its queued tasks)
+func (h *TaskHandler) CancelExportJob(w http.ResponseWriter, r *http.Request) {
+	exportID := chi.URLParam(r, "exportId")
+	if exportID == "" {
+		httputil.BadRequest(w, "export_id is required")
+		return
+	}
+
+	var req struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if req.UserID == "" {
+		httputil.BadRequest(w, "user_id is required")
+		return
+	}
+
+	if err := h.exportService.CancelExport(r.Context(), req.UserID, exportID); err != nil {
+		h.log.Warnw("failed to cancel export job",
+			"export_id", exportID,
+			"user_id", req.UserID,
+			"error", err,
+		)
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]string{"message": "export cancelled"})
+}
+
+// ListUserExportJobs returns all export jobs for a user
+func (h *TaskHandler) ListUserExportJobs(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userId")
+	if userID == "" {
+		httputil.BadRequest(w, "user_id is required")
+		return
+	}
+
+	jobs, err := h.exportService.GetUserExports(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	responses := make([]*domain.ExportJobResponse, 0, len(jobs))
+	for _, job := range jobs {
+		responses = append(responses, job.ToResponse())
+	}
+
+	httputil.OK(w, responses)
 }
 
 // GetWorkerStatus returns the status of the anime loader worker

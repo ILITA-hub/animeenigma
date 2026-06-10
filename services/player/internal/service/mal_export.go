@@ -160,14 +160,61 @@ func (s *MALExportService) GetExportStatus(ctx context.Context, exportID string)
 
 // GetUserExports retrieves all export jobs for a user
 func (s *MALExportService) GetUserExports(ctx context.Context, userID string) ([]*ExportJobResponse, error) {
-	// Note: The scheduler service would need an endpoint to list exports by user
-	// For now, we'll return an empty list and implement this when needed
-	return []*ExportJobResponse{}, nil
+	url := fmt.Sprintf("%s/api/v1/tasks/anime-load/user/%s", s.schedulerURL, userID)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "create request")
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.CodeExternalAPI, "scheduler service")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Internal(fmt.Sprintf("scheduler returned status %d", resp.StatusCode))
+	}
+
+	var result struct {
+		Data []*ExportJobResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, errors.CodeInternal, "decode response")
+	}
+
+	if result.Data == nil {
+		return []*ExportJobResponse{}, nil
+	}
+	return result.Data, nil
 }
 
 // CancelExport cancels an active export job
 func (s *MALExportService) CancelExport(ctx context.Context, userID, exportID string) error {
-	// TODO: Implement cancel endpoint in scheduler service
+	url := fmt.Sprintf("%s/api/v1/tasks/anime-load/%s/cancel", s.schedulerURL, exportID)
+
+	body, _ := json.Marshal(map[string]string{"user_id": userID})
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(body)))
+	if err != nil {
+		return errors.Wrap(err, errors.CodeInternal, "create request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, errors.CodeExternalAPI, "scheduler service")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return errors.NotFound("export job not found")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Internal(fmt.Sprintf("scheduler returned status %d", resp.StatusCode))
+	}
+
 	return nil
 }
 
