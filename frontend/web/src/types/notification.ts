@@ -17,7 +17,12 @@
  * is purely additive: ship a new renderer, define its payload type, no
  * changes to the bell/dropdown/toast.
  */
-export type NotificationType = 'new_episode' | string
+export type NotificationType =
+  | 'new_episode'
+  | 'feedback_created'
+  | 'feedback_in_progress'
+  | 'feedback_ai_done'
+  | string
 
 /**
  * Payload shape for `type === 'new_episode'`. Mirror of
@@ -42,6 +47,19 @@ export interface NewEpisodePayload {
   translation_id: string
   translation_title?: string
   watch_url: string
+}
+
+/**
+ * Payload shape for the three `feedback_*` types (AUTO-417 feedback triage
+ * loop). Mirror of `domain.FeedbackStatusPayload` in the notifications
+ * service. One card component renders all three stages; the stage itself is
+ * carried both in `notification.type` and in `status`.
+ */
+export interface FeedbackStatusPayload {
+  report_id: string
+  category?: string // bug | issue | feature
+  description?: string // truncated snippet of the user's original feedback
+  status: string // created | in_progress | ai_done
 }
 
 /**

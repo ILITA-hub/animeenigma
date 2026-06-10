@@ -15,7 +15,10 @@ import (
 // rejected at the Upsert boundary so a buggy producer can't pollute the
 // table with unrecognised types that the frontend won't render.
 var allowedTypes = map[string]bool{
-	string(domain.TypeNewEpisode): true,
+	string(domain.TypeNewEpisode):         true,
+	string(domain.TypeFeedbackCreated):    true,
+	string(domain.TypeFeedbackInProgress): true,
+	string(domain.TypeFeedbackAIDone):     true,
 }
 
 // NotificationService is the thin orchestration layer between the HTTP
@@ -45,12 +48,26 @@ func NewEpisodeDedupeKey(animeID, player, language, watchType, translationID str
 		animeID, player, language, watchType, translationID)
 }
 
+// FeedbackDedupeKey builds the canonical dedupe key for a feedback_* stage
+// notification: feedback:<report_id>:<stage>. Stage is one of
+// created | in_progress | ai_done.
+func FeedbackDedupeKey(reportID, stage string) string {
+	return fmt.Sprintf("feedback:%s:%s", reportID, stage)
+}
+
 // UpsertRequest is the input to the producer path.
+//
+// InvalidateDedupeKeys (optional) lists dedupe keys whose still-unread
+// notifications for the same user should be stamped invalidated_at after
+// the upsert succeeds — the feedback triage loop uses this so a new stage
+// supersedes the previous one's unread row. Already-read rows are left
+// untouched (the user saw them; history stays honest).
 type UpsertRequest struct {
-	UserID    string          `json:"user_id"`
-	Type      string          `json:"type"`
-	DedupeKey string          `json:"dedupe_key"`
-	Payload   json.RawMessage `json:"payload"`
+	UserID               string          `json:"user_id"`
+	Type                 string          `json:"type"`
+	DedupeKey            string          `json:"dedupe_key"`
+	Payload              json.RawMessage `json:"payload"`
+	InvalidateDedupeKeys []string        `json:"invalidate_dedupe_keys,omitempty"`
 }
 
 // List delegates to the repo with default args translated.
@@ -120,5 +137,36 @@ func (s *NotificationService) Upsert(
 	if err != nil {
 		return nil, err
 	}
+
+	// Best-effort supersede: invalidate the listed dedupe keys' unread rows.
+	// A failure here must not fail the producer call — the new notification
+	// already exists; worst case the user briefly sees two stages.
+	if len(req.InvalidateDedupeKeys) > 0 {
+		if _, err := s.repo.InvalidateUnreadByDedupeKeys(ctx, req.UserID, req.InvalidateDedupeKeys); err != nil {
+			s.log.Warnw("failed to invalidate superseded notifications",
+				"user_id", req.UserID,
+				"dedupe_keys", req.InvalidateDedupeKeys,
+				"error", err,
+			)
+		}
+	}
 	return row, nil
+}
+
+// InvalidateUnread stamps invalidated_at on the user's unread notifications
+// matching the given dedupe keys, without creating anything new. Used when a
+// feedback report is closed as not_relevant — pending stage notifications
+// stop being actual but no replacement notification is warranted.
+func (s *NotificationService) InvalidateUnread(
+	ctx context.Context,
+	userID string,
+	dedupeKeys []string,
+) (int64, error) {
+	if userID == "" {
+		return 0, apperrors.InvalidInput("user_id required")
+	}
+	if len(dedupeKeys) == 0 {
+		return 0, apperrors.InvalidInput("dedupe_keys required")
+	}
+	return s.repo.InvalidateUnreadByDedupeKeys(ctx, userID, dedupeKeys)
 }

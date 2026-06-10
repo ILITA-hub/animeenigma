@@ -755,10 +755,41 @@
     "resetAll": "Reset all",
     "countOf": "{n} of {total} titles",
     "empty": "Nothing found",
-    "col": { "anime": "Anime", "datetime": "Date · time", "episode": "Episode", "score": "Score" },
+    "col": {
+      "anime": "Anime",
+      "datetime": "Date · time",
+      "episode": "Episode",
+      "score": "Score"
+    },
     "episodeCountPlural": "{n} episode | {n} episodes",
-    "monthsNominative": { "jan": "January", "feb": "February", "mar": "March", "apr": "April", "may": "May", "jun": "June", "jul": "July", "aug": "August", "sep": "September", "oct": "October", "nov": "November", "dec": "December" },
-    "monthsGenitive": { "jan": "January", "feb": "February", "mar": "March", "apr": "April", "may": "May", "jun": "June", "jul": "July", "aug": "August", "sep": "September", "oct": "October", "nov": "November", "dec": "December" }
+    "monthsNominative": {
+      "jan": "January",
+      "feb": "February",
+      "mar": "March",
+      "apr": "April",
+      "may": "May",
+      "jun": "June",
+      "jul": "July",
+      "aug": "August",
+      "sep": "September",
+      "oct": "October",
+      "nov": "November",
+      "dec": "December"
+    },
+    "monthsGenitive": {
+      "jan": "January",
+      "feb": "February",
+      "mar": "March",
+      "apr": "April",
+      "may": "May",
+      "jun": "June",
+      "jul": "July",
+      "aug": "August",
+      "sep": "September",
+      "oct": "October",
+      "nov": "November",
+      "dec": "December"
+    }
   },
   "auth": {
     "heading": "Sign in to AnimeEnigma",
@@ -1172,6 +1203,20 @@
       "singleEp": "Episode {n} is out",
       "rangeEp": "Episodes {n}–{m} are out",
       "via": "via {translation}"
+    },
+    "feedback": {
+      "created": {
+        "title": "Feedback received — task created",
+        "body": "Thanks! We opened a task for your feedback."
+      },
+      "inProgress": {
+        "title": "Your feedback is in progress",
+        "body": "The robot is already working on your task."
+      },
+      "aiDone": {
+        "title": "Done — thanks to your feedback!",
+        "body": "The robot finished the fix. Thank you for helping make the site better!"
+      }
     },
     "unknown": {
       "title": "New notification — view in dropdown"

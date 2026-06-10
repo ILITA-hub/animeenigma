@@ -20,6 +20,19 @@ type Config struct {
 	Reports     ReportsConfig
 	Maintenance MaintenanceConfig
 	Tier2       Tier2Config
+	Notify      NotifyConfig
+}
+
+// NotifyConfig controls the fire-and-forget feedback-status notification
+// producer (AUTO-417). Fire-and-forget producer pattern: a notifications
+// outage must never affect report submission or triage.
+type NotifyConfig struct {
+	// InternalURL is the base URL of the notifications service inside the
+	// Docker network. Paths called: /internal/notifications and
+	// /internal/notifications/invalidate. Default: http://notifications:8090
+	InternalURL string
+	// Enabled toggles the producer; when false all dispatches are dropped.
+	Enabled bool
 }
 
 // Tier2Config controls the Phase 6 weighted, time-decayed Tier 2 inference.
@@ -105,7 +118,25 @@ func Load() (*Config, error) {
 			MaxHistoryRows: getEnvInt("TIER2_MAX_HISTORY_ROWS", 5000),
 			DurationFloor:  getEnvInt("TIER2_DURATION_FLOOR", 60),
 		},
+		Notify: NotifyConfig{
+			InternalURL: getEnv("NOTIFICATIONS_INTERNAL_URL", "http://notifications:8090"),
+			Enabled:     getEnvBool("FEEDBACK_NOTIFY_ENABLED", true),
+		},
 	}, nil
+}
+
+func getEnvBool(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	switch v {
+	case "1", "t", "true", "y", "yes", "on":
+		return true
+	case "0", "f", "false", "n", "no", "off":
+		return false
+	}
+	return def
 }
 
 func getEnvFloat(key string, defaultVal float64) float64 {

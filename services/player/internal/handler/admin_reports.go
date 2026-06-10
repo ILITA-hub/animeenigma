@@ -21,6 +21,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -36,6 +37,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -59,14 +61,17 @@ var reportIDRe = regexp.MustCompile(`^[0-9A-Za-z:_\-]+$`)
 
 // AdminReportsHandler serves the admin feedback browser. It owns the same
 // reportsDir as ReportHandler and a mutex protecting the sidecar status file.
+// notifier (optional) drives the feedback triage notification loop
+// (AUTO-417): status transitions notify the report's author.
 type AdminReportsHandler struct {
 	log        *logger.Logger
 	reportsDir string
+	notifier   *service.FeedbackNotifier
 	mu         sync.Mutex
 }
 
-func NewAdminReportsHandler(log *logger.Logger, reportsDir string) *AdminReportsHandler {
-	return &AdminReportsHandler{log: log, reportsDir: reportsDir}
+func NewAdminReportsHandler(log *logger.Logger, reportsDir string, notifier *service.FeedbackNotifier) *AdminReportsHandler {
+	return &AdminReportsHandler{log: log, reportsDir: reportsDir, notifier: notifier}
 }
 
 // feedbackStatusEntry is one row of the sidecar status map.
@@ -275,6 +280,10 @@ type setStatusRequest struct {
 }
 
 // SetStatus upserts the triage status for a report into the sidecar file.
+// Admin route — actor comes from JWT claims; all five statuses allowed.
+// (The unauthenticated internal twin lives in internal_feedback.go.)
+// Status transitions also drive the AUTO-417 author notification loop via
+// dispatchStatusNotification.
 func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	path, ok := h.safeReportPath(id)
@@ -304,6 +313,10 @@ func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) 
 
 	h.mu.Lock()
 	statuses := h.loadStatuses()
+	prev := "new"
+	if e, ok := statuses[id]; ok && e.Status != "" {
+		prev = e.Status
+	}
 	statuses[id] = feedbackStatusEntry{
 		Status:    req.Status,
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
@@ -318,8 +331,46 @@ func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.log.Infow("feedback status updated", "id", id, "status", req.Status, "by", updatedBy)
-	httputil.OK(w, map[string]interface{}{"id": id, "status": req.Status})
+	h.log.Infow("feedback status updated", "id", id, "status", req.Status, "prev", prev, "by", updatedBy)
+	h.dispatchStatusNotification(id, prev, req.Status)
+	httputil.OK(w, map[string]interface{}{"id": id, "status": req.Status, "previous_status": prev})
+}
+
+// dispatchStatusNotification implements the AUTO-417 triage loop on top of a
+// status transition: in_progress and ai_done notify the report's author
+// (superseding the previous stage's unread notification); not_relevant
+// silently invalidates pending stage notifications; new/resolved and no-op
+// repeats dispatch nothing. Author identity comes from the report JSON.
+func (h *AdminReportsHandler) dispatchStatusNotification(id, prev, status string) {
+	if h.notifier == nil || status == prev {
+		return
+	}
+	path, ok := h.safeReportPath(id)
+	if !ok {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		h.log.Warnw("feedback notify: cannot read report", "id", id, "error", err)
+		return
+	}
+	var report struct {
+		UserID      string `json:"user_id"`
+		Category    string `json:"category"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		h.log.Warnw("feedback notify: cannot parse report", "id", id, "error", err)
+		return
+	}
+
+	switch status {
+	case "in_progress", "ai_done":
+		go h.notifier.NotifyStage(context.Background(),
+			id, report.UserID, report.Category, report.Description, status)
+	case "not_relevant":
+		go h.notifier.InvalidateAll(context.Background(), id, report.UserID)
+	}
 }
 
 // truncateRunes shortens s to at most max runes (UTF-8 safe — Russian text),

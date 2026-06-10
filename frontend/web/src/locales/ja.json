@@ -755,10 +755,41 @@
     "resetAll": "すべてリセット",
     "countOf": "{total}件中{n}件",
     "empty": "見つかりませんでした",
-    "col": { "anime": "アニメ", "datetime": "日付・時刻", "episode": "話数", "score": "評価" },
+    "col": {
+      "anime": "アニメ",
+      "datetime": "日付・時刻",
+      "episode": "話数",
+      "score": "評価"
+    },
     "episodeCountPlural": "{n}話",
-    "monthsNominative": { "jan": "1月", "feb": "2月", "mar": "3月", "apr": "4月", "may": "5月", "jun": "6月", "jul": "7月", "aug": "8月", "sep": "9月", "oct": "10月", "nov": "11月", "dec": "12月" },
-    "monthsGenitive": { "jan": "1月", "feb": "2月", "mar": "3月", "apr": "4月", "may": "5月", "jun": "6月", "jul": "7月", "aug": "8月", "sep": "9月", "oct": "10月", "nov": "11月", "dec": "12月" }
+    "monthsNominative": {
+      "jan": "1月",
+      "feb": "2月",
+      "mar": "3月",
+      "apr": "4月",
+      "may": "5月",
+      "jun": "6月",
+      "jul": "7月",
+      "aug": "8月",
+      "sep": "9月",
+      "oct": "10月",
+      "nov": "11月",
+      "dec": "12月"
+    },
+    "monthsGenitive": {
+      "jan": "1月",
+      "feb": "2月",
+      "mar": "3月",
+      "apr": "4月",
+      "may": "5月",
+      "jun": "6月",
+      "jul": "7月",
+      "aug": "8月",
+      "sep": "9月",
+      "oct": "10月",
+      "nov": "11月",
+      "dec": "12月"
+    }
   },
   "auth": {
     "heading": "AnimeEnigmaにサインイン",
@@ -1172,6 +1203,20 @@
       "singleEp": "第 {n} 話が公開されました",
       "rangeEp": "第 {n}–{m} 話が公開されました",
       "via": "{translation} 経由"
+    },
+    "feedback": {
+      "created": {
+        "title": "フィードバック受付 — タスクを作成しました",
+        "body": "ありがとうございます！フィードバックのタスクを作成しました。"
+      },
+      "inProgress": {
+        "title": "フィードバック対応中",
+        "body": "ロボットがあなたのタスクに取り組んでいます。"
+      },
+      "aiDone": {
+        "title": "完了 — あなたのフィードバックのおかげです！",
+        "body": "ロボットが修正を完了しました。サイトの改善にご協力いただきありがとうございます！"
+      }
     },
     "unknown": {
       "title": "新しい通知 — リストで確認"

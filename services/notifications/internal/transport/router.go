@@ -63,6 +63,7 @@ func NewRouter(
 	// inside the Docker network because the gateway never proxies
 	// /internal/*. The Phase 2 detector calls these.
 	r.Post("/internal/notifications", internalHandler.CreateNotification)
+	r.Post("/internal/notifications/invalidate", internalHandler.InvalidateNotifications)
 	r.Get("/internal/health", internalHandler.Health)
 
 	// Phase 2 manual-trigger endpoints (D-DET-05 / D-DET-06). Wired only

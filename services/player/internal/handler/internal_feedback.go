@@ -278,6 +278,10 @@ func (h *AdminReportsHandler) SetStatusInternal(w http.ResponseWriter, r *http.R
 
 	h.mu.Lock()
 	statuses := h.loadStatuses()
+	prev := "new"
+	if e, ok := statuses[id]; ok && e.Status != "" {
+		prev = e.Status
+	}
 	statuses[id] = feedbackStatusEntry{
 		Status:    req.Status,
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
@@ -292,8 +296,11 @@ func (h *AdminReportsHandler) SetStatusInternal(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	h.log.Infow("feedback status updated (internal)", "id", id, "status", req.Status, "by", updatedBy)
-	httputil.OK(w, map[string]interface{}{"id": id, "status": req.Status})
+	h.log.Infow("feedback status updated (internal)", "id", id, "status", req.Status, "prev", prev, "by", updatedBy)
+	// AUTO-417 feedback loop: in_progress/ai_done notify the report's
+	// author; not_relevant invalidates pending stage notifications.
+	h.dispatchStatusNotification(id, prev, req.Status)
+	httputil.OK(w, map[string]interface{}{"id": id, "status": req.Status, "previous_status": prev})
 }
 
 // GetAttachment serves a stored attachment to the admin UI. Mounted inside the

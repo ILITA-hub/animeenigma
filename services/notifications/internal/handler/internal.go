@@ -54,6 +54,38 @@ func (h *InternalHandler) CreateNotification(w http.ResponseWriter, r *http.Requ
 	httputil.OK(w, row)
 }
 
+// InvalidateRequest is the body of POST /internal/notifications/invalidate.
+type InvalidateRequest struct {
+	UserID     string   `json:"user_id"`
+	DedupeKeys []string `json:"dedupe_keys"`
+}
+
+// InvalidateNotifications handles POST /internal/notifications/invalidate.
+//
+// Stamps invalidated_at on the user's unread notifications matching the
+// given dedupe keys, creating nothing new. The feedback triage loop uses
+// this when a report is closed as not_relevant — pending stage
+// notifications stop being actual. Returns {"invalidated": N}.
+func (h *InternalHandler) InvalidateNotifications(w http.ResponseWriter, r *http.Request) {
+	var req InvalidateRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	n, err := h.svc.InvalidateUnread(r.Context(), req.UserID, req.DedupeKeys)
+	if err != nil {
+		h.log.Errorw("internal invalidate notifications failed",
+			"user_id", req.UserID,
+			"dedupe_keys", req.DedupeKeys,
+			"error", err,
+		)
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]int64{"invalidated": n})
+}
+
 // Health handles GET /internal/health. Equivalent to the public /health
 // route but never proxied — used by internal callers (the cron detector in
 // Phase 2 will probe this before submitting a batch).
