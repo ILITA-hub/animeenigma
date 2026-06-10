@@ -1,8 +1,15 @@
 <template>
   <DialogRoot :open="modelValue" :modal="modal" @update:open="onOpenUpdate">
     <DialogPortal>
-      <DialogOverlay
-        class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-200 data-[state=open]:opacity-100 data-[state=closed]:opacity-0"
+      <!-- Plain div, NOT DialogOverlay: Reka renders DialogOverlay only in
+           modal mode, and non-modal is our default (scroll-lock conflict, see
+           the `modal` prop note) — the dim backdrop must not depend on it.
+           Outside-click close still works: Reka's DismissableLayer watches
+           document-level pointerdown, not the overlay element. -->
+      <div
+        v-if="modelValue"
+        class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+        aria-hidden="true"
       />
       <!-- Fixed flex wrapper reproduces the legacy centered layout. The wrapper
            itself is non-interactive (pointer-events-none) so Reka's
@@ -55,7 +62,6 @@ import { X } from 'lucide-vue-next'
 import {
   DialogRoot,
   DialogPortal,
-  DialogOverlay,
   DialogContent,
   DialogTitle,
 } from 'reka-ui'
