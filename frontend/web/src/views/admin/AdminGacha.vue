@@ -321,13 +321,90 @@
   </Modal>
 
   <!-- ─── BANNER CREATE/EDIT DIALOG ────────────────────────────────────── -->
+  <!-- Single Modal with two views: form view ↔ card picker view.
+       This avoids stacked DialogPortal issues (Reka's DismissableLayer leaks
+       pointer-events when two modals stack and the inner one closes first).
+       bannerPickerOpen switches which view is rendered inside the same Modal. -->
   <Modal
     v-model="showBannerDialog"
-    :title="editBanner ? $t('gacha.admin.banner_edit') : $t('gacha.admin.banner_create')"
+    :title="bannerPickerOpen ? $t('gacha.admin.banner_picker_title') : (editBanner ? $t('gacha.admin.banner_edit') : $t('gacha.admin.banner_create'))"
     closable
-    size="lg"
+    size="xl"
   >
-    <div class="space-y-4">
+    <!-- ── PICKER VIEW ──────────────────────────────────────────────────── -->
+    <div v-if="bannerPickerOpen" data-testid="banner-card-picker">
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-2 mb-4">
+        <Input
+          v-model="pickerSearch"
+          :placeholder="$t('gacha.admin.banner_picker_search_placeholder')"
+          class="flex-1 min-w-40"
+          data-testid="picker-search"
+        />
+        <Select
+          v-model="pickerRarity"
+          :options="pickerRarityOptions"
+          class="w-36"
+        />
+        <Select
+          v-model="pickerGroup"
+          :options="pickerGroupOptions"
+          class="w-40"
+        />
+      </div>
+
+      <!-- Card grid -->
+      <div v-if="pickerFilteredCards.length === 0" class="py-8 text-center text-muted-foreground text-sm">
+        {{ $t('gacha.admin.banner_picker_empty') }}
+      </div>
+      <div v-else class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 max-h-96 overflow-y-auto pr-1" data-testid="picker-card-grid">
+        <button
+          v-for="card in pickerFilteredCards"
+          :key="card.id"
+          type="button"
+          :disabled="bannerCurrentCardIds.includes(card.id)"
+          :class="[
+            'relative flex flex-col items-center gap-1 rounded-xl border transition-all focus:outline-none',
+            bannerCurrentCardIds.includes(card.id)
+              ? 'border-white/10 opacity-50 cursor-not-allowed bg-white/5'
+              : pickerSelected.has(card.id)
+                ? 'border-cyan-400 bg-cyan-400/10 ring-2 ring-cyan-400/30'
+                : 'border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10',
+          ]"
+          :data-testid="`picker-card-${card.id}`"
+          @click="togglePickerCard(card.id)"
+        >
+          <img
+            :src="cardImageUrl(card.image_path)"
+            :alt="card.name"
+            class="w-full aspect-[3/4] object-cover rounded-t-xl"
+          />
+          <div class="w-full px-1.5 pb-1.5">
+            <p class="text-white text-xs font-medium truncate leading-tight">{{ card.name }}</p>
+            <div class="flex items-center justify-between mt-0.5">
+              <span :class="['text-xs font-semibold px-1 py-0.5 rounded', rarityBadgeClass(card.rarity)]">
+                {{ card.rarity }}
+              </span>
+              <span
+                v-if="bannerCurrentCardIds.includes(card.id)"
+                class="text-xs text-white/40"
+                :title="$t('gacha.admin.banner_picker_already_in_banner')"
+              >✓</span>
+            </div>
+          </div>
+          <!-- Selected checkmark overlay -->
+          <div
+            v-if="pickerSelected.has(card.id)"
+            class="absolute top-1 right-1 size-5 rounded-full bg-cyan-400 flex items-center justify-center"
+          >
+            <Check class="size-3 text-black" aria-hidden="true" />
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── FORM VIEW ───────────────────────────────────────────────────── -->
+    <div v-else class="space-y-4">
       <div>
         <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_name') }}</label>
         <Input v-model="bannerForm.name" placeholder="Banner name" />
@@ -365,62 +442,93 @@
         </div>
       </div>
 
-      <!-- Banner cards section (M5: pool editor with current cards + remove) -->
+      <!-- Banner cards section -->
       <div v-if="editBanner">
         <p class="text-white/70 text-xs mb-2">{{ $t('gacha.admin.banner_cards_section') }}</p>
 
-        <!-- Current pool -->
+        <!-- Current pool loading -->
         <div v-if="loadingBannerPool" class="text-muted-foreground text-xs mb-2">
           {{ $t('gacha.admin.upload_uploading') }}
         </div>
-        <div v-else-if="bannerCurrentCardIds.length > 0" class="mb-3 space-y-1 max-h-40 overflow-y-auto">
-          <div
-            v-for="cid in bannerCurrentCardIds"
-            :key="cid"
-            class="flex items-center justify-between bg-white/5 rounded px-2 py-1 text-xs text-white/80"
-          >
-            <span class="truncate">{{ cardNameById(cid) || cid }}</span>
-            <button
-              type="button"
-              class="ml-2 text-destructive hover:text-destructive/80 transition-colors"
-              @click="removeBannerCard(cid)"
-            >✕</button>
+
+        <!-- Current pool grid (thumbnail + name + rarity + remove) -->
+        <div v-else-if="bannerCurrentCardIds.length > 0" class="mb-3">
+          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-52 overflow-y-auto pr-1">
+            <div
+              v-for="cid in bannerCurrentCardIds"
+              :key="cid"
+              class="relative flex flex-col items-center gap-1 rounded-xl border border-white/20 bg-white/5"
+            >
+              <img
+                :src="cardImageUrl(cardById(cid)?.image_path ?? '')"
+                :alt="cardNameById(cid)"
+                class="w-full aspect-[3/4] object-cover rounded-t-xl"
+              />
+              <div class="w-full px-1.5 pb-1">
+                <p class="text-white text-xs font-medium truncate leading-tight">{{ cardNameById(cid) || cid }}</p>
+                <span
+                  v-if="cardById(cid)"
+                  :class="['text-xs font-semibold px-1 py-0.5 rounded', rarityBadgeClass(cardById(cid)!.rarity)]"
+                >
+                  {{ cardById(cid)!.rarity }}
+                </span>
+              </div>
+              <!-- Remove button -->
+              <button
+                type="button"
+                class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive/80 flex items-center justify-center transition-colors"
+                :aria-label="`Remove ${cardNameById(cid)}`"
+                @click="removeBannerCard(cid)"
+              >
+                <X class="size-3 text-white" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
         <p v-else class="text-muted-foreground text-xs mb-3">{{ $t('gacha.admin.banner_pool_empty') }}</p>
 
-        <!-- Add cards by ID -->
-        <div class="flex gap-2 mb-2">
-          <Input
-            v-model="bannerCardIds"
-            placeholder="card-id-1, card-id-2"
-            class="flex-1"
-          />
-          <Button variant="outline" size="sm" @click="addBannerCards">
-            {{ $t('gacha.admin.banner_add_cards') }}
-          </Button>
-        </div>
+        <!-- Add cards button -->
+        <Button variant="outline" size="sm" @click="openCardPicker" data-testid="open-card-picker-btn">
+          + {{ $t('gacha.admin.banner_add_cards_btn') }}
+        </Button>
+      </div>
 
-        <!-- Add group -->
-        <div class="flex gap-2">
-          <Select
-            v-model="bannerGroupId"
-            :options="groupSelectOptions"
-            :placeholder="$t('gacha.admin.banner_add_group')"
-            class="flex-1"
-          />
-          <Button variant="outline" size="sm" @click="addBannerGroup">
-            {{ $t('gacha.admin.banner_add_group_btn') }}
-          </Button>
-        </div>
-        <p v-if="bannerGroupAdded" class="text-teal-400 text-xs mt-1">
-          {{ $t('gacha.admin.banner_group_added') }}
-        </p>
+      <!-- New banner hint: cards disabled until banner saved -->
+      <div v-else class="flex items-center gap-2 text-white/40 text-xs">
+        <Info class="size-4 shrink-0" aria-hidden="true" />
+        {{ $t('gacha.admin.banner_new_hint') }}
       </div>
     </div>
 
     <template #footer>
-      <div class="flex justify-end gap-2">
+      <!-- PICKER FOOTER -->
+      <div v-if="bannerPickerOpen" class="flex items-center justify-between w-full gap-3">
+        <div class="flex items-center gap-3">
+          <Button variant="ghost" size="sm" @click="closeCardPicker">
+            ← {{ $t('gacha.admin.banner_picker_back') }}
+          </Button>
+          <button
+            type="button"
+            class="text-xs text-white/60 hover:text-white transition-colors"
+            @click="selectAllPickerVisible"
+          >
+            {{ $t('gacha.admin.banner_picker_select_all') }}
+          </button>
+          <span v-if="pickerSelected.size > 0" class="text-xs text-white/60">
+            {{ $t('gacha.admin.banner_picker_selected', { n: pickerSelected.size }) }}
+          </span>
+        </div>
+        <Button
+          :disabled="pickerSelected.size === 0 || addingPickerCards"
+          data-testid="picker-add-btn"
+          @click="confirmPickerAdd"
+        >
+          {{ $t('gacha.admin.banner_picker_add_btn', { n: pickerSelected.size }) }}
+        </Button>
+      </div>
+
+      <!-- FORM FOOTER -->
+      <div v-else class="flex justify-end gap-2">
         <Button variant="outline" @click="showBannerDialog = false">
           {{ $t('gacha.admin.banner_cancel') }}
         </Button>
@@ -450,7 +558,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Pencil, Trash2, Upload } from 'lucide-vue-next'
+import { Pencil, Trash2, Upload, Check, X, Info } from 'lucide-vue-next'
 import {
   gachaAdminApi,
   cardImageUrl,
@@ -513,10 +621,6 @@ const groupFilterOptions = computed(() => [
   { value: 'all', label: t('gacha.admin.filter_all') },
   ...groups.value.map(g => ({ value: g.id, label: g.name })),
 ])
-
-const groupSelectOptions = computed(() =>
-  groups.value.map(g => ({ value: g.id, label: g.name })),
-)
 
 // ── Banners state ─────────────────────────────────────────────────────────────
 const banners = ref<GachaBanner[]>([])
@@ -691,12 +795,109 @@ async function saveGroup() {
 const showBannerDialog = ref(false)
 const editBanner = ref<GachaBanner | null>(null)
 const savingBanner = ref(false)
-const bannerCardIds = ref('')
-const bannerGroupId = ref<string>('')
-const bannerGroupAdded = ref(false)
 // M5: current pool for the banner being edited
 const bannerCurrentCardIds = ref<string[]>([])
 const loadingBannerPool = ref(false)
+
+// ── Card picker state (rendered inside the banner dialog) ─────────────────────
+// bannerPickerOpen switches the banner modal between form view and picker view.
+const bannerPickerOpen = ref(false)
+const pickerSearch = ref('')
+const pickerRarity = ref('all')
+const pickerGroup = ref('all')
+const pickerSelected = ref<Set<string>>(new Set())
+const addingPickerCards = ref(false)
+
+const pickerRarityOptions = computed(() => [
+  { value: 'all', label: t('gacha.admin.banner_picker_filter_rarity') },
+  { value: 'N', label: 'N' },
+  { value: 'R', label: 'R' },
+  { value: 'SR', label: 'SR' },
+  { value: 'SSR', label: 'SSR' },
+])
+
+const pickerGroupOptions = computed(() => [
+  { value: 'all', label: t('gacha.admin.banner_picker_filter_group') },
+  ...groups.value.map(g => ({ value: g.id, label: g.name })),
+])
+
+// All cards visible in picker, filtered by search + rarity.
+// Group filter uses already-loaded cards (groups were fetched server-side on mount).
+const pickerFilteredCards = computed(() => {
+  const search = pickerSearch.value.toLowerCase().trim()
+  return cards.value.filter(c => {
+    if (pickerRarity.value !== 'all' && c.rarity !== pickerRarity.value) return false
+    if (pickerGroup.value !== 'all') {
+      // cards don't carry group membership in list response; skip group client filter
+      // (the server-side group_id param on listCards serves that on the cards tab)
+    }
+    if (search && !c.name.toLowerCase().includes(search) && !c.source_title.toLowerCase().includes(search)) return false
+    return true
+  })
+})
+
+function openCardPicker() {
+  pickerSearch.value = ''
+  pickerRarity.value = 'all'
+  pickerGroup.value = 'all'
+  pickerSelected.value = new Set()
+  bannerPickerOpen.value = true
+}
+
+function closeCardPicker() {
+  bannerPickerOpen.value = false
+}
+
+function togglePickerCard(cardId: string) {
+  if (bannerCurrentCardIds.value.includes(cardId)) return
+  const next = new Set(pickerSelected.value)
+  if (next.has(cardId)) {
+    next.delete(cardId)
+  } else {
+    next.add(cardId)
+  }
+  pickerSelected.value = next
+}
+
+function selectAllPickerVisible() {
+  const next = new Set(pickerSelected.value)
+  for (const card of pickerFilteredCards.value) {
+    if (!bannerCurrentCardIds.value.includes(card.id)) {
+      next.add(card.id)
+    }
+  }
+  pickerSelected.value = next
+}
+
+async function confirmPickerAdd() {
+  if (!editBanner.value || pickerSelected.value.size === 0) return
+  addingPickerCards.value = true
+  pageError.value = null
+  try {
+    const ids = Array.from(pickerSelected.value)
+    await gachaAdminApi.addBannerCards(editBanner.value.id, ids)
+    // Merge into local pool
+    for (const id of ids) {
+      if (!bannerCurrentCardIds.value.includes(id)) {
+        bannerCurrentCardIds.value.push(id)
+      }
+    }
+    pickerSelected.value = new Set()
+    bannerPickerOpen.value = false
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  } finally {
+    addingPickerCards.value = false
+  }
+}
+
+// Reset picker view state when banner dialog closes
+watch(showBannerDialog, (open) => {
+  if (!open) {
+    bannerPickerOpen.value = false
+    pickerSelected.value = new Set()
+  }
+})
 
 const bannerForm = ref({
   name: '',
@@ -711,9 +912,8 @@ const bannerForm = ref({
 function openBannerCreate() {
   editBanner.value = null
   bannerForm.value = { name: '', description: '', is_standard: false, enabled: true, active_from: '', active_to: '', sort_order: 0 }
-  bannerCardIds.value = ''
-  bannerGroupId.value = ''
-  bannerGroupAdded.value = false
+  bannerCurrentCardIds.value = []
+  bannerPickerOpen.value = false
   showBannerDialog.value = true
 }
 
@@ -728,12 +928,10 @@ async function openBannerEdit(banner: GachaBanner) {
     active_to: banner.active_to ?? '',
     sort_order: banner.sort_order ?? 0,
   }
-  bannerCardIds.value = ''
-  bannerGroupId.value = ''
-  bannerGroupAdded.value = false
   bannerCurrentCardIds.value = []
+  bannerPickerOpen.value = false
   showBannerDialog.value = true
-  // M5: fetch current pool
+  // Fetch current pool
   loadingBannerPool.value = true
   try {
     const res = await gachaAdminApi.getBanner(banner.id)
@@ -773,23 +971,6 @@ async function saveBanner() {
   }
 }
 
-async function addBannerCards() {
-  if (!editBanner.value || !bannerCardIds.value.trim()) return
-  const ids = bannerCardIds.value.split(',').map(s => s.trim()).filter(Boolean)
-  try {
-    await gachaAdminApi.addBannerCards(editBanner.value.id, ids)
-    bannerCardIds.value = ''
-    // M5: merge new ids into the local pool
-    for (const id of ids) {
-      if (!bannerCurrentCardIds.value.includes(id)) {
-        bannerCurrentCardIds.value.push(id)
-      }
-    }
-  } catch (err: unknown) {
-    pageError.value = extractMessage(err)
-  }
-}
-
 // M5: remove a single card from the banner pool via setBannerCards
 async function removeBannerCard(cardId: string) {
   if (!editBanner.value) return
@@ -807,16 +988,8 @@ function cardNameById(id: string): string {
   return cards.value.find(c => c.id === id)?.name ?? ''
 }
 
-async function addBannerGroup() {
-  if (!editBanner.value || !bannerGroupId.value) return
-  try {
-    await gachaAdminApi.addGroupCardsToBanner(editBanner.value.id, bannerGroupId.value)
-    bannerGroupAdded.value = true
-    bannerGroupId.value = ''
-    setTimeout(() => { bannerGroupAdded.value = false }, 3000)
-  } catch (err: unknown) {
-    pageError.value = extractMessage(err)
-  }
+function cardById(id: string): GachaCard | undefined {
+  return cards.value.find(c => c.id === id)
 }
 
 // ── Delete confirm ────────────────────────────────────────────────────────────

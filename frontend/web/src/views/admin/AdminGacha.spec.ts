@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import en from '@/locales/en.json'
 import ru from '@/locales/ru.json'
+import ja from '@/locales/ja.json'
 import AdminGacha from './AdminGacha.vue'
 import type { GachaCard, GachaGroup, GachaBanner } from '@/api/gacha'
 
@@ -38,7 +39,7 @@ vi.mock('@/api/gacha', async (importOriginal) => {
 })
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
-const i18n = createI18n({ locale: 'en', legacy: false, messages: { en, ru } })
+const i18n = createI18n({ locale: 'en', legacy: false, messages: { en, ru, ja } })
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 function makeCard(overrides: Partial<GachaCard> = {}): GachaCard {
@@ -116,6 +117,9 @@ describe('AdminGacha', () => {
           Pencil: { template: '<span />' },
           Trash2: { template: '<span />' },
           Upload: { template: '<span />' },
+          Check: { template: '<span />' },
+          X: { template: '<span />' },
+          Info: { template: '<span />' },
         },
       },
     })
@@ -263,7 +267,7 @@ describe('AdminGacha', () => {
     expect(vi.mocked(gachaAdminApi.renameGroup)).toHaveBeenCalledWith('group-42', 'New Name')
   })
 
-  it('addBannerCards receives (bannerId, string[])', async () => {
+  it('addBannerCards API called with (bannerId, string[]) via picker confirmPickerAdd', async () => {
     const { gachaAdminApi } = await import('@/api/gacha')
     vi.mocked(gachaAdminApi.addBannerCards).mockResolvedValue({
       data: { success: true, data: { updated: true } },
@@ -272,13 +276,85 @@ describe('AdminGacha', () => {
     await flushPromises()
     type BannerVm = {
       editBanner: GachaBanner | null
-      bannerCardIds: string
-      addBannerCards: () => Promise<void>
+      bannerCurrentCardIds: string[]
+      bannerPickerOpen: boolean
+      pickerSelected: Set<string>
+      confirmPickerAdd: () => Promise<void>
     }
     const vm = wrapper.vm as unknown as BannerVm
     vm.editBanner = makeBanner({ id: 'banner-99' })
-    vm.bannerCardIds = 'card-a, card-b'
-    await vm.addBannerCards()
-    expect(vi.mocked(gachaAdminApi.addBannerCards)).toHaveBeenCalledWith('banner-99', ['card-a', 'card-b'])
+    vm.bannerCurrentCardIds = []
+    vm.bannerPickerOpen = true
+    vm.pickerSelected = new Set(['card-a', 'card-b'])
+    await vm.confirmPickerAdd()
+    expect(vi.mocked(gachaAdminApi.addBannerCards)).toHaveBeenCalledWith('banner-99', expect.arrayContaining(['card-a', 'card-b']))
+  })
+
+  // ── Card picker tests ─────────────────────────────────────────────────────
+
+  it('card picker opens when "Добавить карточки" button is clicked in banner edit dialog', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.getBanner).mockResolvedValue({
+      data: { success: true, data: { ...makeBanner({ id: 'banner-1' }), card_ids: [] } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = { openBannerEdit: (b: GachaBanner) => Promise<void>; bannerPickerOpen: boolean }
+    const vm = wrapper.vm as unknown as Vm
+    await vm.openBannerEdit(makeBanner({ id: 'banner-1' }))
+    await flushPromises()
+    expect(vm.bannerPickerOpen).toBe(false)
+    // Simulate clicking the open-picker button
+    vm.bannerPickerOpen = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="banner-card-picker"]').exists()).toBe(true)
+  })
+
+  it('picker search filter narrows visible cards by name substring', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.listCards).mockResolvedValue({
+      data: {
+        success: true,
+        data: [
+          makeCard({ id: 'c1', name: 'Dragon Knight', source_title: 'Anime A', rarity: 'SSR' }),
+          makeCard({ id: 'c2', name: 'Fire Sprite', source_title: 'Anime B', rarity: 'R' }),
+          makeCard({ id: 'c3', name: 'Ice Dragon', source_title: 'Anime C', rarity: 'SR' }),
+        ],
+      },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = { pickerSearch: string; pickerFilteredCards: GachaCard[] }
+    const vm = wrapper.vm as unknown as Vm
+    vm.pickerSearch = 'dragon'
+    await wrapper.vm.$nextTick()
+    const names = vm.pickerFilteredCards.map(c => c.name)
+    expect(names).toContain('Dragon Knight')
+    expect(names).toContain('Ice Dragon')
+    expect(names).not.toContain('Fire Sprite')
+  })
+
+  it('confirmPickerAdd calls addBannerCards with selected ids and closes picker', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.addBannerCards).mockResolvedValue({
+      data: { success: true, data: { updated: true } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = {
+      editBanner: GachaBanner | null
+      bannerPickerOpen: boolean
+      bannerCurrentCardIds: string[]
+      pickerSelected: Set<string>
+      confirmPickerAdd: () => Promise<void>
+    }
+    const vm = wrapper.vm as unknown as Vm
+    vm.editBanner = makeBanner({ id: 'banner-55' })
+    vm.bannerCurrentCardIds = []
+    vm.bannerPickerOpen = true
+    vm.pickerSelected = new Set(['card-x', 'card-y'])
+    await vm.confirmPickerAdd()
+    expect(vi.mocked(gachaAdminApi.addBannerCards)).toHaveBeenCalledWith('banner-55', expect.arrayContaining(['card-x', 'card-y']))
+    expect(vm.bannerPickerOpen).toBe(false)
   })
 })
