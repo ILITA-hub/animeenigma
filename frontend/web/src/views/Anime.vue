@@ -1127,7 +1127,14 @@ const ourEnglishEnabled = import.meta.env.VITE_OURENGLISH_ENABLED !== 'false'
 const animeLibEnabled = import.meta.env.VITE_ANIMELIB_ENABLED === 'true'
 // Unified player (Task 15) — single-surface player; default ON, set
 // VITE_UNIFIED_PLAYER_ENABLED=false to disable for dark-ship.
-const UnifiedPlayer = defineAsyncComponent(() => import('@/components/player/unified/UnifiedPlayer.vue'))
+// loadingComponent: selecting the tab unmounts the existing-player card
+// immediately, so render a player-shaped skeleton (not a blank gap) while the
+// chunk loads. delay:0 shows it instantly; the chunk is usually warm anyway.
+const UnifiedPlayer = defineAsyncComponent({
+  loader: () => import('@/components/player/unified/UnifiedPlayer.vue'),
+  loadingComponent: UnifiedPlayerSkeleton,
+  delay: 0,
+})
 const unifiedPlayerEnabled = import.meta.env.VITE_UNIFIED_PLAYER_ENABLED !== 'false'
 // Workstream watch-together / Phase 02 Plan 02.9 (WT-SHELL-05) — lazy-loaded
 // invite button. Keeps Anime.vue's eager bundle clean — InviteButton pulls in
@@ -1136,6 +1143,7 @@ const unifiedPlayerEnabled = import.meta.env.VITE_UNIFIED_PLAYER_ENABLED !== 'fa
 const InviteButton = defineAsyncComponent(() => import('@/components/watch-together/InviteButton.vue'))
 import type { PlayerKind } from '@/types/watch-together'
 import ResumePill from '@/components/player/ResumePill.vue'
+import UnifiedPlayerSkeleton from '@/components/player/unified/UnifiedPlayerSkeleton.vue'
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
@@ -1278,7 +1286,14 @@ const videoLanguage = ref<VideoLanguage>(
 )
 // Task 15 — dedicated flag so selecting the unified player never overwrites
 // videoLanguage (which controls all existing-player routing).
-const unifiedSelected = ref(false)
+// Persisted so a stale-chunk recovery reload (after a deploy) — or any reload —
+// restores the user's AnimeEnigma selection instead of silently dropping back
+// to the default player.
+const unifiedSelected = ref(localStorage.getItem('unified_player_selected') === '1')
+watch(unifiedSelected, (on) => {
+  if (on) localStorage.setItem('unified_player_selected', '1')
+  else localStorage.removeItem('unified_player_selected')
+})
 // Workstream raw-jp, Phase 04 — 'raw' is the AllAnime-backed raw-JP provider.
 // Phase 24-28 — 'ourenglish' is the scraper-microservice-backed EN provider
 // (failover across gogoanime/animepahe/allanime/animefever/miruro/nineanime).

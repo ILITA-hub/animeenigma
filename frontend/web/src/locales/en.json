@@ -381,6 +381,8 @@
     "unified": {
       "tab": "AnimeEnigma",
       "beta": "Beta",
+      "loadingPlayer": "Loading player…",
+      "loadingEpisode": "Loading episode…",
       "source": "Source & translation",
       "audio": "Audio",
       "language": "Language",
@@ -755,10 +757,41 @@
     "resetAll": "Reset all",
     "countOf": "{n} of {total} titles",
     "empty": "Nothing found",
-    "col": { "anime": "Anime", "datetime": "Date · time", "episode": "Episode", "score": "Score" },
+    "col": {
+      "anime": "Anime",
+      "datetime": "Date · time",
+      "episode": "Episode",
+      "score": "Score"
+    },
     "episodeCountPlural": "{n} episode | {n} episodes",
-    "monthsNominative": { "jan": "January", "feb": "February", "mar": "March", "apr": "April", "may": "May", "jun": "June", "jul": "July", "aug": "August", "sep": "September", "oct": "October", "nov": "November", "dec": "December" },
-    "monthsGenitive": { "jan": "January", "feb": "February", "mar": "March", "apr": "April", "may": "May", "jun": "June", "jul": "July", "aug": "August", "sep": "September", "oct": "October", "nov": "November", "dec": "December" }
+    "monthsNominative": {
+      "jan": "January",
+      "feb": "February",
+      "mar": "March",
+      "apr": "April",
+      "may": "May",
+      "jun": "June",
+      "jul": "July",
+      "aug": "August",
+      "sep": "September",
+      "oct": "October",
+      "nov": "November",
+      "dec": "December"
+    },
+    "monthsGenitive": {
+      "jan": "January",
+      "feb": "February",
+      "mar": "March",
+      "apr": "April",
+      "may": "May",
+      "jun": "June",
+      "jul": "July",
+      "aug": "August",
+      "sep": "September",
+      "oct": "October",
+      "nov": "November",
+      "dec": "December"
+    }
   },
   "auth": {
     "heading": "Sign in to AnimeEnigma",
@@ -1010,8 +1043,11 @@
         "updatedBy": "Status changed by",
         "console": "Console logs",
         "network": "Network logs",
-        "html": "Page HTML"
-      }
+        "html": "Page HTML",
+        "id": "ID"
+      },
+      "copyLink": "Copy link",
+      "copied": "Copied"
     },
     "recs": {
       "title": "Recs Debug",
