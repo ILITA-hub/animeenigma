@@ -21,8 +21,52 @@ export function chooseLoadStrategy(stream: StreamResult, hlsJsSupported: boolean
   return hlsJsSupported ? 'hlsjs' : 'native'
 }
 
+export interface QualityLevel {
+  label: string
+  index: number
+}
+
+export interface FragStat {
+  /** media start position of the fragment (sec) */
+  start: number
+  /** fragment duration (sec) */
+  duration: number
+  /** payload size in bytes */
+  size: number
+  /** wall-clock load time in ms */
+  loadMs: number
+}
+
+/**
+ * Build the quality menu from hls.js levels: label by height (`720p`),
+ * dedupe by label keeping the FIRST hls index for it, sort high→low.
+ * Height-less levels fall back to a bitrate label (`1500k`); unlabelable
+ * levels are dropped (no fake entries — design rule D-05).
+ */
+export function buildLevelLabels(
+  levels: { height?: number; bitrate?: number }[],
+): QualityLevel[] {
+  const byLabel = new Map<string, number>()
+  levels.forEach((l, index) => {
+    const label = l.height
+      ? `${l.height}p`
+      : l.bitrate
+        ? `${Math.round(l.bitrate / 1000)}k`
+        : ''
+    if (!label || byLabel.has(label)) return
+    byLabel.set(label, index)
+  })
+  return [...byLabel.entries()]
+    .map(([label, index]) => ({ label, index }))
+    .sort((a, b) => parseInt(b.label) - parseInt(a.label))
+}
+
 export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
   const fatal = ref<string | null>(null)
+  const levels = ref<QualityLevel[]>([])
+  const currentLevelLabel = ref('')
+  const fragStats = ref<FragStat[]>([])
+  const bandwidthEstimate = ref(0)
   let hls: any = null
   // Monotonic load generation. `load()` awaits a dynamic import of hls.js, so two
   // calls in quick succession (e.g. a provider change immediately followed by an
@@ -37,6 +81,10 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     if (!v) return
     const gen = ++loadGen
     fatal.value = null
+    levels.value = []
+    currentLevelLabel.value = ''
+    fragStats.value = []
+    bandwidthEstimate.value = 0
     destroy()
 
     // Progressive MP4 — native playback. The backend proxy injects Referer and
@@ -62,7 +110,15 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     // here: on CODECS-less HLS (e.g. Kodik's solodcdn streams) the main-thread
     // transmux path stalls at "bufferCodec event(s) expected" and never requests
     // fragment 0, leaving the player frozen at readyState 0 with no error.
-    hls = new Hls({ enableWorker: true, backBufferLength: 90 })
+    hls = new Hls({
+      enableWorker: true,
+      backBufferLength: 90,
+      // Seek-ahead window (spec 2026-06-10): keep ~1 min buffered ahead so
+      // ±5s arrow-key seeks land inside the buffer and resolve instantly.
+      // backBufferLength 90 already covers the "10s behind" requirement.
+      maxBufferLength: 60,
+      maxMaxBufferLength: 120,
+    })
     hls.loadSource(stream.url)
     hls.attachMedia(v)
     // Explicitly kick fragment loading once the manifest parses. On CODECS-less
@@ -70,8 +126,26 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     // at "bufferCodec event(s) expected" without ever requesting fragment 0 — it
     // needs the first fragment to detect the codec. startLoad(-1) forces the load
     // from the natural start position without auto-playing (preserves click-to-play).
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    hls.on(Hls.Events.MANIFEST_PARSED, (_e: unknown, data: any) => {
+      levels.value = buildLevelLabels(data?.levels ?? [])
       hls?.startLoad(-1)
+    })
+    hls.on(Hls.Events.LEVEL_SWITCHED, (_e: unknown, data: any) => {
+      const lvl = levels.value.find((l) => l.index === data?.level)
+      if (lvl) currentLevelLabel.value = lvl.label
+    })
+    hls.on(Hls.Events.FRAG_LOADED, (_e: unknown, data: any) => {
+      const f = data?.frag
+      const st = f?.stats
+      if (!f || !st) return
+      const loadMs = Math.max(0, (st.loading?.end ?? 0) - (st.loading?.start ?? 0))
+      // Rolling window of the last 30 fragments — enough for the hacker-mode
+      // HUD + scrub-bar heatmap without unbounded growth on long episodes.
+      fragStats.value = [
+        ...fragStats.value.slice(-29),
+        { start: f.start ?? 0, duration: f.duration ?? 0, size: st.total ?? 0, loadMs },
+      ]
+      bandwidthEstimate.value = hls?.bandwidthEstimate ?? 0
     })
     hls.on(Hls.Events.ERROR, (_e: unknown, data: any) => {
       if (!data?.fatal) return
@@ -86,6 +160,16 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     })
   }
 
+  function setLevel(label: string) {
+    if (!hls) return
+    if (label === 'Auto') {
+      hls.currentLevel = -1
+      return
+    }
+    const lvl = levels.value.find((l) => l.label === label)
+    if (lvl) hls.currentLevel = lvl.index
+  }
+
   function destroy() {
     if (hls) {
       hls.destroy()
@@ -95,5 +179,5 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
 
   onUnmounted(destroy)
 
-  return { fatal, load, destroy }
+  return { fatal, load, destroy, levels, currentLevelLabel, setLevel, fragStats, bandwidthEstimate }
 }

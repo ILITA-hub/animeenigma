@@ -33,16 +33,17 @@ type ListService struct {
 	activityRepo     *repo.ActivityRepository
 	prefRepo         *repo.PreferenceRepository
 	progressRepo     *repo.ProgressRepository
-	userOrchestrator *recs.UserOrchestrator   // Phase 11 (REC-INFRA-02) — debounced trigger; may be nil in tests
-	recsRepo         recsRepoForListService   // Phase 13 (REC-INFRA-03) — synchronous S6 seed update; may be nil in tests
-	cache            listServiceCache         // Phase 13 (REC-INFRA-03) — cache invalidation after seed update; may be nil in tests
+	userOrchestrator *recs.UserOrchestrator // Phase 11 (REC-INFRA-02) — debounced trigger; may be nil in tests
+	recsRepo         recsRepoForListService // Phase 13 (REC-INFRA-03) — synchronous S6 seed update; may be nil in tests
+	cache            listServiceCache       // Phase 13 (REC-INFRA-03) — cache invalidation after seed update; may be nil in tests
+	gachaCredit      *GachaCreditProducer   // Phase 4 — fire-and-forget Энигмы credits; nil-safe, may be nil in tests
 	log              *logger.Logger
 }
 
-// NewListService wires the list service. The userOrchestrator, recsRepo, and
-// cache arguments may be nil in test environments that don't exercise the
-// recs trigger / seed-update / cache-bust paths; MarkEpisodeWatched
-// nil-guards each before invoking.
+// NewListService wires the list service. The userOrchestrator, recsRepo,
+// cache, and gachaCredit arguments may be nil in test environments that don't
+// exercise the respective paths; MarkEpisodeWatched and UpdateListEntry
+// nil-guard each before invoking.
 func NewListService(
 	listRepo *repo.ListRepository,
 	activityRepo *repo.ActivityRepository,
@@ -51,6 +52,7 @@ func NewListService(
 	userOrchestrator *recs.UserOrchestrator,
 	recsRepo recsRepoForListService,
 	cache listServiceCache,
+	gachaCredit *GachaCreditProducer,
 	log *logger.Logger,
 ) *ListService {
 	return &ListService{
@@ -61,6 +63,7 @@ func NewListService(
 		userOrchestrator: userOrchestrator,
 		recsRepo:         recsRepo,
 		cache:            cache,
+		gachaCredit:      gachaCredit,
 		log:              log,
 	}
 }
@@ -201,7 +204,10 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 		entry.StartedAt = &now
 	}
 
-	// Handle CompletedAt - use provided value, preserve existing, or auto-set
+	// Handle CompletedAt - use provided value, preserve existing, or auto-set.
+	// newlyCompleted is set true only in the auto-set arm so the gacha hook
+	// fires only when this call is the one that first marks the title done.
+	var newlyCompleted bool
 	if req.CompletedAt != nil {
 		entry.CompletedAt = req.CompletedAt
 	} else if existingEntry != nil && existingEntry.CompletedAt != nil {
@@ -209,6 +215,7 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 	} else if req.Status == "completed" {
 		now := time.Now()
 		entry.CompletedAt = &now
+		newlyCompleted = true
 	}
 
 	// When marking as completed, set episodes to total if not explicitly provided
@@ -250,6 +257,13 @@ func (s *ListService) UpdateListEntry(ctx context.Context, userID, username stri
 		}
 	}
 
+	// Phase 4 (gacha): fire non-blocking title-completed credit when this call
+	// is the one that first sets CompletedAt. Nil-safe; gacha deduplicates on
+	// (user_id, "title_completed", animeID) so rewatches don't double-pay.
+	if newlyCompleted {
+		s.gachaCredit.TitleCompleted(userID, req.AnimeID)
+	}
+
 	return entry, nil
 }
 
@@ -264,7 +278,6 @@ func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID strin
 // watch_history audit trail preserved). rewatch_count is NOT bumped here — it
 // increments when the rewatch reaches the finale (watching→completed while
 // is_rewatching).
-//
 func (s *ListService) Rewatch(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
 	if _, err := s.listRepo.StartRewatch(ctx, userID, animeID); err != nil {
 		return nil, err
@@ -329,6 +342,9 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 					"error", err,
 				)
 			}
+			// Phase 4 (gacha): fire non-blocking episode-watched credit.
+			// Nil-safe; gacha outage never fails this branch.
+			s.gachaCredit.EpisodeWatched(userID, animeID, req.Episode)
 			return entry, nil
 		}
 
@@ -350,6 +366,10 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			"error", err,
 		)
 	}
+	// Phase 4 (gacha): fire non-blocking episode-watched credit on main path.
+	// Nil-safe; gacha outage never fails MarkEpisodeWatched. Gacha deduplicates
+	// on (user_id, reason, ref) so firing on every invocation is safe.
+	s.gachaCredit.EpisodeWatched(userID, animeID, req.Episode)
 
 	// Create watch history with combo context if present
 	if req.Player != "" {

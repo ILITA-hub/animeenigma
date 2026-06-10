@@ -20,6 +20,7 @@ type Config struct {
 	Reports     ReportsConfig
 	Maintenance MaintenanceConfig
 	Tier2       Tier2Config
+	Gacha       GachaConfig
 	Notify      NotifyConfig
 }
 
@@ -32,6 +33,24 @@ type NotifyConfig struct {
 	// /internal/notifications/invalidate. Default: http://notifications:8090
 	InternalURL string
 	// Enabled toggles the producer; when false all dispatches are dropped.
+	Enabled bool
+}
+
+// GachaConfig controls the fire-and-forget gacha credit producer (Phase 4).
+type GachaConfig struct {
+	// InternalURL is the base URL of the gacha service reachable inside the
+	// Docker network. Only the path /internal/gacha/credit is called.
+	// Default: http://gacha:8093
+	InternalURL string
+	// CreditEpisode is the Энигмы amount credited per watched episode.
+	// Default: 22
+	CreditEpisode int64
+	// CreditTitle is the Энигмы amount credited when a title is completed.
+	// Default: 80
+	CreditTitle int64
+	// Enabled controls whether the credit producer is active. When false the
+	// producer is constructed in disabled mode and all events are silently
+	// dropped (gacha outage / dark-ship scenario). Default: true
 	Enabled bool
 }
 
@@ -117,6 +136,12 @@ func Load() (*Config, error) {
 			MinConfidence:  getEnvFloat("TIER2_MIN_CONFIDENCE", 1800.0),
 			MaxHistoryRows: getEnvInt("TIER2_MAX_HISTORY_ROWS", 5000),
 			DurationFloor:  getEnvInt("TIER2_DURATION_FLOOR", 60),
+		},
+		Gacha: GachaConfig{
+			InternalURL:   getEnv("GACHA_INTERNAL_URL", "http://gacha:8093"),
+			CreditEpisode: int64(getEnvInt("GACHA_CREDIT_EPISODE", 22)),
+			CreditTitle:   int64(getEnvInt("GACHA_CREDIT_TITLE", 80)),
+			Enabled:       getEnvBool("GACHA_CREDIT_ENABLED", true),
 		},
 		Notify: NotifyConfig{
 			InternalURL: getEnv("NOTIFICATIONS_INTERNAL_URL", "http://notifications:8090"),

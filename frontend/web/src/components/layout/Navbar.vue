@@ -34,6 +34,15 @@
           >
             {{ $t(link.label) }}
           </router-link>
+          <!-- Gacha «Лудка» nav item — gated by VITE_GACHA_ADMIN_ONLY -->
+          <router-link
+            v-if="gachaVisible"
+            to="/gacha"
+            class="nav-link-nt"
+            active-class="nav-link-nt--active"
+          >
+            {{ $t('gacha.nav_item') }}
+          </router-link>
         </div>
 
         <!-- Right Section — Neon Tokyo tools row -->
@@ -46,27 +55,27 @@
               :aria-label="$t('nav.search')"
               @click="openSearch"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search class="size-5" />
             </button>
             <div v-else class="flex items-center gap-2">
-              <div class="relative">
-                <input
+              <div class="relative w-64">
+                <Input
                   ref="searchInputRef"
                   v-model="searchQuery"
                   type="text"
+                  size="sm"
                   :placeholder="$t('search.placeholder')"
-                  class="w-64 px-3 py-1.5 pl-9 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:bg-white/15 transition-all"
+                  class="bg-white/10 border-white/20 focus:border-cyan-400/50 focus:bg-white/15"
                   @input="onSearchInput"
                   @keydown.enter="goToSearch"
                   @keydown.escape="closeSearch"
                   @keydown.down.prevent="highlightNext"
                   @keydown.up.prevent="highlightPrev"
-                />
-                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                >
+                  <template #prefix>
+                    <Search class="size-4 text-white/60" aria-hidden="true" />
+                  </template>
+                </Input>
                 <!-- Autocomplete Dropdown -->
                 <Transition name="dropdown">
                   <div
@@ -112,12 +121,22 @@
                 :aria-label="$t('nav.closeSearch')"
                 @click="closeSearch"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X class="size-4" />
               </button>
             </div>
           </div>
+
+          <!-- Gacha balance chip — gated by VITE_GACHA_ADMIN_ONLY -->
+          <router-link
+            v-if="gachaVisible"
+            to="/gacha"
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-400/10 hover:bg-orange-400/20 transition-colors"
+            :aria-label="$t('gacha.balance_chip_aria', { n: gachaBalance })"
+            :title="$t('gacha.balance_tooltip')"
+          >
+            <Gem class="size-4 text-orange-400 flex-shrink-0" aria-hidden="true" />
+            <span class="text-orange-300 text-sm font-medium tabular-nums">{{ gachaBalance }}</span>
+          </router-link>
 
           <!-- Language Selector -->
           <div class="relative" ref="langDropdownRef">
@@ -126,9 +145,7 @@
               @click="langDropdownOpen = !langDropdownOpen"
             >
               <span class="uppercase">{{ locale }}</span>
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
+              <ChevronDown class="size-3.5" aria-hidden="true" />
             </button>
             <Transition name="dropdown">
               <div
@@ -157,18 +174,16 @@
           <template v-if="authStore.isAuthenticated">
             <router-link
               to="/profile"
-              class="avatar-nt"
+              class="group flex-shrink-0"
               :aria-label="authStore.user?.username || $t('nav.profile')"
             >
-              <img
-                v-if="authStore.user?.avatar"
-                :src="authStore.user.avatar"
-                :alt="authStore.user.username"
-                class="w-full h-full object-cover"
+              <Avatar
+                :src="authStore.user?.avatar"
+                :name="authStore.user?.username"
+                size="sm"
+                status="online"
+                class="size-9 ring-2 ring-white/10 transition-shadow group-hover:ring-brand-cyan/30"
               />
-              <span v-else class="avatar-initials">{{ userInitials }}</span>
-              <!-- Online dot per handoff .avatar::after -->
-              <span class="avatar-online-dot" aria-hidden="true" />
             </router-link>
           </template>
           <template v-else>
@@ -188,12 +203,8 @@
           :aria-expanded="mobileMenuOpen"
           aria-controls="mobile-drawer"
         >
-          <svg v-if="!mobileMenuOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          <svg v-else class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <Menu v-if="!mobileMenuOpen" class="size-6" />
+          <X v-else class="size-6" />
         </button>
       </div>
 
@@ -222,6 +233,19 @@
               {{ $t(link.label) }}
             </router-link>
 
+            <!-- Gacha «Лудка» mobile link -->
+            <router-link
+              v-if="gachaVisible"
+              to="/gacha"
+              class="flex items-center gap-2 px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              active-class="text-orange-400 bg-orange-500/10"
+              @click="mobileMenuOpen = false"
+            >
+              <Gem class="size-4 text-orange-400" aria-hidden="true" />
+              {{ $t('gacha.nav_item') }}
+              <span class="ml-auto text-orange-300 text-sm font-medium tabular-nums">{{ gachaBalance }}</span>
+            </router-link>
+
             <!-- Divider -->
             <div class="my-1 border-t border-white/10" />
 
@@ -243,18 +267,12 @@
                 active-class="text-cyan-400 bg-cyan-500/10"
                 @click="mobileMenuOpen = false"
               >
-                <div
-                  class="w-8 h-8 rounded-full overflow-hidden border border-cyan-500/30 flex items-center justify-center flex-shrink-0"
-                  :class="authStore.user?.avatar ? 'bg-surface' : 'bg-cyan-500/20'"
-                >
-                  <img
-                    v-if="authStore.user?.avatar"
-                    :src="authStore.user.avatar"
-                    :alt="authStore.user.username"
-                    class="w-full h-full object-cover"
-                  />
-                  <span v-else class="text-cyan-400 text-sm font-medium">{{ userInitials }}</span>
-                </div>
+                <Avatar
+                  :src="authStore.user?.avatar"
+                  :name="authStore.user?.username"
+                  size="sm"
+                  class="ring-1 ring-cyan-500/30"
+                />
                 {{ $t('nav.profile') }}
               </router-link>
             </template>
@@ -320,14 +338,35 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+import { Search, X, ChevronDown, Menu, Gem } from 'lucide-vue-next'
+import Avatar from '@/components/ui/Avatar.vue'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
+import { Input } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell.vue'
 import BrandMark from '@/components/layout/BrandMark.vue'
+import { useGachaVisible } from '@/utils/gachaGate'
+import { useGachaStore } from '@/stores/gacha'
 
 const router = useRouter()
 const { locale } = useI18n()
 const authStore = useAuthStore()
+
+// Gacha gate + balance chip
+const gachaVisible = useGachaVisible()
+const gachaStore = useGachaStore()
+const gachaBalance = computed(() => gachaStore.balance)
+
+// Refresh wallet once on login (whenever isAuthenticated flips true and gacha is visible)
+watch(
+  () => authStore.isAuthenticated,
+  (authenticated) => {
+    if (authenticated && gachaVisible.value) {
+      gachaStore.refreshWallet()
+    }
+  },
+  { immediate: true },
+)
 
 // Workstream notifications / Phase 3 — feature flag mirrors App.vue. Build-
 // time constant, no reactive dependency.
@@ -387,12 +426,6 @@ useEventListener(document, 'keydown', (e: KeyboardEvent) => {
   }
 })
 
-const userInitials = computed(() => {
-  const user = authStore.user
-  if (!user?.username) return '?'
-  return user.username.slice(0, 2).toUpperCase()
-})
-
 const setLocale = (code: string) => {
   locale.value = code
   localStorage.setItem('locale', code)
@@ -426,7 +459,7 @@ const searchOpen = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<Array<{ id: string; title: string; coverImage: string; releaseYear?: number; totalEpisodes?: number; rating?: number }>>([])
 const highlightedIndex = ref(-1)
-const searchInputRef = ref<HTMLInputElement | null>(null)
+const searchInputRef = ref<{ focus: () => void } | null>(null)
 const searchContainerRef = ref<HTMLElement | null>(null)
 
 const openSearch = async () => {
@@ -667,46 +700,4 @@ onUnmounted(() => {
   color: var(--foreground);
 }
 
-/* ------------------------------------------------------------------ */
-/* Avatar — handoff .avatar with online dot                            */
-/* ------------------------------------------------------------------ */
-.avatar-nt {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #1a3a4a 0%, #0e2030 100%);
-  display: grid;
-  place-items: center;
-  font-size: 16px;
-  border: 2px solid var(--line-strong, rgba(255, 255, 255, 0.12));
-  position: relative;
-  overflow: hidden;
-  text-decoration: none;
-  flex-shrink: 0;
-  transition: border-color 0.15s ease;
-}
-
-.avatar-nt:hover {
-  border-color: var(--accent-line, rgba(0, 212, 255, 0.28));
-}
-
-.avatar-initials {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--brand-cyan);
-  line-height: 1;
-}
-
-/* Online presence dot — bottom-right corner, 8px with green fill + base border */
-.avatar-online-dot {
-  position: absolute;
-  bottom: 1px;
-  right: 1px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--color-success, #00ff9d);
-  border: 2px solid var(--color-base, #08080f);
-  pointer-events: none;
-}
 </style>

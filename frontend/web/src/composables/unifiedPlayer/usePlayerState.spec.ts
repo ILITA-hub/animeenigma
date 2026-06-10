@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { usePlayerState } from './usePlayerState'
 
 describe('usePlayerState', () => {
@@ -24,5 +25,33 @@ describe('usePlayerState', () => {
     s.setTeam('AniLibria')
     s.setAudio('dub')
     expect(s.combo.value.team).toBeNull()
+  })
+
+  describe('hackerMode', () => {
+    beforeEach(() => {
+      localStorage.removeItem('pl_hacker_mode')
+    })
+
+    it('defaults to off', () => {
+      const s = usePlayerState()
+      expect(s.hackerMode.value).toBe(false)
+    })
+
+    it('persists to localStorage and restores', async () => {
+      const s = usePlayerState()
+      s.hackerMode.value = true
+      await nextTick()
+      expect(localStorage.getItem('pl_hacker_mode')).toBe('1')
+      const s2 = usePlayerState()
+      expect(s2.hackerMode.value).toBe(true)
+    })
+
+    it('clears the key when switched off', async () => {
+      localStorage.setItem('pl_hacker_mode', '1')
+      const s = usePlayerState()
+      s.hackerMode.value = false
+      await nextTick()
+      expect(localStorage.getItem('pl_hacker_mode')).toBeNull()
+    })
   })
 })

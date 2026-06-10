@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chooseLoadStrategy } from './useVideoEngine'
+import { chooseLoadStrategy, buildLevelLabels } from './useVideoEngine'
 
 describe('chooseLoadStrategy', () => {
   it('uses native src for mp4 regardless of hls.js support', () => {
@@ -14,5 +14,32 @@ describe('chooseLoadStrategy', () => {
   })
   it('falls back to native HLS only when hls.js is unsupported (Safari/iOS)', () => {
     expect(chooseLoadStrategy({ url: 'a.m3u8', type: 'hls' }, false)).toBe('native')
+  })
+})
+
+describe('buildLevelLabels', () => {
+  it('labels levels by height, sorted high to low, keeping hls indexes', () => {
+    expect(
+      buildLevelLabels([{ height: 480 }, { height: 1080 }, { height: 720 }]),
+    ).toEqual([
+      { label: '1080p', index: 1 },
+      { label: '720p', index: 2 },
+      { label: '480p', index: 0 },
+    ])
+  })
+
+  it('dedupes same-height levels keeping the first index', () => {
+    expect(
+      buildLevelLabels([{ height: 720, bitrate: 2_000_000 }, { height: 720, bitrate: 1_000_000 }]),
+    ).toEqual([{ label: '720p', index: 0 }])
+  })
+
+  it('falls back to bitrate labels when height is missing', () => {
+    expect(buildLevelLabels([{ bitrate: 1_500_000 }])).toEqual([{ label: '1500k', index: 0 }])
+  })
+
+  it('returns empty for empty/unlabelable input', () => {
+    expect(buildLevelLabels([])).toEqual([])
+    expect(buildLevelLabels([{}])).toEqual([])
   })
 })

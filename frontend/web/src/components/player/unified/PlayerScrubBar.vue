@@ -25,6 +25,17 @@
       <span class="pl-thumb" aria-hidden="true" />
     </div>
 
+    <!-- Hacker-mode fragment heatmap (sits over the fill so it reads on top) -->
+    <span
+      v-for="(f, i) in fragments ?? []"
+      :key="'frag' + i"
+      data-test="frag"
+      class="pl-frag"
+      :data-tone="f.tone"
+      :style="{ left: f.startPct + '%', width: f.widthPct + '%' }"
+      :title="f.label"
+    />
+
     <!-- Chapter markers (intro / outro) -->
     <span
       v-for="(c, i) in chapters"
@@ -62,12 +73,21 @@ interface Chapter {
   widthPct: number
 }
 
+export interface FragSegment {
+  startPct: number
+  widthPct: number
+  tone: 'ok' | 'warn' | 'bad'
+  label: string
+}
+
 const props = defineProps<{
   progress: number
   buffered: number
   durationSec: number
   chapters: Chapter[]
   stillUrl?: string
+  /** hacker-mode per-fragment heatmap segments (empty/omitted = off) */
+  fragments?: FragSegment[]
 }>()
 
 const emit = defineEmits<{
@@ -190,6 +210,32 @@ function onMouseLeave() {
   opacity: 0.65;
   border-radius: 999px;
   pointer-events: none;
+}
+
+/* Hacker-mode fragment heatmap — size-tinted segments. Clicks still seek:
+   the track's click handler reads currentTarget, so child spans don't break
+   getPct; title attr gives the native size/time tooltip on hover. */
+.pl-frag {
+  position: absolute;
+  height: 4px;
+  opacity: 0.85;
+  border-right: 1px solid rgba(0, 0, 0, 0.6);
+}
+
+.pl-track:hover .pl-frag {
+  height: 6px;
+}
+
+.pl-frag[data-tone='ok'] {
+  background: var(--success);
+}
+
+.pl-frag[data-tone='warn'] {
+  background: var(--warning);
+}
+
+.pl-frag[data-tone='bad'] {
+  background: var(--destructive);
 }
 
 .pl-preview {

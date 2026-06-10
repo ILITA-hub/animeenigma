@@ -11,6 +11,7 @@
  * definitions don't cross component boundaries, but CSS custom properties
  * inherit — so we redefine the classes here against the inherited vars.)
  */
+import { Check } from 'lucide-vue-next'
 import type { EpisodeOption } from './EpisodeSelector.types'
 
 const props = withDefaults(defineProps<{
@@ -59,9 +60,7 @@ function isWatched(ep: EpisodeOption): boolean {
         v-if="isWatched(ep) && !isSelected(ep)"
         class="absolute -top-1 -right-1 w-3 h-3 accent-bg rounded-full flex items-center justify-center"
       >
-        <svg class="w-2 h-2 text-black" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-        </svg>
+        <Check class="size-2 text-black" aria-hidden="true" />
       </span>
     </button>
   </div>

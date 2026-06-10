@@ -7,7 +7,7 @@
     @close="emit('close')"
   >
     <div v-if="loading" class="flex items-center justify-center py-12">
-      <div class="w-8 h-8 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+      <Spinner size="lg" />
     </div>
 
     <div v-else-if="error" class="py-8 text-center text-destructive text-sm">
@@ -124,6 +124,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Modal from '@/components/ui/Modal.vue'
 import Badge from '@/components/ui/Badge.vue'
+import { Spinner } from '@/components/ui'
 import { subtitlesApi } from '@/api/client'
 import type { GroupedSubs, SubtitleTrack } from '@/types/raw'
 

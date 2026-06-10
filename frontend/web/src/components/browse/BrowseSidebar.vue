@@ -15,12 +15,9 @@
           :key="g.id"
           class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
         >
-          <input
-            type="checkbox"
-            :value="g.id"
-            :checked="filters.genres.value.includes(g.id)"
-            class="rounded border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-            @change="onGenreToggle(g.id, ($event.target as HTMLInputElement).checked)"
+          <Checkbox
+            :model-value="filters.genres.value.includes(g.id)"
+            @update:model-value="(v) => onGenreToggle(g.id, v === true)"
           />
           <span>{{ localizedGenre(g) }}</span>
         </label>
@@ -32,21 +29,7 @@
       :label="$t('browse.filters.section.format')"
       :count="filters.kind.value ? 1 : 0"
     >
-      <label
-        v-for="opt in kindOptions"
-        :key="opt.value || 'any-kind'"
-        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
-      >
-        <input
-          type="radio"
-          name="kind-filter"
-          :value="opt.value"
-          :checked="filters.kind.value === opt.value"
-          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-          @change="onKindChange(opt.value)"
-        />
-        <span>{{ opt.label }}</span>
-      </label>
+      <RadioGroup :model-value="filters.kind.value" :options="kindOptions" @update:model-value="(v) => onKindChange(v as Kind)" />
     </FilterSection>
 
     <!-- Status — single-select radio -->
@@ -54,21 +37,7 @@
       :label="$t('browse.filters.section.status')"
       :count="filters.status.value ? 1 : 0"
     >
-      <label
-        v-for="opt in statusOptions"
-        :key="opt.value || 'any-status'"
-        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
-      >
-        <input
-          type="radio"
-          name="status-filter"
-          :value="opt.value"
-          :checked="filters.status.value === opt.value"
-          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-          @change="onStatusChange(opt.value)"
-        />
-        <span>{{ opt.label }}</span>
-      </label>
+      <RadioGroup :model-value="filters.status.value" :options="statusOptions" @update:model-value="onStatusChange" />
     </FilterSection>
 
     <!-- Year range -->
@@ -77,27 +46,13 @@
       :count="filters.yearFrom.value || filters.yearTo.value ? 1 : 0"
     >
       <div class="flex items-center gap-2">
-        <input
-          type="number"
-          :min="MIN_YEAR"
-          :max="MAX_YEAR"
-          :value="filters.yearFrom.value ?? ''"
-          :placeholder="$t('browse.filters.year.from')"
-          :aria-label="$t('browse.filters.year.from')"
-          class="w-1/2 px-2 py-1 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:ring-2 focus:ring-cyan-500/40 focus:outline-none"
-          @change="onYearChange('from', ($event.target as HTMLInputElement).valueAsNumber)"
-        />
+        <div class="w-1/2">
+          <Input type="number" size="sm" :min="MIN_YEAR" :max="MAX_YEAR" :model-value="filters.yearFrom.value != null ? String(filters.yearFrom.value) : ''" :placeholder="$t('browse.filters.year.from')" :aria-label="$t('browse.filters.year.from')" @change="onYearChange('from', ($event.target as HTMLInputElement).valueAsNumber)" />
+        </div>
         <span class="text-white/40">—</span>
-        <input
-          type="number"
-          :min="MIN_YEAR"
-          :max="MAX_YEAR"
-          :value="filters.yearTo.value ?? ''"
-          :placeholder="$t('browse.filters.year.to')"
-          :aria-label="$t('browse.filters.year.to')"
-          class="w-1/2 px-2 py-1 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:ring-2 focus:ring-cyan-500/40 focus:outline-none"
-          @change="onYearChange('to', ($event.target as HTMLInputElement).valueAsNumber)"
-        />
+        <div class="w-1/2">
+          <Input type="number" size="sm" :min="MIN_YEAR" :max="MAX_YEAR" :model-value="filters.yearTo.value != null ? String(filters.yearTo.value) : ''" :placeholder="$t('browse.filters.year.to')" :aria-label="$t('browse.filters.year.to')" @change="onYearChange('to', ($event.target as HTMLInputElement).valueAsNumber)" />
+        </div>
       </div>
     </FilterSection>
 
@@ -114,6 +69,7 @@
           </span>
           <span>10</span>
         </div>
+        <!-- bespoke-keep: range slider; no slider primitive in the design system -->
         <input
           type="range"
           min="0"
@@ -137,6 +93,7 @@
         :key="opt.value"
         class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
       >
+        <!-- bespoke-keep: per-provider brand accent (opt.accent); cyan-only Checkbox primitive can't model it -->
         <input
           type="checkbox"
           :value="opt.value"
@@ -153,21 +110,7 @@
       :label="$t('browse.filters.section.sort')"
       :count="filters.sort.value !== 'popularity' ? 1 : 0"
     >
-      <label
-        v-for="opt in sortOptions"
-        :key="opt.value"
-        class="flex items-center gap-2 text-sm text-white/70 hover:text-white cursor-pointer py-0.5"
-      >
-        <input
-          type="radio"
-          name="sort-filter"
-          :value="opt.value"
-          :checked="filters.sort.value === opt.value"
-          class="border-white/20 bg-transparent text-cyan-500 focus:ring-cyan-500"
-          @change="onSortChange(opt.value)"
-        />
-        <span>{{ opt.label }}</span>
-      </label>
+      <RadioGroup :model-value="filters.sort.value" :options="sortOptions" @update:model-value="(v) => onSortChange(v as Sort)" />
     </FilterSection>
 
     <!-- Reset -->
@@ -202,6 +145,7 @@ import {
 } from '@/composables/useBrowseFilters'
 import FilterSection from './FilterSection.vue'
 import { getLocalizedGenre } from '@/utils/title'
+import { Input, Checkbox, RadioGroup } from '@/components/ui'
 
 // Phase 15 (UX-31) — Browse.vue passes the genre list down (no
 // duplicate fetch) and the parent's useBrowseFilters instance so the

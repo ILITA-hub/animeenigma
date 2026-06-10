@@ -2,16 +2,14 @@
   <div class="animelib-player animelib-player-wrapper">
     <!-- Loading state for episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+      <Spinner size="lg" />
     </div>
 
     <!-- No episodes available -->
-    <div v-else-if="episodes.length === 0 && !loadingEpisodes" class="text-center py-20 text-white/60">
-      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+    <EmptyState v-else-if="episodes.length === 0 && !loadingEpisodes" size="lg">
+      <template #icon><Video class="size-12 opacity-50" /></template>
       {{ $t('player.noEpisodes', { source: 'AniLib' }) }}
-    </div>
+    </EmptyState>
 
     <!-- Main content when episodes available -->
     <div v-else class="flex flex-col lg:flex-row gap-4">
@@ -24,7 +22,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
-              <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <Spinner size="lg" class="mx-auto mb-3" />
               <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}</p>
             </div>
           </div>
@@ -35,9 +33,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center text-pink-400 px-4">
-              <svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+              <TriangleAlert class="size-12 mx-auto mb-3" aria-hidden="true" />
               <p>{{ error }}</p>
             </div>
           </div>
@@ -64,9 +60,7 @@
             class="absolute inset-0 flex items-center justify-center"
           >
             <div class="text-center text-white/40">
-              <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Play class="size-16 mx-auto mb-3" aria-hidden="true" />
               <p>{{ $t('player.selectEpisode') }}</p>
             </div>
           </div>
@@ -87,9 +81,7 @@
         <div class="mt-4">
           <div class="flex items-center gap-3 mb-3 flex-wrap">
             <h3 class="text-white/60 text-sm flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
+              <List class="size-4" aria-hidden="true" />
               {{ $t('player.episodesCount', { count: episodes.length }) }}
             </h3>
             <slot name="header-middle" />
@@ -103,9 +95,7 @@
                 ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/10 text-white hover:bg-white/20'"
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
+              <Check class="size-4" aria-hidden="true" />
               <span class="hidden sm:inline">{{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}</span>
             </button>
           </div>
@@ -122,9 +112,7 @@
       <div class="lg:w-72 flex-shrink-0">
         <!-- Translation selector -->
         <h3 class="text-white/60 text-sm mb-3 flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
-          </svg>
+          <Languages class="size-4" aria-hidden="true" />
           {{ $t('player.voiceActing') }}
         </h3>
 
@@ -183,9 +171,7 @@
                   v-if="selectedTranslation?.id === tr.id"
                   class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 accent-bg"
                 >
-                  <svg class="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                  </svg>
+                  <Check class="size-4 text-black" aria-hidden="true" />
                 </div>
               </div>
             </button>
@@ -194,7 +180,7 @@
 
         <!-- Loading translations -->
         <div v-else-if="loadingTranslations" class="flex items-center justify-center py-6">
-          <div class="w-6 h-6 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+          <Spinner size="md" tone="mono" />
         </div>
 
         <!-- No translations -->
@@ -205,9 +191,7 @@
         <!-- Quality selector (only for direct video) -->
         <div v-if="availableSources.length > 1" class="mt-4">
           <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-            </svg>
+            <MonitorPlay class="size-4" aria-hidden="true" />
             {{ $t('player.quality') }}
           </h3>
           <div class="flex flex-wrap gap-2">
@@ -228,9 +212,7 @@
         <!-- Subtitle controls (only for direct video with external subtitles) -->
         <div v-if="streamSubtitles.length > 0" class="mt-4">
           <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
+            <MessageSquare class="size-4" aria-hidden="true" />
             {{ $t('player.subtitles') }}
           </h3>
 
@@ -270,6 +252,8 @@
 
 <script setup lang="ts">
 import { ref, computed, toRef, onMounted, watch } from 'vue'
+import { Video, TriangleAlert, Play, List, Check, Languages, MonitorPlay, MessageSquare } from 'lucide-vue-next'
+import { Spinner, EmptyState } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import { animeLibApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'

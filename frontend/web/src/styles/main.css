@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* NOTE: noto-sans-jp.css (230 unicode-range @font-face slices, ~250KB of CSS
+   text) is deliberately NOT imported here — it would bloat the render-blocking
+   main stylesheet. It is idle-loaded as its own async chunk from main.ts; the
+   woff2 slices themselves only ever download when JP glyphs appear (the
+   unicode-range mechanism), so deferring the declarations costs nothing. */
 
 @font-face { font-family: 'Manrope'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/manrope-700.woff2') format('woff2'); }
 @font-face { font-family: 'Manrope'; font-style: normal; font-weight: 800; font-display: swap; src: url('/fonts/manrope-800.woff2') format('woff2'); }
@@ -8,8 +13,7 @@
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/inter-700.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/jetbrains-mono-400.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/jetbrains-mono-500.woff2') format('woff2'); }
-@font-face { font-family: 'Noto Sans JP'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/noto-sans-jp-400.woff2') format('woff2'); }
-@font-face { font-family: 'Noto Sans JP'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/noto-sans-jp-500.woff2') format('woff2'); }
+/* Noto Sans JP is sliced into unicode-range subsets — see noto-sans-jp.css (imported above). */
 
 /* Neon Tokyo Theme */
 @theme {
@@ -75,6 +79,8 @@
   --color-brand-pink-soft: var(--brand-pink-soft);
   --color-brand-violet: var(--brand-violet);
 
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-success-foreground: var(--success-foreground);
   --color-success-soft: var(--success-soft);
   --color-warning-foreground: var(--warning-foreground);
@@ -395,6 +401,8 @@ body {
   --brand-pink: var(--color-pink-500);
   --brand-pink-foreground: #ffffff;
   --brand-violet: var(--violet);
+  --success: #00ff9d;
+  --warning: #ffd600;
   --success-foreground: var(--color-base);
   --warning-foreground: var(--color-base);
   --info: #5ab8ff;

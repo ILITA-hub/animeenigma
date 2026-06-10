@@ -22,6 +22,7 @@
  */
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { SmilePlus, X } from 'lucide-vue-next'
 import { reviewApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -322,14 +323,7 @@ async function adminRemove(emoji: string, reactor: Reactor): Promise<void> {
       :aria-expanded="pickerOpen"
       @click="togglePicker"
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-        <path d="M22 11v1a10 10 0 1 1-9-10" />
-        <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-        <line x1="9" x2="9.01" y1="9" y2="9" />
-        <line x1="15" x2="15.01" y1="9" y2="9" />
-        <path d="M16 5h6" />
-        <path d="M19 2v6" />
-      </svg>
+      <SmilePlus class="size-4" aria-hidden="true" />
     </button>
 
     <!-- Who-reacted popover — teleported: .glass-card review cards each create
@@ -368,10 +362,7 @@ async function adminRemove(emoji: string, reactor: Reactor): Promise<void> {
             data-testid="reaction-admin-remove"
             @click="adminRemove(whoReaction.emoji, reactor)"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
+            <X class="size-3" aria-hidden="true" />
           </button>
         </div>
       </div>

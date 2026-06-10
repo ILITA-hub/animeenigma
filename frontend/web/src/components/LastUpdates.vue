@@ -61,14 +61,11 @@
                 <p class="entry-text">{{ entry.message }}</p>
               </div>
             </div>
-            <svg
+            <ChevronDown
               class="entry-chevron"
               :class="{ 'entry-chevron--open': isExpanded(group.date, idx) }"
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
               aria-hidden="true"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
+            />
           </button>
         </div>
       </template>
@@ -133,6 +130,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ChevronDown } from 'lucide-vue-next'
 import { animeApi } from '@/api/client'
 
 interface ChangelogEntry {

@@ -98,9 +98,7 @@
       class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/50 animate-pulse-glow"
     >
       <span class="text-sm">{{ $t('hero.scroll') }}</span>
-      <svg class="w-6 h-6 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-      </svg>
+      <ArrowDown class="size-6 animate-bounce" aria-hidden="true" />
     </div>
   </section>
 </template>
@@ -108,6 +106,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useMediaQuery, useIntersectionObserver } from '@vueuse/core'
+import { ArrowDown } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 
 interface Props {

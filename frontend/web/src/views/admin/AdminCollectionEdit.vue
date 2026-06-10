@@ -38,7 +38,7 @@
 
       <!-- Loading -->
       <div v-if="isLoading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <template v-else>
@@ -49,12 +49,7 @@
             <label class="block text-white/70 text-xs uppercase mb-1">
               {{ $t('admin.collections.fieldSlug') }}
             </label>
-            <input
-              v-model="form.slug"
-              type="text"
-              class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              :placeholder="$t('admin.collections.slugPlaceholder')"
-            />
+            <Input v-model="form.slug" type="text" size="sm" class="bg-black/40" :placeholder="$t('admin.collections.slugPlaceholder')" />
           </div>
 
           <!-- Titles -->
@@ -63,32 +58,19 @@
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleEn') }} *
               </label>
-              <input
-                v-model="form.title"
-                type="text"
-                required
-                class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              />
+              <Input v-model="form.title" type="text" size="sm" class="bg-black/40" required />
             </div>
             <div>
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleRu') }}
               </label>
-              <input
-                v-model="form.title_ru"
-                type="text"
-                class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              />
+              <Input v-model="form.title_ru" type="text" size="sm" class="bg-black/40" />
             </div>
             <div>
               <label class="block text-white/70 text-xs uppercase mb-1">
                 {{ $t('admin.collections.fieldTitleJp') }}
               </label>
-              <input
-                v-model="form.title_jp"
-                type="text"
-                class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              />
+              <Input v-model="form.title_jp" type="text" size="sm" class="bg-black/40" />
             </div>
           </div>
 
@@ -97,12 +79,7 @@
             <label class="block text-white/70 text-xs uppercase mb-1">
               {{ $t('admin.collections.fieldCover') }}
             </label>
-            <input
-              v-model="form.cover_image_url"
-              type="url"
-              class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              placeholder="https://…"
-            />
+            <Input v-model="form.cover_image_url" type="url" size="sm" class="bg-black/40" placeholder="https://…" />
             <div v-if="form.cover_image_url" class="mt-2">
               <img
                 :src="form.cover_image_url"
@@ -150,7 +127,7 @@
           <!-- Published toggle -->
           <div class="flex items-center gap-3">
             <label class="inline-flex items-center cursor-pointer">
-              <input v-model="form.published" type="checkbox" class="mr-2" />
+              <Checkbox v-model="form.published" class="mr-2" />
               <span class="text-white text-sm">{{ $t('admin.collections.fieldPublished') }}</span>
             </label>
           </div>
@@ -167,13 +144,7 @@
 
           <!-- Picker -->
           <div class="mb-4">
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="w-full px-3 py-2 rounded bg-black/40 border border-white/10 text-white text-sm"
-              :placeholder="$t('admin.collections.itemSearchPlaceholder')"
-              @input="onSearch"
-            />
+            <Input v-model="searchQuery" type="text" size="sm" class="bg-black/40" :placeholder="$t('admin.collections.itemSearchPlaceholder')" @input="onSearch" />
             <div v-if="searchResults.length > 0" class="mt-2 max-h-60 overflow-y-auto rounded border border-white/10 bg-black/60">
               <button
                 v-for="r in searchResults"
@@ -213,13 +184,9 @@
               </div>
               <div class="flex items-center gap-2 flex-shrink-0">
                 <label class="text-white/50 text-xs">{{ $t('admin.collections.itemSortOrder') }}</label>
-                <input
-                  :value="item.sort_order"
-                  type="number"
-                  min="0"
-                  class="w-16 px-2 py-1 rounded bg-black/40 border border-white/10 text-white text-sm text-right"
-                  @change="(e) => onUpdateSort(item, (e.target as HTMLInputElement).valueAsNumber)"
-                />
+                <div class="w-16">
+                  <Input :model-value="String(item.sort_order ?? 0)" type="number" size="sm" min="0" class="bg-black/40 text-right" @change="(e: Event) => onUpdateSort(item, (e.target as HTMLInputElement).valueAsNumber)" />
+                </div>
                 <button
                   type="button"
                   class="px-3 py-1 rounded bg-destructive/30 hover:bg-destructive/50 text-xs text-destructive"
@@ -242,6 +209,9 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
+import Checkbox from '@/components/ui/Checkbox.vue'
+import Input from '@/components/ui/Input.vue'
 import {
   adminApi,
   animeApi,
@@ -250,8 +220,10 @@ import {
   type CreateCollectionRequest,
   type UpdateCollectionRequest,
 } from '@/api/client'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
+const { confirm } = useConfirm()
 const route = useRoute()
 const router = useRouter()
 
@@ -404,7 +376,13 @@ async function onAddItem(r: AnimeSearchResult) {
 }
 
 async function onRemoveItem(item: CollectionItem) {
-  if (!confirm(t('admin.collections.itemRemove') + '?')) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('admin.collections.itemRemove') + '?',
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   try {
     await adminApi.removeCollectionItem(id.value, item.anime_id)
     await load()

@@ -48,22 +48,10 @@
         </h2>
         <form class="glass-card p-4 mb-4 flex flex-wrap gap-3 items-end" @submit.prevent="handleSearch">
           <div class="flex-1 min-w-[260px]">
-            <input
-              v-model="searchQuery"
-              type="text"
-              :placeholder="$t('player.adminLibrary.search.placeholder')"
-              :aria-label="$t('player.adminLibrary.search.placeholder')"
-              class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            />
+            <Input v-model="searchQuery" type="text" size="sm" :placeholder="$t('player.adminLibrary.search.placeholder')" :aria-label="$t('player.adminLibrary.search.placeholder')" />
           </div>
           <div class="w-32">
-            <input
-              v-model.number="searchMalId"
-              type="number"
-              placeholder="MAL ID"
-              aria-label="MAL ID"
-              class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            />
+            <Input v-model.number="searchMalId" type="number" size="sm" placeholder="MAL ID" aria-label="MAL ID" />
           </div>
           <Button
             type="submit"
@@ -77,7 +65,7 @@
         </form>
 
         <div v-if="searching" class="flex justify-center py-6">
-          <div class="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+          <Spinner size="md" />
         </div>
         <div v-else-if="searchResults.length === 0" class="glass-card p-4 text-white/60 text-sm">
           {{ $t('player.adminLibrary.search.empty') }}
@@ -225,12 +213,13 @@
             >
               <div class="text-white text-sm font-medium truncate mb-2" :title="job.title">{{ job.title }}</div>
               <div class="relative">
-                <input
+                <Input
                   v-model="pendingLinkSearchQueries[job.id]"
                   type="text"
+                  size="sm"
                   :placeholder="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
                   :aria-label="$t('player.adminLibrary.jobs.pendingLink.searchPlaceholder')"
-                  class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white placeholder-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-warning"
+                  class="focus:ring-warning"
                   @input="onPendingLinkInput(job.id)"
                 />
                 <ul
@@ -267,6 +256,11 @@ import { adminLibraryApi, animeApi } from '@/api/client'
 import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload } from '@/types/library'
 import Badge from '@/components/ui/Badge.vue'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
+import Input from '@/components/ui/Input.vue'
+import { useConfirm } from '@/composables/useConfirm'
+
+const { confirm } = useConfirm()
 
 // Phase 5 (LIB-09): RawLibrary admin view.
 //
@@ -287,7 +281,7 @@ const health = ref<LibraryHealth | null>(null)
 const errorBanner = ref<string | null>(null)
 
 const searchQuery = ref('')
-const searchMalId = ref<number | null>(null)
+const searchMalId = ref<number | undefined>(undefined)
 const searchResults = ref<Release[]>([])
 const searching = ref(false)
 
@@ -422,7 +416,7 @@ function handleSearch() {
     }
     searching.value = true
     try {
-      const resp = await adminLibraryApi.search(searchQuery.value.trim(), searchMalId.value ?? undefined, 50)
+      const resp = await adminLibraryApi.search(searchQuery.value.trim(), searchMalId.value, 50)
       const data = unwrap<{ releases?: Release[] } | Release[]>(resp)
       searchResults.value = Array.isArray(data) ? data : data?.releases ?? []
     } catch (err) {
@@ -464,7 +458,13 @@ async function queueJob(release: Release) {
 
 async function cancelJob(job: Job) {
   const needsConfirm = ['downloading', 'encoding', 'uploading'].includes(job.status)
-  if (needsConfirm && !window.confirm(`Cancel: ${job.title}?`)) {
+  if (needsConfirm && !(await confirm({
+    title: 'Cancel job?',
+    description: `Cancel: ${job.title}?`,
+    confirmText: 'Cancel job',
+    cancelText: 'Keep',
+    variant: 'destructive',
+  }))) {
     return
   }
   try {

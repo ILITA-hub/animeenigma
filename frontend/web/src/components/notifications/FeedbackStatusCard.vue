@@ -14,10 +14,7 @@
         :class="stage.iconClass"
         aria-hidden="true"
       >
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
-          <path v-for="(d, i) in stage.iconPaths" :key="i" :d="d" />
-        </svg>
+        <component :is="stage.icon" class="size-6" aria-hidden="true" />
       </div>
 
       <div class="flex-1 min-w-0">
@@ -53,6 +50,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { Bot, CheckCheck, MessageSquarePlus, type LucideIcon } from 'lucide-vue-next'
 
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
@@ -80,38 +78,19 @@ const payload = computed<FeedbackStatusPayload>(() => {
 const isRead = computed(() => Boolean(props.notification.read_at))
 
 interface StageMeta {
-  /** Inline lucide path data (bot / check-check / message-square-plus). */
-  iconPaths: string[]
+  icon: LucideIcon
   iconClass: string
   key: 'created' | 'inProgress' | 'aiDone'
 }
 
-// lucide "bot"
-const BOT_PATHS = [
-  'M12 8V4H8',
-  'M2 14h2',
-  'M20 14h2',
-  'M15 13v2',
-  'M9 13v2',
-  'M5 8 h14 a2 2 0 0 1 2 2 v8 a2 2 0 0 1 -2 2 H5 a2 2 0 0 1 -2 -2 v-8 a2 2 0 0 1 2 -2 z',
-]
-// lucide "check-check"
-const CHECK_CHECK_PATHS = ['M18 6 7 17l-5-5', 'm22 10-7.5 7.5L13 16']
-// lucide "message-square-plus"
-const MESSAGE_PLUS_PATHS = [
-  'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
-  'M12 7v6',
-  'M9 10h6',
-]
-
 const stage = computed<StageMeta>(() => {
   switch (props.notification.type) {
     case 'feedback_in_progress':
-      return { iconPaths: BOT_PATHS, iconClass: 'text-info', key: 'inProgress' }
+      return { icon: Bot, iconClass: 'text-info', key: 'inProgress' }
     case 'feedback_ai_done':
-      return { iconPaths: CHECK_CHECK_PATHS, iconClass: 'text-success', key: 'aiDone' }
+      return { icon: CheckCheck, iconClass: 'text-success', key: 'aiDone' }
     default:
-      return { iconPaths: MESSAGE_PLUS_PATHS, iconClass: 'text-cyan-400', key: 'created' }
+      return { icon: MessageSquarePlus, iconClass: 'text-cyan-400', key: 'created' }
   }
 })
 

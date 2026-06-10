@@ -6,17 +6,13 @@
   >
     <!-- watching -->
     <template v-if="kind === 'watching' && (finishedEpisode ?? 0) > 0">
-      <svg class="w-3.5 h-3.5 text-brand-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-      </svg>
+      <Check class="size-3.5 text-brand-cyan flex-shrink-0" aria-hidden="true" />
       <span>{{ t('anime.resume.justFinished', { n: finishedEpisode }) }}</span>
     </template>
 
     <!-- not-yet-aired -->
     <template v-else-if="kind === 'not-yet-aired' && nextEpisodeNumber">
-      <svg class="w-3.5 h-3.5 text-warning/70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
+      <Clock class="size-3.5 text-warning/70 flex-shrink-0" aria-hidden="true" />
       <span v-if="nextEpisodeEtaLabel">
         {{ t('anime.resume.notYetAvailableEta', { n: nextEpisodeNumber, when: nextEpisodeEtaLabel }) }}
       </span>
@@ -39,6 +35,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Check, Clock } from 'lucide-vue-next'
 
 type ResumeKind = 'first-time' | 'watching' | 'finished' | 'not-yet-aired' | 'episode-not-loaded-yet'
 

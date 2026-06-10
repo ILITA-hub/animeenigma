@@ -11,11 +11,12 @@
           </div>
           <button class="h-8 px-3 rounded-lg text-primary border border-primary/40 text-xs" @click="cal.goToday()">{{ $t('schedule.todayBtn') }}</button>
         </div>
-        <div class="flex bg-white/[0.06] rounded-lg p-0.5">
-          <button v-for="v in views" :key="v" class="text-xs px-3.5 py-1.5 rounded-md transition-colors"
-            :class="cal.view.value === v ? 'bg-primary text-primary-foreground font-semibold' : 'text-muted-foreground'"
-            @click="cal.setView(v)">{{ $t('schedule.view' + cap(v)) }}</button>
-        </div>
+        <SegmentedControl
+          :model-value="cal.view.value"
+          :options="viewOptions"
+          :aria-label="$t('schedule.viewSwitcherLabel')"
+          @update:model-value="cal.setView($event as ScheduleView)"
+        />
       </div>
 
       <ScheduleFilters
@@ -28,7 +29,7 @@
       />
 
       <div v-if="loading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <template v-else>
@@ -36,7 +37,7 @@
         <WeekView v-else-if="cal.view.value === 'week'" :columns="cal.weekColumns.value" @open="openDay" />
         <TableView v-else :rows="cal.tableRows.value" :sort-key="cal.sortKey.value" :sort-dir="cal.sortDir.value" @sort="cal.setSort($event)" />
 
-        <div v-if="isEmpty" class="text-center py-12 text-muted-foreground">{{ $t('schedule.empty') }}</div>
+        <EmptyState v-if="isEmpty">{{ $t('schedule.empty') }}</EmptyState>
       </template>
     </div>
 
@@ -58,7 +59,10 @@ import ScheduleFilters from '@/components/schedule/ScheduleFilters.vue'
 import MonthView from '@/components/schedule/MonthView.vue'
 import WeekView from '@/components/schedule/WeekView.vue'
 import TableView from '@/components/schedule/TableView.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import DayModal from '@/components/schedule/DayModal.vue'
+import { Spinner } from '@/components/ui'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -80,6 +84,7 @@ const cal = useScheduleCalendar({
 
 const views: ScheduleView[] = ['month', 'week', 'table']
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const viewOptions = computed(() => views.map(v => ({ value: v, label: t('schedule.view' + cap(v)) })))
 const headerTitle = computed(() => formatHeader())
 
 const isEmpty = computed(() => {

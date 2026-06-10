@@ -9,10 +9,7 @@
       :aria-expanded="open"
       @click="toggle"
     >
-      <!-- Bell icon — inline SVG to match the rest of Navbar.vue's icons (no icon library). -->
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" />
-      </svg>
+      <Bell class="size-5" aria-hidden="true" />
 
       <!-- Unread badge — aria-hidden because the screen-reader gets the
            count via the button's aria-label. Pink to match the project's
@@ -49,6 +46,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onClickOutside, useEventListener } from '@vueuse/core'
+import { Bell } from 'lucide-vue-next'
 
 import { useNotificationsStore } from '@/stores/notifications'
 import NotificationDropdown from '@/components/NotificationDropdown.vue'

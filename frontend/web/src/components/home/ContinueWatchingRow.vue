@@ -15,9 +15,7 @@
       </h2>
       <router-link to="/profile" class="cw-see-all">
         {{ $t('home.continueWatchingAll') }}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 18l6-6-6-6" />
-        </svg>
+        <ChevronRight class="size-3.5" aria-hidden="true" />
       </router-link>
     </div>
 
@@ -47,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChevronRight } from 'lucide-vue-next'
 import MediaTile from '@/components/anime/MediaTile.vue'
 import { fromContinueWatching } from '@/utils/toCardModel'
 import { useContinueWatching, type ContinueWatchingItem } from '@/composables/useContinueWatching'

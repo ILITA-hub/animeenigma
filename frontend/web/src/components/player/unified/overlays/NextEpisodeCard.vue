@@ -24,9 +24,7 @@
     <div class="pl-next-actions">
       <button class="pl-next-play-btn" data-test="next-play" @click="emit('play')">
         <!-- Play icon -->
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M5 3l14 9-14 9V3z" />
-        </svg>
+        <Play class="size-[14px]" aria-hidden="true" />
         Play now
       </button>
       <button class="pl-next-cancel" data-test="next-cancel" @click="emit('cancel')">
@@ -37,6 +35,8 @@
 </template>
 
 <script setup lang="ts">
+import { Play } from 'lucide-vue-next'
+
 defineProps<{
   nextEp: number
   title: string

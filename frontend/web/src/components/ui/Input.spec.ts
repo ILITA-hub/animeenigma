@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import Input from './Input.vue'
 
@@ -78,5 +78,34 @@ describe('Input.vue', () => {
     const w = mount(Input, { props: { label: 'Email' } })
     expect(w.find('label').exists()).toBe(true)
     expect(w.find('label').text()).toContain('Email')
+  })
+
+  it('accepts type="date" and renders a date input', () => {
+    const w = mount(Input, { props: { type: 'date' } })
+    expect(w.find('input').attributes('type')).toBe('date')
+  })
+
+  it('exposes focus() which focuses the inner input', () => {
+    const w = mount(Input, { attachTo: document.body })
+    const vm = w.vm as unknown as { focus: () => void }
+    expect(typeof vm.focus).toBe('function')
+    vm.focus()
+    expect(document.activeElement).toBe(w.find('input').element)
+    w.unmount()
+  })
+
+  it('controlled :model-value + passthrough @blur fires with the native input as target', async () => {
+    const onBlur = vi.fn()
+    const w = mount(Input, { props: { modelValue: '7' }, attrs: { onBlur } })
+    await w.find('input').trigger('blur')
+    expect(onBlur).toHaveBeenCalledTimes(1)
+    expect(onBlur.mock.calls[0][0].target).toBe(w.find('input').element)
+  })
+
+  it('merges a passed class through cn — override wins over the primitive w-full', () => {
+    const w = mount(Input, { attrs: { class: 'w-20' } })
+    const cls = w.find('input').classes()
+    expect(cls).toContain('w-20')
+    expect(cls).not.toContain('w-full')
   })
 })

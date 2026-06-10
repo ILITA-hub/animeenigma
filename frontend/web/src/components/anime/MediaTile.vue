@@ -6,7 +6,7 @@
 
       <!-- Centered play, hover reveal -->
       <span class="mtile-play" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z" /></svg>
+        <Play class="size-5" fill="currentColor" />
       </span>
 
       <!-- Info overlay (bottom) -->
@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Play } from 'lucide-vue-next'
 import PosterImage from './PosterImage.vue'
 import type { AnimeCardModel } from '@/types/card'
 

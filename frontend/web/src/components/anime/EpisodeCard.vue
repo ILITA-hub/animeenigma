@@ -27,9 +27,7 @@
       v-if="watched"
       class="absolute top-2 right-2 w-5 h-5 rounded-full bg-success flex items-center justify-center"
     >
-      <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-      </svg>
+      <Check class="size-3 text-white" aria-hidden="true" />
     </div>
 
     <!-- Progress Bar (for partially watched) -->
@@ -61,15 +59,14 @@
     <!-- Play Icon on Hover -->
     <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
       <div class="w-12 h-12 rounded-full bg-cyan-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(0,212,255,0.5)]">
-        <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M8 5v14l11-7z" />
-        </svg>
+        <Play class="size-5 text-white ml-0.5" fill="currentColor" aria-hidden="true" />
       </div>
     </div>
   </button>
 </template>
 
 <script setup lang="ts">
+import { Check, Play } from 'lucide-vue-next'
 import Badge from '@/components/ui/Badge.vue'
 
 defineProps<{
