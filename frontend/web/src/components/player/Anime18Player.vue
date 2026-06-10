@@ -6,10 +6,10 @@
     </div>
 
     <!-- No episodes available -->
-    <div v-else-if="episodes.length === 0 && !loadingEpisodes" class="text-center py-20 text-white/60">
-      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
+    <EmptyState v-else-if="episodes.length === 0 && !loadingEpisodes" size="lg">
+      <template #icon><Video class="size-12 opacity-50" /></template>
       {{ $t('player.noEpisodes', { source: '18anime' }) }}
-    </div>
+    </EmptyState>
 
     <!-- Main content when episodes available -->
     <div v-else class="flex flex-col lg:flex-row gap-4">
@@ -113,7 +113,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Video, TriangleAlert, Play, List, MonitorPlay, Info } from 'lucide-vue-next'
-import { Spinner } from '@/components/ui'
+import { Spinner, EmptyState } from '@/components/ui'
 import Hls from 'hls.js'
 import { anime18Api, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'

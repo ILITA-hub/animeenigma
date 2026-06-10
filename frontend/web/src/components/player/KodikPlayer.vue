@@ -6,12 +6,14 @@
     </div>
 
     <!-- No translations available -->
-    <div v-else-if="translations.length === 0 && !loadingTranslations" class="text-center py-20 text-white/60">
-      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+    <EmptyState v-else-if="translations.length === 0 && !loadingTranslations" size="lg">
+      <template #icon>
+        <svg class="w-12 h-12 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      </template>
       {{ $t('player.noTranslations') || 'Нет доступных озвучек' }}
-    </div>
+    </EmptyState>
 
     <!-- Main content when translations available -->
     <div v-else class="flex flex-col lg:flex-row gap-4">
@@ -209,7 +211,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, toRef, onMounted, onUnmounted } from 'vue'
 import { Star, Pin } from 'lucide-vue-next'
-import { Spinner } from '@/components/ui'
+import { Spinner, EmptyState } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'

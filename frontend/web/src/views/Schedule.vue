@@ -36,7 +36,7 @@
         <WeekView v-else-if="cal.view.value === 'week'" :columns="cal.weekColumns.value" @open="openDay" />
         <TableView v-else :rows="cal.tableRows.value" :sort-key="cal.sortKey.value" :sort-dir="cal.sortDir.value" @sort="cal.setSort($event)" />
 
-        <div v-if="isEmpty" class="text-center py-12 text-muted-foreground">{{ $t('schedule.empty') }}</div>
+        <EmptyState v-if="isEmpty">{{ $t('schedule.empty') }}</EmptyState>
       </template>
     </div>
 
@@ -58,6 +58,7 @@ import ScheduleFilters from '@/components/schedule/ScheduleFilters.vue'
 import MonthView from '@/components/schedule/MonthView.vue'
 import WeekView from '@/components/schedule/WeekView.vue'
 import TableView from '@/components/schedule/TableView.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import DayModal from '@/components/schedule/DayModal.vue'
 import { Spinner } from '@/components/ui'
 

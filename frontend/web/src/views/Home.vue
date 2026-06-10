@@ -75,9 +75,9 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="ongoingAnime.length === 0" class="text-center py-8 text-muted-foreground">
+          <EmptyState v-if="ongoingAnime.length === 0" size="sm">
             {{ $t('home.noOngoing') }}
-          </div>
+          </EmptyState>
         </HomeColumn>
 
         <!-- Top Anime Column -->
@@ -100,9 +100,9 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="topAnime.length === 0" class="text-center py-8 text-muted-foreground">
+          <EmptyState v-if="topAnime.length === 0" size="sm">
             {{ $t('home.noData') }}
-          </div>
+          </EmptyState>
         </HomeColumn>
 
         <!-- Announcements Column -->
@@ -125,9 +125,9 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="announcedAnime.length === 0" class="text-center py-8 text-muted-foreground">
+          <EmptyState v-if="announcedAnime.length === 0" size="sm">
             {{ $t('home.noAnnounced') }}
-          </div>
+          </EmptyState>
         </HomeColumn>
 
       </div>
@@ -172,7 +172,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { useHomeStore } from '@/stores/home'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useContextMenu } from '@/composables/useContextMenu'
-import { SearchAutocomplete } from '@/components/ui'
+import { SearchAutocomplete, EmptyState } from '@/components/ui'
 import { AnimeContextMenu } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'

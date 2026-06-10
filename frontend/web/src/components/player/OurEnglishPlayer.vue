@@ -6,13 +6,10 @@
     </div>
 
     <!-- Provider chain exhausted -->
-    <div
-      v-else-if="!available"
-      class="text-center py-16 text-white/60"
-    >
-      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
+    <EmptyState v-else-if="!available" size="lg">
+      <template #icon><Video class="size-12 opacity-50" /></template>
       {{ $t('player.ourenglish.unavailable') }}
-    </div>
+    </EmptyState>
 
     <!-- Main content -->
     <div v-else class="flex flex-col gap-4">
@@ -124,6 +121,14 @@
           </select>
 
           <SubtitleSettingsMenu :has-active-sub="!!activeSubUrl" />
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-100 border border-cyan-400/30 transition-colors"
+            @click="otherSubsOpen = true"
+          >
+            <List class="size-4" aria-hidden="true" />
+            {{ $t('player.otherSubs.openButton') }}
+          </button>
         </div>
 
         <!-- Active provider chip -->
@@ -149,18 +154,28 @@
         />
       </div>
     </div>
+
+    <OtherSubsPanel
+      v-model="otherSubsOpen"
+      :anime-id="props.animeId"
+      :episode="selectedEpisode?.number ?? 1"
+      :current-track-url="activeSubUrl"
+      @select-track="onOtherSubSelected"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Video, Play, List, SlidersHorizontal, Captions, CircleAlert } from 'lucide-vue-next'
-import { Spinner } from '@/components/ui'
+import { Spinner, EmptyState } from '@/components/ui'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
+import OtherSubsPanel from './OtherSubsPanel.vue'
 import EpisodeSelector from './EpisodeSelector.vue'
 import type { EpisodeOption } from './EpisodeSelector.types'
+import type { SubtitleTrack } from '@/types/raw'
 import { useSubtitleTimingOffset } from '@/composables/useSubtitleTimingOffset'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import { scraperApi } from '@/api/client'
@@ -275,6 +290,7 @@ const AVAILABLE_PROVIDERS = [
 const availableProviders = computed(() => AVAILABLE_PROVIDERS as readonly string[])
 
 const selectedSubKey = ref<string>('')
+const otherSubsOpen = ref(false)
 
 interface SubChoice {
   key: string
@@ -283,22 +299,54 @@ interface SubChoice {
   format: 'ass' | 'srt' | 'vtt' | null
 }
 
-const availableSubChoices = computed<SubChoice[]>(() =>
-  activeTracks.value
+function detectFormat(format: string | undefined, url: string): 'ass' | 'srt' | 'vtt' | null {
+  const ext = (format || url.split('?')[0].split('.').pop() || '').toLowerCase()
+  return ext === 'ass' || ext === 'srt' || ext === 'vtt' ? ext : null
+}
+
+// Subtitle tracks pulled in via the "Other Subs" panel (Jimaku / OpenSubtitles).
+// Kept separate from the embed's own `activeTracks` so an episode switch (which
+// clears activeTracks) also clears these, and so each carries its explicit
+// upstream `format` instead of relying on URL-extension guessing alone.
+const extraSubChoices = ref<SubChoice[]>([])
+
+const availableSubChoices = computed<SubChoice[]>(() => {
+  const fromTracks = activeTracks.value
     .filter(t => t.kind === 'captions' || t.kind === 'subtitles')
-    .map(t => {
+    .map<SubChoice>(t => {
       const url = t.file
-      const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase()
-      const format: 'ass' | 'srt' | 'vtt' | null =
-        ext === 'ass' || ext === 'srt' || ext === 'vtt' ? ext : null
+      const format = detectFormat(undefined, url)
       return {
         key: url,
         label: t.label || (format ? format.toUpperCase() : 'subtitle'),
         url,
         format,
       }
-    }),
-)
+    })
+  const seen = new Set(fromTracks.map(c => c.key))
+  const extras = extraSubChoices.value.filter(c => !seen.has(c.key))
+  return [...fromTracks, ...extras]
+})
+
+// "Other Subs" panel → pick a Jimaku/OpenSubtitles track. Inject a synthetic
+// choice (carrying its explicit format) so the picker can display it, then pin
+// it so SubtitleOverlay (via activeSubUrl/activeSubFormat) renders it.
+function onOtherSubSelected(track: SubtitleTrack) {
+  const url = track.url
+  const format = detectFormat(track.format, url)
+  if (!availableSubChoices.value.some(c => c.key === url)) {
+    extraSubChoices.value = [
+      ...extraSubChoices.value,
+      {
+        key: url,
+        label: track.label || track.release || (format ? format.toUpperCase() : 'subtitle'),
+        url,
+        format,
+      },
+    ]
+  }
+  selectedSubKey.value = url
+}
 
 const activeSubUrl = computed(() => {
   const c = availableSubChoices.value.find(x => x.key === selectedSubKey.value)
@@ -474,6 +522,7 @@ async function selectEpisode(ep: ScraperEpisode, fromRoomSync = false) {
   selectedServerId.value = ''
   selectedSubKey.value = ''
   activeTracks.value = []
+  extraSubChoices.value = []
   disposePlayer()
   try {
     const prefer = activeProvider.value || preferredProvider.value || undefined

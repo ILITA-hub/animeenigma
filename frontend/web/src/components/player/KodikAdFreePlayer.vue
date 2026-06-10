@@ -6,10 +6,10 @@
     </div>
 
     <!-- No translations available -->
-    <div v-else-if="translations.length === 0 && !loadingTranslations" class="text-center py-20 text-white/60">
-      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
+    <EmptyState v-else-if="translations.length === 0 && !loadingTranslations" size="lg">
+      <template #icon><Video class="size-12 opacity-50" /></template>
       {{ $t('player.noTranslations') || 'Нет доступных озвучек' }}
-    </div>
+    </EmptyState>
 
     <!-- Main content when translations available -->
     <div v-else class="flex flex-col lg:flex-row gap-4">
@@ -209,7 +209,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Video, TriangleAlert, Flag, Play, List, Check, Mic2, MessageSquare, Star, Pin } from 'lucide-vue-next'
-import { Spinner } from '@/components/ui'
+import { Spinner, EmptyState } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import { kodikApi, userApi } from '@/api/client'

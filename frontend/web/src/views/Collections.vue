@@ -36,9 +36,9 @@
 
       <!-- Grid -->
       <section class="max-w-7xl mx-auto px-4 lg:px-8 py-10">
-        <div v-if="!collection.items || collection.items.length === 0" class="text-white/60 italic text-center py-12">
+        <EmptyState v-if="!collection.items || collection.items.length === 0" class="italic">
           {{ $t('collections.emptyItems') }}
-        </div>
+        </EmptyState>
         <div
           v-else
           class="grid gap-4"
@@ -75,7 +75,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { animeApi, type Collection, type CollectionItem } from '@/api/client'
-import { Spinner } from '@/components/ui'
+import { Spinner, EmptyState } from '@/components/ui'
 import { getLocalizedTitle } from '@/utils/title'
 
 const route = useRoute()
