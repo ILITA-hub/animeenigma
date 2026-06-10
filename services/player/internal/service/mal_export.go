@@ -141,7 +141,7 @@ func (s *MALExportService) GetExportStatus(ctx context.Context, exportID string)
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, errors.NotFound("export job not found")
+		return nil, errors.NotFound("export job")
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -208,7 +208,7 @@ func (s *MALExportService) CancelExport(ctx context.Context, userID, exportID st
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return errors.NotFound("export job not found")
+		return errors.NotFound("export job")
 	}
 
 	if resp.StatusCode != http.StatusOK {
