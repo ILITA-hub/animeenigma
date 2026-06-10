@@ -251,8 +251,10 @@ import {
   type CreateCollectionRequest,
   type UpdateCollectionRequest,
 } from '@/api/client'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
+const { confirm } = useConfirm()
 const route = useRoute()
 const router = useRouter()
 
@@ -405,7 +407,13 @@ async function onAddItem(r: AnimeSearchResult) {
 }
 
 async function onRemoveItem(item: CollectionItem) {
-  if (!confirm(t('admin.collections.itemRemove') + '?')) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('admin.collections.itemRemove') + '?',
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   try {
     await adminApi.removeCollectionItem(id.value, item.anime_id)
     await load()

@@ -268,6 +268,9 @@ import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload } from '@
 import Badge from '@/components/ui/Badge.vue'
 import Button from '@/components/ui/Button.vue'
 import { Spinner } from '@/components/ui'
+import { useConfirm } from '@/composables/useConfirm'
+
+const { confirm } = useConfirm()
 
 // Phase 5 (LIB-09): RawLibrary admin view.
 //
@@ -465,7 +468,13 @@ async function queueJob(release: Release) {
 
 async function cancelJob(job: Job) {
   const needsConfirm = ['downloading', 'encoding', 'uploading'].includes(job.status)
-  if (needsConfirm && !window.confirm(`Cancel: ${job.title}?`)) {
+  if (needsConfirm && !(await confirm({
+    title: 'Cancel job?',
+    description: `Cancel: ${job.title}?`,
+    confirmText: 'Cancel job',
+    cancelText: 'Keep',
+    variant: 'destructive',
+  }))) {
     return
   }
   try {

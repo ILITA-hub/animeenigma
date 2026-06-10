@@ -980,6 +980,7 @@ import { useGachaVisible } from '@/utils/gachaGate'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 import { useContextMenu } from '@/composables/useContextMenu'
@@ -1045,6 +1046,7 @@ const { t, te, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 const gachaVisible = useGachaVisible()
 
 const siteOrigin = window.location.origin
@@ -1172,7 +1174,13 @@ async function loadTier2View() {
 }
 
 async function onResetLearnedPreferences() {
-  if (!confirm(t('profile.advanced.resetConfirm'))) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('profile.advanced.resetConfirm'),
+    confirmText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   resettingPrefs.value = true
   resetMessage.value = ''
   try {
@@ -2232,7 +2240,13 @@ const regenerateApiKey = async () => {
 }
 
 const revokeApiKey = async () => {
-  if (!confirm(t('profile.settings.apiKeyRevokeConfirm'))) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('profile.settings.apiKeyRevokeConfirm'),
+    confirmText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   apiKeyActioning.value = true
   apiKeyError.value = null
   generatedApiKey.value = null

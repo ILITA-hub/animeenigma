@@ -87,8 +87,10 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminApi, type Collection } from '@/api/client'
 import { Spinner } from '@/components/ui'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
+const { confirm } = useConfirm()
 
 const collections = ref<Collection[]>([])
 const isLoading = ref(true)
@@ -116,7 +118,13 @@ async function load() {
 }
 
 async function onDelete(c: Collection) {
-  if (!confirm(t('admin.collections.deleteConfirm'))) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('admin.collections.deleteConfirm'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   try {
     await adminApi.deleteCollection(c.id)
     await load()

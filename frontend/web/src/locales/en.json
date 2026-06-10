@@ -663,6 +663,8 @@
     "loading": "Loading...",
     "retry": "Retry",
     "cancel": "Cancel",
+    "confirm": "Confirm",
+    "confirmTitle": "Are you sure?",
     "delete": "Delete",
     "back": "Back",
     "next": "Next",

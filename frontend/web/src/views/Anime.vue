@@ -1105,6 +1105,7 @@ import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import { parseDescription } from '@/utils/description-parser'
 import { getImageUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
@@ -1178,6 +1179,7 @@ const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 const { anime, loading, error, fetchAnime } = useAnime()
 const { contextMenu, openAtElement: openContextMenuAt } = useContextMenu()
 
@@ -2054,7 +2056,13 @@ const saveEditComment = async () => {
 
 const deleteCommentItem = async (c: Comment) => {
   if (!anime.value) return
-  if (!window.confirm(t('anime.ugc.deleteCommentConfirm'))) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('anime.ugc.deleteCommentConfirm'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   const originalIdx = comments.value.findIndex((x) => x.id === c.id)
   if (originalIdx === -1) return
   const snapshot = comments.value[originalIdx]
