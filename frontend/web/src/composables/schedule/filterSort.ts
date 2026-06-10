@@ -38,15 +38,26 @@ export function sortByTime(occ: Occurrence[]): Occurrence[] {
   return [...occ].sort((x, y) => x.date.getTime() - y.date.getTime())
 }
 
-/** Priority anime (in user's list) first, then by air time. */
+/**
+ * List-status display tier: Watching (0) → Plan to watch (1) → the rest (2).
+ * 'planned' is the legacy alias for plan_to_watch kept since the old binary
+ * PRIORITY set.
+ */
+export function statusRank(status: string | null): number {
+  if (status === 'watching') return 0
+  if (status === 'planned' || status === 'plan_to_watch') return 1
+  return 2
+}
+
+/** Watching first, then plan-to-watch, then the rest; by air time within a tier. */
 export function sortCellHybrid(
   occ: Occurrence[],
-  isPriority: (a: ScheduleAnime) => boolean,
+  rankOf: (a: ScheduleAnime) => number,
 ): Occurrence[] {
   return [...occ].sort((x, y) => {
-    const px = isPriority(x.anime) ? 0 : 1
-    const py = isPriority(y.anime) ? 0 : 1
-    if (px !== py) return px - py
+    const rx = rankOf(x.anime)
+    const ry = rankOf(y.anime)
+    if (rx !== ry) return rx - ry
     return x.date.getTime() - y.date.getTime()
   })
 }

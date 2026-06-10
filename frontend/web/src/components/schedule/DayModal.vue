@@ -36,7 +36,6 @@ import { getLocalizedTitle } from '@/utils/title'
 import { formatAirTime, formatDayTitle } from '@/composables/schedule/format'
 import { formatUtcOffset } from '@/composables/schedule/timezone'
 import { useTimezonePref } from '@/composables/useTimezonePref'
-import { sortByTime } from '@/composables/schedule/filterSort'
 
 const props = defineProps<{ modelValue: boolean; date: Date | null; occurrences: Occurrence[] }>()
 defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -44,7 +43,9 @@ const { t } = useI18n()
 
 const { timezone } = useTimezonePref()
 const tzLabel = computed(() => formatUtcOffset(timezone.value))
-const sorted = computed(() => sortByTime(props.occurrences))
+// Cells hand occurrences in already tier-sorted (watching → planned → rest,
+// time within a tier) — preserve that order instead of re-sorting by time.
+const sorted = computed(() => props.occurrences)
 const headerTitle = computed(() => (props.date ? formatDayTitle(props.date, t) : ''))
 // vue-i18n pluralization: the count selects the branch and is auto-exposed as {n}
 const subtitle = computed(() => t('schedule.episodeCountPlural', props.occurrences.length))

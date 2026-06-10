@@ -1,6 +1,6 @@
 // frontend/web/src/composables/schedule/__tests__/filterSort.spec.ts
 import { describe, it, expect } from 'vitest'
-import { applyFilters, sortByTime, sortCellHybrid, availableGenres } from '../filterSort'
+import { applyFilters, sortByTime, sortCellHybrid, statusRank, availableGenres } from '../filterSort'
 import { emptyFilters, type ScheduleAnime, type Occurrence } from '../types'
 
 const A = (o: Partial<ScheduleAnime>): ScheduleAnime => ({ id: 'x', name: 'X', ...o })
@@ -59,14 +59,27 @@ describe('sorting', () => {
     expect(out.map(o => o.anime.id)).toEqual(['early', 'late'])
   })
 
-  it('sortCellHybrid puts priority anime first, then by time', () => {
-    const isPriority = (a: ScheduleAnime) => a.id === 'fav'
-    const out = sortCellHybrid([occ('a', 30), occ('fav', 120), occ('b', 10)], isPriority)
-    expect(out.map(o => o.anime.id)).toEqual(['fav', 'b', 'a'])
+  it('sortCellHybrid orders watching → plan-to-watch → rest, by time within a tier', () => {
+    const statuses: Record<string, string> = { fav: 'watching', soon: 'plan_to_watch' }
+    const rankOf = (a: ScheduleAnime) => statusRank(statuses[a.id] ?? null)
+    const out = sortCellHybrid(
+      [occ('a', 30), occ('soon', 120), occ('fav', 150), occ('b', 10), occ('fav2', 60)],
+      (a) => (a.id === 'fav2' ? statusRank('watching') : rankOf(a)),
+    )
+    // watching (fav2 60m, fav 150m) → planned (soon) → rest (b 10m, a 30m)
+    expect(out.map(o => o.anime.id)).toEqual(['fav2', 'fav', 'soon', 'b', 'a'])
   })
 
-  it('sortCellHybrid with no priority falls back to time', () => {
-    const out = sortCellHybrid([occ('a', 30), occ('b', 10)], () => false)
+  it('sortCellHybrid with uniform rank falls back to time', () => {
+    const out = sortCellHybrid([occ('a', 30), occ('b', 10)], () => 2)
     expect(out.map(o => o.anime.id)).toEqual(['b', 'a'])
+  })
+
+  it('statusRank tiers: watching=0, planned aliases=1, rest=2', () => {
+    expect(statusRank('watching')).toBe(0)
+    expect(statusRank('plan_to_watch')).toBe(1)
+    expect(statusRank('planned')).toBe(1)
+    expect(statusRank('completed')).toBe(2)
+    expect(statusRank(null)).toBe(2)
   })
 })

@@ -3,7 +3,7 @@ import { computed, reactive, ref, type Ref } from 'vue'
 import type { ScheduleAnime, Occurrence, TableSortKey } from './schedule/types'
 import { emptyFilters } from './schedule/types'
 import { occurrencesInRange } from './schedule/projection'
-import { applyFilters, availableGenres, sortCellHybrid } from './schedule/filterSort'
+import { applyFilters, availableGenres, sortCellHybrid, statusRank } from './schedule/filterSort'
 import { monthGridDays, monthGridRange, weekDays, weekStart, startOfDay, isSameDay } from './schedule/calendarGrid'
 import { wallClockDate } from './schedule/timezone'
 
@@ -34,8 +34,9 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
   const sortKey = ref<TableSortKey>('date')
   const sortDir = ref<1 | -1>(1)
 
-  const isPriority = (a: ScheduleAnime) =>
-    opts.loggedIn.value && ['watching', 'planned', 'plan_to_watch'].includes(opts.statusOf(a.id) ?? '')
+  // Watching → plan-to-watch → rest (logged out: everything is "rest").
+  const rankOf = (a: ScheduleAnime) =>
+    opts.loggedIn.value ? statusRank(opts.statusOf(a.id)) : 2
 
   const filteredAnimes = computed(() => applyFilters(opts.animes.value, filters, opts.statusOf))
   const genres = computed(() => availableGenres(opts.animes.value))
@@ -58,7 +59,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
         date,
         inCurrentMonth: inMonth,
         isToday: isSameDay(date, zonedNow()),
-        occurrences: sortCellHybrid(occ, isPriority),
+        occurrences: sortCellHybrid(occ, rankOf),
       }
     })
   })
@@ -73,10 +74,10 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
       date,
       inCurrentMonth: date.getMonth() === viewDate.value.getMonth(),
       isToday: isSameDay(date, zonedNow()),
-      // Hybrid sort (user's list first, then by time) so watched/planned titles
-      // float to the top of each day — matters now that the week view is the
-      // default and caps each day at 4 rows.
-      occurrences: sortCellHybrid(all.filter((o) => isSameDay(o.date, date)), isPriority),
+      // Tier sort (watching → plan-to-watch → rest, by time within a tier) so
+      // the user's titles float to the top of each day — matters now that the
+      // week view is the default and caps each day at 4 rows.
+      occurrences: sortCellHybrid(all.filter((o) => isSameDay(o.date, date)), rankOf),
     }))
   })
 
