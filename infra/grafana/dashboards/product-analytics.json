@@ -256,7 +256,7 @@
         "uid": "aenigma-clickhouse"
       },
       "title": "Most active users (anonymous included)",
-      "description": "One row per unique person_id (identified user UUID if ever stitched, else the anonymous id). Ranked by total events in range. 'kind' = identified once a user_id was ever resolved for that person, else anonymous.",
+      "description": "One row per unique person_id (identified user UUID if ever stitched, else the anonymous id). Ranked by total events in range. 'nickname' resolves the user_id to users.username via the ClickHouse postgresql() table function (anonymous persons show 'anon:<id-prefix>', deleted users show '(deleted user)'). 'kind' = identified once a user_id was ever resolved for that person, else anonymous.",
       "type": "table",
       "gridPos": {
         "h": 8,
@@ -314,7 +314,7 @@
           "format": "table",
           "queryType": "sql",
           "refId": "A",
-          "rawSql": "SELECT person_id, if(max(resolved_user_id) IS NULL, 'anonymous', 'identified') AS kind, count() AS events, countIf(event_type = 'pageview') AS pageviews, countIf(event_type = 'click') AS clicks, count(DISTINCT session_id) AS sessions, round(sumIf(active_ms, event_type = 'heartbeat') / 1000.0, 1) AS active_seconds, max(timestamp) AS last_seen FROM events_resolved WHERE $__timeFilter(timestamp) AND person_id != '' GROUP BY person_id ORDER BY events DESC LIMIT 50"
+          "rawSql": "SELECT if(a.kind = 'identified', coalesce(u.username, '(deleted user)'), concat('anon:', substring(a.person_id, 1, 8))) AS nickname, a.person_id AS person_id, a.kind AS kind, a.events AS events, a.pageviews AS pageviews, a.clicks AS clicks, a.sessions AS sessions, a.active_seconds AS active_seconds, a.last_seen AS last_seen FROM (SELECT person_id, if(max(resolved_user_id) IS NULL, 'anonymous', 'identified') AS kind, count() AS events, countIf(event_type = 'pageview') AS pageviews, countIf(event_type = 'click') AS clicks, count(DISTINCT session_id) AS sessions, round(sumIf(active_ms, event_type = 'heartbeat') / 1000.0, 1) AS active_seconds, max(timestamp) AS last_seen FROM events_resolved WHERE $__timeFilter(timestamp) AND person_id != '' GROUP BY person_id) AS a LEFT JOIN (SELECT toString(id) AS id, username FROM postgresql('postgres:5432', 'animeenigma', 'users', 'postgres', 'postgres')) AS u ON a.person_id = u.id ORDER BY a.events DESC LIMIT 50"
         }
       ]
     },
