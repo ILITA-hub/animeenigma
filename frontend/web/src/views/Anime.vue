@@ -645,6 +645,7 @@
           :theater="theaterMode"
           :is-hentai="isHentai"
           :initial-episode="resumeStartEpisode"
+          :mal-id="anime.shikimoriId"
           @toggle-theater="setTheater(!theaterMode)"
         />
       </section>

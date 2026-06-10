@@ -7,16 +7,20 @@
   >
     <!-- Forward-skip icon -->
     <FastForward class="size-4" aria-hidden="true" />
-    Skip Intro
+    {{ label }}
   </button>
 </template>
 
 <script setup lang="ts">
 import { FastForward } from 'lucide-vue-next'
 
-defineProps<{
-  visible: boolean
-}>()
+withDefaults(
+  defineProps<{
+    visible: boolean
+    label?: string
+  }>(),
+  { label: 'Skip Intro' },
+)
 
 const emit = defineEmits<{
   (e: 'skip'): void

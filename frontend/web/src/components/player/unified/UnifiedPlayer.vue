@@ -120,8 +120,11 @@
 
     <BufferingOverlay :visible="(showBuffering || isResolving) && !sourceError" />
 
-    <!-- TODO: real skip-timings backend (later stage) -->
-    <SkipIntroChip :visible="false" @skip="() => {}" />
+    <SkipIntroChip
+      :visible="!!skipTarget"
+      :label="skipTarget?.kind === 'outro' ? 'Skip Outro' : 'Skip Intro'"
+      @skip="onSkipSegment"
+    />
 
     <NextEpisodeCard
       v-if="showNextEpisode"
@@ -145,7 +148,7 @@
       :audio-label="audioLabel"
       :progress="state.progress.value"
       :buffered="bufferedPct"
-      :chapters="[]"
+      :chapters="chapters"
       :still-url="anime.still"
       :open-menu="openMenu"
       @toggle-play="togglePlay"
@@ -256,7 +259,9 @@ import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
 
+import { useSkipTimes } from '@/composables/useSkipTimes'
 import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
+import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlayer/skipSegments'
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
 import { useProviderResolver } from '@/composables/unifiedPlayer/useProviderResolver'
 import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'
@@ -284,6 +289,8 @@ const props = defineProps<{
   theater: boolean
   isHentai?: boolean
   initialEpisode?: number
+  /** Shikimori id (= MAL id) for AniSkip skip-times. Absent ⇒ no skip UI. */
+  malId?: string | number
 }>()
 
 defineEmits<{
@@ -610,6 +617,50 @@ function onVideoPause() {
   state.playing.value = false
   stopRaf()
 }
+
+// ─── Intro/outro skip (AniSkip via catalog proxy) ────────────────────────────
+
+const epNumber = computed(() => selectedEpisode.value?.number ?? null)
+const malIdRef = computed(() => props.malId ?? null)
+const { opening, ending } = useSkipTimes(malIdRef, epNumber)
+
+const chapters = computed(() =>
+  segmentsToChapters(opening.value, ending.value, duration.value),
+)
+
+const skipTarget = computed(() =>
+  activeSkipSegment(currentTime.value, opening.value, ending.value),
+)
+
+function onSkipSegment() {
+  const v = videoRef.value
+  const target = skipTarget.value
+  if (!v || !target) return
+  v.currentTime = target.end
+  writeProgress()
+}
+
+// Auto-skip intro (settings toggle) — once per episode view so a manual
+// seek back into the OP isn't fought.
+let autoSkippedEp: number | null = null
+watch(epNumber, () => {
+  autoSkippedEp = null
+})
+watch(currentTime, (t) => {
+  if (!state.autoSkip.value) return
+  const op = opening.value
+  if (!op) return
+  const ep = epNumber.value
+  if (ep === null || autoSkippedEp === ep) return
+  if (t >= op.start && t < op.end - 1) {
+    autoSkippedEp = ep
+    const v = videoRef.value
+    if (v) {
+      v.currentTime = op.end
+      writeProgress()
+    }
+  }
+})
 
 // ─── Buffering indicator ──────────────────────────────────────────────────────
 // waiting/seeking → on; playing/canplay → off. A 150ms grace window keeps
