@@ -21,8 +21,39 @@ export function chooseLoadStrategy(stream: StreamResult, hlsJsSupported: boolean
   return hlsJsSupported ? 'hlsjs' : 'native'
 }
 
+export interface QualityLevel {
+  label: string
+  index: number
+}
+
+/**
+ * Build the quality menu from hls.js levels: label by height (`720p`),
+ * dedupe by label keeping the FIRST hls index for it, sort high→low.
+ * Height-less levels fall back to a bitrate label (`1500k`); unlabelable
+ * levels are dropped (no fake entries — design rule D-05).
+ */
+export function buildLevelLabels(
+  levels: { height?: number; bitrate?: number }[],
+): QualityLevel[] {
+  const byLabel = new Map<string, number>()
+  levels.forEach((l, index) => {
+    const label = l.height
+      ? `${l.height}p`
+      : l.bitrate
+        ? `${Math.round(l.bitrate / 1000)}k`
+        : ''
+    if (!label || byLabel.has(label)) return
+    byLabel.set(label, index)
+  })
+  return [...byLabel.entries()]
+    .map(([label, index]) => ({ label, index }))
+    .sort((a, b) => parseInt(b.label) - parseInt(a.label))
+}
+
 export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
   const fatal = ref<string | null>(null)
+  const levels = ref<QualityLevel[]>([])
+  const currentLevelLabel = ref('')
   let hls: any = null
   // Monotonic load generation. `load()` awaits a dynamic import of hls.js, so two
   // calls in quick succession (e.g. a provider change immediately followed by an
@@ -37,6 +68,8 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     if (!v) return
     const gen = ++loadGen
     fatal.value = null
+    levels.value = []
+    currentLevelLabel.value = ''
     destroy()
 
     // Progressive MP4 — native playback. The backend proxy injects Referer and
@@ -78,8 +111,13 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     // at "bufferCodec event(s) expected" without ever requesting fragment 0 — it
     // needs the first fragment to detect the codec. startLoad(-1) forces the load
     // from the natural start position without auto-playing (preserves click-to-play).
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    hls.on(Hls.Events.MANIFEST_PARSED, (_e: unknown, data: any) => {
+      levels.value = buildLevelLabels(data?.levels ?? [])
       hls?.startLoad(-1)
+    })
+    hls.on(Hls.Events.LEVEL_SWITCHED, (_e: unknown, data: any) => {
+      const lvl = levels.value.find((l) => l.index === data?.level)
+      if (lvl) currentLevelLabel.value = lvl.label
     })
     hls.on(Hls.Events.ERROR, (_e: unknown, data: any) => {
       if (!data?.fatal) return
@@ -94,6 +132,16 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     })
   }
 
+  function setLevel(label: string) {
+    if (!hls) return
+    if (label === 'Auto') {
+      hls.currentLevel = -1
+      return
+    }
+    const lvl = levels.value.find((l) => l.label === label)
+    if (lvl) hls.currentLevel = lvl.index
+  }
+
   function destroy() {
     if (hls) {
       hls.destroy()
@@ -103,5 +151,5 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
 
   onUnmounted(destroy)
 
-  return { fatal, load, destroy }
+  return { fatal, load, destroy, levels, currentLevelLabel, setLevel }
 }

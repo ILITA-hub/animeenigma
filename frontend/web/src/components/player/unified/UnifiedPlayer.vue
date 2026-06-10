@@ -192,12 +192,13 @@
     <div v-if="openMenu === 'settings'" class="pl-floating pl-floating--btnmenu" @click.stop>
       <PlaybackSettingsMenu
         :quality="state.quality.value"
-        :qualities="['Auto']"
+        :qualities="qualities"
+        :quality-display="qualityDisplay"
         :speed="state.speed.value"
         :speeds="[0.75, 1, 1.25, 1.5, 2]"
         :auto-next="state.autoNext.value"
         :auto-skip="state.autoSkip.value"
-        @update:quality="v => { state.quality.value = v }"
+        @update:quality="onSetQuality"
         @update:speed="onSetSpeed"
         @update:auto-next="v => { state.autoNext.value = v }"
         @update:auto-skip="v => { state.autoSkip.value = v }"
@@ -263,6 +264,7 @@ import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
 import { providerById } from './providerRegistry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
+import type { StreamResult } from '@/types/unifiedPlayer'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -347,12 +349,80 @@ const episodes = ref<EpisodeOption[]>([])
 const selectedEpisode = ref<EpisodeOption | null>(null)
 const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
+const currentStream = ref<StreamResult | null>(null)
 const isResolving = ref(false)
 
 // Monotonically-increasing request token — only the latest resolve applies.
 // Prevents a stale audio/lang/server re-resolve from clobbering a concurrent
 // provider-change full re-list+resolve that started after it.
 let resolveToken = 0
+
+// ─── Quality ladder ──────────────────────────────────────────────────────────
+// HLS: data-driven from hls.js levels. MP4: only when the provider returned
+// multiple URL-valued qualities. Single-variant streams stay Auto-only (D-05).
+// NOTE: declared after currentStream — watch() below evaluates its computed
+// source eagerly during setup.
+
+const mp4Qualities = computed(() => {
+  const s = currentStream.value
+  if (!s || s.type !== 'mp4' || !s.qualities) return []
+  return s.qualities.filter(
+    (q) => typeof q.value === 'string' && /^(https?:|\/)/.test(q.value as string),
+  )
+})
+
+const qualities = computed(() => {
+  if (mp4Qualities.value.length > 1) return ['Auto', ...mp4Qualities.value.map((q) => q.label)]
+  return ['Auto', ...engine.levels.value.map((l) => l.label)]
+})
+
+const qualityDisplay = computed(() =>
+  state.quality.value === 'Auto' && engine.currentLevelLabel.value
+    ? `Auto · ${engine.currentLevelLabel.value}`
+    : state.quality.value,
+)
+
+// New stream may not offer the previously-chosen quality — snap back to Auto.
+// If it DOES offer it, re-apply: each load() creates a fresh hls instance
+// that starts at auto, so a pinned level must be re-pinned.
+watch(qualities, (qs) => {
+  if (!qs.includes(state.quality.value)) {
+    state.quality.value = 'Auto'
+  } else if (state.quality.value !== 'Auto' && mp4Qualities.value.length === 0) {
+    engine.setLevel(state.quality.value)
+  }
+})
+
+function swapMp4Source(url: string) {
+  const v = videoRef.value
+  if (!v) return
+  const t = v.currentTime
+  const wasPlaying = !v.paused
+  v.addEventListener(
+    'loadedmetadata',
+    () => {
+      v.currentTime = t
+      if (wasPlaying) void v.play()
+    },
+    { once: true },
+  )
+  v.src = url
+}
+
+function onSetQuality(q: string) {
+  state.quality.value = q
+  const mq = mp4Qualities.value.find((x) => x.label === q)
+  if (mq) {
+    swapMp4Source(mq.value as string)
+    return
+  }
+  if (q === 'Auto' && currentStream.value?.type === 'mp4') {
+    // mp4 has no auto ladder — Auto = the originally-resolved URL
+    swapMp4Source(currentStream.value.url)
+    return
+  }
+  engine.setLevel(q)
+}
 
 // Initialize selectedEpisode from initialEpisode or anime.ep
 function initSelectedEpisode() {
@@ -410,6 +480,9 @@ async function loadEpisodesAndStream() {
     if (token !== resolveToken) return // superseded
 
     resolvedServers.value = stream.servers ?? []
+    // Set BEFORE the await: a superseded resolve must never clobber the
+    // winner's stream descriptor after resuming from engine.load.
+    currentStream.value = stream
     await engine.load(stream)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
@@ -653,6 +726,8 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     )
     if (token !== resolveToken) return // superseded
     resolvedServers.value = stream.servers ?? []
+    // Set BEFORE the await — see loadEpisodesAndStream.
+    currentStream.value = stream
     await engine.load(stream)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded

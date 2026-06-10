@@ -26,7 +26,7 @@
           <Check v-if="quality === q" class="size-3 flex-shrink-0" aria-hidden="true" />
           <span v-else class="w-3 flex-shrink-0" aria-hidden="true"/>
           {{ q }}
-          <span v-if="q === qualities[0]" class="ml-auto text-[10px] font-semibold uppercase text-white" style="background: var(--brand-cyan); padding: 1px 5px; border-radius: 4px; color: var(--color-base);">HD</span>
+          <span v-if="q !== 'Auto' && q === (qualities.find(x => x !== 'Auto') ?? '')" class="ml-auto text-[10px] font-semibold uppercase" style="background: var(--brand-cyan); padding: 1px 5px; border-radius: 4px; color: var(--color-base);">HD</span>
         </button>
       </div>
     </template>
@@ -79,7 +79,7 @@
         <MonitorPlay class="size-4 flex-shrink-0" aria-hidden="true" />
         <span class="flex-1">Quality</span>
         <span class="inline-flex items-center gap-[6px] text-[13px] text-[var(--muted-foreground)] mr-1">
-          {{ quality }}
+          {{ qualityDisplay ?? quality }}
           <ChevronDown class="size-3" aria-hidden="true" />
         </span>
       </button>
@@ -130,6 +130,8 @@ import { ChevronLeft, ChevronDown, Check, MonitorPlay, Gauge, SkipForward, FastF
 defineProps<{
   quality: string
   qualities: string[]
+  /** e.g. "Auto · 720p" while auto-switching; falls back to `quality` */
+  qualityDisplay?: string
   speed: number
   speeds: number[]
   autoNext: boolean
