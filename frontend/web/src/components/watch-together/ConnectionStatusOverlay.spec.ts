@@ -27,6 +27,7 @@ vi.mock('vue-i18n', () => ({
 }))
 
 import ConnectionStatusOverlay from './ConnectionStatusOverlay.vue'
+import Spinner from '@/components/ui/Spinner.vue'
 import type { ConnectionStatus } from '@/composables/useWatchTogetherRoom'
 
 function mountAt(status: ConnectionStatus) {
@@ -66,13 +67,11 @@ describe('ConnectionStatusOverlay', () => {
     expect(wrapper.text()).toContain('watch_together.connection_status_closed')
   })
 
-  it('renders a spinner with the animate-spin class while reconnecting', () => {
+  it('renders a Spinner while reconnecting', () => {
     const wrapper = mountAt('reconnecting')
-    // The spinner is the inline span with `animate-spin`. Use a class match
-    // so a refactor to a different element shape still passes if the class
-    // moves to the new wrapper.
-    const spinner = wrapper.find('.animate-spin')
-    expect(spinner.exists()).toBe(true)
+    // The inline animate-spin span was replaced by the shared <Spinner>
+    // primitive (dual-arc donut, role="status").
+    expect(wrapper.findComponent(Spinner).exists()).toBe(true)
   })
 
   it('wrapper is pointer-events-none and the banner box is pointer-events-auto', () => {

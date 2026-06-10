@@ -33,7 +33,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Spinner } from '@/components/ui'
+// Direct import (not the @/components/ui barrel) so this leaf overlay doesn't
+// drag the barrel's vue-i18n-dependent components into ConnectionStatusOverlay.spec.
+import Spinner from '@/components/ui/Spinner.vue'
 
 import type { ConnectionStatus } from '@/composables/useWatchTogetherRoom'
 
