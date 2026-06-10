@@ -1,5 +1,6 @@
 // frontend/web/src/composables/schedule/projection.ts
 import type { ScheduleAnime, Occurrence } from './types'
+import { wallClockDate } from './timezone'
 
 const WEEK_MS = 7 * 86400000
 
@@ -8,16 +9,22 @@ const WEEK_MS = 7 * 86400000
  * Anchor = next_episode_at (concrete next airing). Episode at anchor = episodes_aired + 1.
  * Each week k (… -1, 0, 1 …): date = anchor + k weeks, episode = episodes_aired + 1 + k.
  * Included when ep >= 1 and (episodes_count <= 0 || ep <= episodes_count).
+ *
+ * `tz` shifts the anchor into that zone's wall-clock space BEFORE windowing,
+ * so occurrence dates (and therefore day grouping + displayed HH:MM) follow
+ * the user's chosen timezone. The window is wall-clock day boundaries, which
+ * keeps the comparison consistent. No tz → browser-local (legacy behavior).
  */
 export function projectOccurrences(
   anime: ScheduleAnime,
   windowStart: Date,
   windowEnd: Date,
+  tz?: string,
 ): Occurrence[] {
   if (!anime.next_episode_at) return []
   const anchor = new Date(anime.next_episode_at)
-  const anchorMs = anchor.getTime()
-  if (Number.isNaN(anchorMs)) return []
+  if (Number.isNaN(anchor.getTime())) return []
+  const anchorMs = wallClockDate(anchor, tz).getTime()
 
   const aired = anime.episodes_aired ?? 0
   const total = anime.episodes_count ?? 0
@@ -44,6 +51,7 @@ export function occurrencesInRange(
   animes: ScheduleAnime[],
   windowStart: Date,
   windowEnd: Date,
+  tz?: string,
 ): Occurrence[] {
-  return animes.flatMap((a) => projectOccurrences(a, windowStart, windowEnd))
+  return animes.flatMap((a) => projectOccurrences(a, windowStart, windowEnd, tz))
 }

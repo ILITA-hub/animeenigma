@@ -11,12 +11,25 @@
           </div>
           <button class="h-8 px-3 rounded-lg text-primary border border-primary/40 text-xs" @click="cal.goToday()">{{ $t('schedule.todayBtn') }}</button>
         </div>
-        <SegmentedControl
-          :model-value="cal.view.value"
-          :options="viewOptions"
-          :aria-label="$t('schedule.viewSwitcherLabel')"
-          @update:model-value="cal.setView($event as ScheduleView)"
-        />
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex items-center gap-1.5" :title="$t('schedule.tz.label')">
+            <Globe class="size-4 text-muted-foreground flex-none" aria-hidden="true" />
+            <div class="w-48">
+              <Select
+                size="xs"
+                :model-value="tzPref.pref.value"
+                :options="tzOptions"
+                @update:model-value="tzPref.setPref(String($event))"
+              />
+            </div>
+          </div>
+          <SegmentedControl
+            :model-value="cal.view.value"
+            :options="viewOptions"
+            :aria-label="$t('schedule.viewSwitcherLabel')"
+            @update:model-value="cal.setView($event as ScheduleView)"
+          />
+        </div>
       </div>
 
       <ScheduleFilters
@@ -63,6 +76,10 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import DayModal from '@/components/schedule/DayModal.vue'
 import { Spinner } from '@/components/ui'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import Select from '@/components/ui/Select.vue'
+import { Globe } from 'lucide-vue-next'
+import { useTimezonePref, TIMEZONE_CHOICES } from '@/composables/useTimezonePref'
+import { formatUtcOffset, tzOffsetMinutes } from '@/composables/schedule/timezone'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -75,11 +92,21 @@ const schedule = ref<ScheduleAnime[]>([])
 const now = ref(new Date())
 const loggedIn = computed(() => auth.isAuthenticated)
 
+const tzPref = useTimezonePref()
+// "Auto (UTC+3)" first, then curated zones sorted by their current offset.
+const tzOptions = computed(() => [
+  { value: 'auto', label: `${t('schedule.tz.auto')} (${formatUtcOffset(tzPref.browserTimezone)})` },
+  ...[...TIMEZONE_CHOICES]
+    .sort((a, b) => tzOffsetMinutes(a.value) - tzOffsetMinutes(b.value))
+    .map((c) => ({ value: c.value, label: `${t('schedule.tz.cities.' + c.cityKey)} (${formatUtcOffset(c.value)})` })),
+])
+
 const cal = useScheduleCalendar({
   animes: computed(() => schedule.value),
   now,
   statusOf: (id: string) => watchlist.getStatus(id),
   loggedIn,
+  timezone: tzPref.timezone,
 })
 
 const views: ScheduleView[] = ['month', 'week', 'table']

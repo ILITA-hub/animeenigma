@@ -5,6 +5,7 @@ import { emptyFilters } from './schedule/types'
 import { occurrencesInRange } from './schedule/projection'
 import { applyFilters, availableGenres, sortCellHybrid } from './schedule/filterSort'
 import { monthGridDays, monthGridRange, weekDays, weekStart, startOfDay, isSameDay } from './schedule/calendarGrid'
+import { wallClockDate } from './schedule/timezone'
 
 export type ScheduleView = 'month' | 'week' | 'table'
 
@@ -20,6 +21,8 @@ export interface UseScheduleCalendarOptions {
   now: Ref<Date>
   statusOf: (animeId: string) => string | null
   loggedIn: Ref<boolean>
+  /** IANA display timezone; occurrences + "today" follow it. Omitted → browser-local. */
+  timezone?: Ref<string | undefined>
 }
 
 const WEEK_MS = 7 * 86400000
@@ -37,11 +40,16 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
   const filteredAnimes = computed(() => applyFilters(opts.animes.value, filters, opts.statusOf))
   const genres = computed(() => availableGenres(opts.animes.value))
 
+  const tz = () => opts.timezone?.value
+  // "now" expressed in the display timezone's wall clock, so the today
+  // highlight moves with the selected zone (a new day starts at ITS midnight).
+  const zonedNow = () => wallClockDate(opts.now.value, tz())
+
   const monthCells = computed<DayCellModel[]>(() => {
     void opts.loggedIn.value // track login state so priority re-sorts on auth change
     const days = monthGridDays(viewDate.value)
     const { start, end } = monthGridRange(viewDate.value)
-    const all = occurrencesInRange(filteredAnimes.value, start, end)
+    const all = occurrencesInRange(filteredAnimes.value, start, end, tz())
     const m = viewDate.value.getMonth()
     return days.map((date) => {
       const inMonth = date.getMonth() === m
@@ -49,7 +57,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
       return {
         date,
         inCurrentMonth: inMonth,
-        isToday: isSameDay(date, opts.now.value),
+        isToday: isSameDay(date, zonedNow()),
         occurrences: sortCellHybrid(occ, isPriority),
       }
     })
@@ -60,11 +68,11 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
     const days = weekDays(viewDate.value)
     const start = startOfDay(days[0])
     const end = new Date(start.getTime() + WEEK_MS)
-    const all = occurrencesInRange(filteredAnimes.value, start, end)
+    const all = occurrencesInRange(filteredAnimes.value, start, end, tz())
     return days.map((date) => ({
       date,
       inCurrentMonth: date.getMonth() === viewDate.value.getMonth(),
-      isToday: isSameDay(date, opts.now.value),
+      isToday: isSameDay(date, zonedNow()),
       // Hybrid sort (user's list first, then by time) so watched/planned titles
       // float to the top of each day — matters now that the week view is the
       // default and caps each day at 4 rows.
@@ -76,7 +84,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
     const days = weekDays(viewDate.value)
     const start = startOfDay(days[0])
     const end = new Date(start.getTime() + WEEK_MS)
-    const all = occurrencesInRange(filteredAnimes.value, start, end)
+    const all = occurrencesInRange(filteredAnimes.value, start, end, tz())
     const cmp: Record<TableSortKey, (x: Occurrence, y: Occurrence) => number> = {
       name: (x, y) => (x.anime.name ?? '').localeCompare(y.anime.name ?? ''),
       date: (x, y) => x.date.getTime() - y.date.getTime(),
@@ -95,7 +103,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
       viewDate.value = new Date(viewDate.value.getFullYear(), viewDate.value.getMonth() + dir, 1)
     }
   }
-  function goToday() { viewDate.value = startOfDay(opts.now.value) }
+  function goToday() { viewDate.value = startOfDay(zonedNow()) }
   function setSort(key: TableSortKey) {
     if (sortKey.value === key) sortDir.value = (sortDir.value === 1 ? -1 : 1)
     else { sortKey.value = key; sortDir.value = 1 }

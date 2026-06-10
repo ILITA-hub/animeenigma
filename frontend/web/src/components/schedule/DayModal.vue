@@ -14,7 +14,7 @@
           <div class="text-sm font-semibold text-foreground line-clamp-2">{{ titleOf(o) }}</div>
           <div class="text-xs text-primary mt-1">{{ $t('schedule.episode', { n: o.episode }) }}</div>
           <div class="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-            <span>{{ formatAirTime(o.date) }} {{ $t('schedule.mskSuffix') }} ·</span>
+            <span>{{ formatAirTime(o.date) }} {{ tzLabel }} ·</span>
             <Star class="size-2.5 text-warning" fill="currentColor" aria-hidden="true" />
             <span>{{ (o.anime.score ?? 0).toFixed(1) }}</span>
           </div>
@@ -34,12 +34,16 @@ import Button from '@/components/ui/Button.vue'
 import type { Occurrence } from '@/composables/schedule/types'
 import { getLocalizedTitle } from '@/utils/title'
 import { formatAirTime, formatDayTitle } from '@/composables/schedule/format'
+import { formatUtcOffset } from '@/composables/schedule/timezone'
+import { useTimezonePref } from '@/composables/useTimezonePref'
 import { sortByTime } from '@/composables/schedule/filterSort'
 
 const props = defineProps<{ modelValue: boolean; date: Date | null; occurrences: Occurrence[] }>()
 defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const { t } = useI18n()
 
+const { timezone } = useTimezonePref()
+const tzLabel = computed(() => formatUtcOffset(timezone.value))
 const sorted = computed(() => sortByTime(props.occurrences))
 const headerTitle = computed(() => (props.date ? formatDayTitle(props.date, t) : ''))
 // vue-i18n pluralization: the count selects the branch and is auto-exposed as {n}

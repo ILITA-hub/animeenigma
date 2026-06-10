@@ -6,7 +6,9 @@ import EpisodeRow from './EpisodeRow.vue'
 const occ = {
   anime: { id: '1', name: 'Kaiju No. 8', name_ru: 'Кайдзю №8', poster_url: '/p.jpg' },
   episode: 10,
-  date: new Date('2026-06-08T17:00:00+03:00'),
+  // Occurrence dates arrive pre-shifted into the display timezone (projection
+  // layer), so the row formats LOCAL fields — construct via local fields here.
+  date: new Date(2026, 5, 8, 17, 0, 0),
 }
 
 function mountRow() {

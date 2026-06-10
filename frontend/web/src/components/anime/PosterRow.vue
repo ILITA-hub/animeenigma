@@ -74,6 +74,8 @@ import { useI18n } from 'vue-i18n'
 import { EllipsisVertical, Star, Clock } from 'lucide-vue-next'
 import ScoreDiamond from '@/components/ui/ScoreDiamond.vue'
 import { cardPosterUrl } from '@/composables/useImageProxy'
+import { useTimezonePref } from '@/composables/useTimezonePref'
+import { wallClockDate } from '@/composables/schedule/timezone'
 import type { AnimeCardModel } from '@/types/card'
 
 const props = defineProps<{
@@ -87,6 +89,7 @@ const props = defineProps<{
 const emit = defineEmits<{ openMenu: [el: HTMLElement] }>()
 
 const { t } = useI18n()
+const { timezone: userTimezone } = useTimezonePref()
 const kebabEl = ref<HTMLButtonElement | null>(null)
 
 function onKebab() {
@@ -132,12 +135,12 @@ const formattedNextEp = computed(() => {
   const date = new Date(when)
   const now = new Date()
   const diffDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })
+  const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: userTimezone.value })
   if (diffDays === 0) return t('home.todayAt', { time: timeStr })
   if (diffDays === 1) return t('home.tomorrowAt', { time: timeStr })
   if (diffDays > 1 && diffDays < 7) {
     const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    return t('home.dayAt', { day: t(`schedule.daysShort.${dayKeys[date.getDay()]}`), time: timeStr })
+    return t('home.dayAt', { day: t(`schedule.daysShort.${dayKeys[wallClockDate(date, userTimezone.value).getDay()]}`), time: timeStr })
   }
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 })

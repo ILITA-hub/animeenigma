@@ -1,7 +1,11 @@
 // frontend/web/src/composables/schedule/format.ts
-/** HH:MM in Europe/Moscow (project standard, mirrors the old Schedule.vue). */
+/**
+ * HH:MM from the date's LOCAL fields. Occurrence dates are pre-shifted into
+ * the user's chosen timezone by the projection layer (see timezone.ts
+ * wallClockDate), so no timeZone option here — that would double-convert.
+ */
 export function formatAirTime(date: Date): string {
-  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
 
 type T = (key: string, named?: Record<string, unknown>) => string

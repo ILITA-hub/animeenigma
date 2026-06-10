@@ -1047,6 +1047,8 @@ import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useSiteRatings } from '@/composables/useSiteRatings'
+import { useTimezonePref } from '@/composables/useTimezonePref'
+import { wallClockDate, formatUtcOffset } from '@/composables/schedule/timezone'
 import { fromCatalogAnime } from '@/utils/toCardModel'
 import type { AnimeCardModel } from '@/types/card'
 import type { WatchCombo } from '@/types/preference'
@@ -1687,25 +1689,28 @@ const isReviewFlagged = (review: Review): boolean => {
   return status === 'plan_to_watch' || episodes === 0
 }
 
+const { timezone: userTimezone } = useTimezonePref()
+
 const formatNextEpisode = (dateStr: string) => {
   const date = new Date(dateStr)
   const now = new Date()
   const diffMs = date.getTime() - now.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const tz = userTimezone.value
 
   const timeStr = date.toLocaleTimeString('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'Europe/Moscow'
+    timeZone: tz
   })
 
   if (diffDays === 0) return t('anime.todayAt', { time: timeStr })
   if (diffDays === 1) return t('anime.tomorrowAt', { time: timeStr })
   if (diffDays > 1 && diffDays < 7) {
     const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    return t('anime.dayAtTime', { day: t(`schedule.daysWhen.${dayKeys[date.getDay()]}`), time: timeStr })
+    return t('anime.dayAtTime', { day: t(`schedule.daysWhen.${dayKeys[wallClockDate(date, tz).getDay()]}`), time: timeStr })
   }
-  return t('anime.timeMsk', { time: date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }) })
+  return t('anime.timeAt', { time: date.toLocaleDateString(locale.value === 'ru' ? 'ru-RU' : locale.value === 'ja' ? 'ja-JP' : 'en-US', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: tz }), tz: formatUtcOffset(tz) })
 }
 
 // Localized "N ago" for an episode that already aired (episode-not-loaded-yet).
