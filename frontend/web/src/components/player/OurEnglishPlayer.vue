@@ -47,9 +47,7 @@
           class="absolute inset-0 flex items-center justify-center text-white/70 px-6"
         >
           <div class="text-center max-w-sm">
-            <svg class="w-14 h-14 mx-auto mb-3 text-warning/80" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
+            <CircleAlert class="size-14 mx-auto mb-3 text-warning/80" aria-hidden="true" />
             <p>{{ $t('player.sourceUnavailable') }}</p>
           </div>
         </div>
@@ -156,7 +154,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Video, Play, List, SlidersHorizontal, Captions } from 'lucide-vue-next'
+import { Video, Play, List, SlidersHorizontal, Captions, CircleAlert } from 'lucide-vue-next'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'
