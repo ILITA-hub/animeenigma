@@ -79,6 +79,8 @@
   --color-brand-pink-soft: var(--brand-pink-soft);
   --color-brand-violet: var(--brand-violet);
 
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-success-foreground: var(--success-foreground);
   --color-success-soft: var(--success-soft);
   --color-warning-foreground: var(--warning-foreground);
@@ -399,6 +401,8 @@ body {
   --brand-pink: var(--color-pink-500);
   --brand-pink-foreground: #ffffff;
   --brand-violet: var(--violet);
+  --success: #00ff9d;
+  --warning: #ffd600;
   --success-foreground: var(--color-base);
   --warning-foreground: var(--color-base);
   --info: #5ab8ff;
