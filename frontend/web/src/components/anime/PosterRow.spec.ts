@@ -59,3 +59,40 @@ describe('PosterRow', () => {
     expect(w.emitted('openMenu')).toBeTruthy()
   })
 })
+
+describe('PosterRow poster skeleton + resized proxy', () => {
+  it('shows the glass skeleton until the poster loads, then hides it', async () => {
+    const w = mountRow()
+    expect(w.find('[data-testid="poster-skeleton"]').exists()).toBe(true)
+    expect(w.find('img.poster').classes()).toContain('opacity-0')
+
+    await w.find('img.poster').trigger('load')
+    expect(w.find('[data-testid="poster-skeleton"]').exists()).toBe(false)
+    expect(w.find('img.poster').classes()).toContain('opacity-100')
+  })
+
+  it('routes shikimori posters through the resizing image-proxy (w=128)', () => {
+    const shiki = 'https://shikimori.io/uploads/poster/animes/1/abc.jpeg'
+    const w = mountRow({ coverImage: shiki })
+    const src = w.find('img.poster').attributes('src')!
+    expect(src).toContain('/api/streaming/image-proxy?url=')
+    expect(src).toContain('w=128')
+    expect(src).toContain(encodeURIComponent(shiki))
+  })
+
+  it('keeps non-proxyable poster URLs untouched', () => {
+    const w = mountRow({ coverImage: 'http://x/p.jpg' })
+    expect(w.find('img.poster').attributes('src')).toBe('http://x/p.jpg')
+  })
+
+  it('falls back proxied → original → placeholder on consecutive errors', async () => {
+    const shiki = 'https://shikimori.io/uploads/poster/animes/1/abc.jpeg'
+    const w = mountRow({ coverImage: shiki })
+
+    await w.find('img.poster').trigger('error')
+    expect(w.find('img.poster').attributes('src')).toBe(shiki)
+
+    await w.find('img.poster').trigger('error')
+    expect(w.find('img.poster').attributes('src')).toBe('/placeholder.svg')
+  })
+})

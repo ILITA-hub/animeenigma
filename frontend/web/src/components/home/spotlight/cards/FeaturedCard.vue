@@ -54,6 +54,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle } from '@/utils/title'
 import { parseDescription } from '@/utils/description-parser'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import type { FeaturedData } from '@/types/spotlight'
 import SpotlightIcon from '../SpotlightIcon.vue'
 
@@ -65,8 +66,10 @@ const locale = computed(() => {
   return typeof v === 'string' ? v : 'ru'
 })
 
+// w=640 ≈ the native width of Shikimori originals (~700px) — the hero was
+// already upscaling, so this trades nothing visually for a ~7× smaller LCP.
 const posterBg = computed(() =>
-  props.data.anime.poster_url ? `url("${props.data.anime.poster_url}")` : 'none',
+  props.data.anime.poster_url ? `url("${cardPosterUrl(props.data.anime.poster_url, 640)}")` : 'none',
 )
 
 const parsedDescription = computed(() =>

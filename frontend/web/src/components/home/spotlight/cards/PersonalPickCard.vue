@@ -21,7 +21,7 @@
               class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-cyan-500/20 group-hover:shadow-cyan-500/40 transition-shadow"
             >
               <img
-                :src="featured.anime.poster_url || '/placeholder.svg'"
+                :src="cardPosterUrl(featured.anime.poster_url, 256)"
                 :alt="featuredTitle"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"
@@ -70,7 +70,7 @@
                 class="flex-shrink-0 w-16 h-24 rounded-md overflow-hidden bg-white/5"
               >
                 <img
-                  :src="item.anime.poster_url || '/placeholder.svg'"
+                  :src="cardPosterUrl(item.anime.poster_url, 128)"
                   :alt="
                     getLocalizedTitle(
                       item.anime.name,
@@ -155,6 +155,7 @@ import { useAuthStore } from '@/stores/auth'
 import SpotlightBackdrop from '../SpotlightBackdrop.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
 import type { PersonalPickData } from '@/types/spotlight'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{ data: PersonalPickData }>()
 

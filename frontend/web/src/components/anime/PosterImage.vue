@@ -15,7 +15,7 @@
 
     <img
       v-if="src"
-      :src="src"
+      :src="resolvedSrc"
       :alt="alt"
       loading="lazy"
       class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { getImageFallbackUrl } from '@/composables/useImageProxy'
+import { cardPosterUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
 const props = withDefaults(
   defineProps<{
@@ -43,11 +43,25 @@ const props = withDefaults(
     ratio?: '2/3' | '16/9'
     rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl'
     scrim?: boolean
+    /** When set, proxyable posters are served resized via the backend
+     *  image-proxy (`w` param). Pass max CSS width × 2 for retina. */
+    proxyWidth?: number
   }>(),
-  { ratio: '2/3', rounded: 'none', scrim: false }
+  { ratio: '2/3', rounded: 'none', scrim: false, proxyWidth: undefined }
 )
 
 const loaded = ref(false)
+
+// Fallback chain when serving a resized proxy URL: proxied → original → done.
+// Without proxyWidth the legacy chain applies: original → full-size proxy.
+const fallbackStage = ref(0)
+
+const resolvedSrc = computed(() => {
+  if (!props.proxyWidth) return props.src
+  const proxied = cardPosterUrl(props.src, props.proxyWidth)
+  if (proxied === props.src) return props.src
+  return fallbackStage.value === 0 ? proxied : props.src
+})
 
 const ratioClass = computed(() => (props.ratio === '16/9' ? 'aspect-[16/9]' : 'aspect-[2/3]'))
 const roundedClass = computed(() => {
@@ -56,6 +70,12 @@ const roundedClass = computed(() => {
 })
 
 function onError(e: Event) {
+  // Stage 1: resized proxy URL failed → retry with the original upstream URL
+  if (props.proxyWidth && fallbackStage.value === 0 && resolvedSrc.value !== props.src) {
+    fallbackStage.value = 1
+    return
+  }
+  // Stage 2: original URL failed → full-size proxy (has server-side MAL fallback)
   const img = e.target as HTMLImageElement
   if (!img.dataset.fallback) {
     img.dataset.fallback = '1'

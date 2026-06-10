@@ -16,13 +16,22 @@
         class="collection-card-link"
       >
         <div class="collection-card">
+          <!-- Glass skeleton until the cover finishes loading -->
+          <div
+            v-if="c.cover_image_url && !loadedCovers.has(c.id)"
+            class="absolute inset-0 sk-drift"
+            aria-hidden="true"
+          />
           <!-- Cover image -->
           <img
             v-if="c.cover_image_url"
             :src="c.cover_image_url"
             :alt="localizedTitle(c)"
             class="collection-card-img"
+            :class="loadedCovers.has(c.id) ? 'cover-loaded' : 'cover-loading'"
             loading="lazy"
+            @load="loadedCovers.add(c.id)"
+            @error="loadedCovers.add(c.id)"
           />
           <!-- Fallback gradient (preserved from original) -->
           <div
@@ -52,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { animeApi, type Collection } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
@@ -61,6 +70,7 @@ const { locale } = useI18n()
 
 const items = ref<Collection[]>([])
 const isLoading = ref(true)
+const loadedCovers = reactive(new Set<string>())
 
 function unwrap<T>(resp: { data: T | { data: T } }): T {
   const d = resp.data as unknown
@@ -159,6 +169,10 @@ onMounted(load)
 .collection-card-link:hover .collection-card-img {
   transform: scale(1.05);
 }
+
+/* Fade the cover in once loaded; skeleton sits behind it meanwhile */
+.collection-card-img.cover-loading { opacity: 0; }
+.collection-card-img.cover-loaded { opacity: 1; transition: opacity 0.3s ease, transform 0.3s ease; }
 
 /* Fallback gradient (preserved from original) */
 .collection-card-fallback {
