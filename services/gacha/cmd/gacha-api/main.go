@@ -88,7 +88,15 @@ func main() {
 	log.Infow("gacha-cards bucket ensured", "bucket", cfg.Storage.BucketName)
 
 	walletRepo := repo.NewWalletRepository(db.DB)
-	walletSvc := service.NewWalletService(walletRepo, cfg.Economy.StarterBonus, cfg.Enabled, log)
+	walletSvc := service.NewWalletService(
+		walletRepo,
+		cfg.Economy.StarterBonus,
+		cfg.Economy.DailyBase,
+		cfg.Economy.DailyStreakStep,
+		cfg.Economy.DailyStreakCap,
+		cfg.Enabled,
+		log,
+	)
 
 	contentRepo := repo.NewContentRepository(db.DB)
 	bannerRepo := repo.NewBannerRepository(db.DB)

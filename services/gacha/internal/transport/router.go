@@ -89,6 +89,8 @@ func NewRouter(
 		r.Group(func(r chi.Router) {
 			r.Use(AuthMiddleware(jwtConfig))
 			r.Get("/wallet", walletHandler.GetWallet)
+			// Phase 4 — daily claim with streak bonus.
+			r.Post("/daily", walletHandler.ClaimDaily)
 
 			// Player-facing pull engine (Phase 3).
 			r.Get("/banners", pullHandler.Banners)

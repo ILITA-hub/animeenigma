@@ -41,6 +41,11 @@ func (s ServerConfig) Address() string { return fmt.Sprintf("%s:%d", s.Host, s.P
 type EconomyConfig struct {
 	StarterBonus int64 // one-time grant on first wallet access (default 300)
 
+	// Phase 4 — daily claim knobs (spec §5.2).
+	DailyBase       int64 // GACHA_DAILY_BASE, default 50 — base award on any daily claim
+	DailyStreakStep int64 // GACHA_DAILY_STREAK_STEP, default 10 — Энигм per consecutive-day streak day
+	DailyStreakCap  int64 // GACHA_DAILY_STREAK_CAP, default 100 — max streak bonus (caps at step*10 by default)
+
 	// Phase 3 — pull-engine knobs (spec §5.1/5.3).
 	PullCostX1    int64 // GACHA_PULL_COST_X1, default 100
 	PullCostX10   int64 // GACHA_PULL_COST_X10, default 900 (×10 with the 10% discount)
@@ -83,8 +88,11 @@ func Load() (*Config, error) {
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 		Economy: EconomyConfig{
-			StarterBonus:  int64(getEnvInt("GACHA_STARTER_BONUS", 300)),
-			PullCostX1:    int64(getEnvInt("GACHA_PULL_COST_X1", 100)),
+			StarterBonus:    int64(getEnvInt("GACHA_STARTER_BONUS", 300)),
+			DailyBase:       int64(getEnvInt("GACHA_DAILY_BASE", 50)),
+			DailyStreakStep: int64(getEnvInt("GACHA_DAILY_STREAK_STEP", 10)),
+			DailyStreakCap:  int64(getEnvInt("GACHA_DAILY_STREAK_CAP", 100)),
+			PullCostX1:      int64(getEnvInt("GACHA_PULL_COST_X1", 100)),
 			PullCostX10:   int64(getEnvInt("GACHA_PULL_COST_X10", 900)),
 			PityThreshold: getEnvInt("GACHA_PITY_THRESHOLD", 90),
 			WeightN:       getEnvInt("GACHA_WEIGHT_N", 69),
