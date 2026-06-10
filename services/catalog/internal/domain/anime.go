@@ -91,6 +91,8 @@ type RelatedAnime struct {
 	Score       float64 `json:"score"`
 	Status      string  `json:"status"`
 	PosterURL   string  `json:"poster_url"`
+	Year        int     `json:"year,omitempty"`
+	Episodes    int     `json:"episodes,omitempty"`
 }
 
 // SimilarAnime represents a similar anime entry fetched from Shikimori

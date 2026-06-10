@@ -983,6 +983,7 @@
           :items="relatedAnime"
           :title="$t('anime.related')"
           item-key="id"
+          :item-width="{ mobile: 128, tablet: 160, desktop: 176, large: 190 }"
         >
           <template #default="{ item }">
             <div>
@@ -2365,6 +2366,8 @@ async function fetchRelatedAnime() {
       score: number
       status: string
       poster_url: string
+      year?: number
+      episodes?: number
     }>
     relatedAnime.value = data.map(r => ({
       id: r.local_id || `shiki_${r.shikimori_id}`,
@@ -2373,6 +2376,8 @@ async function fetchRelatedAnime() {
       name: r.name,
       coverImage: getImageUrl(r.poster_url),
       rating: r.score || undefined,
+      releaseYear: r.year || undefined,
+      episodes: r.episodes || undefined,
       relationLabel: locale.value === 'ru' ? r.relation_ru : r.relation_en,
     }))
     // Site ratings exist only for anime already in the local catalog (UUID ids)
