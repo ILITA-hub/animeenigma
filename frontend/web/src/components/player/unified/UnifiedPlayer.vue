@@ -32,6 +32,13 @@
       @ended="onEnded"
       @click="togglePlay"
       @volumechange="onVolumeChange"
+      @waiting="onBufferStart"
+      @seeking="onBufferStart"
+      @canplay="onBufferEnd"
+      @playing="onBufferEnd"
+      @seeked="onSeeked"
+      @timeupdate="onTimeUpdate"
+      @error="onVideoError"
     />
 
     <!-- Subtitle overlay -->
@@ -66,8 +73,8 @@
 
     <!-- Top bar -->
     <div class="pl-top" @click.stop>
-      <!-- Back button -->
-      <button class="pl-icon" aria-label="Back" @click="$emit('open-episodes')">
+      <!-- Episodes (left chevron — opens the episode drawer) -->
+      <button class="pl-icon" aria-label="Episodes" @click="toggleMenu('episodes')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="15 18 9 12 15 6" />
         </svg>
@@ -95,7 +102,7 @@
           class="pl-icon"
           aria-label="Episode list"
           title="Episodes"
-          @click="$emit('open-episodes')"
+          @click="toggleMenu('episodes')"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
@@ -108,12 +115,27 @@
     <ResumePill :kind="resumeKind" />
 
     <BigPlayButton
-      :visible="!state.playing.value && !sourceError"
+      :visible="!state.playing.value && !sourceError && !showBuffering && !isResolving"
       @play="togglePlay"
     />
 
-    <!-- TODO: real skip-timings backend (later stage) -->
-    <SkipIntroChip :visible="false" @skip="() => {}" />
+    <BufferingOverlay :visible="(showBuffering || isResolving) && !sourceError" />
+
+    <DebugHud
+      v-if="hudVisible"
+      :stats="playbackStats"
+      :frags="engine.fragStats.value"
+      :bandwidth="engine.bandwidthEstimate.value"
+      :provider="activeProviderName"
+      :stream-type="currentStream?.type ?? '—'"
+      :level-label="engine.currentLevelLabel.value"
+    />
+
+    <SkipIntroChip
+      :visible="!!skipTarget"
+      :label="skipTarget?.kind === 'outro' ? 'Skip Outro' : 'Skip Intro'"
+      @skip="onSkipSegment"
+    />
 
     <NextEpisodeCard
       v-if="showNextEpisode"
@@ -137,9 +159,10 @@
       :audio-label="audioLabel"
       :progress="state.progress.value"
       :buffered="bufferedPct"
-      :chapters="[]"
+      :chapters="chapters"
       :still-url="anime.still"
       :open-menu="openMenu"
+      :fragments="fragOverlay"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"
       @seek="onSeek"
@@ -171,19 +194,32 @@
       />
     </div>
 
+    <!-- Episodes drawer (floating, top-right — reuses source-panel geometry) -->
+    <div v-if="openMenu === 'episodes'" class="pl-floating pl-floating--source" @click.stop>
+      <EpisodesPanel
+        :episodes="episodes"
+        :selected-number="selectedEpisode?.number ?? null"
+        @select="onSelectEpisode"
+      />
+    </div>
+
     <!-- Playback settings menu (floating, above control bar) -->
     <div v-if="openMenu === 'settings'" class="pl-floating pl-floating--btnmenu" @click.stop>
       <PlaybackSettingsMenu
         :quality="state.quality.value"
-        :qualities="['Auto']"
+        :qualities="qualities"
+        :quality-display="qualityDisplay"
         :speed="state.speed.value"
         :speeds="[0.75, 1, 1.25, 1.5, 2]"
         :auto-next="state.autoNext.value"
         :auto-skip="state.autoSkip.value"
-        @update:quality="v => { state.quality.value = v }"
+        :hacker-mode="state.hackerMode.value"
+        :debug-stats="debugStats"
+        @update:quality="onSetQuality"
         @update:speed="onSetSpeed"
         @update:auto-next="v => { state.autoNext.value = v }"
         @update:auto-skip="v => { state.autoSkip.value = v }"
+        @update:hacker-mode="v => { state.hackerMode.value = v }"
       />
     </div>
 
@@ -228,15 +264,21 @@ import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
 import PlayerControlBar from './PlayerControlBar.vue'
 import SourcePanel from './SourcePanel.vue'
+import EpisodesPanel from './EpisodesPanel.vue'
 import PlaybackSettingsMenu from './PlaybackSettingsMenu.vue'
 import SubtitlesMenu from './SubtitlesMenu.vue'
 import BrowseSubsModal from './BrowseSubsModal.vue'
 import BigPlayButton from './overlays/BigPlayButton.vue'
+import BufferingOverlay from './overlays/BufferingOverlay.vue'
+import DebugHud from './overlays/DebugHud.vue'
 import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
 
+import { useSkipTimes } from '@/composables/useSkipTimes'
 import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
+import { usePlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
+import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlayer/skipSegments'
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
 import { useProviderResolver } from '@/composables/unifiedPlayer/useProviderResolver'
 import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'
@@ -244,6 +286,7 @@ import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
 import { providerById } from './providerRegistry'
 
 import type { EpisodeOption } from '@/components/player/EpisodeSelector.types'
+import type { StreamResult } from '@/types/unifiedPlayer'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -263,11 +306,12 @@ const props = defineProps<{
   theater: boolean
   isHentai?: boolean
   initialEpisode?: number
+  /** Shikimori id (= MAL id) for AniSkip skip-times. Absent ⇒ no skip UI. */
+  malId?: string | number
 }>()
 
 defineEmits<{
   (e: 'toggle-theater'): void
-  (e: 'open-episodes'): void
 }>()
 
 // ─── Core state ──────────────────────────────────────────────────────────────
@@ -329,12 +373,80 @@ const episodes = ref<EpisodeOption[]>([])
 const selectedEpisode = ref<EpisodeOption | null>(null)
 const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
+const currentStream = ref<StreamResult | null>(null)
 const isResolving = ref(false)
 
 // Monotonically-increasing request token — only the latest resolve applies.
 // Prevents a stale audio/lang/server re-resolve from clobbering a concurrent
 // provider-change full re-list+resolve that started after it.
 let resolveToken = 0
+
+// ─── Quality ladder ──────────────────────────────────────────────────────────
+// HLS: data-driven from hls.js levels. MP4: only when the provider returned
+// multiple URL-valued qualities. Single-variant streams stay Auto-only (D-05).
+// NOTE: declared after currentStream — watch() below evaluates its computed
+// source eagerly during setup.
+
+const mp4Qualities = computed(() => {
+  const s = currentStream.value
+  if (!s || s.type !== 'mp4' || !s.qualities) return []
+  return s.qualities.filter(
+    (q) => typeof q.value === 'string' && /^(https?:|\/)/.test(q.value as string),
+  )
+})
+
+const qualities = computed(() => {
+  if (mp4Qualities.value.length > 1) return ['Auto', ...mp4Qualities.value.map((q) => q.label)]
+  return ['Auto', ...engine.levels.value.map((l) => l.label)]
+})
+
+const qualityDisplay = computed(() =>
+  state.quality.value === 'Auto' && engine.currentLevelLabel.value
+    ? `Auto · ${engine.currentLevelLabel.value}`
+    : state.quality.value,
+)
+
+// New stream may not offer the previously-chosen quality — snap back to Auto.
+// If it DOES offer it, re-apply: each load() creates a fresh hls instance
+// that starts at auto, so a pinned level must be re-pinned.
+watch(qualities, (qs) => {
+  if (!qs.includes(state.quality.value)) {
+    state.quality.value = 'Auto'
+  } else if (state.quality.value !== 'Auto' && mp4Qualities.value.length === 0) {
+    engine.setLevel(state.quality.value)
+  }
+})
+
+function swapMp4Source(url: string) {
+  const v = videoRef.value
+  if (!v) return
+  const t = v.currentTime
+  const wasPlaying = !v.paused
+  v.addEventListener(
+    'loadedmetadata',
+    () => {
+      v.currentTime = t
+      if (wasPlaying) void v.play()
+    },
+    { once: true },
+  )
+  v.src = url
+}
+
+function onSetQuality(q: string) {
+  state.quality.value = q
+  const mq = mp4Qualities.value.find((x) => x.label === q)
+  if (mq) {
+    swapMp4Source(mq.value as string)
+    return
+  }
+  if (q === 'Auto' && currentStream.value?.type === 'mp4') {
+    // mp4 has no auto ladder — Auto = the originally-resolved URL
+    swapMp4Source(currentStream.value.url)
+    return
+  }
+  engine.setLevel(q)
+}
 
 // Initialize selectedEpisode from initialEpisode or anime.ep
 function initSelectedEpisode() {
@@ -392,6 +504,9 @@ async function loadEpisodesAndStream() {
     if (token !== resolveToken) return // superseded
 
     resolvedServers.value = stream.servers ?? []
+    // Set BEFORE the await: a superseded resolve must never clobber the
+    // winner's stream descriptor after resuming from engine.load.
+    currentStream.value = stream
     await engine.load(stream)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
@@ -445,6 +560,20 @@ watch(
 function onSelectProvider(id: string) {
   state.setProvider(id, '')
   // loadEpisodesAndStream fires via the provider watcher above
+}
+
+// ─── Episode selection (episodes drawer) ─────────────────────────────────────
+// Resolve DIRECTLY (mirrors goToNextEpisode) — the combo/episode watcher
+// early-returns while isResolving and would silently swallow a click made
+// during an in-flight resolve. resolveStreamForEpisode sets isResolving
+// synchronously, so the watcher's deferred fire is deduped, and resolveToken
+// arbitrates any race with the in-flight request.
+
+function onSelectEpisode(ep: EpisodeOption) {
+  openMenu.value = null
+  if (selectedEpisode.value?.number === ep.number) return
+  selectedEpisode.value = ep
+  void resolveStreamForEpisode(ep)
 }
 
 // ─── Retry ───────────────────────────────────────────────────────────────────
@@ -505,6 +634,157 @@ function onVideoPause() {
   state.playing.value = false
   stopRaf()
 }
+
+// ─── Intro/outro skip (AniSkip via catalog proxy) ────────────────────────────
+
+const epNumber = computed(() => selectedEpisode.value?.number ?? null)
+const malIdRef = computed(() => props.malId ?? null)
+const { opening, ending } = useSkipTimes(malIdRef, epNumber)
+
+const chapters = computed(() =>
+  segmentsToChapters(opening.value, ending.value, duration.value),
+)
+
+const skipTarget = computed(() =>
+  activeSkipSegment(currentTime.value, opening.value, ending.value),
+)
+
+function onSkipSegment() {
+  const v = videoRef.value
+  const target = skipTarget.value
+  if (!v || !target) return
+  v.currentTime = target.end
+  writeProgress()
+}
+
+// Auto-skip intro (settings toggle) — once per episode view so a manual
+// seek back into the OP isn't fought.
+let autoSkippedEp: number | null = null
+watch(epNumber, () => {
+  autoSkippedEp = null
+})
+watch(currentTime, (t) => {
+  if (!state.autoSkip.value) return
+  const op = opening.value
+  if (!op) return
+  const ep = epNumber.value
+  if (ep === null || autoSkippedEp === ep) return
+  if (t >= op.start && t < op.end - 1) {
+    autoSkippedEp = ep
+    const v = videoRef.value
+    if (v) {
+      v.currentTime = op.end
+      writeProgress()
+    }
+  }
+})
+
+// ─── Buffering indicator ──────────────────────────────────────────────────────
+// waiting/seeking → on; playing/canplay → off. A 150ms grace window keeps
+// instant in-buffer seeks from flashing the ring. `seeked` only clears when
+// the element actually has decodable data (readyState ≥ 3) — otherwise the
+// following `waiting` keeps the ring up. We deliberately do NOT bind
+// `stalled`: browsers fire it spuriously when the download is throttled
+// because the buffer is FULL, and nothing would clear the ring during healthy
+// playback. `timeupdate` self-heals any false positive.
+
+const isBuffering = ref(false)
+const showBuffering = ref(false)
+let bufferingTimer: ReturnType<typeof setTimeout> | null = null
+
+function setBuffering(on: boolean) {
+  if (on === isBuffering.value) return
+  isBuffering.value = on
+  if (on) {
+    bufferingTimer = setTimeout(() => {
+      showBuffering.value = true
+    }, 150)
+  } else {
+    if (bufferingTimer) {
+      clearTimeout(bufferingTimer)
+      bufferingTimer = null
+    }
+    showBuffering.value = false
+  }
+}
+
+function onBufferStart() {
+  setBuffering(true)
+}
+
+function onBufferEnd() {
+  setBuffering(false)
+}
+
+function onSeeked() {
+  const v = videoRef.value
+  if (v && v.readyState >= 3) setBuffering(false)
+}
+
+// Self-heal: if time is advancing with decodable data, we are NOT buffering.
+function onTimeUpdate() {
+  const v = videoRef.value
+  if (isBuffering.value && v && v.readyState >= 3 && !v.seeking) {
+    setBuffering(false)
+  }
+}
+
+// A dead source must surface the error overlay, not an endless spinner.
+// Covers the native/mp4 path (e.g. upstream CDN 404 → MEDIA_ERR_SRC_NOT_SUPPORTED).
+function onVideoError() {
+  const v = videoRef.value
+  if (!v?.error || isResolving.value) return
+  setBuffering(false)
+  sourceError.value = 'Stream unavailable'
+}
+
+// Same for the hls.js path: the engine flags unrecoverable fatals.
+watch(engine.fatal, (f) => {
+  if (f) {
+    setBuffering(false)
+    sourceError.value = 'Stream unavailable'
+  }
+})
+
+// ─── Hacker mode (debug HUD) ──────────────────────────────────────────────────
+
+const statsEnabled = computed(() => state.hackerMode.value)
+const { stats: playbackStats } = usePlaybackStats(videoRef, statsEnabled)
+
+// HUD shows while paused or while actively buffering/seeking. Uses
+// showBuffering (post-150ms-grace) so instant seeks don't flash it.
+const hudVisible = computed(
+  () => state.hackerMode.value && (!state.playing.value || showBuffering.value),
+)
+
+// Scrub-bar heatmap segments — size-tinted (green <300KB, amber <1MB, red ≥1MB).
+const fragOverlay = computed(() => {
+  if (!state.hackerMode.value) return []
+  const dur = duration.value
+  if (!dur) return []
+  return engine.fragStats.value.map((f) => ({
+    startPct: (f.start / dur) * 100,
+    widthPct: (f.duration / dur) * 100,
+    tone: (f.size < 300_000 ? 'ok' : f.size < 1_000_000 ? 'warn' : 'bad') as 'ok' | 'warn' | 'bad',
+    label: `${Math.round(f.size / 1024)} KB · ${Math.round(f.loadMs)} ms`,
+  }))
+})
+
+// Compact line set for the settings-menu mini-stats section.
+const debugStats = computed(() => {
+  if (!state.hackerMode.value) return null
+  const bwv = engine.bandwidthEstimate.value
+  const frs = engine.fragStats.value
+  const last = frs[frs.length - 1]
+  return {
+    bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
+    buffer: `+${playbackStats.value.bufferAheadSec.toFixed(1)}s / −${playbackStats.value.bufferBehindSec.toFixed(1)}s`,
+    level:
+      engine.currentLevelLabel.value ||
+      (currentStream.value?.type === 'mp4' ? 'mp4' : '—'),
+    frag: last ? `${Math.round(last.size / 1024)} KB · ${Math.round(last.loadMs)} ms` : '—',
+  }
+})
 
 // ─── Next episode logic ───────────────────────────────────────────────────────
 
@@ -571,6 +851,8 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
     )
     if (token !== resolveToken) return // superseded
     resolvedServers.value = stream.servers ?? []
+    // Set BEFORE the await — see loadEpisodesAndStream.
+    currentStream.value = stream
     await engine.load(stream)
   } catch (err: unknown) {
     if (token !== resolveToken) return // superseded
@@ -598,7 +880,7 @@ async function resolveStreamForCurrentEpisode() {
 
 // ─── Menu state ───────────────────────────────────────────────────────────────
 
-type MenuKind = 'source' | 'settings' | 'subs' | null
+type MenuKind = 'source' | 'settings' | 'subs' | 'episodes' | null
 const openMenu = ref<MenuKind>(null)
 const browseOpen = ref(false)
 
@@ -796,6 +1078,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopRaf()
   clearNextEpTimer()
+  if (bufferingTimer) clearTimeout(bufferingTimer)
   window.removeEventListener('keydown', onKeydown)
 })
 </script>

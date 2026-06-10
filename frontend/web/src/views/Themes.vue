@@ -21,13 +21,8 @@
           :disabled="syncing"
           @click="triggerSync"
         >
-          <svg v-if="syncing" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-          </svg>
-          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+          <Spinner v-if="syncing" size="sm" tone="mono" />
+          <RefreshCw v-else class="size-4" />
           {{ syncing ? $t('themes.syncing', { progress: syncProgress }) : $t('themes.syncButton') }}
         </button>
       </div>
@@ -78,10 +73,7 @@
 
       <!-- Loading -->
       <div v-if="loading" class="flex justify-center py-20">
-        <svg class="w-10 h-10 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
+        <Spinner size="lg" />
       </div>
 
       <!-- Error -->
@@ -93,9 +85,7 @@
 
       <!-- Empty state -->
       <div v-else-if="themes.length === 0" class="text-center py-20">
-        <svg class="w-16 h-16 mx-auto text-white/10 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-        </svg>
+        <Music class="size-16 mx-auto text-white/10 mb-4" />
         <p class="text-white/60">{{ $t('themes.noThemes') }}</p>
         <p v-if="authStore.isAdmin" class="text-white/30 text-sm mt-2">{{ $t('themes.syncHint') }}</p>
       </div>
@@ -115,11 +105,12 @@
 </template>
 
 <script setup lang="ts">
+import { Music, RefreshCw } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { themesApi, adminThemesApi } from '@/api/client'
-import { ButtonGroup } from '@/components/ui'
+import { ButtonGroup, Spinner } from '@/components/ui'
 import ThemeCard from '@/components/themes/ThemeCard.vue'
 
 const { t } = useI18n()

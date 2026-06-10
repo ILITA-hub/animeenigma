@@ -7,9 +7,8 @@
         useWatchTogetherRoom composable).
       - The `(you)` badge target is read from useAuthStore() so the parent
         doesn't need to plumb the local user-id through.
-      - Avatar fallback is a CSS-only first-letter chip (no external util
-        import — avatars in chat panels are rendered tiny enough that the
-        existing imageFallback util is overkill).
+      - Avatars render through the DS Avatar primitive (initials fallback,
+        image error handling, brand-cyan tint).
 
     UI-SPEC contract (CLAUDE.md):
       - Tailwind utility classes only
@@ -35,20 +34,11 @@
         data-testid="wt-member-entry"
         class="flex items-center gap-2 p-2 rounded-md hover:bg-foreground/5"
       >
-        <img
-          v-if="m.meta.avatar_url"
-          :src="m.meta.avatar_url"
-          :alt="m.meta.username"
-          class="w-8 h-8 rounded-full object-cover flex-shrink-0"
-          loading="lazy"
+        <Avatar
+          :src="m.meta.avatar_url || undefined"
+          :name="m.meta.username"
+          size="sm"
         />
-        <span
-          v-else
-          aria-hidden="true"
-          class="w-8 h-8 rounded-full bg-cyan-500/80 text-white flex items-center justify-center text-sm font-semibold flex-shrink-0"
-        >
-          {{ initialFor(m.meta.username) }}
-        </span>
 
         <span class="font-medium truncate min-w-0">{{ m.meta.username }}</span>
 
@@ -75,6 +65,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import Avatar from '@/components/ui/Avatar.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { Member } from '@/api/watch-together'
 
@@ -87,10 +78,4 @@ const { t } = useI18n()
 
 const authStore = useAuthStore()
 const selfUserId = computed(() => authStore.user?.id ?? '')
-
-function initialFor(username: string): string {
-  // Empty string falls back to '?' so the fallback chip never collapses to 0×0.
-  const first = (username ?? '').trim().charAt(0)
-  return first ? first.toUpperCase() : '?'
-}
 </script>

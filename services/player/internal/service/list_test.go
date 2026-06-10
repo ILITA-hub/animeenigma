@@ -77,7 +77,7 @@ func setupListServiceWithRecsTestDB(t *testing.T, recsRepo recsRepoForListServic
 	progressRepo := repo.NewProgressRepository(db)
 	log, err := logger.New(logger.Config{Level: "error", Development: false})
 	require.NoError(t, err)
-	svc := NewListService(listRepo, activityRepo, prefRepo, progressRepo, nil, recsRepo, cache, log)
+	svc := NewListService(listRepo, activityRepo, prefRepo, progressRepo, nil, recsRepo, cache, nil, log)
 	return svc, db
 }
 

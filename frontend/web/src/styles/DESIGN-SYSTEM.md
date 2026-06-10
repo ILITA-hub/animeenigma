@@ -43,6 +43,7 @@ Defined as `:root` foundation vars (not in `@theme`): `--surface-2 #161623`, `--
 3. **Cascade rules are load-bearing** — `.cta-*` stays inside `@layer components`; `.spotlight-frame` / `.shuffle-deck` / `.glass-card` stay UNLAYERED. Don't "tidy" them. (Ref: `reference_tailwind_v4_css_cascade.md`.)
 4. **Smoke-test i18n key paths** in-browser when changing `t(...)` paths.
 5. **Verify cascade/visual changes in a real browser**, not jsdom.
+6. **Score glyphs** — AnimeEnigma scores (site rating, user reviews, list scores, theme votes) render the cyan ◆ via the `ScoreDiamond` primitive (`components/ui/ScoreDiamond.vue`); the amber lucide `Star` is reserved for Shikimori/MAL scores. Never render a site score with a star or an inline diamond SVG.
 
 ## Type / spacing / radius / elevation
 

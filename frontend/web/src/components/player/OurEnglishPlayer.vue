@@ -6,13 +6,10 @@
     </div>
 
     <!-- Provider chain exhausted -->
-    <div
-      v-else-if="!available"
-      class="text-center py-16 text-white/60"
-    >
-      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
+    <EmptyState v-else-if="!available" size="lg">
+      <template #icon><Video class="size-12 opacity-50" /></template>
       {{ $t('player.ourenglish.unavailable') }}
-    </div>
+    </EmptyState>
 
     <!-- Main content -->
     <div v-else class="flex flex-col gap-4">
@@ -171,7 +168,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Video, Play, List, SlidersHorizontal, Captions, CircleAlert } from 'lucide-vue-next'
-import { Spinner } from '@/components/ui'
+import { Spinner, EmptyState } from '@/components/ui'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'

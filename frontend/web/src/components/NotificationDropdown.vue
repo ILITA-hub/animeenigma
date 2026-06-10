@@ -8,15 +8,10 @@
     <!-- Body: list region (scrolls) -->
     <div class="max-h-[420px] overflow-y-auto" role="region">
       <!-- Empty state -->
-      <div
-        v-if="store.notifications.length === 0"
-        class="flex flex-col items-center justify-center text-center py-10 px-6 text-white/40"
-      >
-        <svg class="w-10 h-10 mb-3 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" />
-        </svg>
-        <p class="text-sm">{{ $t('notifications.dropdown.empty') }}</p>
-      </div>
+      <EmptyState v-if="store.notifications.length === 0" size="sm" class="text-sm">
+        <template #icon><Bell class="size-10" /></template>
+        {{ $t('notifications.dropdown.empty') }}
+      </EmptyState>
 
       <!-- Notification list -->
       <ul v-else class="divide-y divide-white/5">
@@ -59,6 +54,8 @@
  *
  * Phase 3 — workstream: notifications.
  */
+import { Bell } from 'lucide-vue-next'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { resolveRenderer } from '@/lib/notification-renderers'
 import Button from '@/components/ui/Button.vue'

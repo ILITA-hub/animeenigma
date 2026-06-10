@@ -30,9 +30,7 @@
               aria-label="Close"
               @click="handleClose"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X class="size-5" aria-hidden="true" />
             </button>
           </div>
 
@@ -53,6 +51,7 @@
 
 <script setup lang="ts">
 import { computed, toRef } from 'vue'
+import { X } from 'lucide-vue-next'
 import {
   DialogRoot,
   DialogPortal,

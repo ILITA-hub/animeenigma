@@ -27,9 +27,7 @@
       :aria-label="t('spotlight.prevSlide')"
       @click="$emit('prev')"
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
+      <ChevronLeft class="size-5" aria-hidden="true" />
     </button>
 
     <!-- Chevron NEXT — 44×44 touch target wraps the 36×36 visual pill -->
@@ -39,15 +37,14 @@
       :aria-label="t('spotlight.nextSlide')"
       @click="$emit('next')"
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-      </svg>
+      <ChevronRight class="size-5" aria-hidden="true" />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 defineEmits<{
   (e: 'prev'): void

@@ -40,6 +40,8 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { UserPlus } from 'lucide-vue-next'
+import { Spinner } from '@/components/ui'
 
 import { createRoom } from '@/api/watch-together'
 import type { PlayerKind } from '@/api/watch-together'
@@ -163,27 +165,8 @@ async function onClick(): Promise<void> {
     class="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
     @click="onClick"
   >
-    <span
-      v-if="loading"
-      aria-hidden="true"
-      class="inline-block w-4 h-4 border-2 border-cyan-300 border-t-transparent rounded-full animate-spin"
-    />
-    <svg
-      v-else
-      aria-hidden="true"
-      class="w-4 h-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="8.5" cy="7" r="4" />
-      <line x1="20" y1="8" x2="20" y2="14" />
-      <line x1="23" y1="11" x2="17" y2="11" />
-    </svg>
+    <Spinner v-if="loading" size="sm" tone="mono" aria-hidden="true" />
+    <UserPlus v-else aria-hidden="true" class="size-4" />
     {{ t('watch_together.invite_button_label') }}
   </button>
 </template>

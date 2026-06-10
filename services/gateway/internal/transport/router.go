@@ -191,6 +191,13 @@ func NewRouterWithCleanup(
 		// (was missing, so the page 404'd at the gateway).
 		r.HandleFunc("/raw-library", proxyHandler.ProxyToWeb)
 		r.HandleFunc("/raw-library/*", proxyHandler.ProxyToWeb)
+
+		// Gacha (Лудка) admin SPA routes (/admin/gacha — cards/groups/banners
+		// management pages, Phase 5 UI) — same fall-through as /recs,
+		// /collections, /feedback above. Auth is already enforced by the
+		// surrounding /admin group's JWT + AdminRoleMiddleware.
+		r.HandleFunc("/gacha", proxyHandler.ProxyToWeb)
+		r.HandleFunc("/gacha/*", proxyHandler.ProxyToWeb)
 	})
 
 	// API routes
@@ -488,6 +495,22 @@ func NewRouterWithCleanup(
 		// The internal credit endpoint (/internal/gacha/credit) is NOT
 		// registered here — Docker-network-only (D-05).
 		r.Route("/gacha", func(r chi.Router) {
+			// Public card/banner art (Phase 2). Browsers load these via <img>
+			// (no JWT header possible) — unauthenticated by design: keys are
+			// unguessable UUIDs and the content is anime character art. The
+			// gacha service validates the key shape and serves with nosniff.
+			r.Get("/images/*", proxyHandler.ProxyToGacha)
+
+			// Admin content API (Phase 2) — ALWAYS admin-gated, independent
+			// of the GachaAdminOnly dark-ship flag: these are admin tools,
+			// full stop. The gacha service re-validates JWT+admin downstream.
+			r.Group(func(r chi.Router) {
+				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
+				r.Use(userRateLimit)
+				r.Use(AdminRoleMiddleware)
+				r.HandleFunc("/admin/*", proxyHandler.ProxyToGacha)
+			})
+
 			r.Group(func(r chi.Router) {
 				r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 				r.Use(userRateLimit)
@@ -496,6 +519,15 @@ func NewRouterWithCleanup(
 					r.Use(AdminRoleMiddleware)
 				}
 				r.Get("/wallet", proxyHandler.ProxyToGacha)
+
+				// Player pull engine (Phase 3): active banners (+my pity),
+				// the pull itself, and the collection album.
+				r.Get("/banners", proxyHandler.ProxyToGacha)
+				r.Post("/banners/{id}/pull", proxyHandler.ProxyToGacha)
+				r.Get("/collection", proxyHandler.ProxyToGacha)
+
+				// Daily streak claim (Phase 4).
+				r.Post("/daily", proxyHandler.ProxyToGacha)
 			})
 		})
 

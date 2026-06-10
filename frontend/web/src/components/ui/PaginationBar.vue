@@ -9,9 +9,7 @@
       :class="{ 'opacity-40 cursor-not-allowed': currentPage <= 1 }"
       @click="$emit('update:currentPage', currentPage - 1)"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
+      <ChevronLeft class="size-4" aria-hidden="true" />
     </button>
 
     <!-- Page buttons -->
@@ -39,15 +37,14 @@
       :class="{ 'opacity-40 cursor-not-allowed': currentPage >= totalPages }"
       @click="$emit('update:currentPage', currentPage + 1)"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-      </svg>
+      <ChevronRight class="size-4" aria-hidden="true" />
     </button>
   </nav>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 const props = defineProps<{
   currentPage: number

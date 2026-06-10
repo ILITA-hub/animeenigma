@@ -27,9 +27,7 @@
           :aria-label="$t('nav.scheduleLink')"
           class="btn-ghost-accent"
         >
-          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+          <Calendar class="size-5 flex-shrink-0" aria-hidden="true" />
           <span class="hidden sm:inline">{{ $t('nav.schedule') }}</span>
         </router-link>
       </div>
@@ -77,9 +75,9 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="ongoingAnime.length === 0" class="text-center py-8 text-muted-foreground">
+          <EmptyState v-if="ongoingAnime.length === 0" size="sm">
             {{ $t('home.noOngoing') }}
-          </div>
+          </EmptyState>
         </HomeColumn>
 
         <!-- Top Anime Column -->
@@ -102,9 +100,9 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="topAnime.length === 0" class="text-center py-8 text-muted-foreground">
+          <EmptyState v-if="topAnime.length === 0" size="sm">
             {{ $t('home.noData') }}
-          </div>
+          </EmptyState>
         </HomeColumn>
 
         <!-- Announcements Column -->
@@ -127,9 +125,9 @@
             @touchmove="onHomeTouchmove"
             @touchend="onHomeTouchend"
           />
-          <div v-if="announcedAnime.length === 0" class="text-center py-8 text-muted-foreground">
+          <EmptyState v-if="announcedAnime.length === 0" size="sm">
             {{ $t('home.noAnnounced') }}
-          </div>
+          </EmptyState>
         </HomeColumn>
 
       </div>
@@ -165,6 +163,7 @@
 </template>
 
 <script setup lang="ts">
+import { Calendar } from 'lucide-vue-next'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -173,7 +172,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { useHomeStore } from '@/stores/home'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useContextMenu } from '@/composables/useContextMenu'
-import { SearchAutocomplete } from '@/components/ui'
+import { SearchAutocomplete, EmptyState } from '@/components/ui'
 import { AnimeContextMenu } from '@/components/anime'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import LastUpdates from '@/components/LastUpdates.vue'

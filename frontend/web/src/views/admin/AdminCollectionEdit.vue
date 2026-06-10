@@ -38,7 +38,7 @@
 
       <!-- Loading -->
       <div v-if="isLoading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <template v-else>
@@ -242,6 +242,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
 import {
   adminApi,
   animeApi,
@@ -250,8 +251,10 @@ import {
   type CreateCollectionRequest,
   type UpdateCollectionRequest,
 } from '@/api/client'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
+const { confirm } = useConfirm()
 const route = useRoute()
 const router = useRouter()
 
@@ -404,7 +407,13 @@ async function onAddItem(r: AnimeSearchResult) {
 }
 
 async function onRemoveItem(item: CollectionItem) {
-  if (!confirm(t('admin.collections.itemRemove') + '?')) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('admin.collections.itemRemove') + '?',
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   try {
     await adminApi.removeCollectionItem(id.value, item.anime_id)
     await load()

@@ -27,26 +27,26 @@
             :to="`/anime/${s.anime_id}`"
             class="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 backdrop-blur-sm transition group min-w-0"
           >
-            <!-- Avatar circle (hashed deterministic color) -->
-            <div
-              class="relative flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white"
-              :class="avatarBgClass(s.username)"
+            <!-- Avatar circle (hashed deterministic color via fallbackClass) -->
+            <Avatar
+              :name="s.username"
+              size="md"
+              :fallback-class="`${avatarBgClass(s.username)} text-white`"
             >
-              {{ s.username.slice(0, 1).toUpperCase() }}
               <!-- Pulsing LIVE indicator dot (visually hidden text for a11y) -->
               <span
                 aria-hidden="true"
-                class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-success ring-2 ring-[#0a0e1a] animate-pulse"
+                class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-success ring-2 ring-background animate-pulse"
               />
               <span class="sr-only">{{
                 t('spotlight.nowWatching.liveBadge')
               }}</span>
-            </div>
+            </Avatar>
 
             <!-- Bigger anime poster (56x84) -->
             <img
               v-if="s.poster_url"
-              :src="s.poster_url"
+              :src="cardPosterUrl(s.poster_url, 128)"
               alt=""
               class="w-14 object-cover rounded-md flex-shrink-0"
               style="height: 84px"
@@ -99,9 +99,11 @@
  */
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle } from '@/utils/title'
+import Avatar from '@/components/ui/Avatar.vue'
 import SpotlightBackdrop from '../SpotlightBackdrop.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
 import type { NowWatchingData } from '@/types/spotlight'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 defineProps<{ data: NowWatchingData }>()
 const { t } = useI18n()

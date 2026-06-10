@@ -77,7 +77,7 @@
         </form>
 
         <div v-if="searching" class="flex justify-center py-6">
-          <div class="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+          <Spinner size="md" />
         </div>
         <div v-else-if="searchResults.length === 0" class="glass-card p-4 text-white/60 text-sm">
           {{ $t('player.adminLibrary.search.empty') }}
@@ -267,6 +267,10 @@ import { adminLibraryApi, animeApi } from '@/api/client'
 import type { Job, JobStatus, Release, LibraryHealth, CreateJobPayload } from '@/types/library'
 import Badge from '@/components/ui/Badge.vue'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
+import { useConfirm } from '@/composables/useConfirm'
+
+const { confirm } = useConfirm()
 
 // Phase 5 (LIB-09): RawLibrary admin view.
 //
@@ -464,7 +468,13 @@ async function queueJob(release: Release) {
 
 async function cancelJob(job: Job) {
   const needsConfirm = ['downloading', 'encoding', 'uploading'].includes(job.status)
-  if (needsConfirm && !window.confirm(`Cancel: ${job.title}?`)) {
+  if (needsConfirm && !(await confirm({
+    title: 'Cancel job?',
+    description: `Cancel: ${job.title}?`,
+    confirmText: 'Cancel job',
+    cancelText: 'Keep',
+    variant: 'destructive',
+  }))) {
     return
   }
   try {

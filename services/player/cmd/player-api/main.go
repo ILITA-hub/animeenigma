@@ -368,7 +368,21 @@ func main() {
 	// Phase 13 (REC-INFRA-03): recsRepo + redisCache wired so MarkEpisodeWatched
 	// can synchronously update s6_seed_* and bust recs:user:{id}:topN when a
 	// completion qualifies (status='completed' AND score>=7).
-	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, recsRepo, redisCache, log)
+	// Phase 4 (gacha): construct the non-blocking credit producer. Start before
+	// ListService so EpisodeWatched/TitleCompleted can fire immediately once the
+	// service is live. defer Stop so the worker drains any queued credits on
+	// graceful shutdown before the process exits.
+	gachaProducer := service.NewGachaCreditProducer(
+		cfg.Gacha.InternalURL,
+		cfg.Gacha.CreditEpisode,
+		cfg.Gacha.CreditTitle,
+		cfg.Gacha.Enabled,
+		log,
+	)
+	gachaProducer.Start()
+	defer gachaProducer.Stop()
+
+	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, recsRepo, redisCache, gachaProducer, log)
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(listRepo, activityRepo, log)
 

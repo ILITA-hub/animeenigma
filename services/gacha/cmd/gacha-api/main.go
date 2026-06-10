@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +17,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/libs/tracing"
 	gormtrace "github.com/ILITA-hub/animeenigma/libs/tracing/gormtrace"
+	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/handler"
@@ -57,7 +59,12 @@ func main() {
 		metrics.StartDBPoolCollector(sqlDB, 15*time.Second)
 	}
 
-	if err := db.AutoMigrate(&domain.Wallet{}, &domain.LedgerEntry{}); err != nil {
+	if err := db.AutoMigrate(
+		&domain.Wallet{}, &domain.LedgerEntry{},
+		&domain.Card{}, &domain.Group{}, &domain.CardGroup{},
+		&domain.Banner{}, &domain.BannerCard{},
+		&domain.CollectionEntry{}, &domain.PityCounter{},
+	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
@@ -70,14 +77,42 @@ func main() {
 		log.Fatalw("failed to create ledger dedup index", "error", err)
 	}
 
+	// MinIO storage for gacha card/banner art.
+	storage, err := videoutils.NewStorage(cfg.Storage)
+	if err != nil {
+		log.Fatalw("failed to init minio storage", "error", err)
+	}
+	if err := storage.EnsureBucket(context.Background()); err != nil {
+		log.Fatalw("failed to ensure gacha-cards bucket", "error", err)
+	}
+	log.Infow("gacha-cards bucket ensured", "bucket", cfg.Storage.BucketName)
+
 	walletRepo := repo.NewWalletRepository(db.DB)
-	walletSvc := service.NewWalletService(walletRepo, cfg.Economy.StarterBonus, cfg.Enabled, log)
+	walletSvc := service.NewWalletService(
+		walletRepo,
+		cfg.Economy.StarterBonus,
+		cfg.Economy.DailyBase,
+		cfg.Economy.DailyStreakStep,
+		cfg.Economy.DailyStreakCap,
+		cfg.Enabled,
+		log,
+	)
+
+	contentRepo := repo.NewContentRepository(db.DB)
+	bannerRepo := repo.NewBannerRepository(db.DB)
+	pullRepo := repo.NewPullRepository(db.DB)
+	contentSvc := service.NewContentService(contentRepo, bannerRepo)
+	imageSvc := service.NewImageService(&storageAdapter{storage})
+	pullSvc := service.NewPullService(pullRepo, bannerRepo, contentRepo, cfg.Economy, service.NewSecureRand(), log)
 
 	walletHandler := handler.NewWalletHandler(walletSvc, log)
 	internalHandler := handler.NewInternalHandler(walletSvc, log)
+	adminHandler := handler.NewAdminHandler(contentSvc, imageSvc, log)
+	imagesHandler := handler.NewImagesHandler(storage, log)
+	pullHandler := handler.NewPullHandler(pullSvc, log)
 
 	metricsCollector := metrics.NewCollector("gacha")
-	router := transport.NewRouter(walletHandler, internalHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(walletHandler, internalHandler, adminHandler, imagesHandler, pullHandler, cfg.JWT, log, metricsCollector)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
@@ -109,4 +144,13 @@ func main() {
 		log.Fatalw("server forced to shutdown", "error", err)
 	}
 	log.Info("gacha service stopped")
+}
+
+// storageAdapter adapts *videoutils.Storage to the service.objectStore interface.
+// The real Upload returns (*VideoFile, error); the interface only needs error.
+type storageAdapter struct{ s *videoutils.Storage }
+
+func (a *storageAdapter) Upload(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	_, err := a.s.Upload(ctx, key, r, size, contentType)
+	return err
 }

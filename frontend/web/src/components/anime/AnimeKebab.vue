@@ -22,11 +22,7 @@
     @keydown.enter.prevent="onActivate"
     @keydown.space.prevent="onActivate"
   >
-    <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-      <circle cx="10" cy="4" r="1.5" />
-      <circle cx="10" cy="10" r="1.5" />
-      <circle cx="10" cy="16" r="1.5" />
-    </svg>
+    <EllipsisVertical class="size-4" aria-hidden="true" />
   </button>
 </template>
 
@@ -34,6 +30,7 @@
 import { ref, onMounted, computed } from 'vue'
 import type { HTMLAttributes } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { EllipsisVertical } from 'lucide-vue-next'
 import { cn } from '@/lib/utils'
 
 defineOptions({ inheritAttrs: false })

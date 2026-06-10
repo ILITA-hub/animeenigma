@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { AudioKind, TrackLang, Combo } from '@/types/unifiedPlayer'
 
 export function usePlayerState() {
@@ -25,9 +25,20 @@ export function usePlayerState() {
   const subBg = ref(45)
   const subOffset = ref(0)
 
+  // Hacker mode (debug HUD) — persisted, default off.
+  const HACKER_KEY = 'pl_hacker_mode'
+  const hackerMode = ref(
+    typeof localStorage !== 'undefined' && localStorage.getItem(HACKER_KEY) === '1',
+  )
+  watch(hackerMode, (on) => {
+    if (typeof localStorage === 'undefined') return
+    if (on) localStorage.setItem(HACKER_KEY, '1')
+    else localStorage.removeItem(HACKER_KEY)
+  })
+
   return {
     playing, progress, volume, muted, quality, speed, autoNext, autoSkip, combo,
-    subLang, subSize, subBg, subOffset,
+    subLang, subSize, subBg, subOffset, hackerMode,
     setAudio, setLang, setProvider, setServer, setTeam,
   }
 }

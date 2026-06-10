@@ -4,8 +4,10 @@ import { useSessions } from '@/composables/useSessions'
 import { parseUserAgent } from '@/utils/userAgent'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
+const { confirm } = useConfirm()
 const { sessions, loading, error, refresh, revoke, revokeOthers } = useSessions()
 
 onMounted(refresh)
@@ -19,7 +21,13 @@ function relative(iso: string): string {
 }
 
 async function onRevokeOthers() {
-  if (!confirm(t('profile.settings.sessions.confirmRevokeOthers'))) return
+  if (!(await confirm({
+    title: t('common.confirmTitle'),
+    description: t('profile.settings.sessions.confirmRevokeOthers'),
+    confirmText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    variant: 'destructive',
+  }))) return
   await revokeOthers()
 }
 </script>

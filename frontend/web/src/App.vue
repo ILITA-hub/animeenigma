@@ -12,9 +12,7 @@
     <!-- Error Fallback -->
     <div v-if="appError" class="min-h-screen flex items-center justify-center px-4">
       <div class="text-center max-w-md">
-        <svg class="w-16 h-16 mx-auto mb-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
+        <TriangleAlert class="size-16 mx-auto mb-4 text-pink-400" aria-hidden="true" />
         <h2 class="text-xl font-semibold text-white mb-2">Something went wrong</h2>
         <p class="text-white/60 text-sm mb-6">{{ appError.message }}</p>
         <button
@@ -58,6 +56,10 @@
     <!-- Phase 13 / UX-27: global toast renderer for optimistic-action rollbacks -->
     <Toaster />
 
+    <!-- Global promise-based confirm() host (useConfirm) — themed replacement
+         for native window.confirm(). Mounted once, like <Toaster />. -->
+    <ConfirmDialogHost />
+
     <!-- Workstream notifications / Phase 3 — slide-in toast for the latest
          undismissed notification. Mounted at App-root so it survives route
          transitions. Gated by the feature flag so VITE_NOTIFICATIONS_ENABLED=
@@ -83,6 +85,7 @@
 
 <script setup lang="ts">
 import { onMounted, onErrorCaptured, ref, watch } from 'vue'
+import { TriangleAlert } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -90,6 +93,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import Navbar from '@/components/layout/Navbar.vue'
 import FeedbackButton from '@/components/layout/FeedbackButton.vue'
 import Toaster from '@/components/ui/Toaster.vue'
+import ConfirmDialogHost from '@/components/ui/ConfirmDialogHost.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 

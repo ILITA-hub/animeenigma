@@ -14,14 +14,24 @@
       :aria-expanded="menuOpen"
       @click.prevent.stop="onKebab"
     >
-      <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-        <circle cx="10" cy="4" r="1.5" />
-        <circle cx="10" cy="10" r="1.5" />
-        <circle cx="10" cy="16" r="1.5" />
-      </svg>
+      <EllipsisVertical class="size-4" />
     </button>
 
-    <img :src="posterSrc" :alt="model.title" class="poster" loading="lazy" @error="onPosterError" />
+    <div class="poster-wrap">
+      <img
+        :src="posterSrc"
+        :alt="model.title"
+        class="poster"
+        loading="lazy"
+        @load="posterLoaded = true"
+        @error="onPosterError"
+      />
+      <!-- Glass skeleton — translucent overlay ABOVE the img so the native
+           progressive poster render shows through; fades out on @load -->
+      <Transition name="sk-fade">
+        <div v-if="!posterLoaded" class="absolute inset-0 sk-drift pointer-events-none" aria-hidden="true" data-testid="poster-skeleton" />
+      </Transition>
+    </div>
 
     <div class="body">
       <div class="title truncate" data-testid="row-title">{{ model.title }}</div>
@@ -40,24 +50,18 @@
         </template>
         <template v-if="variant !== 'announced'">
           <span v-if="model.malScore" class="chip score tabular-nums">
-            <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
+            <Star class="size-[10px]" fill="currentColor" aria-hidden="true" />
             {{ model.malScore.toFixed(1) }}
           </span>
           <span v-if="model.siteScore" class="chip score site-score tabular-nums">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M12 2l9 10-9 10L3 12z" />
-            </svg>
+            <ScoreDiamond class="size-[10px]" />
             {{ model.siteScore.toFixed(1) }}
           </span>
         </template>
       </div>
 
       <div v-if="variant === 'ongoing' && model.nextEpisode" class="next-ep" data-testid="next-ep">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        <Clock class="size-[11px]" aria-hidden="true" />
         {{ nextEpLabel }}
       </div>
     </div>
@@ -67,6 +71,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { EllipsisVertical, Star, Clock } from 'lucide-vue-next'
+import ScoreDiamond from '@/components/ui/ScoreDiamond.vue'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import type { AnimeCardModel } from '@/types/card'
 
 const props = defineProps<{
@@ -93,9 +100,24 @@ const to = computed(() =>
     : props.model.href
 )
 
-const posterFailed = ref(false)
-const posterSrc = computed(() => (!posterFailed.value && props.model.coverImage ? props.model.coverImage : '/placeholder.svg'))
-function onPosterError() { posterFailed.value = true }
+// Fallback chain: resized proxy URL → original upstream URL → placeholder
+const posterFallbackStage = ref(0)
+const posterLoaded = ref(false)
+const posterSrc = computed(() => {
+  const raw = props.model.coverImage
+  if (!raw || posterFallbackStage.value >= 2) return '/placeholder.svg'
+  if (posterFallbackStage.value === 1) return raw
+  return cardPosterUrl(raw, 128)
+})
+function onPosterError() {
+  const raw = props.model.coverImage
+  // Skip the original-URL stage when the proxied URL is the raw URL anyway
+  if (posterFallbackStage.value === 0 && raw && cardPosterUrl(raw, 128) !== raw) {
+    posterFallbackStage.value = 1
+  } else {
+    posterFallbackStage.value = 2
+  }
+}
 
 // Script-level computed labels — avoids $t() in templates (no i18n plugin in unit tests)
 const openMenuLabel = computed(() => t('contextMenu.openMenu'))
@@ -142,20 +164,33 @@ const nextEpLabel = computed(() =>
   overflow: hidden;
   flex-shrink: 0;
   align-items: start;
+  /* Skip layout/paint for rows scrolled out of the column list — cuts the
+     whole-page style/layout cost that dominated the 379ms INP click in the
+     2026-06-10 trace. Safe here: the row already clips (overflow:hidden),
+     so the implied paint containment changes nothing visually. */
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 104px;
 }
 .prow:hover { background: rgba(255, 255, 255, 0.03); }
 
-.poster {
+.poster-wrap {
+  position: relative;
   width: 56px;
-  aspect-ratio: 2 / 3;
   height: 84px;
+  aspect-ratio: 2 / 3;
   overflow: hidden;
-  object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--line);
   flex-shrink: 0;
-  position: relative;
   z-index: 1;
+  background: var(--color-surface);
+}
+
+.poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .body { min-width: 0; display: flex; flex-direction: column; gap: 4px; position: relative; z-index: 1; }

@@ -2,19 +2,14 @@
   <div class="raw-player" style="--player-accent: #22d3ee; --player-accent-rgb: 34, 211, 238;">
     <!-- Loading episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+      <Spinner size="lg" />
     </div>
 
     <!-- Provider not available -->
-    <div
-      v-else-if="!available"
-      class="text-center py-16 text-white/60"
-    >
-      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+    <EmptyState v-else-if="!available" size="lg">
+      <template #icon><Video class="size-12 opacity-50" /></template>
       {{ $t('player.raw.unavailable') }}
-    </div>
+    </EmptyState>
 
     <!-- Main content -->
     <div v-else class="flex flex-col gap-4">
@@ -26,7 +21,7 @@
           class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
         >
           <div class="text-center">
-            <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <Spinner size="lg" class="mx-auto mb-3" />
             <p class="text-white/60 text-sm">
               {{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}
             </p>
@@ -49,9 +44,7 @@
           class="absolute inset-0 flex items-center justify-center text-white/40"
         >
           <div class="text-center">
-            <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <Play class="size-16 mx-auto mb-3" aria-hidden="true" />
             <p>{{ $t('player.selectEpisode') }}</p>
           </div>
         </div>
@@ -71,10 +64,7 @@
       <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between bg-white/5 rounded-lg p-3">
         <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center w-full sm:w-auto">
           <label class="flex items-center gap-2 text-white/70 text-sm">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12h2m4 0h4M7 8h4m4 0h2" />
-            </svg>
+            <Captions class="size-4" aria-hidden="true" />
             {{ $t('player.subtitlePicker.label') }}
           </label>
           <select
@@ -100,9 +90,7 @@
             class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-100 border border-cyan-400/30 transition-colors"
             @click="otherSubsOpen = true"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h10M4 18h6" />
-            </svg>
+            <List class="size-4" aria-hidden="true" />
             {{ $t('player.otherSubs.openButton') }}
           </button>
         </div>
@@ -112,9 +100,7 @@
       <div>
         <div class="flex items-center gap-3 mb-3 flex-wrap">
           <h3 class="text-white/60 text-sm flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
+            <List class="size-4" aria-hidden="true" />
             {{ $t('player.episodesCount', { count: episodes.length }) }}
           </h3>
           <slot name="header-middle" />
@@ -140,6 +126,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Video, Play, Captions, List } from 'lucide-vue-next'
+import { Spinner, EmptyState } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'

@@ -5,6 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"image"
+	"image/jpeg"
+	_ "image/gif" // register decoder for upstream GIF posters
+	_ "image/png" // register decoder for upstream PNG posters
 	"io"
 	"net/http"
 	"net/url"
@@ -15,6 +19,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 	"github.com/minio/minio-go/v7"
+	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp" // register decoder for upstream WebP posters
 	"golang.org/x/sync/singleflight"
 )
 
@@ -36,7 +42,14 @@ var (
 	}
 
 	shikimoriAnimeIDRe = regexp.MustCompile(`/uploads/poster/animes/(\d+)/`)
+
+	// Allowed resize widths — a fixed bucket set bounds MinIO cache
+	// fragmentation to at most len(allowedWidths) variants per poster.
+	// Mirrored in frontend/web/src/composables/useImageProxy.ts.
+	allowedWidths = []int{128, 256, 384, 512, 640}
 )
+
+const resizeJPEGQuality = 80
 
 type ImageSource string
 
@@ -78,7 +91,11 @@ func NewImageProxyService(storage *videoutils.Storage, log *logger.Logger) *Imag
 	}
 }
 
-func (s *ImageProxyService) GetImage(ctx context.Context, rawURL string) (*ImageResult, error) {
+// GetImage returns the proxied image. width <= 0 serves the upstream
+// original; width > 0 is snapped up to the nearest allowed bucket and the
+// image is downscaled server-side (a 56px row thumbnail downloads ~5-20KB
+// instead of the 300-530KB Shikimori original).
+func (s *ImageProxyService) GetImage(ctx context.Context, rawURL string, width int) (*ImageResult, error) {
 	if rawURL == "" {
 		return s.placeholderResult(), nil
 	}
@@ -87,15 +104,111 @@ func (s *ImageProxyService) GetImage(ctx context.Context, rawURL string) (*Image
 		return nil, fmt.Errorf("domain not allowed")
 	}
 
-	cacheKey := posterPrefix + s.hashURL(rawURL)
+	width = snapWidth(width)
 
-	result, err, _ := s.sfGroup.Do(cacheKey, func() (interface{}, error) {
+	cacheKey := posterPrefix + s.hashURL(rawURL)
+	sfKey := cacheKey
+	if width > 0 {
+		sfKey = fmt.Sprintf("%s|w=%d", cacheKey, width)
+	}
+
+	result, err, _ := s.sfGroup.Do(sfKey, func() (interface{}, error) {
+		if width > 0 {
+			return s.resolveResized(ctx, rawURL, cacheKey, width)
+		}
 		return s.resolveImage(ctx, rawURL, cacheKey)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return result.(*ImageResult), nil
+}
+
+// snapWidth snaps a requested width UP to the nearest allowed bucket
+// (largest bucket when the request exceeds it); <= 0 means "original size".
+func snapWidth(width int) int {
+	if width <= 0 {
+		return 0
+	}
+	for _, w := range allowedWidths {
+		if width <= w {
+			return w
+		}
+	}
+	return allowedWidths[len(allowedWidths)-1]
+}
+
+// resolveResized serves posters/w{width}/{hash} from MinIO, deriving it from
+// the full-size image (which itself goes through the regular cache → upstream
+// → MAL-fallback chain) on a miss.
+func (s *ImageProxyService) resolveResized(ctx context.Context, rawURL, cacheKey string, width int) (*ImageResult, error) {
+	resizedKey := fmt.Sprintf("%sw%d/%s", posterPrefix, width, s.hashURL(rawURL))
+
+	if result, err := s.fromCache(ctx, resizedKey); err == nil {
+		return result, nil
+	}
+
+	// Share the full-size resolution with concurrent full-size/other-width
+	// requests via the same singleflight key.
+	fullI, err, _ := s.sfGroup.Do(cacheKey, func() (interface{}, error) {
+		return s.resolveImage(ctx, rawURL, cacheKey)
+	})
+	if err != nil {
+		return nil, err
+	}
+	full := fullI.(*ImageResult)
+	// Don't try to resize the 1x1 placeholder
+	if full.Source == SourcePlaceholder {
+		return full, nil
+	}
+
+	data, contentType, err := downscaleImage(full.Data, width)
+	if err != nil {
+		// Unsupported/corrupt format — serve the full-size original instead
+		s.log.Warnw("image resize failed, serving original", "url", rawURL, "width", width, "error", err)
+		return full, nil
+	}
+
+	result := &ImageResult{Data: data, ContentType: contentType, Source: full.Source}
+	s.storeInCache(ctx, resizedKey, data, contentType)
+	return result, nil
+}
+
+// downscaleImage scales src down to targetWidth (never upscales) and
+// re-encodes as JPEG. Returns the encoded bytes and content type.
+func downscaleImage(src []byte, targetWidth int) ([]byte, string, error) {
+	img, _, err := image.Decode(bytes.NewReader(src))
+	if err != nil {
+		return nil, "", fmt.Errorf("decode: %w", err)
+	}
+
+	bounds := img.Bounds()
+	srcW, srcH := bounds.Dx(), bounds.Dy()
+	if srcW <= 0 || srcH <= 0 {
+		return nil, "", fmt.Errorf("invalid dimensions %dx%d", srcW, srcH)
+	}
+
+	outW, outH := srcW, srcH
+	if srcW > targetWidth {
+		outW = targetWidth
+		outH = (srcH*targetWidth + srcW/2) / srcW
+		if outH < 1 {
+			outH = 1
+		}
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, outW, outH))
+	if outW == srcW && outH == srcH {
+		draw.Copy(dst, image.Point{}, img, bounds, draw.Src, nil)
+	} else {
+		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
+	}
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: resizeJPEGQuality}); err != nil {
+		return nil, "", fmt.Errorf("encode: %w", err)
+	}
+	return buf.Bytes(), "image/jpeg", nil
 }
 
 func (s *ImageProxyService) resolveImage(ctx context.Context, rawURL, cacheKey string) (*ImageResult, error) {

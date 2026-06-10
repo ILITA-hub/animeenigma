@@ -9,6 +9,7 @@
         :duration-sec="duration"
         :chapters="chapters"
         :still-url="stillUrl"
+        :fragments="fragments"
         @seek="emit('seek', $event)"
       />
       <span class="pl-time pl-time-dur" data-test="time-duration">{{ fmt(duration) }}</span>
@@ -17,26 +18,18 @@
     <div class="pl-btns">
 
       <!-- Play / Pause -->
-      <button
-        class="pl-icon"
+      <PlayerIconButton
         :aria-label="playing ? 'Pause' : 'Play'"
         data-test="play-pause"
         @click="emit('toggle-play')"
       >
-        <svg v-if="playing" width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M10 9v6m4-6v6" />
-        </svg>
-        <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M5 3l14 9-14 9V3z" />
-        </svg>
-      </button>
+        <Pause v-if="playing" class="size-5" aria-hidden="true" />
+        <Play v-else class="size-5" aria-hidden="true" />
+      </PlayerIconButton>
 
       <!-- −5s (hidden on mobile via CSS) — circular replay arrow w/ "5" inside -->
-      <button
-        class="pl-icon pl-skip-back"
+      <PlayerIconButton
+        class="pl-skip-back"
         aria-label="Back 5 seconds"
         data-test="seek-back"
         @click="emit('seek-rel', -5)"
@@ -46,13 +39,13 @@
           aria-hidden="true"
         >
           <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
-          <text x="12.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
+          <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
-      </button>
+      </PlayerIconButton>
 
       <!-- +5s (hidden on mobile via CSS) — circular forward arrow w/ "5" inside -->
-      <button
-        class="pl-icon pl-skip-fwd"
+      <PlayerIconButton
+        class="pl-skip-fwd"
         aria-label="Forward 5 seconds"
         data-test="seek-fwd"
         @click="emit('seek-rel', 5)"
@@ -61,43 +54,27 @@
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
           aria-hidden="true"
         >
-          <path d="M4 4v6h6M4 10a8 8 0 11-1 4" style="transform: scaleX(-1); transform-origin: center" />
-          <text x="11.5" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
+          <g style="transform: scaleX(-1); transform-origin: center">
+            <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
+          </g>
+          <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
-      </button>
+      </PlayerIconButton>
 
       <!-- Volume cluster (hover to expand) -->
       <div class="pl-vol">
-        <button
-          class="pl-icon"
+        <PlayerIconButton
           :aria-label="muted || volume === 0 ? 'Unmute' : 'Mute'"
           data-test="mute"
           @click="emit('toggle-mute')"
         >
           <!-- Muted -->
-          <svg v-if="muted || volume === 0" width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M11 5L6 9H2v6h4l5 4V5z" />
-            <path d="M23 9l-6 6m0-6l6 6" />
-          </svg>
+          <VolumeX v-if="muted || volume === 0" class="size-5" aria-hidden="true" />
           <!-- Volume medium -->
-          <svg v-else-if="volume < 0.5" width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M11 5L6 9H2v6h4l5 4V5z" />
-            <path d="M15.54 8.46a5 5 0 010 7.07" />
-          </svg>
+          <Volume1 v-else-if="volume < 0.5" class="size-5" aria-hidden="true" />
           <!-- Volume high -->
-          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
-          </svg>
-        </button>
+          <Volume2 v-else class="size-5" aria-hidden="true" />
+        </PlayerIconButton>
         <input
           type="range"
           class="pl-vol-range"
@@ -130,75 +107,48 @@
         />
         <span class="pl-srcbtn-text">{{ providerName }} · {{ audioLabel }}</span>
         <!-- Chevron down -->
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown class="size-3" aria-hidden="true" />
       </button>
 
       <!-- Subtitles (CC) -->
-      <button
-        class="pl-icon"
-        :class="{ 'is-open': openMenu === 'subs' }"
+      <PlayerIconButton
+        :active="openMenu === 'subs'"
         aria-label="Subtitles"
         data-test="toggle-subs"
         @click="emit('toggle-subs')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1zm5.5 5.2a1.8 1.8 0 100 3.6m7 0a1.8 1.8 0 110-3.6" />
-        </svg>
-      </button>
+        <Captions class="size-5" aria-hidden="true" />
+      </PlayerIconButton>
 
       <!-- Settings gear -->
-      <button
-        class="pl-icon"
-        :class="{ 'is-open': openMenu === 'settings' }"
+      <PlayerIconButton
+        :active="openMenu === 'settings'"
         aria-label="Settings"
         data-test="toggle-settings"
         @click="emit('toggle-settings')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </button>
+        <Settings class="size-5" aria-hidden="true" />
+      </PlayerIconButton>
 
       <!-- PiP (hidden on mobile via CSS) -->
-      <button
-        class="pl-icon pl-pip-btn"
+      <PlayerIconButton
+        class="pl-pip-btn"
         aria-label="Picture in Picture"
         data-test="toggle-pip"
         @click="emit('toggle-pip')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M19 11h-6a1 1 0 00-1 1v4a1 1 0 001 1h6a1 1 0 001-1v-4a1 1 0 00-1-1zM4 5h16a1 1 0 011 1v3M4 5a1 1 0 00-1 1v12a1 1 0 001 1h5" />
-        </svg>
-      </button>
+        <PictureInPicture2 class="size-5" aria-hidden="true" />
+      </PlayerIconButton>
 
       <!-- Fullscreen (hidden on mobile via CSS) -->
-      <button
-        class="pl-icon pl-fs-btn"
+      <PlayerIconButton
+        class="pl-fs-btn"
         aria-label="Fullscreen"
         data-test="toggle-fullscreen"
         @click="emit('toggle-fullscreen')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
-        </svg>
-      </button>
+        <Maximize class="size-5" aria-hidden="true" />
+      </PlayerIconButton>
 
     </div>
   </div>
@@ -206,6 +156,8 @@
 
 <script setup lang="ts">
 import PlayerScrubBar from './PlayerScrubBar.vue'
+import PlayerIconButton from './PlayerIconButton.vue'
+import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize } from 'lucide-vue-next'
 
 interface Chapter {
   kind: 'intro' | 'outro'
@@ -230,9 +182,11 @@ withDefaults(
     chapters?: Chapter[]
     stillUrl?: string
     /** which floating menu is open, for trigger-button is-open highlight */
-    openMenu?: 'source' | 'settings' | 'subs' | null
+    openMenu?: 'source' | 'settings' | 'subs' | 'episodes' | null
+    /** hacker-mode fragment heatmap, forwarded to the scrub bar */
+    fragments?: { startPct: number; widthPct: number; tone: 'ok' | 'warn' | 'bad'; label: string }[]
   }>(),
-  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null },
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [] },
 )
 
 const emit = defineEmits<{
@@ -290,28 +244,11 @@ function onVolumeInput(event: Event) {
   flex: 1;
 }
 
-.pl-icon {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-md);
-  background: transparent;
-  border: 0;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-
-.pl-icon:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.pl-icon.is-open {
-  background: rgba(0, 212, 255, 0.2);
-  color: var(--brand-cyan);
-}
+/* Icon control buttons now live in the <PlayerIconButton> primitive
+   (was `.pl-icon` / `.pl-icon:hover` / `.pl-icon.is-open`). The marker
+   classes below (pl-skip-back/fwd, pl-pip-btn, pl-fs-btn) are kept only for
+   the mobile-trim media query and are passed through via PlayerIconButton's
+   `class` prop. */
 
 /* Volume cluster */
 .pl-vol {

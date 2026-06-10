@@ -152,6 +152,7 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 	fCategory := q.Get("category")
 	fStatus := q.Get("status")
 	fType := q.Get("type")
+	fUsername := strings.ToLower(strings.TrimSpace(q.Get("username")))
 
 	page, _ := strconv.Atoi(q.Get("page"))
 	if page < 1 {
@@ -217,6 +218,9 @@ func (h *AdminReportsHandler) List(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if fStatus != "" && m.Status != fStatus {
+			continue
+		}
+		if fUsername != "" && !strings.Contains(strings.ToLower(m.Username), fUsername) {
 			continue
 		}
 		all = append(all, m)

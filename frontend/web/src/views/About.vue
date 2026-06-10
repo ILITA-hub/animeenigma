@@ -22,20 +22,10 @@
           class="cursor-pointer text-lg font-medium text-white flex items-center justify-between list-none"
         >
           <span>{{ t(item.qKey) }}</span>
-          <svg
-            class="w-5 h-5 transition-transform group-open:rotate-180 text-white/40 flex-shrink-0 ml-3"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+          <ChevronDown
+            class="size-5 transition-transform group-open:rotate-180 text-white/40 flex-shrink-0 ml-3"
             aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
+          />
         </summary>
         <p class="mt-3 text-white/70 leading-relaxed">{{ t(item.aKey) }}</p>
       </details>
@@ -44,6 +34,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChevronDown } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()

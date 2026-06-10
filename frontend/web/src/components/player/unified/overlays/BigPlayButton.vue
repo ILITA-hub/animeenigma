@@ -7,13 +7,13 @@
     @click="emit('play')"
   >
     <!-- Play triangle -->
-    <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M5 3l14 9-14 9V3z" />
-    </svg>
+    <Play class="size-9" aria-hidden="true" />
   </button>
 </template>
 
 <script setup lang="ts">
+import { Play } from 'lucide-vue-next'
+
 defineProps<{
   visible: boolean
 }>()

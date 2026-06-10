@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/domain"
 	"gorm.io/gorm"
@@ -55,6 +56,63 @@ func (r *WalletRepository) Credit(
 			UpdateColumn("balance", gorm.Expr("balance + ?", delta)).Error
 	})
 	return applied, err
+}
+
+// DailyClaimResult is the outcome of DailyClaimTx.
+type DailyClaimResult struct {
+	Claimed bool
+	Wallet  *domain.Wallet
+}
+
+// DailyClaimTx atomically claims today's daily reward inside one transaction.
+// The claim is idempotent on the (user_id, "daily", date-ref) ledger unique
+// index: if the ledger INSERT lands zero rows (duplicate) the tx commits as a
+// no-op and Claimed=false is returned — race-safe even with stale wallet reads.
+// When the insert lands, balance, daily_streak, and last_daily_at are updated
+// in the same tx. now is the caller-supplied clock (injected for testability;
+// production always passes time.Now()).
+func (r *WalletRepository) DailyClaimTx(ctx context.Context, userID string, amount int64, streak int, now time.Time) (DailyClaimResult, error) {
+	ref := now.UTC().Format("2006-01-02")
+	var result DailyClaimResult
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		entry := domain.LedgerEntry{
+			UserID: userID,
+			Delta:  amount,
+			Reason: domain.ReasonDaily,
+			Ref:    ref,
+		}
+		res := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&entry)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			// Same-day duplicate — fetch current wallet and return claimed=false.
+			var w domain.Wallet
+			if err := tx.First(&w, "user_id = ?", userID).Error; err != nil {
+				return err
+			}
+			result.Wallet = &w
+			return nil
+		}
+		// Ledger row landed — update balance + streak fields in the same tx.
+		if err := tx.Model(&domain.Wallet{}).
+			Where("user_id = ?", userID).
+			Updates(map[string]interface{}{
+				"balance":       gorm.Expr("balance + ?", amount),
+				"daily_streak":  streak,
+				"last_daily_at": now.UTC(),
+			}).Error; err != nil {
+			return err
+		}
+		var w domain.Wallet
+		if err := tx.First(&w, "user_id = ?", userID).Error; err != nil {
+			return err
+		}
+		result.Claimed = true
+		result.Wallet = &w
+		return nil
+	})
+	return result, err
 }
 
 // GrantStarterOnce atomically flips starter_granted true AND credits the

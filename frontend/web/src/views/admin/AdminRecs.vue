@@ -40,7 +40,7 @@
 
       <!-- Loading -->
       <div v-if="isLoading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <!-- Main table -->
@@ -212,6 +212,7 @@ import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminRecs, type AdminRecRow } from '@/composables/useAdminRecs'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
 
 // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug page.
 const route = useRoute()

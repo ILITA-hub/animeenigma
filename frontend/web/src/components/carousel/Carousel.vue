@@ -11,9 +11,7 @@
         class="text-sm text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1"
       >
         {{ $t('home.seeAll') }}
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight class="size-4" aria-hidden="true" />
       </router-link>
     </div>
 
@@ -26,9 +24,7 @@
         @click="scrollLeft"
         :aria-label="$t('common.back')"
       >
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
+        <ChevronLeft class="size-6" aria-hidden="true" />
       </button>
 
       <!-- Scrollable Container -->
@@ -59,9 +55,7 @@
         @click="scrollRight"
         :aria-label="$t('common.next')"
       >
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight class="size-6" aria-hidden="true" />
       </button>
     </div>
 
@@ -85,6 +79,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
+import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 interface Props {
   items: unknown[]
@@ -160,10 +155,17 @@ const getItemKey = (item: unknown, index: number): string | number => {
   return index
 }
 
+// rAF-throttled: reading scrollLeft after the reactive write re-renders the
+// arrow buttons forces a reflow per scroll event during smooth scrolling.
+let scrollRafId = 0
 const handleScroll = () => {
-  if (scrollContainer.value) {
-    scrollPosition.value = scrollContainer.value.scrollLeft
-  }
+  if (scrollRafId) return
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = 0
+    if (scrollContainer.value) {
+      scrollPosition.value = scrollContainer.value.scrollLeft
+    }
+  })
 }
 
 const scrollLeft = () => {

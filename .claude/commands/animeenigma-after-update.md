@@ -100,6 +100,11 @@ Trump-mode signature elements (use 2-4 per entry, not all at once — keep it pu
 - **Self-aggrandizing claim**: `МЫ это нашли. Никто другой не заметил.` / `Многие просили — МЫ сделали.` / `Только МЫ можем.`
 - **Bombastic comparatives**: `лучшая защита`, `лучшая перемотка`, `грандиозный фильтр`.
 - **Drama-then-fix arc** for `fix` entries: name the disaster ("КАТАСТРОФА была"), then the heroic resolution ("Теперь — ВЕЛИКОЛЕПНО").
+- **Slang intensifiers** `ЖОСКО`, `КАЙФ`, `ВАЙБ` — drop them as ALL-CAPS verdicts:
+  - `ЖОСКО` = raw power/brutal-impressiveness of what we built. Use it as an **adverb BEFORE the verb**: `ЖОСКО сделали.`, `ЖОСКО починили.`, `ЖОСКО переписали.` — NOT `Сделали ЖОСКО`. Also fine standalone: `ЖОСКО.`
+  - `КАЙФ` = the user-felt pleasure of the result: `Смотреть — один КАЙФ.`, `Теперь КАЙФ, а не плеер.`, standalone closer `КАЙФ.`
+  - `ВАЙБ` = the atmosphere/feel of a feature or the whole platform: `Какой ВАЙБ!`, `ВАЙБ — имперский.`, `Новый дизайн — чистый ВАЙБ.`, `Поймали ВАЙБ.`
+  - `BEST` = English caps drop-in for `Лучший`, used randomly/occasionally instead of it: `BEST плеер. BEST!`, `BEST перемотка в индустрии.`, `Лучший X. BEST!` Mix it in — don't replace every `Лучший`.
 - **Emojis stay** at the start (🎉 🔧 ⚡ 🎌 🐛 📐 🧭 🔔 etc.) — they're the visual hook.
 - **Length cap ≈ 180 chars** per entry; longer is fine when the technical content earns it (see the 2026-05-19 AnimePahe batch in the same file as the gold-standard reference).
 
@@ -107,6 +112,8 @@ Examples (good):
 - "🎉 AnimePahe ОЖИЛ! Английская озвучка снова идёт через animepahe — Frieren тянется все 28 эпизодов без единого 403. ВЕЛИКОЛЕПНАЯ архитектура. Никто другой так не делает!"
 - "🔧 Субтитры в AnimeLib плеере. БОЛЬШАЯ починка. Плавные субтитры снова работают. МЫ это починили. Поверьте мне."
 - "⚡ Страницы грузятся быстрее благодаря оптимизированному кэшированию. Лучшая скорость. Лучшая!"
+- "🐛 Перемотка в EN-плеере зависала на 0:00 — КАТАСТРОФА была. МЫ нашли баг в hls.js, никто другой не заметил. ЖОСКО починили. Теперь смотреть — один КАЙФ."
+- "🎨 Новый дизайн главной — неоновый Токио, чистый ВАЙБ. BEST дизайн в индустрии. Никто другой так не делает!"
 
 Anti-examples (do NOT ship these — old "informative + enthusiastic" tone):
 - ❌ "🎉 Новая лента аниме-новостей из Telegram прямо на главной! Будьте в курсе всех анонсов"
