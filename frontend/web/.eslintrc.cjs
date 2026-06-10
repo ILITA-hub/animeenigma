@@ -22,6 +22,17 @@ module.exports = {
     }
   },
   rules: {
+    'no-restricted-imports': ['error', {
+      paths: [{
+        name: 'lucide-vue-next',
+        importNames: ['default'],
+        message: 'Import named icons only, e.g. `import { X } from "lucide-vue-next"`. No default/namespace import (defeats tree-shaking).',
+      }],
+      patterns: [{
+        group: ['lucide-vue-next/*'],
+        message: 'Import from the package root: `import { X } from "lucide-vue-next"`.',
+      }],
+    }],
     'vue/multi-word-component-names': 'off',
     '@typescript-eslint/no-explicit-any': 'warn',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
