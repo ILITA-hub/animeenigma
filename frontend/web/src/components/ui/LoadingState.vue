@@ -1,6 +1,6 @@
 <template>
   <div :class="cn('flex flex-col items-center justify-center gap-3 p-8', props.class)" role="status">
-    <Spinner :size="size" :tone="tone" :label="label ?? 'Loading'" />
+    <Spinner :size="size" :tone="tone" :label="label ? '' : 'Loading'" />
     <span v-if="label" data-testid="loadingstate-label" class="text-sm text-muted-foreground">{{ label }}</span>
   </div>
 </template>
