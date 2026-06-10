@@ -87,7 +87,10 @@
                   <div class="text-xs text-white/50">{{ $t('profile.stats.totalAnime') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
-                  <div class="text-2xl font-bold text-warning">{{ watchlistStats.avgScore }}</div>
+                  <div class="text-2xl font-bold text-cyan-400 flex items-center justify-center gap-1">
+                    <ScoreDiamond class="size-4" />
+                    {{ watchlistStats.avgScore }}
+                  </div>
                   <div class="text-xs text-white/50">{{ $t('profile.stats.avgScore') }}</div>
                 </div>
                 <div class="glass-card p-3 text-center">
@@ -337,10 +340,11 @@
                            Click-to-edit on own profile still works after mouse-leave. -->
                       <div
                         v-if="anime.score && anime.score > 0"
-                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-warning text-sm font-bold transition-opacity duration-200 group-hover:opacity-0"
+                        class="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-cyan-400 text-sm font-bold transition-opacity duration-200 group-hover:opacity-0 flex items-center gap-1"
                         :class="{ 'cursor-pointer hover:bg-black/80': isOwnProfile }"
                         @click.prevent="isOwnProfile && (editingScoreGrid = anime.anime_id)"
                       >
+                        <ScoreDiamond class="size-3" />
                         {{ anime.score }}
                       </div>
                       <!-- Score edit popover for grid (z-40 keeps it above the kebab) -->
@@ -950,7 +954,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Avatar, Badge, Button, Modal, Tabs, Select, PaginationBar, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
+import { Avatar, Badge, Button, Modal, Tabs, Select, PaginationBar, ScoreDiamond, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
