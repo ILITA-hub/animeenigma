@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -524,6 +525,59 @@ func TestProbe_FetchSegmentFollowsPlaylistToRealSegment(t *testing.T) {
 	// playlist with no media URI: failure.
 	if err := r.fetchSegment(context.Background(), srv.URL+"/empty.m3u8", nil); err == nil {
 		t.Error("empty playlist: got nil; want 'no media URI' failure")
+	}
+}
+
+// TestProbe_FetchSegmentDoesNotDrainLargeBody — the stream_segment probe is
+// a "first 4 KiB" liveness check, but the old cleanup path drained the ENTIRE
+// remaining resp.Body via io.Copy(io.Discard, ...). For progressive-MP4
+// sources (allanime fast4speed, nineanime) the body is a whole episode, so
+// every probe tick pulled ~50 MB through the streaming HLS proxy until the
+// 10 s segmentTimeout cut it — inflating the streaming service's P95 to 13 s+
+// and wasting upstream CDN bandwidth. The probe must validate the segment
+// while consuming only a bounded number of bytes.
+func TestProbe_FetchSegmentDoesNotDrainLargeBody(t *testing.T) {
+	const (
+		totalBody  = 64 << 20 // 64 MiB "episode" served by the fake CDN
+		chunkSize  = 64 << 10
+		maxAllowed = 8 << 20 // generous: bounded read + drain + kernel/transport buffering
+	)
+	var bytesWritten atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Content-Length", strconv.Itoa(totalBody))
+		flusher, _ := w.(http.Flusher)
+		chunk := make([]byte, chunkSize)
+		chunk[0] = 0x47 // non-playlist bytes
+		for written := 0; written < totalBody; written += chunkSize {
+			if req.Context().Err() != nil {
+				return // client disconnected — stop serving
+			}
+			n, err := w.Write(chunk)
+			bytesWritten.Add(int64(n))
+			if err != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer srv.Close()
+
+	cache := NewInMemoryHealthCache()
+	log := newProbeTestLogger(t)
+	r := NewProbeRunner(&FakeProvider{NameVal: "tp-no-drain"}, DefaultGoldenPool, cache, log,
+		WithRNG(rand.New(rand.NewPCG(42, 0))),
+	)
+	allowPrivateHostsForTest(r) // httptest binds 127.0.0.1
+
+	if err := r.fetchSegment(context.Background(), srv.URL+"/episode.mp4", nil); err != nil {
+		t.Fatalf("large segment: got err %v; want nil (bytes downloaded = healthy)", err)
+	}
+	if got := bytesWritten.Load(); got > maxAllowed {
+		t.Errorf("probe consumed %d bytes of a %d-byte body; want <= %d (bounded read, no full-body drain)",
+			got, int64(totalBody), int64(maxAllowed))
 	}
 }
 

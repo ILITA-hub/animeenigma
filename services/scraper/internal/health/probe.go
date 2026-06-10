@@ -94,6 +94,13 @@ const (
 	// playlist. Real HLS playlists are well under this; segment bodies are
 	// only read far enough to confirm non-empty bytes.
 	maxPlaylistReadBytes = 1 << 16 // 64 KiB
+
+	// maxDrainBytes caps how much of an unread resp.Body the cleanup defer
+	// discards before Close. Small leftovers drain fully (connection stays
+	// reusable); anything larger — e.g. a whole progressive-MP4 episode —
+	// is abandoned by closing the body, which is the cheap option at probe
+	// cadence. Without this cap the probe downloaded entire episodes.
+	maxDrainBytes = 1 << 16 // 64 KiB
 )
 
 // ProbeRunner is a per-provider liveness probe goroutine. Construct one
@@ -583,7 +590,15 @@ func (r *ProbeRunner) fetchSegmentDepth(ctx context.Context, urlStr string, head
 		return fmt.Errorf("stream_segment: do request: %w", err)
 	}
 	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
+		// Drain at most maxDrainBytes before closing. The old unbounded
+		// io.Copy(io.Discard, resp.Body) was meant to enable keep-alive
+		// reuse, but for progressive-MP4 sources (allanime fast4speed,
+		// nineanime) the body is a whole episode — every probe tick pulled
+		// ~50 MB through the streaming HLS proxy until segmentTimeout cut
+		// it, inflating streaming's P95 to 13 s+ and wasting CDN bandwidth.
+		// Closing a partially-read body discards the connection instead of
+		// reusing it; at one probe per provider per 15 min that's free.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxDrainBytes))
 		_ = resp.Body.Close()
 	}()
 	// A 3xx response here means CheckRedirect refused the bounce
