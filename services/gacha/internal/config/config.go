@@ -10,6 +10,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/database"
+	"github.com/ILITA-hub/animeenigma/libs/videoutils"
 )
 
 // Config is the gacha service configuration.
@@ -19,6 +20,7 @@ type Config struct {
 	Redis    cache.Config
 	JWT      authz.JWTConfig
 	Economy  EconomyConfig
+	Storage  videoutils.StorageConfig
 
 	// Enabled is the backend dark-ship toggle (GACHA_ENABLED). When false,
 	// the internal credit endpoint no-ops with 200 (so producers don't
@@ -73,6 +75,13 @@ func Load() (*Config, error) {
 		},
 		Economy: EconomyConfig{
 			StarterBonus: int64(getEnvInt("GACHA_STARTER_BONUS", 300)),
+		},
+		Storage: videoutils.StorageConfig{
+			Endpoint:        getEnv("MINIO_ENDPOINT", "minio:9000"),
+			AccessKeyID:     getEnv("MINIO_ACCESS_KEY", "minioadmin"),
+			SecretAccessKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
+			UseSSL:          getEnvBool("MINIO_USE_SSL", false),
+			BucketName:      getEnv("GACHA_MINIO_BUCKET", "gacha-cards"),
 		},
 		Enabled: getEnvBool("GACHA_ENABLED", true),
 	}, nil
