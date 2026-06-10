@@ -1048,6 +1048,7 @@ import { useWatchPreferences } from '@/composables/useWatchPreferences'
 import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
 import { useContextMenu } from '@/composables/useContextMenu'
+import { useSiteRatings } from '@/composables/useSiteRatings'
 import { fromCatalogAnime } from '@/utils/toCardModel'
 import type { AnimeCardModel } from '@/types/card'
 import type { WatchCombo } from '@/types/preference'
@@ -2343,8 +2344,14 @@ const loadAnimeData = async (animeId: string) => {
   fetchRelatedAnime()
 }
 
+const { ratings: relatedSiteRatings, fetchRatings: fetchRelatedSiteRatings } = useSiteRatings()
+
 function relatedCardModel(item: RelatedAnime): AnimeCardModel {
-  return fromCatalogAnime({ ...item, totalEpisodes: item.episodes })
+  const sr = relatedSiteRatings.value[String(item.id)]
+  return fromCatalogAnime(
+    { ...item, totalEpisodes: item.episodes },
+    { siteScore: sr && sr.total_reviews > 0 ? sr.average_score : undefined },
+  )
 }
 
 async function fetchRelatedAnime() {
@@ -2371,6 +2378,8 @@ async function fetchRelatedAnime() {
       rating: r.score || undefined,
       relationLabel: locale.value === 'ru' ? r.relation_ru : r.relation_en,
     }))
+    // Site ratings exist only for anime already in the local catalog (UUID ids)
+    void fetchRelatedSiteRatings(data.filter(r => r.local_id).map(r => String(r.local_id)))
   } catch (e) {
     console.warn('Failed to fetch related anime:', e)
   }

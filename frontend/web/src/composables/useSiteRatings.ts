@@ -23,10 +23,23 @@ export function useSiteRatings() {
       loading.value = true
       try {
         const resp = await reviewApi.getBatchRatings(uncached)
-        const data = (resp.data ?? resp) as SiteRating[] | { ratings: SiteRating[] }
-        const list = Array.isArray(data) ? data : (data as { ratings: SiteRating[] }).ratings ?? []
+        // Backend shape: { success, data: { ratings: { [anime_id]: SiteRating } } } —
+        // unwrap the envelope and accept either the id-keyed map or a flat array.
+        const envelope = (resp.data ?? resp) as { data?: { ratings?: unknown }; ratings?: unknown }
+        const ratingsField = envelope.data?.ratings ?? envelope.ratings ?? envelope
+        const list: SiteRating[] = Array.isArray(ratingsField)
+          ? ratingsField
+          : ratingsField && typeof ratingsField === 'object'
+            ? (Object.values(ratingsField) as SiteRating[])
+            : []
         for (const r of list) {
-          ratingCache.set(r.anime_id, r)
+          if (r && typeof r.anime_id === 'string') ratingCache.set(r.anime_id, r)
+        }
+        // Negative-cache misses so absent ratings aren't re-requested every page
+        for (const id of uncached) {
+          if (!ratingCache.has(id)) {
+            ratingCache.set(id, { anime_id: id, average_score: 0, total_reviews: 0 })
+          }
         }
       } catch (e) {
         console.warn('Failed to fetch batch ratings:', e)
