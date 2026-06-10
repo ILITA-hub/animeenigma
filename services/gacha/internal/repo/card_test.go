@@ -259,6 +259,47 @@ func TestGroupCRUD_AndMembership(t *testing.T) {
 	}
 }
 
+// TestGroupCardIDs_ExcludesSoftDeletedCards asserts that GroupCardIDs does not
+// return card IDs for cards that have been soft-deleted.
+func TestGroupCardIDs_ExcludesSoftDeletedCards(t *testing.T) {
+	db := newContentTestDB(t)
+	r := NewContentRepository(db)
+	ctx := context.Background()
+
+	// Create two cards and a group containing both.
+	c1 := &domain.Card{Name: "Keep", Rarity: domain.RarityN, ImagePath: "p1"}
+	c2 := &domain.Card{Name: "Delete", Rarity: domain.RarityR, ImagePath: "p2"}
+	for _, c := range []*domain.Card{c1, c2} {
+		if err := r.CreateCard(ctx, c); err != nil {
+			t.Fatalf("CreateCard: %v", err)
+		}
+	}
+	g := &domain.Group{Name: "SoftDelGroup"}
+	if err := r.CreateGroup(ctx, g); err != nil {
+		t.Fatalf("CreateGroup: %v", err)
+	}
+	if err := r.AddCardsToGroup(ctx, g.ID, []string{c1.ID, c2.ID}); err != nil {
+		t.Fatalf("AddCardsToGroup: %v", err)
+	}
+
+	// Soft-delete c2.
+	if err := r.DeleteCard(ctx, c2.ID); err != nil {
+		t.Fatalf("DeleteCard: %v", err)
+	}
+
+	// GroupCardIDs must only return the non-deleted card.
+	ids, err := r.GroupCardIDs(ctx, g.ID)
+	if err != nil {
+		t.Fatalf("GroupCardIDs: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Errorf("expected 1 card in group after soft-delete, got %d: %v", len(ids), ids)
+	}
+	if len(ids) == 1 && ids[0] != c1.ID {
+		t.Errorf("expected card c1 (%s), got %s", c1.ID, ids[0])
+	}
+}
+
 // isNotFound checks if an error is a NotFound app error.
 func isNotFound(err error) bool {
 	if err == nil {

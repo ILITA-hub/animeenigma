@@ -59,6 +59,7 @@ func (r *BannerRepository) ListBanners(ctx context.Context) ([]domain.Banner, er
 }
 
 // SetCards atomically replaces the full card pool for a banner.
+// Duplicate card IDs in the input are silently deduplicated (ON CONFLICT DO NOTHING).
 func (r *BannerRepository) SetCards(ctx context.Context, bannerID string, cardIDs []string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("banner_id = ?", bannerID).Delete(&domain.BannerCard{}).Error; err != nil {
@@ -71,7 +72,7 @@ func (r *BannerRepository) SetCards(ctx context.Context, bannerID string, cardID
 		for i, cid := range cardIDs {
 			rows[i] = domain.BannerCard{BannerID: bannerID, CardID: cid}
 		}
-		return tx.Create(&rows).Error
+		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error
 	})
 }
 
@@ -89,29 +90,36 @@ func (r *BannerRepository) AddCards(ctx context.Context, bannerID string, cardID
 		Create(&rows).Error
 }
 
-// AddGroupCards copies all cards from a group into the banner pool using an
-// INSERT...SELECT, ignoring duplicates.
+// AddGroupCards copies all non-soft-deleted cards from a group into the banner
+// pool using an INSERT...SELECT, ignoring duplicates.
 func (r *BannerRepository) AddGroupCards(ctx context.Context, bannerID, groupID string) error {
 	return r.db.WithContext(ctx).Exec(
 		`INSERT INTO gacha_banner_cards (banner_id, card_id)
-		 SELECT ?, card_id FROM gacha_card_groups WHERE group_id = ?
+		 SELECT ?, cg.card_id
+		 FROM gacha_card_groups cg
+		 JOIN gacha_cards c ON c.id = cg.card_id AND c.deleted_at IS NULL
+		 WHERE cg.group_id = ?
 		 ON CONFLICT DO NOTHING`,
 		bannerID, groupID,
 	).Error
 }
 
-// BannerCardIDs returns the card IDs in the banner's pool.
+// BannerCardIDs returns the IDs of all non-soft-deleted cards in the banner's pool.
 func (r *BannerRepository) BannerCardIDs(ctx context.Context, bannerID string) ([]string, error) {
-	var rows []domain.BannerCard
-	err := r.db.WithContext(ctx).Where("banner_id = ?", bannerID).Find(&rows).Error
+	var cardIDs []string
+	err := r.db.WithContext(ctx).
+		Model(&domain.BannerCard{}).
+		Select("gacha_banner_cards.card_id").
+		Joins("JOIN gacha_cards ON gacha_cards.id = gacha_banner_cards.card_id AND gacha_cards.deleted_at IS NULL").
+		Where("gacha_banner_cards.banner_id = ?", bannerID).
+		Pluck("gacha_banner_cards.card_id", &cardIDs).Error
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]string, len(rows))
-	for i, row := range rows {
-		ids[i] = row.CardID
+	if cardIDs == nil {
+		cardIDs = []string{}
 	}
-	return ids, nil
+	return cardIDs, nil
 }
 
 // ActiveNow returns banners visible to players at the given time: enabled AND

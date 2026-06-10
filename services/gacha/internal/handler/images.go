@@ -57,6 +57,7 @@ func (h *ImagesHandler) Serve(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	if _, err := io.Copy(w, rc); err != nil {
 		h.log.Warnw("image stream error", "key", key, "error", err)

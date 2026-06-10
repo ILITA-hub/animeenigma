@@ -203,6 +203,113 @@ func TestBannerAddGroupCards(t *testing.T) {
 	}
 }
 
+// TestBannerCardIDs_ExcludesSoftDeletedCards asserts that BannerCardIDs does
+// not return IDs for soft-deleted cards.
+func TestBannerCardIDs_ExcludesSoftDeletedCards(t *testing.T) {
+	db := newBannerTestDB(t)
+	cr := NewContentRepository(db)
+	br := NewBannerRepository(db)
+	ctx := context.Background()
+
+	c1 := seedCard(t, cr.db, "Visible")
+	c2 := seedCard(t, cr.db, "Deleted")
+
+	b := &domain.Banner{Name: "SoftDelBanner", Enabled: true}
+	if err := br.CreateBanner(ctx, b); err != nil {
+		t.Fatalf("CreateBanner: %v", err)
+	}
+	if err := br.SetCards(ctx, b.ID, []string{c1, c2}); err != nil {
+		t.Fatalf("SetCards: %v", err)
+	}
+
+	// Soft-delete c2.
+	if err := cr.DeleteCard(ctx, c2); err != nil {
+		t.Fatalf("DeleteCard: %v", err)
+	}
+
+	ids, err := br.BannerCardIDs(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("BannerCardIDs: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Errorf("expected 1 card after soft-delete, got %d: %v", len(ids), ids)
+	}
+	if len(ids) == 1 && ids[0] != c1 {
+		t.Errorf("expected c1 (%s), got %s", c1, ids[0])
+	}
+}
+
+// TestAddGroupCards_ExcludesSoftDeletedCards asserts that AddGroupCards does
+// not import soft-deleted group members into the banner pool.
+func TestAddGroupCards_ExcludesSoftDeletedCards(t *testing.T) {
+	db := newBannerTestDB(t)
+	cr := NewContentRepository(db)
+	br := NewBannerRepository(db)
+	ctx := context.Background()
+
+	c1 := seedCard(t, cr.db, "Keep")
+	c2 := seedCard(t, cr.db, "ToDelete")
+
+	g := &domain.Group{Name: "GroupWithDeleted"}
+	if err := cr.CreateGroup(ctx, g); err != nil {
+		t.Fatalf("CreateGroup: %v", err)
+	}
+	if err := cr.AddCardsToGroup(ctx, g.ID, []string{c1, c2}); err != nil {
+		t.Fatalf("AddCardsToGroup: %v", err)
+	}
+
+	// Soft-delete c2 before importing group into banner.
+	if err := cr.DeleteCard(ctx, c2); err != nil {
+		t.Fatalf("DeleteCard: %v", err)
+	}
+
+	b := &domain.Banner{Name: "BannerGroupDel", Enabled: true}
+	if err := br.CreateBanner(ctx, b); err != nil {
+		t.Fatalf("CreateBanner: %v", err)
+	}
+	if err := br.AddGroupCards(ctx, b.ID, g.ID); err != nil {
+		t.Fatalf("AddGroupCards: %v", err)
+	}
+
+	ids, err := br.BannerCardIDs(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("BannerCardIDs: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Errorf("AddGroupCards must skip soft-deleted card, got %d ids: %v", len(ids), ids)
+	}
+}
+
+// TestSetCards_DedupesInputIDs asserts that SetCards with a duplicate card ID
+// in the input list stores exactly one row per unique card ID and returns no error.
+func TestSetCards_DedupesInputIDs(t *testing.T) {
+	db := newBannerTestDB(t)
+	cr := NewContentRepository(db)
+	br := NewBannerRepository(db)
+	ctx := context.Background()
+
+	c1 := seedCard(t, cr.db, "C1")
+	c2 := seedCard(t, cr.db, "C2")
+
+	b := &domain.Banner{Name: "DedupBanner", Enabled: true}
+	if err := br.CreateBanner(ctx, b); err != nil {
+		t.Fatalf("CreateBanner: %v", err)
+	}
+
+	// Pass [c1, c1, c2] — c1 is duplicated.
+	if err := br.SetCards(ctx, b.ID, []string{c1, c1, c2}); err != nil {
+		t.Fatalf("SetCards with duplicate IDs must not error, got: %v", err)
+	}
+
+	ids, err := br.BannerCardIDs(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("BannerCardIDs: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Errorf("expected 2 unique cards after SetCards([c1,c1,c2]), got %d: %v", len(ids), ids)
+	}
+}
+
 func TestBannerActiveNow_WindowAndFlags(t *testing.T) {
 	db := newBannerTestDB(t)
 	br := NewBannerRepository(db)

@@ -131,16 +131,20 @@ func (r *ContentRepository) RemoveCardFromGroup(ctx context.Context, groupID, ca
 		Delete(&domain.CardGroup{}).Error
 }
 
-// GroupCardIDs returns the IDs of all cards in the group.
+// GroupCardIDs returns the IDs of all non-soft-deleted cards in the group.
 func (r *ContentRepository) GroupCardIDs(ctx context.Context, groupID string) ([]string, error) {
-	var rows []domain.CardGroup
-	err := r.db.WithContext(ctx).Where("group_id = ?", groupID).Find(&rows).Error
+	var cardIDs []string
+	err := r.db.WithContext(ctx).
+		Model(&domain.CardGroup{}).
+		Select("gacha_card_groups.card_id").
+		Joins("JOIN gacha_cards ON gacha_cards.id = gacha_card_groups.card_id AND gacha_cards.deleted_at IS NULL").
+		Where("gacha_card_groups.group_id = ?", groupID).
+		Pluck("gacha_card_groups.card_id", &cardIDs).Error
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]string, len(rows))
-	for i, row := range rows {
-		ids[i] = row.CardID
+	if cardIDs == nil {
+		cardIDs = []string{}
 	}
-	return ids, nil
+	return cardIDs, nil
 }

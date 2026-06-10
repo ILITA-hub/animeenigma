@@ -2,7 +2,10 @@ package handler
 
 import (
 	"net/http"
+	"regexp"
+	"strings"
 
+	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/domain"
@@ -10,6 +13,13 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/service"
 	"github.com/go-chi/chi/v5"
 )
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// isUUID returns true when s matches the standard UUID format.
+func isUUID(s string) bool {
+	return uuidPattern.MatchString(s)
+}
 
 // AdminHandler serves /api/gacha/admin/* — admin-gated content CRUD.
 type AdminHandler struct {
@@ -67,6 +77,10 @@ func (h *AdminHandler) ListCards(w http.ResponseWriter, r *http.Request) {
 // GetCard handles GET /api/gacha/admin/cards/{id}
 func (h *AdminHandler) GetCard(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	card, err := h.content.GetCard(r.Context(), id)
 	if err != nil {
 		httputil.Error(w, err)
@@ -83,6 +97,10 @@ func (h *AdminHandler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.ID = chi.URLParam(r, "id")
+	if !isUUID(req.ID) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	card, err := h.content.UpdateCard(r.Context(), req)
 	if err != nil {
 		h.log.Errorw("update card", "id", req.ID, "error", err)
@@ -95,6 +113,10 @@ func (h *AdminHandler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 // DeleteCard handles DELETE /api/gacha/admin/cards/{id}
 func (h *AdminHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	if err := h.content.DeleteCard(r.Context(), id); err != nil {
 		h.log.Errorw("delete card", "id", id, "error", err)
 		httputil.Error(w, err)
@@ -143,6 +165,10 @@ func (h *AdminHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 // RenameGroup handles PATCH /api/gacha/admin/groups/{id}
 func (h *AdminHandler) RenameGroup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	var req groupNameRequest
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -159,6 +185,10 @@ func (h *AdminHandler) RenameGroup(w http.ResponseWriter, r *http.Request) {
 // DeleteGroup handles DELETE /api/gacha/admin/groups/{id}
 func (h *AdminHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	if err := h.content.DeleteGroup(r.Context(), id); err != nil {
 		h.log.Errorw("delete group", "id", id, "error", err)
 		httputil.Error(w, err)
@@ -170,6 +200,10 @@ func (h *AdminHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 // AddCardsToGroup handles POST /api/gacha/admin/groups/{id}/cards
 func (h *AdminHandler) AddCardsToGroup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	var req groupCardsRequest
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -187,6 +221,10 @@ func (h *AdminHandler) AddCardsToGroup(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) RemoveCardFromGroup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	cardID := chi.URLParam(r, "cardId")
+	if !isUUID(id) || !isUUID(cardID) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	if err := h.content.RemoveCardFromGroup(r.Context(), id, cardID); err != nil {
 		h.log.Errorw("remove card from group", "group_id", id, "card_id", cardID, "error", err)
 		httputil.Error(w, err)
@@ -231,6 +269,10 @@ func (h *AdminHandler) ListBanners(w http.ResponseWriter, r *http.Request) {
 // GetBanner handles GET /api/gacha/admin/banners/{id}
 func (h *AdminHandler) GetBanner(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	b, err := h.content.GetBanner(r.Context(), id)
 	if err != nil {
 		httputil.Error(w, err)
@@ -257,6 +299,10 @@ func (h *AdminHandler) UpdateBanner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.ID = chi.URLParam(r, "id")
+	if !isUUID(req.ID) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	b, err := h.content.UpdateBanner(r.Context(), req)
 	if err != nil {
 		h.log.Errorw("update banner", "id", req.ID, "error", err)
@@ -269,6 +315,10 @@ func (h *AdminHandler) UpdateBanner(w http.ResponseWriter, r *http.Request) {
 // DeleteBanner handles DELETE /api/gacha/admin/banners/{id}
 func (h *AdminHandler) DeleteBanner(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	if err := h.content.DeleteBanner(r.Context(), id); err != nil {
 		h.log.Errorw("delete banner", "id", id, "error", err)
 		httputil.Error(w, err)
@@ -280,6 +330,10 @@ func (h *AdminHandler) DeleteBanner(w http.ResponseWriter, r *http.Request) {
 // SetBannerCards handles PUT /api/gacha/admin/banners/{id}/cards
 func (h *AdminHandler) SetBannerCards(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	var req bannerCardsRequest
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -296,6 +350,10 @@ func (h *AdminHandler) SetBannerCards(w http.ResponseWriter, r *http.Request) {
 // AddBannerCards handles POST /api/gacha/admin/banners/{id}/cards
 func (h *AdminHandler) AddBannerCards(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	var req bannerCardsRequest
 	if err := httputil.Bind(r, &req); err != nil {
 		httputil.Error(w, err)
@@ -313,6 +371,10 @@ func (h *AdminHandler) AddBannerCards(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) AddGroupCardsToBanner(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	groupID := chi.URLParam(r, "groupId")
+	if !isUUID(id) || !isUUID(groupID) {
+		httputil.Error(w, apperrors.InvalidInput("invalid id"))
+		return
+	}
 	if err := h.content.AddGroupCardsToBanner(r.Context(), id, groupID); err != nil {
 		h.log.Errorw("add group cards to banner", "banner_id", id, "group_id", groupID, "error", err)
 		httputil.Error(w, err)
@@ -377,7 +439,8 @@ func (h *AdminHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// isMultipart returns true when the Content-Type starts with multipart/form-data.
+// isMultipart returns true when the Content-Type starts with multipart/form-data
+// (case-insensitive per RFC 7231 §3.1.1.1).
 func isMultipart(ct string) bool {
-	return len(ct) >= 19 && ct[:19] == "multipart/form-data"
+	return strings.HasPrefix(strings.ToLower(ct), "multipart/form-data")
 }
