@@ -32,7 +32,9 @@
           aria-label="Close"
           @click="emit('close')"
         >
-          <X class="size-4" aria-hidden="true" />
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 3L13 13M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
         </button>
       </div>
 
@@ -41,7 +43,10 @@
         <!-- Search -->
         <div class="relative flex items-center">
           <span class="absolute left-3 text-white/50 pointer-events-none">
-            <Search class="size-[14px]" aria-hidden="true" />
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
           </span>
           <input
             v-model="q"
@@ -60,7 +65,9 @@
             aria-label="Clear search"
             @click="q = ''"
           >
-            <X class="size-[10px]" aria-hidden="true" />
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+              <path d="M2 2L8 8M8 2L2 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
           </button>
         </div>
 
@@ -175,8 +182,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { X, Search } from 'lucide-vue-next'
 
 export interface SubTrack {
   url: string

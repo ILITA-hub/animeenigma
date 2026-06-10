@@ -50,7 +50,9 @@
       style="background: rgba(0,0,0,0.72);"
     >
       <div class="flex flex-col items-center gap-3 text-center px-8">
-        <CircleAlert class="size-12 text-muted-foreground" aria-hidden="true" />
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-muted-foreground" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
         <p class="text-sm font-medium text-foreground">{{ sourceError }}</p>
         <button
           class="px-4 py-2 rounded-md text-sm font-semibold text-foreground"
@@ -62,29 +64,13 @@
       </div>
     </div>
 
-    <!-- Resolving overlay — spinner while the stream is being resolved/attached
-         (chunk is loaded but no playable frame yet). Hidden once an error shows
-         or the first frame is ready. -->
-    <div
-      v-if="isResolving && !sourceError"
-      class="absolute inset-0 z-[3] flex items-center justify-center pointer-events-none"
-      style="background: rgba(0,0,0,0.55);"
-      role="status"
-      data-test="resolving-overlay"
-    >
-      <div class="flex flex-col items-center gap-3">
-        <Spinner size="lg" tone="signature" :label="t('player.unified.loadingEpisode')" />
-        <span class="text-sm font-medium text-[var(--muted-foreground)]">
-          {{ t('player.unified.loadingEpisode') }}
-        </span>
-      </div>
-    </div>
-
     <!-- Top bar -->
     <div class="pl-top" @click.stop>
       <!-- Back button -->
       <button class="pl-icon" aria-label="Back" @click="$emit('open-episodes')">
-        <ArrowLeft class="size-5" aria-hidden="true" />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
       </button>
 
       <!-- Title block -->
@@ -111,7 +97,9 @@
           title="Episodes"
           @click="$emit('open-episodes')"
         >
-          <List class="size-5" aria-hidden="true" />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
         </button>
       </div>
     </div>
@@ -120,7 +108,7 @@
     <ResumePill :kind="resumeKind" />
 
     <BigPlayButton
-      :visible="!state.playing.value && !sourceError && !isResolving"
+      :visible="!state.playing.value && !sourceError"
       @play="togglePlay"
     />
 
@@ -236,9 +224,6 @@ import {
   onUnmounted,
 } from 'vue'
 
-import { useI18n } from 'vue-i18n'
-import { CircleAlert } from 'lucide-vue-next'
-import Spinner from '@/components/ui/Spinner.vue'
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
 import PlayerControlBar from './PlayerControlBar.vue'
@@ -286,8 +271,6 @@ defineEmits<{
 }>()
 
 // ─── Core state ──────────────────────────────────────────────────────────────
-
-const { t } = useI18n()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)

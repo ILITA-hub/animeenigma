@@ -19,7 +19,7 @@
           <span class="brand-wordmark">
             <span class="brand-b1">Anime</span><span class="brand-b2">Enigma</span>
           </span>
-          <span class="brand-beta" :class="{ 'brand-beta--admin': isAdminRoute }">{{ isAdminRoute ? 'admin' : 'beta' }}</span>
+          <span class="brand-beta">beta</span>
         </router-link>
 
         <!-- Desktop Navigation -->
@@ -48,13 +48,7 @@
             >
               <Search class="size-5" />
             </button>
-            <!-- Spacer holds the 36px flex slot so siblings don't shift when search expands -->
-            <div v-else class="w-9 h-9 flex-shrink-0" aria-hidden="true" />
-            <!-- Expanded search: absolute so it overlays siblings without pushing them -->
-            <div
-              v-if="searchOpen"
-              class="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-2 z-20"
-            >
+            <div v-else class="flex items-center gap-2">
               <div class="relative">
                 <input
                   ref="searchInputRef"
@@ -305,7 +299,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { onClickOutside, useDebounceFn, useEventListener, useMediaQuery } from '@vueuse/core'
@@ -321,12 +315,8 @@ import NotificationBell from '@/components/NotificationBell.vue'
 import BrandMark from '@/components/layout/BrandMark.vue'
 
 const router = useRouter()
-const route = useRoute()
 const { locale } = useI18n()
 const authStore = useAuthStore()
-
-// Brand badge reads "ADMIN" (cyan) on any /admin route, "beta" (pink) elsewhere.
-const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 
 // Workstream notifications / Phase 3 — feature flag mirrors App.vue. Build-
 // time constant, no reactive dependency.
@@ -571,13 +561,6 @@ onUnmounted(() => {
   border-radius: var(--r-sm, 6px);
   transform: rotate(-8deg);
   transform-origin: left center;
-}
-
-/* Admin-context variant: same tag, cyan accent so admins can tell at a glance
-   they're inside the admin surface (set whenever the route is under /admin). */
-.brand-beta--admin {
-  color: var(--brand-cyan);
-  border-color: var(--brand-cyan);
 }
 
 /* ------------------------------------------------------------------ */
