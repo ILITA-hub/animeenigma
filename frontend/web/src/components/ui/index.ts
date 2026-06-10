@@ -30,6 +30,14 @@ export { default as Skeleton } from './Skeleton.vue'
 export { default as Switch } from './Switch.vue'
 export { default as Tabs } from './Tabs.vue'
 export { default as Tooltip } from './Tooltip.vue'
+export { default as Spinner } from './Spinner.vue'
+export { spinnerVariants, type SpinnerVariants } from './spinner-variants'
+export { default as LoadingState } from './LoadingState.vue'
+export { default as Alert } from './Alert.vue'
+export { alertVariants, type AlertVariants } from './alert-variants'
+export { default as Avatar } from './Avatar.vue'
+export { avatarVariants, type AvatarVariants } from './avatar-variants'
+export { default as AvatarGroup } from './AvatarGroup.vue'
 
 // Re-export SelectOption type
 export interface SelectOption {
