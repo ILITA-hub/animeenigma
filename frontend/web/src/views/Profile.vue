@@ -2,10 +2,7 @@
   <div class="min-h-screen">
     <!-- Loading State -->
     <div v-if="loading" class="flex justify-center items-center min-h-screen pt-20">
-      <svg class="w-12 h-12 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
+      <Spinner size="lg" />
     </div>
 
     <!-- Error State -->
@@ -88,10 +85,7 @@
           <template #watchlist>
             <!-- Loading -->
             <div v-if="loadingWatchlist" class="flex justify-center py-12">
-              <svg class="w-8 h-8 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <Spinner size="lg" />
             </div>
 
             <div v-else-if="hasAnyEntries" class="space-y-4">
@@ -177,10 +171,7 @@
               <!-- Table/Grid Content with Loading Overlay -->
               <div class="relative">
               <div v-if="watchlistPageLoading && watchlist.length > 0" class="absolute inset-0 bg-black/30 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
-                <svg class="w-8 h-8 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <Spinner size="lg" />
               </div>
 
               <!-- Table or Grid (only when the current filter has items) -->
@@ -438,10 +429,7 @@
               <!-- Current filter has no items, but the user has entries in other statuses -->
               <template v-else>
                 <div v-if="watchlistPageLoading" class="flex justify-center py-12">
-                  <svg class="w-8 h-8 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
+                  <Spinner size="lg" />
                 </div>
                 <div v-else class="text-center py-12">
                   <Archive class="size-16 mx-auto text-white/20 mb-4" />
@@ -1009,7 +997,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
+import { Badge, Button, Modal, Tabs, Select, PaginationBar, Spinner, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'

@@ -76,10 +76,7 @@
 
       <!-- Loading -->
       <div v-if="loading" class="flex justify-center py-20">
-        <svg class="w-10 h-10 animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
+        <Spinner size="lg" />
       </div>
 
       <!-- Error -->
@@ -116,7 +113,7 @@ import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount } from 'v
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { themesApi, adminThemesApi } from '@/api/client'
-import { ButtonGroup } from '@/components/ui'
+import { ButtonGroup, Spinner } from '@/components/ui'
 import ThemeCard from '@/components/themes/ThemeCard.vue'
 
 const { t } = useI18n()

@@ -3,7 +3,7 @@
   <div class="min-h-screen bg-base">
     <!-- Loading -->
     <div v-if="isLoading" class="flex justify-center pt-32">
-      <div class="w-10 h-10 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+      <Spinner size="lg" />
     </div>
 
     <!-- 404 -->
@@ -75,6 +75,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { animeApi, type Collection, type CollectionItem } from '@/api/client'
+import { Spinner } from '@/components/ui'
 import { getLocalizedTitle } from '@/utils/title'
 
 const route = useRoute()

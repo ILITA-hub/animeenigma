@@ -5,7 +5,7 @@
 
       <!-- Loading -->
       <div v-if="initialLoading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <template v-else-if="status">
@@ -88,6 +88,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { statusApi } from '@/api/client'
 import Button from '@/components/ui/Button.vue'
+import { Spinner } from '@/components/ui'
 
 const { locale } = useI18n()
 

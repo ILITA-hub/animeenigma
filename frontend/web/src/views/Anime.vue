@@ -1009,7 +1009,7 @@
   <!-- Loading State -->
   <div v-else-if="loading" class="min-h-screen flex items-center justify-center">
     <div class="text-center">
-      <div class="w-12 h-12 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <Spinner size="lg" class="mx-auto mb-4" />
       <p class="text-white/60">{{ $t('common.loading') }}</p>
     </div>
   </div>
@@ -1042,7 +1042,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem } from '@/components/ui'
+import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Spinner } from '@/components/ui'
 import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import { Carousel } from '@/components/carousel'

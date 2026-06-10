@@ -71,7 +71,7 @@
 
           <!-- Loading State -->
           <div v-if="loading" class="flex justify-center py-20">
-            <div class="w-12 h-12 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+            <Spinner size="lg" />
           </div>
 
           <!-- Error State -->
@@ -222,7 +222,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Button, PaginationBar, SearchAutocomplete } from '@/components/ui'
+import { Button, PaginationBar, SearchAutocomplete, Spinner } from '@/components/ui'
 import { PosterCard, AnimeContextMenu } from '@/components/anime'
 import { fromCatalogAnime } from '@/utils/toCardModel'
 import type { ListStatus } from '@/types/card'

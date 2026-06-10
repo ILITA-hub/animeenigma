@@ -2,7 +2,7 @@
   <div class="anime18-player anime18-player-wrapper">
     <!-- Loading state for episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+      <Spinner size="lg" />
     </div>
 
     <!-- No episodes available -->
@@ -22,7 +22,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
-              <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <Spinner size="lg" class="mx-auto mb-3" />
               <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: (selectedEpisodeIndex ?? 0) + 1 }) }}</p>
             </div>
           </div>
@@ -113,6 +113,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Video, TriangleAlert, Play, List, MonitorPlay, Info } from 'lucide-vue-next'
+import { Spinner } from '@/components/ui'
 import Hls from 'hls.js'
 import { anime18Api, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'

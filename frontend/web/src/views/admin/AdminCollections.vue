@@ -27,7 +27,7 @@
 
       <!-- Loading -->
       <div v-if="isLoading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <!-- Empty state -->
@@ -86,6 +86,7 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminApi, type Collection } from '@/api/client'
+import { Spinner } from '@/components/ui'
 
 const { t } = useI18n()
 

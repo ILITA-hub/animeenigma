@@ -2,7 +2,7 @@
   <div class="kodik-player">
     <!-- Loading state for translations -->
     <div v-if="loadingTranslations" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+      <Spinner size="lg" />
     </div>
 
     <!-- No translations available -->
@@ -24,7 +24,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center">
-              <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <Spinner size="lg" class="mx-auto mb-3" />
               <p class="text-white/60 text-sm">{{ $t('player.loadingEpisode', { n: selectedEpisode }) }}</p>
             </div>
           </div>
@@ -209,6 +209,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, toRef, onMounted, onUnmounted } from 'vue'
 import { Star, Pin } from 'lucide-vue-next'
+import { Spinner } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import { kodikApi, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'

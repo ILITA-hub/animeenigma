@@ -2,7 +2,7 @@
   <div class="raw-player" style="--player-accent: #22d3ee; --player-accent-rgb: 34, 211, 238;">
     <!-- Loading episodes -->
     <div v-if="loadingEpisodes" class="flex items-center justify-center py-20">
-      <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin" />
+      <Spinner size="lg" />
     </div>
 
     <!-- Provider not available -->
@@ -24,7 +24,7 @@
           class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
         >
           <div class="text-center">
-            <div class="w-10 h-10 border-2 accent-border border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <Spinner size="lg" class="mx-auto mb-3" />
             <p class="text-white/60 text-sm">
               {{ $t('player.loadingEpisode', { n: selectedEpisode?.number }) }}
             </p>
@@ -130,6 +130,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Video, Play, Captions, List } from 'lucide-vue-next'
+import { Spinner } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'

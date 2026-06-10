@@ -76,7 +76,7 @@
 
       <!-- Loading -->
       <div v-if="isLoading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <!-- Empty state -->
@@ -233,7 +233,7 @@
         </div>
 
         <div v-if="isDetailLoading" class="flex justify-center py-12">
-          <div class="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+          <Spinner size="lg" />
         </div>
         <p v-else-if="detailError" class="text-destructive py-4">
           {{ $te(detailError) ? $t(detailError) : detailError }}
@@ -331,6 +331,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Link as LinkIcon } from 'lucide-vue-next'
 import Select from '@/components/ui/Select.vue'
+import { Spinner } from '@/components/ui'
 import { useAdminFeedback } from '@/composables/useAdminFeedback'
 import type { FeedbackStatus } from '@/types/feedback'
 

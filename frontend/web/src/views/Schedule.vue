@@ -28,7 +28,7 @@
       />
 
       <div v-if="loading" class="flex justify-center py-12">
-        <div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <Spinner size="lg" />
       </div>
 
       <template v-else>
@@ -59,6 +59,7 @@ import MonthView from '@/components/schedule/MonthView.vue'
 import WeekView from '@/components/schedule/WeekView.vue'
 import TableView from '@/components/schedule/TableView.vue'
 import DayModal from '@/components/schedule/DayModal.vue'
+import { Spinner } from '@/components/ui'
 
 const { t } = useI18n()
 const route = useRoute()

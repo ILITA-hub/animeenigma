@@ -21,7 +21,7 @@
 
         <!-- Loading State -->
         <div v-if="loading" class="flex justify-center py-20">
-          <div class="w-12 h-12 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+          <Spinner size="lg" />
         </div>
 
         <!-- Empty State -->
@@ -124,7 +124,7 @@
             <div class="glass-card p-6 min-h-[400px] flex items-center justify-center">
               <!-- Waiting State -->
               <div v-if="currentRoom.status === 'waiting'" class="text-center">
-                <div class="w-16 h-16 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin mx-auto mb-4" />
+                <Spinner size="xl" class="mx-auto mb-4" />
                 <h3 class="text-xl font-semibold text-white mb-2">{{ $t('rooms.status.waiting') }}</h3>
                 <p class="text-white/50">{{ $t('rooms.waitingDescription') }}</p>
                 <p class="text-cyan-400 mt-4">
@@ -246,7 +246,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { gameApi } from '@/api/client'
 import { io, Socket } from 'socket.io-client'
-import { Button, Badge, ButtonGroup, Input, Modal, Select } from '@/components/ui'
+import { Button, Badge, ButtonGroup, Input, Modal, Select, Spinner } from '@/components/ui'
 
 const { t } = useI18n()
 
