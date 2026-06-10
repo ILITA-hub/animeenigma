@@ -206,6 +206,15 @@ func (r *TaskRepository) DeleteByMALID(ctx context.Context, malID int) error {
 		}).Error
 }
 
+// DeletePendingByExportJobID deletes all pending tasks for an export job.
+// Used on cancel so the worker stops picking up the job's queued tasks —
+// GetNextPending selects by task status only and never checks job status.
+func (r *TaskRepository) DeletePendingByExportJobID(ctx context.Context, exportJobID string) (int64, error) {
+	result := r.db.WithContext(ctx).
+		Delete(&domain.AnimeLoadTask{}, "export_job_id = ? AND status = ?", exportJobID, domain.TaskStatusPending)
+	return result.RowsAffected, result.Error
+}
+
 // GetStats retrieves task statistics for an export job
 func (r *TaskRepository) GetStats(ctx context.Context, exportJobID string) (*domain.TaskStats, error) {
 	var stats domain.TaskStats

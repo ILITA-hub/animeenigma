@@ -194,10 +194,101 @@ func TestMALExportService_CreateTasks(t *testing.T) {
 
 func TestMALExportService_GetUserExports(t *testing.T) {
 	log := logger.Default()
-	service := NewMALExportService(log)
 
-	// Currently returns empty list
+	schedulerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/tasks/anime-load/user/user-123" && r.Method == "GET" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			response := map[string]interface{}{
+				"data": []map[string]interface{}{
+					{"id": "export-1", "mal_username": "testuser", "status": "completed"},
+					{"id": "export-2", "mal_username": "testuser", "status": "processing"},
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer schedulerServer.Close()
+
+	service := &MALExportService{
+		httpClient:   http.DefaultClient,
+		schedulerURL: schedulerServer.URL,
+		log:          log,
+	}
+
+	exports, err := service.GetUserExports(context.Background(), "user-123")
+	require.NoError(t, err)
+	require.Len(t, exports, 2)
+	assert.Equal(t, "export-1", exports[0].ID)
+	assert.Equal(t, "processing", exports[1].Status)
+}
+
+func TestMALExportService_GetUserExports_EmptyList(t *testing.T) {
+	log := logger.Default()
+
+	schedulerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"data": []interface{}{}})
+	}))
+	defer schedulerServer.Close()
+
+	service := &MALExportService{
+		httpClient:   http.DefaultClient,
+		schedulerURL: schedulerServer.URL,
+		log:          log,
+	}
+
 	exports, err := service.GetUserExports(context.Background(), "user-123")
 	require.NoError(t, err)
 	assert.Empty(t, exports)
+}
+
+func TestMALExportService_CancelExport(t *testing.T) {
+	log := logger.Default()
+
+	schedulerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/tasks/anime-load/export-123/cancel" && r.Method == "POST" {
+			var req map[string]string
+			json.NewDecoder(r.Body).Decode(&req)
+			assert.Equal(t, "user-123", req["user_id"])
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"message": "export cancelled"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer schedulerServer.Close()
+
+	service := &MALExportService{
+		httpClient:   http.DefaultClient,
+		schedulerURL: schedulerServer.URL,
+		log:          log,
+	}
+
+	err := service.CancelExport(context.Background(), "user-123", "export-123")
+	require.NoError(t, err)
+}
+
+func TestMALExportService_CancelExport_NotFound(t *testing.T) {
+	log := logger.Default()
+
+	schedulerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer schedulerServer.Close()
+
+	service := &MALExportService{
+		httpClient:   http.DefaultClient,
+		schedulerURL: schedulerServer.URL,
+		log:          log,
+	}
+
+	err := service.CancelExport(context.Background(), "user-123", "nonexistent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 }

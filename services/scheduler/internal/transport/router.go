@@ -56,6 +56,8 @@ func NewRouter(
 			r.Post("/anime-load", taskHandler.CreateExportJob)
 			r.Post("/anime-load/tasks", taskHandler.CreateTasks)
 			r.Get("/anime-load/status/{exportId}", taskHandler.GetExportJobStatus)
+			r.Get("/anime-load/user/{userId}", taskHandler.ListUserExportJobs)
+			r.Post("/anime-load/{exportId}/cancel", taskHandler.CancelExportJob)
 			r.Delete("/anime-load/{malId}", taskHandler.DeletePendingTask)
 
 			// Worker status

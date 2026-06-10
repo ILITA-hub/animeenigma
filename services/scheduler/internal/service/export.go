@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	stderrors "errors"
 	"time"
 
+	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scheduler/internal/repo"
@@ -117,12 +119,15 @@ func (s *ExportService) GetUserExports(ctx context.Context, userID string) ([]*d
 func (s *ExportService) CancelExport(ctx context.Context, userID, exportID string) error {
 	job, err := s.exportJobRepo.GetByID(ctx, exportID)
 	if err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.NotFound("export job")
+		}
 		return err
 	}
 
-	// Verify ownership
+	// Verify ownership — report not-found to avoid leaking other users' job IDs
 	if job.UserID != userID {
-		return gorm.ErrRecordNotFound
+		return errors.NotFound("export job")
 	}
 
 	// Only cancel active exports
@@ -134,9 +139,21 @@ func (s *ExportService) CancelExport(ctx context.Context, userID, exportID strin
 		return err
 	}
 
+	// Drain the queue: the worker selects tasks by task status alone, so a
+	// cancelled job's pending tasks would still be processed unless removed.
+	removed, err := s.taskRepo.DeletePendingByExportJobID(ctx, exportID)
+	if err != nil {
+		s.log.Errorw("cancelled export job but failed to delete pending tasks",
+			"job_id", exportID,
+			"error", err,
+		)
+		return err
+	}
+
 	s.log.Infow("cancelled export job",
 		"job_id", exportID,
 		"user_id", userID,
+		"pending_tasks_removed", removed,
 	)
 
 	return nil
