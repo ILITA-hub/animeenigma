@@ -4,46 +4,81 @@
   "title": "Backend Tracing",
   "uid": "backend-tracing",
   "tags": ["tracing"],
-  "description": "ClickHouse trace explorer (distributed tracing, OTel → OTel Collector → ClickHouse analytics.otel_traces). Phase 6 (06-02) repointed this dashboard off Tempo onto the ClickHouse datasource (uid aenigma-clickhouse, grafana-clickhouse-datasource OTel trace builder) as part of the gated observability consolidation — Tempo stays live as the safety net until 06-03. Parity note: Tempo's TraceQL ('{ duration > 1s }') has no direct equivalent in ClickHouse; the slow-trace use case is expressed via the CH plugin's OTel trace query / SQL (WHERE Duration > 1e9 ns over analytics.otel_traces). The per-service latency-p95 and 5xx-rate timeseries that used to live here were exact duplicates of the 'Service Overview' row in 'Services / Overview' (animeenigma-services) — removed 2026-06-03 to de-duplicate. Use that dashboard for RED metrics; use this one to drill into individual slow traces.",
+  "description": "ClickHouse trace explorer (distributed tracing, OTel → OTel Collector → ClickHouse analytics.otel_traces). Phase 6 (06-02) repointed this dashboard off Tempo onto the ClickHouse datasource (uid aenigma-clickhouse, grafana-clickhouse-datasource OTel trace builder) as part of the gated observability consolidation. Parity note: Tempo's TraceQL ('{ duration > 1s }') has no direct equivalent in ClickHouse; the slow-trace use case is expressed via SQL (WHERE Duration > 1e9 ns over analytics.otel_traces). The 'Recent slow traces' panel is a TABLE list (the Grafana 'traces' viz renders only a single trace's span waterfall, not a list) — click a TraceId to open that trace's full waterfall in a split Explore view via an internal data link. The per-service latency-p95 and 5xx-rate timeseries that used to live here were exact duplicates of the 'Service Overview' row in 'Services / Overview' (animeenigma-services) — removed 2026-06-03. Use that dashboard for RED metrics; use this one to drill into individual slow traces.",
   "timezone": "",
   "schemaVersion": 39,
   "time": { "from": "now-6h", "to": "now" },
   "templating": { "list": [] },
   "panels": [
     {
-      "type": "traces",
-      "title": "Recent slow traces (>1s)",
+      "type": "table",
+      "title": "Recent slow traces (>1s) — click a TraceId to open its waterfall",
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
       "gridPos": { "h": 18, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "duration", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "filterable": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "duration" },
+            "properties": [
+              { "id": "unit", "value": "ms" },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "text", "value": null },
+                    { "color": "orange", "value": 3000 },
+                    { "color": "red", "value": 8000 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "traceID" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trace waterfall",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "aenigma-clickhouse",
+                      "datasourceName": "ClickHouse",
+                      "query": {
+                        "refId": "trace",
+                        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
+                        "queryType": "traces",
+                        "editorType": "sql",
+                        "format": 3,
+                        "rawSql": "WITH '${__value.raw}' as trace_id, (SELECT min(Start) FROM \"otel_traces_trace_id_ts\" WHERE TraceId = trace_id) as trace_start, (SELECT max(End) + 1 FROM \"otel_traces_trace_id_ts\" WHERE TraceId = trace_id) as trace_end SELECT \"TraceId\" as traceID, \"SpanId\" as spanID, \"ParentSpanId\" as parentSpanID, \"ServiceName\" as serviceName, \"SpanName\" as operationName, \"Timestamp\" as startTime, multiply(\"Duration\", 0.000001) as duration, arrayMap(key -> map('key', key, 'value', \"SpanAttributes\"[key]), mapKeys(\"SpanAttributes\")) as tags, arrayMap(key -> map('key', key, 'value', \"ResourceAttributes\"[key]), mapKeys(\"ResourceAttributes\")) as serviceTags FROM \"otel_traces\" WHERE traceID = trace_id AND startTime >= trace_start AND startTime <= trace_end AND Duration > 0 ORDER BY Timestamp DESC, Duration DESC LIMIT 1000"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "aenigma-clickhouse" },
-          "queryType": "traces",
+          "queryType": "table",
           "pluginVersion": "4.17.0",
           "editorType": "sql",
-          "rawSql": "SELECT TraceId AS traceID, ServiceName AS serviceName, SpanName AS operationName, Timestamp AS startTime, Duration / 1000000 AS duration FROM analytics.otel_traces WHERE ParentSpanId = '' AND Duration > 1000000000 ORDER BY Timestamp DESC LIMIT 50",
-          "format": 3,
-          "builderOptions": {
-            "database": "analytics",
-            "table": "otel_traces",
-            "queryType": "traces",
-            "mode": "trace",
-            "otelEnabled": true,
-            "otelVersion": "latest",
-            "limit": 50,
-            "filters": [
-              {
-                "key": "Duration",
-                "type": "Int64",
-                "condition": "AND",
-                "operator": ">",
-                "value": 1000000000,
-                "filterType": "custom"
-              }
-            ],
-            "orderBy": [{ "name": "Timestamp", "dir": "DESC" }]
-          }
+          "rawSql": "SELECT TraceId AS traceID, ServiceName AS serviceName, SpanName AS operationName, Timestamp AS startTime, Duration / 1000000 AS duration FROM analytics.otel_traces WHERE ParentSpanId = '' AND Duration > 1000000000 AND Timestamp >= $__fromTime AND Timestamp <= $__toTime ORDER BY Timestamp DESC LIMIT 50",
+          "format": 1
         }
       ]
     }
