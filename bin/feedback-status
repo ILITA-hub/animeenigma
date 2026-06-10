@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Set the triage status of an /admin/feedback report (sidecar _status.json).
+
+Usage: bin/feedback-status <report-id> <status> [updated_by]
+
+AI agents are ALLOWED (intended, pre-authorized by the project owner) to set:
+  new | in_progress | ai_done | not_relevant
+"ai_done" exists specifically for this: the AI believes the item is done and
+a human verifies before promoting it. The promotion itself — "resolved" — is
+HUMAN-ONLY and this script refuses it; flip it in the /admin/feedback UI.
+
+Mirrors services/player/internal/handler/admin_reports.go semantics: the
+handler re-reads _status.json on every request, so changes apply instantly.
+"""
+import json
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+REPORTS_DIR = Path("/var/lib/docker/volumes/docker_player_reports/_data")
+STATUS_FILE = REPORTS_DIR / "_status.json"
+AI_ALLOWED = {"new", "in_progress", "ai_done", "not_relevant"}
+ID_RE = re.compile(r"^[0-9A-Za-z:_\-]+$")  # same guard as admin_reports.go
+
+
+def main() -> int:
+    if len(sys.argv) < 3:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    report_id, status = sys.argv[1], sys.argv[2]
+    updated_by = sys.argv[3] if len(sys.argv) > 3 else "claude"
+
+    if status == "resolved":
+        print("REFUSED: 'resolved' is human-only — promote ai_done via the "
+              "/admin/feedback UI after verifying.", file=sys.stderr)
+        return 1
+    if status not in AI_ALLOWED:
+        print(f"invalid status {status!r} (allowed: {', '.join(sorted(AI_ALLOWED))})",
+              file=sys.stderr)
+        return 1
+    if not ID_RE.match(report_id) or report_id.startswith("_") or ".." in report_id:
+        print(f"invalid report id {report_id!r}", file=sys.stderr)
+        return 1
+    if not (REPORTS_DIR / f"{report_id}.json").is_file():
+        print(f"report not found: {report_id}", file=sys.stderr)
+        return 1
+
+    statuses = {}
+    if STATUS_FILE.is_file():
+        statuses = json.loads(STATUS_FILE.read_text())
+    prev = statuses.get(report_id, {}).get("status", "new")
+    statuses[report_id] = {
+        "status": status,
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "updated_by": updated_by,
+    }
+    STATUS_FILE.write_text(json.dumps(statuses, indent=2, ensure_ascii=False))
+    print(f"{report_id}: {prev} -> {status} (by {updated_by})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

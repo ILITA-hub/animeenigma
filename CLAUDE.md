@@ -343,6 +343,24 @@ The notifications service uses the standard `DB_*` + `JWT_SECRET` + `REDIS_HOST`
 trio. Internal producer endpoint `POST /internal/notifications` is reachable
 only inside the Docker network — the gateway does not proxy `/internal/*`.
 
+## Feedback Triage Statuses (/admin/feedback)
+
+User feedback / error reports live as JSON files on the `docker_player_reports`
+volume; triage statuses in the sidecar `_status.json` (re-read by the player
+service on every request — external writes apply instantly). Statuses:
+`new | in_progress | ai_done | resolved | not_relevant`.
+
+**AI agents are PRE-AUTHORIZED by the project owner (2026-06-10) to set
+`new`, `in_progress`, `ai_done`, and `not_relevant` autonomously** — that is
+the whole point of `ai_done`: "AI believes this is done, awaiting human
+verification". **Only `resolved` is human-only** (the owner promotes
+`ai_done` → `resolved` in the UI after verifying). Use the guarded helper —
+it enforces the human-only rule itself:
+
+```bash
+bin/feedback-status <report-id> <status> [updated_by]   # refuses "resolved"
+```
+
 ## UI Audit Test User (DO NOT DELETE)
 
 Permanent `ui_audit_bot` account (API key, password login, seed data) for UI audits + integration/e2e tests. **DO NOT DELETE / recreate.** Full details, seed contents, and key-rotation steps: [`docs/ui-audit-test-user.md`](docs/ui-audit-test-user.md).
