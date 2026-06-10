@@ -31,9 +31,11 @@
           @pointerup="onPointerUp"
           @pointercancel="onPointerUp"
           @pointerleave="onPointerLeave"
+          @dragstart.prevent
+          @selectstart.prevent
         >
           <div class="cimg">
-            <img v-if="current" :src="cardImageUrl(current.card.image_path)" :alt="current.card.name" />
+            <img v-if="current" :src="cardImageUrl(current.card.image_path)" :alt="current.card.name" draggable="false" />
           </div>
           <div class="holo" />
           <div class="cname">
@@ -42,7 +44,7 @@
           </div>
           <!-- Card back: uploaded image, else branded default -->
           <div class="cardback">
-            <img v-if="backImage" :src="backImage" alt="" class="cardback-img" />
+            <img v-if="backImage" :src="backImage" alt="" class="cardback-img" draggable="false" />
             <template v-else>
               <div class="emblem">
                 <div class="ringb" />
@@ -433,7 +435,7 @@ onBeforeUnmount(() => {
   border: 3px solid;
   background: var(--elevated);
   animation: flyIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-}
+;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
 .card3d.slowIn {
   animation: flyIn 1.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -635,4 +637,5 @@ onBeforeUnmount(() => {
 .r-sr  { color: rgb(129, 140, 248); }
 .r-r   { color: rgb(45, 212, 191); }
 .r-n   { color: var(--ink-4); }
+.card3d img{user-select:none;-webkit-user-select:none;-webkit-user-drag:none;pointer-events:none}
 </style>
