@@ -72,8 +72,8 @@
 
     <!-- Top bar -->
     <div class="pl-top" @click.stop>
-      <!-- Back button -->
-      <button class="pl-icon" aria-label="Back" @click="$emit('open-episodes')">
+      <!-- Episodes (left chevron — opens the episode drawer) -->
+      <button class="pl-icon" aria-label="Episodes" @click="toggleMenu('episodes')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="15 18 9 12 15 6" />
         </svg>
@@ -101,7 +101,7 @@
           class="pl-icon"
           aria-label="Episode list"
           title="Episodes"
-          @click="$emit('open-episodes')"
+          @click="toggleMenu('episodes')"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
@@ -179,6 +179,15 @@
       />
     </div>
 
+    <!-- Episodes drawer (floating, top-right — reuses source-panel geometry) -->
+    <div v-if="openMenu === 'episodes'" class="pl-floating pl-floating--source" @click.stop>
+      <EpisodesPanel
+        :episodes="episodes"
+        :selected-number="selectedEpisode?.number ?? null"
+        @select="onSelectEpisode"
+      />
+    </div>
+
     <!-- Playback settings menu (floating, above control bar) -->
     <div v-if="openMenu === 'settings'" class="pl-floating pl-floating--btnmenu" @click.stop>
       <PlaybackSettingsMenu
@@ -236,6 +245,7 @@ import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
 import PlayerControlBar from './PlayerControlBar.vue'
 import SourcePanel from './SourcePanel.vue'
+import EpisodesPanel from './EpisodesPanel.vue'
 import PlaybackSettingsMenu from './PlaybackSettingsMenu.vue'
 import SubtitlesMenu from './SubtitlesMenu.vue'
 import BrowseSubsModal from './BrowseSubsModal.vue'
@@ -276,7 +286,6 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'toggle-theater'): void
-  (e: 'open-episodes'): void
 }>()
 
 // ─── Core state ──────────────────────────────────────────────────────────────
@@ -454,6 +463,20 @@ watch(
 function onSelectProvider(id: string) {
   state.setProvider(id, '')
   // loadEpisodesAndStream fires via the provider watcher above
+}
+
+// ─── Episode selection (episodes drawer) ─────────────────────────────────────
+// Resolve DIRECTLY (mirrors goToNextEpisode) — the combo/episode watcher
+// early-returns while isResolving and would silently swallow a click made
+// during an in-flight resolve. resolveStreamForEpisode sets isResolving
+// synchronously, so the watcher's deferred fire is deduped, and resolveToken
+// arbitrates any race with the in-flight request.
+
+function onSelectEpisode(ep: EpisodeOption) {
+  openMenu.value = null
+  if (selectedEpisode.value?.number === ep.number) return
+  selectedEpisode.value = ep
+  void resolveStreamForEpisode(ep)
 }
 
 // ─── Retry ───────────────────────────────────────────────────────────────────
@@ -657,7 +680,7 @@ async function resolveStreamForCurrentEpisode() {
 
 // ─── Menu state ───────────────────────────────────────────────────────────────
 
-type MenuKind = 'source' | 'settings' | 'subs' | null
+type MenuKind = 'source' | 'settings' | 'subs' | 'episodes' | null
 const openMenu = ref<MenuKind>(null)
 const browseOpen = ref(false)
 

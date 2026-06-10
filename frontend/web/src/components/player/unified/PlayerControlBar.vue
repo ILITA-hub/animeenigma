@@ -181,7 +181,7 @@ withDefaults(
     chapters?: Chapter[]
     stillUrl?: string
     /** which floating menu is open, for trigger-button is-open highlight */
-    openMenu?: 'source' | 'settings' | 'subs' | null
+    openMenu?: 'source' | 'settings' | 'subs' | 'episodes' | null
   }>(),
   { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null },
 )

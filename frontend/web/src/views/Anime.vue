@@ -74,7 +74,7 @@
             <!-- Site Rating -->
             <div v-if="siteRating && siteRating.total_reviews > 0" class="flex items-center gap-2">
               <div class="flex items-center gap-1 text-cyan-400">
-                <Star class="size-5" fill="currentColor" />
+                <ScoreDiamond class="size-5" />
                 <span class="font-bold text-lg">{{ siteRating.average_score.toFixed(1) }}</span>
               </div>
               <span class="text-white/60 text-sm">AnimeEnigma ({{ siteRating.total_reviews }})</span>
@@ -646,7 +646,6 @@
           :is-hentai="isHentai"
           :initial-episode="resumeStartEpisode"
           @toggle-theater="setTheater(!theaterMode)"
-          @open-episodes="() => {}"
         />
       </section>
 
@@ -678,7 +677,7 @@
             {{ myReview ? $t('anime.editReview') : $t('anime.writeReview') }}
           </h3>
 
-          <!-- Star Rating -->
+          <!-- Score rating (◆ scale) -->
           <div class="mb-4">
             <label class="block text-white/60 text-sm mb-2">{{ $t('anime.yourRating') }}</label>
             <div class="flex flex-wrap gap-1" role="radiogroup" :aria-label="$t('anime.yourRating')">
@@ -692,11 +691,9 @@
                 @click="reviewForm.score = star"
                 class="p-0.5 sm:p-1 transition-transform hover:scale-110"
               >
-                <Star
+                <ScoreDiamond
                   class="size-6 sm:size-8 transition-colors"
-                  :class="star <= reviewForm.score ? 'text-warning' : 'text-white/30'"
-                  fill="currentColor"
-                  aria-hidden="true"
+                  :class="star <= reviewForm.score ? 'text-cyan-400' : 'text-white/30'"
                 />
               </button>
             </div>
@@ -774,8 +771,8 @@
                   </p>
                 </div>
               </div>
-              <div class="flex items-center gap-1 text-warning">
-                <Star class="size-5" fill="currentColor" />
+              <div class="flex items-center gap-1 text-cyan-400">
+                <ScoreDiamond class="size-5" />
                 <span class="font-bold">{{ review.score }}</span>
               </div>
             </div>
@@ -1042,7 +1039,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Spinner } from '@/components/ui'
+import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, ScoreDiamond, Spinner } from '@/components/ui'
 import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import { Carousel } from '@/components/carousel'
