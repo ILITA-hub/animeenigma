@@ -61,14 +61,15 @@ describe('PosterRow', () => {
 })
 
 describe('PosterRow poster skeleton + resized proxy', () => {
-  it('shows the glass skeleton until the poster loads, then hides it', async () => {
+  it('overlays the glass skeleton on the always-visible poster until it loads', async () => {
     const w = mountRow()
     expect(w.find('[data-testid="poster-skeleton"]').exists()).toBe(true)
-    expect(w.find('img.poster').classes()).toContain('opacity-0')
+    // The img is NEVER opacity-hidden — the native progressive render must
+    // stay visible under the translucent overlay as loading feedback.
+    expect(w.find('img.poster').classes()).not.toContain('opacity-0')
 
     await w.find('img.poster').trigger('load')
     expect(w.find('[data-testid="poster-skeleton"]').exists()).toBe(false)
-    expect(w.find('img.poster').classes()).toContain('opacity-100')
   })
 
   it('routes shikimori posters through the resizing image-proxy (w=128)', () => {
