@@ -56,6 +56,10 @@
     <!-- Phase 13 / UX-27: global toast renderer for optimistic-action rollbacks -->
     <Toaster />
 
+    <!-- Global promise-based confirm() host (useConfirm) — themed replacement
+         for native window.confirm(). Mounted once, like <Toaster />. -->
+    <ConfirmDialogHost />
+
     <!-- Workstream notifications / Phase 3 — slide-in toast for the latest
          undismissed notification. Mounted at App-root so it survives route
          transitions. Gated by the feature flag so VITE_NOTIFICATIONS_ENABLED=
@@ -89,6 +93,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import Navbar from '@/components/layout/Navbar.vue'
 import FeedbackButton from '@/components/layout/FeedbackButton.vue'
 import Toaster from '@/components/ui/Toaster.vue'
+import ConfirmDialogHost from '@/components/ui/ConfirmDialogHost.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 

@@ -38,6 +38,9 @@ export { alertVariants, type AlertVariants } from './alert-variants'
 export { default as Avatar } from './Avatar.vue'
 export { avatarVariants, type AvatarVariants } from './avatar-variants'
 export { default as AvatarGroup } from './AvatarGroup.vue'
+export { default as ConfirmDialog } from './ConfirmDialog.vue'
+export { default as ConfirmDialogHost } from './ConfirmDialogHost.vue'
+export type { ConfirmOptions } from '@/composables/useConfirm'
 
 // Re-export SelectOption type
 export interface SelectOption {
