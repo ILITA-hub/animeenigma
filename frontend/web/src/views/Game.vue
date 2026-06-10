@@ -221,14 +221,7 @@
         />
         <div>
           <label class="block text-sm font-medium text-white/70 mb-2">{{ $t('rooms.maxPlayersLabel') }}</label>
-          <input
-            v-model.number="newRoom.maxPlayers"
-            type="number"
-            min="2"
-            max="20"
-            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500"
-            required
-          />
+          <Input v-model.number="newRoom.maxPlayers" type="number" min="2" max="20" required />
         </div>
       </form>
       <template #footer>

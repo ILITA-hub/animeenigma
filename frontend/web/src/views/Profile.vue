@@ -123,12 +123,9 @@
 
               <!-- View Toggle + Sort -->
               <div class="flex items-center justify-end gap-2">
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  :placeholder="$t('profile.watchlist.searchPlaceholder')"
-                  class="flex-shrink-0 w-48 px-3 py-2 rounded-full text-sm bg-white/5 text-white/80 border border-transparent focus:border-cyan-500/30 focus:outline-none placeholder-white/40 mr-auto"
-                >
+                <div class="flex-shrink-0 w-48 mr-auto">
+                  <Input v-model="searchQuery" type="text" size="sm" :placeholder="$t('profile.watchlist.searchPlaceholder')" class="rounded-full border-transparent" />
+                </div>
                 <!-- Sort -->
                 <div class="w-36">
                   <Select
@@ -202,18 +199,18 @@
                       <!-- Score (inline edit) -->
                       <td class="py-3 px-2 text-center">
                         <template v-if="isOwnProfile">
-                          <input
-                            v-if="editingScore === anime.anime_id"
-                            type="number"
-                            min="0"
-                            max="10"
-                            :value="anime.score || 0"
-                            @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
-                            @keydown.enter="(e) => { (e.target as HTMLInputElement).blur(); }"
-                            @keydown.escape="editingScore = null"
-                            class="w-12 h-8 text-center bg-white/10 border border-cyan-500/50 rounded text-cyan-400 font-bold focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                            ref="scoreInputRef"
-                          />
+                          <div v-if="editingScore === anime.anime_id" class="w-14">
+                            <Input
+                              type="number"
+                              size="sm"
+                              min="0" max="10"
+                              :model-value="String(anime.score || 0)"
+                              @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); }"
+                              @keydown.enter="(e: KeyboardEvent) => { (e.target as HTMLInputElement).blur(); }"
+                              @keydown.escape="editingScore = null"
+                              class="text-center text-cyan-400"
+                            />
+                          </div>
                           <button
                             v-else
                             @click="editingScore = anime.anime_id"
@@ -238,15 +235,18 @@
                             class="w-6 h-6 rounded flex items-center justify-center bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors"
                             :disabled="(anime.episodes || 0) <= 0"
                           >-</button>
-                          <input
-                            type="number"
-                            :value="anime.episodes || 0"
-                            min="0"
-                            :max="animeTotalEpisodes(anime) || 9999"
-                            @blur="(e) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
-                            @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
-                            class="w-10 h-6 text-center text-xs bg-white/10 border border-white/10 rounded text-white focus:outline-none focus:border-cyan-500"
-                          />
+                          <div class="w-12">
+                            <Input
+                              type="number"
+                              size="sm"
+                              :model-value="String(anime.episodes || 0)"
+                              min="0"
+                              :max="animeTotalEpisodes(anime) || 9999"
+                              class="h-6 py-0 text-center text-xs bg-white/10"
+                              @blur="(e: Event) => updateAnimeEpisodes(anime.anime_id, parseInt((e.target as HTMLInputElement).value) || 0)"
+                              @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
+                            />
+                          </div>
                           <span class="text-white/60">/</span>
                           <span class="text-white/60">{{ animeTotalEpisodes(anime) || '?' }}</span>
                           <button
@@ -262,24 +262,26 @@
                         </div>
                       </td>
                       <td class="py-3 px-2 text-center hidden sm:table-cell">
-                        <input
+                        <Input
                           v-if="isOwnProfile"
                           type="date"
-                          :value="formatDateForInput(anime.started_at)"
-                          @change="(e) => updateAnimeDate(anime.anime_id, 'started_at', (e.target as HTMLInputElement).value)"
-                          class="bg-white/10 border border-white/10 rounded px-2 py-1 text-white text-xs w-full focus:outline-none focus:border-cyan-500"
+                          size="sm"
+                          :model-value="formatDateForInput(anime.started_at)"
+                          @change="(e: Event) => updateAnimeDate(anime.anime_id, 'started_at', (e.target as HTMLInputElement).value)"
+                          class="text-xs py-1"
                         />
                         <span v-else class="text-white/60 text-xs">
                           {{ formatDateDisplay(anime.started_at) }}
                         </span>
                       </td>
                       <td class="py-3 px-2 text-center hidden sm:table-cell">
-                        <input
+                        <Input
                           v-if="isOwnProfile"
                           type="date"
-                          :value="formatDateForInput(anime.completed_at)"
-                          @change="(e) => updateAnimeDate(anime.anime_id, 'completed_at', (e.target as HTMLInputElement).value)"
-                          class="bg-white/10 border border-white/10 rounded px-2 py-1 text-white text-xs w-full focus:outline-none focus:border-cyan-500"
+                          size="sm"
+                          :model-value="formatDateForInput(anime.completed_at)"
+                          @change="(e: Event) => updateAnimeDate(anime.anime_id, 'completed_at', (e.target as HTMLInputElement).value)"
+                          class="text-xs py-1"
                         />
                         <span v-else class="text-white/60 text-xs">
                           {{ formatDateDisplay(anime.completed_at) }}
@@ -350,18 +352,18 @@
                       <!-- Score edit popover for grid (z-40 keeps it above the kebab) -->
                       <div
                         v-if="isOwnProfile && editingScoreGrid === anime.anime_id"
-                        class="absolute top-2 right-2 z-40"
+                        class="absolute top-2 right-2 z-40 w-14"
                         @click.prevent.stop
                       >
-                        <input
+                        <Input
                           type="number"
-                          min="0"
-                          max="10"
-                          :value="anime.score || 0"
-                          @blur="(e) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
-                          @keydown.enter="(e) => (e.target as HTMLInputElement).blur()"
+                          size="sm"
+                          min="0" max="10"
+                          :model-value="String(anime.score || 0)"
+                          @blur="(e: Event) => { finishEditScore(anime.anime_id, (e.target as HTMLInputElement).value); editingScoreGrid = null; }"
+                          @keydown.enter="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
                           @keydown.escape="editingScoreGrid = null"
-                          class="w-14 h-8 text-center bg-black/80 border border-cyan-500/50 rounded text-warning font-bold text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          class="text-center text-warning"
                         />
                       </div>
 
@@ -452,13 +454,9 @@
                   <div>
                     <label class="block text-white/60 text-sm mb-2">MyAnimeList</label>
                     <div class="flex gap-2">
-                      <input
-                        v-model="malUsername"
-                        type="text"
-                        :placeholder="$t('profile.import.malPlaceholder')"
-                        class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
-                        :disabled="malSync.importing"
-                      />
+                      <div class="flex-1">
+                        <Input v-model="malUsername" type="text" :placeholder="$t('profile.import.malPlaceholder')" class="bg-white/10" :disabled="malSync.importing" />
+                      </div>
                       <Button
                         variant="primary"
                         :disabled="!malUsername || malSync.importing"
@@ -500,13 +498,9 @@
                   <div>
                     <label class="block text-white/60 text-sm mb-2">Shikimori</label>
                     <div class="flex gap-2">
-                      <input
-                        v-model="shikimoriNickname"
-                        type="text"
-                        :placeholder="$t('profile.import.shikimoriPlaceholder')"
-                        class="flex-1 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-cyan-500"
-                        :disabled="shikimoriSync.importing"
-                      />
+                      <div class="flex-1">
+                        <Input v-model="shikimoriNickname" type="text" :placeholder="$t('profile.import.shikimoriPlaceholder')" class="bg-white/10" :disabled="shikimoriSync.importing" />
+                      </div>
                       <Button
                         variant="primary"
                         :disabled="!shikimoriNickname || shikimoriSync.importing"
@@ -574,13 +568,9 @@
                     <div class="flex gap-2">
                       <div class="flex-1 flex items-center bg-white/10 border border-white/10 rounded-lg overflow-hidden">
                         <span class="px-3 text-white/60 text-sm">/user/</span>
-                        <input
-                          v-model="publicId"
-                          type="text"
-                          placeholder="your-username"
-                          class="flex-1 bg-transparent py-2 pr-3 text-white placeholder-white/40 focus:outline-none"
-                          :disabled="savingPublicId"
-                        />
+                        <div class="flex-1">
+                          <Input v-model="publicId" type="text" size="sm" placeholder="your-username" class="bg-transparent border-0 pl-0" :disabled="savingPublicId" />
+                        </div>
                       </div>
                       <Button
                         variant="primary"
@@ -625,11 +615,9 @@
                         :key="status.value"
                         class="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
                       >
-                        <input
-                          type="checkbox"
-                          :checked="publicStatuses.includes(status.value)"
-                          @change="togglePublicStatus(status.value)"
-                          class="w-4 h-4 rounded border-white/20 bg-white/10 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+                        <Checkbox
+                          :model-value="publicStatuses.includes(status.value)"
+                          @update:model-value="() => togglePublicStatus(status.value)"
                         />
                         <span class="text-white">{{ status.label }}</span>
                       </label>
@@ -661,16 +649,17 @@
                   <label for="skip-intro-dismiss-sec" class="block text-white/60 text-sm mb-2">
                     {{ $t('profile.settings.skipIntroDismissSec.label') }}
                   </label>
-                  <input
-                    id="skip-intro-dismiss-sec"
-                    type="number"
-                    :min="skipIntroMin"
-                    :max="skipIntroMax"
-                    step="1"
-                    :value="skipIntroSec"
-                    @change="onSkipIntroSecChange"
-                    class="w-32 bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-500"
-                  />
+                  <div class="w-32">
+                    <Input
+                      id="skip-intro-dismiss-sec"
+                      type="number"
+                      size="sm"
+                      :min="skipIntroMin" :max="skipIntroMax" step="1"
+                      :model-value="String(skipIntroSec)"
+                      @change="onSkipIntroSecChange"
+                      class="bg-white/10"
+                    />
+                  </div>
                   <p class="text-white/60 text-xs mt-2">
                     {{ $t('profile.settings.skipIntroDismissSec.hint') }}
                   </p>
@@ -904,6 +893,7 @@
           <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-white hover:bg-white/20 cursor-pointer transition-colors">
             <ImageIcon class="size-5" />
             {{ $t('profile.avatar.selectFile') }}
+            <!-- bespoke-keep: file upload; out of Input-primitive scope -->
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -954,7 +944,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Avatar, Badge, Button, Modal, Tabs, Select, PaginationBar, ScoreDiamond, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
+import { Avatar, Badge, Button, Checkbox, Input, Modal, Tabs, Select, PaginationBar, ScoreDiamond, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'

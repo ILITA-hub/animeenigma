@@ -9,13 +9,14 @@
       </span>
       <input
         :id="inputId"
-        v-bind="$attrs"
+        ref="inputRef"
+        v-bind="restAttrs"
         v-model="model"
         :type="type"
         :placeholder="placeholder"
         :disabled="disabled"
         :readonly="readonly"
-        :class="cn(inputClasses, $slots.prefix ? 'pl-10' : '', (clearable || $slots.suffix) ? 'pr-10' : '')"
+        :class="cn(inputClasses, $slots.prefix ? 'pl-10' : '', (clearable || $slots.suffix) ? 'pr-10' : '', passedClass)"
         @focus="focused = true"
         @blur="focused = false"
       />
@@ -37,15 +38,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useAttrs } from 'vue'
 import { X } from 'lucide-vue-next'
 import { cn } from '@/lib/utils'
 
 defineOptions({ inheritAttrs: false })
 
 interface Props {
-  modelValue?: string
-  type?: 'text' | 'email' | 'password' | 'search' | 'number' | 'tel' | 'url'
+  modelValue?: string | number
+  type?: 'text' | 'email' | 'password' | 'search' | 'number' | 'tel' | 'url' | 'date'
   placeholder?: string
   label?: string
   hint?: string
@@ -68,16 +69,25 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
+  'update:modelValue': [value: string | number]
 }>()
 
 const model = computed({
   get: () => props.modelValue,
-  set: (value: string) => emit('update:modelValue', value),
+  set: (value: string | number) => emit('update:modelValue', value),
 })
 
 const focused = ref(false)
 const inputId = `input-${Math.random().toString(36).slice(2, 9)}`
+
+const attrs = useAttrs()
+const passedClass = computed(() => attrs.class as string | undefined)
+const restAttrs = computed(() => {
+  const { class: _omitClass, ...rest } = attrs
+  return rest
+})
+const inputRef = ref<HTMLInputElement | null>(null)
+defineExpose({ focus: () => inputRef.value?.focus() })
 
 const wrapperClasses = computed(() => 'w-full')
 
