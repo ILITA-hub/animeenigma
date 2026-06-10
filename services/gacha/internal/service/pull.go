@@ -392,8 +392,7 @@ type BannerView struct {
 	ID            string           `json:"id"`
 	Name          string           `json:"name"`
 	Description   string           `json:"description"`
-	ArtPath       string           `json:"art_path"`
-	// BackdropPath is the separately uploaded slider/spin-page background image key.
+	// BackdropPath is the single banner background image key (slider/spin-page).
 	BackdropPath  string           `json:"backdrop_path"`
 	IsStandard    bool             `json:"is_standard"`
 	Cards         []BannerCardView `json:"cards"`
@@ -434,7 +433,7 @@ func (s *PullService) ActiveBannersView(ctx context.Context, userID string) ([]B
 			return nil, err
 		}
 		views = append(views, BannerView{
-			ID: b.ID, Name: b.Name, Description: b.Description, ArtPath: b.ArtPath,
+			ID: b.ID, Name: b.Name, Description: b.Description,
 			BackdropPath: b.BackdropPath, IsStandard: b.IsStandard, Cards: cards,
 			MyPity: pity, PityThreshold: s.econ.PityThreshold,
 		})

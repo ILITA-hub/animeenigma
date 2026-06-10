@@ -71,8 +71,11 @@ type Banner struct {
 	ID          string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Name        string         `gorm:"size:128;not null" json:"name"`
 	Description string         `gorm:"size:1024" json:"description"`
-	ArtPath     string         `gorm:"size:512" json:"art_path"`
-	// BackdropPath is the separately uploaded slider/spin-page background image key.
+	// ArtPath is the legacy banner image field — the DB column (art_path) is
+	// retained (GORM never drops columns) but is no longer written or read by
+	// the application.  BackdropPath is the single banner image going forward.
+	ArtPath     string         `gorm:"size:512" json:"-"`
+	// BackdropPath is the single banner background image key (slider/spin-page).
 	BackdropPath string        `gorm:"size:512" json:"backdrop_path"`
 	IsStandard  bool           `gorm:"not null;default:false" json:"is_standard"`
 	Enabled     bool           `gorm:"not null;default:false;index" json:"enabled"`

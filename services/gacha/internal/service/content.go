@@ -173,7 +173,6 @@ func (s *ContentService) GroupCardIDs(ctx context.Context, groupID string) ([]st
 type CreateBannerRequest struct {
 	Name         string     `json:"name"`
 	Description  string     `json:"description"`
-	ArtPath      string     `json:"art_path"`
 	BackdropPath string     `json:"backdrop_path"`
 	IsStandard   bool       `json:"is_standard"`
 	Enabled      bool       `json:"enabled"`
@@ -187,7 +186,6 @@ type UpdateBannerRequest struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
 	Description  string     `json:"description"`
-	ArtPath      string     `json:"art_path"`
 	BackdropPath string     `json:"backdrop_path"`
 	IsStandard   bool       `json:"is_standard"`
 	Enabled      bool       `json:"enabled"`
@@ -215,7 +213,6 @@ func (s *ContentService) CreateBanner(ctx context.Context, req CreateBannerReque
 	b := &domain.Banner{
 		Name:         req.Name,
 		Description:  req.Description,
-		ArtPath:      req.ArtPath,
 		BackdropPath: req.BackdropPath,
 		IsStandard:   req.IsStandard,
 		Enabled:      req.Enabled,
@@ -244,7 +241,6 @@ func (s *ContentService) UpdateBanner(ctx context.Context, req UpdateBannerReque
 	}
 	b.Name = req.Name
 	b.Description = req.Description
-	b.ArtPath = req.ArtPath
 	b.BackdropPath = req.BackdropPath
 	b.IsStandard = req.IsStandard
 	b.Enabled = req.Enabled

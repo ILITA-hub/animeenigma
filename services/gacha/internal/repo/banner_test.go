@@ -388,7 +388,6 @@ func TestBanner_BackdropPath_RoundTrip(t *testing.T) {
 	b := &domain.Banner{
 		Name:         "Spring Fest",
 		Enabled:      true,
-		ArtPath:      "banners/spring-art.webp",
 		BackdropPath: "banners/spring-backdrop.webp",
 	}
 	if err := br.CreateBanner(ctx, b); err != nil {
