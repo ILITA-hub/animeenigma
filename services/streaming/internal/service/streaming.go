@@ -199,19 +199,27 @@ func (s *StreamingService) StreamFromStorage(ctx context.Context, token *StreamT
 	}
 	defer reader.Close()
 
-	// Set headers
-	w.Header().Set("Content-Type", fileInfo.ContentType)
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
-	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-
-	// Handle range requests for seeking
-	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
-		// TODO: Implement proper range request handling
-		w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", fileInfo.Size-1, fileInfo.Size))
-		w.WriteHeader(http.StatusPartialContent)
+	// Pre-set the content type so ServeContent uses it instead of sniffing the
+	// first 512 bytes (sniffing would consume the reader before the copy).
+	if fileInfo.ContentType != "" {
+		w.Header().Set("Content-Type", fileInfo.ContentType)
 	}
 
+	// The MinIO object is an io.ReadSeeker, so hand off to http.ServeContent,
+	// which implements proper HTTP Range handling: it parses the Range header,
+	// emits 206 Partial Content with a correct Content-Range + Content-Length
+	// (or 416 for an unsatisfiable range), sets Accept-Ranges, and honors
+	// conditional (If-Range / If-Modified-Since) requests. This is what makes
+	// in-player seeking work for self-hosted MinIO videos.
+	if seeker, ok := reader.(io.ReadSeeker); ok {
+		http.ServeContent(w, r, token.StorageKey, fileInfo.LastModified, seeker)
+		return nil
+	}
+
+	// Fallback: a non-seekable reader can only be streamed whole (200 OK).
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size))
+	w.Header().Set("Accept-Ranges", "none")
 	_, err = io.Copy(w, reader)
 	return err
 }
