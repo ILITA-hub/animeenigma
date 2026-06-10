@@ -62,7 +62,15 @@ export function useVideoEngine(videoEl: Ref<HTMLVideoElement | null>) {
     // here: on CODECS-less HLS (e.g. Kodik's solodcdn streams) the main-thread
     // transmux path stalls at "bufferCodec event(s) expected" and never requests
     // fragment 0, leaving the player frozen at readyState 0 with no error.
-    hls = new Hls({ enableWorker: true, backBufferLength: 90 })
+    hls = new Hls({
+      enableWorker: true,
+      backBufferLength: 90,
+      // Seek-ahead window (spec 2026-06-10): keep ~1 min buffered ahead so
+      // ±5s arrow-key seeks land inside the buffer and resolve instantly.
+      // backBufferLength 90 already covers the "10s behind" requirement.
+      maxBufferLength: 60,
+      maxMaxBufferLength: 120,
+    })
     hls.loadSource(stream.url)
     hls.attachMedia(v)
     // Explicitly kick fragment loading once the manifest parses. On CODECS-less
