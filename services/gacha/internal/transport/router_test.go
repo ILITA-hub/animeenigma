@@ -86,7 +86,7 @@ func getTestRouter(t *testing.T) http.Handler {
 		}
 
 		walletRepo := repo.NewWalletRepository(db)
-		walletSvc := service.NewWalletService(walletRepo, 100, true, log)
+		walletSvc := service.NewWalletService(walletRepo, 100, 50, 10, 100, true, log)
 		walletH := handler.NewWalletHandler(walletSvc, log)
 		internalH := handler.NewInternalHandler(walletSvc, log)
 
