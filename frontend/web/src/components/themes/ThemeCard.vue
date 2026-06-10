@@ -51,7 +51,7 @@
           <!-- Rating display -->
           <div class="flex flex-col items-end flex-shrink-0">
             <div class="flex items-center gap-1">
-              <Star class="size-4 text-warning" fill="currentColor" aria-hidden="true" />
+              <ScoreDiamond class="size-4 text-cyan-400" />
               <span class="text-white font-medium text-sm">
                 {{ theme.avg_score > 0 ? theme.avg_score.toFixed(1) : '-' }}
               </span>
@@ -104,8 +104,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Play, Star, ExternalLink, ChevronDown } from 'lucide-vue-next'
+import { Play, ExternalLink, ChevronDown } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import ScoreDiamond from '@/components/ui/ScoreDiamond.vue'
 import RatingStars from './RatingStars.vue'
 
 const authStore = useAuthStore()

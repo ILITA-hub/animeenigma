@@ -56,10 +56,7 @@
             data-testid="score"
             class="gap-1 tabular-nums"
           >
-            <!-- ◆ diamond = AnimeEnigma score -->
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2l9 10-9 10L3 12z" />
-            </svg>
+            <ScoreDiamond class="size-3" />
             {{ model.siteScore.toFixed(1) }}
           </Badge>
         </div>
@@ -117,6 +114,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Star, Play } from 'lucide-vue-next'
 import Badge from '@/components/ui/Badge.vue'
+import ScoreDiamond from '@/components/ui/ScoreDiamond.vue'
 import AnimeKebab from './AnimeKebab.vue'
 import PosterImage from './PosterImage.vue'
 import type { AnimeCardModel } from '@/types/card'

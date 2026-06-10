@@ -30,7 +30,7 @@
               {{ anime.rating.toFixed(1) }}
             </span>
             <span v-if="siteRating && siteRating.total_reviews > 0" class="flex items-center gap-0.5 text-xs text-cyan-400">
-              <Star class="size-3" fill="currentColor" aria-hidden="true" />
+              <ScoreDiamond class="size-3" />
               {{ siteRating.average_score.toFixed(1) }}
             </span>
           </div>
@@ -91,7 +91,7 @@ import type { ReferenceElement } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Check, Trash2, ExternalLink, Star } from 'lucide-vue-next'
-import { DropdownMenu, DropdownMenuItem } from '@/components/ui'
+import { DropdownMenu, DropdownMenuItem, ScoreDiamond } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { userApi } from '@/api/client'

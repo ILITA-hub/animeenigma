@@ -54,9 +54,7 @@
             {{ model.malScore.toFixed(1) }}
           </span>
           <span v-if="model.siteScore" class="chip score site-score tabular-nums">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M12 2l9 10-9 10L3 12z" />
-            </svg>
+            <ScoreDiamond class="size-[10px]" />
             {{ model.siteScore.toFixed(1) }}
           </span>
         </template>
@@ -74,6 +72,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EllipsisVertical, Star, Clock } from 'lucide-vue-next'
+import ScoreDiamond from '@/components/ui/ScoreDiamond.vue'
 import { cardPosterUrl } from '@/composables/useImageProxy'
 import type { AnimeCardModel } from '@/types/card'
 
