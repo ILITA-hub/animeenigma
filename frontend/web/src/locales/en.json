@@ -553,6 +553,12 @@
         "label": "Hide Skip-Intro button after (seconds)",
         "hint": "How long the Skip-Intro / Skip-Outro button stays visible during the OP/ED window. Min 2, max 60. Default 8."
       },
+      "timezone": {
+        "title": "Time zone",
+        "description": "Affects episode air times on the anime page and the home page. Detected automatically at sign-up; can only be changed here.",
+        "saved": "Time zone saved",
+        "error": "Failed to save time zone"
+      },
       "apiKey": "API Key",
       "apiKeyDescription": "Use an API key for CLI/script access without a password. Keep it secret.",
       "generateApiKey": "Generate API Key",

@@ -157,6 +157,28 @@ func (h *UserHandler) UpdateAvatar(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, map[string]string{"status": "ok"})
 }
 
+// UpdateTimezone updates the current user's display timezone
+func (h *UserHandler) UpdateTimezone(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authz.ClaimsFromContext(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	var req domain.UpdateTimezoneRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	if err := h.userService.UpdateTimezone(r.Context(), claims.UserID, req.Timezone); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, map[string]string{"timezone": req.Timezone})
+}
+
 // UpdatePrivacy updates the current user's public_statuses
 func (h *UserHandler) UpdatePrivacy(w http.ResponseWriter, r *http.Request) {
 	claims, ok := authz.ClaimsFromContext(r.Context())

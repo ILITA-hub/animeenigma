@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -128,6 +129,30 @@ func (s *UserService) UpdateAvatar(ctx context.Context, userID, avatar string) e
 		return err
 	}
 	user.Avatar = avatar
+	return s.userRepo.Update(ctx, user)
+}
+
+// IsValidTimezone reports whether tz is a concrete IANA zone the runtime
+// image can resolve (alpine ships tzdata). "Local" is rejected — a stored
+// zone must mean the same instant on every machine that reads it.
+func IsValidTimezone(tz string) bool {
+	if tz == "" || tz == "Local" {
+		return false
+	}
+	_, err := time.LoadLocation(tz)
+	return err == nil
+}
+
+func (s *UserService) UpdateTimezone(ctx context.Context, userID, tz string) error {
+	if !IsValidTimezone(tz) {
+		return errors.InvalidInput("invalid IANA timezone: " + tz)
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	user.Timezone = tz
 	return s.userRepo.Update(ctx, user)
 }
 

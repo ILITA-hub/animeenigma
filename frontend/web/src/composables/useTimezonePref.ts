@@ -30,7 +30,7 @@ export const TIMEZONE_CHOICES: ReadonlyArray<{ value: string; cityKey: string }>
   { value: 'America/Los_Angeles', cityKey: 'losAngeles' },
 ]
 
-function isValidTz(tz: string): boolean {
+export function isValidTz(tz: string): boolean {
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: tz })
     return true
@@ -39,7 +39,7 @@ function isValidTz(tz: string): boolean {
   }
 }
 
-const browserTimezone: string = (() => {
+export const browserTimezone: string = (() => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   } catch {

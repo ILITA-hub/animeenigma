@@ -464,6 +464,7 @@ export const userApi = {
   updatePrivacy: (publicStatuses: string[]) => apiClient.put('/auth/profile/privacy', { public_statuses: publicStatuses }),
   // Avatar
   updateAvatar: (avatar: string) => apiClient.put('/auth/profile/avatar', { avatar }),
+  updateTimezone: (timezone: string) => apiClient.put('/auth/profile/timezone', { timezone }),
   // Error reporting
   reportError: (data: Record<string, unknown>) => apiClient.post('/users/report', data),
   // API Key management

@@ -12,6 +12,7 @@ export interface User {
   public_id?: string
   public_statuses?: string[]
   created_at?: string
+  timezone?: string
 }
 
 export interface LoginCredentials {
@@ -22,6 +23,8 @@ export interface LoginCredentials {
 export interface RegisterData {
   username: string
   password: string
+  /** IANA zone captured at sign-up; register() fills it from the browser when omitted. */
+  timezone?: string
 }
 
 // Helper to safely parse user from localStorage
@@ -191,7 +194,10 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
 
     try {
-      const response = await apiClient.post('/auth/register', data)
+      // Account timezone is set once at sign-up (browser-detected); later
+      // changes go through Profile -> Settings only.
+      const payload = { timezone: detectBrowserTimezone(), ...data }
+      const response = await apiClient.post('/auth/register', payload)
       const respData = response.data?.data || response.data
       setToken(respData.access_token)
       setUser(respData.user)
@@ -275,6 +281,26 @@ export const useAuthStore = defineStore('auth', () => {
     import('@/analytics').then(({ analytics }) => analytics.reset()).catch(() => undefined)
   }
 
+  function detectBrowserTimezone(): string {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    } catch {
+      return 'UTC'
+    }
+  }
+
+  // Accounts created before the timezone field existed (and Telegram sign-ups,
+  // where the user is created server-side) have no zone — set it once from the
+  // browser on first authenticated load. Fire-and-forget: display falls back
+  // to the browser zone anyway, so a failed backfill costs nothing.
+  function backfillTimezone(u: User | null) {
+    if (!u || u.timezone) return
+    const tz = detectBrowserTimezone()
+    apiClient.put('/auth/profile/timezone', { timezone: tz })
+      .then(() => { if (user.value && !user.value.timezone) setUser({ ...user.value, timezone: tz }) })
+      .catch(() => { /* next load retries */ })
+  }
+
   const fetchUser = async () => {
     if (!token.value) return
 
@@ -283,6 +309,7 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiClient.get('/auth/me')
       const userData = response.data?.data || response.data
       setUser(userData)
+      backfillTimezone(userData)
     } catch (err) {
       // Only logout when the server says the token is invalid; transient
       // network/5xx errors (e.g. VPN reconnect) shouldn't drop the session.
@@ -369,6 +396,7 @@ export const useAuthStore = defineStore('auth', () => {
     checkDeepLink,
     logout,
     fetchUser,
+    setUser,
     updateProfile,
     refreshAccessToken
   }

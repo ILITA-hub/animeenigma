@@ -726,6 +726,9 @@
                 </template>
               </div>
 
+              <!-- Timezone -->
+              <TimezoneCard />
+
               <!-- Active Sessions -->
               <ActiveSessionsCard />
 
@@ -946,6 +949,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { Avatar, Badge, Button, Checkbox, Input, Modal, Tabs, Select, PaginationBar, ScoreDiamond, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
+import TimezoneCard from '@/components/profile/TimezoneCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'

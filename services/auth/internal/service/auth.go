@@ -122,6 +122,11 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest,
 		PasswordHash: hashedPassword,
 		Role:         authz.RoleUser,
 	}
+	// Browser-detected zone from the sign-up request; invalid → leave empty
+	// (frontend backfills on first login) rather than failing registration.
+	if IsValidTimezone(req.Timezone) {
+		user.Timezone = req.Timezone
+	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, err

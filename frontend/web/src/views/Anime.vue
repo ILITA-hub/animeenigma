@@ -1047,7 +1047,7 @@ import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useResumeStateMachine } from '@/composables/useResumeStateMachine'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useSiteRatings } from '@/composables/useSiteRatings'
-import { useTimezonePref } from '@/composables/useTimezonePref'
+import { useUserTimezone } from '@/composables/useUserTimezone'
 import { wallClockDate, formatUtcOffset } from '@/composables/schedule/timezone'
 import { fromCatalogAnime } from '@/utils/toCardModel'
 import type { AnimeCardModel } from '@/types/card'
@@ -1689,7 +1689,7 @@ const isReviewFlagged = (review: Review): boolean => {
   return status === 'plan_to_watch' || episodes === 0
 }
 
-const { timezone: userTimezone } = useTimezonePref()
+const { timezone: userTimezone } = useUserTimezone()
 
 const formatNextEpisode = (dateStr: string) => {
   const date = new Date(dateStr)

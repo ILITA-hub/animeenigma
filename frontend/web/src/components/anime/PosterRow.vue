@@ -74,7 +74,7 @@ import { useI18n } from 'vue-i18n'
 import { EllipsisVertical, Star, Clock } from 'lucide-vue-next'
 import ScoreDiamond from '@/components/ui/ScoreDiamond.vue'
 import { cardPosterUrl } from '@/composables/useImageProxy'
-import { useTimezonePref } from '@/composables/useTimezonePref'
+import { useUserTimezone } from '@/composables/useUserTimezone'
 import { wallClockDate } from '@/composables/schedule/timezone'
 import type { AnimeCardModel } from '@/types/card'
 
@@ -89,7 +89,7 @@ const props = defineProps<{
 const emit = defineEmits<{ openMenu: [el: HTMLElement] }>()
 
 const { t } = useI18n()
-const { timezone: userTimezone } = useTimezonePref()
+const { timezone: userTimezone } = useUserTimezone()
 const kebabEl = ref<HTMLButtonElement | null>(null)
 
 function onKebab() {

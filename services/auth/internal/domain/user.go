@@ -17,6 +17,7 @@ type User struct {
 	PublicID       string         `gorm:"size:32;uniqueIndex" json:"public_id"`
 	PublicStatuses pq.StringArray `gorm:"type:text[]" json:"public_statuses"`
 	Avatar         string         `gorm:"type:text" json:"avatar,omitempty"`
+	Timezone       string         `gorm:"size:64" json:"timezone,omitempty"`
 	ApiKeyHash     *string        `gorm:"size:64;uniqueIndex" json:"-"`
 	Role           authz.Role     `gorm:"size:20;default:'user'" json:"role"`
 	CreatedAt      time.Time      `json:"created_at"`
@@ -28,6 +29,10 @@ type User struct {
 type RegisterRequest struct {
 	Username string `json:"username" validate:"required,min=3,max=32,alphanum"`
 	Password string `json:"password" validate:"required,min=8,max=128"`
+	// Browser-detected IANA timezone, captured once at sign-up; afterwards
+	// changeable only via settings (PUT /auth/profile/timezone). Invalid
+	// values are silently dropped — never fail a registration over tz.
+	Timezone string `json:"timezone,omitempty" validate:"omitempty,max=64"`
 }
 
 // LoginRequest represents a login request
@@ -117,6 +122,11 @@ type UpdatePrivacyRequest struct {
 // UpdateAvatarRequest represents a request to change the user's avatar
 type UpdateAvatarRequest struct {
 	Avatar string `json:"avatar" validate:"required"`
+}
+
+// UpdateTimezoneRequest represents a request to change the user's timezone
+type UpdateTimezoneRequest struct {
+	Timezone string `json:"timezone" validate:"required,max=64"`
 }
 
 // ApiKeyResponse is returned when generating an API key

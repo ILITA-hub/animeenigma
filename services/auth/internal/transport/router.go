@@ -69,6 +69,7 @@ func NewRouter(
 			r.Put("/auth/profile/public-id", userHandler.UpdatePublicID)
 			r.Put("/auth/profile/privacy", userHandler.UpdatePrivacy)
 			r.Put("/auth/profile/avatar", userHandler.UpdateAvatar)
+			r.Put("/auth/profile/timezone", userHandler.UpdateTimezone)
 			r.Post("/auth/api-key", authHandler.GenerateApiKey)
 			r.Delete("/auth/api-key", authHandler.RevokeApiKey)
 			r.Get("/auth/api-key", authHandler.HasApiKey)
