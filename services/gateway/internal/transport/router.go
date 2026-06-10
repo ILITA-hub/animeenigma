@@ -151,28 +151,12 @@ func NewRouterWithCleanup(
 			r.Use(AdminRoleMiddleware)
 		}
 
-		// Admin dashboard landing page
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html")
-			_, _ = w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head>
-    <title>AnimeEnigma Admin</title>
-    <style>
-        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-        h1 { color: #333; }
-        a { display: block; padding: 15px; margin: 10px 0; background: #f5f5f5; text-decoration: none; color: #333; border-radius: 8px; }
-        a:hover { background: #e0e0e0; }
-    </style>
-</head>
-<body>
-    <h1>AnimeEnigma Admin</h1>
-    <a href="/admin/grafana/">Grafana - Metrics & Dashboards</a>
-    <a href="/admin/recs/">Recommendation Engine Debugger</a>
-    <a href="/admin/feedback">User Feedback - Ideas & Bug Reports</a>
-</body>
-</html>`))
-		})
+		// Admin dashboard landing page — now rendered by the Vue SPA
+		// (AdminDashboard.vue) instead of hardcoded HTML, so it matches the
+		// site design. Falls through to the web service exactly like /recs,
+		// /feedback, /collections, etc. below. Auth (JWT + AdminRole +
+		// session-refresh) is already applied by the surrounding /admin group.
+		r.HandleFunc("/", proxyHandler.ProxyToWeb)
 
 		r.HandleFunc("/grafana/*", proxyHandler.ProxyToGrafana)
 		r.HandleFunc("/prometheus/*", proxyHandler.ProxyToPrometheus)

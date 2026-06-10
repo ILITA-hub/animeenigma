@@ -944,6 +944,16 @@
     "markNextWatched": "Mark episode {n} watched"
   },
   "admin": {
+    "dashboard": {
+      "title": "Admin Dashboard",
+      "subtitle": "Operator tools for monitoring, debugging and content management.",
+      "grafana": "Grafana",
+      "grafanaDesc": "Metrics, dashboards and service health.",
+      "recsDesc": "Inspect and force-recompute a user's recommendations.",
+      "feedbackDesc": "Read and triage user ideas, bugs and error reports.",
+      "collectionsDesc": "Curate and publish editorial anime collections.",
+      "rawLibraryDesc": "Self-hosted torrent → HLS pipeline for raw-JP episodes."
+    },
     "feedback": {
       "title": "User Feedback",
       "subtitle": "Ideas, bugs and issues submitted via the site feedback button.",

@@ -944,6 +944,16 @@
     "markNextWatched": "第{n}話を視聴済みにする"
   },
   "admin": {
+    "dashboard": {
+      "title": "管理ダッシュボード",
+      "subtitle": "監視・デバッグ・コンテンツ管理のための運用ツール。",
+      "grafana": "Grafana",
+      "grafanaDesc": "メトリクス、ダッシュボード、サービス稼働状況。",
+      "recsDesc": "ユーザーのレコメンドを確認し、強制再計算する。",
+      "feedbackDesc": "ユーザーのアイデア・バグ・エラー報告を確認・整理する。",
+      "collectionsDesc": "編集部のアニメコレクションを編集・公開する。",
+      "rawLibraryDesc": "生の日本語エピソード用のセルフホスト型 torrent → HLS パイプライン。"
+    },
     "feedback": {
       "title": "ユーザーフィードバック",
       "subtitle": "フィードバックボタンから寄せられたアイデア・バグ・問題。",

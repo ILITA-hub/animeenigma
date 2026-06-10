@@ -124,6 +124,16 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'about.title' }
   },
   {
+    // Admin dashboard landing — Vue replacement for the old hardcoded gateway
+    // HTML page. Lists every admin tool as a styled card. Non-strict matching
+    // covers both `/admin` and `/admin/`. Auth enforced by the guard below
+    // (meta.requiresAdmin) AND upstream by the gateway /admin JWT group.
+    path: '/admin',
+    name: 'admin-dashboard',
+    component: () => import('@/views/admin/AdminDashboard.vue'),
+    meta: { titleKey: 'admin.dashboard.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug page for the recs
     // engine. Route guard rejects non-admin users via meta.requiresAdmin.
     path: '/admin/recs/:user_id',
