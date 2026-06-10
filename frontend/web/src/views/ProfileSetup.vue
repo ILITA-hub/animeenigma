@@ -3,9 +3,7 @@
     <div class="max-w-md w-full">
       <div class="glass-card p-8 text-center">
         <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-cyan-500/20 flex items-center justify-center">
-          <svg class="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
+          <User class="size-10 text-cyan-400" />
         </div>
 
         <h1 class="text-2xl font-bold text-white mb-2">{{ $t('profileSetup.title') }}</h1>
@@ -54,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+import { User } from 'lucide-vue-next'
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

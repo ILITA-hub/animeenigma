@@ -19,10 +19,7 @@
           aria-controls="browse-filter-drawer"
           @click="drawerOpen = true"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L15 12.414V19a1 1 0 01-1.447.894l-4-2A1 1 0 019 17v-4.586L3.293 6.707A1 1 0 013 6V4z" />
-          </svg>
+          <Filter class="size-4" aria-hidden="true" />
           {{ $t('browse.filters.mobileToggle') }}
           <span
             v-if="filters.activeCount.value"
@@ -85,9 +82,7 @@
 
           <!-- Empty State -->
           <div v-else-if="animeList.length === 0" class="text-center py-20">
-            <svg class="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <Search class="size-16 mx-auto text-white/20 mb-4" />
             <p class="text-white/50 text-lg">{{ $t('search.noResults') }}</p>
             <Button
               v-if="searchQuery"
@@ -96,9 +91,7 @@
               :loading="loadingShikimori"
               @click="searchOnShikimori"
             >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search class="size-4 mr-2" />
               {{ $t('browse.searchShikimori') }}
             </Button>
           </div>
@@ -116,9 +109,7 @@
                 <svg v-if="loadingShikimori" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <RefreshCw v-else class="size-4" />
                 {{ $t('browse.refreshShikimori') }}
               </button>
             </div>
@@ -203,9 +194,7 @@
               :aria-label="$t('common.close')"
               @click="drawerOpen = false"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X class="size-5" aria-hidden="true" />
             </button>
           </div>
           <BrowseSidebar :genres="browseGenres" :filters="filters" />
@@ -228,6 +217,7 @@
 </template>
 
 <script setup lang="ts">
+import { Filter, RefreshCw, Search, X } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAnime } from '@/composables/useAnime'
