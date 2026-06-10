@@ -64,9 +64,9 @@ describe('NotTimeYetCard — root + backdrop', () => {
     expect(wrapper.element.tagName).toBe('ARTICLE')
   })
 
-  it('renders the warning secondary gradient overlay', () => {
+  it('renders the violet secondary gradient overlay (brand triad)', () => {
     const wrapper = mountCard({ data: baseData })
-    expect(wrapper.html()).toContain('from-warning/30')
+    expect(wrapper.html()).toContain('from-brand-violet/25')
   })
 
   it('renders a poster-blur backdrop driven by the poster url', () => {
@@ -92,16 +92,18 @@ describe('NotTimeYetCard — header + status pill', () => {
     const wrapper = mountCard({ data: { ...baseData, status: 'planned' } })
     expect(wrapper.text()).toContain('spotlight.notTimeYet.statusPlanned')
     expect(wrapper.text()).not.toContain('spotlight.notTimeYet.statusPostponed')
-    expect(wrapper.html()).toContain('bg-warning/20')
+    // DS alignment: status renders as an overlay Badge (dark glass) with a
+    // warning accent TEXT class for planned entries.
     expect(wrapper.html()).toContain('text-warning')
+    expect(wrapper.html()).toContain('bg-black/[0.62]')
   })
 
   it('shows the postponed status label + muted pill class', () => {
     const wrapper = mountCard({ data: { ...baseData, status: 'postponed' } })
     expect(wrapper.text()).toContain('spotlight.notTimeYet.statusPostponed')
     expect(wrapper.text()).not.toContain('spotlight.notTimeYet.statusPlanned')
-    expect(wrapper.html()).toContain('bg-muted/20')
     expect(wrapper.html()).toContain('text-muted-foreground')
+    expect(wrapper.html()).toContain('bg-black/[0.62]')
   })
 })
 

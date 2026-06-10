@@ -3,7 +3,7 @@
  *
  * Vitest snapshots + structural assertions for SpotlightBackdrop.vue.
  * One snapshot per (variant, accent) combination — 1 for poster-blur and
- * 6 for gradient-mesh × 6 accents.
+ * 3 for gradient-mesh × 3 brand-triad accents (DS alignment 2026-06-10).
  */
 
 import { describe, it, expect } from 'vitest'
@@ -13,11 +13,8 @@ import type { SpotlightAccent } from './tokens'
 
 const ACCENTS: readonly SpotlightAccent[] = [
   'cyan',
-  'purple',
-  'sky',
-  'amber',
-  'teal',
-  'green',
+  'pink',
+  'violet',
 ] as const
 
 describe('SpotlightBackdrop', () => {
@@ -43,7 +40,7 @@ describe('SpotlightBackdrop', () => {
 
   it('falls back to gradient-mesh when poster-blur has no posterUrl', () => {
     const wrapper = mount(SpotlightBackdrop, {
-      props: { variant: 'poster-blur', posterUrl: '', accent: 'purple' },
+      props: { variant: 'poster-blur', posterUrl: '', accent: 'violet' },
     })
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.find('[data-testid="spotlight-backdrop-mesh"]').exists()).toBe(true)
@@ -51,7 +48,7 @@ describe('SpotlightBackdrop', () => {
 
   it('renders a gradient mesh in gradient-mesh variant', () => {
     const wrapper = mount(SpotlightBackdrop, {
-      props: { variant: 'gradient-mesh', accent: 'teal' },
+      props: { variant: 'gradient-mesh', accent: 'pink' },
     })
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.find('[data-testid="spotlight-backdrop-mesh"]').exists()).toBe(true)

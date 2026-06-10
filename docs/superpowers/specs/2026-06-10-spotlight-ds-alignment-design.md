@@ -1,8 +1,9 @@
 # Hero Spotlight × Design System — alignment design (DRAFT v1)
 
-> Status: **DRAFT — awaiting user notes on artifact v1** (`.brainstorm/content/spotlight-ds-v1.html`,
-> served at localhost:3000 via the brainstorm companion server).
-> Implementation is HARD-GATED until the user approves this spec.
+> Status: **APPROVED & IMPLEMENTED 2026-06-10** (artifact v2 with live screenshots:
+> `.brainstorm/content/spotlight-ds-v2.html`). User decisions: A-1 brand triad; FeaturedCard
+> on primitives with PLAIN year/episodes and pills only for genres/status/scores; CTA row
+> pinned bottom-left; lucide icons for score glyphs; all-9 rollout in one pass.
 
 ## Goal
 
@@ -39,12 +40,26 @@ with the Neon Tokyo DS — **without touching carousel mechanics or the BE contr
 7. **Keeps:** `SpotlightIcon` (lucide keep-list), `CarouselControls`/`CarouselDots` (bespoke-keep
    governance §5; only ensure 44px touch targets), backdrop scrims/blur, today's image lazy-loading.
 
-## Open questions (artifact §④)
+## Resolved decisions (user, 2026-06-10)
 
-1. Accent option A-1 (triad) vs A-2 (semantic)?
-2. FeaturedCard meta row: full overlay-badge treatment vs badges only for score+status?
-3. Shell rollout: all 9 cards at once vs worst-3 first (Featured, PlatformStats, RandomTail)?
-4. Which current solutions does the user dislike MOST (block refs A-0, B-0, D-1…)?
+1. Accents: **A-1 brand triad**.
+2. FeaturedCard meta row: **plain text for year/episodes; pills for genres, status, scores**.
+3. Shell rollout: **all 9 in sequence** (delivered in one pass).
+4. Score glyphs: **lucide icons** (amber `Star` for Shikimori; `ScoreDiamond` stays canonical
+   for site scores when they reach the payload). CTA icons also lucide (Play/Shuffle/
+   ExternalLink/ArrowDown); SpotlightIcon remains for kickers (lucide keep-list).
+
+## Implementation summary
+
+- `SpotlightCardShell.vue` (+spec) — shared kicker/body/CTA-bottom-left frame, DS padding scale.
+- `tokens.ts` — triad accents + `accentText` map; genreColors rainbow deleted; latest_news
+  pills → semantic `bg-success/15 text-success` / `bg-warning/15 text-warning`.
+- All 9 cards migrated; legacy `.btn-primary-hero`/`.cta-hero`/`.cta-card`/`.cta-text`
+  usages in spotlight replaced with Button-variant classes; on-poster pills → `Badge overlay`;
+  font weights clamped to medium/semibold; bespoke scoped CSS reduced to justified keeps
+  (hero scrim, pulse dot, line-clamp:7, stats gradient, tile highlight).
+- Verified: 228/228 spotlight tests, vue-tsc clean, DS lint PASS, in-browser smoke of all
+  9 cards at 1440px + 390px (screenshots in artifact v2).
 
 ## Metrics
 

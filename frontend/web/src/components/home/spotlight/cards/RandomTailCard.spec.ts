@@ -139,16 +139,13 @@ describe('RandomTailCard', () => {
     expect(html).toContain('from-brand-violet/30')
   })
 
-  it('renders a SpotlightIcon name="shuffle" in the header (both layouts)', () => {
+  it('renders a SpotlightIcon name="shuffle" in the shell kicker', () => {
     const wrapper = mountCard({ data: baseMockData })
     const icons = wrapper.findAllComponents({ name: 'SpotlightIcon' })
-    // Three shuffle icons total: mobile header + desktop header + inline
-    // in the CTA. All three must be `name="shuffle"`.
+    // The single shell kicker icon (the old mobile/desktop dual header was
+    // unified by SpotlightCardShell; the CTA icon is lucide Shuffle now).
     const shuffleIcons = icons.filter((i) => i.props('name') === 'shuffle')
-    expect(shuffleIcons.length).toBeGreaterThanOrEqual(2)
-    for (const icon of shuffleIcons) {
-      expect(icon.props('name')).toBe('shuffle')
-    }
+    expect(shuffleIcons.length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders the localized title via getLocalizedTitle', () => {
@@ -188,14 +185,16 @@ describe('RandomTailCard', () => {
     expect(tagEl.text().trim()).toBe('spotlight.randomTail.subtitle')
   })
 
-  it('renders exactly one .cta-hero CTA with data-accent="purple"', () => {
+  it('renders exactly one Button-primitive CTA (default variant)', () => {
     const wrapper = mountCard({ data: baseMockData })
-    const ctas = wrapper.findAll('.cta-hero')
+    // DS alignment: the CTA is a router-link carrying the Button default
+    // variant classes (bg-primary) instead of the legacy .cta-hero.
+    const ctas = wrapper
+      .findAllComponents(RouterLinkStub)
+      .filter((l) => l.classes().includes('bg-primary'))
     expect(ctas).toHaveLength(1)
-    const cta = ctas[0]
-    expect(cta.attributes('data-accent')).toBe('purple')
     // The CTA copy is the discoverCta i18n key under our echo mock.
-    expect(cta.text()).toContain('spotlight.randomTail.discoverCta')
+    expect(ctas[0].text()).toContain('spotlight.randomTail.discoverCta')
   })
 
   it('does not retain the legacy btn-primary / btn-ghost CTA classes', () => {

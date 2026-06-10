@@ -1308,7 +1308,8 @@
       "remindCta": "Remind me",
       "addCta": "Add to list",
       "scoreLabel": "Score",
-      "episodesLabel": "{n} ep."
+      "episodesLabel": "{n} ep.",
+      "airedLabel": "ep. {n} aired"
     },
     "randomTail": {
       "title": "Random pick",

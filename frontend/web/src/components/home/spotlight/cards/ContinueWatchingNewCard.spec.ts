@@ -63,8 +63,8 @@ describe('ContinueWatchingNewCard', () => {
       )
     expect(ribbon).toBeDefined()
     // Ribbon carries the brand-violet->fuchsia gradient identity.
-    expect(ribbon!.classes()).toContain('from-brand-violet')
-    expect(ribbon!.classes()).toContain('to-fuchsia-500')
+    expect(ribbon!.classes()).toContain('from-pink-500')
+    expect(ribbon!.classes()).toContain('to-pink-400')
   })
 
   it('ribbon text interpolates new_episode_number via newEpisodeBadge', () => {
@@ -111,9 +111,9 @@ describe('ContinueWatchingNewCard', () => {
     expect(cta).toBeDefined()
   })
 
-  it('backdrop secondary overlay carries the from-brand-violet/30 wash', () => {
+  it('backdrop secondary overlay carries the from-pink-500/25 wash', () => {
     const wrapper = mountCard({ data: baseData })
-    expect(wrapper.html()).toContain('from-brand-violet/30')
+    expect(wrapper.html()).toContain('from-pink-500/25')
   })
 
   it('uses only font-medium and font-semibold typography weights', () => {

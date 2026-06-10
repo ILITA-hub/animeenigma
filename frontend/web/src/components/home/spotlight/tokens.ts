@@ -1,9 +1,15 @@
 /**
- * Workstream hero-spotlight — v1.1-polish Phase 01 (HSB-V11-CC-02).
+ * Workstream hero-spotlight — v1.1-polish Phase 01 (HSB-V11-CC-02);
+ * DS-alignment 2026-06-10 (spec: 2026-06-10-spotlight-ds-alignment-design.md).
  *
  * Per-card design tokens consumed by every card SFC + CarouselControls.
  *
- *   accent     — Tailwind color stem used for headers, CTAs, dot indicators.
+ *   accent     — BRAND-TRIAD hue (A-1, user-approved): cards are
+ *                differentiated by kicker ICON, not by a per-card rainbow.
+ *                  cyan   = content core   (featured, personal_pick, platform_stats)
+ *                  pink   = live/personal  (now_watching, continue_watching_new)
+ *                  violet = meta/service   (random_tail, latest_news,
+ *                                           telegram_news, not_time_yet)
  *   kickerKey  — i18n key for the card's small uppercase kicker (e.g.
  *                "spotlight.featured.title"). The same key doubles as the
  *                accessible label for the labeled-pill dot indicator.
@@ -17,7 +23,7 @@
 
 import type { SpotlightCard } from '@/types/spotlight'
 
-export type SpotlightAccent = 'cyan' | 'purple' | 'sky' | 'amber' | 'teal' | 'green'
+export type SpotlightAccent = 'cyan' | 'pink' | 'violet'
 
 export type SpotlightIconName =
   | 'telegram'
@@ -65,75 +71,39 @@ export type LatestNewsCardToken = CardToken & LatestNewsTokenExtensions
 // so a future change to types/spotlight.ts is statically caught.
 export type SpotlightCardType = SpotlightCard['type']
 
-/**
- * v1.1-polish Phase 02 (HSB-V11-AOD-04) — per-card extra tokens.
- *
- * `featured.genreColors` maps Shikimori genre IDs to Tailwind bg+text
- * class pairs so each genre tag renders in a hue that matches its mood.
- * Unmapped IDs fall back to the neutral `bg-white/10 text-gray-300` pair
- * (resolved at the call site via `?? 'bg-white/10 text-gray-300'`).
- *
- * Tailwind 4 needs every utility string to appear verbatim in source so
- * the JIT can scan them — keep these literal, do not template-compose.
- *
- * Shikimori genre IDs (verified via shikimori.one/api/genres):
- *   1  = Action       2  = Adventure   4  = Comedy       7  = Mystery
- *   8  = Drama        10 = Fantasy     14 = Horror       22 = Romance
- *   24 = Sci-Fi       30 = Sports      36 = Slice of Life 37 = Supernatural
- */
-
-// Cyan pill for feat-family entries — matches the v1.1 design token
-// accent for "new functionality" badges across the app.
+// Cyan pill for feat-family entries — brand cyan = "new functionality".
 const FEAT_BADGE: LatestNewsTypeBadge = {
   i18nKey: 'spotlight.latestNews.typeFeat',
-  accent: 'bg-cyan-500/20 text-cyan-200',
+  accent: 'bg-cyan-500/20 text-cyan-400',
 }
-// Green pill for fix-family entries.
+// Fix-family entries — semantic success token.
 const FIX_BADGE: LatestNewsTypeBadge = {
   i18nKey: 'spotlight.latestNews.typeFix',
-  accent: 'bg-green-500/20 text-green-200',
+  accent: 'bg-success/15 text-success',
 }
-// Amber pill for perf-family entries.
+// Perf-family entries — semantic warning token.
 const PERF_BADGE: LatestNewsTypeBadge = {
   i18nKey: 'spotlight.latestNews.typePerf',
-  accent: 'bg-amber-500/20 text-amber-200',
+  accent: 'bg-warning/15 text-warning',
 }
 
 // Map shape preserves the parity guarantee: every variant in SpotlightCard
-// still resolves to a token with {accent, kickerKey, icon}. `featured`
-// carries the genre-color map (Phase 02) and `latest_news` is upcast to the
-// wider LatestNewsCardToken (Phase 07) so callers can read iconByType /
-// labelByType without extra type assertions.
+// still resolves to a token with {accent, kickerKey, icon}; `latest_news`
+// is upcast to the wider LatestNewsCardToken (Phase 07) so callers can read
+// iconByType / labelByType without extra type assertions.
+// (The 12-hue `featured.genreColors` map was removed in the DS alignment —
+// genre tags render as neutral overlay badges now, per locked rule D-1.)
 type CardTokenMap = Record<SpotlightCardType, CardToken> & {
-  featured: CardToken & { genreColors: Record<string, string> }
   latest_news: LatestNewsCardToken
 }
 
 export const cardTokens: CardTokenMap = {
-  featured:          {
-    accent: 'cyan',
-    kickerKey: 'spotlight.featured.title',
-    icon: 'sparkles',
-    genreColors: {
-      '1':  'bg-red-500/20 text-red-200',         // Action
-      '2':  'bg-blue-500/20 text-blue-200',       // Adventure
-      '4':  'bg-yellow-500/20 text-yellow-200',   // Comedy
-      '7':  'bg-orange-500/20 text-orange-200',   // Mystery
-      '8':  'bg-pink-500/20 text-pink-200',       // Drama
-      '10': 'bg-purple-500/20 text-purple-200',   // Fantasy
-      '14': 'bg-fuchsia-500/20 text-fuchsia-200', // Horror
-      '22': 'bg-rose-500/20 text-rose-200',       // Romance
-      '24': 'bg-cyan-500/20 text-cyan-200',       // Sci-Fi
-      '30': 'bg-indigo-500/20 text-indigo-200',   // Sports
-      '36': 'bg-emerald-500/20 text-emerald-200', // Slice of Life
-      '37': 'bg-violet-500/20 text-violet-200',   // Supernatural
-    },
-  },
-  random_tail:           { accent: 'purple', kickerKey: 'spotlight.randomTail.title',          icon: 'shuffle'  },
+  featured:              { accent: 'cyan',   kickerKey: 'spotlight.featured.title',            icon: 'sparkles' },
+  random_tail:           { accent: 'violet', kickerKey: 'spotlight.randomTail.title',          icon: 'shuffle'  },
   personal_pick:         { accent: 'cyan',   kickerKey: 'spotlight.personalPick.title',        icon: 'sparkles' },
-  telegram_news:         { accent: 'sky',    kickerKey: 'spotlight.telegramNews.title',        icon: 'telegram' },
+  telegram_news:         { accent: 'violet', kickerKey: 'spotlight.telegramNews.title',        icon: 'telegram' },
   latest_news: {
-    accent: 'amber',
+    accent: 'violet',
     kickerKey: 'spotlight.latestNews.title',
     icon: 'sparkles',
     // Conventional-commit keys (feat/fix/perf/docs) + the long-form
@@ -157,10 +127,10 @@ export const cardTokens: CardTokenMap = {
       infrastructure: FIX_BADGE,
     },
   },
-  platform_stats:        { accent: 'teal',   kickerKey: 'spotlight.platformStats.title',       icon: 'chart'    },
-  now_watching:          { accent: 'green',  kickerKey: 'spotlight.nowWatching.title',         icon: 'pulse'    },
-  not_time_yet:          { accent: 'amber',  kickerKey: 'spotlight.notTimeYet.title',          icon: 'clock'    },
-  continue_watching_new: { accent: 'purple', kickerKey: 'spotlight.continueWatchingNew.title', icon: 'play'     },
+  platform_stats:        { accent: 'cyan',   kickerKey: 'spotlight.platformStats.title',       icon: 'chart'    },
+  now_watching:          { accent: 'pink',   kickerKey: 'spotlight.nowWatching.title',         icon: 'pulse'    },
+  not_time_yet:          { accent: 'violet', kickerKey: 'spotlight.notTimeYet.title',          icon: 'clock'    },
+  continue_watching_new: { accent: 'pink',   kickerKey: 'spotlight.continueWatchingNew.title', icon: 'play'     },
 }
 
 // Tailwind class strings for the active labeled-pill dot, by accent. Kept
@@ -169,9 +139,15 @@ export const cardTokens: CardTokenMap = {
 // strings to source files keeps working).
 export const accentDotBg: Record<SpotlightAccent, string> = {
   cyan:   'bg-cyan-500/30 text-cyan-100',
-  purple: 'bg-purple-500/30 text-purple-100',
-  sky:    'bg-sky-500/30 text-sky-100',
-  amber:  'bg-amber-500/30 text-amber-100',
-  teal:   'bg-teal-500/30 text-teal-100',
-  green:  'bg-green-500/30 text-green-100',
+  pink:   'bg-pink-500/30 text-pink-100',
+  violet: 'bg-brand-violet/30 text-white',
+}
+
+// Kicker text color per accent — single source for SpotlightCardShell and
+// any card that renders accent-colored text outside the shell. Pinned
+// literals (Tailwind JIT scans verbatim strings).
+export const accentText: Record<SpotlightAccent, string> = {
+  cyan:   'text-cyan-400',
+  pink:   'text-pink-400',
+  violet: 'text-brand-violet',
 }

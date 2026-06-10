@@ -6,7 +6,7 @@
  *
  *  1. Single root <article> with no top-level siblings (Phase 04 footgun:
  *     <transition mode="out-in"> wedges if root is a comment node).
- *  2. SpotlightBackdrop rendered with variant="gradient-mesh" accent="green".
+ *  2. SpotlightBackdrop rendered with variant="gradient-mesh" accent="pink".
  *  3. Header SpotlightIcon name="pulse" carries animate-pulse class.
  *  4. Each row has an avatar circle whose text content starts with
  *     `username[0].toUpperCase()`.
@@ -114,13 +114,13 @@ describe('NowWatchingCard (v1.1-polish social-identity layout)', () => {
 
   // ── Backdrop ─────────────────────────────────────────────────────────
 
-  it('renders SpotlightBackdrop with variant="gradient-mesh" accent="green"', () => {
+  it('renders SpotlightBackdrop with variant="gradient-mesh" accent="pink"', () => {
     const data = { sessions: [session(1)] }
     const wrapper = mountCard({ data })
     const backdrop = wrapper.find('[data-testid="backdrop"]')
     expect(backdrop.exists()).toBe(true)
     expect(backdrop.attributes('data-variant')).toBe('gradient-mesh')
-    expect(backdrop.attributes('data-accent')).toBe('green')
+    expect(backdrop.attributes('data-accent')).toBe('pink')
   })
 
   // ── Header pulse icon ────────────────────────────────────────────────

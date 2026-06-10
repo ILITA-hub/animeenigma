@@ -35,13 +35,11 @@ const EXPECTED_TYPES: readonly SpotlightCardType[] = [
   'continue_watching_new',
 ] as const
 
+// Brand triad only (DS alignment A-1, 2026-06-10, user-approved).
 const VALID_ACCENTS: readonly SpotlightAccent[] = [
   'cyan',
-  'purple',
-  'sky',
-  'amber',
-  'teal',
-  'green',
+  'pink',
+  'violet',
 ] as const
 
 const VALID_ICONS: readonly SpotlightIconName[] = [
@@ -94,28 +92,29 @@ describe('cardTokens', () => {
   })
 })
 
-describe('cardTokens.featured.genreColors (v1.1-polish HSB-V11-AOD-04)', () => {
-  it('exists and is an object', () => {
-    expect(cardTokens.featured.genreColors).toBeDefined()
-    expect(typeof cardTokens.featured.genreColors).toBe('object')
+describe('cardTokens — A-1 brand-triad mapping (DS alignment 2026-06-10)', () => {
+  it('content-core cards are cyan', () => {
+    expect(cardTokens.featured.accent).toBe('cyan')
+    expect(cardTokens.personal_pick.accent).toBe('cyan')
+    expect(cardTokens.platform_stats.accent).toBe('cyan')
   })
 
-  it('has at least 10 mapped genre IDs', () => {
-    const keys = Object.keys(cardTokens.featured.genreColors)
-    expect(keys.length).toBeGreaterThanOrEqual(10)
+  it('live/personal cards are pink', () => {
+    expect(cardTokens.now_watching.accent).toBe('pink')
+    expect(cardTokens.continue_watching_new.accent).toBe('pink')
   })
 
-  it('every entry pairs a bg-*/20 and text-*/200 class', () => {
-    for (const [, classes] of Object.entries(cardTokens.featured.genreColors)) {
-      expect(classes).toMatch(/bg-[a-z]+-500\/20/)
-      expect(classes).toMatch(/text-[a-z]+-200/)
-    }
+  it('meta/service cards are violet', () => {
+    expect(cardTokens.random_tail.accent).toBe('violet')
+    expect(cardTokens.latest_news.accent).toBe('violet')
+    expect(cardTokens.telegram_news.accent).toBe('violet')
+    expect(cardTokens.not_time_yet.accent).toBe('violet')
   })
 
-  it('every key is a numeric string (Shikimori genre IDs are integers)', () => {
-    for (const key of Object.keys(cardTokens.featured.genreColors)) {
-      expect(key).toMatch(/^\d+$/)
-    }
+  it('the 12-hue genreColors rainbow is gone (genres render as neutral overlay badges)', () => {
+    expect(
+      (cardTokens.featured as unknown as Record<string, unknown>).genreColors,
+    ).toBeUndefined()
   })
 })
 
@@ -151,11 +150,11 @@ describe('cardTokens.latest_news extensions', () => {
     }
   })
 
-  it('per-type accents are color-coded per the Phase 07 spec', () => {
+  it('per-type accents are color-coded — brand cyan + semantic status tokens', () => {
     const t = cardTokens.latest_news
     expect(t.labelByType.feat.accent).toContain('cyan')
-    expect(t.labelByType.fix.accent).toContain('green')
-    expect(t.labelByType.perf.accent).toContain('amber')
+    expect(t.labelByType.fix.accent).toContain('success')
+    expect(t.labelByType.perf.accent).toContain('warning')
   })
 
   it('every iconByType value is a registered SpotlightIconName', () => {

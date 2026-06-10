@@ -1308,7 +1308,8 @@
       "remindCta": "Напомнить о выходе",
       "addCta": "В список",
       "scoreLabel": "Рейтинг",
-      "episodesLabel": "{n} эп."
+      "episodesLabel": "{n} эп.",
+      "airedLabel": "эп. {n} вышел"
     },
     "randomTail": {
       "title": "Случайная находка",

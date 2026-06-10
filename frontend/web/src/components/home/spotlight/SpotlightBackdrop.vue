@@ -73,16 +73,15 @@ const POSTER_BLUR_STYLE = 'filter: blur(40px) saturate(1.2); opacity: 0.4;'
 // proxyable posters through the resizing image-proxy at the smallest bucket.
 const blurSrc = computed(() => cardPosterUrl(props.posterUrl, 128))
 
-// Per-accent radial-gradient mesh. Tailwind 4 evaluates these utility
+// Per-accent radial-gradient mesh — brand triad only (DS alignment A-1,
+// 2026-06-10): the rgba stops are the brand-cyan-400/500, brand-pink-400/500
+// and brand-violet/violet-500 primitives. Tailwind 4 evaluates these utility
 // strings at build time, so we use a static lookup table rather than
 // dynamic class composition (which would need a safelist).
 const MESH_CLASSES: Record<SpotlightAccent, string> = {
-  cyan:   'bg-[radial-gradient(at_25%_30%,rgba(34,211,238,0.30),transparent_55%),radial-gradient(at_75%_70%,rgba(14,165,233,0.20),transparent_60%)]',
-  purple: 'bg-[radial-gradient(at_25%_30%,rgba(168,85,247,0.30),transparent_55%),radial-gradient(at_75%_70%,rgba(217,70,239,0.20),transparent_60%)]',
-  sky:    'bg-[radial-gradient(at_25%_30%,rgba(56,189,248,0.30),transparent_55%),radial-gradient(at_75%_70%,rgba(2,132,199,0.20),transparent_60%)]',
-  amber:  'bg-[radial-gradient(at_25%_30%,rgba(251,191,36,0.30),transparent_55%),radial-gradient(at_75%_70%,rgba(245,158,11,0.20),transparent_60%)]',
-  teal:   'bg-[radial-gradient(at_25%_30%,rgba(45,212,191,0.30),transparent_55%),radial-gradient(at_75%_70%,rgba(20,184,166,0.20),transparent_60%)]',
-  green:  'bg-[radial-gradient(at_25%_30%,rgba(74,222,128,0.30),transparent_55%),radial-gradient(at_75%_70%,rgba(34,197,94,0.20),transparent_60%)]',
+  cyan:   'bg-[radial-gradient(at_25%_30%,rgba(0,212,255,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(0,184,230,0.18),transparent_60%)]',
+  pink:   'bg-[radial-gradient(at_25%_30%,rgba(255,77,141,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(255,45,124,0.18),transparent_60%)]',
+  violet: 'bg-[radial-gradient(at_25%_30%,rgba(167,139,250,0.28),transparent_55%),radial-gradient(at_75%_70%,rgba(139,92,246,0.18),transparent_60%)]',
 }
 
 const meshClass = computed<string>(() => MESH_CLASSES[props.accent])
