@@ -150,6 +150,7 @@ Design: root = language list + "Subtitle settings" entry → `subsettings` sub-v
 | H2 | ← → / j l → seek ∓5s | — | |
 | H3 | ↑ ↓ → volume ±5 | — | |
 | H4 | m mute · f fullscreen · c subs · p pip | — | |
+| H4b | **z / x → subtitle timing offset earlier / later (±0.1s)** | — | |
 | H5 | 0–9 → seek to decile | — | |
 | H6 | Esc closes any open menu | — | |
 | H7 | Shortcuts only fire when pointer over player or focus within (don't hijack page typing) | — | |
@@ -197,3 +198,17 @@ Design: root = language list + "Subtitle settings" entry → `subsettings` sub-v
 | D-06 | Menu anchoring | `.pl-menu` anchored above its own trigger button via `.pl-menu-wrap` | Settings/subs float at a fixed `right:14px; bottom:76px` | ⚠️ | **Acceptable** — visually equivalent floating card; revisit only if pixel-anchor matters |
 
 All ❌ resolved + verified in-browser; ⚠️ items either fixed or consciously deferred with reason.
+
+### Review pass 2 — 2026-06-10 (desktop, Frieren) — continuation
+
+Verified ✅ in-browser this pass:
+- **B5/B6** — source pill + CC button show the `is-open` cyan highlight when their panel/menu is open.
+- **C1-C5** — source panel: "6 available", AUDIO (Sub/Dub) + LANGUAGE (English/Русский/日本語) sliders with sliding thumb, full provider list with brand-hue dots (AnimeFever/Gogoanime/Miruro/9anime/AnimePahe active; Kodik + AniLib tinted/greyed as irrelevant for EN-Sub).
+- **E1** — subtitle languages `Off · English · Русский · 日本語`.
+- **H4b (new)** — `x` ×3 → Timing `0.3s` ("0.3s later"); `z` → `0.2s`. Subtitle-timing shortcut works bidirectionally.
+
+| ID | Element | Finding | Severity | Note |
+|---|---|---|---|---|
+| D-07 | Playback (I1-I2) | AllAnime (mp4 default) leaves an empty `<video src>`; Gogoanime attaches hls.js (`blob:`) and loads master + level playlist but issues **zero `.ts` fragment requests** → `readyState 0`, never decodes | ❌ (pre-existing, out of scope) | The known platform-wide HLS codec stall (also affects the legacy OurEnglish player). hls.js is correctly pinned `1.5.20` — NOT a version drift. Tracked separately from the unified-player UI work; needs proxy-side CODECS injection or an hls.js config dig. |
+
+> Sections F (scrub hover-preview), G (overlays), J (true ≤680 mobile reflow) not yet driven — the remote macOS Chrome won't reflow to a real mobile viewport, and overlays/hover-preview need a playing stream to exercise fully. Deferred to a pass with working playback.

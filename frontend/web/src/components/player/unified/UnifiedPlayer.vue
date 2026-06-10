@@ -758,6 +758,11 @@ function onKeydown(e: KeyboardEvent) {
       }
       break
     }
+    case 'sub-offset': {
+      const next = Math.round((state.subOffset.value + action.value) * 10) / 10
+      state.subOffset.value = next
+      break
+    }
     case 'mute':
       onToggleMute()
       break

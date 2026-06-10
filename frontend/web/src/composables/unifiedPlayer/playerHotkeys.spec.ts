@@ -34,6 +34,13 @@ describe('mapKeyToAction', () => {
     expect(mapKeyToAction(ev('p'))).toEqual({ type: 'pip' })
   })
 
+  it('maps z/x to subtitle timing offset (earlier/later by 0.1s)', () => {
+    expect(mapKeyToAction(ev('z'))).toEqual({ type: 'sub-offset', value: -0.1 })
+    expect(mapKeyToAction(ev('x'))).toEqual({ type: 'sub-offset', value: 0.1 })
+    expect(mapKeyToAction(ev('Z'))).toEqual({ type: 'sub-offset', value: -0.1 })
+    expect(mapKeyToAction(ev('X'))).toEqual({ type: 'sub-offset', value: 0.1 })
+  })
+
   it('is case-insensitive for letter shortcuts', () => {
     expect(mapKeyToAction(ev('K'))).toEqual({ type: 'play-pause' })
     expect(mapKeyToAction(ev('M'))).toEqual({ type: 'mute' })
@@ -46,7 +53,7 @@ describe('mapKeyToAction', () => {
   })
 
   it('returns null for unhandled keys', () => {
-    expect(mapKeyToAction(ev('z'))).toBeNull()
+    expect(mapKeyToAction(ev('q'))).toBeNull()
     expect(mapKeyToAction(ev('Tab'))).toBeNull()
   })
 
