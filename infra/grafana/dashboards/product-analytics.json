@@ -6,16 +6,20 @@
   "graphTooltip": 0,
   "id": null,
   "uid": "product-analytics",
-  "title": "Product Analytics (Clickstream)",
-  "description": "Clickstream over the ClickHouse events_resolved view (v4 Activity Register, 01-03). person_id = identified user if known, else anonymous.",
+  "title": "Analytics (Clickstream)",
+  "description": "Unified clickstream dashboard (v4 Activity Register). TOP — product funnel over the ClickHouse events_resolved view (person_id = identified user if known, else anonymous): unique visitors, sessions, anon-vs-identified, pageviews, top clicks, time on page, and most-active users (anon included). BOTTOM ('Ingest pipeline (ops)') — the collector pipe itself from Prometheus: accept throughput (analytics_events_received_total), back-pressure drops when the in-process buffer is full (analytics_events_dropped_total), the resulting drop rate, and the writer's DB pool. Merged from the former 'Analytics Ingest (Clickstream Collector)' (uid analytics-ingest, now removed) on 2026-06-10.",
   "tags": ["analytics"],
   "time": {
     "from": "now-7d",
     "to": "now"
   },
+  "refresh": "1m",
   "timezone": "",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
+  "templating": {
+    "list": []
+  },
   "panels": [
     {
       "datasource": {
@@ -245,6 +249,356 @@
           "rawSql": "SELECT path, round(sum(active_ms) / 1000.0, 1) AS active_seconds, count(DISTINCT session_id) AS sessions FROM events_resolved WHERE event_type = 'heartbeat' AND $__timeFilter(timestamp) GROUP BY path ORDER BY active_seconds DESC LIMIT 25"
         }
       ]
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "aenigma-clickhouse"
+      },
+      "title": "Most active users (anonymous included)",
+      "description": "One row per unique person_id (identified user UUID if ever stitched, else the anonymous id). Ranked by total events in range. 'kind' = identified once a user_id was ever resolved for that person, else anonymous.",
+      "type": "table",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 7,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "active_seconds" },
+            "properties": [{ "id": "unit", "value": "s" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "last_seen" },
+            "properties": [{ "id": "unit", "value": "dateTimeAsIso" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "events" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "blue", "value": 50 }, { "color": "purple", "value": 500 }] } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "kind" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              { "id": "mappings", "value": [
+                { "type": "value", "options": { "anonymous": { "color": "text", "index": 0 } } },
+                { "type": "value", "options": { "identified": { "color": "green", "index": 1 } } }
+              ] }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "events", "desc": true }]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "aenigma-clickhouse"
+          },
+          "rawQuery": true,
+          "format": "table",
+          "queryType": "sql",
+          "refId": "A",
+          "rawSql": "SELECT person_id, if(max(resolved_user_id) IS NULL, 'anonymous', 'identified') AS kind, count() AS events, countIf(event_type = 'pageview') AS pageviews, countIf(event_type = 'click') AS clicks, count(DISTINCT session_id) AS sessions, round(sumIf(active_ms, event_type = 'heartbeat') / 1000.0, 1) AS active_seconds, max(timestamp) AS last_seen FROM events_resolved WHERE $__timeFilter(timestamp) AND person_id != '' GROUP BY person_id ORDER BY events DESC LIMIT 50"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Ingest pipeline (ops)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "id": 8,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 21 },
+      "id": 9,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(increase(analytics_events_received_total[24h]))",
+          "format": "time_series",
+          "legendFormat": "received",
+          "refId": "A"
+        }
+      ],
+      "title": "Events received (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 100 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 21 },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(increase(analytics_events_dropped_total[24h]))",
+          "format": "time_series",
+          "legendFormat": "dropped",
+          "refId": "A"
+        }
+      ],
+      "title": "Events dropped (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 21 },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "100 * sum(rate(analytics_events_dropped_total[1h])) / clamp_min(sum(rate(analytics_events_received_total[1h])) + sum(rate(analytics_events_dropped_total[1h])), 1)",
+          "format": "time_series",
+          "legendFormat": "drop rate",
+          "refId": "A"
+        }
+      ],
+      "title": "Drop rate (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 21 },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "db_pool_open_connections{job=\"analytics\"}",
+          "format": "time_series",
+          "legendFormat": "open",
+          "refId": "A"
+        }
+      ],
+      "title": "DB pool open (writer)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "dropped" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 27 },
+      "id": 13,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(rate(analytics_events_received_total[5m]))",
+          "format": "time_series",
+          "legendFormat": "received",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(rate(analytics_events_dropped_total[5m]))",
+          "format": "time_series",
+          "legendFormat": "dropped",
+          "refId": "B"
+        }
+      ],
+      "title": "Ingest throughput (events/s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 27 },
+      "id": 14,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "db_pool_open_connections{job=\"analytics\"}",
+          "format": "time_series",
+          "legendFormat": "open",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "db_pool_idle_connections{job=\"analytics\"}",
+          "format": "time_series",
+          "legendFormat": "idle",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "expr": "rate(db_pool_wait_total{job=\"analytics\"}[5m])",
+          "format": "time_series",
+          "legendFormat": "wait/s",
+          "refId": "C"
+        }
+      ],
+      "title": "Writer DB pool (open / idle / wait)",
+      "type": "timeseries"
     }
   ]
 }
