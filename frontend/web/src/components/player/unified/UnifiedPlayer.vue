@@ -38,6 +38,7 @@
       @playing="onBufferEnd"
       @seeked="onSeeked"
       @timeupdate="onTimeUpdate"
+      @error="onVideoError"
     />
 
     <!-- Subtitle overlay -->
@@ -727,6 +728,23 @@ function onTimeUpdate() {
     setBuffering(false)
   }
 }
+
+// A dead source must surface the error overlay, not an endless spinner.
+// Covers the native/mp4 path (e.g. upstream CDN 404 → MEDIA_ERR_SRC_NOT_SUPPORTED).
+function onVideoError() {
+  const v = videoRef.value
+  if (!v?.error || isResolving.value) return
+  setBuffering(false)
+  sourceError.value = 'Stream unavailable'
+}
+
+// Same for the hls.js path: the engine flags unrecoverable fatals.
+watch(engine.fatal, (f) => {
+  if (f) {
+    setBuffering(false)
+    sourceError.value = 'Stream unavailable'
+  }
+})
 
 // ─── Hacker mode (debug HUD) ──────────────────────────────────────────────────
 
