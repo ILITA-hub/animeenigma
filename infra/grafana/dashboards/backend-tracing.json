@@ -23,7 +23,7 @@
           "pluginVersion": "4.17.0",
           "editorType": "sql",
           "rawSql": "SELECT TraceId AS traceID, ServiceName AS serviceName, SpanName AS operationName, Timestamp AS startTime, Duration / 1000000 AS duration FROM analytics.otel_traces WHERE ParentSpanId = '' AND Duration > 1000000000 ORDER BY Timestamp DESC LIMIT 50",
-          "format": "trace",
+          "format": 3,
           "builderOptions": {
             "database": "analytics",
             "table": "otel_traces",
