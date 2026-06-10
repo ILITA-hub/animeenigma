@@ -141,22 +141,12 @@
                 >
                   <ArrowUpDown class="size-5 transition-transform" :class="sortDirection === 'desc' ? 'rotate-180' : ''" />
                 </button>
-                <button
-                  class="p-2 rounded-lg transition-colors"
-                  :class="viewMode === 'table' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-white/60 hover:text-white'"
-                  @click="viewMode = 'table'"
-                  title="Table view"
-                >
-                  <List class="size-5" />
-                </button>
-                <button
-                  class="p-2 rounded-lg transition-colors"
-                  :class="viewMode === 'grid' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-white/60 hover:text-white'"
-                  @click="viewMode = 'grid'"
-                  title="Grid view"
-                >
-                  <LayoutGrid class="size-5" />
-                </button>
+                <SegmentedControl
+                  :model-value="viewMode"
+                  :options="viewModeOptions"
+                  icon-only
+                  @update:model-value="viewMode = $event as 'table' | 'grid'"
+                />
               </div>
 
               <!-- Table/Grid Content with Loading Overlay -->
@@ -960,7 +950,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
-import { Avatar, Badge, Button, Modal, Tabs, Select, PaginationBar, Spinner, type SelectOption } from '@/components/ui'
+import { Avatar, Badge, Button, Modal, Tabs, Select, PaginationBar, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
@@ -1196,6 +1186,10 @@ const loadingWatchlist = ref(false)
 const watchlistFilter = ref('all')
 const searchQuery = ref('')
 const viewMode = ref<'table' | 'grid'>('grid')
+const viewModeOptions = [
+  { value: 'table', label: 'Table view', icon: List },
+  { value: 'grid', label: 'Grid view', icon: LayoutGrid },
+]
 
 // Pagination
 const watchlistPage = ref(1)

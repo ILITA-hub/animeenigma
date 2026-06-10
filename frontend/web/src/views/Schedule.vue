@@ -11,11 +11,12 @@
           </div>
           <button class="h-8 px-3 rounded-lg text-primary border border-primary/40 text-xs" @click="cal.goToday()">{{ $t('schedule.todayBtn') }}</button>
         </div>
-        <div class="flex bg-white/[0.06] rounded-lg p-0.5">
-          <button v-for="v in views" :key="v" class="text-xs px-3.5 py-1.5 rounded-md transition-colors"
-            :class="cal.view.value === v ? 'bg-primary text-primary-foreground font-semibold' : 'text-muted-foreground'"
-            @click="cal.setView(v)">{{ $t('schedule.view' + cap(v)) }}</button>
-        </div>
+        <SegmentedControl
+          :model-value="cal.view.value"
+          :options="viewOptions"
+          :aria-label="$t('schedule.viewSwitcherLabel')"
+          @update:model-value="cal.setView($event as ScheduleView)"
+        />
       </div>
 
       <ScheduleFilters
@@ -61,6 +62,7 @@ import TableView from '@/components/schedule/TableView.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import DayModal from '@/components/schedule/DayModal.vue'
 import { Spinner } from '@/components/ui'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -82,6 +84,7 @@ const cal = useScheduleCalendar({
 
 const views: ScheduleView[] = ['month', 'week', 'table']
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const viewOptions = computed(() => views.map(v => ({ value: v, label: t('schedule.view' + cap(v)) })))
 const headerTitle = computed(() => formatHeader())
 
 const isEmpty = computed(() => {
