@@ -34,13 +34,13 @@
           @dragstart.prevent
           @selectstart.prevent
         >
-          <!-- Толщина: две половины торца с backface-visibility — передняя видна
-               только спереди, задняя (rotateY 180) только сзади, так что грани
-               НИКОГДА не перекрывают лицо/рубашку (Chromium мис-сортирует
-               параллельные opaque-слои в preserve-3d — проверено вживую).
-               Видимы только у ребра: applyTilt гасит их вне |cos|<0.35. -->
-          <div v-for="n in 2" :key="`ef-${n}`" class="cedge" :style="{ transform: `translateZ(${n * 0.7}px)` }" />
-          <div v-for="n in 2" :key="`eb-${n}`" class="cedge" :style="{ transform: `rotateY(180deg) translateZ(${n * 0.7}px)` }" />
+          <!-- Толщина (~7px): срезы в две половины с backface-visibility
+               (половина не может перекрыть противоположную грань) + z-index:-1,
+               который в фолбэк-отрисовке Chromium (его depth-sort параллельных
+               opaque-слоёв в preserve-3d сломан — доказано вживую) держит срезы
+               ПОД гранями, оставляя им только выступающий обод на силуэте. -->
+          <div v-for="n in 4" :key="`ef-${n}`" class="cedge" :style="{ transform: `translateZ(${n * 0.8}px)` }" />
+          <div v-for="n in 4" :key="`eb-${n}`" class="cedge" :style="{ transform: `rotateY(180deg) translateZ(${n * 0.8}px)` }" />
           <div class="cimg">
             <img v-if="current" :src="cardImageUrl(current.card.image_path)" :alt="current.card.name" draggable="false" />
           </div>
@@ -177,10 +177,6 @@ function applyTilt() {
   const hy = 50 + Math.sin((rx * Math.PI) / 180) * 52
   c.style.setProperty('--hx', `${hx}%`)
   c.style.setProperty('--hy', `${hy}%`)
-  // Торцы показываем только у ребра (|cos| < 0.35 ≈ 70°–110°): вне этого окна
-  // они погашены и гарантированно не «съедают» лицо или рубашку.
-  const edgeOn = Math.abs(Math.cos((ry * Math.PI) / 180)) < 0.35 ? '1' : '0'
-  c.querySelectorAll<HTMLElement>('.cedge').forEach((e) => (e.style.opacity = edgeOn))
 }
 
 function tick() {
@@ -476,7 +472,7 @@ onBeforeUnmount(() => {
 .card3d .holo,
 .card3d .cname,
 .card3d .vtagNEW,
-.card3d .vtagDUP { transform: translateZ(2px); }
+.card3d .vtagDUP { transform: translateZ(3.5px); }
 .cedge {
   position: absolute;
   inset: 0;
@@ -484,8 +480,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(160deg, rgb(26, 26, 40), rgb(14, 14, 26));
   border: 1px solid rgba(255, 255, 255, 0.10);
   backface-visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.25s;
+  z-index: -1; /* fallback paint order: всегда под гранями */
   pointer-events: none;
 }
 .card3d .cimg {
@@ -532,7 +527,7 @@ onBeforeUnmount(() => {
   inset: 0;
   border-radius: 1.1rem;
   border: 3px solid;
-  transform: rotateY(180deg) translateZ(2px);
+  transform: rotateY(180deg) translateZ(3.5px);
   backface-visibility: hidden;
   overflow: hidden;
   background:
