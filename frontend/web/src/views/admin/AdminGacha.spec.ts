@@ -38,6 +38,18 @@ vi.mock('@/api/gacha', async (importOriginal) => {
   }
 })
 
+// Stub for GachaCardPicker that renders a transparent div so data-testid is
+// preserved and parent state (pickerSearch, pickerSelected) can be tested directly.
+const GachaCardPickerStub = {
+  props: ['excludeIds', 'allCards', 'groups', 'alreadyInLabel', 'search', 'selected'],
+  emits: ['update:search', 'update:selected', 'confirm', 'cancel'],
+  // expose selectAllVisible for parent refs
+  setup(_props: unknown, { expose }: { expose: (obj: Record<string, unknown>) => void }) {
+    expose({ selectAllVisible: () => {}, filteredCards: [] })
+  },
+  template: '<div />',
+}
+
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const i18n = createI18n({ locale: 'en', legacy: false, messages: { en, ru, ja } })
 
@@ -120,6 +132,7 @@ describe('AdminGacha', () => {
           Check: { template: '<span />' },
           X: { template: '<span />' },
           Info: { template: '<span />' },
+          GachaCardPicker: GachaCardPickerStub,
         },
       },
     })
@@ -356,5 +369,59 @@ describe('AdminGacha', () => {
     await vm.confirmPickerAdd()
     expect(vi.mocked(gachaAdminApi.addBannerCards)).toHaveBeenCalledWith('banner-55', expect.arrayContaining(['card-x', 'card-y']))
     expect(vm.bannerPickerOpen).toBe(false)
+  })
+
+  // ── Group picker tests ─────────────────────────────────────────────────────
+
+  it('group card picker opens from group edit dialog', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    // listCards is called with group_id when opening group edit
+    vi.mocked(gachaAdminApi.listCards)
+      .mockResolvedValueOnce(emptyListResponse() as never) // initial mount (all cards)
+      .mockResolvedValueOnce(emptyListResponse() as never) // openGroupEdit group_id call
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = {
+      openGroupEdit: (g: GachaGroup) => Promise<void>
+      groupPickerOpen: boolean
+      groupCurrentCardIds: string[]
+    }
+    const vm = wrapper.vm as unknown as Vm
+    await vm.openGroupEdit(makeGroup({ id: 'group-77' }))
+    await flushPromises()
+    // picker is closed initially
+    expect(vm.groupPickerOpen).toBe(false)
+    // open it
+    vm.groupPickerOpen = true
+    await wrapper.vm.$nextTick()
+    // group-card-picker rendered in the modal
+    expect(wrapper.find('[data-testid="group-card-picker"]').exists()).toBe(true)
+  })
+
+  it('onGroupPickerConfirm calls addCardsToGroup with exact ids and closes picker', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.addCardsToGroup).mockResolvedValue({
+      data: { success: true, data: { updated: true } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = {
+      editGroup: GachaGroup | null
+      groupPickerOpen: boolean
+      groupCurrentCardIds: string[]
+      groupPickerSelected: Set<string>
+      onGroupPickerConfirm: (ids: string[]) => Promise<void>
+    }
+    const vm = wrapper.vm as unknown as Vm
+    vm.editGroup = makeGroup({ id: 'group-88' })
+    vm.groupCurrentCardIds = []
+    vm.groupPickerOpen = true
+    vm.groupPickerSelected = new Set(['card-p', 'card-q'])
+    await vm.onGroupPickerConfirm(['card-p', 'card-q'])
+    expect(vi.mocked(gachaAdminApi.addCardsToGroup)).toHaveBeenCalledWith(
+      'group-88',
+      expect.arrayContaining(['card-p', 'card-q']),
+    )
+    expect(vm.groupPickerOpen).toBe(false)
   })
 })

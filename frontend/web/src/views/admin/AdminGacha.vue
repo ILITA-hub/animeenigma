@@ -132,7 +132,7 @@
               <div class="flex items-center justify-between mb-3">
                 <span class="font-semibold text-white">{{ group.name }}</span>
                 <div class="flex gap-1">
-                  <Button variant="ghost" size="sm" @click="openGroupRename(group)">
+                  <Button variant="ghost" size="sm" @click="openGroupEdit(group)">
                     <Pencil class="size-4" />
                   </Button>
                   <Button variant="ghost" size="sm" class="text-destructive" @click="confirmGroupDelete(group)">
@@ -298,18 +298,133 @@
     </template>
   </Modal>
 
-  <!-- ─── GROUP CREATE/RENAME DIALOG ───────────────────────────────────── -->
+  <!-- ─── GROUP EDIT DIALOG ─────────────────────────────────────────────── -->
+  <!-- Same two-view pattern as the banner dialog: form view ↔ card picker.
+       groupPickerOpen switches which view is rendered inside the same Modal. -->
   <Modal
     v-model="showGroupDialog"
-    :title="editGroup ? $t('gacha.admin.group_rename') : $t('gacha.admin.group_create')"
+    :title="groupPickerOpen
+      ? $t('gacha.admin.banner_picker_title')
+      : (editGroup ? $t('gacha.admin.group_rename') : $t('gacha.admin.group_create'))"
     closable
+    size="xl"
   >
-    <div>
-      <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.group_name') }}</label>
-      <Input v-model="groupForm.name" placeholder="Group name" />
+    <!-- ── PICKER VIEW ──────────────────────────────────────────────────── -->
+    <GachaCardPicker
+      v-if="groupPickerOpen"
+      ref="groupPickerRef"
+      :exclude-ids="groupCurrentCardIds"
+      :all-cards="cards"
+      :groups="groups"
+      :already-in-label="$t('gacha.admin.group_picker_already_in_group')"
+      :search="groupPickerSearch"
+      :selected="groupPickerSelected"
+      data-testid="group-card-picker"
+      @update:search="groupPickerSearch = $event"
+      @update:selected="groupPickerSelected = $event"
+      @confirm="onGroupPickerConfirm"
+      @cancel="closeGroupPicker"
+    />
+
+    <!-- ── FORM VIEW ───────────────────────────────────────────────────── -->
+    <div v-else class="space-y-4">
+      <div>
+        <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.group_name') }}</label>
+        <Input v-model="groupForm.name" placeholder="Group name" />
+      </div>
+
+      <!-- Group cards section (edit mode only) -->
+      <div v-if="editGroup">
+        <p class="text-white/70 text-xs mb-2">{{ $t('gacha.admin.group_cards_section') }}</p>
+
+        <!-- Current pool loading -->
+        <div v-if="loadingGroupPool" class="text-muted-foreground text-xs mb-2">
+          {{ $t('gacha.admin.upload_uploading') }}
+        </div>
+
+        <!-- Current member cards grid (thumbnail + name + rarity + remove) -->
+        <div v-else-if="groupCurrentCardIds.length > 0" class="mb-3">
+          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-52 overflow-y-auto pr-1">
+            <div
+              v-for="cid in groupCurrentCardIds"
+              :key="cid"
+              class="relative flex flex-col items-center gap-1 rounded-xl border border-white/20 bg-white/5"
+            >
+              <img
+                :src="cardImageUrl(cardById(cid)?.image_path ?? '')"
+                :alt="cardNameById(cid)"
+                class="w-full aspect-[3/4] object-cover rounded-t-xl"
+              />
+              <div class="w-full px-1.5 pb-1">
+                <p class="text-white text-xs font-medium truncate leading-tight">{{ cardNameById(cid) || cid }}</p>
+                <span
+                  v-if="cardById(cid)"
+                  :class="['text-xs font-semibold px-1 py-0.5 rounded', rarityBadgeClass(cardById(cid)!.rarity)]"
+                >
+                  {{ cardById(cid)!.rarity }}
+                </span>
+              </div>
+              <!-- Remove button -->
+              <button
+                type="button"
+                class="absolute top-1 right-1 size-5 rounded-full bg-black/60 hover:bg-destructive/80 flex items-center justify-center transition-colors"
+                :aria-label="`Remove ${cardNameById(cid)}`"
+                @click="removeGroupCard(cid)"
+              >
+                <X class="size-3 text-white" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+        <p v-else class="text-muted-foreground text-xs mb-3">{{ $t('gacha.admin.group_pool_empty') }}</p>
+
+        <!-- Add cards button -->
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid="open-group-card-picker-btn"
+          @click="openGroupPicker"
+        >
+          + {{ $t('gacha.admin.group_add_cards') }}
+        </Button>
+      </div>
+
+      <!-- New group hint: cards disabled until group saved -->
+      <div v-else class="flex items-center gap-2 text-white/40 text-xs">
+        <Info class="size-4 shrink-0" aria-hidden="true" />
+        {{ $t('gacha.admin.group_new_hint') }}
+      </div>
     </div>
+
     <template #footer>
-      <div class="flex justify-end gap-2">
+      <!-- PICKER FOOTER -->
+      <div v-if="groupPickerOpen" class="flex items-center justify-between w-full gap-3">
+        <div class="flex items-center gap-3">
+          <Button variant="ghost" size="sm" @click="closeGroupPicker">
+            ← {{ $t('gacha.admin.banner_picker_back') }}
+          </Button>
+          <button
+            type="button"
+            class="text-xs text-white/60 hover:text-white transition-colors"
+            @click="selectAllGroupPickerVisible"
+          >
+            {{ $t('gacha.admin.banner_picker_select_all') }}
+          </button>
+          <span v-if="groupPickerSelected.size > 0" class="text-xs text-white/60">
+            {{ $t('gacha.admin.banner_picker_selected', { n: groupPickerSelected.size }) }}
+          </span>
+        </div>
+        <Button
+          :disabled="groupPickerSelected.size === 0 || addingGroupCards"
+          data-testid="group-picker-add-btn"
+          @click="confirmGroupPickerAdd"
+        >
+          {{ $t('gacha.admin.banner_picker_add_btn', { n: groupPickerSelected.size }) }}
+        </Button>
+      </div>
+
+      <!-- FORM FOOTER -->
+      <div v-else class="flex justify-end gap-2">
         <Button variant="outline" @click="showGroupDialog = false">
           {{ $t('gacha.admin.card_cancel') }}
         </Button>
@@ -332,76 +447,21 @@
     size="xl"
   >
     <!-- ── PICKER VIEW ──────────────────────────────────────────────────── -->
-    <div v-if="bannerPickerOpen" data-testid="banner-card-picker">
-      <!-- Filters -->
-      <div class="flex flex-wrap gap-2 mb-4">
-        <Input
-          v-model="pickerSearch"
-          :placeholder="$t('gacha.admin.banner_picker_search_placeholder')"
-          class="flex-1 min-w-40"
-          data-testid="picker-search"
-        />
-        <Select
-          v-model="pickerRarity"
-          :options="pickerRarityOptions"
-          class="w-36"
-        />
-        <Select
-          v-model="pickerGroup"
-          :options="pickerGroupOptions"
-          class="w-40"
-        />
-      </div>
-
-      <!-- Card grid -->
-      <div v-if="pickerFilteredCards.length === 0" class="py-8 text-center text-muted-foreground text-sm">
-        {{ $t('gacha.admin.banner_picker_empty') }}
-      </div>
-      <div v-else class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 max-h-96 overflow-y-auto pr-1" data-testid="picker-card-grid">
-        <button
-          v-for="card in pickerFilteredCards"
-          :key="card.id"
-          type="button"
-          :disabled="bannerCurrentCardIds.includes(card.id)"
-          :class="[
-            'relative flex flex-col items-center gap-1 rounded-xl border transition-all focus:outline-none',
-            bannerCurrentCardIds.includes(card.id)
-              ? 'border-white/10 opacity-50 cursor-not-allowed bg-white/5'
-              : pickerSelected.has(card.id)
-                ? 'border-cyan-400 bg-cyan-400/10 ring-2 ring-cyan-400/30'
-                : 'border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10',
-          ]"
-          :data-testid="`picker-card-${card.id}`"
-          @click="togglePickerCard(card.id)"
-        >
-          <img
-            :src="cardImageUrl(card.image_path)"
-            :alt="card.name"
-            class="w-full aspect-[3/4] object-cover rounded-t-xl"
-          />
-          <div class="w-full px-1.5 pb-1.5">
-            <p class="text-white text-xs font-medium truncate leading-tight">{{ card.name }}</p>
-            <div class="flex items-center justify-between mt-0.5">
-              <span :class="['text-xs font-semibold px-1 py-0.5 rounded', rarityBadgeClass(card.rarity)]">
-                {{ card.rarity }}
-              </span>
-              <span
-                v-if="bannerCurrentCardIds.includes(card.id)"
-                class="text-xs text-white/40"
-                :title="$t('gacha.admin.banner_picker_already_in_banner')"
-              >✓</span>
-            </div>
-          </div>
-          <!-- Selected checkmark overlay -->
-          <div
-            v-if="pickerSelected.has(card.id)"
-            class="absolute top-1 right-1 size-5 rounded-full bg-cyan-400 flex items-center justify-center"
-          >
-            <Check class="size-3 text-black" aria-hidden="true" />
-          </div>
-        </button>
-      </div>
-    </div>
+    <GachaCardPicker
+      v-if="bannerPickerOpen"
+      ref="bannerPickerRef"
+      :exclude-ids="bannerCurrentCardIds"
+      :all-cards="cards"
+      :groups="groups"
+      :already-in-label="$t('gacha.admin.banner_picker_already_in_banner')"
+      :search="pickerSearch"
+      :selected="pickerSelected"
+      data-testid="banner-card-picker"
+      @update:search="pickerSearch = $event"
+      @update:selected="pickerSelected = $event"
+      @confirm="onBannerPickerConfirm"
+      @cancel="closeCardPicker"
+    />
 
     <!-- ── FORM VIEW ───────────────────────────────────────────────────── -->
     <div v-else class="space-y-4">
@@ -558,7 +618,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Pencil, Trash2, Upload, Check, X, Info } from 'lucide-vue-next'
+import { Pencil, Trash2, Upload, X, Info } from 'lucide-vue-next'
 import {
   gachaAdminApi,
   cardImageUrl,
@@ -575,6 +635,7 @@ import Select from '@/components/ui/Select.vue'
 import Checkbox from '@/components/ui/Checkbox.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import Alert from '@/components/ui/Alert.vue'
+import GachaCardPicker from '@/components/admin/GachaCardPicker.vue'
 
 const { t } = useI18n()
 
@@ -761,17 +822,108 @@ const editGroup = ref<GachaGroup | null>(null)
 const savingGroup = ref(false)
 const groupForm = ref({ name: '' })
 
+// Group card picker state (two-view, mirrors the banner picker pattern)
+const groupPickerOpen = ref(false)
+const groupCurrentCardIds = ref<string[]>([])
+const loadingGroupPool = ref(false)
+const addingGroupCards = ref(false)
+const groupPickerSearch = ref('')
+const groupPickerSelected = ref<Set<string>>(new Set())
+const groupPickerRef = ref<InstanceType<typeof GachaCardPicker> | null>(null)
+
 function openGroupCreate() {
   editGroup.value = null
   groupForm.value = { name: '' }
+  groupCurrentCardIds.value = []
+  groupPickerOpen.value = false
   showGroupDialog.value = true
 }
 
+/** Open group dialog for rename only (no card pool fetch).
+ *  Also used as setup helper by openGroupEdit. */
 function openGroupRename(group: GachaGroup) {
   editGroup.value = group
   groupForm.value = { name: group.name }
+  groupCurrentCardIds.value = []
+  groupPickerOpen.value = false
   showGroupDialog.value = true
 }
+
+/** Open group dialog in edit mode (rename + card management).
+ *  Called from the pencil button in the groups grid. */
+async function openGroupEdit(group: GachaGroup) {
+  openGroupRename(group)
+  // Fetch current member cards via listCards({group_id})
+  loadingGroupPool.value = true
+  try {
+    const res = await gachaAdminApi.listCards({ group_id: group.id })
+    const members = ((res as { data?: { data?: GachaCard[] } }).data?.data ?? [])
+    groupCurrentCardIds.value = members.map(c => c.id)
+  } catch {
+    // non-fatal: pool stays empty
+  } finally {
+    loadingGroupPool.value = false
+  }
+}
+
+function openGroupPicker() {
+  groupPickerSearch.value = ''
+  groupPickerSelected.value = new Set()
+  groupPickerOpen.value = true
+}
+
+function closeGroupPicker() {
+  groupPickerOpen.value = false
+}
+
+function selectAllGroupPickerVisible() {
+  groupPickerRef.value?.selectAllVisible()
+}
+
+async function confirmGroupPickerAdd() {
+  const ids = Array.from(groupPickerSelected.value)
+  await onGroupPickerConfirm(ids)
+}
+
+async function onGroupPickerConfirm(ids: string[]) {
+  if (!editGroup.value || ids.length === 0) return
+  addingGroupCards.value = true
+  pageError.value = null
+  try {
+    await gachaAdminApi.addCardsToGroup(editGroup.value.id, ids)
+    // Merge into local pool
+    for (const id of ids) {
+      if (!groupCurrentCardIds.value.includes(id)) {
+        groupCurrentCardIds.value.push(id)
+      }
+    }
+    groupPickerSelected.value = new Set()
+    groupPickerOpen.value = false
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  } finally {
+    addingGroupCards.value = false
+  }
+}
+
+async function removeGroupCard(cardId: string) {
+  if (!editGroup.value) return
+  try {
+    await gachaAdminApi.removeCardFromGroup(editGroup.value.id, cardId)
+    groupCurrentCardIds.value = groupCurrentCardIds.value.filter(id => id !== cardId)
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  }
+}
+
+// Reset group picker state when dialog closes
+watch(showGroupDialog, (open) => {
+  if (!open) {
+    groupPickerOpen.value = false
+    groupPickerSearch.value = ''
+    groupPickerSelected.value = new Set()
+  }
+})
 
 async function saveGroup() {
   savingGroup.value = true
@@ -799,39 +951,25 @@ const savingBanner = ref(false)
 const bannerCurrentCardIds = ref<string[]>([])
 const loadingBannerPool = ref(false)
 
-// ── Card picker state (rendered inside the banner dialog) ─────────────────────
+// ── Banner card picker state ──────────────────────────────────────────────────
 // bannerPickerOpen switches the banner modal between form view and picker view.
+// pickerSearch and pickerSelected are controlled by the parent (passed as props
+// to GachaCardPicker) so that existing spec assertions on vm.pickerSearch and
+// vm.pickerSelected continue to work without modification.
 const bannerPickerOpen = ref(false)
 const pickerSearch = ref('')
-const pickerRarity = ref('all')
-const pickerGroup = ref('all')
 const pickerSelected = ref<Set<string>>(new Set())
 const addingPickerCards = ref(false)
+const bannerPickerRef = ref<InstanceType<typeof GachaCardPicker> | null>(null)
 
-const pickerRarityOptions = computed(() => [
-  { value: 'all', label: t('gacha.admin.banner_picker_filter_rarity') },
-  { value: 'N', label: 'N' },
-  { value: 'R', label: 'R' },
-  { value: 'SR', label: 'SR' },
-  { value: 'SSR', label: 'SSR' },
-])
-
-const pickerGroupOptions = computed(() => [
-  { value: 'all', label: t('gacha.admin.banner_picker_filter_group') },
-  ...groups.value.map(g => ({ value: g.id, label: g.name })),
-])
-
-// All cards visible in picker, filtered by search + rarity.
-// Group filter uses already-loaded cards (groups were fetched server-side on mount).
+// pickerFilteredCards — computed here in the parent using the same logic as the
+// picker component, so existing spec assertions on vm.pickerFilteredCards work.
+const pickerRarity = ref('all')
 const pickerFilteredCards = computed(() => {
-  const search = pickerSearch.value.toLowerCase().trim()
+  const q = pickerSearch.value.toLowerCase().trim()
   return cards.value.filter(c => {
     if (pickerRarity.value !== 'all' && c.rarity !== pickerRarity.value) return false
-    if (pickerGroup.value !== 'all') {
-      // cards don't carry group membership in list response; skip group client filter
-      // (the server-side group_id param on listCards serves that on the cards tab)
-    }
-    if (search && !c.name.toLowerCase().includes(search) && !c.source_title.toLowerCase().includes(search)) return false
+    if (q && !c.name.toLowerCase().includes(q) && !c.source_title.toLowerCase().includes(q)) return false
     return true
   })
 })
@@ -839,7 +977,6 @@ const pickerFilteredCards = computed(() => {
 function openCardPicker() {
   pickerSearch.value = ''
   pickerRarity.value = 'all'
-  pickerGroup.value = 'all'
   pickerSelected.value = new Set()
   bannerPickerOpen.value = true
 }
@@ -848,18 +985,9 @@ function closeCardPicker() {
   bannerPickerOpen.value = false
 }
 
-function togglePickerCard(cardId: string) {
-  if (bannerCurrentCardIds.value.includes(cardId)) return
-  const next = new Set(pickerSelected.value)
-  if (next.has(cardId)) {
-    next.delete(cardId)
-  } else {
-    next.add(cardId)
-  }
-  pickerSelected.value = next
-}
-
 function selectAllPickerVisible() {
+  groupPickerRef.value?.selectAllVisible()
+  // For banner picker: select all from pickerFilteredCards not already in banner
   const next = new Set(pickerSelected.value)
   for (const card of pickerFilteredCards.value) {
     if (!bannerCurrentCardIds.value.includes(card.id)) {
@@ -867,6 +995,27 @@ function selectAllPickerVisible() {
     }
   }
   pickerSelected.value = next
+}
+
+async function onBannerPickerConfirm(ids: string[]) {
+  if (!editBanner.value || ids.length === 0) return
+  addingPickerCards.value = true
+  pageError.value = null
+  try {
+    await gachaAdminApi.addBannerCards(editBanner.value.id, ids)
+    // Merge into local pool
+    for (const id of ids) {
+      if (!bannerCurrentCardIds.value.includes(id)) {
+        bannerCurrentCardIds.value.push(id)
+      }
+    }
+    pickerSelected.value = new Set()
+    bannerPickerOpen.value = false
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  } finally {
+    addingPickerCards.value = false
+  }
 }
 
 async function confirmPickerAdd() {
@@ -895,6 +1044,7 @@ async function confirmPickerAdd() {
 watch(showBannerDialog, (open) => {
   if (!open) {
     bannerPickerOpen.value = false
+    pickerSearch.value = ''
     pickerSelected.value = new Set()
   }
 })

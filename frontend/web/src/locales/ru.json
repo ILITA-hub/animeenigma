@@ -1465,7 +1465,11 @@
       "banner_picker_add_btn": "Добавить ({n})",
       "banner_picker_back": "Назад",
       "banner_picker_empty": "Нет карточек по фильтрам",
-      "banner_new_hint": "Сначала сохраните баннер, чтобы добавить карточки"
+      "banner_new_hint": "Сначала сохраните баннер, чтобы добавить карточки",
+      "group_cards_section": "Карточки группы",
+      "group_pool_empty": "В группе пока нет карточек",
+      "group_new_hint": "Сначала сохраните группу, чтобы добавить карточки",
+      "group_picker_already_in_group": "Уже в группе"
     }
   }
 }

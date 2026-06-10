@@ -1465,7 +1465,11 @@
       "banner_picker_add_btn": "追加 ({n})",
       "banner_picker_back": "戻る",
       "banner_picker_empty": "フィルター条件に合うカードがありません",
-      "banner_new_hint": "カードを追加するには先にバナーを保存してください"
+      "banner_new_hint": "カードを追加するには先にバナーを保存してください",
+      "group_cards_section": "グループのカード",
+      "group_pool_empty": "グループにカードがまだありません",
+      "group_new_hint": "カードを追加するには先にグループを保存してください",
+      "group_picker_already_in_group": "すでにグループに追加済み"
     }
   }
 }

@@ -1465,7 +1465,11 @@
       "banner_picker_add_btn": "Add ({n})",
       "banner_picker_back": "Back",
       "banner_picker_empty": "No cards match filters",
-      "banner_new_hint": "Save the banner first to add cards"
+      "banner_new_hint": "Save the banner first to add cards",
+      "group_cards_section": "Group Cards",
+      "group_pool_empty": "No cards in group yet",
+      "group_new_hint": "Save the group first to add cards",
+      "group_picker_already_in_group": "Already in group"
     }
   }
 }
