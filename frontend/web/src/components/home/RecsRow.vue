@@ -1,10 +1,10 @@
 <template>
-  <!-- Notebook 12:04:05 — the recommendations engine (/api/users/recs) and the
-       useRecs composable were already built; this row was the missing mount.
-       Shows "Trending now" for anonymous viewers and "Up Next for you" once
-       logged in (label driven by the backend's row_label_key). Hidden while a
-       logged-in user has zero recs so we never render an empty shell. -->
-  <section v-if="recs.length > 0" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+  <!-- Notebook 12:04:05 — recommendations rail. Per user request (2026-06-10)
+       the personalized "Подобрано для вас" / "Up Next for you" rail is hidden:
+       we only render the anonymous "Trending now" discovery rail. Since the
+       backend returns the personalized payload exactly when authenticated, we
+       gate the whole rail on !isAuthenticated. -->
+  <section v-if="!auth.isAuthenticated && recs.length > 0" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
     <div class="rr-section-head">
       <h2 class="rr-title">
         {{ $t(rowLabelKey) }}
@@ -27,7 +27,7 @@
   </section>
 
   <!-- Loading skeleton — matches the loaded horizontal scroller. -->
-  <div v-else-if="isLoading" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
+  <div v-else-if="!auth.isAuthenticated && isLoading" class="px-4 lg:px-8 max-w-7xl mx-auto mb-8">
     <div class="h-8 w-52 bg-white/10 rounded animate-pulse mb-4" />
     <div class="rr-row">
       <div v-for="i in 6" :key="i" class="rr-card-skeleton" />
@@ -41,9 +41,13 @@ import MediaTile from '@/components/anime/MediaTile.vue'
 import { fromHomeAnime } from '@/utils/toCardModel'
 import { useRecs, type RecItem } from '@/composables/useRecs'
 import { emitRecClick } from '@/utils/recsAnalytics'
+import { useAuthStore } from '@/stores/auth'
 
 const { recs, isLoading, rowLabelKey } = useRecs()
 const { t } = useI18n()
+// Hide the personalized rail for logged-in users (user request 2026-06-10);
+// the anonymous "Trending now" rail still renders.
+const auth = useAuthStore()
 
 // Pinned items carry the literal signal "s6_pin"; organic items carry the
 // backend-surfaced top_contributor (empty string if none). Mirrors the
