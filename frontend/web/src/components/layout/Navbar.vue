@@ -46,9 +46,7 @@
               :aria-label="$t('nav.search')"
               @click="openSearch"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search class="size-5" />
             </button>
             <!-- Spacer holds the 36px flex slot so siblings don't shift when search expands -->
             <div v-else class="w-9 h-9 flex-shrink-0" aria-hidden="true" />
@@ -70,9 +68,7 @@
                   @keydown.down.prevent="highlightNext"
                   @keydown.up.prevent="highlightPrev"
                 />
-                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-white/60" aria-hidden="true" />
                 <!-- Autocomplete Dropdown -->
                 <Transition name="dropdown">
                   <div
@@ -118,9 +114,7 @@
                 :aria-label="$t('nav.closeSearch')"
                 @click="closeSearch"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X class="size-4" />
               </button>
             </div>
           </div>
@@ -132,9 +126,7 @@
               @click="langDropdownOpen = !langDropdownOpen"
             >
               <span class="uppercase">{{ locale }}</span>
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
+              <ChevronDown class="size-3.5" aria-hidden="true" />
             </button>
             <Transition name="dropdown">
               <div
@@ -194,12 +186,8 @@
           :aria-expanded="mobileMenuOpen"
           aria-controls="mobile-drawer"
         >
-          <svg v-if="!mobileMenuOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          <svg v-else class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <Menu v-if="!mobileMenuOpen" class="size-6" />
+          <X v-else class="size-6" />
         </button>
       </div>
 
@@ -326,6 +314,7 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
+import { Search, X, ChevronDown, Menu } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
 import NotificationBell from '@/components/NotificationBell.vue'

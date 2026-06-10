@@ -4,9 +4,7 @@
       class="w-[52px] h-[72px] rounded flex-shrink-0 bg-white/5 flex items-center justify-center text-white/30"
       aria-hidden="true"
     >
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
+      <Info class="size-6" aria-hidden="true" />
     </div>
     <div class="flex-1 min-w-0">
       <p class="text-white/70 text-sm">{{ $t('notifications.unknown.title') }}</p>
@@ -38,6 +36,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Info } from 'lucide-vue-next'
 
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'

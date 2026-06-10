@@ -6,17 +6,13 @@
       :aria-label="$t('footer.feedback.button')"
       @click="handleClick"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.96 9.96 0 01-4.84-1.23L3 20l1.25-3.74A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-      </svg>
+      <MessageSquare class="size-4" aria-hidden="true" />
       {{ $t('footer.feedback.button') }}
     </button>
 
     <Modal v-model="showModal" :title="$t('footer.feedback.title')" size="lg">
       <div v-if="submitted" class="text-center py-4">
-        <svg class="w-12 h-12 mx-auto mb-3 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        <CircleCheck class="size-12 mx-auto mb-3 text-success" aria-hidden="true" />
         <p class="text-white text-lg font-medium">{{ $t('footer.feedback.sent') }}</p>
         <p class="text-white/60 mt-1 text-sm">{{ $t('footer.feedback.thankYou') }}</p>
       </div>
@@ -101,6 +97,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { MessageSquare, CircleCheck } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/client'
 import { collectDiagnostics } from '@/utils/diagnostics'

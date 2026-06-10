@@ -14,15 +14,10 @@
           class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-semibold"
         >{{ count }}</span>
       </span>
-      <svg
-        class="w-4 h-4 text-white/40 transition-transform duration-150 group-open:rotate-180"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
+      <ChevronDown
+        class="size-4 text-white/40 transition-transform duration-150 group-open:rotate-180"
         aria-hidden="true"
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-      </svg>
+      />
     </summary>
     <div class="pt-3 px-1 space-y-2">
       <slot />
@@ -35,6 +30,8 @@
 // browser owns the open/close state via the native <details> element, so
 // keyboard interaction (Enter/Space) and screen reader semantics are
 // inherited for free — no manual ARIA expanded wiring needed.
+import { ChevronDown } from 'lucide-vue-next'
+
 interface Props {
   label?: string
   open?: boolean
