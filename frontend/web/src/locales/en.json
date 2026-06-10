@@ -1430,10 +1430,16 @@
       "banner_cards_section": "Banner Cards",
       "banner_add_cards": "Add cards by ID",
       "banner_add_group": "Add group…",
+      "banner_add_group_btn": "Add group",
       "banner_group_added": "Group cards added",
+      "banner_pool_empty": "No cards in pool yet",
+      "banner_not_found": "Banner not found",
       "upload_preview": "Preview",
       "upload_uploading": "Uploading…",
-      "upload_error": "Upload failed"
+      "upload_error": "Upload failed",
+      "cards_empty": "No cards found",
+      "groups_empty": "No groups yet",
+      "banners_empty": "No banners yet"
     }
   }
 }

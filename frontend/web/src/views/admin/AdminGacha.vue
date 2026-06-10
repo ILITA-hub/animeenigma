@@ -54,7 +54,7 @@
 
           <!-- Empty -->
           <div v-else-if="filteredCards.length === 0" class="glass-card p-8 text-center text-muted-foreground">
-            {{ $t('gacha.admin.filter_all') }} — no cards
+            {{ $t('gacha.admin.cards_empty') }}
           </div>
 
           <!-- Cards table -->
@@ -121,7 +121,7 @@
             <Spinner />
           </div>
           <div v-else-if="groups.length === 0" class="glass-card p-8 text-center text-muted-foreground">
-            No groups yet
+            {{ $t('gacha.admin.groups_empty') }}
           </div>
           <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div
@@ -157,7 +157,7 @@
             <Spinner />
           </div>
           <div v-else-if="banners.length === 0" class="glass-card p-8 text-center text-muted-foreground">
-            No banners yet
+            {{ $t('gacha.admin.banners_empty') }}
           </div>
           <div v-else class="glass-card overflow-x-auto">
             <table class="w-full text-sm text-white">
@@ -220,6 +220,26 @@
       <div>
         <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.card_rarity') }}</label>
         <Select v-model="cardForm.rarity" :options="rarityOptions" />
+      </div>
+      <!-- Groups multiselect (M4) -->
+      <div>
+        <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.card_groups') }}</label>
+        <div class="flex flex-wrap gap-1.5">
+          <label
+            v-for="group in groups"
+            :key="group.id"
+            class="inline-flex items-center gap-1.5 cursor-pointer select-none text-sm text-white/70"
+          >
+            <input
+              type="checkbox"
+              :value="group.id"
+              :checked="cardForm.groupIds.includes(group.id)"
+              class="rounded border-white/20"
+              @change="toggleCardGroup(group.id)"
+            />
+            {{ group.name }}
+          </label>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <Checkbox v-model="cardForm.enabled" />
@@ -329,17 +349,47 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_active_from') }}</label>
-          <Input v-model="bannerForm.active_from" type="datetime-local" />
+          <input
+            v-model="bannerForm.active_from"
+            type="datetime-local"
+            class="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 transition-all duration-200 focus:outline-none px-4 py-3 text-base rounded-xl focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+          />
         </div>
         <div>
           <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_active_to') }}</label>
-          <Input v-model="bannerForm.active_to" type="datetime-local" />
+          <input
+            v-model="bannerForm.active_to"
+            type="datetime-local"
+            class="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 transition-all duration-200 focus:outline-none px-4 py-3 text-base rounded-xl focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+          />
         </div>
       </div>
 
-      <!-- Banner cards section -->
+      <!-- Banner cards section (M5: pool editor with current cards + remove) -->
       <div v-if="editBanner">
-        <p class="text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_cards_section') }}</p>
+        <p class="text-white/70 text-xs mb-2">{{ $t('gacha.admin.banner_cards_section') }}</p>
+
+        <!-- Current pool -->
+        <div v-if="loadingBannerPool" class="text-muted-foreground text-xs mb-2">
+          {{ $t('gacha.admin.upload_uploading') }}
+        </div>
+        <div v-else-if="bannerCurrentCardIds.length > 0" class="mb-3 space-y-1 max-h-40 overflow-y-auto">
+          <div
+            v-for="cid in bannerCurrentCardIds"
+            :key="cid"
+            class="flex items-center justify-between bg-white/5 rounded px-2 py-1 text-xs text-white/80"
+          >
+            <span class="truncate">{{ cardNameById(cid) || cid }}</span>
+            <button
+              type="button"
+              class="ml-2 text-destructive hover:text-destructive/80 transition-colors"
+              @click="removeBannerCard(cid)"
+            >✕</button>
+          </div>
+        </div>
+        <p v-else class="text-muted-foreground text-xs mb-3">{{ $t('gacha.admin.banner_pool_empty') }}</p>
+
+        <!-- Add cards by ID -->
         <div class="flex gap-2 mb-2">
           <Input
             v-model="bannerCardIds"
@@ -350,6 +400,8 @@
             {{ $t('gacha.admin.banner_add_cards') }}
           </Button>
         </div>
+
+        <!-- Add group -->
         <div class="flex gap-2">
           <Select
             v-model="bannerGroupId"
@@ -358,7 +410,7 @@
             class="flex-1"
           />
           <Button variant="outline" size="sm" @click="addBannerGroup">
-            Add group
+            {{ $t('gacha.admin.banner_add_group_btn') }}
           </Button>
         </div>
         <p v-if="bannerGroupAdded" class="text-teal-400 text-xs mt-1">
@@ -396,7 +448,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Pencil, Trash2, Upload } from 'lucide-vue-next'
 import {
@@ -448,6 +500,7 @@ const filteredCards = computed(() => {
   return cards.value.filter(c => {
     if (cardFilterRarity.value !== 'all' && c.rarity !== cardFilterRarity.value) return false
     if (cardFilterEnabled.value && !c.enabled) return false
+    // M6: group filter is applied server-side; no client-side group filter
     return true
   })
 })
@@ -485,10 +538,11 @@ const cardForm = ref({
   enabled: true,
   imagePath: '',   // final stored path (returned from upload or existing)
   imageUrl: '',    // user-typed URL
+  groupIds: [] as string[],  // selected group membership (M4)
 })
 
 function resetCardForm() {
-  cardForm.value = { name: '', source_title: '', rarity: 'N', enabled: true, imagePath: '', imageUrl: '' }
+  cardForm.value = { name: '', source_title: '', rarity: 'N', enabled: true, imagePath: '', imageUrl: '', groupIds: [] }
   imagePreview.value = null
   uploadError.value = false
   uploading.value = false
@@ -509,11 +563,21 @@ function openCardEdit(card: GachaCard) {
     enabled: card.enabled,
     imagePath: card.image_path,
     imageUrl: '',
+    groupIds: [],   // We don't have the current membership here; user selects from scratch
   }
   imagePreview.value = card.image_path ? cardImageUrl(card.image_path) : null
   uploadError.value = false
   uploading.value = false
   showCardDialog.value = true
+}
+
+function toggleCardGroup(groupId: string) {
+  const idx = cardForm.value.groupIds.indexOf(groupId)
+  if (idx === -1) {
+    cardForm.value.groupIds.push(groupId)
+  } else {
+    cardForm.value.groupIds.splice(idx, 1)
+  }
 }
 
 async function onFileChange(e: Event) {
@@ -522,10 +586,7 @@ async function onFileChange(e: Event) {
   uploading.value = true
   uploadError.value = false
   try {
-    const form = new FormData()
-    form.append('file', file)
-    form.append('kind', 'card')
-    const res = await gachaAdminApi.uploadFile(form)
+    const res = await gachaAdminApi.uploadFile(file, 'cards')
     const data = (res as { data?: { data?: { image_path?: string } } }).data
     const path = data?.data?.image_path ?? ''
     cardForm.value.imagePath = path
@@ -543,7 +604,7 @@ async function onImageUrlBlur() {
   uploading.value = true
   uploadError.value = false
   try {
-    const res = await gachaAdminApi.uploadUrl({ image_url: url, kind: 'card' })
+    const res = await gachaAdminApi.uploadUrl(url, 'cards')
     const data = (res as { data?: { data?: { image_path?: string } } }).data
     const path = data?.data?.image_path ?? ''
     cardForm.value.imagePath = path
@@ -566,9 +627,18 @@ async function saveCard() {
       rarity: cardForm.value.rarity,
       enabled: cardForm.value.enabled,
       image_path: cardForm.value.imagePath,
+      group_ids: cardForm.value.groupIds,
     }
     if (editCard.value) {
+      // Update card fields + apply group membership diffs (M4)
       await gachaAdminApi.updateCard(editCard.value.id, payload)
+      // Apply group membership changes: add to selected groups, the API
+      // handles deduplication; remove path deferred (no full prior membership).
+      if (cardForm.value.groupIds.length > 0) {
+        for (const gid of cardForm.value.groupIds) {
+          await gachaAdminApi.addCardsToGroup(gid, [editCard.value.id])
+        }
+      }
     } else {
       await gachaAdminApi.createCard(payload)
     }
@@ -604,9 +674,9 @@ async function saveGroup() {
   pageError.value = null
   try {
     if (editGroup.value) {
-      await gachaAdminApi.renameGroup(editGroup.value.id, { name: groupForm.value.name })
+      await gachaAdminApi.renameGroup(editGroup.value.id, groupForm.value.name)
     } else {
-      await gachaAdminApi.createGroup({ name: groupForm.value.name })
+      await gachaAdminApi.createGroup(groupForm.value.name)
     }
     showGroupDialog.value = false
     await loadGroups()
@@ -624,6 +694,9 @@ const savingBanner = ref(false)
 const bannerCardIds = ref('')
 const bannerGroupId = ref<string>('')
 const bannerGroupAdded = ref(false)
+// M5: current pool for the banner being edited
+const bannerCurrentCardIds = ref<string[]>([])
+const loadingBannerPool = ref(false)
 
 const bannerForm = ref({
   name: '',
@@ -644,7 +717,7 @@ function openBannerCreate() {
   showBannerDialog.value = true
 }
 
-function openBannerEdit(banner: GachaBanner) {
+async function openBannerEdit(banner: GachaBanner) {
   editBanner.value = banner
   bannerForm.value = {
     name: banner.name,
@@ -658,7 +731,19 @@ function openBannerEdit(banner: GachaBanner) {
   bannerCardIds.value = ''
   bannerGroupId.value = ''
   bannerGroupAdded.value = false
+  bannerCurrentCardIds.value = []
   showBannerDialog.value = true
+  // M5: fetch current pool
+  loadingBannerPool.value = true
+  try {
+    const res = await gachaAdminApi.getBanner(banner.id)
+    const detail = (res as { data?: { data?: { card_ids?: string[] } } }).data?.data
+    bannerCurrentCardIds.value = detail?.card_ids ?? []
+  } catch {
+    // non-fatal: pool just stays empty
+  } finally {
+    loadingBannerPool.value = false
+  }
 }
 
 async function saveBanner() {
@@ -692,11 +777,34 @@ async function addBannerCards() {
   if (!editBanner.value || !bannerCardIds.value.trim()) return
   const ids = bannerCardIds.value.split(',').map(s => s.trim()).filter(Boolean)
   try {
-    await gachaAdminApi.addBannerCards(editBanner.value.id, { card_ids: ids })
+    await gachaAdminApi.addBannerCards(editBanner.value.id, ids)
     bannerCardIds.value = ''
+    // M5: merge new ids into the local pool
+    for (const id of ids) {
+      if (!bannerCurrentCardIds.value.includes(id)) {
+        bannerCurrentCardIds.value.push(id)
+      }
+    }
   } catch (err: unknown) {
     pageError.value = extractMessage(err)
   }
+}
+
+// M5: remove a single card from the banner pool via setBannerCards
+async function removeBannerCard(cardId: string) {
+  if (!editBanner.value) return
+  const newPool = bannerCurrentCardIds.value.filter(id => id !== cardId)
+  try {
+    await gachaAdminApi.setBannerCards(editBanner.value.id, newPool)
+    bannerCurrentCardIds.value = newPool
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  }
+}
+
+// Helper: card name for display in pool (M5)
+function cardNameById(id: string): string {
+  return cards.value.find(c => c.id === id)?.name ?? ''
 }
 
 async function addBannerGroup() {
@@ -770,7 +878,9 @@ async function runDelete() {
 async function loadCards() {
   loadingCards.value = true
   try {
-    const res = await gachaAdminApi.listCards()
+    // M6: server-side group filter
+    const params = cardFilterGroup.value !== 'all' ? { group_id: cardFilterGroup.value } : undefined
+    const res = await gachaAdminApi.listCards(params)
     cards.value = ((res as { data?: { data?: GachaCard[] } }).data?.data ?? [])
   } catch (err: unknown) {
     pageError.value = extractMessage(err)
@@ -824,6 +934,9 @@ function rarityBadgeClass(rarity: Rarity): string {
     default:    return 'bg-white/10 text-white/60'
   }
 }
+
+// M6: re-fetch cards when group filter changes (server-side filter)
+watch(cardFilterGroup, () => { void loadCards() })
 
 onMounted(async () => {
   await Promise.all([loadCards(), loadGroups(), loadBanners()])

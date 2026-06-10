@@ -915,8 +915,8 @@
             </div>
           </template>
 
-          <!-- Gacha Collection Tab — visible when gachaVisible -->
-          <template v-if="gachaVisible" #collection>
+          <!-- Gacha Collection Tab — own profile only (I2: don't leak viewer's collection to other users' profiles) -->
+          <template v-if="isOwnProfile && gachaVisible" #collection>
             <GachaCollection />
           </template>
         </Tabs>
@@ -1154,7 +1154,7 @@ const tabs = computed(() => {
   const baseTabs = [
     { value: 'watchlist', label: t('profile.tabs.watchlist') },
   ]
-  if (gachaVisible.value) {
+  if (isOwnProfile.value && gachaVisible.value) {
     baseTabs.push({ value: 'collection', label: t('gacha.collection_tab') })
   }
   if (isOwnProfile.value) {

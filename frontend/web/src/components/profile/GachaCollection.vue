@@ -110,8 +110,8 @@ import { cardImageUrl, type Rarity } from '@/api/gacha'
 import Spinner from '@/components/ui/Spinner.vue'
 import Alert from '@/components/ui/Alert.vue'
 
-const { t } = useI18n()
-void t
+const { t: _t } = useI18n()
+void _t // keep vue-i18n composable active for template $t
 
 const store = useGachaStore()
 const loadingCollection = computed(() => store.loadingCollection)
@@ -122,15 +122,16 @@ const RARITY_SECTIONS: Rarity[] = ['SSR', 'SR', 'R', 'N']
 
 // Group cards by rarity
 const cardsByRarity = computed(() => {
-  if (!collection.value) return {} as Record<Rarity, typeof collection.value.cards>
-  return collection.value.cards.reduce(
+  const c = collection.value
+  if (!c) return {} as Record<Rarity, NonNullable<typeof c>['cards']>
+  return c.cards.reduce(
     (acc, entry) => {
       const r = entry.card.rarity
       if (!acc[r]) acc[r] = []
       acc[r].push(entry)
       return acc
     },
-    {} as Record<Rarity, typeof collection.value.cards>,
+    {} as Record<Rarity, NonNullable<typeof c>['cards']>,
   )
 })
 

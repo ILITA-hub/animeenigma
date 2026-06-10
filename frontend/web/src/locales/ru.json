@@ -1430,10 +1430,16 @@
       "banner_cards_section": "Карточки баннера",
       "banner_add_cards": "Добавить карточки по ID",
       "banner_add_group": "Добавить группу…",
+      "banner_add_group_btn": "Добавить группу",
       "banner_group_added": "Карточки группы добавлены",
+      "banner_pool_empty": "В пуле пока нет карточек",
+      "banner_not_found": "Баннер не найден",
       "upload_preview": "Превью",
       "upload_uploading": "Загружается…",
-      "upload_error": "Ошибка загрузки"
+      "upload_error": "Ошибка загрузки",
+      "cards_empty": "Карточки не найдены",
+      "groups_empty": "Групп пока нет",
+      "banners_empty": "Баннеров пока нет"
     }
   }
 }

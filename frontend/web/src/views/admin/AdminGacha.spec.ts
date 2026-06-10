@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n'
 import en from '@/locales/en.json'
 import ru from '@/locales/ru.json'
 import AdminGacha from './AdminGacha.vue'
-import type { GachaCard } from '@/api/gacha'
+import type { GachaCard, GachaGroup, GachaBanner } from '@/api/gacha'
 
 // ── Mock API ──────────────────────────────────────────────────────────────────
 vi.mock('@/api/gacha', async (importOriginal) => {
@@ -57,6 +57,31 @@ function makeCard(overrides: Partial<GachaCard> = {}): GachaCard {
 
 function emptyListResponse() {
   return { data: { success: true, data: [] } }
+}
+
+function makeGroup(overrides: Partial<GachaGroup> = {}): GachaGroup {
+  return {
+    id: 'group-1',
+    name: 'Test Group',
+    created_at: '2026-06-01T00:00:00Z',
+    updated_at: '2026-06-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+function makeBanner(overrides: Partial<GachaBanner> = {}): GachaBanner {
+  return {
+    id: 'banner-1',
+    name: 'Test Banner',
+    description: '',
+    art_path: '',
+    is_standard: false,
+    enabled: true,
+    sort_order: 0,
+    created_at: '2026-06-01T00:00:00Z',
+    updated_at: '2026-06-01T00:00:00Z',
+    ...overrides,
+  }
 }
 
 describe('AdminGacha', () => {
@@ -149,5 +174,111 @@ describe('AdminGacha', () => {
     // Allow onMounted to set loadingCards = true (one microtask tick)
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-testid="spinner"]').exists()).toBe(true)
+  })
+
+  // ── I3: Payload-shape assertions for the critical call sites ─────────────────
+
+  it('createCard receives image_path + group_ids in payload', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.createCard).mockResolvedValue({
+      data: { success: true, data: makeCard() },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    // Open create dialog
+    type CreateVm = { openCardCreate: () => void; saveCard: () => Promise<void>; cardForm: { name: string; imagePath: string; groupIds: string[] } }
+    const vm = wrapper.vm as unknown as CreateVm
+    vm.openCardCreate()
+    await wrapper.vm.$nextTick()
+    // Set form values
+    vm.cardForm.name = 'Hero'
+    vm.cardForm.imagePath = 'cards/hero.webp'
+    vm.cardForm.groupIds = ['group-1']
+    await vm.saveCard()
+    expect(vi.mocked(gachaAdminApi.createCard)).toHaveBeenCalledWith(
+      expect.objectContaining({ image_path: 'cards/hero.webp', group_ids: ['group-1'] }),
+    )
+  })
+
+  it('uploadFile receives File instance + "cards" kind', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.uploadFile).mockResolvedValue({
+      data: { success: true, data: { image_path: 'cards/x.webp', image_url: '/api/gacha/images/cards/x.webp' } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type UploadVm = { onFileChange: (e: Event) => Promise<void> }
+    const vm = wrapper.vm as unknown as UploadVm
+    const file = new File(['x'], 'card.png', { type: 'image/png' })
+    const input = document.createElement('input')
+    input.type = 'file'
+    Object.defineProperty(input, 'files', { value: [file] })
+    await vm.onFileChange({ target: input } as unknown as Event)
+    expect(vi.mocked(gachaAdminApi.uploadFile)).toHaveBeenCalledWith(file, 'cards')
+  })
+
+  it('uploadUrl receives string + "cards" kind', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.uploadUrl).mockResolvedValue({
+      data: { success: true, data: { image_path: 'cards/x.webp', image_url: '/api/gacha/images/cards/x.webp' } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type UrlVm = { onImageUrlBlur: () => Promise<void>; cardForm: { imageUrl: string } }
+    const vm = wrapper.vm as unknown as UrlVm
+    vm.cardForm.imageUrl = 'https://example.com/card.png'
+    await vm.onImageUrlBlur()
+    expect(vi.mocked(gachaAdminApi.uploadUrl)).toHaveBeenCalledWith('https://example.com/card.png', 'cards')
+  })
+
+  it('createGroup receives a string name', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.createGroup).mockResolvedValue({
+      data: { success: true, data: makeGroup() },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type GroupVm = { openGroupCreate: () => void; saveGroup: () => Promise<void>; groupForm: { name: string } }
+    const vm = wrapper.vm as unknown as GroupVm
+    vm.openGroupCreate()
+    await wrapper.vm.$nextTick()
+    vm.groupForm.name = 'Shonen Heroes'
+    await vm.saveGroup()
+    expect(vi.mocked(gachaAdminApi.createGroup)).toHaveBeenCalledWith('Shonen Heroes')
+  })
+
+  it('renameGroup receives (id, string)', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.renameGroup).mockResolvedValue({
+      data: { success: true, data: { updated: true } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type RenameVm = { openGroupRename: (g: GachaGroup) => void; saveGroup: () => Promise<void>; groupForm: { name: string } }
+    const vm = wrapper.vm as unknown as RenameVm
+    vm.openGroupRename(makeGroup({ id: 'group-42' }))
+    await wrapper.vm.$nextTick()
+    vm.groupForm.name = 'New Name'
+    await vm.saveGroup()
+    expect(vi.mocked(gachaAdminApi.renameGroup)).toHaveBeenCalledWith('group-42', 'New Name')
+  })
+
+  it('addBannerCards receives (bannerId, string[])', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.addBannerCards).mockResolvedValue({
+      data: { success: true, data: { updated: true } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type BannerVm = {
+      editBanner: GachaBanner | null
+      bannerCardIds: string
+      addBannerCards: () => Promise<void>
+    }
+    const vm = wrapper.vm as unknown as BannerVm
+    vm.editBanner = makeBanner({ id: 'banner-99' })
+    vm.bannerCardIds = 'card-a, card-b'
+    await vm.addBannerCards()
+    expect(vi.mocked(gachaAdminApi.addBannerCards)).toHaveBeenCalledWith('banner-99', ['card-a', 'card-b'])
   })
 })
