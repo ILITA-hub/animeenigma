@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./noto-sans-jp.css";
 
 @font-face { font-family: 'Manrope'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/manrope-700.woff2') format('woff2'); }
 @font-face { font-family: 'Manrope'; font-style: normal; font-weight: 800; font-display: swap; src: url('/fonts/manrope-800.woff2') format('woff2'); }
@@ -8,8 +9,7 @@
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/inter-700.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/jetbrains-mono-400.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/jetbrains-mono-500.woff2') format('woff2'); }
-@font-face { font-family: 'Noto Sans JP'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/noto-sans-jp-400.woff2') format('woff2'); }
-@font-face { font-family: 'Noto Sans JP'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/noto-sans-jp-500.woff2') format('woff2'); }
+/* Noto Sans JP is sliced into unicode-range subsets — see noto-sans-jp.css (imported above). */
 
 /* Neon Tokyo Theme */
 @theme {
