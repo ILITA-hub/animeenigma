@@ -1010,7 +1010,13 @@
         "updatedBy": "ステータス変更者",
         "console": "コンソールログ",
         "network": "ネットワークログ",
-        "html": "ページHTML"
+        "html": "ページHTML",
+        "attachments": "添付ファイル",
+        "attachmentLoadError": "添付ファイルを読み込めませんでした",
+        "download": "ダウンロード",
+        "forwardedFrom": "転送元",
+        "replyTo": "返信先",
+        "fromAdmin": "管理者から"
       }
     },
     "recs": {
