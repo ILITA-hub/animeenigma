@@ -50,6 +50,19 @@
             <p v-if="it.status_updated_at" class="mt-2 text-[11px] text-muted-foreground">
               {{ $t('myFeedback.statusUpdated', { date: formatDate(it.status_updated_at) }) }}
             </p>
+            <details v-if="it.status_history?.length" class="mt-2">
+              <summary class="cursor-pointer text-[11px] text-primary/80 hover:text-primary">
+                {{ $t('myFeedback.history', { n: it.status_history.length }) }}
+              </summary>
+              <ol class="mt-1.5 space-y-1 border-l border-white/10 pl-3">
+                <li v-for="(tr, i) in it.status_history" :key="i" class="text-[11px] text-muted-foreground">
+                  <span class="text-foreground/70">{{ statusLabel(tr.from) }}</span>
+                  <span aria-hidden="true"> → </span>
+                  <span class="text-foreground/90">{{ statusLabel(tr.to) }}</span>
+                  · {{ formatDate(tr.at) }}
+                </li>
+              </ol>
+            </details>
           </div>
         </div>
 

@@ -1088,7 +1088,8 @@
         "download": "Download",
         "forwardedFrom": "Forwarded from",
         "replyTo": "In reply to",
-        "fromAdmin": "from admin"
+        "fromAdmin": "from admin",
+        "history": "Status history"
       },
       "copyLink": "Copy link",
       "copied": "Copied"
@@ -1587,6 +1588,7 @@
       "from": "From date",
       "to": "To date",
       "reset": "Reset"
-    }
+    },
+    "history": "Status history ({n})"
   }
 }

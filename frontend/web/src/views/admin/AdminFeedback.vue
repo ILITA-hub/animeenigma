@@ -363,6 +363,20 @@
             </select>
           </div>
 
+          <!-- Status history (append-only triage log; starts 2026-06-10) -->
+          <div v-if="detail.status_history?.length" class="bg-black/20 rounded p-3">
+            <p class="text-white/50 text-xs uppercase mb-2">{{ $t('admin.feedback.detail.history') }}</p>
+            <ol class="space-y-1.5">
+              <li v-for="(tr, i) in detail.status_history" :key="i" class="flex items-center gap-2 flex-wrap text-xs">
+                <span class="text-white/40 whitespace-nowrap">{{ formatDate(tr.at, '') }}</span>
+                <span class="text-white/70">{{ statusLabel(tr.from) }}</span>
+                <span class="text-white/40" aria-hidden="true">→</span>
+                <span class="text-white">{{ statusLabel(tr.to) }}</span>
+                <span v-if="tr.by" class="text-white/40">· {{ tr.by }}</span>
+              </li>
+            </ol>
+          </div>
+
           <!-- Collapsible diagnostics -->
           <details v-if="detail.console_logs" class="bg-black/20 rounded p-2">
             <summary class="cursor-pointer text-white/70 text-xs uppercase">{{ $t('admin.feedback.detail.console') }}</summary>

@@ -32,7 +32,16 @@ export interface FeedbackListResponse {
 }
 
 // FeedbackDetail is the full on-disk report (raw map) with id/status injected.
+/** One triage transition (admin shape includes the actor). */
+export interface StatusTransition {
+  from: FeedbackStatus | string
+  to: FeedbackStatus | string
+  at: string
+  by?: string
+}
+
 export interface FeedbackDetail extends FeedbackListItem {
+  status_history?: StatusTransition[]
   anime_id?: string
   server_name?: string
   stream_url?: string
@@ -57,6 +66,7 @@ export interface FeedbackDetail extends FeedbackListItem {
 
 /** User-facing "my feedback" row (GET /api/users/reports). */
 export interface MyFeedbackItem {
+  status_history?: Array<{ from: string; to: string; at: string }>
   id: string
   timestamp: string
   player_type: string

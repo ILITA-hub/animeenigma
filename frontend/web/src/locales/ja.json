@@ -1088,7 +1088,8 @@
         "download": "ダウンロード",
         "forwardedFrom": "転送元",
         "replyTo": "返信先",
-        "fromAdmin": "管理者から"
+        "fromAdmin": "管理者から",
+        "history": "ステータス履歴"
       },
       "copyLink": "リンクをコピー",
       "copied": "コピーしました"
@@ -1587,6 +1588,7 @@
       "from": "開始日",
       "to": "終了日",
       "reset": "リセット"
-    }
+    },
+    "history": "ステータス履歴（{n}）"
   }
 }

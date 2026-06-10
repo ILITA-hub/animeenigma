@@ -35,6 +35,8 @@ type myReportRow struct {
 	Description     string `json:"description"`
 	Status          string `json:"status"`
 	StatusUpdatedAt string `json:"status_updated_at,omitempty"`
+	// Triage transitions (oldest first), actor names stripped.
+	StatusHistory []userStatusTransition `json:"status_history,omitempty"`
 }
 
 // myReportFile is the on-disk subset needed to build a row + match the owner.
@@ -97,6 +99,7 @@ func (h *AdminReportsHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 
 	h.mu.Lock()
 	statuses := h.loadStatuses()
+	histories := h.loadHistory()
 	h.mu.Unlock()
 
 	mine := make([]myReportRow, 0, 16)
@@ -130,6 +133,7 @@ func (h *AdminReportsHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 			row.Status = st.Status
 			row.StatusUpdatedAt = st.UpdatedAt
 		}
+		row.StatusHistory = toUserTransitions(histories[id])
 		mine = append(mine, row)
 	}
 

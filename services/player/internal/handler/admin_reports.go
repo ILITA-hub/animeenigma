@@ -272,6 +272,7 @@ func (h *AdminReportsHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	h.mu.Lock()
 	statuses := h.loadStatuses()
+	history := h.historyFor(id)
 	h.mu.Unlock()
 	st := "new"
 	if e, ok := statuses[id]; ok && e.Status != "" {
@@ -280,6 +281,9 @@ func (h *AdminReportsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		full["status_updated_by"] = e.UpdatedBy
 	}
 	full["status"] = st
+	if len(history) > 0 {
+		full["status_history"] = history
+	}
 
 	httputil.OK(w, full)
 }
@@ -326,12 +330,16 @@ func (h *AdminReportsHandler) SetStatus(w http.ResponseWriter, r *http.Request) 
 	if e, ok := statuses[id]; ok && e.Status != "" {
 		prev = e.Status
 	}
+	now := time.Now().UTC().Format(time.RFC3339)
 	statuses[id] = feedbackStatusEntry{
 		Status:    req.Status,
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt: now,
 		UpdatedBy: updatedBy,
 	}
 	saveErr := h.saveStatuses(statuses)
+	if saveErr == nil && req.Status != prev {
+		h.appendHistory(id, statusTransition{From: prev, To: req.Status, At: now, By: updatedBy})
+	}
 	h.mu.Unlock()
 
 	if saveErr != nil {

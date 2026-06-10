@@ -282,12 +282,16 @@ func (h *AdminReportsHandler) SetStatusInternal(w http.ResponseWriter, r *http.R
 	if e, ok := statuses[id]; ok && e.Status != "" {
 		prev = e.Status
 	}
+	now := time.Now().UTC().Format(time.RFC3339)
 	statuses[id] = feedbackStatusEntry{
 		Status:    req.Status,
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt: now,
 		UpdatedBy: updatedBy,
 	}
 	saveErr := h.saveStatuses(statuses)
+	if saveErr == nil && req.Status != prev {
+		h.appendHistory(id, statusTransition{From: prev, To: req.Status, At: now, By: updatedBy})
+	}
 	h.mu.Unlock()
 
 	if saveErr != nil {
