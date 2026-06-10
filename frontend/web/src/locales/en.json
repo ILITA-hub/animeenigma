@@ -976,7 +976,8 @@
       "sending": "Sending…",
       "sent": "Feedback sent",
       "thankYou": "Thank you! We'll take a look.",
-      "submitError": "Couldn't send feedback. Please try again."
+      "submitError": "Couldn't send feedback. Please try again.",
+      "viewMine": "My feedback"
     }
   },
   "status": {
@@ -1555,6 +1556,30 @@
       "group_pool_empty": "No cards in group yet",
       "group_new_hint": "Save the group first to add cards",
       "group_picker_already_in_group": "Already in group"
+    }
+  },
+  "myFeedback": {
+    "title": "My feedback",
+    "subtitle": "Every message you sent via feedback and player report buttons — with its handling status.",
+    "total": "total: {n}",
+    "empty": "You have not sent any feedback yet. The “Feedback” button is at the bottom of every page.",
+    "loadError": "Failed to load your feedback",
+    "retry": "Retry",
+    "noText": "(no text — technical player report)",
+    "episode": "Episode {n}",
+    "statusUpdated": "Status updated {date}",
+    "status": {
+      "new": "Received",
+      "in_progress": "In progress",
+      "ai_done": "Fixed — being verified",
+      "resolved": "Resolved",
+      "not_relevant": "Not relevant"
+    },
+    "category": {
+      "bug": "Bug",
+      "issue": "Issue",
+      "feature": "Idea",
+      "other": "Report"
     }
   }
 }

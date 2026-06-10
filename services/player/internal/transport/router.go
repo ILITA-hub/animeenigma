@@ -143,6 +143,10 @@ func NewRouter(
 
 			// Error reports
 			r.Post("/report", reportHandler.SubmitReport)
+			if adminReportsHandler != nil {
+				// User-facing "my feedback" list — own reports + triage status.
+				r.Get("/reports", adminReportsHandler.ListMine)
+			}
 
 			// Preference routes
 			r.Get("/preferences/global", preferenceHandler.GetGlobalPreferences)

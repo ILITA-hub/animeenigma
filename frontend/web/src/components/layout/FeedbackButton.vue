@@ -15,6 +15,9 @@
         <CircleCheck class="size-12 mx-auto mb-3 text-success" aria-hidden="true" />
         <p class="text-white text-lg font-medium">{{ $t('footer.feedback.sent') }}</p>
         <p class="text-white/60 mt-1 text-sm">{{ $t('footer.feedback.thankYou') }}</p>
+        <button type="button" class="mt-3 text-sm text-primary hover:underline" @click="goToMyFeedback">
+          {{ $t('footer.feedback.viewMine') }}
+        </button>
       </div>
 
       <template v-else>
@@ -53,6 +56,9 @@
 
         <p class="mt-2 text-xs text-white/30">
           {{ $t('footer.feedback.disclaimer') }}
+          <button type="button" class="text-primary/70 hover:text-primary hover:underline" @click="goToMyFeedback">
+            {{ $t('footer.feedback.viewMine') }}
+          </button>
         </p>
 
         <div v-if="submitError" class="mt-2 text-sm text-pink-400">
@@ -140,6 +146,12 @@ function handleClick() {
     sessionStorage.setItem('returnUrl', router.currentRoute.value.fullPath)
     router.push({ name: 'auth' })
   }
+}
+
+function goToMyFeedback() {
+  showModal.value = false
+  submitted.value = false
+  router.push('/my-feedback')
 }
 
 function closeAfterSuccess() {

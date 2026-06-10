@@ -177,6 +177,13 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'player.adminLibrary.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // User-facing "my feedback" page — own messages + triage status.
+    path: '/my-feedback',
+    name: 'my-feedback',
+    component: () => import('@/views/MyFeedback.vue'),
+    meta: { titleKey: 'myFeedback.title', requiresAuth: true }
+  },
+  {
     // Admin feedback browser — read + triage user feedback / error reports.
     path: '/admin/feedback',
     name: 'admin-feedback',

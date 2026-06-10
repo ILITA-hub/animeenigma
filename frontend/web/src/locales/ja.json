@@ -976,7 +976,8 @@
       "sending": "送信中…",
       "sent": "送信完了",
       "thankYou": "ありがとうございます！確認します。",
-      "submitError": "送信に失敗しました。もう一度お試しください。"
+      "submitError": "送信に失敗しました。もう一度お試しください。",
+      "viewMine": "マイフィードバック"
     }
   },
   "status": {
@@ -1555,6 +1556,30 @@
       "group_pool_empty": "グループにカードがまだありません",
       "group_new_hint": "カードを追加するには先にグループを保存してください",
       "group_picker_already_in_group": "すでにグループに追加済み"
+    }
+  },
+  "myFeedback": {
+    "title": "マイフィードバック",
+    "subtitle": "フィードバックやプレイヤーから送信したすべてのメッセージと、その対応状況。",
+    "total": "合計: {n}",
+    "empty": "まだフィードバックを送信していません。「フィードバック」ボタンは各ページの下部にあります。",
+    "loadError": "フィードバックを読み込めませんでした",
+    "retry": "再試行",
+    "noText": "（本文なし — プレイヤーからの技術レポート）",
+    "episode": "第{n}話",
+    "statusUpdated": "ステータス更新: {date}",
+    "status": {
+      "new": "受付済み",
+      "in_progress": "対応中",
+      "ai_done": "修正済み・確認中",
+      "resolved": "解決済み",
+      "not_relevant": "対象外"
+    },
+    "category": {
+      "bug": "バグ",
+      "issue": "問題",
+      "feature": "アイデア",
+      "other": "レポート"
     }
   }
 }

@@ -54,3 +54,23 @@ export interface FeedbackDetail extends FeedbackListItem {
     from_admin?: boolean
   }
 }
+
+/** User-facing "my feedback" row (GET /api/users/reports). */
+export interface MyFeedbackItem {
+  id: string
+  timestamp: string
+  player_type: string
+  category: string
+  anime_name?: string
+  episode_number?: number | null
+  description: string
+  status: FeedbackStatus
+  status_updated_at?: string
+}
+
+export interface MyFeedbackResponse {
+  items: MyFeedbackItem[]
+  total: number
+  page: number
+  page_size: number
+}
