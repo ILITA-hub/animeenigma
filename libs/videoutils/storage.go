@@ -130,6 +130,17 @@ func (s *Storage) GetPresignedURL(ctx context.Context, key string, expiry time.D
 	return presignedURL.String(), nil
 }
 
+// GetPresignedPutURL generates a presigned URL for a direct client-side upload
+// (HTTP PUT). The client PUTs the object body straight to MinIO/S3 with this URL,
+// bypassing the streaming service for the bytes.
+func (s *Storage) GetPresignedPutURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	presignedURL, err := s.client.PresignedPutObject(ctx, s.bucketName, key, expiry)
+	if err != nil {
+		return "", fmt.Errorf("generate presigned put url: %w", err)
+	}
+	return presignedURL.String(), nil
+}
+
 // Delete removes a video file
 func (s *Storage) Delete(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucketName, key, minio.RemoveObjectOptions{})

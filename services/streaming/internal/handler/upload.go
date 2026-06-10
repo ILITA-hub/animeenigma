@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -122,11 +123,22 @@ func (h *UploadHandler) GetUploadURL(w http.ResponseWriter, r *http.Request) {
 	ext := path.Ext(req.Filename)
 	storageKey := fmt.Sprintf("videos/%s/ep%d_%s%s", req.AnimeID, req.EpisodeNumber, req.Quality, ext)
 
-	// TODO: Generate proper presigned PUT URL
-	// For now, return the storage key for the client to use with direct upload
+	// Presigned PUT URL — the client uploads the bytes straight to MinIO/S3 with
+	// an HTTP PUT, bypassing this service. Valid for a short upload window.
+	const uploadWindow = 15 * time.Minute
+	uploadURL, err := h.streamingService.GetUploadURL(r.Context(), storageKey, uploadWindow)
+	if err != nil {
+		h.log.Errorw("failed to generate presigned upload url", "storage_key", storageKey, "error", err)
+		httputil.Error(w, err)
+		return
+	}
+
 	httputil.OK(w, map[string]interface{}{
-		"storage_key": storageKey,
-		"expires_at":  "", // Would be set by presigned URL
+		"upload_url":   uploadURL,
+		"method":       http.MethodPut,
+		"storage_key":  storageKey,
+		"content_type": req.ContentType,
+		"expires_at":   time.Now().Add(uploadWindow).UTC().Format(time.RFC3339),
 	})
 }
 

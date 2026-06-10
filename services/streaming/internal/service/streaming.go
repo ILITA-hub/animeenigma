@@ -230,11 +230,9 @@ func (s *StreamingService) Upload(ctx context.Context, key string, reader io.Rea
 	return s.storage.Upload(ctx, key, reader, size, contentType)
 }
 
-// GetUploadURL generates a presigned URL for direct upload
+// GetUploadURL generates a presigned PUT URL for direct client-side upload.
 func (s *StreamingService) GetUploadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	// For now, use the download URL generation
-	// In production, you'd want a separate presigned PUT URL
-	return s.storage.GetPresignedURL(ctx, key, expiry)
+	return s.storage.GetPresignedPutURL(ctx, key, expiry)
 }
 
 // Delete removes a video from storage
