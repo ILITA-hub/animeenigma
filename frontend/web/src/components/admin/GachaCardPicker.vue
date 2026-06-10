@@ -34,6 +34,22 @@
         :options="groupOptions"
         class="w-40"
       />
+      <button
+        type="button"
+        :class="[
+          'flex items-center gap-1.5 px-3 rounded-lg border text-xs font-medium transition-colors',
+          hideExcluded
+            ? 'border-cyan-400/60 bg-cyan-400/10 text-cyan-400'
+            : 'border-white/20 bg-white/5 text-white/60 hover:text-white hover:border-white/40',
+        ]"
+        data-testid="picker-hide-added"
+        :aria-pressed="hideExcluded"
+        @click="hideExcluded = !hideExcluded"
+      >
+        <EyeOff v-if="hideExcluded" class="size-3.5" aria-hidden="true" />
+        <Eye v-else class="size-3.5" aria-hidden="true" />
+        {{ $t('gacha.admin.picker_hide_added') }}
+      </button>
     </div>
 
     <!-- Card grid -->
@@ -95,10 +111,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Check } from 'lucide-vue-next'
-import { cardImageUrl, type GachaCard, type GachaGroup, type Rarity } from '@/api/gacha'
+import { Check, Eye, EyeOff } from 'lucide-vue-next'
+import { cardImageUrl, gachaAdminApi, type GachaCard, type GachaGroup, type Rarity } from '@/api/gacha'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
 
@@ -132,6 +148,24 @@ const { t } = useI18n()
 // ── Internal filter state (not controlled by parent) ──────────────────────────
 const rarityFilter = ref('all')
 const groupFilter = ref('all')
+const hideExcluded = ref(false)
+
+// Group membership is not carried on the card list response, so the group
+// filter loads the selected group's card ids server-side (listCards group_id)
+// and filters client-side against that set. null = no group filter active.
+const groupCardIDs = ref<Set<string> | null>(null)
+watch(groupFilter, async (g) => {
+  if (g === 'all') {
+    groupCardIDs.value = null
+    return
+  }
+  try {
+    const res = await gachaAdminApi.listCards({ group_id: g })
+    groupCardIDs.value = new Set((res.data.data ?? []).map(c => c.id))
+  } catch {
+    groupCardIDs.value = new Set() // failed load → empty (shows none, not wrong)
+  }
+})
 
 // ── Options ───────────────────────────────────────────────────────────────────
 const rarityOptions = computed(() => [
@@ -152,11 +186,8 @@ const filteredCards = computed(() => {
   const q = props.search.toLowerCase().trim()
   return props.allCards.filter(c => {
     if (rarityFilter.value !== 'all' && c.rarity !== rarityFilter.value) return false
-    // Group filter: cards don't carry group membership in list response;
-    // we keep this filter dropdown for UX (future: pass server-filtered list)
-    if (groupFilter.value !== 'all') {
-      // skip — no client-side group membership data available
-    }
+    if (groupCardIDs.value !== null && !groupCardIDs.value.has(c.id)) return false
+    if (hideExcluded.value && props.excludeIds.includes(c.id)) return false
     if (q && !c.name.toLowerCase().includes(q) && !c.source_title.toLowerCase().includes(q)) return false
     return true
   })
@@ -206,6 +237,8 @@ function rarityBadgeClass(rarity: Rarity): string {
 function reset() {
   rarityFilter.value = 'all'
   groupFilter.value = 'all'
+  groupCardIDs.value = null
+  hideExcluded.value = false
   emit('update:search', '')
   emit('update:selected', new Set())
 }

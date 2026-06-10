@@ -1457,6 +1457,7 @@
       "banner_add_cards_btn": "Add cards",
       "banner_picker_title": "Card picker",
       "banner_picker_search_placeholder": "Search by name or source…",
+      "picker_hide_added": "Hide added",
       "banner_picker_filter_rarity": "All rarities",
       "banner_picker_filter_group": "All groups",
       "banner_picker_already_in_banner": "Already in banner",

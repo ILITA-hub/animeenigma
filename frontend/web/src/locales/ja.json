@@ -1457,6 +1457,7 @@
       "banner_add_cards_btn": "カードを追加",
       "banner_picker_title": "カード選択",
       "banner_picker_search_placeholder": "名前またはソースで検索…",
+      "picker_hide_added": "追加済みを隠す",
       "banner_picker_filter_rarity": "すべてのレアリティ",
       "banner_picker_filter_group": "すべてのグループ",
       "banner_picker_already_in_banner": "すでにバナーに追加済み",

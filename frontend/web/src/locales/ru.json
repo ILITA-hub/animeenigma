@@ -1457,6 +1457,7 @@
       "banner_add_cards_btn": "Добавить карточки",
       "banner_picker_title": "Выбор карточек",
       "banner_picker_search_placeholder": "Поиск по названию или источнику…",
+      "picker_hide_added": "Скрыть добавленные",
       "banner_picker_filter_rarity": "Все редкости",
       "banner_picker_filter_group": "Все группы",
       "banner_picker_already_in_banner": "Уже в баннере",
