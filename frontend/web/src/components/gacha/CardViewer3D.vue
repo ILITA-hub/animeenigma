@@ -34,6 +34,13 @@
           @dragstart.prevent
           @selectstart.prevent
         >
+          <!-- Толщина: две половины торца с backface-visibility — передняя видна
+               только спереди, задняя (rotateY 180) только сзади, так что грани
+               НИКОГДА не перекрывают лицо/рубашку (Chromium мис-сортирует
+               параллельные opaque-слои в preserve-3d — проверено вживую).
+               Видимы только у ребра: applyTilt гасит их вне |cos|<0.35. -->
+          <div v-for="n in 2" :key="`ef-${n}`" class="cedge" :style="{ transform: `translateZ(${n * 0.7}px)` }" />
+          <div v-for="n in 2" :key="`eb-${n}`" class="cedge" :style="{ transform: `rotateY(180deg) translateZ(${n * 0.7}px)` }" />
           <div class="cimg">
             <img v-if="current" :src="cardImageUrl(current.card.image_path)" :alt="current.card.name" draggable="false" />
           </div>
@@ -42,8 +49,6 @@
             <span class="truncate">{{ current?.card.name }}</span>
             <span :class="rarityTextClass(current?.card.rarity)">{{ current?.card.rarity }}</span>
           </div>
-          <!-- Толщина: стопка тонких слоёв между лицом и рубашкой -->
-          <div v-for="n in 5" :key="`edge-${n}`" class="cedge" :style="{ transform: `translateZ(${(n - 3) * 0.8}px)` }" />
           <!-- Card back: uploaded image, else branded default -->
           <div class="cardback">
             <img v-if="backImage" :src="backImage" alt="" class="cardback-img" draggable="false" />
@@ -172,6 +177,10 @@ function applyTilt() {
   const hy = 50 + Math.sin((rx * Math.PI) / 180) * 52
   c.style.setProperty('--hx', `${hx}%`)
   c.style.setProperty('--hy', `${hy}%`)
+  // Торцы показываем только у ребра (|cos| < 0.35 ≈ 70°–110°): вне этого окна
+  // они погашены и гарантированно не «съедают» лицо или рубашку.
+  const edgeOn = Math.abs(Math.cos((ry * Math.PI) / 180)) < 0.35 ? '1' : '0'
+  c.querySelectorAll<HTMLElement>('.cedge').forEach((e) => (e.style.opacity = edgeOn))
 }
 
 function tick() {
@@ -474,6 +483,10 @@ onBeforeUnmount(() => {
   border-radius: 1.1rem;
   background: linear-gradient(160deg, rgb(26, 26, 40), rgb(14, 14, 26));
   border: 1px solid rgba(255, 255, 255, 0.10);
+  backface-visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
 }
 .card3d .cimg {
   position: absolute;
