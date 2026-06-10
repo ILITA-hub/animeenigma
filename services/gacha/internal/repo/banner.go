@@ -18,6 +18,10 @@ type BannerRepository struct {
 
 func NewBannerRepository(db *gorm.DB) *BannerRepository { return &BannerRepository{db: db} }
 
+// DB exposes the underlying *gorm.DB so callers (e.g. the pull engine) can run
+// their own multi-repo transactions on the same connection.
+func (r *BannerRepository) DB() *gorm.DB { return r.db }
+
 // CreateBanner inserts a new banner.
 func (r *BannerRepository) CreateBanner(ctx context.Context, b *domain.Banner) error {
 	return r.db.WithContext(ctx).Create(b).Error
