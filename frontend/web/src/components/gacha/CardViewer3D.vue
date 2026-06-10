@@ -42,6 +42,8 @@
             <span class="truncate">{{ current?.card.name }}</span>
             <span :class="rarityTextClass(current?.card.rarity)">{{ current?.card.rarity }}</span>
           </div>
+          <!-- Толщина: стопка тонких слоёв между лицом и рубашкой -->
+          <div v-for="n in 5" :key="`edge-${n}`" class="cedge" :style="{ transform: `translateZ(${(n - 3) * 0.8}px)` }" />
           <!-- Card back: uploaded image, else branded default -->
           <div class="cardback">
             <img v-if="backImage" :src="backImage" alt="" class="cardback-img" draggable="false" />
@@ -453,6 +455,23 @@ onBeforeUnmount(() => {
 .card3d .cimg,
 .card3d .holo,
 .card3d .cname { backface-visibility: hidden; }
+/* ── толщина карты ────────────────────────────────────────────────────────
+   Лицевые слои выдвинуты на +2px, рубашка на -2px (своим translateZ), между
+   ними 5 слоёв-«срезов» — с ребра карта читается как плотный картон, а не
+   бумажный лист. Скруглённые углы остаются гладкими (каждый срез со своим
+   border-radius). */
+.card3d .cimg,
+.card3d .holo,
+.card3d .cname,
+.card3d .vtagNEW,
+.card3d .vtagDUP { transform: translateZ(2px); }
+.cedge {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.9rem;
+  background: linear-gradient(160deg, rgb(26, 26, 40), rgb(14, 14, 26));
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
 .card3d .cimg {
   position: absolute;
   inset: 0;
@@ -494,7 +513,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   border-radius: 0.9rem;
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) translateZ(2px);
   backface-visibility: hidden;
   overflow: hidden;
   background:
