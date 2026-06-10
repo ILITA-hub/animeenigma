@@ -434,8 +434,11 @@ onBeforeUnmount(() => {
   transform-style: preserve-3d;
   transition: transform 0.08s linear;
   cursor: grab;
-  border: 3px solid;
-  background: var(--elevated);
+  /* НИКАКОЙ собственной отрисовки: фон/рамка контейнера легли бы плоскостью
+     на z=0 — между лицом (+2px) и рубашкой (−2px) — и закрывали бы рубашку
+     при перевороте, пряча и торцы. Грани красятся сами. */
+  border: none;
+  background: transparent;
   animation: flyIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 ;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
 .card3d.slowIn {
@@ -448,10 +451,10 @@ onBeforeUnmount(() => {
   78% { transform: translateZ(46px) rotateY(-14deg) scale(1.05); filter: brightness(1.15) blur(0); }
   100% { transform: none; filter: none; }
 }
-.card3d.f-SSR { border-color: rgb(251, 146, 60); box-shadow: 0 0 60px rgba(251, 146, 60, 0.55); }
-.card3d.f-SR { border-color: rgb(129, 140, 248); box-shadow: 0 0 34px rgba(129, 140, 248, 0.4); }
-.card3d.f-R { border-color: rgb(45, 212, 191); box-shadow: 0 0 20px rgba(45, 212, 191, 0.3); }
-.card3d.f-N { border-color: rgba(255, 255, 255, 0.25); }
+.card3d.f-SSR .cimg, .card3d.f-SSR .cardback { border-color: rgb(251, 146, 60); box-shadow: 0 0 60px rgba(251, 146, 60, 0.55); }
+.card3d.f-SR .cimg, .card3d.f-SR .cardback { border-color: rgb(129, 140, 248); box-shadow: 0 0 34px rgba(129, 140, 248, 0.4); }
+.card3d.f-R .cimg, .card3d.f-R .cardback { border-color: rgb(45, 212, 191); box-shadow: 0 0 20px rgba(45, 212, 191, 0.3); }
+.card3d.f-N .cimg, .card3d.f-N .cardback { border-color: rgba(255, 255, 255, 0.25); }
 .card3d .cimg,
 .card3d .holo,
 .card3d .cname { backface-visibility: hidden; }
@@ -468,14 +471,16 @@ onBeforeUnmount(() => {
 .cedge {
   position: absolute;
   inset: 0;
-  border-radius: 0.9rem;
+  border-radius: 1.1rem;
   background: linear-gradient(160deg, rgb(26, 26, 40), rgb(14, 14, 26));
   border: 1px solid rgba(255, 255, 255, 0.10);
 }
 .card3d .cimg {
   position: absolute;
   inset: 0;
-  border-radius: 0.9rem;
+  border-radius: 1.1rem;
+  border: 3px solid;
+  background: var(--elevated);
   overflow: hidden;
 }
 .card3d .cimg img {
@@ -512,7 +517,8 @@ onBeforeUnmount(() => {
 .cardback {
   position: absolute;
   inset: 0;
-  border-radius: 0.9rem;
+  border-radius: 1.1rem;
+  border: 3px solid;
   transform: rotateY(180deg) translateZ(2px);
   backface-visibility: hidden;
   overflow: hidden;
