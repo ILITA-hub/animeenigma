@@ -69,12 +69,16 @@ interface Props {
   closable?: boolean
   closeOnBackdrop?: boolean
   closeOnEsc?: boolean
-  // modal=false makes Reka use the NON-modal DialogContent, which does NOT set
-  // `body { pointer-events: none }`. Reka 2.9.8's modal DismissableLayer leaks
-  // that style on close (its restore is gated on `size === 1`, but Vue runs the
-  // layer-delete cleanup before the restore cleanup, so the restore is skipped
-  // and the page becomes unscrollable/unclickable after the first close).
-  // Background scroll is still locked by useBodyScrollLock while open.
+  // modal=false (the DEFAULT) makes Reka use the NON-modal DialogContent.
+  // Reka 2.9.8's modal mode both leaks `body { pointer-events: none }` on
+  // close (its restore is gated on `size === 1`, but Vue runs the layer-delete
+  // cleanup before the restore cleanup) AND fights our refcounted
+  // useBodyScrollLock over `body { overflow }`: reka's own scroll lock
+  // captures our already-applied 'hidden' as the value to restore, so the
+  // page stays unscrollable after the first close (reported on the footer
+  // feedback modal, 2026-06-10). Non-modal keeps exactly one scroll-lock
+  // owner — ours. Pass modal=true only if a consumer truly needs reka's
+  // modal machinery and has verified the leak is gone (reka upgrade).
   modal?: boolean
 }
 
@@ -83,7 +87,7 @@ const props = withDefaults(defineProps<Props>(), {
   closable: true,
   closeOnBackdrop: true,
   closeOnEsc: true,
-  modal: true,
+  modal: false,
 })
 
 const emit = defineEmits<{
