@@ -1,6 +1,7 @@
 <template>
   <!-- Gacha collection album — OWNED cards ONLY, per-rarity sections SSR→N with
-       per-rarity progress and ×N dupe counts. No unowned cards / silhouettes. -->
+       per-rarity progress and ×N dupe counts. No unowned cards / silhouettes.
+       Click a card to open it in the 3D viewer (inspect mode). -->
   <div>
     <!-- Loading state -->
     <div v-if="loadingCollection" class="flex justify-center py-10">
@@ -65,7 +66,11 @@
             v-for="entry in cardsByRarity[rarity]"
             :key="entry.card.id"
             data-testid="collection-card-owned"
-            class="relative rounded-lg overflow-hidden aspect-[2/3] bg-white/5"
+            class="relative rounded-lg overflow-hidden aspect-[2/3] bg-white/5 cursor-pointer ring-0 hover:ring-2 hover:ring-white/40 transition-all"
+            tabindex="0"
+            :aria-label="entry.card.name"
+            @click="openInspect(entry)"
+            @keydown.enter.space.prevent="openInspect(entry)"
           >
             <img
               :src="cardImageUrl(entry.card.image_path)"
@@ -88,16 +93,26 @@
         </div>
       </div>
     </template>
+
+    <!-- 3D inspect viewer — renders all owned cards; starts at clicked card -->
+    <CardViewer3D
+      :active="inspectActive"
+      :cards="inspectCards"
+      :start-index="inspectStartIndex"
+      mode="inspect"
+      @done="inspectActive = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useGachaStore } from '@/stores/gacha'
-import { cardImageUrl, type Rarity } from '@/api/gacha'
+import { cardImageUrl, type Rarity, type CollectionCardView, type PulledCard } from '@/api/gacha'
 import Spinner from '@/components/ui/Spinner.vue'
 import Alert from '@/components/ui/Alert.vue'
+import CardViewer3D from '@/components/gacha/CardViewer3D.vue'
 
 const { t: _t } = useI18n()
 void _t // keep vue-i18n composable active for template $t
@@ -126,6 +141,28 @@ const cardsByRarity = computed(() => {
     {} as Record<Rarity, NonNullable<typeof c>['cards']>,
   )
 })
+
+// ── Inspect viewer state ─────────────────────────────────────────────────────
+const inspectActive = ref(false)
+const inspectStartIndex = ref(0)
+
+/**
+ * All owned cards in display order (SSR→SR→R→N) as PulledCard[].
+ * count is carried over; new=false since this is the collection view.
+ */
+const inspectCards = computed<PulledCard[]>(() =>
+  RARITY_SECTIONS.flatMap((r) => (cardsByRarity.value[r] ?? []).map(collectionToPulled)),
+)
+
+function collectionToPulled(entry: CollectionCardView): PulledCard {
+  return { card: entry.card, new: false, count: entry.count }
+}
+
+function openInspect(entry: CollectionCardView) {
+  const idx = inspectCards.value.findIndex((p) => p.card.id === entry.card.id)
+  inspectStartIndex.value = idx >= 0 ? idx : 0
+  inspectActive.value = true
+}
 
 function progressPercent(owned: number, total: number): number {
   if (total === 0) return 0

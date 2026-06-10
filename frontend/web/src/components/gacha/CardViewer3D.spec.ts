@@ -30,9 +30,9 @@ function pulled(id: string, rarity: Rarity, isNew = true, count = 1, backPath = 
   }
 }
 
-function mountViewer(cards: PulledCard[], active = true) {
+function mountViewer(cards: PulledCard[], active = true, mode?: 'reveal' | 'inspect', startIndex?: number) {
   return mount(CardViewer3D, {
-    props: { active, cards },
+    props: { active, cards, ...(mode ? { mode } : {}), ...(startIndex !== undefined ? { startIndex } : {}) },
     global: {
       plugins: [i18n],
       stubs: {
@@ -137,6 +137,73 @@ describe('CardViewer3D', () => {
     expect(document.querySelector('[data-testid="viewer-next"]')?.textContent).toContain(
       en.gacha.viewer_to_results.replace(' ›', ''),
     )
+    w.unmount()
+  })
+})
+
+describe('CardViewer3D — inspect mode', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    document.body.innerHTML = ''
+  })
+
+  it('renders Prev / Next / Close nav — no Skip all button', async () => {
+    const w = mountViewer([pulled('a', 'SR'), pulled('b', 'N'), pulled('c', 'SSR')], true, 'inspect')
+    await flushPromises()
+    expect(document.querySelector('[data-testid="viewer-inspect-prev"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="viewer-inspect-next"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="viewer-inspect-close"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="viewer-skip-all"]')).toBeNull()
+    w.unmount()
+  })
+
+  it('startIndex positions the counter at the correct card', async () => {
+    const w = mountViewer([pulled('a', 'N'), pulled('b', 'SR'), pulled('c', 'SSR')], true, 'inspect', 1)
+    await flushPromises()
+    expect(document.querySelector('.vcount')?.textContent).toContain('2 / 3')
+    w.unmount()
+  })
+
+  it('Next wraps around from last to first card', async () => {
+    const w = mountViewer([pulled('a', 'N'), pulled('b', 'SR')], true, 'inspect', 1)
+    await flushPromises()
+    expect(document.querySelector('.vcount')?.textContent).toContain('2 / 2')
+    const nextBtn = document.querySelector('[data-testid="viewer-inspect-next"]') as HTMLButtonElement
+    nextBtn.click()
+    await flushPromises()
+    expect(document.querySelector('.vcount')?.textContent).toContain('1 / 2')
+    w.unmount()
+  })
+
+  it('Prev wraps around from first to last card', async () => {
+    const w = mountViewer([pulled('a', 'N'), pulled('b', 'SR'), pulled('c', 'R')], true, 'inspect', 0)
+    await flushPromises()
+    expect(document.querySelector('.vcount')?.textContent).toContain('1 / 3')
+    const prevBtn = document.querySelector('[data-testid="viewer-inspect-prev"]') as HTMLButtonElement
+    prevBtn.click()
+    await flushPromises()
+    expect(document.querySelector('.vcount')?.textContent).toContain('3 / 3')
+    w.unmount()
+  })
+
+  it('Close emits done', async () => {
+    const w = mountViewer([pulled('a', 'R'), pulled('b', 'SR')], true, 'inspect')
+    await flushPromises()
+    const closeBtn = document.querySelector('[data-testid="viewer-inspect-close"]') as HTMLButtonElement
+    closeBtn.click()
+    await flushPromises()
+    expect(w.emitted('done')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('shows ×N dupe badge (no NEW badge) in inspect mode', async () => {
+    const w = mountViewer([pulled('a', 'SSR', true, 3)], true, 'inspect')
+    await flushPromises()
+    // In inspect mode, new=true is ignored — always show ×N
+    expect(document.querySelector('.vtagDUP')?.textContent).toContain('×3')
+    expect(document.querySelector('.vtagNEW')).toBeNull()
     w.unmount()
   })
 })

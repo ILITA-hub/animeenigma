@@ -97,6 +97,12 @@ describe('GachaCollection', () => {
         stubs: {
           Spinner: { template: '<div data-testid="spinner" />' },
           Alert: { template: '<div data-testid="alert"><slot /></div>' },
+          // Stub CardViewer3D so we can assert on its props without rendering canvas/teleport
+          CardViewer3D: {
+            props: ['active', 'cards', 'startIndex', 'mode'],
+            emits: ['done'],
+            template: '<div data-testid="card-viewer-3d-stub" :data-active="active" :data-start="startIndex" :data-mode="mode" :data-cards="cards?.length" @click="$emit(\'done\')" />',
+          },
         },
       },
     })
@@ -165,5 +171,66 @@ describe('GachaCollection', () => {
     const wrapper = mountComponent()
     // The empty state message key is gacha.collection_empty
     expect(wrapper.html()).toContain('No cards in collection yet')
+  })
+
+  // ── Inspect mode ─────────────────────────────────────────────────────────
+
+  it('CardViewer3D is rendered in inspect mode', async () => {
+    const store = useGachaStore()
+    store.collection = makeCollection()
+    store.loadingCollection = false
+    const wrapper = mountComponent()
+    const stub = wrapper.find('[data-testid="card-viewer-3d-stub"]')
+    expect(stub.exists()).toBe(true)
+    expect(stub.attributes('data-mode')).toBe('inspect')
+  })
+
+  it('clicking a card opens the viewer with active=true', async () => {
+    const store = useGachaStore()
+    store.collection = makeCollection()
+    store.loadingCollection = false
+    const wrapper = mountComponent()
+
+    // Viewer should start inactive
+    const stub = wrapper.find('[data-testid="card-viewer-3d-stub"]')
+    expect(stub.attributes('data-active')).toBe('false')
+
+    // Click the first owned card
+    const firstCard = wrapper.find('[data-testid="collection-card-owned"]')
+    await firstCard.trigger('click')
+
+    expect(stub.attributes('data-active')).toBe('true')
+  })
+
+  it('clicking the SSR card opens viewer at startIndex=0 (SSR is first in order)', async () => {
+    const store = useGachaStore()
+    store.collection = makeCollection()
+    store.loadingCollection = false
+    const wrapper = mountComponent()
+
+    // First owned card in the fixture is SSR Hero (SSR section comes first)
+    const firstCard = wrapper.find('[data-testid="collection-card-owned"]')
+    await firstCard.trigger('click')
+
+    const stub = wrapper.find('[data-testid="card-viewer-3d-stub"]')
+    expect(stub.attributes('data-start')).toBe('0')
+  })
+
+  it('viewer done event closes the viewer (active goes back to false)', async () => {
+    const store = useGachaStore()
+    store.collection = makeCollection()
+    store.loadingCollection = false
+    const wrapper = mountComponent()
+
+    // Open viewer
+    const firstCard = wrapper.find('[data-testid="collection-card-owned"]')
+    await firstCard.trigger('click')
+
+    const stub = wrapper.find('[data-testid="card-viewer-3d-stub"]')
+    expect(stub.attributes('data-active')).toBe('true')
+
+    // Simulate done (our stub emits done when clicked)
+    await stub.trigger('click')
+    expect(stub.attributes('data-active')).toBe('false')
   })
 })

@@ -2,7 +2,10 @@
   <!-- Sequential fullscreen 3D card reveal. Fly-in from depth w/ spin, shockwave
        + particles tinted by tier, rotating godrays (SSR/SR), drag-rotate via rAF
        (cos-damped vertical, spring-back), sin-based holo shine, branded card back.
-       Ported 1:1 from the v21 mock. -->
+       Ported 1:1 from the v21 mock.
+
+       mode='reveal' (default) — pull-reveal flow: Skip all + Next/To results.
+       mode='inspect' — collection viewer: Prev/Next (wrap-around) + Close; no Skip all. -->
   <Teleport to="body">
     <div
       v-if="active"
@@ -11,7 +14,13 @@
       :class="`t-${current?.card.rarity ?? 'N'}`"
       data-testid="card-viewer-3d"
     >
-      <span class="vcount">{{ $t('gacha.viewer_count', { i: index + 1, total: cards.length }) }}</span>
+      <span class="vcount">
+        {{
+          isInspect
+            ? $t('gacha.viewer_inspect_count', { i: index + 1, total: cards.length })
+            : $t('gacha.viewer_count', { i: index + 1, total: cards.length })
+        }}
+      </span>
       <div ref="stage" class="stage">
         <div
           ref="card3d"
@@ -43,15 +52,17 @@
               <span class="wordmark">{{ $t('gacha.viewer_card_back_wordmark') }}</span>
             </template>
           </div>
-          <!-- NEW / ×N badge (backface-hidden) -->
-          <span v-if="current?.new" class="vtagNEW">{{ $t('gacha.viewer_new_badge') }}</span>
+          <!-- reveal: NEW badge; inspect: always show ×N dupe count -->
+          <span v-if="!isInspect && current?.new" class="vtagNEW">{{ $t('gacha.viewer_new_badge') }}</span>
           <span v-else-if="current && current.count > 1" class="vtagDUP">
             {{ $t('gacha.viewer_dupe_badge', { n: current.count }) }}
           </span>
         </div>
       </div>
       <span class="vhint">{{ $t('gacha.viewer_hint') }}</span>
-      <div class="vbtns">
+
+      <!-- reveal mode footer -->
+      <div v-if="!isInspect" class="vbtns">
         <Button variant="outline" size="sm" data-testid="viewer-skip-all" @click="skipAll">
           {{ $t('gacha.viewer_skip_all') }}
         </Button>
@@ -59,24 +70,66 @@
           {{ isLast ? $t('gacha.viewer_to_results') : $t('gacha.viewer_next') }}
         </Button>
       </div>
+
+      <!-- inspect mode footer -->
+      <div v-else class="vbtns">
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid="viewer-inspect-prev"
+          :aria-label="$t('gacha.viewer_inspect_prev_aria')"
+          @click="inspectPrev"
+        >
+          {{ $t('gacha.viewer_inspect_prev') }}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid="viewer-inspect-close"
+          :aria-label="$t('gacha.viewer_inspect_close_aria')"
+          @click="finish"
+        >
+          {{ $t('gacha.viewer_inspect_close') }}
+        </Button>
+        <Button
+          size="sm"
+          data-testid="viewer-inspect-next"
+          :aria-label="$t('gacha.viewer_inspect_next_aria')"
+          @click="inspectNext"
+        >
+          {{ $t('gacha.viewer_inspect_next') }}
+        </Button>
+      </div>
     </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, onMounted, nextTick } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import { cardImageUrl, type PulledCard, type Rarity } from '@/api/gacha'
 
 const props = defineProps<{
   active: boolean
   cards: PulledCard[]
+  /**
+   * 'reveal' (default) — sequential pull-reveal: Skip all + Next/To results.
+   * 'inspect' — collection browser: Prev/Next wrap-around + Close; no Skip all.
+   */
+  mode?: 'reveal' | 'inspect'
+  /**
+   * Index to start at when the viewer opens (inspect mode).
+   * Defaults to 0. Changes while active are ignored (use reactive cards order).
+   */
+  startIndex?: number
 }>()
 
 const emit = defineEmits<{
-  /** All cards viewed (next on last) or skip-all pressed. */
+  /** All cards viewed (next on last), skip-all, or inspect close pressed. */
   done: []
 }>()
+
+const isInspect = computed(() => props.mode === 'inspect')
 
 const TEASE: Record<Rarity, string> = {
   N: 'rgba(255,255,255,.55)',
@@ -258,9 +311,26 @@ function skipAll() {
   finish()
 }
 
+/** inspect mode: go to previous card, wrapping around. */
+function inspectPrev() {
+  index.value = (index.value - 1 + props.cards.length) % props.cards.length
+  renderCurrent()
+}
+
+/** inspect mode: go to next card, wrapping around. */
+function inspectNext() {
+  index.value = (index.value + 1) % props.cards.length
+  renderCurrent()
+}
+
 function finish() {
   cleanupFx()
   emit('done')
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  if (!props.active) return
+  if (e.key === 'Escape') finish()
 }
 
 function cleanupFx() {
@@ -287,7 +357,7 @@ watch(
   () => props.active,
   (on) => {
     if (on) {
-      index.value = 0
+      index.value = props.startIndex ?? 0
       renderCurrent()
     } else {
       cleanupFx()
@@ -296,7 +366,15 @@ watch(
   { immediate: true },
 )
 
-onBeforeUnmount(cleanupFx)
+// Register ESC key handler globally when mounted.
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+})
+
+onBeforeUnmount(() => {
+  cleanupFx()
+  window.removeEventListener('keydown', onKeyDown)
+})
 </script>
 
 <style scoped>
