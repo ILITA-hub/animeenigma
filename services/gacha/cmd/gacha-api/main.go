@@ -63,6 +63,7 @@ func main() {
 		&domain.Wallet{}, &domain.LedgerEntry{},
 		&domain.Card{}, &domain.Group{}, &domain.CardGroup{},
 		&domain.Banner{}, &domain.BannerCard{},
+		&domain.CollectionEntry{}, &domain.PityCounter{},
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -91,16 +92,19 @@ func main() {
 
 	contentRepo := repo.NewContentRepository(db.DB)
 	bannerRepo := repo.NewBannerRepository(db.DB)
+	pullRepo := repo.NewPullRepository(db.DB)
 	contentSvc := service.NewContentService(contentRepo, bannerRepo)
 	imageSvc := service.NewImageService(&storageAdapter{storage})
+	pullSvc := service.NewPullService(pullRepo, bannerRepo, contentRepo, cfg.Economy, service.NewSecureRand(), log)
 
 	walletHandler := handler.NewWalletHandler(walletSvc, log)
 	internalHandler := handler.NewInternalHandler(walletSvc, log)
 	adminHandler := handler.NewAdminHandler(contentSvc, imageSvc, log)
 	imagesHandler := handler.NewImagesHandler(storage, log)
+	pullHandler := handler.NewPullHandler(pullSvc, log)
 
 	metricsCollector := metrics.NewCollector("gacha")
-	router := transport.NewRouter(walletHandler, internalHandler, adminHandler, imagesHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(walletHandler, internalHandler, adminHandler, imagesHandler, pullHandler, cfg.JWT, log, metricsCollector)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
