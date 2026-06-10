@@ -33,6 +33,13 @@ type Config struct {
 	// GACHA_ADMIN_ONLY=false + restart-gateway) to open it to all
 	// authenticated users. Default true.
 	GachaAdminOnly bool
+	// PoisonClientIPs is the anti-scrape "tarpit" target list — exact IPs
+	// and/or CIDR ranges (comma-separated env POISON_CLIENT_IPS). Requests
+	// from these clients get structurally-valid but semantically-fake JSON
+	// for known-scraped endpoints (see transport/poison.go), silently
+	// corrupting the abuser's dataset instead of an obvious 403. Empty by
+	// default (feature off). Change + `make restart-gateway` (no rebuild).
+	PoisonClientIPs []string
 }
 
 type ServerConfig struct {
@@ -154,6 +161,8 @@ func Load() (*Config, error) {
 		SystemBannerMessage: getEnv("SYSTEM_BANNER_MESSAGE", ""),
 		// Gacha (Лудка) dark-ship admin-gate — default true (spec §12).
 		GachaAdminOnly: getEnvBool("GACHA_ADMIN_ONLY", true),
+		// Anti-scrape poison target list — empty = feature off.
+		PoisonClientIPs: httputil.ParseCommaList(getEnv("POISON_CLIENT_IPS", "")),
 	}
 
 	// DevMode is only permitted in known development environments. Any

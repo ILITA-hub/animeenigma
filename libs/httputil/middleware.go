@@ -33,6 +33,9 @@ func RequestLogger(log *logger.Logger) func(http.Handler) http.Handler {
 					"duration_ms", time.Since(start).Milliseconds(),
 					"remote_addr", r.RemoteAddr,
 					"user_agent", r.UserAgent(),
+					"referer", r.Referer(),
+					"origin", r.Header.Get("Origin"),
+					"xff", r.Header.Get("X-Forwarded-For"),
 				)
 			}()
 

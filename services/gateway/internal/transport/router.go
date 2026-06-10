@@ -67,6 +67,10 @@ func NewRouterWithCleanup(
 	r.Use(httputil.CORS(cfg.CORSOrigins))
 	r.Use(httputil.SecurityHeaders)
 	r.Use(middleware.RealIP)
+	// Anti-scrape tarpit: feed fake-but-valid JSON to configured scraper IPs
+	// (POISON_CLIENT_IPS). MUST run AFTER RealIP so r.RemoteAddr is the true
+	// client IP. No-op when the list is empty.
+	r.Use(PoisonMiddleware(cfg.PoisonClientIPs, log))
 	r.Use(MaxBodySizeMiddleware(10 * 1024 * 1024)) // 10MB
 	rateLimitMW, rateLimiter := RateLimitMiddlewareWithStop(cfg.RateLimit)
 	r.Use(rateLimitMW)
