@@ -638,12 +638,14 @@ type relatedEntry struct {
 	Relation        string `json:"relation"`
 	RelationRussian string `json:"relation_russian"`
 	Anime           *struct {
-		ID      int    `json:"id"`
-		Name    string `json:"name"`
-		Russian string `json:"russian"`
-		Score   string `json:"score"`
-		Status  string `json:"status"`
-		Image   *struct {
+		ID       int    `json:"id"`
+		Name     string `json:"name"`
+		Russian  string `json:"russian"`
+		Score    string `json:"score"`
+		Status   string `json:"status"`
+		Episodes int    `json:"episodes"`
+		AiredOn  string `json:"aired_on"`
+		Image    *struct {
 			Original string `json:"original"`
 		} `json:"image"`
 	} `json:"anime"`
@@ -687,6 +689,13 @@ func (c *Client) GetRelatedAnime(ctx context.Context, shikimoriID string) ([]dom
 			RelationRU:  e.RelationRussian,
 			RelationEN:  e.Relation,
 			Status:      e.Anime.Status,
+			Episodes:    e.Anime.Episodes,
+		}
+		// aired_on is "YYYY-MM-DD" (sometimes null/empty for announcements)
+		if len(e.Anime.AiredOn) >= 4 {
+			if y, err := strconv.Atoi(e.Anime.AiredOn[:4]); err == nil {
+				ra.Year = y
+			}
 		}
 		if score, err := strconv.ParseFloat(e.Anime.Score, 64); err == nil {
 			ra.Score = score
