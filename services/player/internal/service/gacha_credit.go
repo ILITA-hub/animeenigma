@@ -77,6 +77,11 @@ func (p *GachaCreditProducer) Stop() {
 // EpisodeWatched enqueues a credit event for a watched episode. Non-blocking:
 // drops with a WARN log if the channel is full.
 // ref format: "<animeID>:<episode>" — the gacha unique index deduplicates.
+// NOTE (shutdown ordering): the select-send below does NOT protect against a
+// closed channel — a send racing Stop() would panic. This is safe today only
+// because main.go calls srv.Shutdown() (draining all in-flight HTTP handlers,
+// the only callers) BEFORE the deferred Stop() closes the channel. If you add
+// a non-HTTP caller or reorder shutdown, guard sends with an atomic closed flag.
 func (p *GachaCreditProducer) EpisodeWatched(userID, animeID string, episode int) {
 	if p == nil || !p.enabled {
 		return

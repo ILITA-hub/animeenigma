@@ -40,10 +40,10 @@ func (h *WalletHandler) GetWallet(w http.ResponseWriter, r *http.Request) {
 
 // dailyClaimResponse is the JSON shape returned by ClaimDaily.
 type dailyClaimResponse struct {
-	Claimed bool            `json:"claimed"`
-	Amount  int64           `json:"amount,omitempty"`
-	Streak  int             `json:"streak,omitempty"`
-	Wallet  interface{}     `json:"wallet"`
+	Claimed bool        `json:"claimed"`
+	Amount  int64       `json:"amount,omitempty"`
+	Streak  int         `json:"streak,omitempty"`
+	Wallet  interface{} `json:"wallet"`
 }
 
 // ClaimDaily handles POST /api/gacha/daily. Issues the player's daily

@@ -33,10 +33,10 @@ type ListService struct {
 	activityRepo     *repo.ActivityRepository
 	prefRepo         *repo.PreferenceRepository
 	progressRepo     *repo.ProgressRepository
-	userOrchestrator *recs.UserOrchestrator   // Phase 11 (REC-INFRA-02) — debounced trigger; may be nil in tests
-	recsRepo         recsRepoForListService   // Phase 13 (REC-INFRA-03) — synchronous S6 seed update; may be nil in tests
-	cache            listServiceCache         // Phase 13 (REC-INFRA-03) — cache invalidation after seed update; may be nil in tests
-	gachaCredit      *GachaCreditProducer     // Phase 4 — fire-and-forget Энигмы credits; nil-safe, may be nil in tests
+	userOrchestrator *recs.UserOrchestrator // Phase 11 (REC-INFRA-02) — debounced trigger; may be nil in tests
+	recsRepo         recsRepoForListService // Phase 13 (REC-INFRA-03) — synchronous S6 seed update; may be nil in tests
+	cache            listServiceCache       // Phase 13 (REC-INFRA-03) — cache invalidation after seed update; may be nil in tests
+	gachaCredit      *GachaCreditProducer   // Phase 4 — fire-and-forget Энигмы credits; nil-safe, may be nil in tests
 	log              *logger.Logger
 }
 
@@ -278,7 +278,6 @@ func (s *ListService) DeleteListEntry(ctx context.Context, userID, animeID strin
 // watch_history audit trail preserved). rewatch_count is NOT bumped here — it
 // increments when the rewatch reaches the finale (watching→completed while
 // is_rewatching).
-//
 func (s *ListService) Rewatch(ctx context.Context, userID, animeID string) (*domain.AnimeListEntry, error) {
 	if _, err := s.listRepo.StartRewatch(ctx, userID, animeID); err != nil {
 		return nil, err
