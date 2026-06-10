@@ -380,6 +380,57 @@ func (r *ListRepository) GetUserReview(ctx context.Context, userID, animeID stri
 	return &entry, nil
 }
 
+// ApplyEffectiveEpisodes mutates each entry's Episodes in place to
+// max(anime_list.episodes, distinct completed episodes in watch_progress) for
+// that (user, anime). This fixes the false ⚠️ "0 episodes" review flag for
+// passive watchers who never updated their list (repo-todo 19:00:02). One
+// batched query over all distinct (user_id, anime_id) pairs — no N+1.
+func (r *ListRepository) ApplyEffectiveEpisodes(ctx context.Context, entries []*domain.AnimeListEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	type pair struct{ u, a string }
+	seen := make(map[pair]bool, len(entries))
+	conds := make([]string, 0, len(entries))
+	args := make([]interface{}, 0, len(entries)*2)
+	for _, e := range entries {
+		p := pair{e.UserID, e.AnimeID}
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		// OR-of-pairs rather than a row-value tuple IN so the query is portable
+		// across Postgres (prod) and SQLite (tests).
+		conds = append(conds, "(user_id = ? AND anime_id = ?)")
+		args = append(args, e.UserID, e.AnimeID)
+	}
+
+	sql := "SELECT user_id, anime_id, COUNT(DISTINCT episode_number) AS cnt " +
+		"FROM watch_progress WHERE completed = true AND (" +
+		strings.Join(conds, " OR ") + ") GROUP BY user_id, anime_id"
+
+	var rows []struct {
+		UserID  string
+		AnimeID string
+		Cnt     int
+	}
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&rows).Error; err != nil {
+		return err
+	}
+
+	counts := make(map[pair]int, len(rows))
+	for _, row := range rows {
+		counts[pair{row.UserID, row.AnimeID}] = row.Cnt
+	}
+	for _, e := range entries {
+		if c := counts[pair{e.UserID, e.AnimeID}]; c > e.Episodes {
+			e.Episodes = c
+		}
+	}
+	return nil
+}
+
 // UpsertReview writes the (score, review_text, username) triple onto an
 // existing anime_list row OR creates a fresh row with status='completed' when
 // none exists. On the update path it ONLY assigns score, review_text,

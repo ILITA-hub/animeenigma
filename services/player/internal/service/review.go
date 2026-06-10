@@ -113,6 +113,11 @@ func (s *ReviewService) GetAnimeReviews(ctx context.Context, animeID string, vie
 	if err != nil {
 		return nil, err
 	}
+	// Best-effort: a passive-watcher episode-count failure must never break the
+	// reviews list — fall back to the raw anime_list.episodes value.
+	if err := s.listRepo.ApplyEffectiveEpisodes(ctx, entries); err != nil {
+		s.log.Warnw("apply effective episodes failed", "anime_id", animeID, "error", err)
+	}
 	return s.attachReactions(ctx, entries, viewerUserID)
 }
 
@@ -124,8 +129,12 @@ func (s *ReviewService) GetUserReview(ctx context.Context, userID, animeID strin
 	if err != nil {
 		return nil, err
 	}
+	single := []*domain.AnimeListEntry{entry}
+	if err := s.listRepo.ApplyEffectiveEpisodes(ctx, single); err != nil {
+		s.log.Warnw("apply effective episodes failed", "anime_id", animeID, "error", err)
+	}
 	viewer := userID
-	if _, err := s.attachReactions(ctx, []*domain.AnimeListEntry{entry}, &viewer); err != nil {
+	if _, err := s.attachReactions(ctx, single, &viewer); err != nil {
 		return nil, err
 	}
 	return entry, nil
@@ -187,7 +196,14 @@ func (s *ReviewService) ToggleReaction(ctx context.Context, animeID, reviewID, u
 // GetUserReviews returns every anime_list row for the user that qualifies
 // as a review (score>0 OR review_text!=''). Used by GET /api/users/reviews.
 func (s *ReviewService) GetUserReviews(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
-	return s.listRepo.GetReviewsByUser(ctx, userID)
+	entries, err := s.listRepo.GetReviewsByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.listRepo.ApplyEffectiveEpisodes(ctx, entries); err != nil {
+		s.log.Warnw("apply effective episodes failed", "user_id", userID, "error", err)
+	}
+	return entries, nil
 }
 
 // GetAnimeRating returns the average rating + scoring-row count.

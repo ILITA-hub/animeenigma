@@ -114,7 +114,8 @@
       "noProgress": "📺 0/{total} · {status} ⚠️",
       "noProgressOpen": "📺 0 eps · {status} ⚠️",
       "planToWatchFlag": "📺 {watched}/{total} · {status} ⚠️",
-      "planToWatchOpenFlag": "📺 {watched} eps · {status} ⚠️"
+      "planToWatchOpenFlag": "📺 {watched} eps · {status} ⚠️",
+      "rewatch": "🔁 On rewatch"
     },
     "reactions": {
       "toggle": "React",

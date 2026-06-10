@@ -31,23 +31,19 @@ type reviewResponse struct {
 	ReviewText string    `json:"review_text"`
 	CreatedAt  time.Time `json:"created_at"`
 	// Status and Episodes — Steam-style review context (2026-05-21). Live
-	// values from anime_list.status / anime_list.episodes, NOT snapshotted.
-	// If the reviewer keeps watching after publishing, these numbers update.
+	// values from anime_list.status, NOT snapshotted. If the reviewer keeps
+	// watching after publishing, these numbers update.
 	//
-	// TODO(rewatch): surface rewatch context on review cards. AnimeListEntry
-	// has is_rewatching (bool) and WatchProgress has watch_count (1 = first
-	// watch, 2+ = rewatch). Future enhancement should render "🔁 On rewatch"
-	// as a 4th segment. See
+	// Episodes is max(anime_list.episodes, distinct completed episodes in
+	// watch_progress) — so a passive watcher who never updated their list
+	// doesn't show a false ⚠️ "0 episodes" (repo-todo 19:00:02).
+	// IsRewatching surfaces the "🔁 On rewatch" segment on review cards
+	// (repo-todo 19:00:01). Spec:
 	// docs/superpowers/specs/2026-05-21-steam-style-review-context-design.md.
-	//
-	// TODO(passive-watcher): fix the false-negative ⚠️ for users who watch
-	// without updating their list. Replace `episodes` source with
-	// max(anime_list.episodes, COUNT DISTINCT episode_number in
-	// watch_history WHERE completed=true) — adds a subquery per render.
-	// Same spec link as above.
-	Status   string            `json:"status"`
-	Episodes int               `json:"episodes"`
-	Anime    *domain.AnimeInfo `json:"anime,omitempty"`
+	Status       string            `json:"status"`
+	Episodes     int               `json:"episodes"`
+	IsRewatching bool              `json:"is_rewatching"`
+	Anime        *domain.AnimeInfo `json:"anime,omitempty"`
 	// Reactions — per-emoji aggregate counts (with reacted_by_me for the
 	// requesting viewer). MyReactions is the convenience subset of emojis the
 	// viewer has reacted with, consumed by the frontend's `viewer-reacted`
@@ -80,11 +76,12 @@ func toReviewResponse(e *domain.AnimeListEntry) reviewResponse {
 		Score:       e.Score,
 		ReviewText:  e.ReviewText,
 		CreatedAt:   e.CreatedAt,
-		Status:      e.Status,
-		Episodes:    e.Episodes,
-		Anime:       e.Anime,
-		Reactions:   reactions,
-		MyReactions: myReactions,
+		Status:       e.Status,
+		Episodes:     e.Episodes,
+		IsRewatching: e.IsRewatching,
+		Anime:        e.Anime,
+		Reactions:    reactions,
+		MyReactions:  myReactions,
 	}
 }
 

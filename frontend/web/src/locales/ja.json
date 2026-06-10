@@ -114,7 +114,8 @@
       "noProgress": "📺 0/{total}話 · {status} ⚠️",
       "noProgressOpen": "📺 0話 · {status} ⚠️",
       "planToWatchFlag": "📺 {watched}/{total}話 · {status} ⚠️",
-      "planToWatchOpenFlag": "📺 {watched}話 · {status} ⚠️"
+      "planToWatchOpenFlag": "📺 {watched}話 · {status} ⚠️",
+      "rewatch": "🔁 再視聴中"
     },
     "reactions": {
       "toggle": "リアクション",

@@ -135,11 +135,12 @@ var allowedReviewKeys = map[string]bool{
 	"score":       true,
 	"review_text": true,
 	"created_at":  true,
-	"status":       true, // Steam-style review-context (2026-05-21)
-	"episodes":     true, // Steam-style review-context (2026-05-21)
-	"anime":        true,
-	"reactions":    true, // emoji reactions (AUTO-408)
-	"my_reactions": true, // viewer's reacted-emoji subset (AUTO-408)
+	"status":        true, // Steam-style review-context (2026-05-21)
+	"episodes":      true, // Steam-style review-context (2026-05-21)
+	"is_rewatching": true, // rewatch context on review cards (repo-todo 19:00:01)
+	"anime":         true,
+	"reactions":     true, // emoji reactions (AUTO-408)
+	"my_reactions":  true, // viewer's reacted-emoji subset (AUTO-408)
 }
 
 // forbiddenLeakKeys are the AnimeListEntry-only keys that MUST NOT appear
@@ -147,7 +148,7 @@ var allowedReviewKeys = map[string]bool{
 // `*domain.AnimeListEntry` directly, every one of these leaks.
 var forbiddenLeakKeys = []string{
 	"notes", "tags", "mal_id",
-	"is_rewatching", "priority", "started_at", "completed_at", "updated_at",
+	"priority", "started_at", "completed_at", "updated_at",
 }
 
 // decodeResponseData reads the httputil.Response wrapper and returns the

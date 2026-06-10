@@ -1176,6 +1176,9 @@ interface Review {
   // for the "watched / total" rendering; backend preloads it.
   status?: string
   episodes?: number
+  // True when the reviewer is on a rewatch — renders a "🔁 On rewatch"
+  // segment after the watch stats (repo-todo 19:00:01).
+  is_rewatching?: boolean
   anime?: {
     episodes_count?: number
   }
@@ -1702,7 +1705,9 @@ const formatReviewStats = (review: Review): string => {
     key = 'anime.reviewStats.watched'
   }
 
-  return t(key, { watched: episodes, total, status: statusLabel })
+  const base = t(key, { watched: episodes, total, status: statusLabel })
+  // Append the rewatch segment when the reviewer is rewatching.
+  return review.is_rewatching ? `${base} · ${t('anime.reviewStats.rewatch')}` : base
 }
 
 const isReviewFlagged = (review: Review): boolean => {
