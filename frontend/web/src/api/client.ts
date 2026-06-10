@@ -467,7 +467,7 @@ export const userApi = {
   updateTimezone: (timezone: string) => apiClient.put('/auth/profile/timezone', { timezone }),
   // Error reporting
   reportError: (data: Record<string, unknown>) => apiClient.post('/users/report', data),
-  listMyReports: (params?: { page?: number; page_size?: number }) => apiClient.get('/users/reports', { params }),
+  listMyReports: (params?: { page?: number; page_size?: number; from?: string; to?: string }) => apiClient.get('/users/reports', { params }),
   // API Key management
   generateApiKey: () => apiClient.post('/auth/api-key'),
   revokeApiKey: () => apiClient.delete('/auth/api-key'),
@@ -553,7 +553,7 @@ export const adminApi = {
     apiClient.delete<void>(`/admin/collections/${id}/items/${animeId}`),
   // Admin feedback browser — user feedback/error reports (player service,
   // /api/admin/reports). Responses use the standard {success,data} envelope.
-  listReports: (params?: { category?: string; status?: string; type?: string; username?: string; page?: number; page_size?: number }) =>
+  listReports: (params?: { category?: string; status?: string; type?: string; username?: string; from?: string; to?: string; page?: number; page_size?: number }) =>
     apiClient.get<FeedbackListResponse | { data: FeedbackListResponse }>('/admin/reports', { params }),
   getReport: (id: string) =>
     apiClient.get<FeedbackDetail | { data: FeedbackDetail }>(`/admin/reports/${encodeURIComponent(id)}`),

@@ -10,7 +10,19 @@
         <h1 class="text-2xl font-bold text-foreground font-display">{{ $t('myFeedback.title') }}</h1>
         <span v-if="total > 0" class="text-sm text-muted-foreground">{{ $t('myFeedback.total', { n: total }) }}</span>
       </div>
-      <p class="text-sm text-muted-foreground mb-6">{{ $t('myFeedback.subtitle') }}</p>
+      <p class="text-sm text-muted-foreground mb-4">{{ $t('myFeedback.subtitle') }}</p>
+
+      <div class="flex items-end gap-3 flex-wrap mb-6">
+        <div class="w-40">
+          <Input v-model="dateFrom" size="sm" type="date" :label="$t('myFeedback.filter.from')" />
+        </div>
+        <div class="w-40">
+          <Input v-model="dateTo" size="sm" type="date" :label="$t('myFeedback.filter.to')" />
+        </div>
+        <Button v-if="dateFrom || dateTo" variant="ghost" size="sm" class="mb-0.5" @click="resetDates">
+          {{ $t('myFeedback.filter.reset') }}
+        </Button>
+      </div>
 
       <div v-if="loading" class="flex justify-center py-12">
         <Spinner size="lg" />
@@ -50,15 +62,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { userApi } from '@/api/client'
+import { dayStartISO, dayEndISO } from '@/utils/time'
 import type { MyFeedbackItem, MyFeedbackResponse, FeedbackStatus } from '@/types/feedback'
 import { Badge, Button, Spinner } from '@/components/ui'
+import Input from '@/components/ui/Input.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PaginationBar from '@/components/ui/PaginationBar.vue'
 
 const { t, locale } = useI18n()
+
+const dateFrom = ref('')
+const dateTo = ref('')
 
 const items = ref<MyFeedbackItem[]>([])
 const total = ref(0)
@@ -96,7 +113,12 @@ async function load(p: number) {
   loading.value = true
   error.value = ''
   try {
-    const resp = await userApi.listMyReports({ page: p, page_size: pageSize.value })
+    const resp = await userApi.listMyReports({
+      page: p,
+      page_size: pageSize.value,
+      from: dayStartISO(dateFrom.value),
+      to: dayEndISO(dateTo.value),
+    })
     const data = (resp.data as { data?: MyFeedbackResponse }).data ?? (resp.data as MyFeedbackResponse)
     items.value = data.items ?? []
     total.value = data.total ?? 0
@@ -107,6 +129,13 @@ async function load(p: number) {
     loading.value = false
   }
 }
+
+function resetDates() {
+  dateFrom.value = ''
+  dateTo.value = ''
+}
+
+watch([dateFrom, dateTo], () => load(1))
 
 onMounted(() => load(1))
 </script>

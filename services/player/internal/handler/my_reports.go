@@ -58,6 +58,7 @@ func (h *AdminReportsHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
+	fFrom, fTo := parseReportWindow(q)
 	page, _ := strconv.Atoi(q.Get("page"))
 	if page < 1 {
 		page = 1
@@ -112,6 +113,9 @@ func (h *AdminReportsHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		id := strings.TrimSuffix(n, ".json")
+		if !reportInWindow(f.Timestamp, id, fFrom, fTo) {
+			continue
+		}
 		row := myReportRow{
 			ID:            id,
 			Timestamp:     f.Timestamp,

@@ -41,7 +41,7 @@
       </div>
 
       <!-- Filters -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
         <Select
           v-model="filterType"
           size="sm"
@@ -71,6 +71,18 @@
           clearable
           :label="$t('admin.feedback.filters.username')"
           :placeholder="$t('admin.feedback.filters.usernamePlaceholder')"
+        />
+        <Input
+          v-model="filterDateFrom"
+          size="sm"
+          type="date"
+          :label="$t('admin.feedback.filters.dateFrom')"
+        />
+        <Input
+          v-model="filterDateTo"
+          size="sm"
+          type="date"
+          :label="$t('admin.feedback.filters.dateTo')"
         />
       </div>
 
@@ -388,7 +400,7 @@ const router = useRouter()
 
 const {
   items, total, page, pageSize, isLoading, error,
-  filterCategory, filterStatus, filterType, filterUsername,
+  filterCategory, filterStatus, filterType, filterUsername, filterDateFrom, filterDateTo,
   detail, isDetailLoading, detailError,
   refresh, applyFilters, setPage, openDetail, closeDetail, setStatus,
 } = useAdminFeedback()
@@ -404,6 +416,9 @@ watch(filterUsername, () => {
 onUnmounted(() => {
   if (usernameDebounce) clearTimeout(usernameDebounce)
 })
+
+// Date pickers fire once per selection — no debounce needed.
+watch([filterDateFrom, filterDateTo], () => applyFilters())
 
 // --- Deep-linking: /admin/feedback?id=<report-id> opens that report ---
 // openReport/closeReport wrap the composable's openDetail/closeDetail and keep

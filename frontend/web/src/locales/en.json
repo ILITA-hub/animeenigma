@@ -1043,7 +1043,9 @@
         "allCategories": "All categories",
         "allStatuses": "All statuses",
         "username": "User",
-        "usernamePlaceholder": "Filter by username…"
+        "usernamePlaceholder": "Filter by username…",
+        "dateFrom": "Date from",
+        "dateTo": "Date to"
       },
       "columns": {
         "category": "Category",
@@ -1580,6 +1582,11 @@
       "issue": "Issue",
       "feature": "Idea",
       "other": "Report"
+    },
+    "filter": {
+      "from": "From date",
+      "to": "To date",
+      "reset": "Reset"
     }
   }
 }

@@ -1043,7 +1043,9 @@
         "allCategories": "すべてのカテゴリ",
         "allStatuses": "すべてのステータス",
         "username": "ユーザー",
-        "usernamePlaceholder": "ユーザー名で絞り込み…"
+        "usernamePlaceholder": "ユーザー名で絞り込み…",
+        "dateFrom": "開始日",
+        "dateTo": "終了日"
       },
       "columns": {
         "category": "カテゴリ",
@@ -1580,6 +1582,11 @@
       "issue": "問題",
       "feature": "アイデア",
       "other": "レポート"
+    },
+    "filter": {
+      "from": "開始日",
+      "to": "終了日",
+      "reset": "リセット"
     }
   }
 }

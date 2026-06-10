@@ -1043,7 +1043,9 @@
         "allCategories": "Все категории",
         "allStatuses": "Все статусы",
         "username": "Пользователь",
-        "usernamePlaceholder": "Фильтр по нику…"
+        "usernamePlaceholder": "Фильтр по нику…",
+        "dateFrom": "Дата с",
+        "dateTo": "Дата по"
       },
       "columns": {
         "category": "Категория",
@@ -1580,6 +1582,11 @@
       "issue": "Проблема",
       "feature": "Идея",
       "other": "Репорт"
+    },
+    "filter": {
+      "from": "С даты",
+      "to": "По дату",
+      "reset": "Сбросить"
     }
   }
 }

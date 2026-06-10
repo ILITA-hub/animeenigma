@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { adminApi } from '@/api/client'
+import { dayStartISO, dayEndISO } from '@/utils/time'
 import type {
   FeedbackListItem,
   FeedbackListResponse,
@@ -45,6 +46,10 @@ export function useAdminFeedback() {
   const filterType = ref('all')
   // Free-text username filter (case-insensitive substring match, server-side).
   const filterUsername = ref('')
+  // Submitted-at window (YYYY-MM-DD from <input type=date>); converted to
+  // local-day RFC3339 bounds before hitting the API. Same date in both = one day.
+  const filterDateFrom = ref('')
+  const filterDateTo = ref('')
 
   const detail = ref<FeedbackDetail | null>(null)
   const isDetailLoading = ref(false)
@@ -60,6 +65,8 @@ export function useAdminFeedback() {
         status: norm(filterStatus.value),
         type: norm(filterType.value),
         username: filterUsername.value.trim() || undefined,
+        from: dayStartISO(filterDateFrom.value),
+        to: dayEndISO(filterDateTo.value),
         page: page.value,
         page_size: pageSize.value,
       })
@@ -133,6 +140,8 @@ export function useAdminFeedback() {
     filterStatus,
     filterType,
     filterUsername,
+    filterDateFrom,
+    filterDateTo,
     detail,
     isDetailLoading,
     detailError,
