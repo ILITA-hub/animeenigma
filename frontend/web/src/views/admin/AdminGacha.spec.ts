@@ -217,6 +217,90 @@ describe('AdminGacha', () => {
     )
   })
 
+  it('card dialog renders the optional card-back upload slot', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = { openCardCreate: () => void }
+    const vm = wrapper.vm as unknown as Vm
+    vm.openCardCreate()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="card-back-slot"]').exists()).toBe(true)
+  })
+
+  it('createCard payload includes back_path', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.createCard).mockResolvedValue({
+      data: { success: true, data: makeCard() },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = { openCardCreate: () => void; saveCard: () => Promise<void>; cardForm: { name: string; imagePath: string; backPath: string } }
+    const vm = wrapper.vm as unknown as Vm
+    vm.openCardCreate()
+    await wrapper.vm.$nextTick()
+    vm.cardForm.name = 'Hero'
+    vm.cardForm.imagePath = 'cards/hero.webp'
+    vm.cardForm.backPath = 'cards/hero-back.webp'
+    await vm.saveCard()
+    expect(vi.mocked(gachaAdminApi.createCard)).toHaveBeenCalledWith(
+      expect.objectContaining({ back_path: 'cards/hero-back.webp' }),
+    )
+  })
+
+  it('banner dialog renders art + backdrop upload slots', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = { openBannerCreate: () => void }
+    const vm = wrapper.vm as unknown as Vm
+    vm.openBannerCreate()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="banner-art-slot"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="banner-backdrop-slot"]').exists()).toBe(true)
+  })
+
+  it('saveBanner payload carries art_path + backdrop_path (no wipe on edit)', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.updateBanner).mockResolvedValue({
+      data: { success: true, data: makeBanner() },
+    } as never)
+    vi.mocked(gachaAdminApi.getBanner).mockResolvedValue({
+      data: { success: true, data: { ...makeBanner({ id: 'b9' }), card_ids: [] } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = {
+      openBannerEdit: (b: GachaBanner) => Promise<void>
+      saveBanner: () => Promise<void>
+      bannerForm: { art_path: string; backdrop_path: string }
+    }
+    const vm = wrapper.vm as unknown as Vm
+    await vm.openBannerEdit(makeBanner({ id: 'b9', art_path: 'banners/art.webp', backdrop_path: 'banners/bd.webp' }))
+    await flushPromises()
+    await vm.saveBanner()
+    expect(vi.mocked(gachaAdminApi.updateBanner)).toHaveBeenCalledWith(
+      'b9',
+      expect.objectContaining({ art_path: 'banners/art.webp', backdrop_path: 'banners/bd.webp' }),
+    )
+  })
+
+  it('onBannerBackdropFile uploads with "banners" kind and stores backdrop_path', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.uploadFile).mockResolvedValue({
+      data: { success: true, data: { image_path: 'banners/bd.webp', image_url: '/api/gacha/images/banners/bd.webp' } },
+    } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+    type Vm = { onBannerBackdropFile: (e: Event) => Promise<void>; bannerForm: { backdrop_path: string } }
+    const vm = wrapper.vm as unknown as Vm
+    const file = new File(['x'], 'bd.png', { type: 'image/png' })
+    const input = document.createElement('input')
+    input.type = 'file'
+    Object.defineProperty(input, 'files', { value: [file] })
+    await vm.onBannerBackdropFile({ target: input } as unknown as Event)
+    expect(vi.mocked(gachaAdminApi.uploadFile)).toHaveBeenCalledWith(file, 'banners')
+    expect(vm.bannerForm.backdrop_path).toBe('banners/bd.webp')
+  })
+
   it('uploadFile receives File instance + "cards" kind', async () => {
     const { gachaAdminApi } = await import('@/api/gacha')
     vi.mocked(gachaAdminApi.uploadFile).mockResolvedValue({

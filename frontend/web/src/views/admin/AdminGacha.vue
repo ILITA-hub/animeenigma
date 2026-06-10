@@ -284,6 +284,43 @@
         <p v-if="uploadError" class="text-destructive text-xs mt-1">{{ $t('gacha.admin.upload_error') }}</p>
         <p v-if="uploading" class="text-muted-foreground text-xs mt-1">{{ $t('gacha.admin.upload_uploading') }}</p>
       </div>
+
+      <!-- Card back upload: optional «Рубашка» (file OR URL) -->
+      <div data-testid="card-back-slot">
+        <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.card_back_image') }}</label>
+        <p class="text-white/40 text-xs mb-2">{{ $t('gacha.admin.card_back_hint') }}</p>
+        <!-- Back preview -->
+        <div v-if="backPreview" class="mb-2">
+          <img
+            :src="backPreview"
+            alt="Card back preview"
+            class="w-20 h-28 object-cover rounded border border-white/20"
+          />
+        </div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <label
+              class="inline-flex items-center gap-1.5 cursor-pointer rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm font-medium text-white transition"
+            >
+              <Upload class="size-4" aria-hidden="true" />
+              {{ $t('gacha.admin.card_image_or') }}
+              <input
+                type="file"
+                accept="image/*"
+                class="sr-only"
+                @change="onBackFileChange"
+              />
+            </label>
+          </div>
+          <Input
+            v-model="cardForm.backUrl"
+            :placeholder="$t('gacha.admin.card_image_url_placeholder')"
+            @blur="onBackUrlBlur"
+          />
+        </div>
+        <p v-if="backError" class="text-destructive text-xs mt-1">{{ $t('gacha.admin.upload_error') }}</p>
+        <p v-if="uploadingBack" class="text-muted-foreground text-xs mt-1">{{ $t('gacha.admin.upload_uploading') }}</p>
+      </div>
     </div>
 
     <template #footer>
@@ -502,6 +539,66 @@
         </div>
       </div>
 
+      <!-- Banner art + backdrop upload slots (file OR URL) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Hero art -->
+        <div data-testid="banner-art-slot">
+          <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_art') }}</label>
+          <div v-if="bannerForm.art_path" class="mb-2">
+            <img
+              :src="cardImageUrl(bannerForm.art_path)"
+              alt="Banner art preview"
+              class="w-full h-24 object-cover rounded border border-white/20"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <label
+              class="inline-flex items-center gap-1.5 cursor-pointer rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm font-medium text-white transition"
+            >
+              <Upload class="size-4" aria-hidden="true" />
+              {{ $t('gacha.admin.card_image_or') }}
+              <input type="file" accept="image/*" class="sr-only" @change="onBannerArtFile" />
+            </label>
+            <Input
+              v-model="bannerArtUrl"
+              :placeholder="$t('gacha.admin.card_image_url_placeholder')"
+              @blur="onBannerArtUrlBlur"
+            />
+          </div>
+          <p v-if="bannerArtError" class="text-destructive text-xs mt-1">{{ $t('gacha.admin.upload_error') }}</p>
+          <p v-if="uploadingBannerArt" class="text-muted-foreground text-xs mt-1">{{ $t('gacha.admin.upload_uploading') }}</p>
+        </div>
+
+        <!-- Backdrop «Задник» -->
+        <div data-testid="banner-backdrop-slot">
+          <label class="block text-white/70 text-xs mb-1">{{ $t('gacha.admin.banner_backdrop') }}</label>
+          <p class="text-white/40 text-xs mb-2">{{ $t('gacha.admin.banner_backdrop_hint') }}</p>
+          <div v-if="bannerForm.backdrop_path" class="mb-2">
+            <img
+              :src="cardImageUrl(bannerForm.backdrop_path)"
+              alt="Banner backdrop preview"
+              class="w-full h-24 object-cover rounded border border-white/20"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <label
+              class="inline-flex items-center gap-1.5 cursor-pointer rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm font-medium text-white transition"
+            >
+              <Upload class="size-4" aria-hidden="true" />
+              {{ $t('gacha.admin.card_image_or') }}
+              <input type="file" accept="image/*" class="sr-only" @change="onBannerBackdropFile" />
+            </label>
+            <Input
+              v-model="bannerBackdropUrl"
+              :placeholder="$t('gacha.admin.card_image_url_placeholder')"
+              @blur="onBannerBackdropUrlBlur"
+            />
+          </div>
+          <p v-if="bannerBackdropError" class="text-destructive text-xs mt-1">{{ $t('gacha.admin.upload_error') }}</p>
+          <p v-if="uploadingBannerBackdrop" class="text-muted-foreground text-xs mt-1">{{ $t('gacha.admin.upload_uploading') }}</p>
+        </div>
+      </div>
+
       <!-- Banner cards section -->
       <div v-if="editBanner">
         <p class="text-white/70 text-xs mb-2">{{ $t('gacha.admin.banner_cards_section') }}</p>
@@ -703,14 +800,24 @@ const cardForm = ref({
   enabled: true,
   imagePath: '',   // final stored path (returned from upload or existing)
   imageUrl: '',    // user-typed URL
+  backPath: '',    // optional card-back image key (new slot)
+  backUrl: '',     // user-typed URL for the card back
   groupIds: [] as string[],  // selected group membership (M4)
 })
 
+// Card-back upload state (optional «Рубашка» slot, file-or-URL flow).
+const uploadingBack = ref(false)
+const backError = ref(false)
+const backPreview = ref<string | null>(null)
+
 function resetCardForm() {
-  cardForm.value = { name: '', source_title: '', rarity: 'N', enabled: true, imagePath: '', imageUrl: '', groupIds: [] }
+  cardForm.value = { name: '', source_title: '', rarity: 'N', enabled: true, imagePath: '', imageUrl: '', backPath: '', backUrl: '', groupIds: [] }
   imagePreview.value = null
   uploadError.value = false
   uploading.value = false
+  backPreview.value = null
+  backError.value = false
+  uploadingBack.value = false
 }
 
 function openCardCreate() {
@@ -728,12 +835,54 @@ function openCardEdit(card: GachaCard) {
     enabled: card.enabled,
     imagePath: card.image_path,
     imageUrl: '',
+    backPath: card.back_path ?? '',
+    backUrl: '',
     groupIds: [],   // We don't have the current membership here; user selects from scratch
   }
   imagePreview.value = card.image_path ? cardImageUrl(card.image_path) : null
+  backPreview.value = card.back_path ? cardImageUrl(card.back_path) : null
   uploadError.value = false
   uploading.value = false
+  backError.value = false
+  uploadingBack.value = false
   showCardDialog.value = true
+}
+
+async function onBackFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  uploadingBack.value = true
+  backError.value = false
+  try {
+    const res = await gachaAdminApi.uploadFile(file, 'cards')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    const path = data?.data?.image_path ?? ''
+    cardForm.value.backPath = path
+    backPreview.value = path ? cardImageUrl(path) : null
+  } catch {
+    backError.value = true
+  } finally {
+    uploadingBack.value = false
+  }
+}
+
+async function onBackUrlBlur() {
+  const url = cardForm.value.backUrl.trim()
+  if (!url) return
+  uploadingBack.value = true
+  backError.value = false
+  try {
+    const res = await gachaAdminApi.uploadUrl(url, 'cards')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    const path = data?.data?.image_path ?? ''
+    cardForm.value.backPath = path
+    backPreview.value = path ? cardImageUrl(path) : url
+  } catch {
+    backError.value = true
+    backPreview.value = url
+  } finally {
+    uploadingBack.value = false
+  }
 }
 
 function toggleCardGroup(groupId: string) {
@@ -792,6 +941,7 @@ async function saveCard() {
       rarity: cardForm.value.rarity,
       enabled: cardForm.value.enabled,
       image_path: cardForm.value.imagePath,
+      back_path: cardForm.value.backPath,
       group_ids: cardForm.value.groupIds,
     }
     if (editCard.value) {
@@ -947,6 +1097,78 @@ async function saveGroup() {
 const showBannerDialog = ref(false)
 const editBanner = ref<GachaBanner | null>(null)
 const savingBanner = ref(false)
+
+// Banner art + backdrop upload state (file-or-URL, same flow as card image).
+const bannerArtUrl = ref('')        // user-typed URL for the hero art slot
+const bannerBackdropUrl = ref('')   // user-typed URL for the backdrop slot
+const uploadingBannerArt = ref(false)
+const uploadingBannerBackdrop = ref(false)
+const bannerArtError = ref(false)
+const bannerBackdropError = ref(false)
+
+async function onBannerArtFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  uploadingBannerArt.value = true
+  bannerArtError.value = false
+  try {
+    const res = await gachaAdminApi.uploadFile(file, 'banners')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    bannerForm.value.art_path = data?.data?.image_path ?? ''
+  } catch {
+    bannerArtError.value = true
+  } finally {
+    uploadingBannerArt.value = false
+  }
+}
+
+async function onBannerArtUrlBlur() {
+  const url = bannerArtUrl.value.trim()
+  if (!url) return
+  uploadingBannerArt.value = true
+  bannerArtError.value = false
+  try {
+    const res = await gachaAdminApi.uploadUrl(url, 'banners')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    bannerForm.value.art_path = data?.data?.image_path ?? ''
+  } catch {
+    bannerArtError.value = true
+  } finally {
+    uploadingBannerArt.value = false
+  }
+}
+
+async function onBannerBackdropFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  uploadingBannerBackdrop.value = true
+  bannerBackdropError.value = false
+  try {
+    const res = await gachaAdminApi.uploadFile(file, 'banners')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    bannerForm.value.backdrop_path = data?.data?.image_path ?? ''
+  } catch {
+    bannerBackdropError.value = true
+  } finally {
+    uploadingBannerBackdrop.value = false
+  }
+}
+
+async function onBannerBackdropUrlBlur() {
+  const url = bannerBackdropUrl.value.trim()
+  if (!url) return
+  uploadingBannerBackdrop.value = true
+  bannerBackdropError.value = false
+  try {
+    const res = await gachaAdminApi.uploadUrl(url, 'banners')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    bannerForm.value.backdrop_path = data?.data?.image_path ?? ''
+  } catch {
+    bannerBackdropError.value = true
+  } finally {
+    uploadingBannerBackdrop.value = false
+  }
+}
 // M5: current pool for the banner being edited
 const bannerCurrentCardIds = ref<string[]>([])
 const loadingBannerPool = ref(false)
@@ -1057,11 +1279,15 @@ const bannerForm = ref({
   active_from: '',
   active_to: '',
   sort_order: 0,
+  art_path: '',       // hero/slider art (preserved across edits)
+  backdrop_path: '',  // separately uploaded slider backdrop (new slot)
 })
 
 function openBannerCreate() {
   editBanner.value = null
-  bannerForm.value = { name: '', description: '', is_standard: false, enabled: true, active_from: '', active_to: '', sort_order: 0 }
+  bannerForm.value = { name: '', description: '', is_standard: false, enabled: true, active_from: '', active_to: '', sort_order: 0, art_path: '', backdrop_path: '' }
+  bannerArtUrl.value = ''
+  bannerBackdropUrl.value = ''
   bannerCurrentCardIds.value = []
   bannerPickerOpen.value = false
   showBannerDialog.value = true
@@ -1077,7 +1303,11 @@ async function openBannerEdit(banner: GachaBanner) {
     active_from: banner.active_from ?? '',
     active_to: banner.active_to ?? '',
     sort_order: banner.sort_order ?? 0,
+    art_path: banner.art_path ?? '',
+    backdrop_path: banner.backdrop_path ?? '',
   }
+  bannerArtUrl.value = ''
+  bannerBackdropUrl.value = ''
   bannerCurrentCardIds.value = []
   bannerPickerOpen.value = false
   showBannerDialog.value = true
@@ -1106,6 +1336,10 @@ async function saveBanner() {
       active_from: bannerForm.value.active_from || undefined,
       active_to: bannerForm.value.active_to || undefined,
       sort_order: bannerForm.value.sort_order,
+      // Carry art_path + backdrop_path so editing a banner doesn't wipe them
+      // (backend UpdateBanner overwrites both fields from the request body).
+      art_path: bannerForm.value.art_path,
+      backdrop_path: bannerForm.value.backdrop_path,
     }
     if (editBanner.value) {
       await gachaAdminApi.updateBanner(editBanner.value.id, payload)
