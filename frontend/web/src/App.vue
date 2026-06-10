@@ -76,6 +76,14 @@
           {{ $t('status.title') }}
         </router-link>
         <FeedbackButton />
+        <router-link
+          v-if="authStore.isAuthenticated"
+          to="/my-feedback"
+          class="inline-flex items-center gap-1.5 text-white/60 hover:text-white/80 text-sm transition-colors"
+        >
+          <Inbox class="size-4" aria-hidden="true" />
+          {{ $t('footer.feedback.viewMine') }}
+        </router-link>
       </div>
     </footer>
 
@@ -85,7 +93,7 @@
 
 <script setup lang="ts">
 import { onMounted, onErrorCaptured, ref, watch } from 'vue'
-import { TriangleAlert } from 'lucide-vue-next'
+import { TriangleAlert, Inbox } from 'lucide-vue-next'
 import { TooltipProvider } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'

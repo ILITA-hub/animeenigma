@@ -56,9 +56,6 @@
 
         <p class="mt-2 text-xs text-white/30">
           {{ $t('footer.feedback.disclaimer') }}
-          <button type="button" class="text-primary/70 hover:text-primary hover:underline" @click="goToMyFeedback">
-            {{ $t('footer.feedback.viewMine') }}
-          </button>
         </p>
 
         <div v-if="submitError" class="mt-2 text-sm text-pink-400">
@@ -67,6 +64,16 @@
       </template>
 
       <template #footer>
+        <Button
+          v-if="!submitted"
+          variant="ghost"
+          size="sm"
+          class="mr-auto"
+          @click="goToMyFeedback"
+        >
+          <Inbox class="size-4 mr-1.5" aria-hidden="true" />
+          {{ $t('footer.feedback.viewMine') }}
+        </Button>
         <Button
           v-if="!submitted"
           variant="soft"
@@ -104,7 +111,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, CircleCheck } from 'lucide-vue-next'
+import { MessageSquare, CircleCheck, Inbox } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { userApi } from '@/api/client'
 import { collectDiagnostics } from '@/utils/diagnostics'
