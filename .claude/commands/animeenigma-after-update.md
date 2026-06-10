@@ -57,7 +57,15 @@ If any lint check fails, fix the issues before proceeding.
 
 ### 3. Deploy
 
-List the services to redeploy and why (one line, for the record), then redeploy them immediately — do NOT pause for confirmation.
+**Pre-deploy: land everything on `main` and deploy FROM `main` — never from a random branch.**
+
+`make redeploy-*` builds from the SHARED working tree at `/data/animeenigma`, NOT from any worktree. So before redeploying:
+
+1. **If the work was done in a `git worktree`, merge it into `main` first.** Commit in the worktree, then merge those commits into `main` (push to `origin/main`). Don't deploy the worktree in isolation and leave `main` behind — `main` is the deploy source of truth.
+2. **Check what branch the shared tree is on** (`git -C /data/animeenigma branch --show-current`). If it's sitting on a stray feature branch (parallel agents do this — see [[feedback_always_work_on_main_worktrees]]), do NOT `make redeploy-*` as-is: that ships the stray branch's code PLUS other agents' uncommitted hunks. Get `main`'s code into the build path first (e.g. build/deploy from a clean `main` worktree, or bring the shared tree's build path to `main`), then deploy.
+3. **Only deploy code that is on `main`.** If you can't get the change onto `main` cleanly, STOP and surface it rather than deploying from a random branch.
+
+Then: list the services to redeploy and why (one line, for the record), and redeploy them immediately — do NOT pause for confirmation.
 
 Run `make redeploy-<service>` for each service sequentially from `/data/animeenigma`. For frontend, use `make redeploy-web`.
 
