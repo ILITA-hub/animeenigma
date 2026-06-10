@@ -12,6 +12,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// RequireAdmin is a middleware that rejects requests from non-admin users with 403.
+// It runs AFTER AuthMiddleware (which puts claims on the context).
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !authz.IsAdmin(r.Context()) {
+			httputil.Forbidden(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // NewRouter builds the chi router for the gacha service.
 //
 //	GET  /health                  (public)
@@ -19,9 +31,13 @@ import (
 //	POST /internal/gacha/credit   (internal — gateway never proxies)
 //	GET  /internal/health         (internal)
 //	GET  /api/gacha/wallet        (JWT)
+//	GET  /images/*                (public — browser <img> tags, no JWT)
+//	     /api/gacha/admin/*       (JWT + AdminRole)
 func NewRouter(
 	walletHandler *handler.WalletHandler,
 	internalHandler *handler.InternalHandler,
+	adminHandler *handler.AdminHandler,
+	imagesHandler *handler.ImagesHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -53,10 +69,51 @@ func NewRouter(
 	r.Post("/internal/gacha/credit", internalHandler.Credit)
 	r.Get("/internal/health", internalHandler.Health)
 
+	// Public card/banner art. Browsers load these via <img> (no JWT header
+	// possible), so the route is unauthenticated by design: keys are
+	// unguessable UUIDs and the content is anime character art.
+	r.Get("/images/*", imagesHandler.Serve)
+
 	// Public — JWT-gated.
 	r.Route("/api/gacha", func(r chi.Router) {
 		r.Use(AuthMiddleware(jwtConfig))
 		r.Get("/wallet", walletHandler.GetWallet)
+	})
+
+	// Admin content API. The gateway already requires JWT+AdminRole for
+	// /api/gacha/admin/*; this service re-validates both (defense in depth,
+	// same pattern as every service re-checking the gateway's JWT).
+	r.Route("/api/gacha/admin", func(r chi.Router) {
+		r.Use(AuthMiddleware(jwtConfig))
+		r.Use(RequireAdmin)
+
+		// Cards
+		r.Post("/cards", adminHandler.CreateCard)
+		r.Get("/cards", adminHandler.ListCards)
+		r.Get("/cards/{id}", adminHandler.GetCard)
+		r.Patch("/cards/{id}", adminHandler.UpdateCard)
+		r.Delete("/cards/{id}", adminHandler.DeleteCard)
+
+		// Groups
+		r.Post("/groups", adminHandler.CreateGroup)
+		r.Get("/groups", adminHandler.ListGroups)
+		r.Patch("/groups/{id}", adminHandler.RenameGroup)
+		r.Delete("/groups/{id}", adminHandler.DeleteGroup)
+		r.Post("/groups/{id}/cards", adminHandler.AddCardsToGroup)
+		r.Delete("/groups/{id}/cards/{cardId}", adminHandler.RemoveCardFromGroup)
+
+		// Banners
+		r.Post("/banners", adminHandler.CreateBanner)
+		r.Get("/banners", adminHandler.ListBanners)
+		r.Get("/banners/{id}", adminHandler.GetBanner)
+		r.Patch("/banners/{id}", adminHandler.UpdateBanner)
+		r.Delete("/banners/{id}", adminHandler.DeleteBanner)
+		r.Put("/banners/{id}/cards", adminHandler.SetBannerCards)
+		r.Post("/banners/{id}/cards", adminHandler.AddBannerCards)
+		r.Post("/banners/{id}/groups/{groupId}", adminHandler.AddGroupCardsToBanner)
+
+		// Upload (file or URL → MinIO)
+		r.Post("/upload", adminHandler.Upload)
 	})
 
 	return r
