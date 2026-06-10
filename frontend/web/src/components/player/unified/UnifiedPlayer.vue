@@ -32,6 +32,12 @@
       @ended="onEnded"
       @click="togglePlay"
       @volumechange="onVolumeChange"
+      @waiting="onBufferStart"
+      @seeking="onBufferStart"
+      @canplay="onBufferEnd"
+      @playing="onBufferEnd"
+      @seeked="onSeeked"
+      @timeupdate="onTimeUpdate"
     />
 
     <!-- Subtitle overlay -->
@@ -108,9 +114,11 @@
     <ResumePill :kind="resumeKind" />
 
     <BigPlayButton
-      :visible="!state.playing.value && !sourceError"
+      :visible="!state.playing.value && !sourceError && !showBuffering && !isResolving"
       @play="togglePlay"
     />
+
+    <BufferingOverlay :visible="(showBuffering || isResolving) && !sourceError" />
 
     <!-- TODO: real skip-timings backend (later stage) -->
     <SkipIntroChip :visible="false" @skip="() => {}" />
@@ -232,6 +240,7 @@ import PlaybackSettingsMenu from './PlaybackSettingsMenu.vue'
 import SubtitlesMenu from './SubtitlesMenu.vue'
 import BrowseSubsModal from './BrowseSubsModal.vue'
 import BigPlayButton from './overlays/BigPlayButton.vue'
+import BufferingOverlay from './overlays/BufferingOverlay.vue'
 import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
@@ -504,6 +513,56 @@ function onVideoPlay() {
 function onVideoPause() {
   state.playing.value = false
   stopRaf()
+}
+
+// ─── Buffering indicator ──────────────────────────────────────────────────────
+// waiting/seeking → on; playing/canplay → off. A 150ms grace window keeps
+// instant in-buffer seeks from flashing the ring. `seeked` only clears when
+// the element actually has decodable data (readyState ≥ 3) — otherwise the
+// following `waiting` keeps the ring up. We deliberately do NOT bind
+// `stalled`: browsers fire it spuriously when the download is throttled
+// because the buffer is FULL, and nothing would clear the ring during healthy
+// playback. `timeupdate` self-heals any false positive.
+
+const isBuffering = ref(false)
+const showBuffering = ref(false)
+let bufferingTimer: ReturnType<typeof setTimeout> | null = null
+
+function setBuffering(on: boolean) {
+  if (on === isBuffering.value) return
+  isBuffering.value = on
+  if (on) {
+    bufferingTimer = setTimeout(() => {
+      showBuffering.value = true
+    }, 150)
+  } else {
+    if (bufferingTimer) {
+      clearTimeout(bufferingTimer)
+      bufferingTimer = null
+    }
+    showBuffering.value = false
+  }
+}
+
+function onBufferStart() {
+  setBuffering(true)
+}
+
+function onBufferEnd() {
+  setBuffering(false)
+}
+
+function onSeeked() {
+  const v = videoRef.value
+  if (v && v.readyState >= 3) setBuffering(false)
+}
+
+// Self-heal: if time is advancing with decodable data, we are NOT buffering.
+function onTimeUpdate() {
+  const v = videoRef.value
+  if (isBuffering.value && v && v.readyState >= 3 && !v.seeking) {
+    setBuffering(false)
+  }
 }
 
 // ─── Next episode logic ───────────────────────────────────────────────────────
@@ -796,6 +855,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopRaf()
   clearNextEpTimer()
+  if (bufferingTimer) clearTimeout(bufferingTimer)
   window.removeEventListener('keydown', onKeydown)
 })
 </script>
