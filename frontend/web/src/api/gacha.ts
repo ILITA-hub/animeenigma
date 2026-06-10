@@ -19,6 +19,8 @@ export interface GachaCard {
   name: string
   source_title: string
   image_path: string
+  /** Optional card-back image key; viewer falls back to the branded default. */
+  back_path?: string
   rarity: Rarity
   enabled: boolean
   created_at: string
@@ -39,6 +41,8 @@ export interface GachaBanner {
   name: string
   description: string
   art_path: string
+  /** Separately uploaded slider/spin-page background image key. */
+  backdrop_path?: string
   is_standard: boolean
   enabled: boolean
   active_from?: string | null
@@ -93,6 +97,8 @@ export interface BannerCardView {
   name: string
   rarity: Rarity
   image_path: string
+  /** Optional card-back image key; viewer falls back to the branded default. */
+  back_path?: string
   owned: boolean
 }
 
@@ -102,6 +108,8 @@ export interface BannerView {
   name: string
   description: string
   art_path: string
+  /** Separately uploaded slider/spin-page background image key. */
+  backdrop_path?: string
   is_standard: boolean
   cards: BannerCardView[]
   my_pity: number
@@ -134,6 +142,8 @@ export interface CreateCardRequest {
   name: string
   source_title?: string
   image_path: string
+  /** Optional card-back image key. */
+  back_path?: string
   rarity: Rarity
   enabled: boolean
   group_ids?: string[]
@@ -143,6 +153,8 @@ export interface UpdateCardRequest {
   name: string
   source_title?: string
   image_path: string
+  /** Optional card-back image key. */
+  back_path?: string
   rarity: Rarity
   enabled: boolean
   group_ids?: string[]
@@ -152,6 +164,8 @@ export interface CreateBannerRequest {
   name: string
   description?: string
   art_path?: string
+  /** Optional slider/spin-page backdrop image key. */
+  backdrop_path?: string
   is_standard?: boolean
   enabled?: boolean
   active_from?: string | null
@@ -163,6 +177,8 @@ export interface UpdateBannerRequest {
   name?: string
   description?: string
   art_path?: string
+  /** Optional slider/spin-page backdrop image key. */
+  backdrop_path?: string
   is_standard?: boolean
   enabled?: boolean
   active_from?: string | null
