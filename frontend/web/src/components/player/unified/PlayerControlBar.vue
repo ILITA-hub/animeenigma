@@ -23,15 +23,8 @@
         data-test="play-pause"
         @click="emit('toggle-play')"
       >
-        <svg v-if="playing" width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M10 9v6m4-6v6" />
-        </svg>
-        <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M5 3l14 9-14 9V3z" />
-        </svg>
+        <Pause v-if="playing" class="size-5" aria-hidden="true" />
+        <Play v-else class="size-5" aria-hidden="true" />
       </button>
 
       <!-- −5s (hidden on mobile via CSS) — circular replay arrow w/ "5" inside -->
@@ -75,28 +68,11 @@
           @click="emit('toggle-mute')"
         >
           <!-- Muted -->
-          <svg v-if="muted || volume === 0" width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M11 5L6 9H2v6h4l5 4V5z" />
-            <path d="M23 9l-6 6m0-6l6 6" />
-          </svg>
+          <VolumeX v-if="muted || volume === 0" class="size-5" aria-hidden="true" />
           <!-- Volume medium -->
-          <svg v-else-if="volume < 0.5" width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M11 5L6 9H2v6h4l5 4V5z" />
-            <path d="M15.54 8.46a5 5 0 010 7.07" />
-          </svg>
+          <Volume1 v-else-if="volume < 0.5" class="size-5" aria-hidden="true" />
           <!-- Volume high -->
-          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
-          </svg>
+          <Volume2 v-else class="size-5" aria-hidden="true" />
         </button>
         <input
           type="range"
@@ -130,12 +106,7 @@
         />
         <span class="pl-srcbtn-text">{{ providerName }} · {{ audioLabel }}</span>
         <!-- Chevron down -->
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown class="size-3" aria-hidden="true" />
       </button>
 
       <!-- Subtitles (CC) -->
@@ -146,12 +117,7 @@
         data-test="toggle-subs"
         @click="emit('toggle-subs')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1zm5.5 5.2a1.8 1.8 0 100 3.6m7 0a1.8 1.8 0 110-3.6" />
-        </svg>
+        <Captions class="size-5" aria-hidden="true" />
       </button>
 
       <!-- Settings gear -->
@@ -162,12 +128,7 @@
         data-test="toggle-settings"
         @click="emit('toggle-settings')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
+        <Settings class="size-5" aria-hidden="true" />
       </button>
 
       <!-- PiP (hidden on mobile via CSS) -->
@@ -177,12 +138,7 @@
         data-test="toggle-pip"
         @click="emit('toggle-pip')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M19 11h-6a1 1 0 00-1 1v4a1 1 0 001 1h6a1 1 0 001-1v-4a1 1 0 00-1-1zM4 5h16a1 1 0 011 1v3M4 5a1 1 0 00-1 1v12a1 1 0 001 1h5" />
-        </svg>
+        <PictureInPicture2 class="size-5" aria-hidden="true" />
       </button>
 
       <!-- Fullscreen (hidden on mobile via CSS) -->
@@ -192,12 +148,7 @@
         data-test="toggle-fullscreen"
         @click="emit('toggle-fullscreen')"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
-        </svg>
+        <Maximize class="size-5" aria-hidden="true" />
       </button>
 
     </div>
@@ -206,6 +157,7 @@
 
 <script setup lang="ts">
 import PlayerScrubBar from './PlayerScrubBar.vue'
+import { Play, Pause, Volume1, Volume2, VolumeX, ChevronDown, Captions, Settings, PictureInPicture2, Maximize } from 'lucide-vue-next'
 
 interface Chapter {
   kind: 'intro' | 'outro'

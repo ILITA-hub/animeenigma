@@ -6,19 +6,14 @@
     @click="emit('skip')"
   >
     <!-- Forward-skip icon -->
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="2"
-      stroke-linecap="round" stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M5.4 19.5L10.95 12 5.4 4.5h3.6l5.55 7.5L9 19.5z" fill="currentColor" stroke="none" />
-      <path d="M12.6 19.5L18.15 12 12.6 4.5h3.6l5.55 7.5-5.55 7.5z" fill="currentColor" stroke="none" />
-    </svg>
+    <FastForward class="size-4" aria-hidden="true" />
     Skip Intro
   </button>
 </template>
 
 <script setup lang="ts">
+import { FastForward } from 'lucide-vue-next'
+
 defineProps<{
   visible: boolean
 }>()

@@ -143,19 +143,16 @@
       class="w-full flex items-center gap-[10px] px-[10px] py-[9px] rounded-[var(--r-sm)] bg-transparent border-0 text-[14px] text-left transition-colors hover:bg-white/[0.08] hover:text-white text-[var(--brand-cyan)]"
       @click="emit('open-browse')"
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="flex-shrink-0" aria-hidden="true">
-        <path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
+      <List class="size-4 flex-shrink-0" aria-hidden="true" />
       <span class="flex-1 text-[var(--brand-cyan)]">Browse all subtitles</span>
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-        <path d="M5 3l4 3-4 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+      <ChevronRight class="size-3" aria-hidden="true" />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { List, ChevronRight } from 'lucide-vue-next'
 
 const props = defineProps<{
   subLang: string

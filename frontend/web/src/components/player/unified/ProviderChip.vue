@@ -35,9 +35,7 @@
         class="ml-auto flex-shrink-0 text-[var(--brand-cyan)]"
         aria-label="Selected"
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <Check class="size-[14px]" aria-hidden="true" />
       </span>
 
       <!-- State badge for wip/down -->
@@ -55,6 +53,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Check } from 'lucide-vue-next'
 import type { ProviderRow } from '@/types/unifiedPlayer'
 
 const props = defineProps<{

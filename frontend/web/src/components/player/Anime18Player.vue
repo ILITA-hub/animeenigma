@@ -7,9 +7,7 @@
 
     <!-- No episodes available -->
     <div v-else-if="episodes.length === 0 && !loadingEpisodes" class="text-center py-20 text-white/60">
-      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
       {{ $t('player.noEpisodes', { source: '18anime' }) }}
     </div>
 
@@ -35,9 +33,7 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80"
           >
             <div class="text-center text-rose-400 px-4">
-              <svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+              <TriangleAlert class="size-12 mx-auto mb-3" aria-hidden="true" />
               <p>{{ error }}</p>
             </div>
           </div>
@@ -61,9 +57,7 @@
             class="absolute inset-0 flex items-center justify-center"
           >
             <div class="text-center text-white/40">
-              <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Play class="size-16 mx-auto mb-3" aria-hidden="true" />
               <p>{{ $t('player.selectEpisode') }}</p>
             </div>
           </div>
@@ -73,9 +67,7 @@
         <div class="mt-4">
           <div class="flex items-center gap-3 mb-3 flex-wrap">
             <h3 class="text-white/60 text-sm flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
+              <List class="size-4" aria-hidden="true" />
               {{ $t('player.episodesCount', { count: episodes.length }) }}
             </h3>
             <slot name="header-middle" />
@@ -94,9 +86,7 @@
         <!-- Quality (18anime resolves a single best mirror per episode) -->
         <div v-if="currentSource" class="mt-0">
           <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-            </svg>
+            <MonitorPlay class="size-4" aria-hidden="true" />
             {{ $t('player.quality') }}
           </h3>
           <div class="flex flex-wrap gap-2">
@@ -109,9 +99,7 @@
         <!-- Episode info -->
         <div v-if="selectedEpisode" class="mt-4">
           <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <Info class="size-4" aria-hidden="true" />
             {{ $t('player.anime18.label') }}
           </h3>
           <p class="text-white text-sm font-medium truncate">{{ $t('player.anime18.label') }} {{ selectedEpisode.number }}</p>
@@ -124,6 +112,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { Video, TriangleAlert, Play, List, MonitorPlay, Info } from 'lucide-vue-next'
 import Hls from 'hls.js'
 import { anime18Api, userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'

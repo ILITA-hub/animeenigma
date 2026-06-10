@@ -10,9 +10,7 @@
       v-else-if="!available"
       class="text-center py-16 text-white/60"
     >
-      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
       {{ $t('player.ourenglish.unavailable') }}
     </div>
 
@@ -62,9 +60,7 @@
           class="absolute inset-0 flex items-center justify-center text-white/40"
         >
           <div class="text-center">
-            <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <Play class="size-16 mx-auto mb-3" aria-hidden="true" />
             <p>{{ $t('player.selectEpisode') }}</p>
           </div>
         </div>
@@ -85,9 +81,7 @@
         <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:flex-wrap">
           <!-- Source provider dropdown (pins a specific scraper provider) -->
           <label class="flex items-center gap-2 text-white/70 text-sm" data-test="source-dropdown">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-            </svg>
+            <SlidersHorizontal class="size-4" aria-hidden="true" />
             {{ $t('player.ourenglish.sourceLabel') }}
           </label>
           <select
@@ -117,10 +111,7 @@
 
           <!-- Subtitle picker -->
           <label class="flex items-center gap-2 text-white/70 text-sm">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12h2m4 0h4M7 8h4m4 0h2" />
-            </svg>
+            <Captions class="size-4" aria-hidden="true" />
             {{ $t('player.subtitlePicker.label') }}
           </label>
           <select
@@ -147,9 +138,7 @@
       <div>
         <div class="flex items-center gap-3 mb-3 flex-wrap">
           <h3 class="text-white/60 text-sm flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
+            <List class="size-4" aria-hidden="true" />
             {{ $t('player.episodesCount', { count: episodes.length }) }}
           </h3>
           <slot name="header-middle" />
@@ -167,6 +156,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Video, Play, List, SlidersHorizontal, Captions } from 'lucide-vue-next'
 import Hls from 'hls.js'
 import SubtitleOverlay from './SubtitleOverlay.vue'
 import SubtitleSettingsMenu from './SubtitleSettingsMenu.vue'

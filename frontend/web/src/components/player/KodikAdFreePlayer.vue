@@ -7,9 +7,7 @@
 
     <!-- No translations available -->
     <div v-else-if="translations.length === 0 && !loadingTranslations" class="text-center py-20 text-white/60">
-      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+      <Video class="size-12 mx-auto mb-3 opacity-50" aria-hidden="true" />
       {{ $t('player.noTranslations') || 'Нет доступных озвучек' }}
     </div>
 
@@ -35,18 +33,14 @@
             class="absolute inset-0 z-10 flex items-center justify-center bg-black/80 p-6"
           >
             <div class="text-center space-y-4 max-w-sm">
-              <svg class="w-12 h-12 mx-auto text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+              <TriangleAlert class="size-12 mx-auto text-destructive" aria-hidden="true" />
               <p class="text-destructive text-sm font-medium">{{ $t('player.kodikAdfree.extractError') }}</p>
               <button
                 data-testid="report-button"
                 class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-destructive/20 hover:bg-destructive/30 text-destructive border border-destructive/40 transition-colors"
                 @click="reportStreamError"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
-                </svg>
+                <Flag class="size-4" aria-hidden="true" />
                 {{ $t('player.report') || 'Сообщить об ошибке' }}
               </button>
             </div>
@@ -77,9 +71,7 @@
             class="absolute inset-0 flex items-center justify-center"
           >
             <div class="text-center text-white/40">
-              <svg class="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Play class="size-16 mx-auto mb-3" aria-hidden="true" />
               <p>{{ $t('player.selectVoice') }}</p>
             </div>
           </div>
@@ -89,9 +81,7 @@
         <div class="mt-4">
           <div class="flex items-center gap-3 mb-3 flex-wrap">
             <h3 class="text-white/60 text-sm flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
+              <List class="size-4" aria-hidden="true" />
               {{ $t('player.episodesCount', { count: episodeRange.length }) }}
             </h3>
             <slot name="header-middle" />
@@ -105,9 +95,7 @@
                 ? 'accent-bg-muted accent-text border accent-border'
                 : 'bg-white/10 text-white hover:bg-white/20'"
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
+              <Check class="size-4" aria-hidden="true" />
               <span class="hidden sm:inline">{{ episodeMarkedWatched ? $t('player.watched') : $t('player.markWatched') }}</span>
             </button>
           </div>
@@ -131,9 +119,7 @@
               ? 'bg-success/20 text-success border border-success/50'
               : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
+            <Mic2 class="size-4" aria-hidden="true" />
             {{ $t('player.dub') }}
             <span class="text-xs opacity-70">({{ voiceTranslations.length }})</span>
           </button>
@@ -144,9 +130,7 @@
               ? 'bg-info/20 text-info border border-info/50'
               : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
+            <MessageSquare class="size-4" aria-hidden="true" />
             {{ $t('player.sub') }}
             <span class="text-xs opacity-70">({{ subtitleTranslations.length }})</span>
           </button>
@@ -192,9 +176,7 @@
                     class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
                     :class="translationType === 'voice' ? 'bg-success' : 'bg-info'"
                   >
-                    <svg class="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
+                    <Check class="size-4 text-black" aria-hidden="true" />
                   </div>
                 </div>
               </button>
@@ -230,6 +212,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { Video, TriangleAlert, Flag, Play, List, Check, Mic2, MessageSquare } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
 import { kodikApi, userApi } from '@/api/client'
