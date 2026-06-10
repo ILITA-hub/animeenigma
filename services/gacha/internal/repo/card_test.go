@@ -25,6 +25,7 @@ func newContentTestDB(t *testing.T) *gorm.DB {
 			name        TEXT NOT NULL,
 			source_title TEXT NOT NULL DEFAULT '',
 			image_path  TEXT NOT NULL,
+			back_path   TEXT NOT NULL DEFAULT '',
 			rarity      TEXT NOT NULL,
 			enabled     INTEGER NOT NULL DEFAULT 0,
 			created_at  DATETIME,
@@ -297,6 +298,46 @@ func TestGroupCardIDs_ExcludesSoftDeletedCards(t *testing.T) {
 	}
 	if len(ids) == 1 && ids[0] != c1.ID {
 		t.Errorf("expected card c1 (%s), got %s", c1.ID, ids[0])
+	}
+}
+
+// TestCard_BackPath_RoundTrip verifies that a card created with a back_path
+// value is persisted and read back correctly (T1 image slots).
+func TestCard_BackPath_RoundTrip(t *testing.T) {
+	db := newContentTestDB(t)
+	r := NewContentRepository(db)
+	ctx := context.Background()
+
+	c := &domain.Card{
+		Name:      "Emilia",
+		Rarity:    domain.RaritySSR,
+		ImagePath: "cards/emilia.webp",
+		BackPath:  "cards/emilia-back.webp",
+		Enabled:   true,
+	}
+	if err := r.CreateCard(ctx, c); err != nil {
+		t.Fatalf("CreateCard: %v", err)
+	}
+
+	got, err := r.GetCard(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetCard: %v", err)
+	}
+	if got.BackPath != "cards/emilia-back.webp" {
+		t.Errorf("BackPath round-trip: want %q, got %q", "cards/emilia-back.webp", got.BackPath)
+	}
+
+	// Update to a different back path and verify.
+	got.BackPath = "cards/emilia-back-v2.webp"
+	if err := r.UpdateCard(ctx, got); err != nil {
+		t.Fatalf("UpdateCard: %v", err)
+	}
+	got2, err := r.GetCard(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("GetCard after update: %v", err)
+	}
+	if got2.BackPath != "cards/emilia-back-v2.webp" {
+		t.Errorf("BackPath after update: want %q, got %q", "cards/emilia-back-v2.webp", got2.BackPath)
 	}
 }
 

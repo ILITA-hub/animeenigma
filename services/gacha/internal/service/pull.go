@@ -382,6 +382,8 @@ type BannerCardView struct {
 	Name      string        `json:"name"`
 	Rarity    domain.Rarity `json:"rarity"`
 	ImagePath string        `json:"image_path"`
+	// BackPath is the optional card-back image key; frontend falls back to branded default when empty.
+	BackPath  string        `json:"back_path"`
 	Owned     bool          `json:"owned"`
 }
 
@@ -391,6 +393,8 @@ type BannerView struct {
 	Name          string           `json:"name"`
 	Description   string           `json:"description"`
 	ArtPath       string           `json:"art_path"`
+	// BackdropPath is the separately uploaded slider/spin-page background image key.
+	BackdropPath  string           `json:"backdrop_path"`
 	IsStandard    bool             `json:"is_standard"`
 	Cards         []BannerCardView `json:"cards"`
 	MyPity        int              `json:"my_pity"`
@@ -421,7 +425,7 @@ func (s *PullService) ActiveBannersView(ctx context.Context, userID string) ([]B
 			for _, c := range pool[tier] {
 				cards = append(cards, BannerCardView{
 					ID: c.ID, Name: c.Name, Rarity: c.Rarity,
-					ImagePath: c.ImagePath, Owned: owned[c.ID] > 0,
+					ImagePath: c.ImagePath, BackPath: c.BackPath, Owned: owned[c.ID] > 0,
 				})
 			}
 		}
@@ -431,7 +435,8 @@ func (s *PullService) ActiveBannersView(ctx context.Context, userID string) ([]B
 		}
 		views = append(views, BannerView{
 			ID: b.ID, Name: b.Name, Description: b.Description, ArtPath: b.ArtPath,
-			IsStandard: b.IsStandard, Cards: cards, MyPity: pity, PityThreshold: s.econ.PityThreshold,
+			BackdropPath: b.BackdropPath, IsStandard: b.IsStandard, Cards: cards,
+			MyPity: pity, PityThreshold: s.econ.PityThreshold,
 		})
 	}
 	return views, nil

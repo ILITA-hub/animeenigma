@@ -131,9 +131,11 @@ func newPullSvcDB(t *testing.T) *gorm.DB {
 		`CREATE UNIQUE INDEX idx_user_banner ON gacha_pity(user_id, banner_id)`,
 		`CREATE TABLE gacha_cards (
 			id TEXT PRIMARY KEY, name TEXT NOT NULL, source_title TEXT, image_path TEXT NOT NULL,
+			back_path TEXT NOT NULL DEFAULT '',
 			rarity TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0, created_at DATETIME, updated_at DATETIME, deleted_at DATETIME)`,
 		`CREATE TABLE gacha_banners (
 			id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, art_path TEXT,
+			backdrop_path TEXT NOT NULL DEFAULT '',
 			is_standard INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 0,
 			active_from DATETIME, active_to DATETIME, sort_order INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME, updated_at DATETIME, deleted_at DATETIME)`,

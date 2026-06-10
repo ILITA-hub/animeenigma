@@ -33,6 +33,9 @@ type Card struct {
 	Name        string         `gorm:"size:128;not null" json:"name"`
 	SourceTitle string         `gorm:"size:256" json:"source_title"`
 	ImagePath   string         `gorm:"size:512;not null" json:"image_path"`
+	// BackPath is the optional card-back image key; frontend falls back to the
+	// branded default when empty.
+	BackPath    string         `gorm:"size:512" json:"back_path"`
 	Rarity      Rarity         `gorm:"size:8;not null;index" json:"rarity"`
 	Enabled     bool           `gorm:"not null;default:false;index" json:"enabled"`
 	CreatedAt   time.Time      `json:"created_at"`
@@ -69,6 +72,8 @@ type Banner struct {
 	Name        string         `gorm:"size:128;not null" json:"name"`
 	Description string         `gorm:"size:1024" json:"description"`
 	ArtPath     string         `gorm:"size:512" json:"art_path"`
+	// BackdropPath is the separately uploaded slider/spin-page background image key.
+	BackdropPath string        `gorm:"size:512" json:"backdrop_path"`
 	IsStandard  bool           `gorm:"not null;default:false" json:"is_standard"`
 	Enabled     bool           `gorm:"not null;default:false;index" json:"enabled"`
 	ActiveFrom  *time.Time     `json:"active_from,omitempty"`

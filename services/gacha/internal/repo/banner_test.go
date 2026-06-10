@@ -24,6 +24,7 @@ func newBannerTestDB(t *testing.T) *gorm.DB {
 			name        TEXT NOT NULL,
 			source_title TEXT NOT NULL DEFAULT '',
 			image_path  TEXT NOT NULL,
+			back_path   TEXT NOT NULL DEFAULT '',
 			rarity      TEXT NOT NULL,
 			enabled     INTEGER NOT NULL DEFAULT 0,
 			created_at  DATETIME,
@@ -42,18 +43,19 @@ func newBannerTestDB(t *testing.T) *gorm.DB {
 			UNIQUE(group_id, card_id)
 		)`,
 		`CREATE TABLE gacha_banners (
-			id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-			name        TEXT NOT NULL,
-			description TEXT NOT NULL DEFAULT '',
-			art_path    TEXT NOT NULL DEFAULT '',
-			is_standard INTEGER NOT NULL DEFAULT 0,
-			enabled     INTEGER NOT NULL DEFAULT 0,
-			active_from DATETIME,
-			active_to   DATETIME,
-			sort_order  INTEGER NOT NULL DEFAULT 0,
-			created_at  DATETIME,
-			updated_at  DATETIME,
-			deleted_at  DATETIME
+			id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+			name          TEXT NOT NULL,
+			description   TEXT NOT NULL DEFAULT '',
+			art_path      TEXT NOT NULL DEFAULT '',
+			backdrop_path TEXT NOT NULL DEFAULT '',
+			is_standard   INTEGER NOT NULL DEFAULT 0,
+			enabled       INTEGER NOT NULL DEFAULT 0,
+			active_from   DATETIME,
+			active_to     DATETIME,
+			sort_order    INTEGER NOT NULL DEFAULT 0,
+			created_at    DATETIME,
+			updated_at    DATETIME,
+			deleted_at    DATETIME
 		)`,
 		`CREATE INDEX idx_gacha_banners_enabled ON gacha_banners(enabled)`,
 		`CREATE INDEX idx_gacha_banners_deleted_at ON gacha_banners(deleted_at)`,
@@ -373,5 +375,44 @@ func TestBannerActiveNow_WindowAndFlags(t *testing.T) {
 	}
 	if active[2].Name != "B1 no window" {
 		t.Errorf("expected B1 at index 2, got %s", active[2].Name)
+	}
+}
+
+// TestBanner_BackdropPath_RoundTrip verifies that a banner created with a
+// backdrop_path value is persisted and read back correctly (T1 image slots).
+func TestBanner_BackdropPath_RoundTrip(t *testing.T) {
+	db := newBannerTestDB(t)
+	br := NewBannerRepository(db)
+	ctx := context.Background()
+
+	b := &domain.Banner{
+		Name:         "Spring Fest",
+		Enabled:      true,
+		ArtPath:      "banners/spring-art.webp",
+		BackdropPath: "banners/spring-backdrop.webp",
+	}
+	if err := br.CreateBanner(ctx, b); err != nil {
+		t.Fatalf("CreateBanner: %v", err)
+	}
+
+	got, err := br.GetBanner(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("GetBanner: %v", err)
+	}
+	if got.BackdropPath != "banners/spring-backdrop.webp" {
+		t.Errorf("BackdropPath round-trip: want %q, got %q", "banners/spring-backdrop.webp", got.BackdropPath)
+	}
+
+	// Update to a different backdrop path and verify.
+	got.BackdropPath = "banners/spring-backdrop-v2.webp"
+	if err := br.UpdateBanner(ctx, got); err != nil {
+		t.Fatalf("UpdateBanner: %v", err)
+	}
+	got2, err := br.GetBanner(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("GetBanner after update: %v", err)
+	}
+	if got2.BackdropPath != "banners/spring-backdrop-v2.webp" {
+		t.Errorf("BackdropPath after update: want %q, got %q", "banners/spring-backdrop-v2.webp", got2.BackdropPath)
 	}
 }
