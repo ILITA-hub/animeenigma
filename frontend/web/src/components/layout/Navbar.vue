@@ -34,6 +34,15 @@
           >
             {{ $t(link.label) }}
           </router-link>
+          <!-- Gacha «Лудка» nav item — gated by VITE_GACHA_ADMIN_ONLY -->
+          <router-link
+            v-if="gachaVisible"
+            to="/gacha"
+            class="nav-link-nt"
+            active-class="nav-link-nt--active"
+          >
+            {{ $t('gacha.nav_item') }}
+          </router-link>
         </div>
 
         <!-- Right Section — Neon Tokyo tools row -->
@@ -112,6 +121,18 @@
               </button>
             </div>
           </div>
+
+          <!-- Gacha balance chip — gated by VITE_GACHA_ADMIN_ONLY -->
+          <router-link
+            v-if="gachaVisible"
+            to="/gacha"
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-400/10 hover:bg-orange-400/20 transition-colors"
+            :aria-label="$t('gacha.balance_chip_aria', { n: gachaBalance })"
+            :title="$t('gacha.balance_tooltip')"
+          >
+            <Gem class="size-4 text-orange-400 flex-shrink-0" aria-hidden="true" />
+            <span class="text-orange-300 text-sm font-medium tabular-nums">{{ gachaBalance }}</span>
+          </router-link>
 
           <!-- Language Selector -->
           <div class="relative" ref="langDropdownRef">
@@ -208,6 +229,19 @@
               @click="mobileMenuOpen = false"
             >
               {{ $t(link.label) }}
+            </router-link>
+
+            <!-- Gacha «Лудка» mobile link -->
+            <router-link
+              v-if="gachaVisible"
+              to="/gacha"
+              class="flex items-center gap-2 px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              active-class="text-orange-400 bg-orange-500/10"
+              @click="mobileMenuOpen = false"
+            >
+              <Gem class="size-4 text-orange-400" aria-hidden="true" />
+              {{ $t('gacha.nav_item') }}
+              <span class="ml-auto text-orange-300 text-sm font-medium tabular-nums">{{ gachaBalance }}</span>
             </router-link>
 
             <!-- Divider -->
@@ -308,15 +342,33 @@ import { getLocalizedTitle } from '@/utils/title'
 import { getImageUrl } from '@/composables/useImageProxy'
 import { useFocusTrap } from '@/composables/useFocusTrap'
 import { useBodyScrollLock } from '@/composables/useBodyScrollLock'
-import { Search, X, ChevronDown, Menu } from 'lucide-vue-next'
+import { Search, X, ChevronDown, Menu, Gem } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 import ButtonGroup from '@/components/ui/ButtonGroup.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
 import BrandMark from '@/components/layout/BrandMark.vue'
+import { useGachaVisible } from '@/utils/gachaGate'
+import { useGachaStore } from '@/stores/gacha'
 
 const router = useRouter()
 const { locale } = useI18n()
 const authStore = useAuthStore()
+
+// Gacha gate + balance chip
+const gachaVisible = useGachaVisible()
+const gachaStore = useGachaStore()
+const gachaBalance = computed(() => gachaStore.balance)
+
+// Refresh wallet once on login (whenever isAuthenticated flips true and gacha is visible)
+watch(
+  () => authStore.isAuthenticated,
+  (authenticated) => {
+    if (authenticated && gachaVisible.value) {
+      gachaStore.refreshWallet()
+    }
+  },
+  { immediate: true },
+)
 
 // Workstream notifications / Phase 3 — feature flag mirrors App.vue. Build-
 // time constant, no reactive dependency.

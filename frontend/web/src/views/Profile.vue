@@ -926,6 +926,11 @@
               </div>
             </div>
           </template>
+
+          <!-- Gacha Collection Tab — visible when gachaVisible -->
+          <template v-if="gachaVisible" #collection>
+            <GachaCollection />
+          </template>
         </Tabs>
       </div>
     </template>
@@ -1006,6 +1011,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { Badge, Button, Modal, Tabs, Select, PaginationBar, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
+import GachaCollection from '@/components/profile/GachaCollection.vue'
+import { useGachaVisible } from '@/utils/gachaGate'
 import { AnimeContextMenu, AnimeKebab } from '@/components/anime'
 import { userApi, publicApi } from '@/api/client'
 import { useToast } from '@/composables/useToast'
@@ -1074,6 +1081,7 @@ const { t, te, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
 const toast = useToast()
+const gachaVisible = useGachaVisible()
 
 const siteOrigin = window.location.origin
 
@@ -1158,6 +1166,9 @@ const tabs = computed(() => {
   const baseTabs = [
     { value: 'watchlist', label: t('profile.tabs.watchlist') },
   ]
+  if (gachaVisible.value) {
+    baseTabs.push({ value: 'collection', label: t('gacha.collection_tab') })
+  }
   if (isOwnProfile.value) {
     baseTabs.push(
       { value: 'settings', label: t('profile.tabs.settings') },

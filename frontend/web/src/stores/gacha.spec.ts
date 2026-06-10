@@ -60,7 +60,9 @@ function makePullResult(): PullResult {
 }
 
 // Build a standard httputil envelope { data: { success, data } }
-function envelope<T>(data: T) {
+// Cast as any to satisfy AxiosResponse shape requirement in test context
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function envelope<T>(data: T): any {
   return { data: { success: true, data } }
 }
 
