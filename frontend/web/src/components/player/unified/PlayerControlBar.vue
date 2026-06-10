@@ -9,6 +9,7 @@
         :duration-sec="duration"
         :chapters="chapters"
         :still-url="stillUrl"
+        :fragments="fragments"
         @seek="emit('seek', $event)"
       />
       <span class="pl-time pl-time-dur" data-test="time-duration">{{ fmt(duration) }}</span>
@@ -182,8 +183,10 @@ withDefaults(
     stillUrl?: string
     /** which floating menu is open, for trigger-button is-open highlight */
     openMenu?: 'source' | 'settings' | 'subs' | 'episodes' | null
+    /** hacker-mode fragment heatmap, forwarded to the scrub bar */
+    fragments?: { startPct: number; widthPct: number; tone: 'ok' | 'warn' | 'bad'; label: string }[]
   }>(),
-  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null },
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [] },
 )
 
 const emit = defineEmits<{

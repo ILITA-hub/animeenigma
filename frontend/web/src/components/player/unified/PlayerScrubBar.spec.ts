@@ -20,4 +20,29 @@ describe('PlayerScrubBar', () => {
     await w.find('[data-test="track"]').trigger('click', { clientX: 50 })
     expect(w.emitted('seek')).toBeTruthy()
   })
+  it('renders hacker-mode fragment segments with tones and labels', () => {
+    const w = mount(PlayerScrubBar, {
+      props: {
+        progress: 10,
+        buffered: 30,
+        durationSec: 1400,
+        chapters: [],
+        fragments: [
+          { startPct: 0, widthPct: 2, tone: 'ok' as const, label: '300 KB · 120 ms' },
+          { startPct: 2, widthPct: 2, tone: 'bad' as const, label: '2048 KB · 900 ms' },
+        ],
+      },
+    })
+    const frags = w.findAll('[data-test="frag"]')
+    expect(frags.length).toBe(2)
+    expect(frags[0].attributes('data-tone')).toBe('ok')
+    expect(frags[1].attributes('data-tone')).toBe('bad')
+    expect(frags[0].attributes('title')).toBe('300 KB · 120 ms')
+  })
+  it('renders no fragment layer by default', () => {
+    const w = mount(PlayerScrubBar, {
+      props: { progress: 10, buffered: 30, durationSec: 1400, chapters: [] },
+    })
+    expect(w.findAll('[data-test="frag"]').length).toBe(0)
+  })
 })
