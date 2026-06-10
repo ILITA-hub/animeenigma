@@ -16,6 +16,15 @@ type Config struct {
 	SuppressedAlerts []string // alert keys to ignore (e.g., "Parser Failure Rate:kodik")
 	StatePath        string
 	IssuePath        string
+	// PlayerInternalURL is the base URL of the player service's internal
+	// feedback API (the bot runs on the host; player publishes 127.0.0.1:8083).
+	PlayerInternalURL string
+	// AttachmentsDir is where Telegram attachments are saved on the host so
+	// the Claude dispatcher can Read them (relative paths resolve against
+	// PROJECT_ROOT).
+	AttachmentsDir string
+	// FeedbackBaseURL prefixes /admin/feedback deep links in Telegram replies.
+	FeedbackBaseURL string
 	// TestMode is a future-hook flag (Phase 23 Plan 23-03 / T-23-10
 	// mitigation): when MAINTENANCE_TEST_MODE=true, the dispatcher MAY
 	// short-circuit before invoking the Claude CLI / Telegram client so
@@ -103,6 +112,9 @@ func Load() (*Config, error) {
 		SuppressedAlerts: parseSuppressed(getEnv("SUPPRESSED_ALERTS", "")),
 		StatePath:        getEnv("STATE_PATH", ".claude/maintenance-state.json"),
 		IssuePath:        getEnv("ISSUES_PATH", "docs/issues/issues.json"),
+		PlayerInternalURL: getEnv("PLAYER_INTERNAL_URL", "http://localhost:8083"),
+		AttachmentsDir:    getEnv("ATTACHMENTS_DIR", ".claude/maintenance-attachments"),
+		FeedbackBaseURL:   getEnv("FEEDBACK_BASE_URL", "https://animeenigma.ru"),
 		TestMode:         getEnvBool("MAINTENANCE_TEST_MODE", false),
 	}, nil
 }

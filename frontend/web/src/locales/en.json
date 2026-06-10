@@ -1010,7 +1010,13 @@
         "updatedBy": "Status changed by",
         "console": "Console logs",
         "network": "Network logs",
-        "html": "Page HTML"
+        "html": "Page HTML",
+        "attachments": "Attachments",
+        "attachmentLoadError": "Failed to load attachment",
+        "download": "Download",
+        "forwardedFrom": "Forwarded from",
+        "replyTo": "In reply to",
+        "fromAdmin": "from admin"
       }
     },
     "recs": {

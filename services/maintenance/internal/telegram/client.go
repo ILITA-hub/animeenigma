@@ -79,6 +79,86 @@ type Message struct {
 	Text      string    `json:"text"`
 	Entities  []Entity  `json:"entities,omitempty"`
 	ReplyTo   *Message  `json:"reply_to_message,omitempty"`
+
+	// Media — present when the message carries an attachment. Photo holds
+	// multiple sizes of the same image; the last element is the largest.
+	Caption      string      `json:"caption,omitempty"`
+	Photo        []PhotoSize `json:"photo,omitempty"`
+	Document     *Document   `json:"document,omitempty"`
+	Video        *Video      `json:"video,omitempty"`
+	Audio        *Audio      `json:"audio,omitempty"`
+	Voice        *Voice      `json:"voice,omitempty"`
+	MediaGroupID string      `json:"media_group_id,omitempty"`
+
+	// ForwardOrigin is set on forwarded messages (Bot API 7.0+).
+	ForwardOrigin *ForwardOrigin `json:"forward_origin,omitempty"`
+}
+
+type PhotoSize struct {
+	FileID   string `json:"file_id"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	FileSize int64  `json:"file_size,omitempty"`
+}
+
+type Document struct {
+	FileID   string `json:"file_id"`
+	FileName string `json:"file_name,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
+}
+
+type Video struct {
+	FileID   string `json:"file_id"`
+	FileName string `json:"file_name,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
+	Duration int    `json:"duration,omitempty"`
+}
+
+type Audio struct {
+	FileID   string `json:"file_id"`
+	FileName string `json:"file_name,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
+}
+
+type Voice struct {
+	FileID   string `json:"file_id"`
+	MimeType string `json:"mime_type,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
+}
+
+// ForwardOrigin describes where a forwarded message came from. Type is one of
+// "user", "hidden_user", "chat", "channel".
+type ForwardOrigin struct {
+	Type            string    `json:"type"`
+	SenderUser      *UserInfo `json:"sender_user,omitempty"`
+	SenderUserName  string    `json:"sender_user_name,omitempty"`
+	SenderChat      *Chat     `json:"sender_chat,omitempty"`
+	Chat            *Chat     `json:"chat,omitempty"`
+	AuthorSignature string    `json:"author_signature,omitempty"`
+}
+
+// Label renders a human-readable origin ("@user", "Channel Title", …).
+func (o *ForwardOrigin) Label() string {
+	if o == nil {
+		return ""
+	}
+	switch {
+	case o.SenderUser != nil && o.SenderUser.Username != "":
+		return "@" + o.SenderUser.Username
+	case o.SenderUser != nil:
+		return o.SenderUser.FirstName
+	case o.SenderUserName != "":
+		return o.SenderUserName
+	case o.SenderChat != nil && o.SenderChat.Title != "":
+		return o.SenderChat.Title
+	case o.Chat != nil && o.Chat.Title != "":
+		return o.Chat.Title
+	default:
+		return o.Type
+	}
 }
 
 type UserInfo struct {
@@ -280,6 +360,51 @@ func (c *Client) AnswerCallbackQuery(callbackID string, text string) error {
 	}
 	_, err := c.post("answerCallbackQuery", body)
 	return err
+}
+
+// File is the getFile result — FilePath feeds DownloadFile.
+type File struct {
+	FileID   string `json:"file_id"`
+	FileSize int64  `json:"file_size,omitempty"`
+	FilePath string `json:"file_path,omitempty"`
+}
+
+// maxDownloadSize caps attachment downloads. The Bot API itself refuses
+// getFile for files over 20MB, so this is a defensive ceiling.
+const maxDownloadSize = 25 * 1024 * 1024
+
+// GetFile resolves a file_id to a downloadable file path.
+func (c *Client) GetFile(fileID string) (*File, error) {
+	resp, err := c.post("getFile", map[string]interface{}{"file_id": fileID})
+	if err != nil {
+		return nil, err
+	}
+	var f File
+	if err := json.Unmarshal(resp.Result, &f); err != nil {
+		return nil, fmt.Errorf("parse getFile: %w", err)
+	}
+	return &f, nil
+}
+
+// DownloadFile fetches the file bytes for a path returned by GetFile.
+func (c *Client) DownloadFile(filePath string) ([]byte, error) {
+	url := "https://api.telegram.org/file/bot" + c.token + "/" + filePath
+	resp, err := c.http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("telegram download: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("telegram download: status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("telegram download read: %w", err)
+	}
+	if len(data) > maxDownloadSize {
+		return nil, fmt.Errorf("telegram download: file exceeds %d bytes", maxDownloadSize)
+	}
+	return data, nil
 }
 
 func (c *Client) SetReactionsSupported(supported bool) {

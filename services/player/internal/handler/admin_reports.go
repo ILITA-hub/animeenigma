@@ -91,6 +91,8 @@ type reportMeta struct {
 	URL           string `json:"url"`
 	Description   string `json:"description"`
 	Status        string `json:"status"`
+	Source        string   `json:"source,omitempty"`
+	Attachments   []string `json:"attachments,omitempty"`
 }
 
 func (h *AdminReportsHandler) statusPath() string {

@@ -129,3 +129,6 @@ tmp/
 
 # Visual brainstorming companion (local-only)
 .superpowers/
+
+# Maintenance bot: downloaded Telegram attachments (mirrored to the feedback store; never commit)
+.claude/maintenance-attachments/

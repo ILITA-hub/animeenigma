@@ -1010,7 +1010,13 @@
         "updatedBy": "Статус изменил",
         "console": "Логи консоли",
         "network": "Сетевые логи",
-        "html": "HTML страницы"
+        "html": "HTML страницы",
+        "attachments": "Вложения",
+        "attachmentLoadError": "Не удалось загрузить вложение",
+        "download": "Скачать",
+        "forwardedFrom": "Переслано от",
+        "replyTo": "В ответ на",
+        "fromAdmin": "от админа"
       }
     },
     "recs": {

@@ -68,6 +68,17 @@ func NewRouter(
 		r.Get("/internal/users/{user_id}/list", internalListHandler.ListByStatuses)
 	}
 
+	// Internal feedback write API — used by the host-side maintenance bot to
+	// mirror Telegram conversations (and their attachments) into the same
+	// on-disk store the /admin/feedback browser reads, and to drive entry
+	// status as it analyzes/fixes. Same /internal/* exposure rules as above
+	// (not gateway-proxied; player's port is published on 127.0.0.1 only).
+	if adminReportsHandler != nil {
+		r.Post("/internal/feedback", adminReportsHandler.CreateInternal)
+		r.Post("/internal/feedback/{id}/attachments", adminReportsHandler.UploadAttachmentInternal)
+		r.Patch("/internal/feedback/{id}/status", adminReportsHandler.SetStatusInternal)
+	}
+
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Protected routes - user data
@@ -183,6 +194,7 @@ func NewRouter(
 				r.Use(AdminRoleMiddleware)
 				r.Get("/admin/reports", adminReportsHandler.List)
 				r.Get("/admin/reports/{id}", adminReportsHandler.Get)
+				r.Get("/admin/reports/{id}/attachments/{name}", adminReportsHandler.GetAttachment)
 				r.Patch("/admin/reports/{id}/status", adminReportsHandler.SetStatus)
 			})
 		}

@@ -557,6 +557,13 @@ export const adminApi = {
     apiClient.get<FeedbackDetail | { data: FeedbackDetail }>(`/admin/reports/${encodeURIComponent(id)}`),
   setReportStatus: (id: string, status: FeedbackStatus) =>
     apiClient.patch(`/admin/reports/${encodeURIComponent(id)}/status`, { status }),
+  // Attachments need the Bearer header, so they're fetched as blobs (a plain
+  // <img src> would arrive unauthenticated) and rendered via object URLs.
+  getReportAttachment: (id: string, name: string) =>
+    apiClient.get<Blob>(
+      `/admin/reports/${encodeURIComponent(id)}/attachments/${encodeURIComponent(name)}`,
+      { responseType: 'blob' },
+    ),
 }
 
 // Phase 5 (LIB-09) — Raw Library admin API. All routes are admin-gated

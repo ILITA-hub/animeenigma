@@ -18,6 +18,10 @@ export interface FeedbackListItem {
   url: string
   description: string
   status: FeedbackStatus
+  // 'telegram' for entries mirrored by the maintenance bot
+  source?: string
+  // Stored attachment filenames (served via /admin/reports/{id}/attachments/{name})
+  attachments?: string[]
 }
 
 export interface FeedbackListResponse {
@@ -41,4 +45,12 @@ export interface FeedbackDetail extends FeedbackListItem {
   page_html?: string
   status_updated_at?: string
   status_updated_by?: string
+  // Telegram-sourced entries (maintenance bot mirror)
+  telegram_meta?: {
+    message_id?: number
+    chat_id?: number
+    forwarded_from?: string
+    reply_to?: string
+    from_admin?: boolean
+  }
 }
