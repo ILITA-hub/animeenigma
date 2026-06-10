@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -772,13 +773,27 @@ func (c *Client) GetSimilarAnime(ctx context.Context, shikimoriID string) ([]dom
 	return result, nil
 }
 
-// ExtractShikimoriID extracts ID from various Shikimori URL formats
+// shikimoriIDRe pulls the numeric anime ID out of the `/animes/<id>` path
+// segment of a Shikimori URL, or out of a bare slugged id. Shikimori prefixes
+// some ids with a literal "z" (e.g. z5114) and appends a "-slug" — both are
+// optional. Anchored on `/animes/` or start-of-string so it never grabs stray
+// digits elsewhere in a URL (ports, query params, etc.).
+var shikimoriIDRe = regexp.MustCompile(`(?:/animes/|^)z?(\d+)`)
+
+// ExtractShikimoriID extracts the numeric Shikimori ID from various inputs:
+// a bare id ("5114"), a slugged id ("z5114", "5114-cowboy-bebop"), or a full
+// URL on any Shikimori domain ("https://shikimori.one/animes/z5114-cowboy-bebop",
+// shikimori.me, shikimori.io, …). Returns the input unchanged when no id is found.
 func ExtractShikimoriID(input string) string {
-	// Handle direct ID
+	input = strings.TrimSpace(input)
+
+	// Direct numeric ID — fast path.
 	if _, err := strconv.Atoi(input); err == nil {
 		return input
 	}
 
-	// TODO: Parse URL formats like https://shikimori.one/animes/z5114
+	if m := shikimoriIDRe.FindStringSubmatch(input); m != nil {
+		return m[1]
+	}
 	return input
 }

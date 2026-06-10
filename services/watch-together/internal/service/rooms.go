@@ -225,11 +225,10 @@ func (s *RoomService) Get(ctx context.Context, roomID string) (*domain.RoomSnaps
 // caller gets ErrNotHost and the room is untouched.
 //
 // On success this removes wt:room:{id}, wt:room:{id}:members, and
-// wt:room:{id}:messages atomically. Connected members are NOT yet
-// kicked — the hub broadcast (`room:closed`) is wired in 01.5/01.6
-// where the hub instance is available to handlers. A TODO at the
-// deletion point flags this contract gap so it doesn't ship to prod
-// without the broadcast.
+// wt:room:{id}:messages atomically. Connected members are kicked by the
+// handler layer (handler/rooms.go, Plan 05.1), which broadcasts `room:closed`
+// to members and cancels the grace timer BEFORE invoking this delete — so this
+// method only owns the Redis teardown.
 func (s *RoomService) Delete(ctx context.Context, requesterUserID, roomID string) error {
 	if requesterUserID == "" {
 		return fmt.Errorf("%w: requester user_id is required", ErrInvalidInput)
@@ -252,11 +251,6 @@ func (s *RoomService) Delete(ctx context.Context, requesterUserID, roomID string
 		)
 		return ErrNotHost
 	}
-
-	// TODO(01.5/01.6): hub.Broadcast(roomID, domain.MsgRoomClosed) before
-	// the DeleteRoom call so connected members receive the close envelope
-	// before their WS reads start failing. Wired here once main.go owns
-	// a *hub.Hub reference the service can hold.
 
 	// Plan 05.2 WT-NF-06 — observe session duration + chat count + Dec the
 	// active gauge BEFORE the destructive DeleteRoom call. Best-effort:

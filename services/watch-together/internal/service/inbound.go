@@ -8,8 +8,7 @@
 // hub.SendTo.
 //
 // The router is the production binding for Connection.OnMessage installed by
-// the WS upgrade handler in 01.5 (handler/websocket.go). 01.5 left the binding
-// at nil with a TODO(01.6) marker; 01.6.3 wires `c.OnMessage = router.Dispatch`
+// the WS upgrade handler (handler/websocket.go): `c.OnMessage = router.Dispatch`
 // and `c.OnClose` chains into router.OnDisconnect for drift + rate-limit
 // cleanup.
 //
