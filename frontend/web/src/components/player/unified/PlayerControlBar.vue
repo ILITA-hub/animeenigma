@@ -1,5 +1,19 @@
 <template>
   <div class="pl-controls">
+    <!-- Scrub row: current time · track · total time (per design) -->
+    <div class="pl-scrub-row">
+      <span class="pl-time pl-time-cur" data-test="time-current">{{ fmt(currentTime) }}</span>
+      <PlayerScrubBar
+        :progress="progress"
+        :buffered="buffered"
+        :duration-sec="duration"
+        :chapters="chapters"
+        :still-url="stillUrl"
+        @seek="emit('seek', $event)"
+      />
+      <span class="pl-time pl-time-dur" data-test="time-duration">{{ fmt(duration) }}</span>
+    </div>
+
     <div class="pl-btns">
 
       <!-- Play / Pause -->
@@ -97,18 +111,13 @@
         />
       </div>
 
-      <!-- Time display -->
-      <span class="pl-time" data-test="time-current">{{ fmt(currentTime) }}</span>
-      <span class="pl-time-sep" aria-hidden="true">/</span>
-      <span class="pl-time pl-time-dur" data-test="time-duration">{{ fmt(duration) }}</span>
-
       <!-- Spacer -->
       <span class="pl-spacer" aria-hidden="true" />
 
       <!-- Source pill -->
       <button
         class="pl-srcbtn"
-        :class="{ 'is-open': false }"
+        :class="{ 'is-open': openMenu === 'source' }"
         data-test="source-pill"
         aria-label="`Source: ${providerName} · ${audioLabel}`"
         @click="emit('toggle-source')"
@@ -132,6 +141,7 @@
       <!-- Subtitles (CC) -->
       <button
         class="pl-icon"
+        :class="{ 'is-open': openMenu === 'subs' }"
         aria-label="Subtitles"
         data-test="toggle-subs"
         @click="emit('toggle-subs')"
@@ -147,6 +157,7 @@
       <!-- Settings gear -->
       <button
         class="pl-icon"
+        :class="{ 'is-open': openMenu === 'settings' }"
         aria-label="Settings"
         data-test="toggle-settings"
         @click="emit('toggle-settings')"
@@ -194,20 +205,40 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  playing: boolean
-  currentTime: number
-  duration: number
-  volume: number
-  muted: boolean
-  providerName: string
-  providerHue: string
-  audioLabel: string
-}>()
+import PlayerScrubBar from './PlayerScrubBar.vue'
+
+interface Chapter {
+  kind: 'intro' | 'outro'
+  startPct: number
+  widthPct: number
+}
+
+withDefaults(
+  defineProps<{
+    playing: boolean
+    currentTime: number
+    duration: number
+    volume: number
+    muted: boolean
+    providerName: string
+    providerHue: string
+    audioLabel: string
+    /** 0..100 playback progress for the scrub fill */
+    progress?: number
+    /** 0..100 buffered for the scrub bar */
+    buffered?: number
+    chapters?: Chapter[]
+    stillUrl?: string
+    /** which floating menu is open, for trigger-button is-open highlight */
+    openMenu?: 'source' | 'settings' | 'subs' | null
+  }>(),
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null },
+)
 
 const emit = defineEmits<{
   (e: 'toggle-play'): void
   (e: 'seek-rel', delta: number): void
+  (e: 'seek', pct: number): void
   (e: 'set-volume', v: number): void
   (e: 'toggle-mute'): void
   (e: 'toggle-source'): void
@@ -239,6 +270,14 @@ function onVolumeInput(event: Event) {
   z-index: 7;
   padding: 30px 16px 12px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+}
+
+/* Scrub row — time · track · time (per design) */
+.pl-scrub-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
 .pl-btns {
@@ -294,24 +333,18 @@ function onVolumeInput(event: Event) {
   margin-right: 6px;
 }
 
-/* Time labels */
+/* Time labels — flank the scrub track */
 .pl-time {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.85);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-  min-width: 38px;
-}
-
-.pl-time-sep {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  flex-shrink: 0;
-  margin: 0 1px;
+  width: 44px;
 }
 
 .pl-time-dur {
-  color: rgba(255, 255, 255, 0.55);
+  text-align: right;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /* Source pill */

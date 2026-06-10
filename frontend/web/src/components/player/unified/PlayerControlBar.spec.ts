@@ -70,4 +70,31 @@ describe('PlayerControlBar', () => {
     const w = mount(PlayerControlBar, { props: baseProps })
     expect(w.find('[data-test="toggle-theater"]').exists()).toBe(false)
   })
+
+  it('renders the scrub bar inside a scrub row with times flanking the track', () => {
+    const w = mount(PlayerControlBar, { props: baseProps })
+    const row = w.find('.pl-scrub-row')
+    expect(row.exists()).toBe(true)
+    // current time, then the track, then duration — left/right of the track
+    expect(row.find('[data-test="time-current"]').exists()).toBe(true)
+    expect(row.find('[data-test="track"]').exists()).toBe(true)
+    expect(row.find('[data-test="time-duration"]').exists()).toBe(true)
+    // time must NOT live in the button row
+    expect(w.find('.pl-btns [data-test="time-current"]').exists()).toBe(false)
+  })
+
+  it('forwards a seek pct from the scrub bar', async () => {
+    const w = mount(PlayerControlBar, { props: { ...baseProps, duration: 100 } })
+    await w.findComponent({ name: 'PlayerScrubBar' }).vm.$emit('seek', 42)
+    expect(w.emitted('seek')?.[0]).toEqual([42])
+  })
+
+  it('highlights the source pill / CC / gear when their menu is open', () => {
+    const src = mount(PlayerControlBar, { props: { ...baseProps, openMenu: 'source' } })
+    expect(src.find('[data-test="source-pill"]').classes()).toContain('is-open')
+    const subs = mount(PlayerControlBar, { props: { ...baseProps, openMenu: 'subs' } })
+    expect(subs.find('[data-test="toggle-subs"]').classes()).toContain('is-open')
+    const settings = mount(PlayerControlBar, { props: { ...baseProps, openMenu: 'settings' } })
+    expect(settings.find('[data-test="toggle-settings"]').classes()).toContain('is-open')
+  })
 })

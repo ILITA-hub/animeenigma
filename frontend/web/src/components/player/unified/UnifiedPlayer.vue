@@ -135,8 +135,14 @@
       :provider-name="activeProviderName"
       :provider-hue="activeProviderHue"
       :audio-label="audioLabel"
+      :progress="state.progress.value"
+      :buffered="bufferedPct"
+      :chapters="[]"
+      :still-url="anime.still"
+      :open-menu="openMenu"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"
+      @seek="onSeek"
       @set-volume="onSetVolume"
       @toggle-mute="onToggleMute"
       @toggle-source="toggleMenu('source')"
@@ -145,18 +151,6 @@
       @toggle-pip="onTogglePip"
       @toggle-fullscreen="onToggleFullscreen"
     />
-
-    <!-- PlayerScrubBar (inside control bar area via slot or directly above it) -->
-    <div class="pl-scrub-overlay" @click.stop>
-      <PlayerScrubBar
-        :progress="state.progress.value"
-        :buffered="bufferedPct"
-        :duration-sec="duration"
-        :chapters="[]"
-        :still-url="anime.still"
-        @seek="onSeek"
-      />
-    </div>
 
     <!-- Source panel (floating, top-right) -->
     <div v-if="openMenu === 'source'" class="pl-floating pl-floating--source" @click.stop>
@@ -183,7 +177,7 @@
         :quality="state.quality.value"
         :qualities="['Auto']"
         :speed="state.speed.value"
-        :speeds="[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]"
+        :speeds="[0.75, 1, 1.25, 1.5, 2]"
         :auto-next="state.autoNext.value"
         :auto-skip="state.autoSkip.value"
         @update:quality="v => { state.quality.value = v }"
@@ -233,7 +227,6 @@ import {
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
 import PlayerControlBar from './PlayerControlBar.vue'
-import PlayerScrubBar from './PlayerScrubBar.vue'
 import SourcePanel from './SourcePanel.vue'
 import PlaybackSettingsMenu from './PlaybackSettingsMenu.vue'
 import SubtitlesMenu from './SubtitlesMenu.vue'
@@ -630,7 +623,8 @@ const chosenSubFormat = computed<'ass' | 'srt' | 'vtt' | null>(() => {
   return null
 })
 
-const subLangsAvailable = computed(() => ['off', 'en', 'ru', 'ja'])
+// Real subtitle languages (the menu renders the "Off" option itself).
+const subLangsAvailable = computed(() => ['en', 'ru', 'ja'])
 
 function onSelectSubTrack(track: SubTrack) {
   chosenSub.value = track
@@ -910,19 +904,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* Scrub bar override position — sits ABOVE the button row with a clear gap so
-   the buttons' hover/focus outlines never overlap the progress track. The
-   button row is 40px tall starting 12px from the bottom (top edge ≈ 52px), so
-   58px leaves a 6px breathing band. */
-.pl-scrub-overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 58px;
-  z-index: 7;
-  padding: 0 16px;
 }
 
 /* Keyboard focus ring on the player shell (tabindex=0 for hotkeys). */

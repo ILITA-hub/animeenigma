@@ -36,7 +36,7 @@
           :style="subLang === lang ? 'background: rgba(0,212,255,0.18)' : ''"
           @click="emit('update:subLang', lang)"
         >
-          {{ lang.toUpperCase() }}
+          {{ langLabel(lang) }}
         </button>
       </div>
     </div>
@@ -172,6 +172,16 @@ const emit = defineEmits<{
   (e: 'update:subOffset', value: number): void
   (e: 'open-browse'): void
 }>()
+
+const LANG_LABELS: Record<string, string> = {
+  en: 'English',
+  ru: 'Русский',
+  ja: '日本語',
+}
+
+function langLabel(code: string): string {
+  return LANG_LABELS[code] ?? code.toUpperCase()
+}
 
 const offsetHint = computed(() => {
   const v = props.subOffset
