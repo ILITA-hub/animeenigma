@@ -17,15 +17,14 @@
       :aria-label="$t('system.statusBanner.dismiss')"
       @click="dismiss"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-      </svg>
+      <X class="size-4" aria-hidden="true" />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { X } from 'lucide-vue-next'
 import { useSystemStatus } from '@/composables/useSystemStatus'
 
 // Component owns its own composable subscription — no props, no emits.
