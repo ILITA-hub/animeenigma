@@ -120,6 +120,16 @@
 
     <BufferingOverlay :visible="(showBuffering || isResolving) && !sourceError" />
 
+    <DebugHud
+      v-if="hudVisible"
+      :stats="playbackStats"
+      :frags="engine.fragStats.value"
+      :bandwidth="engine.bandwidthEstimate.value"
+      :provider="activeProviderName"
+      :stream-type="currentStream?.type ?? '—'"
+      :level-label="engine.currentLevelLabel.value"
+    />
+
     <SkipIntroChip
       :visible="!!skipTarget"
       :label="skipTarget?.kind === 'outro' ? 'Skip Outro' : 'Skip Intro'"
@@ -151,6 +161,7 @@
       :chapters="chapters"
       :still-url="anime.still"
       :open-menu="openMenu"
+      :fragments="fragOverlay"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"
       @seek="onSeek"
@@ -201,10 +212,13 @@
         :speeds="[0.75, 1, 1.25, 1.5, 2]"
         :auto-next="state.autoNext.value"
         :auto-skip="state.autoSkip.value"
+        :hacker-mode="state.hackerMode.value"
+        :debug-stats="debugStats"
         @update:quality="onSetQuality"
         @update:speed="onSetSpeed"
         @update:auto-next="v => { state.autoNext.value = v }"
         @update:auto-skip="v => { state.autoSkip.value = v }"
+        @update:hacker-mode="v => { state.hackerMode.value = v }"
       />
     </div>
 
@@ -255,12 +269,14 @@ import SubtitlesMenu from './SubtitlesMenu.vue'
 import BrowseSubsModal from './BrowseSubsModal.vue'
 import BigPlayButton from './overlays/BigPlayButton.vue'
 import BufferingOverlay from './overlays/BufferingOverlay.vue'
+import DebugHud from './overlays/DebugHud.vue'
 import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
 
 import { useSkipTimes } from '@/composables/useSkipTimes'
 import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
+import { usePlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
 import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlayer/skipSegments'
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
 import { useProviderResolver } from '@/composables/unifiedPlayer/useProviderResolver'
@@ -711,6 +727,46 @@ function onTimeUpdate() {
     setBuffering(false)
   }
 }
+
+// ─── Hacker mode (debug HUD) ──────────────────────────────────────────────────
+
+const statsEnabled = computed(() => state.hackerMode.value)
+const { stats: playbackStats } = usePlaybackStats(videoRef, statsEnabled)
+
+// HUD shows while paused or while actively buffering/seeking. Uses
+// showBuffering (post-150ms-grace) so instant seeks don't flash it.
+const hudVisible = computed(
+  () => state.hackerMode.value && (!state.playing.value || showBuffering.value),
+)
+
+// Scrub-bar heatmap segments — size-tinted (green <300KB, amber <1MB, red ≥1MB).
+const fragOverlay = computed(() => {
+  if (!state.hackerMode.value) return []
+  const dur = duration.value
+  if (!dur) return []
+  return engine.fragStats.value.map((f) => ({
+    startPct: (f.start / dur) * 100,
+    widthPct: (f.duration / dur) * 100,
+    tone: (f.size < 300_000 ? 'ok' : f.size < 1_000_000 ? 'warn' : 'bad') as 'ok' | 'warn' | 'bad',
+    label: `${Math.round(f.size / 1024)} KB · ${Math.round(f.loadMs)} ms`,
+  }))
+})
+
+// Compact line set for the settings-menu mini-stats section.
+const debugStats = computed(() => {
+  if (!state.hackerMode.value) return null
+  const bwv = engine.bandwidthEstimate.value
+  const frs = engine.fragStats.value
+  const last = frs[frs.length - 1]
+  return {
+    bw: bwv > 0 ? `${(bwv / 1_000_000).toFixed(1)} Mbit/s` : '—',
+    buffer: `+${playbackStats.value.bufferAheadSec.toFixed(1)}s / −${playbackStats.value.bufferBehindSec.toFixed(1)}s`,
+    level:
+      engine.currentLevelLabel.value ||
+      (currentStream.value?.type === 'mp4' ? 'mp4' : '—'),
+    frag: last ? `${Math.round(last.size / 1024)} KB · ${Math.round(last.loadMs)} ms` : '—',
+  }
+})
 
 // ─── Next episode logic ───────────────────────────────────────────────────────
 

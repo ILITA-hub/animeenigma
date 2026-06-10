@@ -118,6 +118,27 @@
           @update:model-value="emit('update:autoSkip', $event)"
         />
       </div>
+
+      <!-- Hacker mode toggle -->
+      <div class="flex items-center gap-[10px] px-[10px] py-[9px]">
+        <Terminal class="size-4 flex-shrink-0 text-[var(--ink-2)]" aria-hidden="true" />
+        <span class="flex-1 text-[14px] text-[var(--ink-2)]">Hacker mode</span>
+        <Switch
+          :model-value="hackerMode"
+          @update:model-value="emit('update:hackerMode', $event)"
+        />
+      </div>
+
+      <!-- Live debug mini-stats (hacker mode only) -->
+      <template v-if="hackerMode && debugStats">
+        <div class="h-px mx-1 my-[6px]" style="background: var(--border);"/>
+        <div class="px-[10px] pb-[8px] font-mono text-[11px] leading-[1.8] text-[var(--success)]" data-test="debug-stats">
+          <div>BW   {{ debugStats.bw }}</div>
+          <div>BUF  {{ debugStats.buffer }}</div>
+          <div>LVL  {{ debugStats.level }}</div>
+          <div>FRAG {{ debugStats.frag }}</div>
+        </div>
+      </template>
     </template>
   </div>
 </template>
@@ -125,7 +146,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Switch from '@/components/ui/Switch.vue'
-import { ChevronLeft, ChevronDown, Check, MonitorPlay, Gauge, SkipForward, FastForward } from 'lucide-vue-next'
+import { ChevronLeft, ChevronDown, Check, MonitorPlay, Gauge, SkipForward, FastForward, Terminal } from 'lucide-vue-next'
 
 defineProps<{
   quality: string
@@ -136,6 +157,9 @@ defineProps<{
   speeds: number[]
   autoNext: boolean
   autoSkip: boolean
+  hackerMode: boolean
+  /** compact live debug numbers; null hides the section */
+  debugStats?: { bw: string; buffer: string; level: string; frag: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -143,6 +167,7 @@ const emit = defineEmits<{
   (e: 'update:speed', value: number): void
   (e: 'update:autoNext', value: boolean): void
   (e: 'update:autoSkip', value: boolean): void
+  (e: 'update:hackerMode', value: boolean): void
 }>()
 
 type View = 'root' | 'quality' | 'speed'
