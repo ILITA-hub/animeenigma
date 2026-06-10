@@ -138,16 +138,20 @@ type PullService struct {
 	db      *gorm.DB
 	pull    *repo.PullRepository
 	banners *repo.BannerRepository
+	content *repo.ContentRepository
 	econ    config.EconomyConfig
 	randInt func(int) int
 	log     *logger.Logger
 }
 
 // NewPullService wires the pull engine. The DB is taken from the banner repo's
-// connection so the orchestration transaction shares the same handle.
+// connection so the orchestration transaction shares the same handle. The
+// content repo is used by the player-facing views (collection album); it may
+// be nil in tests that exercise only Pull.
 func NewPullService(
 	pullRepo *repo.PullRepository,
 	bannerRepo *repo.BannerRepository,
+	contentRepo *repo.ContentRepository,
 	econ config.EconomyConfig,
 	randInt func(int) int,
 	log *logger.Logger,
@@ -156,6 +160,7 @@ func NewPullService(
 		db:      bannerRepo.DB(),
 		pull:    pullRepo,
 		banners: bannerRepo,
+		content: contentRepo,
 		econ:    econ,
 		randInt: randInt,
 		log:     log,
@@ -367,4 +372,143 @@ func bannerActiveNow(b *domain.Banner, now time.Time) bool {
 // newPullID generates a unique ref for the pull's ledger entry (audit trail).
 func newPullID() string {
 	return fmt.Sprintf("pull-%d-%d", time.Now().UnixNano(), rand.IntN(1_000_000))
+}
+
+// ─── Player-facing views ────────────────────────────────────────────────────
+
+// BannerCardView is a single card in a banner pool with the caller's owned flag.
+type BannerCardView struct {
+	ID        string        `json:"id"`
+	Name      string        `json:"name"`
+	Rarity    domain.Rarity `json:"rarity"`
+	ImagePath string        `json:"image_path"`
+	Owned     bool          `json:"owned"`
+}
+
+// BannerView is one active banner with its pool + the caller's pity progress.
+type BannerView struct {
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	Description   string           `json:"description"`
+	ArtPath       string           `json:"art_path"`
+	IsStandard    bool             `json:"is_standard"`
+	Cards         []BannerCardView `json:"cards"`
+	MyPity        int              `json:"my_pity"`
+	PityThreshold int              `json:"pity_threshold"`
+}
+
+// ActiveBannersView returns the banners active right now, each with its card
+// pool (owned flags from the user's collection) and the user's pity progress
+// for that banner (GET /api/gacha/banners, spec §6.2).
+func (s *PullService) ActiveBannersView(ctx context.Context, userID string) ([]BannerView, error) {
+	banners, err := s.banners.ActiveNow(ctx, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	owned, err := s.ownedSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]BannerView, 0, len(banners))
+	for _, b := range banners {
+		pool, err := s.pull.CardsByRarity(ctx, b.ID)
+		if err != nil {
+			return nil, err
+		}
+		cards := make([]BannerCardView, 0)
+		for _, tier := range rarityOrder {
+			for _, c := range pool[tier] {
+				cards = append(cards, BannerCardView{
+					ID: c.ID, Name: c.Name, Rarity: c.Rarity,
+					ImagePath: c.ImagePath, Owned: owned[c.ID] > 0,
+				})
+			}
+		}
+		pity, err := s.pull.GetPity(ctx, userID, b.ID)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, BannerView{
+			ID: b.ID, Name: b.Name, Description: b.Description, ArtPath: b.ArtPath,
+			IsStandard: b.IsStandard, Cards: cards, MyPity: pity, PityThreshold: s.econ.PityThreshold,
+		})
+	}
+	return views, nil
+}
+
+// CollectionCardView is one album card with the caller's ownership status.
+type CollectionCardView struct {
+	Card            domain.Card `json:"card"`
+	Owned           bool        `json:"owned"`
+	Count           int         `json:"count"`
+	FirstObtainedAt *time.Time  `json:"first_obtained_at,omitempty"`
+}
+
+// RarityProgress is owned/total for one tier.
+type RarityProgress struct {
+	Owned int `json:"owned"`
+	Total int `json:"total"`
+}
+
+// CollectionView is the full album (all enabled cards) + per-tier progress.
+type CollectionView struct {
+	Cards    []CollectionCardView             `json:"cards"`
+	Progress map[domain.Rarity]RarityProgress `json:"progress"`
+}
+
+// CollectionView returns the full album: every enabled, non-deleted card with
+// the caller's owned flag / count / first-obtained timestamp, plus per-rarity
+// owned/total progress (GET /api/gacha/collection, spec §6.4).
+func (s *PullService) CollectionView(ctx context.Context, userID string) (*CollectionView, error) {
+	enabled := true
+	allCards, err := s.content.ListCards(ctx, repo.CardFilter{Enabled: &enabled})
+	if err != nil {
+		return nil, err
+	}
+	entries, err := s.pull.ListCollection(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	type ownedInfo struct {
+		count int
+		first time.Time
+	}
+	ownedMap := make(map[string]ownedInfo, len(entries))
+	for _, e := range entries {
+		ownedMap[e.CardID] = ownedInfo{count: e.Count, first: e.FirstObtainedAt}
+	}
+
+	out := &CollectionView{
+		Cards:    make([]CollectionCardView, 0, len(allCards)),
+		Progress: make(map[domain.Rarity]RarityProgress),
+	}
+	for _, c := range allCards {
+		prog := out.Progress[c.Rarity]
+		prog.Total++
+		view := CollectionCardView{Card: c}
+		if info, ok := ownedMap[c.ID]; ok {
+			view.Owned = true
+			view.Count = info.count
+			f := info.first
+			view.FirstObtainedAt = &f
+			prog.Owned++
+		}
+		out.Progress[c.Rarity] = prog
+		out.Cards = append(out.Cards, view)
+	}
+	return out, nil
+}
+
+// ownedSet returns a map of cardID → owned count for the user.
+func (s *PullService) ownedSet(ctx context.Context, userID string) (map[string]int, error) {
+	entries, err := s.pull.ListCollection(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	owned := make(map[string]int, len(entries))
+	for _, e := range entries {
+		owned[e.CardID] = e.Count
+	}
+	return owned, nil
 }

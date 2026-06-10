@@ -32,12 +32,16 @@ func RequireAdmin(next http.Handler) http.Handler {
 //	GET  /internal/health              (internal)
 //	GET  /api/gacha/images/*           (public — browser <img> tags, no JWT)
 //	GET  /api/gacha/wallet             (JWT)
+//	GET  /api/gacha/banners            (JWT)
+//	POST /api/gacha/banners/{id}/pull  (JWT)
+//	GET  /api/gacha/collection         (JWT)
 //	     /api/gacha/admin/*            (JWT + AdminRole)
 func NewRouter(
 	walletHandler *handler.WalletHandler,
 	internalHandler *handler.InternalHandler,
 	adminHandler *handler.AdminHandler,
 	imagesHandler *handler.ImagesHandler,
+	pullHandler *handler.PullHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -85,6 +89,11 @@ func NewRouter(
 		r.Group(func(r chi.Router) {
 			r.Use(AuthMiddleware(jwtConfig))
 			r.Get("/wallet", walletHandler.GetWallet)
+
+			// Player-facing pull engine (Phase 3).
+			r.Get("/banners", pullHandler.Banners)
+			r.Post("/banners/{id}/pull", pullHandler.Pull)
+			r.Get("/collection", pullHandler.Collection)
 		})
 
 		// Admin content API. The gateway already requires JWT+AdminRole for

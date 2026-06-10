@@ -14,6 +14,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	videoutils "github.com/ILITA-hub/animeenigma/libs/videoutils"
+	"github.com/ILITA-hub/animeenigma/services/gacha/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/gacha/internal/service"
@@ -99,7 +100,14 @@ func getTestRouter(t *testing.T) http.Handler {
 		adminH := handler.NewAdminHandler(contentSvc, imageSvc, log)
 		imagesH := handler.NewImagesHandler(&fakeImageStore{}, log)
 
-		testRouter = NewRouter(walletH, internalH, adminH, imagesH, jwtCfg, log, mc)
+		pullRepo := repo.NewPullRepository(contentDB)
+		pullSvc := service.NewPullService(pullRepo, bannerRepo, contentRepo, config.EconomyConfig{
+			PullCostX1: 100, PullCostX10: 900, PityThreshold: 90,
+			WeightN: 69, WeightR: 22, WeightSR: 8, WeightSSR: 1,
+		}, service.NewSecureRand(), log)
+		pullH := handler.NewPullHandler(pullSvc, log)
+
+		testRouter = NewRouter(walletH, internalH, adminH, imagesH, pullH, jwtCfg, log, mc)
 	})
 	return testRouter
 }
@@ -129,6 +137,40 @@ func TestRouter_Wallet_RequiresAuth(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("wallet route: expected 401 without token, got %d", rr.Code)
+	}
+}
+
+// TestRouter_Banners_RequiresAuth asserts GET /api/gacha/banners → 401 without token.
+func TestRouter_Banners_RequiresAuth(t *testing.T) {
+	r := getTestRouter(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/gacha/banners", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("banners route: expected 401 without token, got %d", rr.Code)
+	}
+}
+
+// TestRouter_Pull_RequiresAuth asserts POST /api/gacha/banners/{id}/pull → 401 without token.
+func TestRouter_Pull_RequiresAuth(t *testing.T) {
+	r := getTestRouter(t)
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/gacha/banners/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/pull", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("pull route: expected 401 without token, got %d", rr.Code)
+	}
+}
+
+// TestRouter_Collection_RequiresAuth asserts GET /api/gacha/collection → 401 without token.
+func TestRouter_Collection_RequiresAuth(t *testing.T) {
+	r := getTestRouter(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/gacha/collection", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("collection route: expected 401 without token, got %d", rr.Code)
 	}
 }
 

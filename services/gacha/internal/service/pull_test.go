@@ -209,7 +209,8 @@ func newPullSvc(t *testing.T, db *gorm.DB, randInt func(int) int) *PullService {
 	t.Helper()
 	pullRepo := repo.NewPullRepository(db)
 	bannerRepo := repo.NewBannerRepository(db)
-	return NewPullService(pullRepo, bannerRepo, testEconomy(), randInt, logger.Default())
+	contentRepo := repo.NewContentRepository(db)
+	return NewPullService(pullRepo, bannerRepo, contentRepo, testEconomy(), randInt, logger.Default())
 }
 
 func getBalance(t *testing.T, db *gorm.DB) int64 {
