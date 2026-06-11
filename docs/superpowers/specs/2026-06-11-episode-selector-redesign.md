@@ -1,6 +1,41 @@
 # Episode Selector Redesign — variant exploration (2026-06-11)
 
-Status: **awaiting variant pick** · Demo artifact: `docs/superpowers/demos/2026-06-11-episode-selector/index.html` (served on :58363)
+Status: **V2 Bottom Sheet picked (iteration 1) → awaiting large-series mechanic pick (iteration 2)** · Demo artifact: `docs/superpowers/demos/2026-06-11-episode-selector/index.html` (served on :58363)
+
+## Iteration 2 — V2 on 100+/1000+ episode titles
+
+Question: how does the sheet handle far navigation (jump) and overview (grid)
+once a title has 100+ or 1000+ episodes? Three sub-variants, all interactive
+in the demo with switchable datasets (12 / 112 / 1042):
+
+| Criterion | V2a Jump | V2b Strip⇄Grid | V2c Ranges |
+|---|---|---|---|
+| Teleport to ep N | 1 action (type) | 1-2 (jump or grid click) | 2 clicks |
+| Whole-title overview | no | yes (grid) | partial (chips) |
+| Sheet height | minimal | medium in grid mode | +chip row |
+| Extra UI | 1 input | input + view toggle | chips/select |
+| CDI | 0.03 × 3 | 0.04 × 5 | 0.04 × 5 |
+| UXΔ | +2 (Better) | +3 (Better) | +2 (Ambiguous) |
+| MVQ | Sprite 75%/85% | Griffin 88%/82% | Phoenix 70%/75% |
+
+- **V2a Strip + Jump** — single mode; a "Jump to ep ⏎" input teleports the
+  strip (scroll + flash highlight). Minimal UI, no overview.
+- **V2b Strip ⇄ Grid toggle (recommended)** — view toggle in the sheet head:
+  strip = "what to watch next" (titles, progress), grid = "archive
+  navigation" (vertically scrollable dense cells). Grid cell click bridges
+  back to strip centered on the picked episode. Jump + next-unwatched work in
+  both modes.
+- **V2c Strip + Range chips** — 50-ep ranges as chips (≤6 ranges) or a
+  select (>6); strip shows only the active range. Season-like mental model,
+  but far jumps take 2 clicks and cross-boundary browsing needs a range
+  switch.
+
+Adaptive rules (any sub-variant): ≤15 eps → strip only (no jump/toggle/
+ranges); 16–99 → + jump input; 100+ → + grid toggle (V2b) / ranges (V2c).
+Strip virtualizes above ~200 episodes (window ±60). Sheet always opens
+centered on the current episode.
+
+## Iteration 1 (archived) — trigger + interior
 
 ## Goal
 
