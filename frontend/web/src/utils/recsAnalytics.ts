@@ -3,10 +3,12 @@ import { apiClient } from '@/api/client'
 // Phase 14 (REC-EVAL-01): rec_click + rec_watched emit pipeline.
 //
 // Click→watched correlation is purely client-side: emitRecClick stores a
-// small FIFO buffer in localStorage. When the player auto-mark fires, it
-// looks up the most recent click for that anime within the last hour. If
-// a match exists, the player calls emitRecWatched with the matching click's
-// signal_id. No match → no emit (strict correlation per spec §11.5;
+// small FIFO buffer in localStorage. When the player marks an episode watched
+// (auto or manual), it calls emitRecWatchedIfRecent which looks up the most
+// recent click for that anime within the last 7 days (ISS-026: 1h was too
+// narrow — missed most real watch sessions). If a match exists the event is
+// emitted and the click is removed so each click converts at most once
+// (fire-once, ISS-026). No match → no emit (strict correlation per spec §11.5;
 // session-based attribution deferred to v2.1).
 //
 // Telemetry is best-effort: API failures are swallowed so a click or an
@@ -14,7 +16,7 @@ import { apiClient } from '@/api/client'
 
 const STORAGE_KEY = 'recentRecClicks'
 const MAX_ENTRIES = 50
-const TTL_MS = 60 * 60 * 1000 // 1 hour
+const TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days — ISS-026: 1h missed most real watch sessions
 
 export type PinSource = 'local' | 'shikimori_similar' | 'score_5_fallback'
 
@@ -75,8 +77,7 @@ function writeStore(entries: StoredClick[]): void {
 
 /**
  * findRecentClick returns the most recent click for the given anime_id within
- * the 1h window, or null if none. Used by the player auto-mark handlers to
- * decide whether to emit rec_watched.
+ * the TTL window (7 days, ISS-026), or null if none.
  */
 export function findRecentClick(animeId: string): StoredClick | null {
   const store = readStore()
@@ -123,4 +124,34 @@ export async function emitRecWatched(payload: RecWatchedPayload): Promise<void> 
   } catch {
     // Best-effort.
   }
+}
+
+/**
+ * removeClick deletes all stored clicks for an anime — called after a
+ * successful rec_watched emit so each click converts at most once (ISS-026).
+ */
+function removeClick(animeId: string): void {
+  writeStore(readStore().filter((c) => c.anime_id !== animeId))
+}
+
+/**
+ * emitRecWatchedIfRecent is the one call players make on mark-watched
+ * (auto or manual): looks up the most recent rec click for this anime
+ * within the TTL window (7 days, ISS-026), emits rec_watched with the
+ * originating signal_id, and removes the click (fire-once). No click → no-op.
+ */
+export async function emitRecWatchedIfRecent(animeId: string, sourceRoute: string): Promise<void> {
+  const recent = findRecentClick(animeId)
+  if (!recent) return
+  removeClick(animeId)
+  await emitRecWatched({
+    event_type: 'rec_watched',
+    anime_id: animeId,
+    signal_id: recent.signal_id,
+    pinned: recent.pinned,
+    pin_source: recent.pin_source,
+    pin_seed_anime_id: recent.pin_seed_anime_id,
+    source_route: sourceRoute,
+    rank: recent.rank,
+  })
 }

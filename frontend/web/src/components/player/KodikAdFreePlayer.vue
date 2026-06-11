@@ -219,6 +219,7 @@ import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import EpisodeSelector from './EpisodeSelector.vue'
 import type { EpisodeOption } from './EpisodeSelector.types'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
+import { emitRecWatchedIfRecent } from '@/utils/recsAnalytics'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 const { t } = useI18n()
@@ -357,6 +358,7 @@ const markCurrentEpisodeWatched = async () => {
     episodeMarkedWatched.value = true
     await refreshWatched()
     emit('episodeWatched', { episode: selectedEpisode.value })
+    void emitRecWatchedIfRecent(props.animeId, 'player')
   } catch (err: unknown) {
     const e = err as { response?: { data?: { message?: string } } }
     error.value = e.response?.data?.message || t('player.error.markWatched')
@@ -373,6 +375,7 @@ const autoMarkEpisodeWatched = async () => {
     episodeMarkedWatched.value = true
     await refreshWatched()
     emit('episodeWatched', { episode: selectedEpisode.value })
+    void emitRecWatchedIfRecent(props.animeId, 'player')
   } catch {
     // Silent fail for auto-mark
   }

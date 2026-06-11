@@ -130,6 +130,7 @@ import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom
 import EpisodeSelector from './EpisodeSelector.vue'
 import type { EpisodeOption } from './EpisodeSelector.types'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
+import { emitRecWatchedIfRecent } from '@/utils/recsAnalytics'
 
 interface HanimeEpisode {
   name: string
@@ -429,6 +430,7 @@ const markEpisodeWatched = async () => {
   const epNum = selectedEpisodeIndex.value + 1
   try {
     await userApi.markEpisodeWatched(props.animeId, epNum)
+    void emitRecWatchedIfRecent(props.animeId, 'player')
   } catch (err) {
     console.error('[Hanime] Failed to mark episode as watched:', err)
   }
