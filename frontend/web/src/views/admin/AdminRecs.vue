@@ -60,6 +60,7 @@
                 <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s3Title')">S3</th>
                 <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s4Title')">S4</th>
                 <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s5Title')">S5</th>
+                <th scope="col" class="px-3 py-2 text-right" :title="$t('admin.recs.s7Title')">S7</th>
                 <th scope="col" class="px-3 py-2 text-left">{{ $t('admin.recs.columnTopContributor') }}</th>
                 <th scope="col" class="px-3 py-2 w-8"></th>
               </tr>
@@ -77,7 +78,15 @@
                   @keydown.enter.prevent="toggleRow(row.rank)"
                   @keydown.space.prevent="toggleRow(row.rank)"
                 >
-                  <td class="px-3 py-2 font-mono">{{ row.rank }}</td>
+                  <td class="px-3 py-2 font-mono whitespace-nowrap">
+                    {{ row.rank }}
+                    <span
+                      v-if="s12Delta(row) !== 0"
+                      class="ml-1 text-xs"
+                      :class="s12Delta(row) > 0 ? 'text-success' : 'text-destructive'"
+                      :title="$t('admin.recs.s12Delta', { from: row.pre_s12_rank, to: row.rank })"
+                    >{{ s12Delta(row) > 0 ? '↑' : '↓' }}{{ Math.abs(s12Delta(row)) }}</span>
+                  </td>
                   <td class="px-3 py-2">
                     <div class="flex items-center gap-3 min-w-0">
                       <img
@@ -101,6 +110,7 @@
                   <td class="px-3 py-2 text-right font-mono text-white/70">{{ formatBd(row.breakdown.s3) }}</td>
                   <td class="px-3 py-2 text-right font-mono text-white/70">{{ formatBd(row.breakdown.s4) }}</td>
                   <td class="px-3 py-2 text-right font-mono text-white/70">{{ formatBd(row.breakdown.s5) }}</td>
+                  <td class="px-3 py-2 text-right font-mono text-white/70">{{ formatBd(row.breakdown.s7) }}</td>
                   <td class="px-3 py-2">
                     <span
                       class="px-2 py-0.5 rounded text-xs font-mono"
@@ -117,7 +127,7 @@
                   :id="`detail-${row.rank}`"
                   class="border-t border-white/5 bg-white/5"
                 >
-                  <td colspan="10" class="px-6 py-3">
+                  <td colspan="11" class="px-6 py-3">
                     <div v-if="row.pinned" class="space-y-1 text-sm">
                       <p class="text-cyan-300 font-medium">
                         {{ $t('admin.recs.contributorDetailS6Title') }}
@@ -160,7 +170,7 @@
                 </tr>
               </template>
               <tr v-if="rows.length === 0">
-                <td colspan="10" class="px-3 py-6 text-center text-white/50 italic">
+                <td colspan="11" class="px-3 py-6 text-center text-white/50 italic">
                   {{ $t('admin.recs.filterAuditEmpty') }}
                 </td>
               </tr>
@@ -174,6 +184,35 @@
             aria-hidden="true"
             class="md:hidden absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black/40 to-transparent pointer-events-none"
           ></div>
+        </div>
+
+        <!-- Signal legend: every signal in the pipeline + its production weight
+             and a one-line description. Weights come from the response rows
+             (mirrors adminEnsembleWeights on the backend) with a static
+             fallback for the empty-table case. -->
+        <div class="glass-card p-4 mb-6">
+          <h2 class="text-lg font-semibold text-white mb-3">
+            {{ $t('admin.recs.signalLegendTitle') }}
+          </h2>
+          <dl class="space-y-2 text-sm">
+            <div
+              v-for="sig in signalLegend"
+              :key="sig.id"
+              class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5"
+            >
+              <dt class="flex items-center gap-2 w-56 flex-shrink-0">
+                <span
+                  class="px-2 py-0.5 rounded text-xs font-mono"
+                  :class="topContributorClass(sig.badge)"
+                >{{ sig.id.toUpperCase() }}</span>
+                <span class="text-white/90 font-medium">{{ $t(`admin.recs.${sig.id}Title`) }}</span>
+              </dt>
+              <dd class="flex-1 min-w-[16rem] text-white/60">
+                <span class="font-mono text-xs mr-2" :class="sig.weightClass">{{ sig.weightLabel }}</span>
+                {{ $t(`admin.recs.${sig.id}Desc`) }}
+              </dd>
+            </div>
+          </dl>
         </div>
 
         <!-- Filter audit panel -->
@@ -209,6 +248,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useAdminRecs, type AdminRecRow } from '@/composables/useAdminRecs'
 import Button from '@/components/ui/Button.vue'
@@ -231,6 +271,74 @@ const {
 } = useAdminRecs(userId)
 
 void refresh()
+
+// S12 rank movement: positive = the MMR re-rank promoted the row. The S6 pin
+// row carries pre_s12_rank=0 (it never went through the re-rank) — treated as
+// "no movement".
+function s12Delta(row: AdminRecRow): number {
+  if (row.pinned || !row.pre_s12_rank) return 0
+  return row.pre_s12_rank - row.rank
+}
+
+// Legend rows for every signal in the pipeline. Ensemble weights are read
+// from the first response row (the backend mirrors its production weight
+// registry into each row) with a static fallback for the empty-table case.
+const fallbackWeights: Record<string, number> = {
+  s1: 0.3,
+  s2: 0.2,
+  s3: 0.2,
+  s4: 0.1,
+  s5: 0.2,
+  s7: -0.15,
+}
+
+interface SignalLegendEntry {
+  id: string
+  badge: string // key fed to topContributorClass for the colored chip
+  weightLabel: string
+  weightClass: string
+}
+
+const { t } = useI18n()
+
+const signalLegend = computed<SignalLegendEntry[]>(() => {
+  const weights = rows.value[0]?.weights ?? fallbackWeights
+  const weighted = (id: string): SignalLegendEntry => {
+    const w = weights[id] ?? fallbackWeights[id] ?? 0
+    return {
+      id,
+      badge: id,
+      weightLabel: `×${w > 0 ? '+' : ''}${w}`,
+      weightClass: w < 0 ? 'text-destructive' : 'text-white/40',
+    }
+  }
+  return [
+    weighted('s1'),
+    weighted('s2'),
+    weighted('s3'),
+    weighted('s4'),
+    weighted('s5'),
+    {
+      id: 's6',
+      badge: 's6_pin',
+      weightLabel: t('admin.recs.legendPostRank'),
+      weightClass: 'text-cyan-300',
+    },
+    weighted('s7'),
+    {
+      id: 's11',
+      badge: 's11',
+      weightLabel: t('admin.recs.legendFilter'),
+      weightClass: 'text-white/40',
+    },
+    {
+      id: 's12',
+      badge: 's12',
+      weightLabel: `${t('admin.recs.legendPostRank')} · λ=0.3`,
+      weightClass: 'text-cyan-300',
+    },
+  ]
+})
 
 const expandedRowIds = ref<Set<number>>(new Set())
 function toggleRow(rank: number) {
@@ -260,6 +368,8 @@ function topContributorClass(sig: string): string {
       return 'bg-orange-500/20 text-orange-300'
     case 's5':
       return 'bg-brand-violet/20 text-brand-violet'
+    case 's7':
+      return 'bg-destructive/20 text-destructive'
     case 's6_pin':
       return 'bg-cyan-500/20 text-cyan-300'
     default:

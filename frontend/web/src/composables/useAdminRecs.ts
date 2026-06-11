@@ -21,6 +21,8 @@ export interface AdminRecAnime {
 
 export interface AdminRecRow {
   rank: number
+  /** 1-based rank before the S12 MMR re-rank; 0 on the S6 pin row. */
+  pre_s12_rank?: number
   anime: AdminRecAnime
   final: number
   breakdown: Record<string, number>
