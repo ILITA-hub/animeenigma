@@ -1,6 +1,6 @@
 # Episode Selector Redesign — variant exploration (2026-06-11)
 
-Status: **V2 Bottom Sheet picked (iteration 1) → awaiting large-series mechanic pick (iteration 2)** · Demo artifact: `docs/superpowers/demos/2026-06-11-episode-selector/index.html` (served on :58363)
+Status: **SHIPPED — V2b (strip⇄grid) implemented 2026-06-11, trigger = EP block top-left (revised from control-bar pill by user)** · Demo artifact: `docs/superpowers/demos/2026-06-11-episode-selector/index.html` (served on :58363)
 
 ## Iteration 2 — V2 on 100+/1000+ episode titles
 
