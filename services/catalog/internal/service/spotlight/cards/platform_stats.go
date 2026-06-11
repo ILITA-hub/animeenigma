@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
@@ -95,41 +96,64 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 	}
 
 	// --- Tiles: shuffle allowlist, pick a random window each, keep > 0 --
-	// A failed/zero query falls back to the metric's OTHER windows before
-	// the tile is dropped — one bad window used to silently shrink the
-	// card to 2-3 tiles for the whole cached day.
-	tiles := make([]spotlight.StatsTile, 0, 4)
+	// Tiles are queried IN PARALLEL (one goroutine per metric): the whole
+	// resolver runs under the aggregator's 800ms per-card deadline, and a
+	// sequential walk let one slow increase[7d] query starve the rest into
+	// "context deadline exceeded" — the cached-for-a-day 2-tile card. Each
+	// tile also falls back to the metric's other windows on error/zero
+	// before being dropped. Window orders are pre-computed so all rng use
+	// stays on this goroutine (deterministic per dateKey, data-race-free).
 	order := make([]promTile, len(parsedTiles))
 	copy(order, parsedTiles)
 	rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
-	for _, t := range order {
+	windowOrders := make([][]string, len(order))
+	for i, t := range order {
+		ws := make([]string, len(t.Windows))
+		copy(ws, t.Windows)
+		if len(ws) > 1 {
+			first := rng.Intn(len(ws))
+			ws[0], ws[first] = ws[first], ws[0]
+		}
+		windowOrders[i] = ws
+	}
+	results := make([]*spotlight.StatsTile, len(order))
+	var wg sync.WaitGroup
+	for i, t := range order {
+		if len(windowOrders[i]) == 0 {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, t promTile) {
+			defer wg.Done()
+			for _, window := range windowOrders[i] {
+				val, err := r.prom.Query(ctx, windowPromQL(t.Metric, window))
+				if err != nil {
+					r.log.Warnw("spotlight.stats_tile_failed", "metric", t.Metric, "window", window, "error", err)
+					continue
+				}
+				if val <= 0 {
+					continue
+				}
+				results[i] = &spotlight.StatsTile{
+					Label:  t.Label,
+					Value:  val,
+					Window: window,
+					Format: t.Format,
+				}
+				return
+			}
+		}(i, t)
+	}
+	wg.Wait()
+	tiles := make([]spotlight.StatsTile, 0, 4)
+	for _, res := range results {
+		if res == nil {
+			continue
+		}
 		if len(tiles) >= 4 {
 			break
 		}
-		if len(t.Windows) == 0 {
-			continue
-		}
-		windows := make([]string, len(t.Windows))
-		copy(windows, t.Windows)
-		first := rng.Intn(len(windows))
-		windows[0], windows[first] = windows[first], windows[0]
-		for _, window := range windows {
-			val, err := r.prom.Query(ctx, windowPromQL(t.Metric, window))
-			if err != nil {
-				r.log.Warnw("spotlight.stats_tile_failed", "metric", t.Metric, "window", window, "error", err)
-				continue
-			}
-			if val <= 0 {
-				continue
-			}
-			tiles = append(tiles, spotlight.StatsTile{
-				Label:  t.Label,
-				Value:  val,
-				Window: window,
-				Format: t.Format,
-			})
-			break
-		}
+		tiles = append(tiles, *res)
 	}
 
 	data := spotlight.PlatformStatsData{Hero: hero, Tiles: tiles}

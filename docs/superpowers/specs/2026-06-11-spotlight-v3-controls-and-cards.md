@@ -1,46 +1,53 @@
-# Spotlight v3 — carousel controls + 7-card design review (PROPOSAL)
+# Spotlight v3→v4 — carousel controls + 7-card design review
 
-> Status: **AWAITING USER CHOICES** (artifact: `.brainstorm/content/spotlight-ds-v3.html`,
-> served at localhost:3000 via the SSH tunnel). Follow-up to the shipped v2 DS alignment
-> (`2026-06-10-spotlight-ds-alignment-design.md`, commit ccc596b8).
-> **Nothing here deploys until the user picks variants.**
+> Status: **v4 ITERATION — partial locks, rest awaiting choices**
+> (artifact: `.brainstorm/content/spotlight-ds-v4.html`, served at localhost:3000).
+> Follow-up to the shipped v2 DS alignment (`2026-06-10-spotlight-ds-alignment-design.md`).
 
-## Shipped fixes (in code, NOT deployed)
+## Deployed during this review (2026-06-11)
 
-1. **Kicker faux-bold ("мыльный" season text)** — JetBrains Mono is loaded at weights
-   400/500 only; the shell kicker set `font-semibold` (600) → browser faux-bold synthesis
-   → blurry rendering. `SpotlightCardShell.vue` kicker reverted to `font-medium` +
-   `tracking-[0.12em]` (the pre-migration values). Fixes the season suffix AND every
-   card's kicker at once.
-2. **PlatformStats "only 2 tiles"** — backend, not frontend: the resolver picked ONE
-   random window per metric and dropped the whole tile on error/zero, then cached the
-   shrunken card for the UTC day. `platform_stats.go` now falls back to the metric's
-   other windows before dropping. 4 tiles guaranteed whenever ≥4 of 5 metrics have any
-   working window. **Deploy step: flush `spotlight:stats:<date>` Redis key.**
+1. **Kicker faux-bold fix** — JetBrains Mono ships 400/500 only; shell kicker used
+   `font-semibold` (600) → faux-bold blur ("мыльный" season text). Reverted to
+   `font-medium` + `tracking-[0.12em]`. LIVE.
+2. **PlatformStats 4-tiles fix (two layers)** — (a) window fallback: failed/zero
+   window no longer drops the tile; (b) **parallel tile queries**: the resolver runs
+   under the aggregator's 800ms per-card deadline and sequential `increase[7d]`
+   queries starved the tail into `context deadline exceeded` — the real cause of the
+   2-3-tile days. One goroutine per metric; rng stays on the resolver goroutine
+   (deterministic, race-free). Verified live: 4 tiles. Snapshot + stats keys flushed
+   (`spotlight:snapshot:*`, `spotlight:stats:<date>`).
 
-## User decisions still open (answer by letter, e.g. `A2 B1 C1 D1 E1 F2 G1 H1`)
+## Locked (user, 2026-06-11)
 
-| Q | Surface | Variants (first = recommended) |
+- **A-1** icon-menu below frame, active item expands to accent icon+label pill;
+  skeleton reserves the row with shimmer circles (zero CLS). **A-2** (in-frame
+  progress segments) kept in reserve "для разнообразия потом". A-3 rejected.
+- **E-1** terminal changelog (`$ animeenigma --updates`, [FEAT]/[FIX]/[PERF]).
+- **F-2** "N человек смотрят прямо сейчас" counter + compact session list.
+  **TODO (future session):** Watch Together integration — "join" badge + CTA for
+  invite-open rooms; needs `wt_room_id?` on NowWatching sessions.
+- **G-3** pinned-note sticker NotTimeYet.
+- FeaturedCard + PlatformStats designs locked (v3); v2 base (triad, shell, CTA
+  bottom-left, overlay badges, lucide scores) locked.
+- Practice locked: every design review shows a "current prod" screenshot per card.
+
+## v4 — awaiting choices
+
+| Q | Rework | Options |
 |---|---|---|
-| A | Carousel switching + skeleton | **A-1** icon-menu, active expands to icon+label pill (skeleton reserves the row with shimmer circles) · A-2 stories-style progress segments overlaid INSIDE the frame (zero external layout → zero shift) · A-3 always-visible `‹ 3/9 ›` glass cluster in the frame corner (dots removed) |
-| B | RandomTail | **B-1** card-deck poster stack · B-2 full-bleed hero teaser (violet) · B-3 mystery "?" blur-reveal on hover |
-| C | PersonalPick | **C-1** podium 1-2-3 (three posters, center elevated, reason under each) · C-2 refine current (title into body, scores + rank numbers on secondary) · C-3 big quote-style reason + mini poster row |
-| D | TelegramNews | **D-1** Telegram chat bubbles (channel avatar, bubble tail, time) · D-2 hero post + compact tail · D-3 refine tiles (darker, taller photo, date overlay badge, ✈ vignette on photoless posts) |
-| E | LatestNews | **E-1** terminal (`$ animeenigma --updates`, [FEAT]/[FIX]/[PERF] colored prefixes, blink cursor) · E-2 vertical timeline with typed glow dots · E-3 hero update (latest entry big, two small) |
-| F | NowWatching | **F-1** poster trio with avatar overlap + LIVE overlay badge on posters · F-2 big "N человек смотрят прямо сейчас" counter + compact session list (works with 1 session) · F-3 refine rows (LIVE text badge, per-row episode progress bar) |
-| G | NotTimeYet | **G-1** time capsule (big "ждёт N дней" counter, grayscale→color poster on hover, CTA «Время пришло») · G-2 time thread (added→today progress line) · G-3 pinned-note sticker (tilted) |
-| H | ContinueWatchingNew | **H-1** episode stepper chips `эп.4 ✓ → эп.5 ✓ → эп.6 NEW` (ribbon removed from poster) · H-2 giant display episode number with pink glow · H-3 refine (corner badge instead of ribbon + season progress bar) |
+| B | RandomTail B-1 v2 | deal-in animation replacing the buggy 5-card overlay (poster + 2 ghost deck cards fly into the resting stack, 550ms, no content occlusion) + density: year/status pill/description clamp-3/«из N тайтлов». Sub-question: keep ghost «⤮ Ещё разок» re-roll button (needs a tiny reroll endpoint)? |
+| C | PersonalPick C-2 v2 | scrollable right list up to 6 recs (desktop, fade mask + thin cyan scrollbar; resolver cap 3→6 is a one-liner), horizontal poster swipe-row on mobile. Bug surfaced: «+N ещё» links to `/recs` which DOES NOT EXIST (only `/admin/recs/:user_id`) → 404. Options: (а) link `/browse?sort=recommended` now · (б) build /recs page · (в) drop the button. |
+| D | TelegramNews — new round | **D-4** hero post (photo + overlay date) + telegram bubbles right + «Подписаться» ghost (recommended) · D-5 "phone feed" framed channel mock. |
+| H | ContinueWatchingNew | **H-4** stepper + context (status/genres/description/season progress bar/release date; needs `next_episode_at`+`season_episodes` in payload) (recommended) · H-5 stepper × giant EP number. |
+| 📱 | Mobile layouts | 390px mockups for A-1/B-1/C-2/D-4/E-1/F-2/G-3/H-4 in the artifact — confirm or annotate. |
+| PS | DS PosterCard reuse | Verdict: point-wise yes, total no. Plan: add `chrome: 'full'\|'bare'` prop to PosterCard, adopt in PersonalPick podium/recs (≥96px, real catalog items, context menu useful); keep bare `<img>`+proxy for decorative posters (deck, sticker, thumbs, backgrounds). |
 
-## Locked (not revisited)
+## Standing TODO
 
-- A-1 brand triad, SpotlightCardShell anatomy, CTA bottom-left, overlay badges on
-  posters, lucide score glyphs (v2, approved).
-- FeaturedCard + PlatformStats designs (approved by user 2026-06-11; only the two
-  fixes above touch them).
-- Carousel mechanics (7s autoplay, stop-on-manual-nav, transition lock).
+- Spotlight card authoring guidelines — `docs/spotlight-card-guidelines.md`
+  (written this session; linked from CLAUDE.md §Adding a Spotlight Card Type).
+- F-2 × Watch Together (above).
 
-## Metrics (full package at recommended picks)
+## Metrics (locks + recommended v4 picks)
 
-- **UXΔ = +3 (Better)** — per-card identity, non-anonymous menu, CLS shift removed.
-- **CDI = 0.03 * 21** — spread stays inside `components/home/spotlight/`; mechanics untouched.
-- **MVQ = Kraken 80%/85%** — many tentacles (8 surfaces), one body of primitives.
+- **UXΔ = +3 (Better)** · **CDI = 0.03 * 21** · **MVQ = Kraken 82%/85%**

@@ -415,6 +415,8 @@ Tables are auto-created via GORM's `AutoMigrate()` on service startup. For schem
 ### Adding a Spotlight Card Type
 
 The home page's `HeroSpotlightBlock` (workstream `hero-spotlight`) is a 9-card rotating carousel. To add a 10th card type, touch the following 5 anchors (all from the same package boundaries, ~50 lines total):
+> **Design + quality contract** (shell anatomy, accent triad, badge/CTA rules, mobile, review process): [`docs/spotlight-card-guidelines.md`](docs/spotlight-card-guidelines.md) — read alongside this recipe.
+
 
 1. **Backend resolver** — Create `services/catalog/internal/service/spotlight/cards/{new_type}.go` implementing the `spotlight.Resolver` interface (`Type()` + `Resolve(ctx, userID *string) (*spotlight.Card, error)`). Mirror `featured.go`'s pattern (the «Рекомендуем сегодня» card): manual `cache.Get`/`cache.Set` with `errors.Is(err, cache.ErrNotFound)`, return `(nil, nil)` for ineligible, `(nil, err)` for failure, `(*Card, nil)` for success. Multi-item resolvers MUST apply `spotlight.AdaptiveSlice` (the 1-2-3 layout rule). Login-only resolvers return `(nil, nil)` when `userID == nil`. Always carry the `spotlight:` Redis key prefix for new keys (HSB-NF-03). Add a co-located `_test.go` with handwritten fakes — no testify/mock.
 
