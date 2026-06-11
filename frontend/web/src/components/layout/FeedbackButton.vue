@@ -15,7 +15,12 @@
         <CircleCheck class="size-12 mx-auto mb-3 text-success" aria-hidden="true" />
         <p class="text-white text-lg font-medium">{{ $t('footer.feedback.sent') }}</p>
         <p class="text-white/60 mt-1 text-sm">{{ $t('footer.feedback.thankYou') }}</p>
-        <button type="button" class="mt-3 text-sm text-primary hover:underline" @click="goToMyFeedback">
+        <button
+          v-if="MY_FEEDBACK_ENABLED"
+          type="button"
+          class="mt-3 text-sm text-primary hover:underline"
+          @click="goToMyFeedback"
+        >
           {{ $t('footer.feedback.viewMine') }}
         </button>
       </div>
@@ -65,7 +70,7 @@
 
       <template #footer>
         <Button
-          v-if="!submitted"
+          v-if="MY_FEEDBACK_ENABLED && !submitted"
           variant="ghost"
           size="sm"
           class="mr-auto"
@@ -120,6 +125,10 @@ import Modal from '@/components/ui/Modal.vue'
 import { Spinner } from '@/components/ui'
 
 type FeedbackCategory = 'bug' | 'issue' | 'feature'
+
+// "My feedback" entry points disabled for now (owner decision, 2026-06-11).
+// Flip to true to bring them back; App.vue's footer link has the same flag.
+const MY_FEEDBACK_ENABLED = false
 
 const authStore = useAuthStore()
 const router = useRouter()
