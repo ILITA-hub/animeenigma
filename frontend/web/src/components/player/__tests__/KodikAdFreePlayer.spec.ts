@@ -104,6 +104,7 @@ const mountPlayer = (props = {}) =>
 describe('KodikAdFreePlayer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     loadSourceSpy.mockReset()
     refreshWatched.mockReset().mockResolvedValue(undefined)
     markEpisodeWatched.mockReset().mockResolvedValue(undefined)
@@ -136,8 +137,10 @@ describe('KodikAdFreePlayer', () => {
     mountPlayer()
     await flushPromises()
 
-    // Auto-selects first voice translation (id=1215) + episode 1
-    expect(getStream).toHaveBeenCalledWith('anime-uuid', 1, 1215)
+    // Auto-selects first voice translation (id=1215) + episode 1. With no
+    // saved preference the player requests max quality (2160 sentinel) so
+    // PickQuality clamps to the highest available instead of Kodik's 360p default.
+    expect(getStream).toHaveBeenCalledWith('anime-uuid', 1, 1215, 2160)
   })
 
   // ── Assertion 3: builds a /api/streaming/hls-proxy URL with stream_url + referer
@@ -352,5 +355,57 @@ describe('KodikAdFreePlayer', () => {
     expect(emitChangeEpisode).toHaveBeenCalledWith('3')
     // Local loadStream must NOT be triggered
     expect(getStream).not.toHaveBeenCalled()
+  })
+
+  // ── Assertion 13: quality buttons rendered descending, served quality active ─
+  it('renders quality buttons (descending) and marks the served quality active', async () => {
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await flushPromises()
+
+    const buttons = wrapper.findAll('[data-testid^="quality-"]')
+    expect(buttons.map(b => b.text())).toEqual(['720p', '480p', '360p'])
+    // Served quality (720 from STREAM_RESPONSE) carries the active accent class
+    expect(wrapper.find('[data-testid="quality-720"]').classes().join(' ')).toContain('accent-border')
+    expect(wrapper.find('[data-testid="quality-480"]').classes().join(' ')).not.toContain('accent-border')
+  })
+
+  // ── Assertion 14: clicking a quality persists it and re-requests the stream ─
+  it('clicking a quality persists the preference and re-calls getStream with it', async () => {
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await flushPromises()
+
+    getStream.mockClear()
+    getStream.mockResolvedValue({ data: { data: { ...STREAM_RESPONSE, quality: 480 } } })
+
+    await wrapper.find('[data-testid="quality-480"]').trigger('click')
+    await flushPromises()
+
+    expect(localStorage.getItem('kodik_adfree_quality')).toBe('480')
+    expect(getStream).toHaveBeenCalledWith('anime-uuid', 1, 1215, 480)
+  })
+
+  // ── Assertion 15: a saved quality preference is used on mount ──────────────
+  it('uses the saved quality preference on the initial stream request', async () => {
+    localStorage.setItem('kodik_adfree_quality', '480')
+    mountPlayer()
+    await flushPromises()
+
+    expect(getStream).toHaveBeenCalledWith('anime-uuid', 1, 1215, 480)
+  })
+
+  // ── Assertion 16: clicking the already-active quality is a no-op ───────────
+  it('clicking the currently active quality does not re-request the stream', async () => {
+    const wrapper = mountPlayer()
+    await flushPromises()
+    await flushPromises()
+
+    getStream.mockClear()
+    await wrapper.find('[data-testid="quality-720"]').trigger('click')
+    await flushPromises()
+
+    expect(getStream).not.toHaveBeenCalled()
+    expect(localStorage.getItem('kodik_adfree_quality')).toBeNull()
   })
 })

@@ -196,6 +196,28 @@
             <p>{{ translationType === 'voice' ? $t('player.noVoiceActing') : $t('player.noSubtitlesAvailable') }}</p>
           </div>
         </div>
+
+        <!-- Quality selector -->
+        <div v-if="availableQualities.length > 1" class="mt-4">
+          <h3 class="text-white/60 text-sm mb-2 flex items-center gap-2">
+            <MonitorPlay class="size-4" aria-hidden="true" />
+            {{ $t('player.quality') }}
+          </h3>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="q in availableQualities"
+              :key="q"
+              :data-testid="`quality-${q}`"
+              @click="selectQuality(q)"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              :class="selectedQuality === q
+                ? 'accent-bg-muted accent-text border accent-border'
+                : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'"
+            >
+              {{ q }}p
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -208,7 +230,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { Video, TriangleAlert, Flag, Play, List, Check, Mic2, MessageSquare, Star, Pin } from 'lucide-vue-next'
+import { Video, TriangleAlert, Flag, Play, List, Check, Mic2, MessageSquare, MonitorPlay, Star, Pin } from 'lucide-vue-next'
 import { Spinner, EmptyState } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import Hls from 'hls.js'
@@ -412,6 +434,32 @@ let reloadedOnce = false
 
 const streamError = ref(false)
 
+// ── Quality selection ────────────────────────────────────────────────────────
+// Kodik's /ftor "default" quality is 360p, so quality is requested explicitly:
+// the user's persisted choice, else QUALITY_MAX (backend PickQuality clamps to
+// the highest available). selectedQuality mirrors what the backend actually
+// served; only an explicit user click persists a preference.
+const QUALITY_PREF_KEY = 'kodik_adfree_quality'
+const QUALITY_MAX = 2160
+const availableQualities = ref<number[]>([])
+const selectedQuality = ref<number | null>(null)
+// Position to restore after the next stream attach (quality switch / re-extract).
+let pendingSeek = 0
+
+function requestedQuality(): number {
+  const saved = Number(localStorage.getItem(QUALITY_PREF_KEY) || '')
+  return Number.isFinite(saved) && saved > 0 ? saved : QUALITY_MAX
+}
+
+function selectQuality(q: number) {
+  if (q === selectedQuality.value) return
+  localStorage.setItem(QUALITY_PREF_KEY, String(q))
+  selectedQuality.value = q
+  const v = videoRef.value
+  pendingSeek = v && !introPlaying.value ? v.currentTime : 0
+  if (current) void loadStream(current.episode, current.translationID)
+}
+
 // ── Pre-roll intro state ─────────────────────────────────────────────────────
 // A branded 5s video plays before the real Kodik stream, replacing Kodik's own
 // ad pre-roll. The intro is shown ONCE per (translation:episode) key, tracked
@@ -450,12 +498,16 @@ function attachStream(streamUrl: string, referer: string) {
     hls = new Hls({ enableWorker: true, lowLatencyMode: false, backBufferLength: 90 })
     hls.loadSource(proxyUrl)
     hls.attachMedia(v)
-    hls.on(Hls.Events.MANIFEST_PARSED, () => { v.play().catch(() => {}) })
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (pendingSeek > 0) { v.currentTime = pendingSeek; pendingSeek = 0 }
+      v.play().catch(() => {})
+    })
     hls.on(Hls.Events.ERROR, (_e, data) => {
       if (!data.fatal) return
       // Expired signed CDN URL -> re-extract a fresh stream once, then give up.
       if (!reloadedOnce && current) {
         reloadedOnce = true
+        pendingSeek = v.currentTime || pendingSeek
         void loadStream(current.episode, current.translationID)
       } else {
         streamError.value = true
@@ -463,7 +515,10 @@ function attachStream(streamUrl: string, referer: string) {
     })
   } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
     v.src = proxyUrl
-    v.addEventListener('loadedmetadata', () => { v.play().catch(() => {}) }, { once: true })
+    v.addEventListener('loadedmetadata', () => {
+      if (pendingSeek > 0) { v.currentTime = pendingSeek; pendingSeek = 0 }
+      v.play().catch(() => {})
+    }, { once: true })
   }
 }
 
@@ -534,8 +589,12 @@ async function loadStream(episode: number, translationID: number) {
   if (changed) reloadedOnce = false
   current = { episode, translationID }
   try {
-    const resp = await kodikApi.getStream(props.animeId, episode, translationID)
+    const resp = await kodikApi.getStream(props.animeId, episode, translationID, requestedQuality())
     const data = resp.data?.data ?? resp.data
+    selectedQuality.value = data.quality ?? null
+    availableQualities.value = Array.isArray(data.qualities)
+      ? [...data.qualities].sort((a: number, b: number) => b - a)
+      : []
     playWithIntro(data.stream_url, data.referer, `${translationID}:${episode}`)
   } catch {
     streamError.value = true
@@ -676,6 +735,7 @@ function selectTranslation(translationId: number) {
   }
   if (selectedTranslation.value === translationId) return
 
+  pendingSeek = 0
   selectedTranslation.value = translationId
   const trans = translations.value.find(t => t.id === translationId)
   if (trans?.episodes_count && selectedEpisode.value > trans.episodes_count) {
@@ -703,6 +763,7 @@ function selectEpisode(episode: number) {
   currentTime.value = 0
   maxTime.value = 0
   lastSaveTime.value = 0
+  pendingSeek = 0
   episodeMarkedWatched.value = episode <= watchedUpTo.value
   selectedEpisode.value = episode
   if (selectedTranslation.value) {
@@ -758,6 +819,9 @@ watch(() => props.animeId, () => {
   currentTime.value = 0
   maxTime.value = 0
   lastSaveTime.value = 0
+  pendingSeek = 0
+  availableQualities.value = []
+  selectedQuality.value = null
   episodeMarkedWatched.value = false
   streamError.value = false
   error.value = null
