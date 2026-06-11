@@ -19,8 +19,11 @@ export function usePlayerState() {
   const setServer = (server: string) => { combo.value = { ...combo.value, server } }
   const setTeam = (team: string | null) => { combo.value = { ...combo.value, team } }
 
-  // subtitle prefs
-  const subLang = ref<'off' | TrackLang>('en')
+  // subtitle prefs. Default OFF: there is no soft subtitle track until the
+  // user picks one — EN provider streams carry subs burned into the video
+  // (hardsub), which is not a selectable track. `string` (not TrackLang):
+  // browsed tracks (Jimaku/OpenSubtitles) can be any language.
+  const subLang = ref<string>('off')
   const subSize = ref(26)
   const subBg = ref(45)
   const subOffset = ref(0)

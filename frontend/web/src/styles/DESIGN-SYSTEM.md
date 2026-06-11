@@ -113,7 +113,8 @@ The deprecated `--f-*`/`--violet` aliases remain *defined* in `main.css` (pointi
 ## Component inventory (target shadcn-vue mapping)
 
 `Button`→Button(cva) · `Card`→Card · `Badge`→Badge · `Input`→Input · `Select`→Select ·
-`Modal`→Dialog · `Tabs`→Tabs · `ContextMenu`→DropdownMenu · plus new: `Tooltip`, `Popover`, `Switch`, `Checkbox`.
+`Modal`→Dialog · `Tabs`→Tabs · `ContextMenu`→DropdownMenu · plus new: `Tooltip`, `Popover`, `Switch`, `Checkbox`,
+`Stepper` (numeric −/value/+ input; props `modelValue`/`step`/`min`/`max`/`suffix`/`label`, rounds to step precision — added 2026-06-11).
 
 ## Button API (v2.0 — widened 2026-06-04)
 

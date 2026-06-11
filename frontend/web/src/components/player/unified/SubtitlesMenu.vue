@@ -41,6 +41,15 @@
       </div>
     </div>
 
+    <!-- Hardsub note: no soft tracks loaded, subs are burned in by the provider -->
+    <div
+      v-if="hardsubNote && subLangs.length === 0"
+      class="px-[10px] pb-[6px] text-[11px] leading-snug text-[var(--muted-foreground)]"
+      data-test="hardsub-note"
+    >
+      {{ hardsubNote }}
+    </div>
+
     <div class="h-px mx-1 my-[6px]" style="background: var(--border);"/>
 
     <!-- Subtitle settings sub-section -->
@@ -86,44 +95,17 @@
       </span>
     </div>
 
-    <!-- Timing offset stepper -->
+    <!-- Timing offset (DS Stepper primitive) -->
     <div class="flex items-center gap-3 px-[10px] py-2">
       <label class="text-[13px] text-[var(--ink-2)] w-[86px] flex-shrink-0">Timing</label>
       <div class="flex flex-col items-end gap-[4px] ml-auto">
-        <!-- Stepper control -->
-        <div
-          class="inline-flex items-center gap-[2px] rounded-[var(--r-md)] p-[2px]"
-          style="background: rgba(255,255,255,0.06);"
-        >
-          <button
-            class="w-[26px] h-[26px] rounded-[var(--r-sm)] border-0 text-white text-[16px] leading-none transition-colors hover:text-[var(--brand-cyan)]"
-            style="background: rgba(255,255,255,0.08);"
-            aria-label="Decrease offset"
-            @click="adjustOffset(-0.1)"
-            @mousedown.prevent
-          >−</button>
-          <div
-            class="inline-flex items-baseline rounded-[var(--r-sm)] px-2"
-            style="background: rgba(0,0,0,0.25);"
-          >
-            <input
-              type="number"
-              :value="subOffset"
-              step="0.1"
-              class="text-right text-[14px] text-white border-0 bg-transparent py-[5px] focus:outline-none"
-              style="width: 46px; -moz-appearance: textfield;"
-              @change="onOffsetChange"
-            />
-            <span class="text-[12px] text-[var(--muted-foreground)] ml-[1px]">s</span>
-          </div>
-          <button
-            class="w-[26px] h-[26px] rounded-[var(--r-sm)] border-0 text-white text-[16px] leading-none transition-colors hover:text-[var(--brand-cyan)]"
-            style="background: rgba(255,255,255,0.08);"
-            aria-label="Increase offset"
-            @click="adjustOffset(0.1)"
-            @mousedown.prevent
-          >+</button>
-        </div>
+        <Stepper
+          :model-value="subOffset"
+          :step="0.1"
+          suffix="s"
+          label="offset"
+          @update:model-value="emit('update:subOffset', $event)"
+        />
         <!-- Hint text -->
         <span class="text-[11px] text-[var(--muted-foreground)]">
           {{ offsetHint }}
@@ -153,10 +135,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { List, ChevronRight } from 'lucide-vue-next'
+import Stepper from '@/components/ui/Stepper.vue'
 
 const props = defineProps<{
   subLang: string
   subLangs: string[]
+  /** shown when no soft track is loaded but the stream has burned-in subs */
+  hardsubNote?: string | null
   subSize: number
   subBg: number
   subOffset: number
@@ -187,23 +172,4 @@ const offsetHint = computed(() => {
   return v > 0 ? `${abs}s later` : `${abs}s earlier`
 })
 
-function adjustOffset(delta: number) {
-  const next = Math.round((props.subOffset + delta) * 10) / 10
-  emit('update:subOffset', next)
-}
-
-function onOffsetChange(e: Event) {
-  const val = parseFloat((e.target as HTMLInputElement).value)
-  if (!isNaN(val)) {
-    emit('update:subOffset', Math.round(val * 10) / 10)
-  }
-}
 </script>
-
-<style scoped>
-input[type='number']::-webkit-outer-spin-button,
-input[type='number']::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-</style>

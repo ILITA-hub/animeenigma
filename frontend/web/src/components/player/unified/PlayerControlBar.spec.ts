@@ -71,16 +71,16 @@ describe('PlayerControlBar', () => {
     expect(w.find('[data-test="toggle-theater"]').exists()).toBe(false)
   })
 
-  it('renders the scrub bar inside a scrub row with times flanking the track', () => {
+  it('renders a full-width scrub row and the time pill in the button row', () => {
     const w = mount(PlayerControlBar, { props: baseProps })
     const row = w.find('.pl-scrub-row')
     expect(row.exists()).toBe(true)
-    // current time, then the track, then duration — left/right of the track
-    expect(row.find('[data-test="time-current"]').exists()).toBe(true)
     expect(row.find('[data-test="track"]').exists()).toBe(true)
-    expect(row.find('[data-test="time-duration"]').exists()).toBe(true)
-    // time must NOT live in the button row
-    expect(w.find('.pl-btns [data-test="time-current"]').exists()).toBe(false)
+    // times moved OUT of the scrub row into the button-row pill
+    expect(row.find('[data-test="time-current"]').exists()).toBe(false)
+    expect(w.find('.pl-btns [data-test="time-pill"]').exists()).toBe(true)
+    expect(w.find('[data-test="time-pill"] [data-test="time-current"]').exists()).toBe(true)
+    expect(w.find('[data-test="time-pill"] [data-test="time-duration"]').exists()).toBe(true)
   })
 
   it('forwards a seek pct from the scrub bar', async () => {
@@ -89,17 +89,10 @@ describe('PlayerControlBar', () => {
     expect(w.emitted('seek')?.[0]).toEqual([42])
   })
 
-  it('centers the digit 5 identically in both skip buttons (no drift)', () => {
+  it('renders the skip buttons without a digit (icon-only)', () => {
     const w = mount(PlayerControlBar, { props: baseProps })
-    const back = w.find('[data-test="seek-back"] text')
-    const fwd = w.find('[data-test="seek-fwd"] text')
-    expect(back.exists()).toBe(true)
-    expect(fwd.exists()).toBe(true)
-    expect(back.attributes('x')).toBe('12')
-    expect(fwd.attributes('x')).toBe('12')
-    expect(back.attributes('y')).toBe(fwd.attributes('y'))
-    expect(back.attributes('text-anchor')).toBe('middle')
-    expect(fwd.attributes('text-anchor')).toBe('middle')
+    expect(w.find('[data-test="seek-back"] text').exists()).toBe(false)
+    expect(w.find('[data-test="seek-fwd"] text').exists()).toBe(false)
   })
 
   it('highlights the source pill / CC / gear when their menu is open', () => {

@@ -48,4 +48,57 @@ describe('DebugHud', () => {
     const w = mount(DebugHud, { props: { ...baseProps, frags: [], streamType: 'mp4' } })
     expect(w.text()).toContain('no fragments')
   })
+
+  it('renders no seek section without a trace', () => {
+    const w = mount(DebugHud, { props: baseProps })
+    expect(w.find('[data-test="hud-seek-head"]').exists()).toBe(false)
+  })
+
+  it('renders a buffer-HIT seek trace as the short path (no flush/fetch)', () => {
+    const w = mount(DebugHud, {
+      props: {
+        ...baseProps,
+        seek: { target: 754, bufferHit: true, t0: 0, seekedMs: 18, resumeMs: 24, frags: 0, bytes: 0, done: true },
+      },
+    })
+    expect(w.find('[data-test="hud-seek-head"]').text()).toContain('SEEK →12:34 · buffer HIT')
+    expect(w.text()).toContain('no network')
+    expect(w.text()).not.toContain('flush')
+    expect(w.text()).toContain('decode keyframe→target 18ms')
+    expect(w.text()).toContain('resume rs≥3 24ms')
+  })
+
+  it('renders a buffer-MISS trace with flush, fetch totals and pending resume', () => {
+    const w = mount(DebugHud, {
+      props: {
+        ...baseProps,
+        seek: { target: 90, bufferHit: false, t0: 0, seekedMs: 840, resumeMs: null, frags: 3, bytes: 2.1 * 1024 * 1024, done: false },
+      },
+    })
+    expect(w.find('[data-test="hud-seek-head"]').text()).toContain('buffer MISS')
+    expect(w.text()).toContain('flush')
+    expect(w.text()).toContain('3 frags · 2.1MB')
+    expect(w.text()).toContain('… resume rs≥3 — buffering…')
+  })
+
+  it('labels the fetch step as a range request for mp4 streams', () => {
+    const w = mount(DebugHud, {
+      props: {
+        ...baseProps,
+        streamType: 'mp4',
+        seek: { target: 90, bufferHit: false, t0: 0, seekedMs: null, resumeMs: null, frags: 0, bytes: 0, done: false },
+      },
+    })
+    expect(w.text()).toContain('range request (moov index)')
+  })
+
+  it('toggles the seek-pipeline tech reference via the "?" button', async () => {
+    const w = mount(DebugHud, { props: baseProps })
+    expect(w.find('[data-test="hud-reference"]').exists()).toBe(false)
+    await w.find('[data-test="hud-help-toggle"]').trigger('click')
+    expect(w.find('[data-test="hud-reference"]').exists()).toBe(true)
+    expect(w.find('[data-test="hud-reference"]').text()).toContain('keyframe')
+    await w.find('[data-test="hud-help-toggle"]').trigger('click')
+    expect(w.find('[data-test="hud-reference"]').exists()).toBe(false)
+  })
 })

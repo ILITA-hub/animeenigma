@@ -75,11 +75,6 @@
 
     <!-- Top bar -->
     <div class="pl-top" @click.stop>
-      <!-- Episodes (left chevron — opens the episode drawer) -->
-      <button class="pl-icon" aria-label="Episodes" @click="toggleMenu('episodes')">
-        <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
-      </button>
-
       <!-- Title block -->
       <div class="pl-title-block">
         <span class="pl-eyebrow">
@@ -127,6 +122,7 @@
       :provider="activeProviderName"
       :stream-type="currentStream?.type ?? '—'"
       :level-label="engine.currentLevelLabel.value"
+      :seek="lastSeek"
     />
 
     <SkipIntroChip
@@ -228,10 +224,11 @@
       <SubtitlesMenu
         :sub-lang="state.subLang.value"
         :sub-langs="subLangsAvailable"
+        :hardsub-note="hardsubNote"
         :sub-size="state.subSize.value"
         :sub-bg="state.subBg.value"
         :sub-offset="state.subOffset.value"
-        @update:sub-lang="v => { state.subLang.value = v as 'off' | 'en' | 'ru' | 'ja' }"
+        @update:sub-lang="v => { state.subLang.value = v }"
         @update:sub-size="v => { state.subSize.value = v }"
         @update:sub-bg="v => { state.subBg.value = v }"
         @update:sub-offset="v => { state.subOffset.value = v }"
@@ -259,7 +256,7 @@ import {
   onMounted,
   onUnmounted,
 } from 'vue'
-import { CircleAlert, ChevronLeft, List } from 'lucide-vue-next'
+import { CircleAlert, List } from 'lucide-vue-next'
 
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
@@ -271,7 +268,7 @@ import SubtitlesMenu from './SubtitlesMenu.vue'
 import BrowseSubsModal from './BrowseSubsModal.vue'
 import BigPlayButton from './overlays/BigPlayButton.vue'
 import BufferingOverlay from './overlays/BufferingOverlay.vue'
-import DebugHud from './overlays/DebugHud.vue'
+import DebugHud, { type SeekTrace } from './overlays/DebugHud.vue'
 import SkipIntroChip from './overlays/SkipIntroChip.vue'
 import NextEpisodeCard from './overlays/NextEpisodeCard.vue'
 import WatchTogetherButton from './overlays/WatchTogetherButton.vue'
@@ -721,11 +718,17 @@ function onBufferStart() {
 
 function onBufferEnd() {
   setBuffering(false)
+  markSeekResumed()
 }
 
 function onSeeked() {
   const v = videoRef.value
   if (v && v.readyState >= 3) setBuffering(false)
+  // Seek trace: decoder positioned at the target frame
+  const s = lastSeek.value
+  if (s && !s.done && s.seekedMs === null) {
+    s.seekedMs = Math.round(performance.now() - s.t0)
+  }
 }
 
 // Self-heal: if time is advancing with decodable data, we are NOT buffering.
@@ -739,6 +742,9 @@ function onTimeUpdate() {
   }
   if (isBuffering.value && v && v.readyState >= 3 && !v.seeking) {
     setBuffering(false)
+  }
+  if (v && v.readyState >= 3 && !v.seeking) {
+    markSeekResumed()
   }
 }
 
@@ -763,6 +769,54 @@ watch(engine.fatal, (f) => {
 
 const statsEnabled = computed(() => state.hackerMode.value)
 const { stats: playbackStats } = usePlaybackStats(videoRef, statsEnabled)
+
+// Seek pipeline trace — what actually happens between releasing the scrubber
+// and playback resuming: buffer check (hit = instant, no network), pipeline
+// flush + segment fetch, decode from the nearest keyframe to the target
+// (the `seeked` event), then buffer refill to readyState ≥ 3 (resume).
+const lastSeek = ref<SeekTrace | null>(null)
+
+function traceSeekStart(target: number) {
+  if (!state.hackerMode.value) return
+  const v = videoRef.value
+  if (!v) return
+  let hit = false
+  for (let i = 0; i < v.buffered.length; i++) {
+    if (target >= v.buffered.start(i) && target <= v.buffered.end(i)) {
+      hit = true
+      break
+    }
+  }
+  lastSeek.value = {
+    target,
+    bufferHit: hit,
+    t0: performance.now(),
+    seekedMs: null,
+    resumeMs: null,
+    frags: 0,
+    bytes: 0,
+    done: false,
+  }
+}
+
+function markSeekResumed() {
+  const s = lastSeek.value
+  if (!s || s.done) return
+  if (s.seekedMs === null) return // resume can't precede the seeked event
+  s.resumeMs = Math.round(performance.now() - s.t0)
+  s.done = true
+}
+
+// Count fragments fetched while a seek is in flight (hls path; FRAG_LOADED
+// appends exactly one entry per fragment to the rolling fragStats window).
+watch(engine.fragStats, (arr) => {
+  const s = lastSeek.value
+  if (!s || s.done) return
+  const last = arr[arr.length - 1]
+  if (!last) return
+  s.frags++
+  s.bytes += last.size
+})
 
 // HUD shows while paused or while actively buffering/seeking. Uses
 // showBuffering (post-150ms-grace) so instant seeks don't flash it.
@@ -971,11 +1025,32 @@ const chosenSubFormat = computed<'ass' | 'srt' | 'vtt' | null>(() => {
   return null
 })
 
-// Real subtitle languages (the menu renders the "Off" option itself).
-const subLangsAvailable = computed(() => ['en', 'ru', 'ja'])
+// Real subtitle languages — only what's actually loaded as a soft track
+// (the menu renders the "Off" option itself). Provider hardsubs are burned
+// into the video and are NOT a selectable track, so a fresh stream offers
+// nothing here until the user browses one in.
+const subLangsAvailable = computed(() =>
+  chosenSub.value ? [chosenSub.value.lang] : [],
+)
+
+// Informational note for the subs menu: when there's no soft track but the
+// stream is a SUB cut, the subs the user sees are hardsubbed by the provider.
+const hardsubNote = computed(() => {
+  if (chosenSub.value) return null
+  if (state.combo.value.audio !== 'sub') return null
+  const prov = activeProviderName.value
+  if (!prov) return null
+  const langName =
+    state.combo.value.lang === 'ru' ? 'Russian'
+    : state.combo.value.lang === 'ja' ? 'Japanese'
+    : 'English'
+  return `${langName} subtitles are burned into the video by ${prov}`
+})
 
 function onSelectSubTrack(track: SubTrack) {
   chosenSub.value = track
+  // Selecting a track turns the overlay on for that language
+  state.subLang.value = track.lang
   browseOpen.value = false
 }
 
@@ -1001,13 +1076,17 @@ function togglePlay() {
 function onSeekRel(delta: number) {
   const v = videoRef.value
   if (!v) return
-  v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta))
+  const target = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta))
+  traceSeekStart(target)
+  v.currentTime = target
 }
 
 function onSeek(pct: number) {
   const v = videoRef.value
   if (!v || !v.duration) return
-  v.currentTime = (pct / 100) * v.duration
+  const target = (pct / 100) * v.duration
+  traceSeekStart(target)
+  v.currentTime = target
   // Write progress immediately so the scrub bar reflects the new position
   // even while paused (rAF loop is stopped when paused).
   writeProgress()

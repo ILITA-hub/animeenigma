@@ -1,8 +1,7 @@
 <template>
   <div class="pl-controls">
-    <!-- Scrub row: current time · track · total time (per design) -->
+    <!-- Scrub row: full-width horizontal line (YouTube-style) -->
     <div class="pl-scrub-row">
-      <span class="pl-time pl-time-cur" data-test="time-current">{{ fmt(currentTime) }}</span>
       <PlayerScrubBar
         :progress="progress"
         :buffered="buffered"
@@ -14,7 +13,6 @@
         :preview-type="previewType"
         @seek="emit('seek', $event)"
       />
-      <span class="pl-time pl-time-dur" data-test="time-duration">{{ fmt(duration) }}</span>
     </div>
 
     <div class="pl-btns">
@@ -29,7 +27,7 @@
         <Play v-else class="size-5" aria-hidden="true" />
       </PlayerIconButton>
 
-      <!-- −5s (hidden on mobile via CSS) — circular replay arrow w/ "5" inside -->
+      <!-- −5s (hidden on mobile via CSS) — circular replay arrow -->
       <PlayerIconButton
         class="pl-skip-back"
         aria-label="Back 5 seconds"
@@ -41,11 +39,10 @@
           aria-hidden="true"
         >
           <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
-          <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
       </PlayerIconButton>
 
-      <!-- +5s (hidden on mobile via CSS) — circular forward arrow w/ "5" inside -->
+      <!-- +5s (hidden on mobile via CSS) — circular forward arrow -->
       <PlayerIconButton
         class="pl-skip-fwd"
         aria-label="Forward 5 seconds"
@@ -59,7 +56,6 @@
           <g style="transform: scaleX(-1); transform-origin: center">
             <path d="M4 4v6h6M4 10a8 8 0 11-1 4" />
           </g>
-          <text x="12" y="16" font-size="8" font-weight="700" font-family="var(--font-mono,monospace)" fill="currentColor" stroke="none" text-anchor="middle">5</text>
         </svg>
       </PlayerIconButton>
 
@@ -89,6 +85,13 @@
           @input="onVolumeInput"
         />
       </div>
+
+      <!-- Time pill: current / total (YouTube-style, left of the spacer) -->
+      <span class="pl-timepill" data-test="time-pill">
+        <span data-test="time-current">{{ fmt(currentTime) }}</span>
+        <span class="pl-timepill-sep" aria-hidden="true">/</span>
+        <span data-test="time-duration">{{ fmt(duration) }}</span>
+      </span>
 
       <!-- Spacer -->
       <span class="pl-spacer" aria-hidden="true" />
@@ -227,16 +230,15 @@ function onVolumeInput(event: Event) {
   right: 0;
   bottom: 0;
   z-index: 7;
-  padding: 30px 16px 12px;
+  padding: 30px 0 12px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
   transition: opacity 0.2s;
 }
 
-/* Scrub row — time · track · time (per design) */
+/* Scrub row — full-width horizontal line, edge to edge */
 .pl-scrub-row {
   display: flex;
   align-items: center;
-  gap: 12px;
   margin-bottom: 4px;
 }
 
@@ -244,6 +246,7 @@ function onVolumeInput(event: Event) {
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 0 12px;
 }
 
 .pl-spacer {
@@ -276,18 +279,31 @@ function onVolumeInput(event: Event) {
   margin-right: 6px;
 }
 
-/* Time labels — flank the scrub track */
-.pl-time {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
-  flex-shrink: 0;
+/* Time pill — like the source pill but informational (left side) */
+.pl-timepill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  width: 44px;
+  flex-shrink: 0;
+  user-select: none;
 }
 
-.pl-time-dur {
-  text-align: right;
-  color: rgba(255, 255, 255, 0.7);
+.pl-timepill-sep {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.pl-timepill [data-test='time-duration'] {
+  color: rgba(255, 255, 255, 0.65);
 }
 
 /* Source pill */
