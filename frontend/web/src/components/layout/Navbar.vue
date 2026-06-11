@@ -3,10 +3,17 @@
        in Anime.vue (`body.theater-mode .navbar-root { display: none }`)
        hide this header when Theater Mode is active on the anime detail
        view. Navbar itself stays stateless w.r.t. theater-mode; the body
-       class is the contract. -->
+       class is the contract.
+
+       pr-[var(--scrollbar-width,0px)] consumes the CSS var reka-ui sets on
+       <html> while a Select/DropdownMenu/Dialog body-locks scroll: the lock
+       pads <body> right by the vanished scrollbar's width, and this fixed
+       header must shrink by the same amount or its centered content visibly
+       shifts. transition-transform (not -all) keeps the compensation
+       instant — only the show/hide translate-y should animate. -->
   <header
     :class="[
-      'fixed top-0 left-0 right-0 z-50 transition-all duration-300 navbar-root',
+      'fixed top-0 left-0 right-0 z-50 pr-[var(--scrollbar-width,0px)] transition-transform duration-300 navbar-root',
       isVisible ? 'translate-y-0' : '-translate-y-full',
       'glass-nav'
     ]"
