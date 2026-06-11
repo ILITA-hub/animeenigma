@@ -80,8 +80,26 @@
       <div class="pl-title-block">
         <span class="pl-eyebrow">
           <span class="pl-eyebrow-src">
-            EP {{ selectedEpisode?.number ?? anime.ep }}
-            <span v-if="selectedEpisode?.title" class="pl-ep-title">· {{ selectedEpisode.title }}</span>
+            <!-- V2b: the EP block IS the episodes-sheet trigger -->
+            <button
+              type="button"
+              class="pl-ep-trigger"
+              :aria-expanded="openMenu === 'episodes'"
+              aria-label="Episode list"
+              title="Episodes"
+              data-test="ep-trigger"
+              @click="toggleMenu('episodes')"
+            >
+              EP {{ selectedEpisode?.number ?? anime.ep }}
+              <span v-if="selectedEpisode?.title" class="pl-ep-title">· {{ selectedEpisode.title }}</span>
+              <ChevronDown
+                class="pl-ep-chev"
+                :class="{ 'pl-ep-chev--open': openMenu === 'episodes' }"
+                :size="12"
+                :stroke-width="2.5"
+                aria-hidden="true"
+              />
+            </button>
             <span v-if="activeProviderName" class="inline-flex items-center gap-1 ml-1">
               <span class="pl-prov-dot" :style="{ background: activeProviderHue, boxShadow: `0 0 8px ${activeProviderHue}` }" aria-hidden="true" />
               {{ activeProviderName }}
@@ -95,14 +113,6 @@
       <!-- Top-right actions -->
       <div class="pl-top-right">
         <WatchTogetherButton />
-        <button
-          class="pl-icon"
-          aria-label="Episode list"
-          title="Episodes"
-          @click="toggleMenu('episodes')"
-        >
-          <LayoutGrid :size="20" :stroke-width="2" aria-hidden="true" />
-        </button>
       </div>
     </div>
 
@@ -212,8 +222,8 @@
       />
     </div>
 
-    <!-- Episodes drawer (floating, top-right — reuses source-panel geometry) -->
-    <div v-if="openMenu === 'episodes'" class="pl-floating pl-floating--source" @click.stop>
+    <!-- Episodes sheet (V2b — bottom sheet above the control bar) -->
+    <div v-if="openMenu === 'episodes'" class="pl-floating pl-floating--sheet" @click.stop>
       <EpisodesPanel
         :episodes="episodes"
         :selected-number="selectedEpisode?.number ?? null"
@@ -284,7 +294,7 @@ import {
   onMounted,
   onUnmounted,
 } from 'vue'
-import { CircleAlert, LayoutGrid, Play, X } from 'lucide-vue-next'
+import { CircleAlert, ChevronDown, Play, X } from 'lucide-vue-next'
 
 import { userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -1590,6 +1600,36 @@ onUnmounted(() => {
   opacity: 0.85;
 }
 
+/* V2b: the EP block doubles as the episodes-sheet trigger */
+.pl-ep-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 6px;
+  margin: -2px -2px -2px -6px;
+  border-radius: var(--r-sm, 6px);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.pl-ep-trigger:hover,
+.pl-ep-trigger[aria-expanded='true'] {
+  background: rgba(0, 212, 255, 0.12);
+}
+
+.pl-ep-chev {
+  opacity: 0.7;
+  transition: transform 0.15s;
+}
+
+.pl-ep-chev--open {
+  transform: rotate(180deg);
+}
+
 /* Idle while playing — fade out the chrome (top bar lives here, the control
    bar is inside <PlayerControlBar>, hence :deep). */
 .pl--ui-hidden {
@@ -1709,6 +1749,14 @@ onUnmounted(() => {
   right: 14px;
   width: 320px;
   max-height: calc(100% - 130px);
+}
+
+/* Episodes sheet (V2b): full-width above the control bar. */
+.pl-floating--sheet {
+  left: 10px;
+  right: 10px;
+  bottom: 76px;
+  max-height: calc(100% - 150px);
 }
 
 /* Settings / subtitles: compact card floating above the control-bar buttons. */

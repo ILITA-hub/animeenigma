@@ -106,4 +106,82 @@ describe('EpisodesPanel', () => {
     })
     expect(w.find('[data-test="episode-1"]').attributes('title')).toBe('1. The Journey Begins')
   })
+
+  // ── V2b bottom-sheet behaviors ────────────────────────────────────────────
+
+  const manyEps = (n: number): EpisodeOption[] =>
+    Array.from({ length: n }, (_, i) => ({
+      key: i + 1,
+      label: i + 1,
+      number: i + 1,
+      title: `Episode ${i + 1}`,
+    }))
+
+  it('shows the episode title text in the strip card (not only a tooltip)', () => {
+    const w = mount(EpisodesPanel, {
+      props: {
+        episodes: [{ key: 1, label: 1, number: 1, title: 'The Journey Begins' }],
+        selectedNumber: 1,
+      },
+    })
+    expect(w.find('[data-test="episode-1"]').text()).toContain('The Journey Begins')
+  })
+
+  it('adaptive: <=15 eps — no jump input, no grid toggle (strip only)', () => {
+    const w = mount(EpisodesPanel, { props: { episodes: manyEps(12), selectedNumber: 1 } })
+    expect(w.find('[data-test="ep-strip"]').exists()).toBe(true)
+    expect(w.find('[data-test="jump-input"]').exists()).toBe(false)
+    expect(w.find('[data-test="view-grid"]').exists()).toBe(false)
+  })
+
+  it('adaptive: 16-99 eps — jump input appears, still no grid toggle', () => {
+    const w = mount(EpisodesPanel, { props: { episodes: manyEps(40), selectedNumber: 1 } })
+    expect(w.find('[data-test="jump-input"]').exists()).toBe(true)
+    expect(w.find('[data-test="view-grid"]').exists()).toBe(false)
+  })
+
+  it('adaptive: 100+ eps — grid toggle appears and switches to the grid view', async () => {
+    const w = mount(EpisodesPanel, { props: { episodes: manyEps(112), selectedNumber: 4 } })
+    expect(w.find('[data-test="view-grid"]').exists()).toBe(true)
+    expect(w.find('[data-test="ep-grid"]').exists()).toBe(false)
+
+    await w.find('[data-test="view-grid"]').trigger('click')
+    expect(w.find('[data-test="ep-grid"]').exists()).toBe(true)
+    expect(w.find('[data-test="ep-strip"]').exists()).toBe(false)
+    expect(w.findAll('[data-test^="episode-grid-"]').length).toBe(112)
+
+    await w.find('[data-test="view-strip"]').trigger('click')
+    expect(w.find('[data-test="ep-strip"]').exists()).toBe(true)
+  })
+
+  it('grid cells emit select (click = play, same as strip)', async () => {
+    const w = mount(EpisodesPanel, { props: { episodes: manyEps(112), selectedNumber: 4 } })
+    await w.find('[data-test="view-grid"]').trigger('click')
+    await w.find('[data-test="episode-grid-87"]').trigger('click')
+    expect(w.emitted('select')?.[0]).toEqual([
+      expect.objectContaining({ number: 87 }),
+    ])
+  })
+
+  it('shows the next-unwatched chip for long titles and hides it when caught up', () => {
+    const behind = mount(EpisodesPanel, {
+      props: { episodes: manyEps(40), selectedNumber: 1, watchedUpTo: 3 },
+    })
+    expect(behind.find('[data-test="next-unwatched"]').text()).toContain('4')
+
+    // Selected episode IS the next unwatched — chip is noise, hide it.
+    const onIt = mount(EpisodesPanel, {
+      props: { episodes: manyEps(40), selectedNumber: 4, watchedUpTo: 3 },
+    })
+    expect(onIt.find('[data-test="next-unwatched"]').exists()).toBe(false)
+  })
+
+  it('jump scrolls/flashes the target card without selecting it', async () => {
+    const w = mount(EpisodesPanel, { props: { episodes: manyEps(40), selectedNumber: 1 } })
+    const input = w.find('[data-test="jump-input"]')
+    await input.setValue('120') // clamps to 40
+    await input.trigger('keydown.enter')
+    expect(w.emitted('select')).toBeUndefined()
+    expect(w.find('[data-test="episode-40"]').classes()).toContain('ep-flash')
+  })
 })
