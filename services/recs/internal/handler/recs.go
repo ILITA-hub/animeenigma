@@ -20,9 +20,9 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/authz"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs/signals"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs/signals"
 	"gorm.io/gorm"
 )
 

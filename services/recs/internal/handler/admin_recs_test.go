@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs/signals"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs/signals"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

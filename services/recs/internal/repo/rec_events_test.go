@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"

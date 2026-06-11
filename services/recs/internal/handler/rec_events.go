@@ -21,7 +21,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/domain"
 )
 
 // recEventsRepoSurface is the narrow Insert-only interface the handler

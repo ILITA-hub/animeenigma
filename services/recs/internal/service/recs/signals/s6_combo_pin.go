@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/repo"
 	"gorm.io/gorm"
 )
 

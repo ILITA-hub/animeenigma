@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

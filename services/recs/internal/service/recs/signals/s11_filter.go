@@ -23,7 +23,7 @@ package signals
 import (
 	"context"
 
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs"
 	"gorm.io/gorm"
 )
 
