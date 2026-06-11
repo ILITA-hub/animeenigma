@@ -136,7 +136,7 @@ func setupInternalListTestDB(t *testing.T) (*ListService, *gorm.DB) {
 	listRepo := repo.NewListRepository(db)
 	log, err := logger.New(logger.Config{Level: "error", Development: false})
 	require.NoError(t, err)
-	svc := NewListService(listRepo, nil, nil, nil, nil, nil, nil, nil, log)
+	svc := NewListService(listRepo, nil, nil, nil, nil, nil, log)
 	return svc, db
 }
 

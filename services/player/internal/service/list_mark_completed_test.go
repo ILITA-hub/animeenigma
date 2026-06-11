@@ -175,7 +175,7 @@ func setupListServiceTestDB(t *testing.T) (*ListService, *gorm.DB) {
 	// userOrchestrator / recsRepo / cache nil — these tests don't exercise
 	// the Phase 11 debounced trigger path or the Phase 13 synchronous S6
 	// seed-update path; MarkEpisodeWatched nil-guards each before invoking.
-	svc := NewListService(listRepo, activityRepo, prefRepo, progressRepo, nil, nil, nil, nil, log)
+	svc := NewListService(listRepo, activityRepo, prefRepo, progressRepo, nil, nil, log)
 	return svc, db
 }
 

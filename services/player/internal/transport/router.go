@@ -27,10 +27,7 @@ func NewRouter(
 	exportHandler *handler.ExportHandler,
 	preferenceHandler *handler.PreferenceHandler,
 	overrideHandler *handler.OverrideHandler,
-	recsHandler *handler.RecsHandler,
-	adminRecsHandler *handler.AdminRecsHandler, // Phase 14 (REC-ADMIN-01 / REC-ADMIN-02)
 	adminReportsHandler *handler.AdminReportsHandler, // admin feedback browser
-	recEventsHandler *handler.RecEventsHandler, // Phase 14 (REC-EVAL-01)
 	internalListHandler *handler.InternalListHandler, // hero-spotlight v1.0 Phase 3
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
@@ -165,27 +162,9 @@ func NewRouter(
 			r.Post("/override", overrideHandler.RecordOverride)
 		})
 
-		// Phase 10: anonymous trending recs row.
-		// MUST live OUTSIDE the protected r.Route("/users", ...) group above —
-		// that group uses AuthMiddleware which 401s anonymous callers. We mount
-		// /users/recs as a sibling and apply OptionalAuthMiddleware so JWTs
-		// decode if present but anonymous callers pass through with the same
-		// payload (Phase 11 will branch on claims for personalization).
-		r.Route("/users/recs", func(r chi.Router) {
-			r.Use(OptionalAuthMiddleware(jwtConfig))
-			r.Get("/", recsHandler.GetRecs)
-		})
-
-		// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute.
-		// AuthMiddleware first (401 on missing/invalid JWT), AdminRoleMiddleware
-		// second (403 on non-admin role). Defense-in-depth: the gateway also
-		// applies the same gates (services/gateway/internal/transport/router.go).
-		r.Route("/admin/recs", func(r chi.Router) {
-			r.Use(AuthMiddleware(jwtConfig))
-			r.Use(AdminRoleMiddleware)
-			r.Get("/{user_id}", adminRecsHandler.GetAdminRecs)
-			r.Post("/{user_id}/recompute", adminRecsHandler.ForceRecompute)
-		})
+		// The recs HTTP routes (/users/recs anonymous trending row, /admin/recs
+		// admin debug + force-recompute, /events public telemetry) moved out of
+		// player to services/recs — extraction 2026-06-11.
 
 		// Admin feedback browser: read + triage the on-disk user feedback /
 		// error reports that SubmitReport persists. Admin-role-gated (gateway
@@ -202,14 +181,6 @@ func NewRouter(
 				r.Patch("/admin/reports/{id}/status", adminReportsHandler.SetStatus)
 			})
 		}
-
-		// Phase 14 (REC-EVAL-01): public telemetry endpoint. JWT-OPTIONAL —
-		// anonymous trending CTR data is valid per CONTEXT.md §C4. The handler
-		// increments Prometheus counters AND persists a rec_events row.
-		r.Route("/events", func(r chi.Router) {
-			r.Use(OptionalAuthMiddleware(jwtConfig))
-			r.Post("/rec", recEventsHandler.PostRecEvent)
-		})
 
 		// Public user watchlist
 		r.Get("/users/{userId}/watchlist/public", listHandler.GetPublicWatchlist)

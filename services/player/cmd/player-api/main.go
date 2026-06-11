@@ -19,8 +19,6 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/player/internal/handler"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/service"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs/signals"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/transport"
 	"gorm.io/gorm"
 )
@@ -89,10 +87,6 @@ func main() {
 		&domain.ReviewReaction{},
 		&domain.SyncJob{},
 		&domain.ActivityEvent{},
-		&domain.RecUserSignals{},
-		&domain.RecPopulationSignals{},
-		&domain.RecCompletionCoOccurrence{},
-		&domain.RecEvent{}, // Phase 14 (REC-EVAL-01)
 	); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
@@ -146,59 +140,17 @@ func main() {
 		log.Fatalw("social migration failed", "error", err)
 	}
 
-	// Phase 9: rec engine FK constraints + last_computed indexes — created via
-	// raw SQL because GORM AutoMigrate does not infer FKs from struct tags
-	// alone. Postgres 16 does NOT support `ALTER TABLE ... ADD CONSTRAINT IF
-	// NOT EXISTS ...` for FKs, so each constraint is wrapped in a DO block
-	// that checks pg_constraint first. Indexes use the native `CREATE INDEX
-	// IF NOT EXISTS` form. Idempotent — re-running on already-migrated DBs is
-	// a no-op. See spec docs/superpowers/specs/2026-05-03-rec-engine-design.md
-	// §4.1.
+	// review_reactions FK — created via raw SQL because GORM AutoMigrate does
+	// not infer FKs from struct tags alone. Postgres 16 does NOT support
+	// `ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS ...` for FKs, so the
+	// constraint is wrapped in a DO block that checks pg_constraint first.
+	// Idempotent — re-running on already-migrated DBs is a no-op.
+	// (The Phase 9 rec-engine FK/index statements were removed when the recs
+	// engine moved out of player to services/recs — extraction 2026-06-11.)
 	{
 		stmts := []string{
-			`DO $$ BEGIN
-				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_user_signals_user_id_fkey') THEN
-					ALTER TABLE rec_user_signals
-						ADD CONSTRAINT rec_user_signals_user_id_fkey
-						FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
-				END IF;
-			END $$;`,
-			`DO $$ BEGIN
-				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_user_signals_s6_seed_anime_id_fkey') THEN
-					ALTER TABLE rec_user_signals
-						ADD CONSTRAINT rec_user_signals_s6_seed_anime_id_fkey
-						FOREIGN KEY (s6_seed_anime_id) REFERENCES animes(id) ON DELETE SET NULL;
-				END IF;
-			END $$;`,
-			`DO $$ BEGIN
-				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_population_signals_anime_id_fkey') THEN
-					ALTER TABLE rec_population_signals
-						ADD CONSTRAINT rec_population_signals_anime_id_fkey
-						FOREIGN KEY (anime_id) REFERENCES animes(id) ON DELETE CASCADE;
-				END IF;
-			END $$;`,
-			`DO $$ BEGIN
-				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_co_occurrence_seed_fkey') THEN
-					ALTER TABLE rec_completion_co_occurrence
-						ADD CONSTRAINT rec_co_occurrence_seed_fkey
-						FOREIGN KEY (seed_anime_id) REFERENCES animes(id) ON DELETE CASCADE;
-				END IF;
-			END $$;`,
-			`DO $$ BEGIN
-				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rec_co_occurrence_candidate_fkey') THEN
-					ALTER TABLE rec_completion_co_occurrence
-						ADD CONSTRAINT rec_co_occurrence_candidate_fkey
-						FOREIGN KEY (candidate_anime_id) REFERENCES animes(id) ON DELETE CASCADE;
-				END IF;
-			END $$;`,
-			`CREATE INDEX IF NOT EXISTS idx_rec_user_signals_last_computed
-				ON rec_user_signals (last_computed)`,
-			`CREATE INDEX IF NOT EXISTS idx_rec_co_occurrence_seed
-				ON rec_completion_co_occurrence (seed_anime_id, co_count DESC)`,
 			// AUTO-408 — review_reactions.review_id → anime_list(id) ON DELETE
 			// CASCADE so removing a review/list row cleans up its reactions.
-			// Postgres 16 has no ADD CONSTRAINT IF NOT EXISTS for FKs, so guard
-			// with a pg_constraint probe. Idempotent.
 			`DO $$ BEGIN
 				IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'review_reactions_review_id_fkey') THEN
 					ALTER TABLE review_reactions
@@ -209,7 +161,7 @@ func main() {
 		}
 		for _, sql := range stmts {
 			if err := db.DB.Exec(sql).Error; err != nil {
-				log.Fatalw("failed to enforce rec engine FK/index", "sql", sql, "error", err)
+				log.Fatalw("failed to enforce review_reactions FK", "sql", sql, "error", err)
 			}
 		}
 	}
@@ -296,66 +248,10 @@ func main() {
 	}
 	defer dbEffectsStop()
 
-	// Phase 10: rec engine population cron (60-minute ticker).
-	// Spawned with a derived context so graceful shutdown can cancel it
-	// before the HTTP server stops accepting traffic.
-	cronCtx, cronCancel := context.WithCancel(context.Background())
-	{
-		recsRepo := repo.NewRecsRepository(db.DB)
-		s3 := signals.NewS3Trending(db.DB, recsRepo)
-		s4 := signals.NewS4Recency(db.DB)
-		popOrch := recs.NewPopulationOrchestrator(
-			[]recs.SignalModule{s3, s4},
-			redisCache,
-			log,
-		)
-		// 60-minute cadence per CONTEXT.md decisions §Population cron.
-		// Boot tick runs immediately so cold start has data within seconds.
-		// Seed a named origin so frame-less db_writes on this cron attribute to
-		// "scheduled_job/recs-population" instead of "goroutine/unknown" (the
-		// resolvable signals.* stack-frame labels still win where present).
-		popOrch.Start(tracing.SeedBaggage(cronCtx, "scheduled_job:recs-population", ""), 60*time.Minute)
-	}
-
-	// Phase 11: rec engine USER signal cron (6-hour ticker) + debounced
-	// on-write trigger. The orchestrator delegates to the existing
-	// recs.Orchestrator (precompute.go) for per-user RunForUser semantics.
-	// Cache invalidation on success busts recs:user:{user_id}:topN so the
-	// next request picks up fresh signals.
-	//
-	// Phase 14: userPrecompute is hoisted to outer scope (vs. its previous
-	// block-local declaration) so the AdminRecsHandler.ForceRecompute path
-	// can call the SAME synchronous precompute orchestrator the cron uses
-	// — avoids spinning up a parallel module list and keeps admin debug
-	// in lockstep with the production precompute schedule.
-	var userOrch *recs.UserOrchestrator
-	var userPrecompute *recs.Orchestrator
-	{
-		recsRepoLocal := repo.NewRecsRepository(db.DB)
-		s1 := signals.NewS1ScoreCluster(db.DB, recsRepoLocal)
-		s2 := signals.NewS2Metadata(db.DB)
-		s5 := signals.NewS5Attribute(db.DB, recsRepoLocal) // Phase 12 (REC-SIG-05)
-		userPrecompute = recs.NewOrchestrator([]recs.SignalModule{s1, s2, s5})
-		userOrch = recs.NewUserOrchestrator(userPrecompute, db.DB, redisCache, log)
-		// 6-hour cadence per CONTEXT.md decisions §User-Signal Cron.
-		// Boot tick runs immediately so logged-in users get fresh signals
-		// within seconds of redeploy.
-		// Seeded origin → frame-less writes attribute to
-		// "scheduled_job/recs-user-precompute" instead of "goroutine/unknown".
-		userOrch.Start(tracing.SeedBaggage(cronCtx, "scheduled_job:recs-user-precompute", ""), 6*time.Hour)
-	}
-
-	// Phase 13 (REC-SIG-06): rec engine CO-OCCURRENCE cron (24-hour ticker).
-	// Materializes rec_completion_co_occurrence at score>=7 nightly. The S6
-	// pin resolver reads from this table on every recs request; nightly
-	// materialization is enough at production scale (~1900 rows; millisecond
-	// runtime). Per CONTEXT.md decisions §B4.
-	{
-		coOccOrch := recs.NewCoOccurrenceOrchestrator(db.DB, log)
-		// Seeded origin → frame-less writes attribute to
-		// "scheduled_job/recs-cooccurrence" instead of "goroutine/unknown".
-		coOccOrch.Start(tracing.SeedBaggage(cronCtx, "scheduled_job:recs-cooccurrence", ""), 24*time.Hour)
-	}
+	// The recs engine (population / user-signal / co-occurrence crons) moved
+	// out of player to services/recs (port 8094) — extraction 2026-06-11.
+	// MarkEpisodeWatched now POSTs a fire-and-forget recompute hint to recs
+	// instead of running these crons in-process (see RecsHintProducer below).
 
 	// Phase 3 backfill: synthesize watch_progress.completed=true rows for legacy
 	// data (any (user, anime, ep <= anime_list.episodes) without a completed=true
@@ -403,10 +299,6 @@ func main() {
 
 	// Initialize repositories (preference)
 	prefRepo := repo.NewPreferenceRepository(db.DB)
-	// Phase 13 (REC-INFRA-03): recsRepo is hoisted up here (vs. its
-	// previous location next to recsHandler) so ListService can take it
-	// for the synchronous S6 seed-update path inside MarkEpisodeWatched.
-	recsRepo := repo.NewRecsRepository(db.DB)
 
 	// Initialize services
 	prefService := service.NewPreferenceServiceWithTier2(prefRepo, log, service.Tier2Params{
@@ -416,9 +308,6 @@ func main() {
 		DurationFloor:  cfg.Tier2.DurationFloor,
 	})
 	progressService := service.NewProgressService(progressRepo, prefService, log)
-	// Phase 13 (REC-INFRA-03): recsRepo + redisCache wired so MarkEpisodeWatched
-	// can synchronously update s6_seed_* and bust recs:user:{id}:topN when a
-	// completion qualifies (status='completed' AND score>=7).
 	// Phase 4 (gacha): construct the non-blocking credit producer. Start before
 	// ListService so EpisodeWatched/TitleCompleted can fire immediately once the
 	// service is live. defer Stop so the worker drains any queued credits on
@@ -433,7 +322,19 @@ func main() {
 	gachaProducer.Start()
 	defer gachaProducer.Stop()
 
-	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, userOrch, recsRepo, redisCache, gachaProducer, log)
+	// Recs extraction Phase 1 — fire-and-forget recompute hints to recs:8094.
+	// Replaces the in-process recs crons + the synchronous S6 seed update that
+	// MarkEpisodeWatched used to run before the recs engine moved out of player.
+	// Same drop-on-full / nil-safe contract as the gacha producer above.
+	recsHintProducer := service.NewRecsHintProducer(
+		cfg.Recs.InternalURL,
+		cfg.Recs.HintEnabled,
+		log,
+	)
+	recsHintProducer.Start()
+	defer recsHintProducer.Stop()
+
+	listService := service.NewListService(listRepo, activityRepo, prefRepo, progressRepo, recsHintProducer, gachaProducer, log)
 	historyService := service.NewHistoryService(historyRepo, log)
 	reviewService := service.NewReviewService(listRepo, activityRepo, log)
 
@@ -468,29 +369,9 @@ func main() {
 	syncHandler := handler.NewSyncHandler(syncRepo, log)
 	activityHandler := handler.NewActivityHandler(activityRepo, log)
 
-	// Phase 10: recs handler (anonymous trending row).
-	// Phase 13 (REC-SIG-06): also wires the S6 combo-watched-after pin
-	// resolver. The HTTP shikimori-similar client points at the catalog
-	// service's internal docker DNS — same convention as
-	// services/player/internal/handler/{mal,shikimori}_import.go.
-	shikimoriSimilarClient := signals.NewHTTPShikimoriSimilarClient("http://catalog:8081", log)
-	s6 := signals.NewS6ComboPin(db.DB, recsRepo, shikimoriSimilarClient, log)
-	recsHandler := handler.NewRecsHandler(db.DB, recsRepo, redisCache, s6, log)
-
-	// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute.
-	// userPrecompute is the same Orchestrator the user-orchestrator cron
-	// uses for its 6h precompute pass — admin force-recompute calls the
-	// same synchronous RunForUser path so admin clicks always recompute
-	// (NOT the debounced TriggerForUser, which would NO-OP after the
-	// second click within 5 minutes).
-	adminRecsHandler := handler.NewAdminRecsHandler(db.DB, recsRepo, redisCache, s6, userPrecompute, log)
-
-	// Phase 14 (REC-EVAL-01): public events endpoint. JWT-OPTIONAL so
-	// anonymous trending CTR data flows. Persists to rec_events table for
-	// v2.1 weight-tuning queries; increments rec_click_total /
-	// rec_watched_total Prometheus counters via libs/metrics/recs.go.
-	recEventsRepo := repo.NewRecEventsRepository(db.DB)
-	recEventsHandler := handler.NewRecEventsHandler(recEventsRepo, log)
+	// The recs HTTP surface (anonymous trending row, admin debug/force-recompute,
+	// public events telemetry) moved out of player to services/recs — extraction
+	// 2026-06-11. Player now only emits recompute hints via RecsHintProducer.
 
 	// Workstream hero-spotlight v1.0 Phase 3 — internal endpoint that the
 	// catalog spotlight aggregator hits to resolve `not_time_yet` and
@@ -502,7 +383,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, recsHandler, adminRecsHandler, adminReportsHandler, recEventsHandler, internalListHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, adminReportsHandler, internalListHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -527,10 +408,6 @@ func main() {
 	<-quit
 
 	log.Info("shutting down server...")
-
-	// Stop the recs population cron before draining HTTP traffic so a tick
-	// in flight can finish on its own deadline rather than be aborted.
-	cronCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

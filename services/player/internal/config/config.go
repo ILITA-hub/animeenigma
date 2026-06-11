@@ -21,7 +21,23 @@ type Config struct {
 	Maintenance MaintenanceConfig
 	Tier2       Tier2Config
 	Gacha       GachaConfig
+	Recs        RecsConfig
 	Notify      NotifyConfig
+}
+
+// RecsConfig controls the fire-and-forget recs recompute-hint producer
+// (recs engine extraction, 2026-06-11). The recs engine moved out of player
+// to services/recs; player now POSTs a hint per watched episode instead of
+// running the recs crons in-process.
+type RecsConfig struct {
+	// InternalURL is the base URL of the recs service reachable inside the
+	// Docker network. Only the path /internal/recs/recompute-hint is called.
+	// Default: http://recs:8094
+	InternalURL string
+	// HintEnabled controls whether the hint producer is active. When false the
+	// producer is constructed in disabled mode and all hints are silently
+	// dropped (recs outage / dark-ship scenario). Default: true
+	HintEnabled bool
 }
 
 // NotifyConfig controls the fire-and-forget feedback-status notification
@@ -142,6 +158,10 @@ func Load() (*Config, error) {
 			CreditEpisode: int64(getEnvInt("GACHA_CREDIT_EPISODE", 22)),
 			CreditTitle:   int64(getEnvInt("GACHA_CREDIT_TITLE", 80)),
 			Enabled:       getEnvBool("GACHA_CREDIT_ENABLED", true),
+		},
+		Recs: RecsConfig{
+			InternalURL: getEnv("RECS_INTERNAL_URL", "http://recs:8094"),
+			HintEnabled: getEnvBool("RECS_HINT_ENABLED", true),
 		},
 		Notify: NotifyConfig{
 			InternalURL: getEnv("NOTIFICATIONS_INTERNAL_URL", "http://notifications:8090"),

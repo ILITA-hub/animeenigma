@@ -9,62 +9,39 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/player/internal/repo"
-	"github.com/ILITA-hub/animeenigma/services/player/internal/service/recs"
 )
 
-// recsRepoForListService is the narrow surface ListService needs from the
-// recs repo. Production wires *repo.RecsRepository; tests inject a fake.
-// Phase 13 (REC-INFRA-03) — synchronous S6 seed update inside
-// MarkEpisodeWatched. May be nil in tests that don't exercise the seed
-// path; the hot path nil-guards before invoking.
-type recsRepoForListService interface {
-	UpdateS6Seed(ctx context.Context, userID, animeID string, completedAt time.Time, score int) error
-}
-
-// listServiceCache is the narrow Delete-only cache surface ListService
-// needs to invalidate the user's recs:user:{id}:topN key after a seed
-// update. Phase 13 (REC-INFRA-03) — fire-and-forget. May be nil in tests.
-type listServiceCache interface {
-	Delete(ctx context.Context, keys ...string) error
-}
-
 type ListService struct {
-	listRepo         *repo.ListRepository
-	activityRepo     *repo.ActivityRepository
-	prefRepo         *repo.PreferenceRepository
-	progressRepo     *repo.ProgressRepository
-	userOrchestrator *recs.UserOrchestrator // Phase 11 (REC-INFRA-02) — debounced trigger; may be nil in tests
-	recsRepo         recsRepoForListService // Phase 13 (REC-INFRA-03) — synchronous S6 seed update; may be nil in tests
-	cache            listServiceCache       // Phase 13 (REC-INFRA-03) — cache invalidation after seed update; may be nil in tests
-	gachaCredit      *GachaCreditProducer   // Phase 4 — fire-and-forget Энигмы credits; nil-safe, may be nil in tests
-	log              *logger.Logger
+	listRepo     *repo.ListRepository
+	activityRepo *repo.ActivityRepository
+	prefRepo     *repo.PreferenceRepository
+	progressRepo *repo.ProgressRepository
+	recsHint     *RecsHintProducer    // Recs extraction Phase 1 — fire-and-forget recompute hint to recs:8094; nil-safe, may be nil in tests
+	gachaCredit  *GachaCreditProducer // Phase 4 — fire-and-forget Энигмы credits; nil-safe, may be nil in tests
+	log          *logger.Logger
 }
 
-// NewListService wires the list service. The userOrchestrator, recsRepo,
-// cache, and gachaCredit arguments may be nil in test environments that don't
-// exercise the respective paths; MarkEpisodeWatched and UpdateListEntry
-// nil-guard each before invoking.
+// NewListService wires the list service. The recsHint and gachaCredit
+// arguments may be nil in test environments that don't exercise the
+// respective paths; MarkEpisodeWatched and UpdateListEntry nil-guard each
+// before invoking.
 func NewListService(
 	listRepo *repo.ListRepository,
 	activityRepo *repo.ActivityRepository,
 	prefRepo *repo.PreferenceRepository,
 	progressRepo *repo.ProgressRepository,
-	userOrchestrator *recs.UserOrchestrator,
-	recsRepo recsRepoForListService,
-	cache listServiceCache,
+	recsHint *RecsHintProducer,
 	gachaCredit *GachaCreditProducer,
 	log *logger.Logger,
 ) *ListService {
 	return &ListService{
-		listRepo:         listRepo,
-		activityRepo:     activityRepo,
-		prefRepo:         prefRepo,
-		progressRepo:     progressRepo,
-		userOrchestrator: userOrchestrator,
-		recsRepo:         recsRepo,
-		cache:            cache,
-		gachaCredit:      gachaCredit,
-		log:              log,
+		listRepo:     listRepo,
+		activityRepo: activityRepo,
+		prefRepo:     prefRepo,
+		progressRepo: progressRepo,
+		recsHint:     recsHint,
+		gachaCredit:  gachaCredit,
+		log:          log,
 	}
 }
 
@@ -400,56 +377,19 @@ func (s *ListService) MarkEpisodeWatched(ctx context.Context, userID, animeID st
 			)
 		}
 		metrics.WatchEpisodesTotal.WithLabelValues(req.Player, req.Language, req.WatchType).Inc()
-
-		// Phase 11 (REC-INFRA-02): fire-and-forget debounced trigger so the
-		// user's recs row reflects the new watch within ~5 minutes. The
-		// orchestrator handles the SetNX debounce + spawning internally —
-		// this call is non-blocking and never returns an error to us. We use
-		// context.Background() so a cancelled request context (the HTTP
-		// handler returning) doesn't kill the goroutine before SetNX runs.
-		if s.userOrchestrator != nil {
-			go func() {
-				_ = s.userOrchestrator.TriggerForUser(context.Background(), userID)
-			}()
-		}
 	}
 
-	// Phase 13 (REC-INFRA-03): SYNCHRONOUS S6 seed update when this
-	// completion qualifies — status='completed' AND score>=7 AND
-	// completed_at is set. The pin must appear on the next /api/users/recs
-	// call, so we update inside the request path (NOT fire-and-forget like
-	// the user orchestrator above). Failure is logged but does NOT fail
-	// the request — same contract as CreateWatchHistory above.
+	// Recs extraction Phase 1 (spec 2026-06-11): one fire-and-forget hint
+	// replaces both the in-process debounce trigger and the synchronous S6
+	// seed update — the recs service derives the seed from anime_list on
+	// receipt. Drop-on-full; never blocks or fails this request.
 	//
-	// Latency budget per Decision §B1: < 5ms p95 added overhead. The
-	// UpdateS6Seed UPDATE touches a single PK row + 4 columns; expected
-	// 1-2ms. The follow-up cache.Delete is fire-and-forget (goroutine).
-	if s.recsRepo != nil {
-		freshEntry, _ := s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
-		if freshEntry != nil &&
-			freshEntry.Status == "completed" &&
-			freshEntry.Score >= 7 &&
-			freshEntry.CompletedAt != nil {
-			if err := s.recsRepo.UpdateS6Seed(ctx, userID, animeID, *freshEntry.CompletedAt, freshEntry.Score); err != nil {
-				s.log.Errorw("failed to update s6 seed (non-fatal)",
-					"user_id", userID,
-					"anime_id", animeID,
-					"error", err,
-				)
-			} else if s.cache != nil {
-				// Fire-and-forget cache bust so the next recs call rebuilds
-				// with the pin. Use context.Background() so a cancelled
-				// request context doesn't kill the goroutine before the
-				// Delete runs.
-				go func() {
-					if err := s.cache.Delete(context.Background(), recs.UserTopNKey(recs.UserID(userID))); err != nil {
-						s.log.Warnw("failed to bust recs cache after s6 seed update (non-fatal)",
-							"user_id", userID, "error", err)
-					}
-				}()
-			}
-		}
-	}
+	// Placement note: the old S6 seed block ran OUTSIDE the `req.Player != ""`
+	// branch (it fired on every MarkEpisodeWatched call), while the old
+	// userOrchestrator trigger ran INSIDE it. Firing the single hint here (at
+	// the broader level) preserves every case in which either old mechanism
+	// fired.
+	s.recsHint.Hint(userID, animeID)
 
 	// Return updated entry
 	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
