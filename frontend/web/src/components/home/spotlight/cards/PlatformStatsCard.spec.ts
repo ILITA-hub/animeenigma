@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
 
 // The DS-aligned card renders its kicker via useI18n — echo-key mock, same
 // pattern as the sibling card specs.
@@ -10,6 +10,23 @@ vi.mock('vue-i18n', () => ({
     locale: { value: 'ru' },
   }),
 }))
+
+// The card re-checks the live /api/status aggregate on mount and prefers it
+// over the daily-cached hero.working_ok. Controllable per-test.
+const getStatusMock = vi.fn()
+vi.mock('@/api/client', () => ({
+  statusApi: { getStatus: (...args: unknown[]) => getStatusMock(...args) },
+}))
+
+const statusResponse = (overall: string) => ({
+  data: { success: true, data: { overall, services: [], checked_at: '' } },
+})
+
+beforeEach(() => {
+  getStatusMock.mockReset()
+  // Default: endpoint unreachable, so existing tests exercise the cached fallback.
+  getStatusMock.mockRejectedValue(new Error('network down'))
+})
 
 import PlatformStatsCard from './PlatformStatsCard.vue'
 import type { PlatformStatsData } from '@/types/spotlight'
@@ -46,6 +63,36 @@ describe('PlatformStatsCard (joke)', () => {
   it('renders ТЕХНИЧЕСКИ ДА when working_ok is false', () => {
     const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: false }) } })
     expect(w.text()).toContain('ТЕХНИЧЕСКИ ДА')
+  })
+
+  it('overrides a stale cached working_ok=false when live status is operational', async () => {
+    getStatusMock.mockResolvedValue(statusResponse('operational'))
+    const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: false }) } })
+    await flushPromises()
+    expect(w.text()).toContain('ДА')
+    expect(w.text()).not.toContain('ТЕХНИЧЕСКИ ДА')
+  })
+
+  it('overrides a stale cached working_ok=true when live status is degraded', async () => {
+    getStatusMock.mockResolvedValue(statusResponse('degraded'))
+    const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: true }) } })
+    await flushPromises()
+    expect(w.text()).toContain('ТЕХНИЧЕСКИ ДА')
+  })
+
+  it('keeps the cached working_ok when the status endpoint fails', async () => {
+    getStatusMock.mockRejectedValue(new Error('boom'))
+    const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: false }) } })
+    await flushPromises()
+    expect(w.text()).toContain('ТЕХНИЧЕСКИ ДА')
+  })
+
+  it('keeps the cached working_ok when the status payload has no overall', async () => {
+    getStatusMock.mockResolvedValue({ data: { success: true, data: {} } })
+    const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: true }) } })
+    await flushPromises()
+    expect(w.text()).toContain('ДА')
+    expect(w.text()).not.toContain('ТЕХНИЧЕСКИ ДА')
   })
 
   it('renders the uptime quip + percent, and omits percent when null', () => {

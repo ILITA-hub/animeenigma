@@ -22,8 +22,8 @@
       <div class="flex flex-col justify-center gap-3 md:gap-4">
         <h2 class="font-display font-semibold text-3xl md:text-[44px] leading-[1.05] tracking-[-0.025em]">
           Работает:
-          <span :class="hero.working_ok ? 'text-success' : 'text-warning'">
-            {{ hero.working_ok ? 'ДА' : 'ТЕХНИЧЕСКИ ДА' }}
+          <span :class="workingOk ? 'text-success' : 'text-warning'">
+            {{ workingOk ? 'ДА' : 'ТЕХНИЧЕСКИ ДА' }}
           </span>
         </h2>
 
@@ -64,8 +64,9 @@
 <script setup lang="ts">
 // Workstream hero-spotlight — PlatformStatsCard. All data bindings,
 // computed fields, and type imports unchanged by the DS alignment.
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { statusApi } from '@/api/client'
 import type { PlatformStatsData, StatsTile } from '@/types/spotlight'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
 
@@ -74,6 +75,24 @@ const { t } = useI18n()
 
 const hero = computed(() => props.data.hero)
 const tiles = computed(() => props.data.tiles ?? [])
+
+// The backend hero is cached for the whole UTC day, so its working_ok can
+// freeze a transient redeploy blip into a day of «ТЕХНИЧЕСКИ ДА». Re-check
+// the live /api/status aggregate (same source as the /status page) on mount
+// and prefer its verdict; the cached value stays as the fallback.
+const liveWorkingOk = ref<boolean | null>(null)
+
+onMounted(async () => {
+  try {
+    const res = await statusApi.getStatus()
+    const overall: string | undefined = res.data?.data?.overall
+    if (overall) liveWorkingOk.value = overall === 'operational'
+  } catch {
+    // Status endpoint unreachable — keep the cached fallback.
+  }
+})
+
+const workingOk = computed(() => liveWorkingOk.value ?? hero.value.working_ok)
 
 function windowLabel(w: StatsTile['window']): string {
   switch (w) {
