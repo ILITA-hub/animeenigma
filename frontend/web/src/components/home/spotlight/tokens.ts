@@ -2,7 +2,7 @@
  * Workstream hero-spotlight — v1.1-polish Phase 01 (HSB-V11-CC-02);
  * DS-alignment 2026-06-10 (spec: 2026-06-10-spotlight-ds-alignment-design.md).
  *
- * Per-card design tokens consumed by every card SFC + CarouselControls.
+ * Per-card design tokens consumed by every card SFC + CarouselDots.
  *
  *   accent     — BRAND-TRIAD hue (A-1, user-approved): cards are
  *                differentiated by kicker ICON, not by a per-card rainbow.
@@ -131,16 +131,6 @@ export const cardTokens: CardTokenMap = {
   now_watching:          { accent: 'pink',   kickerKey: 'spotlight.nowWatching.title',         icon: 'pulse'    },
   not_time_yet:          { accent: 'violet', kickerKey: 'spotlight.notTimeYet.title',          icon: 'clock'    },
   continue_watching_new: { accent: 'pink',   kickerKey: 'spotlight.continueWatchingNew.title', icon: 'play'     },
-}
-
-// Tailwind class strings for the active labeled-pill dot, by accent. Kept
-// here so CarouselControls.vue can simply read `accentDotBg[token.accent]`
-// without inline ternaries (and so the lint rule that pins Tailwind class
-// strings to source files keeps working).
-export const accentDotBg: Record<SpotlightAccent, string> = {
-  cyan:   'bg-cyan-500/30 text-cyan-100',
-  pink:   'bg-pink-500/30 text-pink-100',
-  violet: 'bg-brand-violet/30 text-white',
 }
 
 

@@ -31,12 +31,14 @@
     <!-- Reserved menu row (v4 A-1): mirrors CarouselDots' mt-3 + h-8
          geometry so the icon menu appearing after load causes ZERO
          layout shift (the old dots row pushed the page ~28px down). -->
+    <!-- 7 = prev chevron + 5 anchors (4th is the active pill) + next
+         chevron — mirrors the ARR-1 row so load causes ZERO shift. -->
     <div class="mt-3 h-8 flex items-center justify-center gap-2" data-testid="menu-skeleton">
       <span
-        v-for="n in 5"
+        v-for="n in 7"
         :key="n"
         class="skeleton-shimmer rounded-full"
-        :class="n === 3 ? 'w-28 h-8' : 'w-8 h-8'"
+        :class="n === 4 ? 'w-28 h-8' : 'w-8 h-8'"
       />
     </div>
   </div>
@@ -59,6 +61,8 @@
   >
     <div
       class="relative glass-card rounded-2xl overflow-hidden flex flex-col spotlight-frame"
+      @touchstart.passive="onTouchStart"
+      @touchend.passive="onTouchEnd"
     >
       <div
         class="relative w-full flex-1 min-h-0"
@@ -130,7 +134,6 @@
           />
         </transition>
       </div>
-      <CarouselControls @prev="prev" @next="next" />
       <!-- SR-only pause announcement (UI-SPEC §A11y; F1.3/F6.1 resolution).
            aria-live=polite so it speaks at the screen reader's next idle. -->
       <span class="sr-only" aria-live="polite">
@@ -138,9 +141,17 @@
       </span>
     </div>
 
-    <!-- Dot indicators live OUTSIDE the .spotlight-frame so the card slide
-         fills the full frame height (no reserved strip cropping it). -->
-    <CarouselDots :current-index="currentIndex" :cards="cards" @goto="goTo" />
+    <!-- ARR-1 (2026-06-11 lock): prev/next chevrons live in the menu row
+         below the frame — the old in-frame edge overlays (CarouselControls)
+         collided with cards whose content runs to the edges (terminal,
+         deck, rec column). One always-visible control cluster instead. -->
+    <CarouselDots
+      :current-index="currentIndex"
+      :cards="cards"
+      @goto="goTo"
+      @prev="prev"
+      @next="next"
+    />
   </section>
 </template>
 
@@ -150,7 +161,6 @@ import { useI18n } from 'vue-i18n'
 import { useIntervalFn, useMediaQuery } from '@vueuse/core'
 import { useSpotlight } from '@/composables/useSpotlight'
 import type { SpotlightCard } from '@/types/spotlight'
-import CarouselControls from './CarouselControls.vue'
 import CarouselDots from './CarouselDots.vue'
 import FeaturedCard from './cards/FeaturedCard.vue'
 import RandomTailCard from './cards/RandomTailCard.vue'
@@ -162,6 +172,8 @@ import NowWatchingCard from './cards/NowWatchingCard.vue'
 import NotTimeYetCard from './cards/NotTimeYetCard.vue'
 import ContinueWatchingNewCard from './cards/ContinueWatchingNewCard.vue'
 import { getLocalizedTitle } from '@/utils/title'
+import { preloadImage } from '@/utils/preload-image'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 // Locked at 7000 ms per HSB-FE-03. Do not parametrize — the cadence is part
 // of the product spec, not a knob.
@@ -298,6 +310,115 @@ function goTo(i: number): void {
   pause()
 }
 
+// ── Touch swipe (ARR-1 companion, 2026-06-11 lock) ─────────────────────
+// Horizontal swipe on the frame navigates slides. Listeners are passive
+// (we never preventDefault — vertical page scroll stays native); a swipe
+// counts only when horizontal travel ≥48px AND clearly dominates the
+// vertical axis, so scroll gestures don't accidentally flip slides.
+const SWIPE_MIN_PX = 48
+let touchX = 0
+let touchY = 0
+let touchTracking = false
+
+function onTouchStart(e: TouchEvent): void {
+  const t = e.touches[0]
+  if (!t) return
+  touchX = t.clientX
+  touchY = t.clientY
+  touchTracking = true
+}
+
+function onTouchEnd(e: TouchEvent): void {
+  if (!touchTracking) return
+  touchTracking = false
+  const t = e.changedTouches[0]
+  if (!t) return
+  const dx = t.clientX - touchX
+  const dy = t.clientY - touchY
+  if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 1.2) return
+  if (dx < 0) next()
+  else prev()
+}
+
+// ── Slide image prefetch (2026-06-11 lock: «ленивая автозагрузка всего
+// спотлайта под капотом») ───────────────────────────────────────────────
+// After the cards arrive, warm every slide's images in the background —
+// at the SAME proxy buckets the card components request, so flipping to
+// any slide is a pure cache hit (no per-slide skeletons for the user who
+// waits a few seconds). Runs once per mount, at browser idle, two lanes
+// deep, starting from the slide AFTER the current one.
+function cardImageUrls(card: SpotlightCard): string[] {
+  switch (card.type) {
+    case 'featured':
+      return card.data.anime.poster_url
+        ? [cardPosterUrl(card.data.anime.poster_url, 640)]
+        : []
+    case 'random_tail': {
+      const p = card.data.anime.poster_url
+      return p ? [cardPosterUrl(p, 256), cardPosterUrl(p, 128)] : []
+    }
+    case 'not_time_yet': {
+      const p = card.data.anime.poster_url
+      return p ? [cardPosterUrl(p, 256)] : []
+    }
+    case 'continue_watching_new': {
+      const p = card.data.anime.poster_url
+      return p ? [cardPosterUrl(p, 256), cardPosterUrl(p, 128)] : []
+    }
+    case 'personal_pick': {
+      const urls: string[] = []
+      for (const [idx, item] of (card.data.items ?? []).entries()) {
+        const p = item.anime.poster_url
+        if (!p) continue
+        // Featured (first) item renders at 256 + feeds the 128 blur
+        // backdrop; the list/swipe rows are all 128.
+        if (idx === 0) urls.push(cardPosterUrl(p, 256))
+        urls.push(cardPosterUrl(p, 128))
+      }
+      return urls
+    }
+    case 'now_watching':
+      return (card.data.sessions ?? [])
+        .filter((s) => s.poster_url)
+        .map((s) => cardPosterUrl(s.poster_url, 128))
+    case 'telegram_news': {
+      const hero = (card.data.posts ?? [])[0]
+      return hero?.image_url ? [hero.image_url] : []
+    }
+    default:
+      return []
+  }
+}
+
+let prefetched = false
+function prefetchSlides(): void {
+  if (prefetched || cards.value.length === 0) return
+  prefetched = true
+  const n = cards.value.length
+  const start = currentIndex.value
+  const ordered: string[] = []
+  for (let k = 1; k <= n; k++) {
+    const card = cards.value[(start + k) % n]
+    if (card) ordered.push(...cardImageUrls(card))
+  }
+  const queue = [...new Set(ordered)]
+  const lane = (): void => {
+    const next = queue.shift()
+    if (!next) return
+    void preloadImage(next).then(lane)
+  }
+  lane()
+  lane()
+}
+
+function schedulePrefetch(): void {
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(() => prefetchSlides(), { timeout: 3000 })
+  } else {
+    setTimeout(prefetchSlides, 800)
+  }
+}
+
 // Pitfall 4 mitigation — randomize AFTER cards populate. The fetch is async,
 // so synchronously seeding currentIndex inside onMounted always picks 0
 // (length is 0 at that point). Watching the length transition from 0 → N
@@ -307,6 +428,7 @@ watch(() => cards.value.length, (n) => {
     currentIndex.value = Math.floor(Math.random() * n)
     initialized = true
     startCycle()
+    schedulePrefetch()
   }
 }, { immediate: false })
 

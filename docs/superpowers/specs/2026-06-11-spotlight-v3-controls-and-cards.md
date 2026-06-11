@@ -73,3 +73,32 @@
 - personal_pick resolver: AdaptiveSlice → flat cap 6 (1 featured + 5 secondary).
 - CarouselDots → A-1 icon menu (32px circles, active expands to accent
   icon+label pill via tokens.accentMenuPill); skeleton reserves the row.
+
+## v4.1 follow-up locks (2026-06-11, same day)
+
+User feedback round on the shipped v4:
+
+- **Cyrillic font subsets** (fix, ce9a0fbc) — all webfonts were latin-only;
+  JP-locale systems rendered Cyrillic full-width. cyrillic+cyrillic-ext
+  variable woff2 with unicode-range added for Inter/Manrope/JetBrains Mono.
+- **Reroll polish** (fix, ce9a0fbc) — deck shuffle loop while fetch+preload
+  (256+128 buckets) run; swap on warm cache only (650ms floor);
+  SpotlightBackdrop crossfades via keyed-wrapper Transition.
+- **ARR-1 LOCKED** (of 4 artifact variants) — nav chevrons moved INTO the
+  CarouselDots menu row (flanking the anchors, always visible);
+  CarouselControls.vue deleted; in-frame overlays banned (guidelines §4).
+  Skeleton row = 7 shimmer slots (chevron + 5 anchors w/ pill + chevron).
+- **Touch swipe** — horizontal swipe ≥48px (and >1.2× the vertical travel)
+  on the frame navigates; passive listeners, vertical scroll untouched;
+  counts as manual nav (stops autoplay).
+- **Smooth menu pill** — the active label expands via grid-template-columns
+  0fr→1fr (+ padding-left) so activation animates instead of reflowing the
+  row; label is always in the DOM (aria-hidden, aria-label carries a11y).
+- **Image skeletons** — SpotlightPoster gained a built-in skeleton-shimmer +
+  300ms fade-in (complete-check on mount for cache hits, reset on URL swap);
+  FeaturedCard 640 hero + TelegramNews hero photo replicate the pattern.
+- **Slide prefetch** — HeroSpotlightBlock.cardImageUrls() maps every card
+  type to its exact proxy buckets; prefetchSlides() warms them at browser
+  idle (2 lanes, starting from current+1) once per mount.
+- **Cache flush op** — today's spotlight:personal/trending/snapshot keys
+  flushed so the cap-6 recs payload (minted pre-redeploy with 3) refreshed.

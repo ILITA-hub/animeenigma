@@ -24,7 +24,20 @@
   -->
     <template #background>
       <div class="featured-bg" aria-hidden="true">
-        <img v-if="posterSrc" :src="posterSrc" alt="" loading="lazy" decoding="async" />
+        <!-- DS shimmer until the hero poster decodes (2026-06-11) — fades
+             in so a slow proxy never flashes an empty hero frame. -->
+        <div v-if="posterSrc && !bgLoaded" class="absolute inset-0 skeleton-shimmer" />
+        <img
+          v-if="posterSrc"
+          :src="posterSrc"
+          alt=""
+          loading="lazy"
+          decoding="async"
+          class="transition-opacity duration-300"
+          :class="bgLoaded ? 'opacity-100' : 'opacity-0'"
+          @load="bgLoaded = true"
+          @error="bgLoaded = true"
+        />
       </div>
     </template>
 
@@ -96,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Play, Star } from 'lucide-vue-next'
 import { getLocalizedTitle } from '@/utils/title'
@@ -120,6 +133,7 @@ const locale = computed(() => {
 const posterSrc = computed(() =>
   props.data.anime.poster_url ? cardPosterUrl(props.data.anime.poster_url, 640) : '',
 )
+const bgLoaded = ref(false)
 
 const parsedDescription = computed(() =>
   props.data.anime.description ? parseDescription(props.data.anime.description) : '',

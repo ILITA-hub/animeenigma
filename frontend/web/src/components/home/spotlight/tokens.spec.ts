@@ -14,7 +14,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   cardTokens,
-  accentDotBg,
   type SpotlightAccent,
   type SpotlightIconName,
   type SpotlightCardType,
@@ -176,18 +175,3 @@ describe('cardTokens.latest_news extensions', () => {
   })
 })
 
-describe('accentDotBg', () => {
-  it('has an entry for every valid accent', () => {
-    for (const accent of VALID_ACCENTS) {
-      expect(accentDotBg[accent]).toBeDefined()
-      expect(accentDotBg[accent]).toBeTypeOf('string')
-    }
-  })
-
-  it('every entry includes both background and text class', () => {
-    for (const accent of VALID_ACCENTS) {
-      expect(accentDotBg[accent]).toMatch(/bg-/)
-      expect(accentDotBg[accent]).toMatch(/text-/)
-    }
-  })
-})

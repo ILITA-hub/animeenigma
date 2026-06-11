@@ -26,13 +26,22 @@
         data-testid="tg-hero-post"
       >
         <div class="relative flex-1 min-h-[88px] overflow-hidden bg-white/5">
+          <!-- DS shimmer until the post photo decodes (2026-06-11). -->
+          <div
+            v-if="hero.image_url && !heroImgLoaded"
+            class="absolute inset-0 skeleton-shimmer"
+            aria-hidden="true"
+          />
           <img
             v-if="hero.image_url"
             :src="hero.image_url"
             :alt="hero.title ?? ''"
-            class="absolute inset-0 w-full h-full object-cover"
+            class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+            :class="heroImgLoaded ? 'opacity-100' : 'opacity-0'"
             loading="lazy"
             decoding="async"
+            @load="heroImgLoaded = true"
+            @error="heroImgLoaded = true"
           />
           <div
             v-else
@@ -99,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ExternalLink, Send } from 'lucide-vue-next'
 import type { TelegramNewsData } from '@/types/spotlight'
@@ -119,6 +128,7 @@ const localeStr = computed<string>(() => {
 
 // Hero = newest post; tail = the next two as chat bubbles.
 const hero = computed(() => props.data.posts[0])
+const heroImgLoaded = ref(false)
 const tail = computed(() => props.data.posts.slice(1, 3))
 
 const heroDate = computed(() => (hero.value ? formatPostDate(hero.value.date) : ''))

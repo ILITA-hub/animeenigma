@@ -60,6 +60,14 @@ will fail the build).
   with `loading="lazy" decoding="async"`. Decorative posters are plain
   `<img>`; use `PosterCard` only for real catalog items ≥96px wide where the
   context menu makes sense (see the v4 PS analysis in the 2026-06-11 spec).
+- **Every image shows a DS shimmer until it decodes** (2026-06-11 lock):
+  prefer `SpotlightPoster` (built-in `skeleton-shimmer` + 300ms fade-in);
+  raw `<img>`s replicate the pattern by hand (`@load`/`@error` → fade) —
+  see FeaturedCard / TelegramNewsCard. Never ship a bare empty box.
+- New image surfaces must be added to `cardImageUrls()` in
+  HeroSpotlightBlock — it idle-prefetches every slide's images at the SAME
+  proxy buckets after the cards arrive, so slide flips are cache hits. A
+  bucket mismatch silently breaks the prefetch for your card.
 - Typography: `font-medium`/`font-semibold` only; titles `font-display`;
   long text gets explicit line-clamps (TW4 may not emit arbitrary
   `line-clamp-[N]` — verify or use scoped CSS like LatestNews).
@@ -72,7 +80,14 @@ will fail the build).
 - The skeleton must keep reserving the menu row height — if you change menu
   geometry, change the skeleton in the same PR (zero-CLS rule).
 - Don't touch carousel mechanics (7s autoplay, stop-on-manual-nav,
-  transition lock) from card code.
+  transition lock, touch swipe) from card code.
+- **No overlays inside the frame** (ARR-1 lock, 2026-06-11): card content
+  may run to the frame edges (terminal, deck, rec column) — nav chevrons
+  live in the CarouselDots menu row BELOW the frame, never on top of the
+  card. Don't reintroduce in-frame floating controls.
+- The active menu pill animates open via the `grid-template-columns
+  0fr→1fr` wrapper in CarouselDots — keep kicker labels short (≤ ~24 chars)
+  so the expansion doesn't wrap the row on 390px.
 
 ## 5. Data & caching
 

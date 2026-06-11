@@ -79,7 +79,7 @@ describe('CarouselDots', () => {
     const wrapper = mount(CarouselDots, {
       props: { currentIndex: 0, cards: mockCards(4) },
     })
-    expect(wrapper.findAll('[data-testid="spotlight-dots"] button').length).toBe(4)
+    expect(wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)').length).toBe(4)
     expect(wrapper.findAll('[aria-current]').length).toBe(4)
   })
 
@@ -88,7 +88,7 @@ describe('CarouselDots', () => {
       props: { currentIndex: 2, cards: mockCards(4) },
     })
 
-    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)')
     expect(dots.length).toBe(4)
     expect(dots[0].attributes('aria-current')).toBe('false')
     expect(dots[1].attributes('aria-current')).toBe('false')
@@ -100,7 +100,7 @@ describe('CarouselDots', () => {
     const wrapper = mount(CarouselDots, {
       props: { currentIndex: 0, cards: mockCards(4) },
     })
-    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)')
     expect(dots.length).toBe(4)
 
     // Click third dot — visually slide 3, internally idx 2 (0-indexed)
@@ -116,7 +116,7 @@ describe('CarouselDots', () => {
     const wrapper = mount(CarouselDots, {
       props: { currentIndex: 0, cards: mockCards(4) },
     })
-    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)')
 
     // Dot 0 → featured → spotlight.featured.title
     expect(dots[0].attributes('aria-label')).toBe('spotlight.featured.title')
@@ -132,7 +132,7 @@ describe('CarouselDots', () => {
     const wrapper = mount(CarouselDots, {
       props: { currentIndex: 0, cards: mockCards(3) },
     })
-    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)')
     for (const dot of dots) {
       expect(dot.attributes('title')).toBe(dot.attributes('aria-label'))
     }
@@ -142,7 +142,7 @@ describe('CarouselDots', () => {
     const wrapper = mount(CarouselDots, {
       props: { currentIndex: 1, cards: mockCards(4) },
     })
-    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)')
 
     // Active item 1 → random_tail → violet accent pill (v4 A-1 icon menu)
     const activeClasses = dots[1].classes().join(' ')
@@ -159,15 +159,15 @@ describe('CarouselDots', () => {
     const wrapper = mount(CarouselDots, {
       props: { currentIndex: 0, cards: mockCards(4) },
     })
-    // 4 dots × 1 SVG each
-    expect(wrapper.findAll('svg').length).toBe(4)
+    // 4 anchor icons + 2 nav chevrons (ARR-1)
+    expect(wrapper.findAll('svg').length).toBe(6)
   })
 
   it('renders exactly one dot when given a single card', () => {
     const wrapper = mount(CarouselDots, {
       props: { currentIndex: 0, cards: mockCards(1) },
     })
-    expect(wrapper.findAll('[data-testid="spotlight-dots"] button').length).toBe(1)
+    expect(wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)').length).toBe(1)
   })
 
   it('has no raw text — every label flows through t()', () => {
@@ -176,5 +176,47 @@ describe('CarouselDots', () => {
     })
     const visibleText = wrapper.text().trim()
     expect(visibleText).not.toMatch(/Go to/i)
+  })
+
+  // ── ARR-1 (2026-06-11 lock): nav chevrons flank the anchor row ──────
+
+  it('renders prev/next chevrons flanking the anchors (first and last buttons)', () => {
+    const wrapper = mount(CarouselDots, {
+      props: { currentIndex: 0, cards: mockCards(4) },
+    })
+    const all = wrapper.findAll('[data-testid="spotlight-dots"] button')
+    expect(all.length).toBe(6) // prev + 4 anchors + next
+    expect(all[0].attributes('data-testid')).toBe('menu-prev')
+    expect(all[all.length - 1].attributes('data-testid')).toBe('menu-next')
+    expect(all[0].attributes('aria-label')).toBe('spotlight.prevSlide')
+    expect(all[all.length - 1].attributes('aria-label')).toBe('spotlight.nextSlide')
+  })
+
+  it('chevron clicks emit prev / next (not goto)', async () => {
+    const wrapper = mount(CarouselDots, {
+      props: { currentIndex: 0, cards: mockCards(4) },
+    })
+    await wrapper.find('[data-testid="menu-prev"]').trigger('click')
+    await wrapper.find('[data-testid="menu-next"]').trigger('click')
+    expect(wrapper.emitted('prev')?.length).toBe(1)
+    expect(wrapper.emitted('next')?.length).toBe(1)
+    expect(wrapper.emitted('goto')).toBeUndefined()
+  })
+
+  // ── Smooth-pill (2026-06-11 lock): the label is ALWAYS in the DOM
+  //    inside a 0fr→1fr grid wrapper so activation animates instead of
+  //    reflowing the row («менюшка пролагивает из-за смещения текста»).
+
+  it('every anchor renders its label inside a .label-wrap; only the active one is open', () => {
+    const wrapper = mount(CarouselDots, {
+      props: { currentIndex: 1, cards: mockCards(4) },
+    })
+    const wraps = wrapper.findAll('.label-wrap')
+    expect(wraps.length).toBe(4)
+    const open = wrapper.findAll('.label-wrap.label-open')
+    expect(open.length).toBe(1)
+    expect(open[0].text()).toBe('spotlight.randomTail.title')
+    // active-menu-label testid stays exclusive to the active anchor (e2e contract)
+    expect(wrapper.findAll('[data-testid="active-menu-label"]').length).toBe(1)
   })
 })

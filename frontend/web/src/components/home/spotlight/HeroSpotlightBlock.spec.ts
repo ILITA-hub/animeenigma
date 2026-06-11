@@ -313,6 +313,35 @@ describe('HeroSpotlightBlock', () => {
     expect(sawZeroAfterTwo).toBe(true)
   })
 
+  it('swipe left/right navigates; vertical drags are ignored (ARR-1 companion)', async () => {
+    vi.useFakeTimers()
+    mockState.loading.value = false
+    mockState.cards.value = mockCards(4)
+    const wrapper = mountBlock()
+    await flushPromises()
+    const frame = wrapper.find('.spotlight-frame')
+    expect(frame.exists()).toBe(true)
+    const initial = readActiveIndex(wrapper)
+
+    // Mostly-vertical drag = page scroll → must NOT flip the slide.
+    await frame.trigger('touchstart', { touches: [{ clientX: 200, clientY: 100 }] })
+    await frame.trigger('touchend', { changedTouches: [{ clientX: 140, clientY: 260 }] })
+    await flushPromises()
+    expect(readActiveIndex(wrapper)).toBe(initial)
+
+    // Horizontal swipe left → next slide.
+    await frame.trigger('touchstart', { touches: [{ clientX: 300, clientY: 100 }] })
+    await frame.trigger('touchend', { changedTouches: [{ clientX: 180, clientY: 110 }] })
+    await flushPromises()
+    expect(readActiveIndex(wrapper)).toBe((initial + 1) % 4)
+
+    // Horizontal swipe right → back to where we started.
+    await frame.trigger('touchstart', { touches: [{ clientX: 180, clientY: 100 }] })
+    await frame.trigger('touchend', { changedTouches: [{ clientX: 320, clientY: 96 }] })
+    await flushPromises()
+    expect(readActiveIndex(wrapper)).toBe(initial)
+  })
+
   it('does NOT advance when reducedMotion is true', async () => {
     vi.useFakeTimers()
     mockReducedMotion.value = true
@@ -340,8 +369,9 @@ describe('HeroSpotlightBlock', () => {
     await flushPromises()
 
     expect(readActiveIndex(wrapper)).toBe(initial)
-    // Only 1 card — only 1 dot button rendered.
-    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
+    // Only 1 card — only 1 anchor button rendered (plus the 2 ARR-1
+    // nav chevrons that always flank the row).
+    const dots = wrapper.findAll('[data-testid="spotlight-dots"] button:not(.menu-nav)')
     expect(dots.length).toBe(1)
   })
 
