@@ -82,9 +82,11 @@ func (h *InternalHintHandler) PostRecomputeHint(w http.ResponseWriter, r *http.R
 	}
 	ctx := r.Context()
 
-	// 1. Debounced recompute — TriggerForUser owns the SetNX debounce and
-	//    always returns nil (best-effort contract carried over from Phase 11).
-	_ = h.deps.TriggerForUser(ctx, body.UserID)
+	// 1. Debounced recompute. TriggerForUser always returns nil by contract
+	//    (UserOrchestrator owns the SetNX debounce; best-effort since Phase 11).
+	//    context.WithoutCancel so a caller disconnect can't cancel the SetNX
+	//    mid-flight — same rationale as the original player-side trigger.
+	_ = h.deps.TriggerForUser(context.WithoutCancel(r.Context()), body.UserID)
 
 	// 2. S6 seed update on qualifying completion. anime_id may be empty for
 	//    generic hints — skip the seed path then.

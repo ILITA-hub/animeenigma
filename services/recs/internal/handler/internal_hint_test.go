@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +18,7 @@ type fakeHintDeps struct {
 	seedUpdates []string // "userID/animeID"
 	cacheDels   []string
 	listEntry   *hintListEntry // what LookupCompletion returns
+	lookupErr   error          // non-nil → LookupCompletion returns this error
 }
 
 func (f *fakeHintDeps) TriggerForUser(_ context.Context, userID string) error {
@@ -24,6 +26,9 @@ func (f *fakeHintDeps) TriggerForUser(_ context.Context, userID string) error {
 	return nil
 }
 func (f *fakeHintDeps) LookupCompletion(_ context.Context, userID, animeID string) (*hintListEntry, error) {
+	if f.lookupErr != nil {
+		return nil, f.lookupErr
+	}
 	return f.listEntry, nil
 }
 func (f *fakeHintDeps) UpdateS6Seed(_ context.Context, userID, animeID string, _ time.Time, _ int) error {
@@ -109,5 +114,43 @@ func TestHint_LowScoreCompletionSkipsSeed(t *testing.T) {
 	// Debounce must still fire regardless of seed qualification.
 	if len(f.triggered) != 1 || f.triggered[0] != "u1" {
 		t.Fatalf("triggered = %v, want [u1]", f.triggered)
+	}
+}
+
+// TestHint_NoListEntrySkipsSeed: when LookupCompletion returns nil (no row),
+// the seed path is skipped entirely but the debounce trigger still fires.
+func TestHint_NoListEntrySkipsSeed(t *testing.T) {
+	f := &fakeHintDeps{listEntry: nil}
+	h := NewInternalHintHandler(f, logger.Default())
+
+	w := postHint(t, h, `{"user_id":"u1","anime_id":"a1"}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if len(f.triggered) != 1 || f.triggered[0] != "u1" {
+		t.Fatalf("triggered = %v, want [u1]", f.triggered)
+	}
+	if len(f.seedUpdates) != 0 {
+		t.Fatalf("seedUpdates = %v, want empty (no list entry)", f.seedUpdates)
+	}
+}
+
+// TestHint_LookupErrorStillOK: a LookupCompletion error is non-fatal;
+// the handler must still return 200 with no seed or cache side-effects.
+func TestHint_LookupErrorStillOK(t *testing.T) {
+	f := &fakeHintDeps{lookupErr: fmt.Errorf("db timeout")}
+	h := NewInternalHintHandler(f, logger.Default())
+
+	w := postHint(t, h, `{"user_id":"u1","anime_id":"a1"}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if len(f.seedUpdates) != 0 {
+		t.Fatalf("seedUpdates = %v, want empty (lookup errored)", f.seedUpdates)
+	}
+	if len(f.cacheDels) != 0 {
+		t.Fatalf("cacheDels = %v, want empty (lookup errored)", f.cacheDels)
 	}
 }
