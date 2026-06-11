@@ -99,7 +99,7 @@
           title="Episodes"
           @click="toggleMenu('episodes')"
         >
-          <List :size="20" :stroke-width="2" aria-hidden="true" />
+          <LayoutGrid :size="20" :stroke-width="2" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -256,7 +256,7 @@ import {
   onMounted,
   onUnmounted,
 } from 'vue'
-import { CircleAlert, List } from 'lucide-vue-next'
+import { CircleAlert, LayoutGrid } from 'lucide-vue-next'
 
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
