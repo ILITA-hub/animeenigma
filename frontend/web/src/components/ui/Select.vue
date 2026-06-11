@@ -127,7 +127,9 @@ const dropdownClasses = computed(() => {
   }
 
   return cn(
-    'z-50 mt-1 bg-popover/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl shadow-black/20 max-h-60 overflow-auto',
+    // border-cyan-400 mirrors the open trigger's data-[state=open]:border-cyan-400
+    // so trigger and popup read as one paired control with equal 1px line weight.
+    'z-50 mt-1 bg-popover/95 backdrop-blur-xl border border-cyan-400 rounded-xl shadow-xl shadow-black/20 max-h-60 overflow-auto',
     sizes[props.size],
   )
 })
