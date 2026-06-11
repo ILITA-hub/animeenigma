@@ -11,7 +11,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 )
 
-// newFixtureServer serves the captured fixtures: POST DLE search, the episode
+// newFixtureServer serves the captured fixtures: GET /?s= search, the episode
 // page, and an mp4upload-style embed page (for the GetStream failover path).
 func newFixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -20,7 +20,7 @@ func newFixtureServer(t *testing.T) *httptest.Server {
 	mp4embed, _ := os.ReadFile("testdata/embed_mp4upload.html")
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.Contains(r.URL.Path, "/index.php"):
+		case r.URL.Path == "/" && r.URL.Query().Get("s") != "":
 			_, _ = w.Write(search)
 		case strings.Contains(r.URL.Path, "/embed-"):
 			_, _ = w.Write(mp4embed)

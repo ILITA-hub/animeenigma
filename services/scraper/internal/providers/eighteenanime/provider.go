@@ -88,16 +88,16 @@ func (p *Provider) fetch(ctx context.Context, u, referer string) (string, error)
 	return string(b), err
 }
 
-// searchHTML POSTs the DataLife Engine search form (18anime.me is title-searched).
+// searchHTML fetches the 18anime.me search results page for query.
+// 18anime.me migrated from a DLE POST form to a GET /?s= search in June 2026.
 func (p *Provider) searchHTML(ctx context.Context, query string) (string, error) {
-	form := url.Values{"do": {"search"}, "subaction": {"search"}, "story": {query}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		p.searchBase+"/index.php?do=search", strings.NewReader(form.Encode()))
+	params := url.Values{"s": {query}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		p.searchBase+"/?"+params.Encode(), nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := p.http.Do(req)
 	if err != nil {
 		return "", err
