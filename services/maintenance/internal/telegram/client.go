@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
@@ -184,10 +182,10 @@ type Entity struct {
 }
 
 type CallbackQuery struct {
-	ID      string    `json:"id"`
+	ID      string   `json:"id"`
 	From    *UserInfo `json:"from"`
-	Message *Message  `json:"message,omitempty"`
-	Data    string    `json:"data"`
+	Message *Message `json:"message,omitempty"`
+	Data    string   `json:"data"`
 }
 
 type InlineButton struct {
@@ -281,54 +279,17 @@ func (c *Client) SetReaction(messageID int, emoji string) bool {
 	return err == nil
 }
 
-func (c *Client) SendReply(replyToMsgID int, text string) (int, error) {
-	return c.sendText(text, replyToMsgID, nil)
-}
-
-func (c *Client) SendReplyWithButtons(replyToMsgID int, text string, buttons []InlineButton) (int, error) {
-	return c.sendText(text, replyToMsgID, buttons)
-}
-
-func (c *Client) SendMessage(text string) (int, error) {
-	return c.sendText(text, 0, nil)
-}
-
-// sendText delivers a message in Telegram Markdown, falling back to plain text
-// when the API rejects the entity markup. The fallback keeps reply_markup
-// (inline buttons) intact so an approval request is never lost to a
-// formatting error.
-func (c *Client) sendText(text string, replyToMsgID int, buttons []InlineButton) (int, error) {
+func (c *Client) SendReply(replyToMsgID int, html string) (int, error) {
+	if len(html) > 4090 {
+		html = html[:4087] + "..."
+	}
 	body := map[string]interface{}{
-		"chat_id":    c.chatID,
-		"text":       truncateText(text),
-		"parse_mode": "Markdown",
-	}
-	if replyToMsgID > 0 {
-		body["reply_to_message_id"] = replyToMsgID
-		// Deliver even if the replied-to message has been deleted.
-		body["allow_sending_without_reply"] = true
-	}
-	if len(buttons) > 0 {
-		var keyboardRow []map[string]string
-		for _, btn := range buttons {
-			keyboardRow = append(keyboardRow, map[string]string{
-				"text":          btn.Text,
-				"callback_data": btn.CallbackData,
-			})
-		}
-		body["reply_markup"] = map[string]interface{}{
-			"inline_keyboard": []interface{}{keyboardRow},
-		}
+		"chat_id":             c.chatID,
+		"reply_to_message_id": replyToMsgID,
+		"text":                html,
+		"parse_mode":          "HTML",
 	}
 	resp, err := c.post("sendMessage", body)
-	if err != nil && isParseError(err) {
-		c.log.Warnw("telegram rejected Markdown markup — retrying as plain text",
-			"reply_to", replyToMsgID,
-			"error", err,
-		)
-		delete(body, "parse_mode")
-		resp, err = c.post("sendMessage", body)
-	}
 	if err != nil {
 		return 0, err
 	}
@@ -339,26 +300,57 @@ func (c *Client) sendText(text string, replyToMsgID int, buttons []InlineButton)
 	return msg.MessageID, nil
 }
 
-// isParseError reports whether a Telegram error is an entity-parsing rejection
-// (bad markup in the text) as opposed to a transport or auth failure.
-func isParseError(err error) bool {
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "parse entities")
+func (c *Client) SendReplyWithButtons(replyToMsgID int, html string, buttons []InlineButton) (int, error) {
+	if len(html) > 4090 {
+		html = html[:4087] + "..."
+	}
+	var keyboardRow []map[string]string
+	for _, btn := range buttons {
+		keyboardRow = append(keyboardRow, map[string]string{
+			"text":          btn.Text,
+			"callback_data": btn.CallbackData,
+		})
+	}
+	body := map[string]interface{}{
+		"chat_id":    c.chatID,
+		"text":       html,
+		"parse_mode": "HTML",
+		"reply_markup": map[string]interface{}{
+			"inline_keyboard": []interface{}{keyboardRow},
+		},
+	}
+	if replyToMsgID > 0 {
+		body["reply_to_message_id"] = replyToMsgID
+	}
+	resp, err := c.post("sendMessage", body)
+	if err != nil {
+		return 0, err
+	}
+	var msg Message
+	if err := json.Unmarshal(resp.Result, &msg); err != nil {
+		return 0, fmt.Errorf("parse sendMessage: %w", err)
+	}
+	return msg.MessageID, nil
 }
 
-// truncateText caps the message body under Telegram's 4096-char limit without
-// splitting a multi-byte character (a mid-rune cut makes the API reject the
-// whole message).
-func truncateText(text string) string {
-	const max = 4090
-	if len(text) <= max {
-		return text
+func (c *Client) SendMessage(html string) (int, error) {
+	if len(html) > 4090 {
+		html = html[:4087] + "..."
 	}
-	cut := max - 3
-	for cut > 0 && !utf8.RuneStart(text[cut]) {
-		cut--
+	body := map[string]interface{}{
+		"chat_id":    c.chatID,
+		"text":       html,
+		"parse_mode": "HTML",
 	}
-	return text[:cut] + "..."
+	resp, err := c.post("sendMessage", body)
+	if err != nil {
+		return 0, err
+	}
+	var msg Message
+	if err := json.Unmarshal(resp.Result, &msg); err != nil {
+		return 0, fmt.Errorf("parse sendMessage: %w", err)
+	}
+	return msg.MessageID, nil
 }
 
 func (c *Client) AnswerCallbackQuery(callbackID string, text string) error {
