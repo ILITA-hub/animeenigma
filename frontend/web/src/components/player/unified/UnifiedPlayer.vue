@@ -61,9 +61,7 @@
       style="background: rgba(0,0,0,0.72);"
     >
       <div class="flex flex-col items-center gap-3 text-center px-8">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-muted-foreground" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
+        <CircleAlert :size="48" :stroke-width="1.5" class="text-muted-foreground" aria-hidden="true" />
         <p class="text-sm font-medium text-foreground">{{ sourceError }}</p>
         <button
           class="px-4 py-2 rounded-md text-sm font-semibold text-foreground"
@@ -79,9 +77,7 @@
     <div class="pl-top" @click.stop>
       <!-- Episodes (left chevron — opens the episode drawer) -->
       <button class="pl-icon" aria-label="Episodes" @click="toggleMenu('episodes')">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
+        <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
       </button>
 
       <!-- Title block -->
@@ -108,9 +104,7 @@
           title="Episodes"
           @click="toggleMenu('episodes')"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-          </svg>
+          <List :size="20" :stroke-width="2" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -265,6 +259,7 @@ import {
   onMounted,
   onUnmounted,
 } from 'vue'
+import { CircleAlert, ChevronLeft, List } from 'lucide-vue-next'
 
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
