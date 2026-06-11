@@ -2,19 +2,23 @@
   <div
     ref="rootRef"
     class="pl"
-    :class="{ 'pl--theater': theater }"
+    :class="{ 'pl--theater': theater, 'pl--ui-hidden': !uiVisible }"
     :style="{ '--prov': activeProviderHue }"
     tabindex="0"
     role="region"
     aria-label="Video player. Space to play or pause, arrow keys to seek and adjust volume."
     @click.self="closeMenus"
-    @mouseenter="isPointerInside = true"
-    @mouseleave="isPointerInside = false"
+    @mouseenter="onPointerEnter"
+    @mouseleave="onPointerLeave"
+    @mousemove="wakeUi"
+    @touchstart.passive="wakeUi"
     data-test="unified-player"
   >
-    <!-- Poster / still background -->
+    <!-- Poster / still background — only until playback first starts; a
+         mid-episode pause must NOT bring the poster back (disruptive in
+         fullscreen where object-contain letterboxing exposes it). -->
     <div
-      v-if="anime.still && !state.playing.value"
+      v-if="anime.still && !hasStarted"
       class="pl-scene"
       :style="{ backgroundImage: `url(${anime.still})` }"
       aria-hidden="true"
@@ -469,6 +473,7 @@ async function loadEpisodesAndStream() {
 
   sourceError.value = null
   isResolving.value = true
+  hasStarted.value = false
   const token = ++resolveToken
 
   try {
@@ -588,6 +593,8 @@ function retryResolution() {
 const currentTime = ref(0)
 const duration = ref(0)
 const bufferedPct = ref(0)
+/** true once playback has started for the current stream — gates the poster */
+const hasStarted = ref(false)
 let rafId: number | null = null
 
 function writeProgress() {
@@ -627,12 +634,16 @@ function stopRaf() {
 
 function onVideoPlay() {
   state.playing.value = true
+  hasStarted.value = true
   startRaf()
+  armUiIdleTimer()
 }
 
 function onVideoPause() {
   state.playing.value = false
   stopRaf()
+  clearUiIdleTimer()
+  uiVisible.value = true
 }
 
 // ─── Intro/outro skip (AniSkip via catalog proxy) ────────────────────────────
@@ -841,6 +852,7 @@ async function resolveStreamForEpisode(ep: EpisodeOption) {
   if (!provider) return
   sourceError.value = null
   isResolving.value = true
+  hasStarted.value = false
   const token = ++resolveToken
   try {
     const stream = await resolver.resolveStream(
@@ -893,6 +905,58 @@ function closeMenus() {
   openMenu.value = null
   browseOpen.value = false
 }
+
+// ─── Controls auto-hide (idle while playing) ─────────────────────────────────
+// Top bar + control bar fade out after UI_IDLE_MS of pointer inactivity while
+// playing (matters most in fullscreen). Any pointer/keyboard activity, a pause,
+// or an open menu brings them back and keeps them visible.
+
+const UI_IDLE_MS = 2500
+const uiVisible = ref(true)
+let uiIdleTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearUiIdleTimer() {
+  if (uiIdleTimer !== null) {
+    clearTimeout(uiIdleTimer)
+    uiIdleTimer = null
+  }
+}
+
+function armUiIdleTimer() {
+  clearUiIdleTimer()
+  if (!state.playing.value || openMenu.value !== null) return
+  uiIdleTimer = setTimeout(() => {
+    uiVisible.value = false
+  }, UI_IDLE_MS)
+}
+
+function wakeUi() {
+  uiVisible.value = true
+  armUiIdleTimer()
+}
+
+function onPointerEnter() {
+  isPointerInside.value = true
+  wakeUi()
+}
+
+function onPointerLeave() {
+  isPointerInside.value = false
+  // Pointer left the player while playing — hide right away (menus pin it)
+  if (state.playing.value && openMenu.value === null) {
+    clearUiIdleTimer()
+    uiVisible.value = false
+  }
+}
+
+watch(openMenu, (menu) => {
+  if (menu !== null) {
+    clearUiIdleTimer()
+    uiVisible.value = true
+  } else {
+    armUiIdleTimer()
+  }
+})
 
 // ─── Subtitles ────────────────────────────────────────────────────────────────
 
@@ -1006,6 +1070,7 @@ function playerIsActive(): boolean {
 
 function onKeydown(e: KeyboardEvent) {
   if (!playerIsActive()) return
+  wakeUi()
 
   if (e.key === 'Escape') {
     if (openMenu.value !== null || browseOpen.value) {
@@ -1078,6 +1143,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopRaf()
   clearNextEpTimer()
+  clearUiIdleTimer()
   if (bufferingTimer) clearTimeout(bufferingTimer)
   window.removeEventListener('keydown', onKeydown)
 })
@@ -1115,6 +1181,18 @@ onUnmounted(() => {
   inset: 0;
   background: radial-gradient(80% 60% at 50% 38%, transparent, rgba(0, 0, 0, 0.35));
   z-index: 1;
+  pointer-events: none;
+}
+
+/* Idle while playing — fade out the chrome (top bar lives here, the control
+   bar is inside <PlayerControlBar>, hence :deep). */
+.pl--ui-hidden {
+  cursor: none;
+}
+
+.pl--ui-hidden .pl-top,
+.pl--ui-hidden :deep(.pl-controls) {
+  opacity: 0;
   pointer-events: none;
 }
 

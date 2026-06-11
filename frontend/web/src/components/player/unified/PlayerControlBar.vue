@@ -224,6 +224,7 @@ function onVolumeInput(event: Event) {
   z-index: 7;
   padding: 30px 16px 12px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+  transition: opacity 0.2s;
 }
 
 /* Scrub row — time · track · time (per design) */
