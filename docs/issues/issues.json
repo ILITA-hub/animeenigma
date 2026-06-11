@@ -1,5 +1,5 @@
 {
-  "last_id": 424,
+  "last_id": 434,
   "issues": [
     {
       "id": "AUTO-001",
@@ -6989,6 +6989,253 @@
         }
       ],
       "resolution": "Alert resolved (webhook notification from Grafana)"
+    },
+    {
+      "id": "AUTO-425",
+      "created_at": "2026-06-10T16:00:22Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_approval",
+      "title": "User-facing feedback history page",
+      "reporter": "player_service",
+      "telegram_message_id": 3010,
+      "actions": [],
+      "feedback_id": "2026-06-10T15-59-40_NANDIorg_9_feedback"
+    },
+    {
+      "id": "AUTO-426",
+      "created_at": "2026-06-10T16:25:59Z",
+      "source": "error_report",
+      "category": "smoke_test",
+      "priority": "P2",
+      "status": "not_relevant",
+      "title": "Smoke test probe — My Reports page feedback submission",
+      "reporter": "player_service",
+      "telegram_message_id": 3012,
+      "actions": [
+        {
+          "action": "bin/feedback-status 2026-06-10T16-25-32_ui_audit_bot_feedback not_relevant maintenance_bot",
+          "result": "success",
+          "details": "Report marked not_relevant — smoke probe, not a real submission."
+        }
+      ],
+      "feedback_id": "2026-06-10T16-25-32_ui_audit_bot_feedback"
+    },
+    {
+      "id": "AUTO-427",
+      "created_at": "2026-06-10T22:14:35Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "ai_done",
+      "title": "Feature request: expand hentai content catalog",
+      "reporter": "player_service",
+      "telegram_message_id": 3014,
+      "actions": [
+        {
+          "action": "bin/feedback-status 2026-06-10T22-13-57_Oronemu_feedback ai_done maintenance-bot",
+          "result": "success",
+          "details": "Feedback triaged and status set to ai_done — awaiting admin decision on scope."
+        }
+      ],
+      "feedback_id": "2026-06-10T22-13-57_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-428",
+      "created_at": "2026-06-10T22:25:39Z",
+      "source": "error_report",
+      "category": "regression",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "OP/ED tab missing from navbar",
+      "reporter": "player_service",
+      "telegram_message_id": 3016,
+      "actions": [
+        {
+          "action": "Edit frontend/web/src/components/layout/Navbar.vue — added { to: '/themes', label: 'nav.themes' } back to navLinks array",
+          "result": "success",
+          "details": "Single-line insertion at line 375"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Build passed: i18n-lint OK, design-system lint OK, type-check OK, Docker image built in 16.9s, container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "All 12 services healthy (gateway, auth, catalog, streaming, player, rooms, scheduler, scraper, library, notifications, watch-together, gacha)"
+        },
+        {
+          "action": "Update changelog.json with 2026-06-11 entry",
+          "result": "success",
+          "details": "Prepended new date group with fix entry"
+        },
+        {
+          "action": "git commit + push to feat/ds-primitives-lucide",
+          "result": "success",
+          "details": "Commits a3934feb (fix) and 179c1d4f (changelog) pushed to origin"
+        }
+      ],
+      "feedback_id": "2026-06-10T22-20-16_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-429",
+      "created_at": "2026-06-10T22:42:35Z",
+      "source": "error_report",
+      "category": "regression",
+      "priority": "P2",
+      "status": "ai_fixed",
+      "title": "Страница «Мои обращения» пропала из футера",
+      "reporter": "player_service",
+      "telegram_message_id": 3018,
+      "actions": [
+        {
+          "action": "Created frontend/web/src/views/MyFeedback.vue",
+          "result": "success",
+          "details": "Full user-facing feedback history view ported from origin/main"
+        },
+        {
+          "action": "Added /my-feedback route to router/index.ts",
+          "result": "success",
+          "details": "requiresAuth: true, lazy-loaded component"
+        },
+        {
+          "action": "Restored footer link in App.vue",
+          "result": "success",
+          "details": "v-if=authStore.isAuthenticated + Inbox icon import"
+        },
+        {
+          "action": "Restored goToMyFeedback + Inbox button in FeedbackButton.vue",
+          "result": "success",
+          "details": "Modal footer now has 'Мои обращения' button"
+        },
+        {
+          "action": "Added MyFeedbackItem/MyFeedbackResponse/StatusTransition to types/feedback.ts",
+          "result": "success"
+        },
+        {
+          "action": "Added listMyReports to userApi in api/client.ts",
+          "result": "success"
+        },
+        {
+          "action": "Added dayStartISO/dayEndISO to utils/time.ts",
+          "result": "success"
+        },
+        {
+          "action": "Added 'date' to Input.vue type prop union",
+          "result": "success",
+          "details": "Blocked type-check; matched origin/main definition"
+        },
+        {
+          "action": "Added myFeedback namespace + footer.feedback.viewMine to en/ru/ja locales",
+          "result": "success"
+        },
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Build passed, container restarted"
+        },
+        {
+          "action": "make health",
+          "result": "success",
+          "details": "12/12 services healthy"
+        },
+        {
+          "action": "git commit + git push",
+          "result": "success",
+          "details": "0d6c8451 → feat/ds-primitives-lucide"
+        },
+        {
+          "action": "bin/feedback-status ai_done",
+          "result": "success",
+          "details": "Report 2026-06-10T22-30-53_Oronemu_feedback marked ai_done"
+        }
+      ],
+      "feedback_id": "2026-06-10T22-30-53_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-430",
+      "created_at": "2026-06-10T22:46:07Z",
+      "source": "error_report",
+      "category": "regression",
+      "priority": "P2",
+      "status": "auto_fixed",
+      "title": "Footer 'Мои обращения' link missing after branch deploy gap",
+      "reporter": "player_service",
+      "telegram_message_id": 3020,
+      "actions": [
+        {
+          "action": "make redeploy-web",
+          "result": "success",
+          "details": "Built docker-web:latest from HEAD (includes 0d6c8451), restarted animeenigma-web. Container is Up healthy at StartedAt=2026-06-10T22:45:28Z, serving HTTP 200 on :3003."
+        },
+        {
+          "action": "bin/feedback-status 2026-06-10T22-40-19_Oronemu_feedback ai_done maintenance-bot",
+          "result": "success",
+          "details": "Feedback status set to ai_done."
+        }
+      ],
+      "feedback_id": "2026-06-10T22-40-19_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-431",
+      "created_at": "2026-06-10T22:47:12Z",
+      "source": "error_report",
+      "category": "feature",
+      "priority": "P2",
+      "status": "pending_details",
+      "title": "Announcement banner for upcoming major feature",
+      "reporter": "player_service",
+      "telegram_message_id": 3022,
+      "actions": [],
+      "feedback_id": "2026-06-10T22-44-50_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-432",
+      "created_at": "2026-06-10T22:54:44Z",
+      "source": "error_report",
+      "category": "security",
+      "priority": "P2",
+      "status": "escalated",
+      "title": "Unverified identity claim — fabricated VORTEX project / ad banner",
+      "reporter": "player_service",
+      "telegram_message_id": 3024,
+      "actions": [
+        {
+          "action": "bin/feedback-status 2026-06-10T22-53-09_Oronemu_feedback not_relevant maintenance_bot",
+          "result": "success",
+          "details": "Feedback marked not_relevant — fabricated project reference, unverifiable identity claim, no actionable bug present."
+        }
+      ],
+      "feedback_id": "2026-06-10T22-53-09_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-433",
+      "created_at": "2026-06-10T23:13:04Z",
+      "source": "error_report",
+      "category": "security",
+      "priority": "P1",
+      "status": "escalated",
+      "title": "Admin access request from unverified identity + deployed navbar missing /themes tab",
+      "reporter": "player_service",
+      "telegram_message_id": 3026,
+      "actions": [],
+      "feedback_id": "2026-06-10T23-08-44_Oronemu_feedback"
+    },
+    {
+      "id": "AUTO-434",
+      "created_at": "2026-06-11T00:10:06Z",
+      "source": "admin_request",
+      "category": "feature",
+      "priority": "P1",
+      "status": "pending_approval",
+      "title": "Feature flags — per-user UI rollout mechanism",
+      "reporter": "@tNeymik",
+      "telegram_message_id": 3028,
+      "actions": [],
+      "feedback_id": "2026-06-11T00-09-19_tNeymik_telegram"
     }
   ]
 }

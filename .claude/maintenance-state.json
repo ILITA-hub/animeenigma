@@ -1,6 +1,6 @@
 {
-  "last_update_id": 124398519,
-  "last_poll_at": "2026-06-10T07:23:45Z",
+  "last_update_id": 124398520,
+  "last_poll_at": "2026-06-11T00:09:18Z",
   "session_started": "2026-06-10T09:57:05Z",
   "reactions_supported": true,
   "bot_user_id": 8609426278,
@@ -154,6 +154,62 @@
       },
       "telegram_message_id": 2993,
       "alert_message_id": 2992
+    },
+    "AUTO-425": {
+      "issue_id": "AUTO-425",
+      "proposed_at": "2026-06-10T16:00:22Z",
+      "fix_plan": {
+        "type": "code_fix",
+        "target": "player + frontend/web",
+        "description": "Add a user-facing feedback history page. (1) Backend — new handler in services/player/internal/handler/report.go: GET /api/users/feedback reads the reports volume, filters JSON files by the authenticated user's ID from the filename or report body, returns paginated list with id/date/description/status fields. Register the route in transport (JWT-protected). (2) Frontend — new page frontend/web/src/views/MyFeedbackPage.vue with route /my-feedback, linked from the user profile menu. Cards show: date, truncated description, coloured status badge (new=muted, in_progress=info, ai_done=warning, resolved=success, not_relevant=destructive). No polling needed — static load on mount. Use existing ui/Badge and ui/Card primitives.",
+        "context": "Users currently have zero visibility after submitting a report. This is a self-contained read-only feature: the backend reads the same volume the admin page uses, and the frontend only needs a new route + one SFC. No schema changes required.",
+        "verification": "After deploy: log in as NANDIorg_9 (or any user with a report on disk), navigate to /my-feedback, confirm the 2026-06-10 report appears with correct status. Confirm unauthenticated request to GET /api/users/feedback returns 401."
+      },
+      "telegram_message_id": 3011,
+      "alert_message_id": 3010,
+      "feedback_id": "2026-06-10T15-59-40_NANDIorg_9_feedback"
+    },
+    "AUTO-427": {
+      "issue_id": "AUTO-427",
+      "proposed_at": "2026-06-10T22:14:35Z",
+      "fix_plan": {
+        "type": "code_fix",
+        "target": "services/catalog/internal/parser/hanime/",
+        "description": "Feature request: expand hentai content availability. Possible implementation directions — (1) audit Hanime parser for broken/missing episode resolvers and fix any regression; (2) add a second adult-content source (e.g. hentai.animemk or similar) alongside Hanime; (3) improve catalog discoverability (genre filter, dedicated browse section). Requires admin direction on which approach to pursue.",
+        "context": "Platform already ships a Hanime player (HanimePlayer.vue) backed by services/catalog/internal/parser/hanime/. The ask is vague — needs admin to specify whether this is a parser bug, a missing source, or a UI discoverability issue.",
+        "verification": "After any parser/source change: curl the scraper health endpoint, smoke-test a known Hanime title end-to-end in the Hanime player, confirm HLS stream loads."
+      },
+      "telegram_message_id": 3015,
+      "alert_message_id": 3014,
+      "feedback_id": "2026-06-10T22-13-57_Oronemu_feedback"
+    },
+    "AUTO-431": {
+      "issue_id": "AUTO-431",
+      "proposed_at": "2026-06-10T22:47:12Z",
+      "fix_plan": {
+        "type": "code_fix",
+        "target": "frontend/web/src/components/home/AnnouncementBanner.vue + Home.vue",
+        "description": "Create a static AnnouncementBanner.vue component and mount it below SystemStatusBanner in Home.vue. Banner will use the existing design system tokens (bg-brand-cyan/10, border-brand-cyan/30, text-foreground), include an icon, a headline, a short description, an optional CTA button, and a dismiss-to-localStorage control. Text content, feature name, CTA URL, and whether the banner is dismissible must be provided by the admin before implementation. Once content is confirmed: (1) write the component, (2) add it to Home.vue after line 8 (below SystemStatusBanner), (3) add i18n keys to en.json + ru.json, (4) make redeploy-web.",
+        "context": "Feature requests are never auto-implemented. The SystemStatusBanner pattern (already in Home.vue:8) and the existing design system provide all primitives needed — the only missing piece is the actual announcement content.",
+        "verification": "bun run build passes design-system lint, banner renders at desktop + mobile without visual regressions on /, dismisses correctly on click, redeploy-web health check passes."
+      },
+      "telegram_message_id": 3023,
+      "alert_message_id": 3022,
+      "feedback_id": "2026-06-10T22-44-50_Oronemu_feedback"
+    },
+    "AUTO-434": {
+      "issue_id": "AUTO-434",
+      "proposed_at": "2026-06-11T00:10:07Z",
+      "fix_plan": {
+        "type": "code_fix",
+        "target": "auth + player + web",
+        "description": "Add a runtime feature-flag system: (1) DB table `feature_flags(name TEXT, user_id UUID nullable, enabled BOOL, created_at TIMESTAMPTZ)` — NULL user_id = global default, user row overrides global; (2) flags aggregated and returned in `GET /api/users/me` profile response (zero extra round-trips); (3) thin `useFeatureFlag(name)` Vue composable that reads from the profile store; (4) `/api/admin/feature-flags` CRUD for the admin panel; (5) one example flag `ui_beta_\u003cthing\u003e` wired to the first candidate button.",
+        "context": "Existing env-var flags (VITE_OURENGLISH_ENABLED, VITE_ANIMELIB_ENABLED) are deploy-time and affect all users. The requested mechanism is runtime and per-user, which unlocks soft-launch, rollback without redeploy, and graduated rollouts.",
+        "verification": "Set flag for user Oronemu only → confirm button visible for him, hidden for others. Set global=true → all users see it. Delete user override → inherits global."
+      },
+      "telegram_message_id": 3029,
+      "alert_message_id": 3028,
+      "feedback_id": "2026-06-11T00-09-19_tNeymik_telegram"
     }
   }
 }
