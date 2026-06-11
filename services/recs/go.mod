@@ -4,6 +4,8 @@ go 1.25.0
 
 require (
 	github.com/ILITA-hub/animeenigma/libs/authz v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/cache v0.0.0
+	github.com/ILITA-hub/animeenigma/libs/database v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/httputil v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/logger v0.0.0
 	github.com/ILITA-hub/animeenigma/libs/metrics v0.0.0
