@@ -113,6 +113,20 @@ interface KodikTranslation {
 interface KodikStream {
   stream_url: string
   referer: string
+  quality?: number
+  qualities?: number[]
+}
+
+// Shared with KodikAdFreePlayer — both surfaces play the same Kodik source, so
+// a quality picked in either player carries over to the other.
+export const KODIK_QUALITY_PREF_KEY = 'kodik_adfree_quality'
+// Kodik's /ftor default is 360p; with no saved preference we request this
+// sentinel and the backend's PickQuality clamps it to the highest available.
+const KODIK_QUALITY_MAX = 2160
+
+function kodikPreferredQuality(): number {
+  const saved = Number(localStorage.getItem(KODIK_QUALITY_PREF_KEY) || '')
+  return Number.isFinite(saved) && saved > 0 ? saved : KODIK_QUALITY_MAX
 }
 
 // ─── ProviderAdapter interface ───────────────────────────────────────────────
@@ -325,14 +339,22 @@ function makeKodikAdapter(api: typeof kodikApi): ProviderAdapter {
       const tr = (combo.team ? translations.find((t) => t.title === combo.team) : undefined)
         ?? translations[0]
 
-      const stResp = await api.getStream(animeId, ep.number, tr.id)
+      const stResp = await api.getStream(animeId, ep.number, tr.id, kodikPreferredQuality())
       const stream: KodikStream = stResp.data?.data ?? stResp.data
       if (!stream?.stream_url) {
         throw new NotAvailableError('kodik', 'returned no stream URL')
       }
+      // Kodik serves one manifest per quality (per-URL ladder): expose the
+      // available qualities as numeric values so the player can re-resolve at
+      // a different quality, and the served quality for the Auto display.
+      const qualities = Array.isArray(stream.qualities) && stream.qualities.length > 1
+        ? [...stream.qualities].sort((a, b) => b - a).map((q) => ({ label: `${q}p`, value: q }))
+        : undefined
       return {
         url: buildProxyUrl(stream.stream_url, stream.referer),
         type: 'hls',
+        qualities,
+        qualityLabel: stream.quality ? `${stream.quality}p` : undefined,
       }
     },
   }

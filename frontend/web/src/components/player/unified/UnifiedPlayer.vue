@@ -320,7 +320,7 @@ import { usePlayerState } from '@/composables/unifiedPlayer/usePlayerState'
 import { usePlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
 import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlayer/skipSegments'
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
-import { useProviderResolver } from '@/composables/unifiedPlayer/useProviderResolver'
+import { useProviderResolver, KODIK_QUALITY_PREF_KEY } from '@/composables/unifiedPlayer/useProviderResolver'
 import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'
 import { useWatchTracking } from '@/composables/unifiedPlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
@@ -557,7 +557,9 @@ let resolveToken = 0
 
 // ─── Quality ladder ──────────────────────────────────────────────────────────
 // HLS: data-driven from hls.js levels. MP4: only when the provider returned
-// multiple URL-valued qualities. Single-variant streams stay Auto-only (D-05).
+// multiple URL-valued qualities. Per-URL HLS (Kodik: one manifest per quality,
+// numeric values): switching re-resolves the stream instead of changing an
+// hls.js level. Single-variant streams stay Auto-only (D-05).
 // NOTE: declared after currentStream — watch() below evaluates its computed
 // source eagerly during setup.
 
@@ -569,24 +571,41 @@ const mp4Qualities = computed(() => {
   )
 })
 
+const perUrlHlsQualities = computed(() => {
+  const s = currentStream.value
+  if (!s || s.type !== 'hls' || !s.qualities) return []
+  return s.qualities.filter((q) => typeof q.value === 'number')
+})
+
 const qualities = computed(() => {
   if (mp4Qualities.value.length > 1) return ['Auto', ...mp4Qualities.value.map((q) => q.label)]
+  if (perUrlHlsQualities.value.length > 1) {
+    return ['Auto', ...perUrlHlsQualities.value.map((q) => q.label)]
+  }
   return ['Auto', ...engine.levels.value.map((l) => l.label)]
 })
 
-const qualityDisplay = computed(() =>
-  state.quality.value === 'Auto' && engine.currentLevelLabel.value
-    ? `Auto · ${engine.currentLevelLabel.value}`
-    : state.quality.value,
-)
+// While auto-switching, show what is actually playing: hls.js's current level,
+// or for per-URL ladders the quality the provider reported serving.
+const qualityDisplay = computed(() => {
+  const served = engine.currentLevelLabel.value || currentStream.value?.qualityLabel
+  return state.quality.value === 'Auto' && served
+    ? `Auto · ${served}`
+    : state.quality.value
+})
 
 // New stream may not offer the previously-chosen quality — snap back to Auto.
 // If it DOES offer it, re-apply: each load() creates a fresh hls instance
-// that starts at auto, so a pinned level must be re-pinned.
+// that starts at auto, so a pinned level must be re-pinned. (Per-URL ladders
+// need no re-apply — the resolved URL already carries the pinned quality.)
 watch(qualities, (qs) => {
   if (!qs.includes(state.quality.value)) {
     state.quality.value = 'Auto'
-  } else if (state.quality.value !== 'Auto' && mp4Qualities.value.length === 0) {
+  } else if (
+    state.quality.value !== 'Auto' &&
+    mp4Qualities.value.length === 0 &&
+    perUrlHlsQualities.value.length === 0
+  ) {
     engine.setLevel(state.quality.value)
   }
 })
@@ -619,7 +638,34 @@ function onSetQuality(q: string) {
     swapMp4Source(currentStream.value.url)
     return
   }
+  if (perUrlHlsQualities.value.length > 0) {
+    // Per-URL ladder (Kodik): persist the choice (the adapter reads it on the
+    // next resolve), then re-resolve the stream at the new quality in place.
+    const pq = perUrlHlsQualities.value.find((x) => x.label === q)
+    if (pq) localStorage.setItem(KODIK_QUALITY_PREF_KEY, String(pq.value))
+    else if (q === 'Auto') localStorage.removeItem(KODIK_QUALITY_PREF_KEY)
+    void reResolveAtPosition()
+    return
+  }
   engine.setLevel(q)
+}
+
+// Re-resolve the current episode's stream, restoring playback position and
+// play state — used for per-URL quality switches where the new quality lives
+// at a different manifest URL.
+async function reResolveAtPosition() {
+  const v = videoRef.value
+  const t = v?.currentTime ?? 0
+  const wasPlaying = v ? !v.paused : false
+  await resolveStreamForCurrentEpisode()
+  const v2 = videoRef.value
+  if (!v2 || t <= 0) return
+  const restore = () => {
+    v2.currentTime = t
+    if (wasPlaying) void v2.play().catch(() => {})
+  }
+  if (v2.readyState >= 1) restore()
+  else v2.addEventListener('loadedmetadata', restore, { once: true })
 }
 
 // Initialize selectedEpisode from initialEpisode or anime.ep

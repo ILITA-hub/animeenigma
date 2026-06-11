@@ -149,6 +149,7 @@ describe('useProviderResolver', () => {
   })
 
   it('wires kodik via translations + proxy-wrapped stream', async () => {
+    localStorage.clear()
     const kodikApi = {
       getTranslations: vi.fn().mockResolvedValue({ data: { data: [{ id: 7, title: 'AniLibria', type: 'voice', episodes_count: 3 }] } }),
       getStream: vi.fn().mockResolvedValue({ data: { data: { stream_url: 'http://cdn/x.m3u8', referer: 'https://kodik' } } }),
@@ -160,7 +161,50 @@ describe('useProviderResolver', () => {
     expect(stream.type).toBe('hls')
     expect(stream.url).toContain('/api/streaming/hls-proxy')
     expect(stream.url).toContain('x.m3u8')
-    expect(kodikApi.getStream).toHaveBeenCalledWith('uuid', 1, 7)
+    // No saved preference -> requests the max-quality sentinel (Kodik's own
+    // default is 360p; the backend clamps 2160 to the highest available).
+    expect(kodikApi.getStream).toHaveBeenCalledWith('uuid', 1, 7, 2160)
+  })
+
+  it('kodik: requests the saved quality preference and exposes the per-URL ladder', async () => {
+    localStorage.setItem('kodik_adfree_quality', '480')
+    const kodikApi = {
+      getTranslations: vi.fn().mockResolvedValue({ data: { data: [{ id: 7, title: 'AniLibria', type: 'voice', episodes_count: 3 }] } }),
+      getStream: vi.fn().mockResolvedValue({ data: { data: {
+        stream_url: 'http://cdn/480.m3u8', referer: 'https://kodik',
+        quality: 480, qualities: [360, 480, 720],
+      } } }),
+    }
+    const resolver = makeResolver({ kodikApi } as any)
+    const eps = await resolver.listEpisodes('kodik', 'uuid')
+    const stream = await resolver.resolveStream('kodik', 'uuid', eps[0], { audio: 'dub', lang: 'ru', provider: 'kodik', server: '', team: null })
+    localStorage.clear()
+
+    expect(kodikApi.getStream).toHaveBeenCalledWith('uuid', 1, 7, 480)
+    // Per-URL ladder: numeric values, sorted descending, served quality labeled.
+    expect(stream.qualities).toEqual([
+      { label: '720p', value: 720 },
+      { label: '480p', value: 480 },
+      { label: '360p', value: 360 },
+    ])
+    expect(stream.qualityLabel).toBe('480p')
+  })
+
+  it('kodik: single-quality stream exposes no ladder', async () => {
+    localStorage.clear()
+    const kodikApi = {
+      getTranslations: vi.fn().mockResolvedValue({ data: { data: [{ id: 7, title: 'AniLibria', type: 'voice', episodes_count: 1 }] } }),
+      getStream: vi.fn().mockResolvedValue({ data: { data: {
+        stream_url: 'http://cdn/720.m3u8', referer: 'https://kodik',
+        quality: 720, qualities: [720],
+      } } }),
+    }
+    const resolver = makeResolver({ kodikApi } as any)
+    const eps = await resolver.listEpisodes('kodik', 'uuid')
+    const stream = await resolver.resolveStream('kodik', 'uuid', eps[0], { audio: 'dub', lang: 'ru', provider: 'kodik', server: '', team: null })
+
+    expect(stream.qualities).toBeUndefined()
+    expect(stream.qualityLabel).toBe('720p')
   })
 
   it('uses MAX episodes_count across all kodik translations', async () => {

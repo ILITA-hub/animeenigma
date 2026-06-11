@@ -56,4 +56,7 @@ export interface StreamResult {
   headers?: Record<string, string>
   qualities?: { label: string; value: number | string }[]
   servers?: { id: string; label: string }[]
+  /** Quality the provider actually served (e.g. "720p") — shown next to Auto
+   *  for per-URL ladders where hls.js has no level to report. */
+  qualityLabel?: string
 }
