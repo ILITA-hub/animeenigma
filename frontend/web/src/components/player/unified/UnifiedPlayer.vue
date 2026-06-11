@@ -442,7 +442,9 @@ async function loadEpisodeProgress() {
   }
   if (progressPrefetchConsumedFor !== props.animeId) {
     progressPrefetchConsumedFor = props.animeId
-    const ctx = useViewerContextStore().forAnime(props.animeId)
+    // whenLoaded (not forAnime): on deep-link mounts the aggregate request is
+    // often still in flight — await it instead of duplicating the fetch.
+    const ctx = await useViewerContextStore().whenLoaded(props.animeId)
     if (ctx) {
       epProgress.value = progressRowsToMap(ctx.progress ?? [])
       return
@@ -709,11 +711,20 @@ watch(
     state.combo.value.server,
     selectedEpisode.value,
   ] as const,
-  (_newVal, oldVal) => {
+  (newVal, oldVal) => {
     // Skip the very first run (oldVal is undefined on initial watch fire)
     if (oldVal === undefined) return
     // Skip if a full re-list is already in progress (provider changed)
     if (isResolving.value) return
+    // Skip an EPISODE change while the episode list hasn't loaded: that's the
+    // mount-time null→synthetic-placeholder transition from
+    // initSelectedEpisode, whose key is a bare episode number — scraper
+    // episode ids are opaque, so resolving it fires a doomed
+    // scraper/servers?episode=<number> request (seen in prod HARs on
+    // ?episode=N deep links). loadEpisodesAndStream reconciles the selection
+    // and resolves the stream itself once the real list arrives. Combo
+    // (audio/lang/server) changes are NOT gated on the list.
+    if (newVal[3] !== oldVal[3] && episodes.value.length === 0) return
     void resolveStreamForCurrentEpisode()
   },
 )

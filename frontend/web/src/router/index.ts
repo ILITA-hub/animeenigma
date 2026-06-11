@@ -3,6 +3,9 @@ import { useAuthStore } from '@/stores/auth'
 import i18n from '@/i18n'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
 import { GACHA_ADMIN_ONLY } from '@/utils/gachaGate'
+import { stashPrefetch } from '@/utils/pagePrefetch'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const routes: RouteRecordRaw[] = [
   {
@@ -42,7 +45,39 @@ const routes: RouteRecordRaw[] = [
     path: '/anime/:id',
     name: 'anime',
     component: () => import('@/views/Anime.vue'),
-    meta: { titleKey: 'anime.detailsTitle' }
+    meta: { titleKey: 'anime.detailsTitle' },
+    // Page-load waterfall optimization (2026-06-11): fire the page's data
+    // requests and warm the player chunk at NAVIGATION START, in parallel
+    // with the Anime.vue route-chunk download — instead of discovering them
+    // only after that chunk executes (a full extra RTT each).
+    // Dynamic imports on purpose: client.ts statically imports this router,
+    // so a static import here would be a cycle (TDZ hazard); both modules
+    // are already in the entry graph, so these resolve from the module cache
+    // without extra network.
+    beforeEnter: (to) => {
+      const id = String(to.params.id ?? '')
+      if (!id || id.startsWith('mal_')) return
+      void import('@/api/client').then(({ animeApi }) => {
+        stashPrefetch(`anime:${id}`, () => animeApi.getById(id))
+      })
+      // viewer-context is keyed by the canonical UUID — only prefetch when
+      // the route param already is one (legacy shikimori-id links resolve
+      // through getById first). The backend resolves the legacy mal_ entry
+      // itself now, so no mal_id is needed here.
+      if (UUID_RE.test(id)) {
+        void import('@/stores/viewerContext').then(({ useViewerContextStore }) => {
+          try {
+            void useViewerContextStore().load(id)
+          } catch {
+            /* pinia not ready (unit tests) — the view loads it on mount */
+          }
+        })
+      }
+      // Warm the player chunk: Anime.vue async-imports UnifiedPlayer only
+      // after IT has loaded+executed; starting the download now removes that
+      // serialization (the browser dedupes with the later import call).
+      void import('@/components/player/unified/UnifiedPlayer.vue').catch(() => undefined)
+    }
   },
   {
     path: '/profile',

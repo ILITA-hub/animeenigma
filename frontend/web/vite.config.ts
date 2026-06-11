@@ -11,6 +11,14 @@ export default defineConfig({
       algorithm: 'gzip',
       threshold: 1024,
     }),
+    // Pre-compressed .br twins served by nginx `brotli_static on` (zero
+    // runtime CPU, same model as gzip_static) — ~15-20% smaller than gzip
+    // on JS/CSS. Page-load optimization 2026-06-11.
+    compression({
+      algorithm: 'brotliCompress',
+      ext: '.br',
+      threshold: 1024,
+    }),
   ],
   resolve: {
     alias: {
@@ -37,11 +45,36 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vue-vendor': ['vue', 'vue-router', 'pinia'],
-          'hls-vendor': ['hls.js'],
-          'socket-vendor': ['socket.io-client']
-        }
+        // Page-load optimization 2026-06-11: the default per-module splitting
+        // produced 90+ chunks, 35 of them under 2KB (every lucide icon was its
+        // own request) — at a ~300ms RTT the request COUNT, not bytes,
+        // dominated page-load time. Group the stable vendor trees into a few
+        // immutable-cached chunks and let rollup merge leftover crumbs.
+        manualChunks(id: string) {
+          // Lazy locales (see src/i18n.ts) get pinned chunks — without this,
+          // rollup merged ja.json into an unrelated route chunk, making every
+          // visitor of that route download 70KB of Japanese messages.
+          if (id.includes('/src/locales/en.json')) return 'locale-en'
+          if (id.includes('/src/locales/ja.json')) return 'locale-ja'
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('hls.js')) return 'hls-vendor'
+          if (id.includes('socket.io') || id.includes('engine.io')) return 'socket-vendor'
+          // All lucide icons in one cached chunk instead of one request each.
+          if (id.includes('lucide-vue-next')) return 'icons'
+          // reka-ui (+ its floating-ui positioning dep) — shared headless-UI
+          // primitives used by nearly every view.
+          if (id.includes('reka-ui') || id.includes('@floating-ui')) return 'ui-vendor'
+          // Core framework. The [\\/] guards keep e.g. vue-i18n's own deps
+          // matched explicitly, not by substring accident.
+          if (/[\\/]node_modules[\\/](vue|@vue|vue-router|pinia|vue-i18n|@intlify)[\\/]/.test(id)) {
+            return 'vue-vendor'
+          }
+          return undefined
+        },
+        // Merge side-effect-free micro-chunks (sub-10KB shared component/
+        // composable slivers) into their importers where rollup can prove it
+        // safe — kills most of the remaining <2KB requests.
+        experimentalMinChunkSize: 10240,
       }
     }
   }

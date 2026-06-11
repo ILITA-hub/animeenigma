@@ -1,20 +1,32 @@
 import { createI18n } from 'vue-i18n'
 import { watch } from 'vue'
 
-// Locale messages
+// Bundle-size optimization (2026-06-11): only the default locale ships in the
+// entry bundle. en/ja (~130KB raw JSON) used to be statically imported here,
+// putting all three locale files in the critical-path entry chunk for every
+// visitor. Non-ru locales now lazy-load via setLocale; their chunks are
+// content-hashed + immutable-cached, so the cost is one parallel request on
+// the FIRST visit only.
 import ru from './locales/ru.json'
-import ja from './locales/ja.json'
-import en from './locales/en.json'
+
+export const SUPPORTED_LOCALES = ['ru', 'en', 'ja'] as const
+
+// Lazy loaders — explicit map (not a template-string import) so Vite doesn't
+// also emit a duplicate chunk for ru.json, which stays statically bundled.
+const localeLoaders: Record<string, () => Promise<{ default: unknown }>> = {
+  en: () => import('./locales/en.json'),
+  ja: () => import('./locales/ja.json'),
+}
 
 // Detect user's preferred language
 function getDefaultLocale(): string {
   const saved = localStorage.getItem('locale')
-  if (saved && ['ru', 'ja', 'en'].includes(saved)) {
+  if (saved && (SUPPORTED_LOCALES as readonly string[]).includes(saved)) {
     return saved
   }
 
   const browserLang = navigator.language.split('-')[0]
-  if (['ru', 'ja', 'en'].includes(browserLang)) {
+  if ((SUPPORTED_LOCALES as readonly string[]).includes(browserLang)) {
     return browserLang
   }
 
@@ -23,13 +35,47 @@ function getDefaultLocale(): string {
 
 const initialLocale = getDefaultLocale()
 
-// Create i18n instance
+// Create i18n instance. The instance always BOOTS in ru (the only locale
+// whose messages are available synchronously); a saved/browser en/ja
+// preference is applied via setLocale below as soon as its messages land —
+// at worst a sub-second flash of Russian on a cold first visit.
+// fallbackLocale is ru (was en): ru is the primary, most complete locale and
+// the only one guaranteed loaded.
 const i18n = createI18n({
   legacy: false,
-  locale: initialLocale,
-  fallbackLocale: 'en',
-  messages: { ru, ja, en },
+  locale: 'ru',
+  fallbackLocale: 'ru',
+  messages: { ru },
 })
+
+const loadedLocales = new Set<string>(['ru'])
+
+/**
+ * Switch the active locale, lazy-loading its messages on first use.
+ * The single entry point for locale changes (Navbar language menu + boot).
+ */
+export async function setLocale(code: string): Promise<void> {
+  if (!(SUPPORTED_LOCALES as readonly string[]).includes(code)) return
+  if (!loadedLocales.has(code)) {
+    try {
+      const messages = await localeLoaders[code]()
+      // en/ja share ru's key schema (vue-i18n types messages from the
+      // statically-imported ru) — the locale files are hand-kept in parity.
+      i18n.global.setLocaleMessage(code, messages.default as typeof ru)
+      loadedLocales.add(code)
+    } catch {
+      // Chunk fetch failed (offline / mid-deploy) — stay on the current
+      // locale rather than rendering bare translation keys.
+      return
+    }
+  }
+  const localeRef = i18n.global.locale as unknown as { value: string }
+  localeRef.value = code
+}
+
+if (initialLocale !== 'ru') {
+  void setLocale(initialLocale)
+}
 
 // Keep <html lang> in sync with the active locale (accessibility, SEO, browser translation)
 if (typeof document !== 'undefined') {

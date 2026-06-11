@@ -4,6 +4,7 @@ import { getOrCreateAnonId } from '@/utils/anonId'
 import type { WatchCombo, ResolveResponse, ResolvedCombo } from '@/types/preference'
 import type { CreateJobPayload } from '@/types/library'
 import type { FeedbackListResponse, FeedbackDetail, FeedbackStatus } from '@/types/feedback'
+import { consumePrefetch } from '@/utils/pagePrefetch'
 import { newTraceparent } from '@/analytics/traceparent'
 import { stampTrace } from '@/analytics/traceContext'
 import { analytics } from '@/analytics'
@@ -367,7 +368,11 @@ export interface AddCollectionItemRequest {
 // API endpoints
 export const animeApi = {
   getAll: (params?: Record<string, unknown>) => apiClient.get('/anime', { params }),
-  getById: (id: string) => apiClient.get(`/anime/${id}`),
+  // The anime route guard prefetches this request at navigation start (in
+  // parallel with the route chunk download) — consume the stashed promise
+  // when present instead of re-issuing. See src/utils/pagePrefetch.ts.
+  getById: (id: string) =>
+    consumePrefetch<AxiosResponse>(`anime:${id}`) ?? apiClient.get(`/anime/${id}`),
   search: (query: string, source?: string, pageSize?: number, signal?: AbortSignal) => apiClient.get('/anime/search', { params: { q: query, ...(source && { source }), ...(pageSize && { page_size: pageSize }) }, signal }),
   getTrending: () => apiClient.get('/anime/trending'),
   getPopular: () => apiClient.get('/anime/popular'),

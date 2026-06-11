@@ -36,6 +36,7 @@ func setupViewerContextTestDB(t *testing.T) (*ViewerContextHandler, *gorm.DB) {
 			name_ru TEXT,
 			name_jp TEXT,
 			poster_url TEXT,
+			mal_id TEXT,
 			episodes_count INTEGER DEFAULT 0,
 			episodes_aired INTEGER DEFAULT 0
 		)`,
@@ -268,6 +269,30 @@ func TestViewerContext_MalIDFallback_SurfacesLegacyEntry(t *testing.T) {
 	var entry map[string]any
 	require.NoError(t, json.Unmarshal(obj["watchlist_entry"], &entry))
 	assert.Equal(t, "mal_5114", entry["anime_id"], "legacy mal_ entry must surface so the frontend can migrate it")
+	assert.Equal(t, "completed", entry["status"])
+}
+
+// Same legacy-entry scenario WITHOUT the ?mal_id= override: the handler must
+// resolve the MAL id from the catalog-owned animes row itself. This is what
+// lets the frontend prefetch viewer-context from a route guard before the
+// anime metadata response (the old mal_id source) has arrived.
+func TestViewerContext_MalIDFallback_ResolvedFromAnimesRow(t *testing.T) {
+	h, db := setupViewerContextTestDB(t)
+
+	require.NoError(t, db.Exec(`INSERT INTO animes (id, name, mal_id)
+		VALUES ('anime-uuid-1', 'FMA: Brotherhood', '5114')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO anime_list (id, user_id, anime_id, status, score, review_text, username)
+		VALUES ('r1', 'user-A', 'mal_5114', 'completed', 0, '', 'alice')`).Error)
+
+	claims := &authz.Claims{UserID: "user-A", Username: "alice"}
+	w := httptest.NewRecorder()
+	h.GetViewerContext(w, viewerContextRequest(t, "anime-uuid-1", claims))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	obj := decodeViewerContext(t, w)
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(obj["watchlist_entry"], &entry))
+	assert.Equal(t, "mal_5114", entry["anime_id"], "legacy mal_ entry must surface without the query param")
 	assert.Equal(t, "completed", entry["status"])
 }
 

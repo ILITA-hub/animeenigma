@@ -134,6 +134,19 @@ func (r *ListRepository) GetByUserAndAnime(ctx context.Context, userID, animeID 
 	return &entry, err
 }
 
+// GetAnimeMALID returns the catalog-owned animes.mal_id for an anime UUID,
+// or "" when the row is missing / has no MAL id. Lets the viewer-context
+// aggregate resolve legacy "mal_{id}" anime_list entries server-side, so the
+// frontend can fire the request from a route guard before the anime metadata
+// response (which used to carry mal_id) has arrived.
+func (r *ListRepository) GetAnimeMALID(ctx context.Context, animeID string) (string, error) {
+	var malID string
+	err := r.db.WithContext(ctx).
+		Raw(`SELECT COALESCE(mal_id, '') FROM animes WHERE id = ?`, animeID).
+		Scan(&malID).Error
+	return malID, err
+}
+
 func (r *ListRepository) Delete(ctx context.Context, userID, animeID string) error {
 	return r.db.WithContext(ctx).
 		Where("user_id = ? AND anime_id = ?", userID, animeID).

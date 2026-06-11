@@ -35,7 +35,10 @@ export function useWatchedEpisodes(animeId: MaybeRefOrGetter<string>): {
     }
     if (prefetchConsumedFor !== id) {
       prefetchConsumedFor = id
-      const ctx = useViewerContextStore().forAnime(id)
+      // whenLoaded (not forAnime): on deep-link mounts the aggregate request
+      // is often still in flight — await it instead of falling back to the
+      // network call it exists to replace.
+      const ctx = await useViewerContextStore().whenLoaded(id)
       if (ctx) {
         watchedUpTo.value = Number(ctx.watchlist_entry?.episodes) || 0
         return

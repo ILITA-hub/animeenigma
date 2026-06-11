@@ -108,6 +108,13 @@ func (s *ListService) GetUserAnimeEntry(ctx context.Context, userID, animeID str
 	return s.listRepo.GetByUserAndAnime(ctx, userID, animeID)
 }
 
+// GetAnimeMALID returns the anime's MAL id from the catalog-owned animes
+// table ("" when unknown). Used by the viewer-context aggregate to resolve
+// legacy mal_{id} list entries without the frontend supplying the id.
+func (s *ListService) GetAnimeMALID(ctx context.Context, animeID string) (string, error) {
+	return s.listRepo.GetAnimeMALID(ctx, animeID)
+}
+
 // clampRewatchCount bounds a manually-supplied rewatch_count to
 // [0, MaxRewatchCount]. Design 2026-06-05.
 func clampRewatchCount(n int) int {

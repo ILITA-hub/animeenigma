@@ -339,6 +339,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { setLocale as switchLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { onClickOutside, useDebounceFn, useEventListener, useMediaQuery } from '@vueuse/core'
 import { animeApi } from '@/api/client'
@@ -442,7 +443,9 @@ useEventListener(document, 'keydown', (e: KeyboardEvent) => {
 })
 
 const setLocale = (code: string) => {
-  locale.value = code
+  // switchLocale lazy-loads the locale's messages on first use (en/ja are no
+  // longer bundled in the entry) and sets i18n.global.locale once they land.
+  void switchLocale(code)
   localStorage.setItem('locale', code)
   langDropdownOpen.value = false
 }

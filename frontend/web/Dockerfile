@@ -30,10 +30,20 @@ COPY . .
 RUN bun run build
 
 # Stage 2: Production stage with nginx
-FROM nginx:alpine AS production
+# Alpine's own nginx package (not the nginx:alpine official image): the
+# official image ships no brotli module, while Alpine's nginx-mod-http-brotli
+# matches its nginx build exactly and auto-loads via /etc/nginx/modules/*.conf.
+# Needed for `brotli_static on` — serving the pre-compressed .br twins Vite
+# emits (page-load optimization 2026-06-11).
+FROM alpine:3.22 AS production
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN apk add --no-cache nginx nginx-mod-http-brotli \
+    # Route logs to the container runtime like the official image does
+    && ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
+
+# Copy custom nginx config (alpine's nginx.conf includes /etc/nginx/http.d/*)
+COPY nginx.conf /etc/nginx/http.d/default.conf
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html

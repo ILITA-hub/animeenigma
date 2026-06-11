@@ -103,14 +103,25 @@ func (h *ViewerContextHandler) GetViewerContext(w http.ResponseWriter, r *http.R
 	// NOTE: the repo returns (nil, nil) — not an error — when no row exists.
 	if entry, err := h.listService.GetUserAnimeEntry(ctx, userID, animeID); err == nil && entry != nil {
 		resp.WatchlistEntry = entry
-	} else if malID := r.URL.Query().Get("mal_id"); malID != "" {
+	} else {
 		// Legacy MAL imports store entries under anime_id="mal_{malId}" until
 		// the user first visits the anime page (which auto-migrates them).
 		// Surface such an entry so the frontend can show the status AND run
 		// its existing migration path — without re-fetching the full
-		// statuses list.
-		if entry, err := h.listService.GetUserAnimeEntry(ctx, userID, "mal_"+malID); err == nil && entry != nil {
-			resp.WatchlistEntry = entry
+		// statuses list. The MAL id comes from the ?mal_id= override when
+		// supplied, otherwise from the catalog-owned animes row — so the
+		// frontend's route-guard prefetch can fire this request before the
+		// anime metadata response arrives.
+		malID := r.URL.Query().Get("mal_id")
+		if malID == "" {
+			if resolved, err := h.listService.GetAnimeMALID(ctx, animeID); err == nil {
+				malID = resolved
+			}
+		}
+		if malID != "" {
+			if entry, err := h.listService.GetUserAnimeEntry(ctx, userID, "mal_"+malID); err == nil && entry != nil {
+				resp.WatchlistEntry = entry
+			}
 		}
 	}
 

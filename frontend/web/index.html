@@ -11,8 +11,21 @@
     <link rel="preconnect" href="https://telegram.org" crossorigin>
     <link rel="dns-prefetch" href="https://oauth.telegram.org">
     <link rel="preconnect" href="https://oauth.telegram.org" crossorigin>
+    <!-- Posters are served straight from Shikimori — warm the connection so the
+         anime page's hero image doesn't pay DNS+TCP+TLS mid-load. -->
+    <!-- no crossorigin: posters load as plain <img> (non-CORS), and a CORS
+         preconnect would open a connection those fetches can't reuse. -->
+    <link rel="dns-prefetch" href="https://shikimori.io">
+    <link rel="preconnect" href="https://shikimori.io">
+    <!-- inter 500/600 are the DS-mandated font-medium/font-semibold weights and
+         700/manrope-cyr render above-the-fold headings — without preload they
+         are only discovered via CSS one RTT after first render. -->
     <link rel="preload" href="/fonts/manrope-800.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/manrope-cyr.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/inter-700.woff2" as="font" type="font/woff2" crossorigin>
     <title>AnimeEnigma - Anime Streaming Platform</title>
     <meta name="description" content="Watch anime for free with subtitles. Stream the latest episodes and classic series in English and Russian.">
     <meta property="og:type" content="website">

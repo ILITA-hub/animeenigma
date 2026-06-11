@@ -100,6 +100,20 @@ export const useViewerContextStore = defineStore('viewerContext', () => {
     return animeId.value === id ? data.value : null
   }
 
+  /**
+   * Like forAnime, but waits for an in-flight load of the same anime instead
+   * of reporting null. Deep-link consumers (player progress / watched-episodes
+   * on `?episode=N`) mount while the aggregate request is still in the air —
+   * a synchronous forAnime check there used to fall back to the very network
+   * calls the aggregate exists to replace. Resolves null when nothing is
+   * loaded or loading for `id`.
+   */
+  function whenLoaded(id: string): Promise<ViewerContextData | null> {
+    if (animeId.value !== id) return Promise.resolve(null)
+    if (data.value) return Promise.resolve(data.value)
+    return inFlight ?? Promise.resolve(null)
+  }
+
   function reset() {
     animeId.value = null
     data.value = null
@@ -107,5 +121,5 @@ export const useViewerContextStore = defineStore('viewerContext', () => {
     loading.value = false
   }
 
-  return { animeId, data, loading, load, forAnime, reset }
+  return { animeId, data, loading, load, forAnime, whenLoaded, reset }
 })

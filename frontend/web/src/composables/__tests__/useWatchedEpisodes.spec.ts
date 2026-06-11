@@ -11,10 +11,16 @@ vi.mock('@/stores/auth', () => ({
 }))
 
 // Viewer-context aggregate (page-fetch optimization 2026-06-11): the first
-// refresh per anime consumes this when present instead of fetching.
+// refresh per anime consumes this when present instead of fetching. The
+// composable awaits whenLoaded (an in-flight-aware Promise wrapper).
 let viewerCtx: { watchlist_entry: { episodes?: number } | null } | null = null
 vi.mock('@/stores/viewerContext', () => ({
-  useViewerContextStore: () => ({ forAnime: () => viewerCtx }),
+  useViewerContextStore: () => ({
+    // forAnime deliberately null: proves the composable relies on whenLoaded
+    // (in-flight aware), not on synchronous availability.
+    forAnime: () => null,
+    whenLoaded: () => Promise.resolve(viewerCtx),
+  }),
 }))
 
 import { useWatchedEpisodes } from '../useWatchedEpisodes'
@@ -57,6 +63,16 @@ describe('useWatchedEpisodes', () => {
     const { watchedUpTo, refresh } = useWatchedEpisodes('a1')
     await refresh()
     expect(watchedUpTo.value).toBe(5)
+    expect(getWatchlistEntry).not.toHaveBeenCalled()
+  })
+
+  it('awaits an in-flight viewer-context load instead of fetching (deep-link race)', async () => {
+    // whenLoaded resolves with data even though it wasn't synchronously
+    // available — the composable must use it and skip the network.
+    viewerCtx = { watchlist_entry: { episodes: 9 } }
+    const { watchedUpTo, refresh } = useWatchedEpisodes('a1')
+    await refresh()
+    expect(watchedUpTo.value).toBe(9)
     expect(getWatchlistEntry).not.toHaveBeenCalled()
   })
 
