@@ -15,6 +15,7 @@ import (
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/services/recs/internal/repo"
 	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs"
+	"github.com/ILITA-hub/animeenigma/services/recs/internal/service/recs/signals"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -479,7 +480,7 @@ func TestRecsHandler_PersonalizedBranch_CacheMissComputesAndCaches(t *testing.T)
 
 	// Cache must now contain the per-user key.
 	var cached interface{}
-	require.NoError(t, cache.Get(context.Background(), "recs:user:user-1:topN:v2", &cached),
+	require.NoError(t, cache.Get(context.Background(), "recs:user:user-1:topN:v3", &cached),
 		"per-user cache key must be populated after fresh compute")
 }
 
@@ -499,7 +500,7 @@ func TestRecsHandler_PersonalizedBranch_CacheHitReturnsCachedPayload(t *testing.
 		Total:       1,
 		RowLabelKey: "recs.upNext",
 	}
-	cache.preBake(t, "recs:user:user-1:topN:v2", prebaked)
+	cache.preBake(t, "recs:user:user-1:topN:v3", prebaked)
 
 	recsRepo := repo.NewRecsRepository(db)
 	h := NewRecsHandler(db, recsRepo, cache, nil, logger.Default())
@@ -629,10 +630,10 @@ func TestRecsHandler_PersonalizedBranch_PerUserCacheIsolation(t *testing.T) {
 
 	// Pre-bake distinct payloads for two users — verifies the cache key is
 	// per-user.
-	cache.preBake(t, "recs:user:user-A:topN:v2", RecsEnvelope{
+	cache.preBake(t, "recs:user:user-A:topN:v3", RecsEnvelope{
 		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-A"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
 	})
-	cache.preBake(t, "recs:user:user-B:topN:v2", RecsEnvelope{
+	cache.preBake(t, "recs:user:user-B:topN:v3", RecsEnvelope{
 		Recs: []RecItem{{Anime: RecAnimePayload{ID: "for-B"}, Rank: 1}}, Total: 1, RowLabelKey: "recs.upNext",
 	})
 
@@ -983,6 +984,111 @@ func TestRecsHandler_PersonalizedBranchS5_TopOrderingDiffersFromPhase11Baseline(
 	}
 	assert.True(t, differs,
 		"Phase-12 ensemble Final scores must differ from Phase-11 ensemble on at least one candidate (S5 contributes). If identical, S5 is not contributing — Phase-12 SC#5 regression.")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 (spec 2026-06-11) — S7 dropped-penalty in the logged-in ensemble.
+// ---------------------------------------------------------------------------
+
+// TestServeLoggedIn_S7DemotesDroppedSimilar verifies that S7 (weight −0.15)
+// lowers the rank of candidates similar to a user's dropped anime. We test at
+// the ensemble level directly:
+//
+//   - A fake constant signal is used as the only positive signal (equal score
+//     for every candidate) so all ordering variation comes from S7.
+//   - A user has dropped 2+ anime with genres g1+g2 (cold-start guard: ≥2 seeds).
+//   - Three candidates with different S7 raw scores create a non-degenerate
+//     S7 pool (required so MinMaxNormalize doesn't flatten to all-zeros):
+//     · "cand-high"  : genre g1+g2 → strong overlap with both dropped seeds
+//     · "cand-partial": genre g1 only → partial overlap with seed d1
+//     · "cand-none"  : no shared genres → S7 raw = 0
+//   - After normalization the ensemble Final scores must satisfy:
+//     cand-none ≥ cand-partial > cand-high  (more penalty = lower rank).
+//
+// We chose the ensemble-level approach because the HTTP-path fixtures would
+// require carefully neutralizing all five positive signals simultaneously;
+// the ensemble approach gives clean, signal-specific evidence. The three-
+// candidate pool ensures S7 normalization is non-degenerate (min < max) so
+// the -0.15 penalty creates observable ordering differences.
+func TestServeLoggedIn_S7DemotesDroppedSimilar(t *testing.T) {
+	db := setupRecsTestDB(t)
+
+	// Dropped seeds: d1 has genres g1+g2; d2 has genres g1+g2. Both scores <7.
+	seedPhase12Anime(t, db, "s7-drop-1", "released", false, 7.0, "tv", "pg_13", "manga")
+	seedPhase12Genre(t, db, "s7-drop-1", "s7g1")
+	seedPhase12Genre(t, db, "s7-drop-1", "s7g2")
+	seedPhase12Anime(t, db, "s7-drop-2", "released", false, 7.0, "tv", "pg_13", "manga")
+	seedPhase12Genre(t, db, "s7-drop-2", "s7g1")
+	seedPhase12Genre(t, db, "s7-drop-2", "s7g2")
+	seedAnimeListRow(t, db, "al-s7d1", "user-s7", "s7-drop-1", "dropped", 3)
+	seedAnimeListRow(t, db, "al-s7d2", "user-s7", "s7-drop-2", "dropped", 2)
+
+	// Three candidates with different S7 raw scores:
+	// cand-high: genres g1+g2 → Jaccard with {g1,g2} seed = 1.0 for both seeds → best=1.0
+	seedPhase12Anime(t, db, "s7-cand-high", "released", false, 7.5, "tv", "pg_13", "manga")
+	seedPhase12Genre(t, db, "s7-cand-high", "s7g1")
+	seedPhase12Genre(t, db, "s7-cand-high", "s7g2")
+	// cand-partial: genre g1 only → Jaccard with {g1,g2} = 0.5 for best seed → best=0.5
+	seedPhase12Anime(t, db, "s7-cand-partial", "released", false, 7.5, "tv", "pg_13", "manga")
+	seedPhase12Genre(t, db, "s7-cand-partial", "s7g1")
+	// cand-none: no overlapping genres → S7 raw = 0 (absent from map)
+	seedPhase12Anime(t, db, "s7-cand-none", "released", false, 7.5, "movie", "g", "original")
+	seedPhase12Genre(t, db, "s7-cand-none", "s7g9") // unrelated genre
+
+	s7 := h_s7ForTest(db)
+	fakeSig := &uniformSignal{id: "fake", score: 1.0}
+
+	candidates := []recs.AnimeID{"s7-cand-high", "s7-cand-partial", "s7-cand-none"}
+
+	// The three S7 raw scores (1.0, 0.5, 0.0) form a non-degenerate pool:
+	// min=0.0, max=1.0 → normalized: cand-high=1.0, cand-partial=0.5, cand-none=0.0.
+	// S7 weighted: -0.15, -0.075, 0.0. All positive signals = 0 (degenerate fakeSig).
+	// Finals: cand-high=-0.15, cand-partial=-0.075, cand-none=0.0.
+	// Expected ordering: cand-none (0) > cand-partial (-0.075) > cand-high (-0.15).
+	ens := recs.NewEnsemble([]recs.WeightedSignal{
+		{Module: fakeSig, Weight: 1.0},
+		{Module: s7, Weight: -0.15}, // S7 appended LAST per spec
+	})
+
+	ranked, err := ens.Rank(context.Background(), recs.UserID("user-s7"), candidates)
+	require.NoError(t, err)
+	require.Len(t, ranked, 3)
+
+	// Verify S7 ordering: no-overlap (least penalty) ranks above high-overlap (most penalty).
+	positions := make(map[recs.AnimeID]int, 3)
+	for i, r := range ranked {
+		positions[r.AnimeID] = i
+	}
+	assert.Less(t, positions[recs.AnimeID("s7-cand-none")], positions[recs.AnimeID("s7-cand-high")],
+		"S7: cand-none (no penalty) must rank above cand-high (max penalty)")
+	assert.Less(t, positions[recs.AnimeID("s7-cand-partial")], positions[recs.AnimeID("s7-cand-high")],
+		"S7: cand-partial (half penalty) must rank above cand-high (full penalty)")
+	// Final score of cand-high must be strictly negative (S7 is active).
+	highIdx := positions[recs.AnimeID("s7-cand-high")]
+	assert.Less(t, ranked[highIdx].Final, 0.0,
+		"S7: cand-high Final must be < 0 (negative S7 contribution is non-zero)")
+}
+
+// h_s7ForTest constructs a real S7DroppedPenalty against the test DB.
+func h_s7ForTest(db *gorm.DB) *signals.S7DroppedPenalty {
+	return signals.NewS7DroppedPenalty(db)
+}
+
+// uniformSignal is a synthetic SignalModule that returns a fixed score for
+// every candidate. Used to isolate the effect of S7 in TestServeLoggedIn_S7DemotesDroppedSimilar.
+type uniformSignal struct {
+	id    string
+	score float64
+}
+
+func (u *uniformSignal) ID() recs.SignalID { return recs.SignalID(u.id) }
+func (u *uniformSignal) Precompute(_ context.Context, _ recs.UserID) error { return nil }
+func (u *uniformSignal) Score(_ context.Context, _ recs.UserID, candidates []recs.AnimeID) (map[recs.AnimeID]recs.RawScore, error) {
+	out := make(map[recs.AnimeID]recs.RawScore, len(candidates))
+	for _, id := range candidates {
+		out[id] = recs.RawScore(u.score)
+	}
+	return out, nil
 }
 
 // sliceTestID returns a zero-padded id so SQL ordering would be predictable

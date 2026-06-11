@@ -160,7 +160,8 @@ type AdminRecsHandler struct {
 	s3  *signals.S3Trending
 	s4  *signals.S4Recency
 	s5  *signals.S5Attribute
-	s6  *signals.S6ComboPin // optional; nil-guarded
+	s6  *signals.S6ComboPin        // optional; nil-guarded
+	s7  *signals.S7DroppedPenalty  // spec 2026-06-11 Phase 3 — demotes dropped-similar
 }
 
 // NewAdminRecsHandler wires the admin handler. The s6 module may be nil
@@ -189,18 +190,21 @@ func NewAdminRecsHandler(
 		s4:         signals.NewS4Recency(db),
 		s5:         signals.NewS5Attribute(db, recsRepo),
 		s6:         s6,
+		s7:         signals.NewS7DroppedPenalty(db), // spec 2026-06-11 Phase 3
 	}
 }
 
-// adminEnsembleWeights is the locked Phase-12 weight registry mirrored from
-// computeFreshForUser at services/player/internal/handler/recs.go. Matched
-// here so admin breakdown columns reflect the exact weights production uses.
+// adminEnsembleWeights is the weight registry mirrored from computeFreshForUser
+// at services/recs/internal/handler/recs.go. Matched here so admin breakdown
+// columns reflect the exact weights production uses.
+// Phase-12 + S7 dropped-penalty (spec 2026-06-11 Phase 3).
 var adminEnsembleWeights = map[recs.SignalID]float64{
 	recs.SignalID("s1"): 0.30,
 	recs.SignalID("s2"): 0.20,
 	recs.SignalID("s3"): 0.20,
 	recs.SignalID("s4"): 0.10,
 	recs.SignalID("s5"): 0.20,
+	recs.SignalID("s7"): -0.15,
 }
 
 // adminSignalVersions is the hardcoded signal-version map surfaced in the
@@ -213,6 +217,7 @@ var adminSignalVersions = map[string]string{
 	"s4": "v1.0",
 	"s5": "v1.0",
 	"s6": "v1.0",
+	"s7": "v1.0",
 }
 
 // GetAdminRecs handles GET /api/admin/recs/{user_id}. Builds the full Phase-12
@@ -277,13 +282,16 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 4. Build the full Phase-12 ensemble + RankWithBreakdown.
+	// 4. Build the full ensemble + RankWithBreakdown.
+	// Phase-12 + S7 dropped-penalty (spec 2026-06-11 Phase 3). S7 appended LAST
+	// so it cannot steal top_contributor via tie-breaking in the all-zero case.
 	ensemble := recs.NewEnsemble([]recs.WeightedSignal{
 		{Module: h.s1, Weight: adminEnsembleWeights[recs.SignalID("s1")]},
 		{Module: h.s2, Weight: adminEnsembleWeights[recs.SignalID("s2")]},
 		{Module: h.s3, Weight: adminEnsembleWeights[recs.SignalID("s3")]},
 		{Module: h.s4, Weight: adminEnsembleWeights[recs.SignalID("s4")]},
 		{Module: h.s5, Weight: adminEnsembleWeights[recs.SignalID("s5")]},
+		{Module: h.s7, Weight: adminEnsembleWeights[recs.SignalID("s7")]},
 	})
 	ranked, err := ensemble.RankWithBreakdown(ctx, recs.UserID(userID), pool)
 	if err != nil {
