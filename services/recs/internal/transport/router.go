@@ -17,6 +17,7 @@ func NewRouter(
 	recsHandler *handler.RecsHandler,
 	adminRecsHandler *handler.AdminRecsHandler,
 	recEventsHandler *handler.RecEventsHandler,
+	internalHintHandler *handler.InternalHintHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -40,6 +41,10 @@ func NewRouter(
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metrics.Handler().ServeHTTP(w, r)
 	})
+
+	// Docker-network-only producer endpoint — the gateway does NOT proxy
+	// /internal/* (same rule as notifications' /internal/notifications).
+	r.Post("/internal/recs/recompute-hint", internalHintHandler.PostRecomputeHint)
 
 	r.Route("/api", func(r chi.Router) {
 		// Phase 10: anonymous trending recs row.
