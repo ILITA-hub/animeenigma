@@ -201,18 +201,6 @@ body {
   box-shadow: 0 0 0 2px var(--color-cyan-400), 0 0 0 4px var(--color-base);
 }
 
-/* Reka popup containers (Select listbox, DropdownMenu menu) receive
-   programmatic focus on open, so the global ring above painted a fat 2px
-   cyan "border" around the whole popup — clashing with the 1px trigger
-   border. Restore the Tailwind shadow stack so shadow-* utilities keep
-   painting; the popup's own border is its open indicator. Must live here
-   unlayered: utility classes (outline-none/shadow-*) lose to the unlayered
-   :focus-visible rule above. */
-[role='listbox']:focus-visible,
-[role='menu']:focus-visible {
-  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-}
-
 /* Glassmorphism utilities */
 .glass {
   background-color: rgba(255, 255, 255, 0.05);
