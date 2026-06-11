@@ -43,15 +43,6 @@ Track issues discovered during development. Each entry should include root cause
 - **Open questions (verify before building):** does `am.vidstream.vip` permit framing on our origin (X-Frame-Options / CSP frame-ancestors — unverified; the signed player URL is time-limited so it needs a fresh ctk-driven fetch to test)? ads? Is the marginal failover depth worth a whole iframe surface given allanime + miruro + gogoanime are healthy?
 - **Status:** Open (backlog idea, not started). Gated on animefever's tserver actually dying — currently tserver is healthy for embed-bearing anime (real bytes flow; `stream=false` is ISS-017 probe noise).
 
-### ISS-026: `rec_watched_total` never observed — recommendation→watch conversions not reported by the frontend
-- **Date:** 2026-06-03
-- **Severity:** Low (observability gap, not an outage — recommendations still work; only the closed-loop CTR/conversion metric is blind).
-- **Symptom:** In Prometheus, `rec_click_total` has series but `rec_watched_total` has **zero** series. Three panels on the Recs dashboard (now the "Recommendations" row of *Recs & Preferences*) stay empty: Per-signal CTR (`rate(rec_watched_total)/rate(rec_click_total)`), Watch rate by signal, and Pin CTR (s6_pin). Surfaced during the 2026-06-03 dashboard audit.
-- **Root cause:** The **backend is correct** — `RecWatchedTotal.WithLabelValues(signal_id, pinned).Inc()` fires at `services/player/internal/handler/rec_events.go:81`, right beside the working `RecClickTotal.Inc()` (line 79), both off the same `POST /api/users/rec-events` endpoint. The counter has simply never been incremented because the **frontend emits the `click` rec-event but not the `watched` rec-event** — i.e. when a user actually watches an anime that originated from a recommendation row, no `{type:"watched", signal_id, ...}` event is POSTed. So the conversion half of the closed loop is uninstrumented client-side. (`RecWatchedTotal` is defined in `libs/metrics/recs.go:42`; its doc-comment expects "auto-mark events for anime that originated from recs".)
-- **Fix options (not started — needs a decision):**
-  1. **Instrument the frontend** — when the player auto-marks an episode complete (or the watch threshold is hit) for an anime whose origin is a recs row (origin already tracked in `localStorage.recentRecClicks` per the click path), POST a `watched` rec-event with the originating `signal_id`. Closes the loop; the 3 panels light up. Most correct.
-  2. **Drop the 3 dependent panels** — if recommendation→watch conversion isn't a metric we want to track, remove them. Lowest effort.
-- **Status:** Open (diagnosed, not started). Backend instrumentation verified present; gap is purely frontend. Files: `services/player/internal/handler/rec_events.go:81`, `libs/metrics/recs.go:42`, and (for the fix) the recs-origin tracking in the frontend player/recs composables.
 
 ### ISS-025: Watch Together — in-room player switch to OurEnglish/Hanime/Raw always rejected (EPISODE_UNAVAILABLE)
 - **Date:** 2026-06-03
@@ -467,6 +458,16 @@ Track issues discovered during development. Each entry should include root cause
 - **Status:** Fixed.
 
 ## Resolved Issues
+
+### ISS-026: `rec_watched_total` never observed — recommendation→watch conversions not reported by the frontend
+- **Date:** 2026-06-03
+- **Severity:** Low (observability gap, not an outage — recommendations still work; only the closed-loop CTR/conversion metric is blind).
+- **Symptom:** In Prometheus, `rec_click_total` has series but `rec_watched_total` has **zero** series. Three panels on the Recs dashboard (now the "Recommendations" row of *Recs & Preferences*) stay empty: Per-signal CTR (`rate(rec_watched_total)/rate(rec_click_total)`), Watch rate by signal, and Pin CTR (s6_pin). Surfaced during the 2026-06-03 dashboard audit.
+- **Root cause:** The **backend is correct** — `RecWatchedTotal.WithLabelValues(signal_id, pinned).Inc()` fires at `services/player/internal/handler/rec_events.go:81`, right beside the working `RecClickTotal.Inc()` (line 79), both off the same `POST /api/users/rec-events` endpoint. The counter has simply never been incremented because the **frontend emits the `click` rec-event but not the `watched` rec-event** — i.e. when a user actually watches an anime that originated from a recommendation row, no `{type:"watched", signal_id, ...}` event is POSTed. So the conversion half of the closed loop is uninstrumented client-side. (`RecWatchedTotal` is defined in `libs/metrics/recs.go:42`; its doc-comment expects "auto-mark events for anime that originated from recs".)
+- **Fix options (not started — needs a decision):**
+  1. **Instrument the frontend** — when the player auto-marks an episode complete (or the watch threshold is hit) for an anime whose origin is a recs row (origin already tracked in `localStorage.recentRecClicks` per the click path), POST a `watched` rec-event with the originating `signal_id`. Closes the loop; the 3 panels light up. Most correct.
+  2. **Drop the 3 dependent panels** — if recommendation→watch conversion isn't a metric we want to track, remove them. Lowest effort.
+- **Status:** Fixed (2026-06-11). Frontend now emits `rec_watched` from ALL five players (Kodik, AniLib, Hanime, Anime18, KodikAdFree) on BOTH manual and auto mark-watched paths via the shared `emitRecWatchedIfRecent()` helper in `frontend/web/src/utils/recsAnalytics.ts`; the click-correlation window was widened 1h → 7 days and made fire-once (click removed after first conversion). Verified live: `rec_watched_total` series present on recs:8094 after deploy. (Endpoint now served by the extracted `services/recs` — see the 2026-06-11 recs-extraction spec.)
 
 ### ISS-019: Subtitle panel showed "opensubtitles down" for hours after one transient failure (degraded result cached 6h)
 - **Date:** 2026-06-01
