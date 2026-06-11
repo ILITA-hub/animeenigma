@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
@@ -87,4 +88,33 @@ func (r *RandomTailResolver) Resolve(ctx context.Context, _ *string) (*spotlight
 		r.log.Warnw("spotlight.cache_set_failed", "type", r.Type(), "key", key, "error", err)
 	}
 	return &spotlight.Card{Type: r.Type(), Data: data}, nil
+}
+
+// Reroll serves the card's «Ещё разок» button (v4 B-1 lock, 2026-06-11):
+// a fresh uniform pick from the same 201..300 pool, bypassing the daily
+// cache in BOTH directions (no read, no write — the daily pick stays
+// stable for everyone else). excludeID, when non-empty, drops the
+// currently-shown anime so a reroll never returns the same card.
+func (r *RandomTailResolver) Reroll(ctx context.Context, excludeID string) (*spotlight.Card, error) {
+	items, _, err := r.repo.Search(ctx, domain.SearchFilters{
+		Sort:     "score",
+		Order:    "desc",
+		Page:     randomTailPage,
+		PageSize: randomTailPageSize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("random_tail reroll: repo search: %w", err)
+	}
+	pool := items[:0:0]
+	for _, a := range items {
+		if a == nil || a.ID == excludeID {
+			continue
+		}
+		pool = append(pool, a)
+	}
+	if len(pool) == 0 {
+		return nil, nil
+	}
+	picked := pool[rand.Intn(len(pool))]
+	return &spotlight.Card{Type: r.Type(), Data: spotlight.RandomTailData{Anime: *picked}}, nil
 }

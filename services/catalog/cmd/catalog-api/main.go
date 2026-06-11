@@ -321,10 +321,13 @@ func main() {
 	spotlightPlayerClient := client.NewPlayerClient("", nil, log)
 	spotlightRng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	prometheusClient := prometheus.NewClient(cfg.Prometheus.URL)
+	// random_tail kept in a named var — the handler's reroll route
+	// (v4 B-1 «Ещё разок») needs direct access beside the aggregator.
+	randomTailResolver := cards.NewRandomTailResolver(animeRepo, redisCache, log)
 	spotlightResolvers := []spotlight.Resolver{
 		// Static cards (Phase 1)
 		cards.NewFeaturedResolver(animeRepo, redisCache, log),
-		cards.NewRandomTailResolver(animeRepo, redisCache, log),
+		randomTailResolver,
 		cards.NewLatestNewsResolver(spotlightWebClient, redisCache, spotlightRng, log),
 		cards.NewPlatformStatsResolver(prometheusClient, redisCache, log),
 		// Dynamic cards (Phase 3 — Plan 03-03)
@@ -336,6 +339,7 @@ func main() {
 	}
 	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)
+	spotlightHandler.SetReroller(randomTailResolver)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")

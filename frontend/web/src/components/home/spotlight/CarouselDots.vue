@@ -1,66 +1,52 @@
 <template>
   <!--
-    Workstream hero-spotlight — labeled-pill dot indicators.
+    Workstream hero-spotlight — v4 A-1 lock (2026-06-11, spec:
+    2026-06-11-spotlight-v3-controls-and-cards.md). Icon menu replacing
+    the anonymous 26×4 pills: every card renders a 32px (28px on mobile)
+    round glass icon button; the ACTIVE card expands into an icon+label
+    pill in its brand-triad accent — you always see where you are and
+    what's around. Inactive buttons keep the label as title= tooltip +
+    aria-label.
 
-    Split out of CarouselControls.vue (v1.1-polish crop fix). Rendered BELOW
-    the .spotlight-frame, OUTSIDE the card — so the card slide occupies the
-    full frame height instead of being cropped by a reserved dot strip (the
-    earlier `pb-10` / in-frame footer both ate ~40px out of every card).
+    Centered below the frame. The skeleton state in HeroSpotlightBlock
+    reserves this exact row height (mt-3 + h-8) so the menu appearing
+    after load causes ZERO layout shift (the old dots row pushed the page
+    ~28px).
 
-    Each pill renders the card-type icon from SpotlightIcon, an aria-label
-    from the i18n kicker key in cardTokens, and a tooltip via title=. The
-    active pill picks up the card's accent background; inactive pills stay
-    glass-on-glass.
+    A-2 (in-frame progress segments) is reserved as a future variety
+    option — see the v4 spec.
 
-    Neon Tokyo restyle (feat/homepage-neon-tokyo-redesign):
-      Inactive: 26×4 pill rgba(255,255,255,.16), border-radius 999px.
-      Active: 36×4 pill var(--brand-cyan) with 0 0 10px cyan glow.
-      Hover: rgba(255,255,255,.3).
-      Transcribed from .dot-btn / .dot-btn.active in the design handoff.
-      The button wrapper keeps its existing Tailwind classes so spec
-      assertions on bg-white/10, bg-purple-*, scale-110 remain valid —
-      the pill is drawn via the ::before pseudo and scoped CSS overrides
-      width/height/border-radius on the button directly when in compact mode.
-
-    Accessibility:
-      - Dots are real <button> elements with aria-label / aria-current.
-      - Active dot uses aria-current="true"; others "false". (Tabs use
-        aria-selected — these are nav buttons, not APG tabs.)
-      - data-testid="spotlight-dots" preserved for e2e selectors.
+    Accessibility: real <button>s, aria-label from the kicker i18n key,
+    aria-current on the active item; data-testid="spotlight-dots" kept
+    for e2e selectors.
   -->
   <div
-    class="mt-3 flex items-center justify-end gap-2.5 px-6"
+    class="mt-3 flex items-center justify-center gap-2 px-4 flex-wrap"
     data-testid="spotlight-dots"
   >
-    <!-- Each dot reads from cardTokens by card.type. If the backend ships an
-         unknown variant the frontend doesn't yet know about (forward-compat
-         scenario), we fall back to FALLBACK_TOKEN so the dot still renders
-         rather than throwing on an undefined property access. -->
-    <!--
-      Kept bespoke (07-02): 4px pill geometry forced by scoped CSS (.dot-pill 26×4
-      / 36×4, !important glass bg, cyan glow) + a spec contract asserting raw
-      bg-white/10 / bg-purple-* / scale-110 classes. The <Button> primitive's
-      smallest size (icon = 40×40, rounded-xl, variant bg) cannot express a 4px
-      pill and would change the rendered class set → break both visuals and spec.
-      Canonical "specialized control the Button API doesn't model" keep.
-    -->
     <button
       v-for="(card, i) in cards"
       :key="`${card.type}:${i}`"
       type="button"
-      :class="[
-        'dot-pill group relative transition',
+      class="menu-item inline-flex items-center justify-center rounded-full border transition-all duration-200"
+      :class="
         i === currentIndex
-          ? `${accentDotBg[tokenFor(card.type).accent]} scale-110 dot-active`
-          : 'bg-white/10 hover:bg-white/20 dot-inactive',
-      ]"
+          ? `${accentMenuPill[tokenFor(card.type).accent]} gap-2 px-3.5 h-8 menu-active`
+          : 'w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20'
+      "
       :aria-label="t(tokenFor(card.type).kickerKey)"
       :aria-current="i === currentIndex ? 'true' : 'false'"
       :title="t(tokenFor(card.type).kickerKey)"
       @click="$emit('goto', i)"
     >
-      <!-- Keep icon for accessibility/tooltip; hide visually so dots look like pills -->
-      <SpotlightIcon :name="tokenFor(card.type).icon" class="dot-icon w-3.5 h-3.5" />
+      <SpotlightIcon :name="tokenFor(card.type).icon" class="w-4 h-4 flex-shrink-0" />
+      <span
+        v-if="i === currentIndex"
+        class="font-mono text-[10px] uppercase tracking-[0.1em] font-medium whitespace-nowrap"
+        data-testid="active-menu-label"
+      >
+        {{ t(tokenFor(card.type).kickerKey) }}
+      </span>
     </button>
   </div>
 </template>
@@ -68,7 +54,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import type { SpotlightCard } from '@/types/spotlight'
-import { cardTokens, accentDotBg, type CardToken, type SpotlightCardType } from './tokens'
+import { cardTokens, accentMenuPill, type CardToken, type SpotlightCardType } from './tokens'
 import SpotlightIcon from './SpotlightIcon.vue'
 
 defineProps<{
@@ -96,56 +82,29 @@ function tokenFor(type: string): CardToken {
 </script>
 
 <style scoped>
-/* Neon Tokyo dot pills — transcribed from .dot-btn / .dot-btn.active in
-   design_handoff_homepage_redesign/styles.css.
-   Button background classes from Tailwind control the accent color (kept
-   for spec compatibility). Scoped CSS overrides the geometry. */
-.dot-pill {
-  /* Pill geometry — inactive: 26×4, active: 36×4 */
-  width: 26px;
-  height: 4px;
-  border-radius: 999px;
-  padding: 0;
-  /* Override Tailwind's w-8/h-8 round inherited by button defaults */
-  min-width: 0;
-  min-height: 0;
-  border: none;
-  cursor: pointer;
-  overflow: hidden;
-  transition: background 0.15s ease, width 0.2s ease, box-shadow 0.15s ease;
-  /* Containing block for the absolutely-positioned clipped icon */
+/* 44px effective touch target around the 32px visual button (28px on
+   small screens) without changing layout — padding-box trick via a
+   transparent ::after hit area. */
+.menu-item {
   position: relative;
-  outline: none;
+  cursor: pointer;
 }
-.dot-pill:focus-visible {
-  outline: 2px solid var(--accent-line);
-  outline-offset: 3px;
-}
-
-/* Inactive state: glass-on-glass */
-.dot-pill.dot-inactive {
-  background: rgba(255, 255, 255, 0.16) !important;
-}
-.dot-pill.dot-inactive:hover {
-  background: rgba(255, 255, 255, 0.3) !important;
-}
-
-/* Active state: wider pill + cyan glow */
-.dot-pill.dot-active {
-  width: 36px;
-  /* background is provided by the accentDotBg Tailwind class (e.g. bg-cyan-500);
-     box-shadow adds the glow. For cyan accent the glow uses the accent token. */
-  box-shadow: 0 0 10px var(--brand-cyan);
-}
-
-/* Hide the SpotlightIcon visually — it's in the DOM for tooltip/a11y context
-   but dots should appear as pure pill shapes. */
-.dot-icon {
+.menu-item::after {
+  content: '';
   position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  inset: -6px;
+}
+.menu-item:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .menu-item:not(.menu-active) {
+    width: 28px;
+    height: 28px;
+  }
+  .menu-item.menu-active {
+    height: 28px;
+  }
 }
 </style>

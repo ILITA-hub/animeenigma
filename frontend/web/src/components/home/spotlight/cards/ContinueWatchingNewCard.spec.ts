@@ -53,39 +53,26 @@ describe('ContinueWatchingNewCard', () => {
     expect(wrapper.text()).toContain('spotlight.continueWatchingNew.title')
   })
 
-  it('renders the hero ribbon spanning the full top of the poster', () => {
+  it('renders the episode stepper with the NEW chip (v4 H-4 — ribbon removed)', () => {
     const wrapper = mountCard({ data: baseData })
-    const ribbon = wrapper
-      .findAll('div')
-      .find(
-        (d) =>
-          d.classes().includes('inset-x-0') && d.classes().includes('top-0'),
-      )
-    expect(ribbon).toBeDefined()
-    // Ribbon carries the brand-violet->fuchsia gradient identity.
-    expect(ribbon!.classes()).toContain('from-pink-500')
-    expect(ribbon!.classes()).toContain('to-pink-400')
+    expect(wrapper.find('[data-testid="episode-stepper"]').exists()).toBe(true)
+    const newChip = wrapper.find('[data-testid="stepper-new"]')
+    expect(newChip.exists()).toBe(true)
+    expect(newChip.classes().join(' ')).toContain('text-pink-400')
   })
 
-  it('ribbon text interpolates new_episode_number via newEpisodeBadge', () => {
+  it('stepper NEW chip interpolates new_episode_number via epChipNew (v4 H-4)', () => {
     const wrapper = mountCard({ data: baseData })
-    const ribbon = wrapper
-      .findAll('div')
-      .find(
-        (d) =>
-          d.classes().includes('inset-x-0') && d.classes().includes('top-0'),
-      )
-    expect(ribbon!.text()).toContain('newEpisodeBadge')
-    expect(ribbon!.text()).toContain('"n":7')
+    const newChip = wrapper.find('[data-testid="stepper-new"]')
+    expect(newChip.text()).toContain('spotlight.continueWatchingNew.epChipNew')
+    expect(newChip.text()).toContain(String(baseData.new_episode_number))
   })
 
-  it('renders BOTH the last-watched line and the new-episode line (count = 2)', () => {
+  it('renders the new-episode meta line + watched chips (v4 H-4)', () => {
     const wrapper = mountCard({ data: baseData })
-    const text = wrapper.text()
-    // Subdued "watched up to" line interpolates last_watched_episode (5).
-    expect(text).toContain('spotlight.continueWatchingNew.lastWatched::{"n":5}')
-    // Accent "new episode" line interpolates new_episode_number (7).
-    expect(text).toContain('spotlight.continueWatchingNew.newEpisodeLine::{"n":7}')
+    expect(wrapper.text()).toContain('spotlight.continueWatchingNew.newEpisodeLine')
+    // last_watched_episode renders as a dimmed ✓ chip inside the stepper
+    expect(wrapper.text()).toContain('spotlight.continueWatchingNew.epChip')
   })
 
   it('CTA deep-links to /anime/{id}?episode={n} (canonical, no /watch hop)', () => {

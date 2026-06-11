@@ -4,38 +4,37 @@
     icon="sparkles"
     :kicker="t('spotlight.latestNews.title')"
   >
-    <ul
-      class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 min-h-0"
+  <!--
+    Workstream hero-spotlight — v4 E-1 lock (2026-06-11, spec:
+    2026-06-11-spotlight-v3-controls-and-cards.md). Terminal changelog:
+    `$ animeenigma --updates` prompt, entries as mono lines with colored
+    [FEAT]/[FIX]/[PERF] prefixes (semantic tokens: cyan/success/warning),
+    blinking cursor. Replaces the three-tile "wall of text" layout —
+    instantly distinguishable from TelegramNewsCard.
+  -->
+    <div
+      class="flex-1 min-h-0 bg-black/45 border border-white/10 rounded-xl px-5 py-4 font-mono text-[12.5px] leading-[1.75] overflow-hidden"
+      data-testid="terminal"
     >
-      <li
-        v-for="(entry, idx) in data.entries.slice(0, 3)"
-        :key="entry.date + ':' + idx"
-        class="news-tile flex flex-col gap-2 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 backdrop-blur-sm transition min-w-0"
-      >
-        <div class="flex items-center justify-between gap-2">
-          <SpotlightIcon
-            :name="iconFor(entry.type)"
-            class="w-4 h-4"
-            :class="iconAccentClassFor(entry.type)"
-          />
-          <span
-            v-if="badgeFor(entry.type)"
-            class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-            :class="badgeFor(entry.type)!.accent"
-          >
-            {{ t(badgeFor(entry.type)!.i18nKey) }}
-          </span>
-        </div>
-        <p class="text-xs font-medium text-muted-foreground">
-          {{ formatEntryDate(entry.date) }}
-        </p>
-        <p
-          class="text-sm font-semibold text-white news-msg flex-1"
+      <p class="text-muted-foreground">$ animeenigma --updates</p>
+      <ul class="mt-2">
+        <li
+          v-for="(entry, idx) in data.entries.slice(0, 3)"
+          :key="entry.date + ':' + idx"
+          class="news-msg"
+          data-testid="terminal-line"
         >
-          {{ entryTitle(entry.message) }}
-        </p>
-      </li>
-    </ul>
+          <span class="text-muted-foreground">{{ formatEntryDate(entry.date) }}</span>
+          {{ ' ' }}
+          <span :class="prefixFor(entry.type).cls">[{{ prefixFor(entry.type).label }}]</span>
+          {{ ' ' }}{{ entry.message }}
+        </li>
+      </ul>
+      <p class="mt-2">
+        <span class="text-muted-foreground">$</span>
+        <span class="cursor-blink" aria-hidden="true" />
+      </p>
+    </div>
 
     <template #cta>
       <a
@@ -51,21 +50,11 @@
 </template>
 
 <script setup lang="ts">
-// Workstream hero-spotlight — DS alignment 2026-06-10: SpotlightCardShell
-// kicker (violet), Button link-variant CTA pinned bottom-left, tile
-// surfaces on bg-white/5 + border-white/10 utilities. Type pills keep the
-// tokens.ts class strings (tinted-inline badges on a glass surface).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowDown } from 'lucide-vue-next'
 import { buttonVariants } from '@/components/ui/button-variants'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
-import SpotlightIcon from '../SpotlightIcon.vue'
-import {
-  cardTokens,
-  type LatestNewsTypeBadge,
-  type SpotlightIconName,
-} from '../tokens'
 import type { LatestNewsData } from '@/types/spotlight'
 
 defineProps<{ data: LatestNewsData }>()
@@ -76,44 +65,26 @@ const localeStr = computed<string>(() => {
   return typeof v === 'string' ? v : 'ru'
 })
 
-const latestNewsToken = cardTokens.latest_news
+// Terminal prefixes — the changelog `type` field mapped to mono labels
+// in semantic accents. Unknown/missing types render a muted [INFO].
+const PREFIXES: Record<string, { label: string; cls: string }> = {
+  feature: { label: 'FEAT', cls: 'text-cyan-400' },
+  fix: { label: 'FIX', cls: 'text-success' },
+  perf: { label: 'PERF', cls: 'text-warning' },
+}
+const FALLBACK_PREFIX = { label: 'INFO', cls: 'text-muted-foreground' }
 
-// Per-type helpers. Each accepts `string | undefined` because the
-// backend ChangelogEntry.type is optional and the per-entry payload may
-// legitimately omit it (very old entries). Unknown types fall back to a
-// sparkles icon with gray accent and no pill (badgeFor returns null).
-function iconFor(type?: string): SpotlightIconName {
-  if (type && latestNewsToken.iconByType[type]) {
-    return latestNewsToken.iconByType[type]
-  }
-  return 'sparkles'
+function prefixFor(type?: string): { label: string; cls: string } {
+  return (type && PREFIXES[type]) || FALLBACK_PREFIX
 }
 
-function badgeFor(type?: string): LatestNewsTypeBadge | null {
-  if (!type) return null
-  return latestNewsToken.labelByType[type] ?? null
-}
-
-function iconAccentClassFor(type?: string): string {
-  const badge = badgeFor(type)
-  return badge ? badge.accent : 'text-muted-foreground'
-}
-
-// Locale-aware relative date. Falls back to a medium absolute date when
-// the entry is older than ~30 days, and to the raw ISO string when the
-// date is unparseable (defensive: backend emits YYYY-MM-DD).
+// Compact dd.MM date for the terminal gutter; raw string fallback when
+// unparseable (backend emits YYYY-MM-DD).
 function formatEntryDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  const now = new Date()
-  const diffMs = d.getTime() - now.getTime()
-  const diffDays = Math.round(diffMs / 86_400_000)
   try {
-    const rtf = new Intl.RelativeTimeFormat(localeStr.value, { numeric: 'auto' })
-    if (Math.abs(diffDays) < 1) return rtf.format(0, 'day') // "today"
-    if (Math.abs(diffDays) < 7) return rtf.format(diffDays, 'day')
-    if (Math.abs(diffDays) < 30) return rtf.format(Math.round(diffDays / 7), 'week')
-    return new Intl.DateTimeFormat(localeStr.value, { dateStyle: 'medium' }).format(d)
+    return new Intl.DateTimeFormat(localeStr.value, { day: '2-digit', month: '2-digit' }).format(d)
   } catch {
     return iso
   }
@@ -123,29 +94,34 @@ function scrollToChangelog(): void {
   const el = document.getElementById('changelog')
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
-
-// Show the full changelog message; visual truncation (with an ellipsis) is
-// handled by the CSS line-clamp on the tile, which is sized to the tile's
-// height. The previous hard 60-char slice cropped the 150–210 char changelog
-// entries down to ~2 lines even though each tile has room for ~11 — that was
-// the "cropped too much" the slice caused. A proper backend title/body split
-// is still in the v1.2 backlog; until then the whole message is the teaser.
-function entryTitle(msg: string): string {
-  return msg || ''
-}
 </script>
 
 <style scoped>
-/* Show up to 7 lines of the changelog message, then truncate with an
-   ellipsis. Defined here (not via a Tailwind line-clamp-[7] utility) because
-   Tailwind v4 did not emit that arbitrary value — the explicit rule is
-   guaranteed. Each tile is tall (~11 lines fit); 7 shows the full 150–210 char
-   entries while keeping the three tiles visually balanced. */
+/* Two terminal lines per entry, then ellipsis. Explicit rule (not a
+   line-clamp-[2] utility) — Tailwind v4 did not reliably emit the
+   arbitrary value here (same precedent as the old 7-line clamp). */
 .news-msg {
   display: -webkit-box;
-  -webkit-line-clamp: 7;
-  line-clamp: 7;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+/* Blinking block cursor after the trailing prompt. steps(1) = hard
+   on/off like a real terminal, no fade. */
+.cursor-blink {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  margin-left: 6px;
+  vertical-align: text-bottom;
+  background: var(--brand-cyan);
+  animation: cursor-blink 1.1s steps(1) infinite;
+}
+@keyframes cursor-blink {
+  50% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cursor-blink { animation: none; }
 }
 </style>

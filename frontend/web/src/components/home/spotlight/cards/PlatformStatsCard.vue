@@ -1,4 +1,10 @@
 <template>
+  <SpotlightCardShell
+    accent="cyan"
+    icon="chart"
+    :kicker="t('spotlight.platformStats.title')"
+    backdrop="none"
+  >
   <!--
     Workstream hero-spotlight — DS alignment 2026-06-10, batch 1 (spec:
     2026-06-10-spotlight-ds-alignment-design.md). Two-column hero-stats
@@ -7,12 +13,6 @@
     medium/semibold scale, scoped CSS reduced to the bespoke gradient
     backdrop + decorative tile highlight. All data bindings unchanged.
   -->
-  <SpotlightCardShell
-    accent="cyan"
-    icon="chart"
-    :kicker="t('spotlight.platformStats.title')"
-    backdrop="none"
-  >
     <template #background>
       <div class="stats-bg" aria-hidden="true" />
     </template>

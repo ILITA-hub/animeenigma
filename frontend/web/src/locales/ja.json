@@ -1302,7 +1302,12 @@
         "見ましたか？",
         "倉庫から掘り出した一作",
         "もしかしたら運命の出会い"
-      ]
+      ],
+      "dealtLabel": "今日のデッキから…",
+      "rerollCta": "もう一回",
+      "statusOngoing": "放送中",
+      "statusReleased": "完結",
+      "statusAnnounced": "発表済み"
     },
     "latestNews": {
       "title": "新着情報",
@@ -1323,16 +1328,25 @@
       "reason": {
         "trending": "トレンド",
         "personal": "おすすめ"
-      }
+      },
+      "kicker": "おすすめ",
+      "allRecsCta": "すべてのおすすめ",
+      "swipeLabel": "他のおすすめ — スワイプ",
+      "watchCta": "視聴する"
     },
     "telegramNews": {
       "title": "Telegram より",
-      "openCta": "投稿を開く →"
+      "openCta": "投稿を開く →",
+      "subscribeCta": "チャンネルを購読"
     },
     "nowWatching": {
       "title": "視聴中",
       "sessionLabel": "{username} → {anime} · 第{n}話",
-      "liveBadge": "LIVE"
+      "liveBadge": "LIVE",
+      "countOne": "人が今視聴中",
+      "countFew": "人が今視聴中",
+      "countMany": "人が今視聴中",
+      "joinLine": "一緒に見よう"
     },
     "notTimeYet": {
       "title": "そろそろ見ませんか?",
@@ -1341,7 +1355,10 @@
       "statusPlanned": "計画中",
       "statusPostponed": "延期",
       "addedAt": "{ago}に追加",
-      "watchCta": "視聴"
+      "watchCta": "視聴",
+      "stickerNote": "{date}に見るつもりだったのに…",
+      "stickerNoteNoDate": "見るつもりだったのに…",
+      "stickerCta": "よし、今がその時"
     },
     "continueWatchingNew": {
       "title": "続きを見る",
@@ -1349,7 +1366,10 @@
       "resumeCta": "再開",
       "lastWatched": "{n}話まで視聴済",
       "newEpisodeLine": "新しい{n}話",
-      "resumeCtaWithEp": "{n}話を見る →"
+      "resumeCtaWithEp": "{n}話を見る →",
+      "epChip": "第{n}話",
+      "epChipNew": "第{n}話 · NEW",
+      "seasonProgress": "全{total}話中{cur}話"
     }
   },
   "watch_together": {

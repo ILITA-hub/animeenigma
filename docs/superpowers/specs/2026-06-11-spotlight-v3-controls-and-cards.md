@@ -1,6 +1,6 @@
 # Spotlight v3→v4 — carousel controls + 7-card design review
 
-> Status: **v4 ITERATION — partial locks, rest awaiting choices**
+> Status: **v4 LOCKED & IMPLEMENTED 2026-06-11** (all variants chosen and shipped)
 > (artifact: `.brainstorm/content/spotlight-ds-v4.html`, served at localhost:3000).
 > Follow-up to the shipped v2 DS alignment (`2026-06-10-spotlight-ds-alignment-design.md`).
 
@@ -31,9 +31,9 @@
   bottom-left, overlay badges, lucide scores) locked.
 - Practice locked: every design review shows a "current prod" screenshot per card.
 
-## v4 — awaiting choices
+## v4 — locked choices (user, 2026-06-11) — ALL IMPLEMENTED
 
-| Q | Rework | Options |
+| Q | Lock | Implementation notes |
 |---|---|---|
 | B | RandomTail B-1 v2 | deal-in animation replacing the buggy 5-card overlay (poster + 2 ghost deck cards fly into the resting stack, 550ms, no content occlusion) + density: year/status pill/description clamp-3/«из N тайтлов». Sub-question: keep ghost «⤮ Ещё разок» re-roll button (needs a tiny reroll endpoint)? |
 | C | PersonalPick C-2 v2 | scrollable right list up to 6 recs (desktop, fade mask + thin cyan scrollbar; resolver cap 3→6 is a one-liner), horizontal poster swipe-row on mobile. Bug surfaced: «+N ещё» links to `/recs` which DOES NOT EXIST (only `/admin/recs/:user_id`) → 404. Options: (а) link `/browse?sort=recommended` now · (б) build /recs page · (в) drop the button. |
@@ -51,3 +51,25 @@
 ## Metrics (locks + recommended v4 picks)
 
 - **UXΔ = +3 (Better)** · **CDI = 0.03 * 21** · **MVQ = Kraken 82%/85%**
+
+## v4 final locks (this review round)
+
+- **B-1 v2** — deck deal-in (no overlay) + density; «Ещё разок» KEPT — backed by
+  `GET /api/home/spotlight/reroll?exclude=<id>` (catalog handler `GetReroll` +
+  gateway passthrough; bypasses the daily cache both ways).
+- **C-2 v2** — scrollable 6-rec column (desktop) / poster swipe-row (mobile);
+  «Все рекомендации» → `/browse?sort=recommended`.
+  **TODO (recorded, task for later): recs service must properly serve
+  `/browse?sort=recommended`** — until then browse falls back to its default
+  ordering for the unknown sort value.
+- **D-4** — hero post + telegram bubbles (user: «ну такой +- но давай ЛОК»).
+- **H-4** — stepper + context (status/genres/description/season progress).
+- Mobile layouts — approved as mocked.
+- **PosterCard question resolved differently**: instead of reusing PosterCard,
+  a DEDICATED spotlight primitive set was built on the same DS token base —
+  `components/home/spotlight/ui/`: SpotlightTile, SpotlightPoster,
+  SpotlightChatBubble, SpotlightStepper, SpotlightProgress (cva variants,
+  tokens only, co-located spec).
+- personal_pick resolver: AdaptiveSlice → flat cap 6 (1 featured + 5 secondary).
+- CarouselDots → A-1 icon menu (32px circles, active expands to accent
+  icon+label pill via tokens.accentMenuPill); skeleton reserves the row.

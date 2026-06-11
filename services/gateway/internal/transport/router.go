@@ -298,6 +298,8 @@ func NewRouterWithCleanup(
 		r.Group(func(r chi.Router) {
 			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.HandleFunc("/home/spotlight", proxyHandler.ProxyToCatalog)
+			// v4 B-1 «Ещё разок» — fresh random_tail pick, public.
+			r.HandleFunc("/home/spotlight/reroll", proxyHandler.ProxyToCatalog)
 		})
 
 		// Phase 17 Plan 03: admin scraper routes (protected, proxied to scraper).

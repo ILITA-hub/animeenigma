@@ -143,6 +143,16 @@ export const accentDotBg: Record<SpotlightAccent, string> = {
   violet: 'bg-brand-violet/30 text-white',
 }
 
+
+// Active menu-pill classes per accent (v4 A-1 lock, 2026-06-11) — the
+// expanded icon+label pill in CarouselDots. Tinted surface + accent ring
+// + matching glow; pinned literals (Tailwind JIT scans verbatim strings).
+export const accentMenuPill: Record<SpotlightAccent, string> = {
+  cyan:   'bg-cyan-500/20 border-cyan-400/50 text-cyan-400 shadow-[0_0_14px_rgba(0,212,255,0.25)]',
+  pink:   'bg-pink-500/20 border-pink-400/50 text-pink-400 shadow-[0_0_14px_rgba(255,45,124,0.25)]',
+  violet: 'bg-brand-violet/20 border-brand-violet/50 text-brand-violet shadow-[0_0_14px_rgba(167,139,250,0.25)]',
+}
+
 // Kicker text color per accent — single source for SpotlightCardShell and
 // any card that renders accent-colored text outside the shell. Pinned
 // literals (Tailwind JIT scans verbatim strings).

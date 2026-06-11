@@ -2,166 +2,173 @@
   <SpotlightCardShell
     accent="cyan"
     icon="sparkles"
-    :kicker="featured ? title : ''"
+    :kicker="featured ? t('spotlight.personalPick.kicker') : ''"
     backdrop="poster-blur"
     :poster-url="featured?.anime.poster_url ?? ''"
   >
+  <!--
+    Workstream hero-spotlight — v4 C-2 lock (2026-06-11, spec:
+    2026-06-11-spotlight-v3-controls-and-cards.md). Refined two-zone
+    layout: the personalized title moved from the kicker into the body,
+    secondary picks gained rank numbers + ★ scores and live in a
+    SCROLLABLE column (desktop, up to 6 items — fade mask + thin cyan
+    scrollbar) or a horizontal poster swipe-row (mobile). «Все
+    рекомендации» links to /browse?sort=recommended (the old /recs route
+    never existed — it 404'd; recs-service support for the sort is a
+    recorded TODO).
+  -->
     <template v-if="featured">
-      <div class="flex-1 grid md:grid-cols-[3fr_2fr] gap-4 md:gap-6 min-h-0">
+      <div class="flex-1 min-h-0 grid md:grid-cols-[3fr_2fr] gap-4 md:gap-7">
         <!-- ── Featured pick ───────────────────────────────────────────── -->
         <router-link
           :to="`/anime/${featured.anime.id}`"
-          :aria-label="featuredAriaLabel"
-          class="flex flex-col md:flex-row gap-4 group min-h-0"
+          :aria-label="featuredTitle"
+          class="flex gap-4 md:gap-5 group min-h-0 min-w-0"
         >
-          <div class="flex-shrink-0 w-32 md:w-40 lg:w-48 self-center md:self-start">
-            <div
-              class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-cyan-500/20 group-hover:shadow-cyan-500/40 transition-shadow"
-            >
-              <img
-                :src="cardPosterUrl(featured.anime.poster_url, 256)"
-                :alt="featuredTitle"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
-          </div>
-
+          <SpotlightPoster
+            :poster-url="featured.anime.poster_url"
+            :alt="featuredTitle"
+            width-class="w-24 md:w-36 self-center md:self-start"
+            glow="cyan"
+            :proxy-width="256"
+          />
           <div class="flex-1 flex flex-col gap-2 min-w-0">
-            <h3
-              class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2"
-            >
+            <p class="text-[13px] text-muted-foreground font-medium">{{ title }}</p>
+            <h3 class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2">
               {{ featuredTitle }}
             </h3>
-            <Badge
-              v-if="featured.reason_i18n_key"
-              variant="primary"
-              size="sm"
-              overlay
-              class="self-start"
-            >
-              <template #icon>
-                <SpotlightIcon name="sparkles" class="w-3 h-3" />
-              </template>
-              {{ t(featured.reason_i18n_key) }}
-            </Badge>
+            <div class="flex flex-wrap items-center gap-2">
+              <Badge v-if="featured.anime.score" variant="warning" size="sm" overlay>
+                <template #icon>
+                  <Star class="size-3" fill="currentColor" aria-hidden="true" />
+                </template>
+                {{ featured.anime.score.toFixed(1) }}
+              </Badge>
+              <Badge
+                v-if="featured.reason_i18n_key"
+                variant="primary"
+                size="sm"
+                overlay
+                class="min-w-0"
+              >
+                <template #icon>
+                  <SpotlightIcon name="sparkles" class="w-3 h-3" />
+                </template>
+                {{ t(featured.reason_i18n_key) }}
+              </Badge>
+            </div>
           </div>
         </router-link>
 
-        <!-- ── Secondary picks (md+ only) ──────────────────────────────── -->
+        <!-- ── Secondary picks: desktop scrollable ranked column ───────── -->
         <ul
           v-if="secondary.length"
-          class="hidden md:flex flex-col gap-2 min-h-0 overflow-hidden"
+          class="rec-scroll hidden md:flex flex-col gap-2.5 min-h-0"
+          data-testid="rec-list"
         >
-          <li v-for="item in secondary" :key="item.anime.id" class="min-h-0">
+          <SpotlightTile
+            v-for="(item, i) in secondary"
+            :key="item.anime.id"
+            as="li"
+            interactive
+            class="flex-shrink-0"
+          >
             <router-link
               :to="`/anime/${item.anime.id}`"
-              class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors group"
+              class="flex items-center gap-3 p-2 min-w-0"
             >
-              <div
-                class="flex-shrink-0 w-16 h-24 rounded-md overflow-hidden bg-white/5"
-              >
-                <img
-                  :src="cardPosterUrl(item.anime.poster_url, 128)"
-                  :alt="
-                    getLocalizedTitle(
-                      item.anime.name,
-                      item.anime.name_ru,
-                      item.anime.name_jp,
-                    )
-                  "
-                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </div>
-              <div class="flex-1 flex flex-col gap-1 min-w-0">
+              <span class="font-mono text-[11px] text-muted-foreground w-3 text-center">{{
+                i + 2
+              }}</span>
+              <SpotlightPoster
+                :poster-url="item.anime.poster_url"
+                :alt="secondaryTitle(item)"
+                width-class="w-10 rounded-md"
+                :proxy-width="128"
+              />
+              <div class="flex-1 flex flex-col gap-0.5 min-w-0">
                 <h4 class="text-sm font-semibold text-white truncate">
-                  {{
-                    getLocalizedTitle(
-                      item.anime.name,
-                      item.anime.name_ru,
-                      item.anime.name_jp,
-                    )
-                  }}
+                  {{ secondaryTitle(item) }}
                 </h4>
-                <p
-                  v-if="item.reason_i18n_key"
-                  class="text-xs font-medium text-cyan-400/80 truncate"
-                >
-                  {{ t(item.reason_i18n_key) }}
+                <p class="text-xs font-medium text-cyan-400/80 truncate">
+                  <template v-if="item.anime.score">★ {{ item.anime.score.toFixed(1) }}</template>
+                  <template v-if="item.anime.score && item.reason_i18n_key"> · </template>
+                  <template v-if="item.reason_i18n_key">{{ t(item.reason_i18n_key) }}</template>
                 </p>
               </div>
             </router-link>
-          </li>
+          </SpotlightTile>
         </ul>
       </div>
 
-      <!-- ── Mobile "+ N more →" footer button (mobile-only) ─────────── -->
+      <!-- ── Mobile: horizontal poster swipe-row ─────────────────────── -->
+      <div v-if="secondary.length" class="md:hidden min-w-0">
+        <p class="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-2">
+          {{ t('spotlight.personalPick.swipeLabel') }}
+        </p>
+        <div class="flex gap-2.5 overflow-x-auto pb-1.5 swipe-row" data-testid="rec-swipe">
+          <router-link
+            v-for="item in secondary"
+            :key="`m-${item.anime.id}`"
+            :to="`/anime/${item.anime.id}`"
+            class="w-[72px] flex-shrink-0"
+          >
+            <SpotlightPoster
+              :poster-url="item.anime.poster_url"
+              :alt="secondaryTitle(item)"
+              width-class="w-[72px] rounded-lg"
+              :proxy-width="128"
+            />
+            <p class="text-[10px] font-medium text-white truncate mt-1">
+              {{ secondaryTitle(item) }}
+            </p>
+          </router-link>
+        </div>
+      </div>
+
+    </template>
+
+    <template #cta>
       <router-link
-        v-if="data.items.length > 1"
-        :to="moreLinkTo"
-        :class="[
-          buttonVariants({ variant: 'ghost', size: 'sm' }),
-          'absolute bottom-3 inset-x-3 justify-center md:hidden z-20',
-        ]"
+        v-if="featured"
+        :to="`/anime/${featured.anime.id}`"
+        :class="[buttonVariants({ variant: 'default', size: 'md' }), 'text-sm']"
       >
-        {{
-          t('spotlight.personalPick.moreLink', {
-            n: data.items.length - 1,
-          })
-        }}
+        {{ t('spotlight.personalPick.watchCta') }}
+      </router-link>
+      <router-link
+        :to="allRecsTo"
+        :class="[buttonVariants({ variant: 'link', size: 'sm' }), 'text-sm']"
+      >
+        {{ t('spotlight.personalPick.allRecsCta') }} →
       </router-link>
     </template>
   </SpotlightCardShell>
 </template>
 
 <script setup lang="ts">
-/**
- * Workstream hero-spotlight — v1.1-polish Phase 04 (HSB-V11-PP-01..04);
- * DS alignment 2026-06-10 (SpotlightCardShell + Badge/Button primitives).
- *
- * Two-zone layout:
- *   - Featured pick (60% desktop / full mobile): large poster + title +
- *     reason chip (overlay Badge), backed by the featured anime's blurred
- *     poster.
- *   - Secondary picks (40% desktop, hidden on mobile): up to 2 stacked
- *     rows with small posters + titles + reason lines.
- *
- * Mobile keeps only the featured pick and surfaces a full-width
- * ghost-Button "+ N more →" footer.
- *
- * Title personalization: when `data.source === 'personal'` and the auth
- * store has a `user.username`, render `titleWithName` with the username
- * interpolated; falls back to `title` (logged-in, no name) or
- * `titleAnon` (anonymous / source='trending').
- *
- * CRITICAL — single-element root: SpotlightCardShell's root <article> is
- * the only root node; conditional content lives INSIDE it, never around
- * it (Transition mode="out-in" safety — Phase 04 e2e regression).
- */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Star } from 'lucide-vue-next'
 import { getLocalizedTitle } from '@/utils/title'
 import { useAuthStore } from '@/stores/auth'
 import Badge from '@/components/ui/Badge.vue'
 import { buttonVariants } from '@/components/ui/button-variants'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
-import type { PersonalPickData } from '@/types/spotlight'
-import { cardPosterUrl } from '@/composables/useImageProxy'
+import SpotlightTile from '../ui/SpotlightTile.vue'
+import SpotlightPoster from '../ui/SpotlightPoster.vue'
+import type { PersonalPickData, PersonalPickItem } from '@/types/spotlight'
 
 const props = defineProps<{ data: PersonalPickData }>()
 
 const { t } = useI18n()
 const auth = useAuthStore()
 
-// Featured = first item. Secondary = items 1..2 (max 2 more for the
-// desktop right column). Mobile shows only the featured pick and a
-// "+ N more →" footer that links to the appropriate list view.
+// Featured = first item (recs arrive ranked). Secondary = the rest, up
+// to 5 — the backend caps the payload at 6 total (v4 C-2).
 const featured = computed(() => props.data.items[0])
-const secondary = computed(() => props.data.items.slice(1, 3))
+const secondary = computed(() => props.data.items.slice(1, 6))
 
 const featuredTitle = computed(() =>
   featured.value
@@ -173,15 +180,11 @@ const featuredTitle = computed(() =>
     : '',
 )
 
-const featuredAriaLabel = computed(() => featuredTitle.value)
+function secondaryTitle(item: PersonalPickItem): string {
+  return getLocalizedTitle(item.anime.name, item.anime.name_ru, item.anime.name_jp)
+}
 
-// Title precedence:
-//   1. Anonymous (source='trending') → titleAnon
-//   2. Personal with username      → titleWithName (interpolated)
-//   3. Personal without username   → title (generic personalized)
-//
-// The auth store may be null/unhydrated in SSR/test contexts —
-// `auth.user?.username` short-circuits safely.
+// Personalized line shown above the featured title (was the kicker).
 const title = computed(() => {
   if (props.data.source !== 'personal') {
     return t('spotlight.personalPick.titleAnon')
@@ -193,7 +196,37 @@ const title = computed(() => {
   return t('spotlight.personalPick.title')
 })
 
-const moreLinkTo = computed(() =>
-  props.data.source === 'trending' ? '/browse?sort=trending' : '/recs',
+// /recs never existed (only /admin/recs/:user_id) — the old mobile
+// "+N more" link 404'd. Until a real recs page ships, browse with the
+// recommended sort is the landing surface (recs-service TODO recorded
+// in the v4 spec).
+const allRecsTo = computed(() =>
+  props.data.source === 'trending' ? '/browse?sort=trending' : '/browse?sort=recommended',
 )
 </script>
+
+<style scoped>
+/* Desktop secondary column: scrolls when >3 rows; bottom fade signals
+   "there's more"; thin cyan scrollbar matches the card accent. */
+.rec-scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, 0.35) transparent;
+  padding-right: 4px;
+  mask-image: linear-gradient(180deg, black 84%, transparent);
+}
+.rec-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.rec-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.3);
+  border-radius: 999px;
+}
+/* Mobile swipe-row: hide the scrollbar, keep the swipe. */
+.swipe-row {
+  scrollbar-width: none;
+}
+.swipe-row::-webkit-scrollbar {
+  display: none;
+}
+</style>

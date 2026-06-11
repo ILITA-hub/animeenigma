@@ -189,20 +189,15 @@ describe('PersonalPickCard (v1.1-polish two-zone layout)', () => {
     expect(text).not.toContain('spotlight.personalPick.titleAnon')
   })
 
-  it('mobile "+ N more →" footer button uses cta-card classes', () => {
+  it('renders the mobile poster swipe-row for secondary picks (v4 C-2)', () => {
     const data = {
       source: 'personal',
       items: [{ anime: animeFixture(1) }, { anime: animeFixture(2) }],
     }
     const wrapper = mountCard({ data })
-    const links = wrapper.findAllComponents(RouterLinkStub)
-    const footer = links.find((l) => l.props('to') === '/recs')
-    expect(footer).toBeDefined()
-    // The footer button is full-width, glass-pill (cta-card), mobile-only.
-    const cls = (footer!.attributes('class') ?? '') as string
-    // DS alignment: ghost Button-variant classes replaced .cta-card.
-    expect(cls).toContain('bg-white/5')
-    expect(cls).toContain('md:hidden')
+    const swipe = wrapper.find('[data-testid="rec-swipe"]')
+    expect(swipe.exists()).toBe(true)
+    expect(swipe.classes().join(' ')).toContain('overflow-x-auto')
   })
 
   it('does NOT render mobile footer button when only 1 item', () => {
@@ -229,14 +224,14 @@ describe('PersonalPickCard (v1.1-polish two-zone layout)', () => {
     expect(footer!.props('to')).toBe('/browse?sort=trending')
   })
 
-  it('mobile footer link routes to /recs when source=personal', () => {
+  it('«Все рекомендации» routes to /browse?sort=recommended for source=personal (v4 C-2 — /recs never existed)', () => {
     const data = {
       source: 'personal',
       items: [{ anime: animeFixture(1) }, { anime: animeFixture(2) }],
     }
     const wrapper = mountCard({ data })
     const links = wrapper.findAllComponents(RouterLinkStub)
-    const footer = links.find((l) => l.props('to') === '/recs')
+    const footer = links.find((l) => l.props('to') === '/browse?sort=recommended')
     expect(footer).toBeDefined()
   })
 

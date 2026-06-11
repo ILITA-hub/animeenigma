@@ -64,9 +64,11 @@ describe('NotTimeYetCard — root + backdrop', () => {
     expect(wrapper.element.tagName).toBe('ARTICLE')
   })
 
-  it('renders the violet secondary gradient overlay (brand triad)', () => {
+  it('renders the tilted pinned-note sticker (v4 G-3)', () => {
     const wrapper = mountCard({ data: baseData })
-    expect(wrapper.html()).toContain('from-brand-violet/25')
+    const sticker = wrapper.find('[data-testid="sticker"]')
+    expect(sticker.exists()).toBe(true)
+    expect(sticker.classes()).toContain('sticker')
   })
 
   it('renders a poster-blur backdrop driven by the poster url', () => {
@@ -108,18 +110,18 @@ describe('NotTimeYetCard — header + status pill', () => {
 })
 
 describe('NotTimeYetCard — addedAt + CTA', () => {
-  it('renders the relative addedAt line when added_at is provided', () => {
+  it('renders the dated sticker note when added_at is provided (v4 G-3)', () => {
     const wrapper = mountCard({ data: baseData })
-    // The `t` mock echoes the addedAt key with its params; formatAgo turns
-    // a 14-day-old timestamp into a "weeks ago" relative string.
-    expect(wrapper.text()).toContain('spotlight.notTimeYet.addedAt')
-    expect(wrapper.text()).toContain('weeks ago')
+    // The `t` mock echoes the key with its params; the note interpolates
+    // the formatted added_at date.
+    expect(wrapper.text()).toContain('spotlight.notTimeYet.stickerNote')
+    expect(wrapper.text()).not.toContain('stickerNoteNoDate')
   })
 
-  it('hides the addedAt line when added_at is absent', () => {
+  it('falls back to the no-date sticker note when added_at is absent', () => {
     const noDate = { ...baseData, added_at: null }
     const wrapper = mountCard({ data: noDate })
-    expect(wrapper.text()).not.toContain('spotlight.notTimeYet.addedAt')
+    expect(wrapper.text()).toContain('spotlight.notTimeYet.stickerNoteNoDate')
   })
 
   it('CTA links directly to the watch page (/anime/{id}/watch)', () => {
@@ -130,9 +132,9 @@ describe('NotTimeYetCard — addedAt + CTA', () => {
     expect((cta!.props('to') as string).endsWith('/watch')).toBe(true)
   })
 
-  it('renders the watchCta label on the CTA', () => {
+  it('renders the stickerCta label on the CTA (v4 G-3)', () => {
     const wrapper = mountCard({ data: baseData })
-    expect(wrapper.text()).toContain('spotlight.notTimeYet.watchCta')
+    expect(wrapper.text()).toContain('spotlight.notTimeYet.stickerCta')
   })
 })
 

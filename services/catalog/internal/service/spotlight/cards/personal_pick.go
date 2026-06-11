@@ -48,9 +48,13 @@ type playerRecsFetcher interface {
 }
 
 // personalPickTrendingPoolSize is the top-N trending pool the anon path
-// pulls before AdaptiveSlice. 10 is a healthy buffer for the random-3
+// pulls before the cap-6 slice. 10 is a healthy buffer for the picked-6
 // rule and matches the design doc.
 const personalPickTrendingPoolSize = 10
+
+// personalPickMaxItems caps the rendered set: 1 featured + up to 5
+// secondary rows (v4 C-2 scrollable list, 2026-06-11).
+const personalPickMaxItems = 6
 
 // personalPickTTL — 24h, mirroring featured. The day-keyed cache
 // rotates at UTC midnight via DateKeyUTC.
@@ -147,12 +151,19 @@ func (r *PersonalPickResolver) resolveAnon(ctx context.Context, cacheKey string)
 		return nil, nil
 	}
 
-	// Shuffle the pool BEFORE AdaptiveSlice so the top 3 (or random 1 from
-	// N==2) is varied across calls rather than always the top 3 by score.
+	// Shuffle the pool BEFORE slicing so the picked set is varied across
+	// days rather than always the top-N by score. v4 C-2 (2026-06-11):
+	// AdaptiveSlice (1-2-3 layout rule) replaced by a flat cap of 6 — the
+	// redesigned card renders 1 featured + up to 5 scrollable secondary
+	// rows (desktop) / a swipe poster row (mobile), so any count 1..6 lays
+	// out correctly.
 	r.rng.Shuffle(len(items), func(i, j int) {
 		items[i], items[j] = items[j], items[i]
 	})
-	picked := spotlight.AdaptiveSlice(items, r.rng)
+	picked := items
+	if len(picked) > personalPickMaxItems {
+		picked = picked[:personalPickMaxItems]
+	}
 	if len(picked) == 0 {
 		return nil, nil
 	}
@@ -204,9 +215,11 @@ func (r *PersonalPickResolver) resolveLogin(ctx context.Context, cacheKey, jwt s
 		return nil, nil
 	}
 
-	picked := spotlight.AdaptiveSlice(items, r.rng)
-	if len(picked) == 0 {
-		return nil, nil
+	// v4 C-2: flat cap of 6 (see resolveAnon comment). Recs arrive ranked,
+	// so no shuffle here — the top recommendation stays the featured pick.
+	picked := items
+	if len(picked) > personalPickMaxItems {
+		picked = picked[:personalPickMaxItems]
 	}
 
 	data := spotlight.PersonalPickData{

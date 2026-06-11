@@ -92,8 +92,8 @@ func TestPersonalPick_AnonHappy_PicksThreeFromTen(t *testing.T) {
 	if !ok {
 		t.Fatalf("Card.Data not PersonalPickData: %T", card.Data)
 	}
-	if len(data.Items) != 3 {
-		t.Errorf("expected 3 items (AdaptiveSlice of N=10 == 3), got %d", len(data.Items))
+	if len(data.Items) != 6 {
+		t.Errorf("expected 6 items (cap-6 of N=10, v4 C-2), got %d", len(data.Items))
 	}
 	if data.Source != "trending" {
 		t.Errorf("Source = %q; want trending", data.Source)
@@ -144,8 +144,8 @@ func TestPersonalPick_AnonTwo_ReturnsRandomOne(t *testing.T) {
 		t.Fatalf("Resolve: card=%v err=%v", card, err)
 	}
 	data := card.Data.(spotlight.PersonalPickData)
-	if len(data.Items) != 1 {
-		t.Errorf("AdaptiveSlice(N=2) should return 1 item, got %d", len(data.Items))
+	if len(data.Items) != 2 {
+		t.Errorf("cap-6 of N=2 should return both items (v4 C-2), got %d", len(data.Items))
 	}
 }
 
@@ -176,8 +176,8 @@ func TestPersonalPick_LoginHappy_CallsFetchUserRecs_WithJWT(t *testing.T) {
 	if data.Source != "personal" {
 		t.Errorf("Source = %q; want personal", data.Source)
 	}
-	if len(data.Items) != 3 {
-		t.Errorf("AdaptiveSlice(N=5) should return 3 items, got %d", len(data.Items))
+	if len(data.Items) != 5 {
+		t.Errorf("cap-6 of N=5 should return all 5 items (v4 C-2), got %d", len(data.Items))
 	}
 	if tr.calls != 0 {
 		t.Errorf("expected 0 trending calls on login happy path, got %d", tr.calls)

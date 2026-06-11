@@ -1,4 +1,11 @@
 <template>
+  <SpotlightCardShell
+    accent="cyan"
+    backdrop="none"
+    justify="end"
+    :kicker="eyebrow"
+    content-class="max-w-[720px]"
+  >
   <!--
     Workstream hero-spotlight — DS alignment 2026-06-10, batch 1 (spec:
     2026-06-10-spotlight-ds-alignment-design.md, blocks B/D, user-approved).
@@ -15,13 +22,6 @@
     episode count, amber lucide Star for the Shikimori score (DS §6),
     font-medium/semibold only.
   -->
-  <SpotlightCardShell
-    accent="cyan"
-    backdrop="none"
-    justify="end"
-    :kicker="eyebrow"
-    content-class="max-w-[720px]"
-  >
     <template #background>
       <div class="featured-bg" aria-hidden="true">
         <img v-if="posterSrc" :src="posterSrc" alt="" loading="lazy" decoding="async" />

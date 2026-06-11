@@ -144,10 +144,10 @@ describe('CarouselDots', () => {
     })
     const dots = wrapper.findAll('[data-testid="spotlight-dots"] button')
 
-    // Active dot 1 → random_tail → violet accent (brand triad)
+    // Active item 1 → random_tail → violet accent pill (v4 A-1 icon menu)
     const activeClasses = dots[1].classes().join(' ')
-    expect(activeClasses).toMatch(/bg-brand-violet/)
-    expect(activeClasses).toContain('scale-110')
+    expect(activeClasses).toMatch(/bg-brand-violet\/20/)
+    expect(activeClasses).toContain('menu-active')
 
     // Inactive dot 0 → glass-on-glass, no accent
     const inactiveClasses = dots[0].classes().join(' ')

@@ -3,6 +3,18 @@
     accent="pink"
     :kicker="t('spotlight.nowWatching.title')"
   >
+  <!--
+    Workstream hero-spotlight — v4 F-2 lock (2026-06-11, spec:
+    2026-06-11-spotlight-v3-controls-and-cards.md). "N в эфире": a big
+    pink live counter on the left (works even with a single session —
+    the old row list looked half-empty), compact session tiles on the
+    right with a pulsing success dot per row. Mobile stacks
+    counter-then-list.
+
+    TODO (recorded in spec, future session): Watch Together integration —
+    a "join" badge + CTA on rows whose viewer has an invite-open WT room
+    (needs wt_room_id? on NowWatching sessions).
+  -->
     <template #kicker-lead>
       <SpotlightIcon
         name="pulse"
@@ -10,48 +22,48 @@
       />
     </template>
 
-    <ul class="flex-1 flex flex-col gap-2 min-h-0">
-        <li
+    <div
+      class="flex-1 min-h-0 flex flex-col md:grid md:grid-cols-[1fr_1.2fr] gap-4 md:gap-7 md:items-center"
+    >
+      <!-- ── Live counter ───────────────────────────────────────────── -->
+      <div class="text-center md:text-left" data-testid="live-counter">
+        <p class="font-display font-semibold leading-none">
+          <span class="text-4xl md:text-5xl text-pink-400">{{ count }}</span>
+        </p>
+        <p class="font-display font-semibold text-lg md:text-xl text-white mt-1.5">
+          {{ countLine }}
+        </p>
+        <p class="text-[13px] text-muted-foreground font-medium mt-2">
+          {{ t('spotlight.nowWatching.joinLine') }}
+        </p>
+      </div>
+
+      <!-- ── Session tiles ──────────────────────────────────────────── -->
+      <ul class="flex flex-col gap-2.5 min-h-0 justify-center">
+        <SpotlightTile
           v-for="s in data.sessions.slice(0, 3)"
           :key="`${s.public_id}:${s.anime_id}:${s.episode_number}`"
-          class="min-w-0"
+          as="li"
+          interactive
         >
           <router-link
             :to="`/anime/${s.anime_id}`"
-            class="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 backdrop-blur-sm transition group min-w-0"
+            class="flex items-center gap-3 p-2.5 min-w-0"
           >
-            <!-- Avatar circle (hashed deterministic color via fallbackClass) -->
             <Avatar
               :name="s.username"
-              size="md"
+              size="sm"
               :fallback-class="`${avatarBgClass(s.username)} text-white`"
-            >
-              <!-- Pulsing LIVE indicator dot (visually hidden text for a11y) -->
-              <span
-                aria-hidden="true"
-                class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-success ring-2 ring-background animate-pulse"
-              />
-              <span class="sr-only">{{
-                t('spotlight.nowWatching.liveBadge')
-              }}</span>
-            </Avatar>
-
-            <!-- Bigger anime poster (56x84) -->
-            <img
-              v-if="s.poster_url"
-              :src="cardPosterUrl(s.poster_url, 128)"
-              alt=""
-              class="w-14 object-cover rounded-md flex-shrink-0"
-              style="height: 84px"
-              loading="lazy"
-              decoding="async"
             />
-
-            <!-- Text -->
+            <SpotlightPoster
+              v-if="s.poster_url"
+              :poster-url="s.poster_url"
+              alt=""
+              width-class="w-9 rounded-md"
+              :proxy-width="128"
+            />
             <div class="flex-1 flex flex-col min-w-0">
-              <p
-                class="text-sm font-semibold text-white truncate"
-              >
+              <p class="text-[13px] font-semibold text-white truncate">
                 {{ s.username }}
               </p>
               <p class="text-xs font-medium text-muted-foreground truncate">
@@ -59,53 +71,53 @@
                 {{ s.episode_number }}
               </p>
             </div>
+            <!-- Pulsing LIVE dot (sr-only text keeps the e2e `text=LIVE`
+                 attached-check and SR announcement). -->
+            <span
+              aria-hidden="true"
+              class="w-2.5 h-2.5 rounded-full bg-success animate-pulse flex-shrink-0 live-dot"
+            />
+            <span class="sr-only">{{ t('spotlight.nowWatching.liveBadge') }}</span>
           </router-link>
-        </li>
-    </ul>
+        </SpotlightTile>
+      </ul>
+    </div>
   </SpotlightCardShell>
 </template>
 
 <script setup lang="ts">
-/**
- * Workstream hero-spotlight — v1.1-polish Phase 05 (HSB-V11-NW-01..04).
- *
- * Refactor goal: make NowWatchingCard feel alive. Bigger poster thumbs
- * (56×84, 3.5× the previous 32×44), deterministic hashed avatar circles
- * per user, animated cyan→green mesh backdrop via SpotlightBackdrop, and
- * a pulsing LIVE micro-element (green dot at bottom-right of avatar) in
- * place of the previous "LIVE" text label on the right edge.
- *
- * The original "LIVE" string is preserved as `sr-only` text inside the
- * avatar circle so screen readers still announce the live indicator and
- * the existing `spotlight-full.spec.ts` e2e check (`text=LIVE`) keeps
- * matching via toBeAttached (DOM presence, not visual visibility).
- *
- * CRITICAL — single-element root (Phase 04 footgun): the <template> block
- * MUST have exactly one root node (<article>) with NO top-level v-if, NO
- * leading template comments, and NO sibling nodes. HeroSpotlightBlock
- * wraps each card in `<transition mode="out-in">`. If the root ever
- * resolves to a comment node — multi-root template OR top-level v-if
- * false — Vue logs "non-element root node that cannot be animated" and
- * the cross-fade silently wedges: the NEXT card's mount never fires, the
- * carousel stays blank after navigation. Conditional content lives
- * INSIDE <article>, never around it. (Phase 04 e2e regression.)
- */
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocalizedTitle } from '@/utils/title'
 import Avatar from '@/components/ui/Avatar.vue'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
+import SpotlightTile from '../ui/SpotlightTile.vue'
+import SpotlightPoster from '../ui/SpotlightPoster.vue'
 import type { NowWatchingData } from '@/types/spotlight'
-import { cardPosterUrl } from '@/composables/useImageProxy'
 
-defineProps<{ data: NowWatchingData }>()
+const props = defineProps<{ data: NowWatchingData }>()
 const { t } = useI18n()
 
-// Avatar color palette: 8 Tailwind backgrounds covering a wide hue range
-// so adjacent usernames feel visibly distinct. Order is stable across
-// builds; `avatarBgClass` hashes the username into a palette index so the
-// same username always renders the same color across mounts and across
-// page reloads (no flicker on data refresh).
+const count = computed(() => props.data.sessions.length)
+
+// Russian needs 3 plural forms (1 человек / 2-4 человека / 5+ человек);
+// picking the i18n key in code avoids configuring vue-i18n's custom
+// pluralization rules for one line. EN/JA map few→many.
+const countLine = computed<string>(() => {
+  const n = count.value
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return t('spotlight.nowWatching.countOne')
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return t('spotlight.nowWatching.countFew')
+  }
+  return t('spotlight.nowWatching.countMany')
+})
+
+// Avatar color palette: 8 backgrounds covering a wide hue range so
+// adjacent usernames feel visibly distinct. Stable order; the hash keeps
+// the same username on the same color across mounts and reloads.
 const PALETTE = [
   'bg-destructive',
   'bg-orange-500',
@@ -117,13 +129,6 @@ const PALETTE = [
   'bg-pink-500',
 ] as const
 
-/**
- * Deterministic username → palette index. Uses the classic 31-multiplier
- * polynomial rolling hash, then `Math.abs(...) % PALETTE.length`. Pure
- * function — exported via the script's binding scope so the spec can
- * exercise determinism (same input → same class across calls) and the
- * hash distribution (different inputs MAY hit different palette slots).
- */
 function avatarBgClass(username: string): string {
   let hash = 0
   for (const ch of username) {
@@ -132,3 +137,10 @@ function avatarBgClass(username: string): string {
   return PALETTE[Math.abs(hash) % PALETTE.length]
 }
 </script>
+
+<style scoped>
+/* Soft success glow behind the live dot — composed shadow, no token pair. */
+.live-dot {
+  box-shadow: 0 0 6px var(--success);
+}
+</style>

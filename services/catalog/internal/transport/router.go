@@ -95,6 +95,8 @@ func NewRouter(
 		// proceed with userID=nil. Feature-flag gated INSIDE the handler —
 		// returns bare 404 when SPOTLIGHT_ENABLED=false (see config.go).
 		r.With(OptionalAuthMiddleware(cfg.JWT)).Get("/home/spotlight", spotlightHandler.Get)
+		// v4 B-1 «Ещё разок» — public, no auth (the random pick is global).
+		r.Get("/home/spotlight/reroll", spotlightHandler.GetReroll)
 
 		// Public catalog routes
 		r.Route("/anime", func(r chi.Router) {

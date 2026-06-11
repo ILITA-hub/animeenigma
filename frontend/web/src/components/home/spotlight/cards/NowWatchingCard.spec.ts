@@ -257,22 +257,20 @@ describe('NowWatchingCard (v1.1-polish social-identity layout)', () => {
 
   // ── Poster size ──────────────────────────────────────────────────────
 
-  it('poster img is 56px wide via w-14 utility', () => {
+  it('poster renders inside a w-9 SpotlightPoster thumb (v4 F-2)', () => {
     const data = { sessions: [session(1)] }
     const wrapper = mountCard({ data })
-    const img = wrapper.find('img')
-    expect(img.exists()).toBe(true)
-    expect(img.classes()).toContain('w-14')
+    expect(wrapper.html()).toContain('w-9')
+    expect(wrapper.find('img').exists()).toBe(true)
   })
 
-  it('poster img is 84px tall via inline style', () => {
-    const data = { sessions: [session(1)] }
+  it('renders the big live counter with the plural line (v4 F-2)', () => {
+    const data = { sessions: [session(1), session(2)] }
     const wrapper = mountCard({ data })
-    const img = wrapper.find('img')
-    expect(img.exists()).toBe(true)
-    // Inline `style="height: 84px"` — assert via attribute substring so
-    // we don't depend on Vue's exact style serialization.
-    expect(img.attributes('style') || '').toMatch(/height:\s*84px/)
+    const counter = wrapper.find('[data-testid="live-counter"]')
+    expect(counter.exists()).toBe(true)
+    expect(counter.text()).toContain('2')
+    expect(counter.text()).toContain('spotlight.nowWatching.countFew')
   })
 
   it('omits avatar img when poster_url missing', () => {

@@ -1354,7 +1354,12 @@
         "А вы это смотрели?",
         "Случайная находка из закромов",
         "Может, это любовь"
-      ]
+      ],
+      "dealtLabel": "Сегодня колода выдала…",
+      "rerollCta": "Ещё разок",
+      "statusOngoing": "Онгоинг",
+      "statusReleased": "Вышло",
+      "statusAnnounced": "Анонс"
     },
     "latestNews": {
       "title": "Что нового",
@@ -1375,16 +1380,25 @@
       "reason": {
         "trending": "В тренде",
         "personal": "Рекомендация"
-      }
+      },
+      "kicker": "Рекомендации",
+      "allRecsCta": "Все рекомендации",
+      "swipeLabel": "Ещё для тебя — свайп",
+      "watchCta": "Смотреть"
     },
     "telegramNews": {
       "title": "Из нашего Telegram",
-      "openCta": "Открыть пост →"
+      "openCta": "Открыть пост →",
+      "subscribeCta": "Подписаться на канал"
     },
     "nowWatching": {
       "title": "Сейчас смотрят",
       "sessionLabel": "{username} → {anime} · эп {n}",
-      "liveBadge": "LIVE"
+      "liveBadge": "LIVE",
+      "countOne": "человек смотрит прямо сейчас",
+      "countFew": "человека смотрят прямо сейчас",
+      "countMany": "человек смотрят прямо сейчас",
+      "joinLine": "присоединяйся — вместе веселее"
     },
     "notTimeYet": {
       "title": "Не пришло ли время?",
@@ -1393,7 +1407,10 @@
       "statusPlanned": "В планах",
       "statusPostponed": "Отложено",
       "addedAt": "Добавлено {ago}",
-      "watchCta": "Смотреть"
+      "watchCta": "Смотреть",
+      "stickerNote": "Ты собирался это посмотреть ещё {date}…",
+      "stickerNoteNoDate": "Ты собирался это посмотреть…",
+      "stickerCta": "Ну ладно, время пришло"
     },
     "continueWatchingNew": {
       "title": "Продолжить просмотр",
@@ -1401,7 +1418,10 @@
       "resumeCta": "Продолжить",
       "lastWatched": "Вы посмотрели до серии {n}",
       "newEpisodeLine": "Новая серия {n}",
-      "resumeCtaWithEp": "Смотреть серию {n} →"
+      "resumeCtaWithEp": "Смотреть серию {n} →",
+      "epChip": "эп. {n}",
+      "epChipNew": "эп. {n} · NEW",
+      "seasonProgress": "{cur} из {total} эпизодов сезона"
     }
   },
   "gacha": {

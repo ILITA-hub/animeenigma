@@ -1354,7 +1354,12 @@
         "Have you seen this one?",
         "A random gem from the vault",
         "Maybe it'll be love"
-      ]
+      ],
+      "dealtLabel": "Today the deck dealt…",
+      "rerollCta": "One more roll",
+      "statusOngoing": "Airing",
+      "statusReleased": "Finished",
+      "statusAnnounced": "Announced"
     },
     "latestNews": {
       "title": "What's new",
@@ -1375,16 +1380,25 @@
       "reason": {
         "trending": "Trending",
         "personal": "Recommended"
-      }
+      },
+      "kicker": "Recommendations",
+      "allRecsCta": "All recommendations",
+      "swipeLabel": "More for you — swipe",
+      "watchCta": "Watch"
     },
     "telegramNews": {
       "title": "From our Telegram",
-      "openCta": "Open post →"
+      "openCta": "Open post →",
+      "subscribeCta": "Subscribe to the channel"
     },
     "nowWatching": {
       "title": "Watching now",
       "sessionLabel": "{username} → {anime} · ep {n}",
-      "liveBadge": "LIVE"
+      "liveBadge": "LIVE",
+      "countOne": "person is watching right now",
+      "countFew": "people are watching right now",
+      "countMany": "people are watching right now",
+      "joinLine": "join in — it’s better together"
     },
     "notTimeYet": {
       "title": "Is it time yet?",
@@ -1393,7 +1407,10 @@
       "statusPlanned": "Planned",
       "statusPostponed": "Postponed",
       "addedAt": "Added {ago}",
-      "watchCta": "Watch"
+      "watchCta": "Watch",
+      "stickerNote": "You meant to watch this back on {date}…",
+      "stickerNoteNoDate": "You meant to watch this…",
+      "stickerCta": "Fine, it’s time"
     },
     "continueWatchingNew": {
       "title": "Continue watching",
@@ -1401,7 +1418,10 @@
       "resumeCta": "Resume",
       "lastWatched": "Watched up to ep {n}",
       "newEpisodeLine": "New episode {n}",
-      "resumeCtaWithEp": "Watch episode {n} →"
+      "resumeCtaWithEp": "Watch episode {n} →",
+      "epChip": "ep. {n}",
+      "epChipNew": "ep. {n} · NEW",
+      "seasonProgress": "{cur} of {total} season episodes"
     }
   },
   "gacha": {

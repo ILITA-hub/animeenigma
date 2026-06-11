@@ -6,6 +6,15 @@
     backdrop="poster-blur"
     :poster-url="data.anime.poster_url"
   >
+  <!--
+    Workstream hero-spotlight — v4 H-4 lock (2026-06-11, spec:
+    2026-06-11-spotlight-v3-controls-and-cards.md). Stepper + episode
+    context: the poster ribbon is gone (artwork stays clean, pink glow
+    shadow instead), the story is told by the chip chain
+    «эп. 4 ✓ → эп. 5 ✓ → эп. 6 · NEW» (SpotlightStepper), backed by the
+    status/genre pills, a clamp-2 description and a thin season-progress
+    line (SpotlightProgress) when episodes_count is known.
+  -->
     <!-- Pink secondary overlay — the "new episode just dropped" wash
          (brand triad: live/personal = pink). -->
     <template #background-extra>
@@ -15,62 +24,73 @@
       />
     </template>
 
-    <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-4 md:gap-6 md:items-center">
-      <!-- Poster + hero ribbon -->
+    <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-4 md:gap-8 md:items-center">
       <router-link
         :to="watchUrl"
-        class="relative flex-shrink-0 self-center w-24 md:w-32 lg:w-40 group"
+        class="flex-shrink-0 self-center group"
       >
-        <div
-          class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-pink-500/30"
-        >
-          <img
-            :src="cardPosterUrl(data.anime.poster_url, 256)"
-            :alt="title"
-            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-            decoding="async"
-          />
-          <!-- Hero ribbon ACROSS the top of the poster -->
-          <div
-            class="absolute inset-x-0 top-0 px-3 py-1.5 bg-gradient-to-r from-pink-500 to-pink-400 text-white text-xs font-semibold uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5"
-          >
-            <Play class="w-3.5 h-3.5" fill="currentColor" aria-hidden="true" />
-            {{
-              t('spotlight.continueWatchingNew.newEpisodeBadge', {
-                n: data.new_episode_number,
-              })
-            }}
-          </div>
-        </div>
+        <SpotlightPoster
+          :poster-url="data.anime.poster_url"
+          :alt="title"
+          width-class="w-24 md:w-40"
+          glow="pink"
+          :proxy-width="256"
+          img-class="group-hover:scale-105 transition-transform duration-300"
+        />
       </router-link>
 
-      <!-- Two-row episode meta with hierarchy -->
-      <div class="flex-1 min-w-0">
-        <h3
-          class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2 mb-3"
-        >
+      <div class="flex-1 min-w-0 max-w-[600px]">
+        <h3 class="text-2xl md:text-3xl font-semibold text-white leading-tight line-clamp-2">
           {{ title }}
         </h3>
 
-        <!-- Subdued: where you stopped -->
-        <p class="text-xs text-muted-foreground font-medium">
-          {{
-            t('spotlight.continueWatchingNew.lastWatched', {
-              n: data.last_watched_episode,
-            })
-          }}
-        </p>
-        <!-- Accent: what's new -->
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <Badge v-if="data.anime.status === 'ongoing'" variant="success" size="sm" overlay>
+            {{ t('spotlight.randomTail.statusOngoing') }}
+          </Badge>
+          <Badge
+            v-for="g in (data.anime.genres || []).slice(0, 2)"
+            :key="g.id"
+            size="sm"
+            overlay
+          >
+            {{ locale === 'ru' ? g.russian || g.name : g.name || g.russian }}
+          </Badge>
+          <span class="text-[13px] text-muted-foreground font-medium">
+            {{
+              t('spotlight.continueWatchingNew.newEpisodeLine', {
+                n: data.new_episode_number,
+              })
+            }}
+          </span>
+        </div>
+
         <p
-          class="mt-1 text-lg text-pink-400 font-semibold tabular-nums"
+          v-if="data.anime.description"
+          class="mt-2.5 text-[13px] leading-relaxed text-white/70 line-clamp-2"
+          data-testid="cwn-desc"
         >
-          {{
-            t('spotlight.continueWatchingNew.newEpisodeLine', {
-              n: data.new_episode_number,
-            })
-          }}
+          {{ plainDescription }}
         </p>
+
+        <SpotlightStepper
+          class="mt-3"
+          :last-watched="data.last_watched_episode"
+          :new-episode="data.new_episode_number"
+        />
+
+        <SpotlightProgress
+          v-if="seasonPercent !== null"
+          class="mt-3 max-w-[380px]"
+          :percent="seasonPercent"
+          accent="pink"
+          :label="
+            t('spotlight.continueWatchingNew.seasonProgress', {
+              cur: data.last_watched_episode,
+              total: data.anime.episodes_count,
+            })
+          "
+        />
       </div>
     </div>
 
@@ -92,20 +112,26 @@
 </template>
 
 <script setup lang="ts">
-// Workstream hero-spotlight — DS alignment 2026-06-10: SpotlightCardShell
-// anatomy (pink kicker per brand triad, CTA bottom-left via Button default
-// variant), pink ribbon/accents replacing the old violet/fuchsia mix.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Play } from 'lucide-vue-next'
+import Badge from '@/components/ui/Badge.vue'
 import { buttonVariants } from '@/components/ui/button-variants'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
+import SpotlightPoster from '../ui/SpotlightPoster.vue'
+import SpotlightStepper from '../ui/SpotlightStepper.vue'
+import SpotlightProgress from '../ui/SpotlightProgress.vue'
 import { getLocalizedTitle } from '@/utils/title'
+import { parseDescription } from '@/utils/description-parser'
 import type { ContinueWatchingNewData } from '@/types/spotlight'
-import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{ data: ContinueWatchingNewData }>()
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
+
+const locale = computed(() => {
+  const v = (i18nLocale as { value?: unknown }).value
+  return typeof v === 'string' ? v : 'ru'
+})
 
 const title = computed<string>(() =>
   getLocalizedTitle(
@@ -114,6 +140,21 @@ const title = computed<string>(() =>
     props.data.anime.name_jp,
   ),
 )
+
+const plainDescription = computed(() => {
+  if (!props.data.anime.description) return ''
+  const el = document.createElement('div')
+  el.innerHTML = parseDescription(props.data.anime.description)
+  return el.textContent || ''
+})
+
+// Season progress: watched / total. null (no bar) when the total is
+// unknown or nonsensical — defensive against episodes_count=0 ongoing.
+const seasonPercent = computed<number | null>(() => {
+  const total = props.data.anime.episodes_count
+  if (!total || total <= 0) return null
+  return (props.data.last_watched_episode / total) * 100
+})
 
 // Canonical deep-link contract honored by Anime.vue's `queryEpisode` computed
 // (and used by the sibling ContinueWatchingRow). `/anime/:id/watch` is only a

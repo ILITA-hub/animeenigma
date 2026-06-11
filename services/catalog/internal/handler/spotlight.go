@@ -43,6 +43,44 @@ type SpotlightHandler struct {
 	agg     aggregator
 	enabled bool
 	log     *logger.Logger
+	reroll  reroller
+}
+
+// reroller is the subset of *cards.RandomTailResolver the reroll route
+// needs (v4 B-1 «Ещё разок», 2026-06-11). Wired via SetReroller so the
+// existing constructor call-sites stay untouched.
+type reroller interface {
+	Reroll(ctx context.Context, excludeID string) (*spotlight.Card, error)
+}
+
+// SetReroller attaches the random_tail reroll resolver. Optional — when
+// unset, GET /home/spotlight/reroll answers 404.
+func (h *SpotlightHandler) SetReroller(r reroller) { h.reroll = r }
+
+// GetReroll handles GET /api/home/spotlight/reroll?exclude=<animeID>.
+// Returns a single bare {type, data} card JSON (same bare-envelope
+// divergence as Get — see DELIBERATE DIVERGENCE 3 above). 404 when the
+// feature flag is off or no reroller is wired; 200 with a fresh pick
+// otherwise; 500 + empty body on a repo error.
+func (h *SpotlightHandler) GetReroll(w http.ResponseWriter, r *http.Request) {
+	if !h.enabled || h.reroll == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), spotlightCtxTimeout)
+	defer cancel()
+	card, err := h.reroll.Reroll(ctx, r.URL.Query().Get("exclude"))
+	if err != nil {
+		h.log.Errorw("spotlight.reroll_failed", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if card == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(card)
 }
 
 // NewSpotlightHandler constructs the handler. enabled mirrors
