@@ -634,7 +634,6 @@ function stopRaf() {
 
 function onVideoPlay() {
   state.playing.value = true
-  hasStarted.value = true
   startRaf()
   armUiIdleTimer()
 }
@@ -735,6 +734,12 @@ function onSeeked() {
 // Self-heal: if time is advancing with decodable data, we are NOT buffering.
 function onTimeUpdate() {
   const v = videoRef.value
+  // Drop the poster only once playback actually progresses — the bare `play`
+  // event fires even on a dead source (readyState 0), which would swap the
+  // poster for a black frame under the spinner.
+  if (!hasStarted.value && v && v.currentTime > 0) {
+    hasStarted.value = true
+  }
   if (isBuffering.value && v && v.readyState >= 3 && !v.seeking) {
     setBuffering(false)
   }
