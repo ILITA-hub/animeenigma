@@ -10,6 +10,8 @@
         :chapters="chapters"
         :still-url="stillUrl"
         :fragments="fragments"
+        :preview-url="previewUrl"
+        :preview-type="previewType"
         @seek="emit('seek', $event)"
       />
       <span class="pl-time pl-time-dur" data-test="time-duration">{{ fmt(duration) }}</span>
@@ -185,8 +187,11 @@ withDefaults(
     openMenu?: 'source' | 'settings' | 'subs' | 'episodes' | null
     /** hacker-mode fragment heatmap, forwarded to the scrub bar */
     fragments?: { startPct: number; widthPct: number; tone: 'ok' | 'warn' | 'bad'; label: string }[]
+    /** current stream URL/type for real hover frame previews */
+    previewUrl?: string | null
+    previewType?: 'hls' | 'mp4' | null
   }>(),
-  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [] },
+  { progress: 0, buffered: 0, chapters: () => [], stillUrl: undefined, openMenu: null, fragments: () => [], previewUrl: null, previewType: null },
 )
 
 const emit = defineEmits<{

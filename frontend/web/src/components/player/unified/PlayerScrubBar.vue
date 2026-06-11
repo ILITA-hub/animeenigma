@@ -47,18 +47,23 @@
       aria-hidden="true"
     />
 
-    <!-- Hover preview -->
+    <!-- Hover preview — v-show (not v-if) so the ScrubPreview shadow engine
+         survives between hovers instead of re-initializing every time -->
     <div
-      v-if="hoverVisible"
+      v-show="hoverVisible"
       class="pl-preview"
       :style="{ left: hoverPct + '%' }"
       aria-hidden="true"
     >
-      <div
-        v-if="stillUrl"
-        class="pl-preview-thumb"
-        :style="{ backgroundImage: `url(${stillUrl})` }"
-      />
+      <div v-if="previewUrl || stillUrl" class="pl-preview-thumb">
+        <ScrubPreview
+          :time-sec="hoverTimeSec"
+          :visible="hoverVisible"
+          :stream-url="previewUrl ?? null"
+          :stream-type="previewType ?? null"
+          :still-url="stillUrl"
+        />
+      </div>
       <span class="pl-preview-time">{{ hoverTime }}</span>
     </div>
   </div>
@@ -66,6 +71,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import ScrubPreview from './ScrubPreview.vue'
 
 interface Chapter {
   kind: 'intro' | 'outro'
@@ -88,6 +94,9 @@ const props = defineProps<{
   stillUrl?: string
   /** hacker-mode per-fragment heatmap segments (empty/omitted = off) */
   fragments?: FragSegment[]
+  /** current stream URL for real hover frame previews (null = still only) */
+  previewUrl?: string | null
+  previewType?: 'hls' | 'mp4' | null
 }>()
 
 const emit = defineEmits<{
@@ -98,7 +107,8 @@ const emit = defineEmits<{
 const hoverPct = ref(0)
 const hoverVisible = ref(false)
 
-const hoverTime = computed(() => fmt((hoverPct.value / 100) * props.durationSec))
+const hoverTimeSec = computed(() => (hoverPct.value / 100) * props.durationSec)
+const hoverTime = computed(() => fmt(hoverTimeSec.value))
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v))
@@ -255,8 +265,7 @@ function onMouseLeave() {
   height: 68px;
   border-radius: 8px;
   border: 2px solid rgba(255, 255, 255, 0.6);
-  background-size: cover;
-  background-position: center;
+  overflow: hidden;
 }
 
 .pl-preview-time {

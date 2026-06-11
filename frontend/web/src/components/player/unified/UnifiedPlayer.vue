@@ -167,6 +167,8 @@
       :still-url="anime.still"
       :open-menu="openMenu"
       :fragments="fragOverlay"
+      :preview-url="currentStream?.url ?? null"
+      :preview-type="currentStream?.type ?? null"
       @toggle-play="togglePlay"
       @seek-rel="onSeekRel"
       @seek="onSeek"
