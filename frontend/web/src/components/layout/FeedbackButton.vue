@@ -126,9 +126,9 @@ import { Spinner } from '@/components/ui'
 
 type FeedbackCategory = 'bug' | 'issue' | 'feature'
 
-// "My feedback" entry points disabled for now (owner decision, 2026-06-11).
-// Flip to true to bring them back; App.vue's footer link has the same flag.
-const MY_FEEDBACK_ENABLED = false
+// "My feedback" entry points re-enabled per owner approval of AUTO-436
+// (2026-06-11, in-chat). App.vue's footer link has the same flag.
+const MY_FEEDBACK_ENABLED = true
 
 const authStore = useAuthStore()
 const router = useRouter()

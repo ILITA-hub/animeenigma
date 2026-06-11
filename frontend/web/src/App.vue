@@ -76,8 +76,6 @@
           {{ $t('status.title') }}
         </router-link>
         <FeedbackButton />
-        <!-- "My feedback" entry points are disabled for now (owner decision,
-             2026-06-11). The /my-feedback route itself stays registered. -->
         <router-link
           v-if="MY_FEEDBACK_ENABLED && authStore.isAuthenticated"
           to="/my-feedback"
@@ -116,9 +114,9 @@ const notifStore = useNotificationsStore()
 // store's polling lifecycle. Defaults to true.
 const notifEnabled = (import.meta.env.VITE_NOTIFICATIONS_ENABLED as string | undefined) !== 'false'
 
-// "My feedback" footer link disabled for now (owner decision, 2026-06-11).
-// Flip to true to bring it back; FeedbackButton.vue has the same flag.
-const MY_FEEDBACK_ENABLED = false
+// "My feedback" footer link re-enabled per owner approval of AUTO-436
+// (2026-06-11, in-chat). FeedbackButton.vue has the same flag.
+const MY_FEEDBACK_ENABLED = true
 
 // Auth-driven lifecycle: start polling on login, stop + clear state on
 // logout. immediate=true so an already-authenticated tab on page-load
