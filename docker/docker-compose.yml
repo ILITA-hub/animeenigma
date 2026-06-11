@@ -473,6 +473,7 @@ services:
       WATCH_TOGETHER_SERVICE_URL: http://watch-together:8091
       ANALYTICS_SERVICE_URL: http://analytics:8092
       GACHA_SERVICE_URL: http://gacha:8093
+      RECS_SERVICE_URL: http://recs:8094
       # Dark-ship admin-gate (spec §12). While true, /api/gacha/* requires the
       # admin role — regular users get 403, the лудка is invisible to them.
       # The global-update release flips this to "false" (env change +
@@ -660,6 +661,8 @@ services:
       # outage never affects report submission or triage.
       NOTIFICATIONS_INTERNAL_URL: http://notifications:8090
       FEEDBACK_NOTIFY_ENABLED: "true"
+      # Recs extraction Phase 1 — fire-and-forget recompute hints.
+      RECS_INTERNAL_URL: http://recs:8094
     extra_hosts:
       - "host-gateway:host-gateway"
     volumes:
@@ -805,6 +808,44 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # recs service — personalised recommendation engine, port 8094.
+  # Stores per-user signal vectors in Postgres, recomputes on play/rate/pin
+  # hints from player (fire-and-forget RECS_INTERNAL_URL). S6 combo-pin
+  # uses Shikimori /similar as a cold-start fallback (CATALOG_URL).
+  # See .planning/phases/recs-service-extraction/
+  recs:
+    build:
+      context: ..
+      dockerfile: services/recs/Dockerfile
+    container_name: animeenigma-recs
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8094
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: animeenigma
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      REDIS_HOST: redis
+      # S6 combo-pin Shikimori /similar fallback.
+      CATALOG_URL: http://catalog:8081
+      TRACING_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8094:8094"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      catalog:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8094/health"]
       interval: 30s
       timeout: 5s
       retries: 3
