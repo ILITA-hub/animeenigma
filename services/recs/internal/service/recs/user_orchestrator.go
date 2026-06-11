@@ -24,11 +24,10 @@ type userOrchestratorCache interface {
 // Cache key prefixes for the user-scope rec engine. Exported so handler
 // and main.go can construct the same keys without re-defining magic strings.
 //
-// :v3 — S7 dropped-penalty entered the logged-in ensemble (2026-06-11);
-// v2 rankings are pre-S7. (v2 was the S11 any-list-status filter change.)
+// :v4 — S12 diversification re-rank (2026-06-11); v3 was S7-without-diversification.
 const (
 	UserTopNKeyPrefix = "recs:user:"
-	UserTopNKeySuffix = ":topN:v3"
+	UserTopNKeySuffix = ":topN:v4"
 	DebounceKeyPrefix = "recs:debounce:"
 
 	// debounceTTL is the per-user debounce window: at most one

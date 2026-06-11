@@ -99,11 +99,11 @@ const adminTopNSliceSize = 50
 // AdminRecsResponse is the JSON payload for GET /api/admin/recs/{user_id}.
 // Schema locked per CONTEXT.md §C1.
 type AdminRecsResponse struct {
-	Recs           []AdminRecRow            `json:"recs"`
+	Recs           []AdminRecRow              `json:"recs"`
 	FilteredOut    []signals.FilteredOutEntry `json:"filtered_out"`
-	ComputedAt     string                   `json:"computed_at"`
-	SignalVersions map[string]string        `json:"signal_versions"`
-	UserID         string                   `json:"user_id"`
+	ComputedAt     string                     `json:"computed_at"`
+	SignalVersions map[string]string          `json:"signal_versions"`
+	UserID         string                     `json:"user_id"`
 }
 
 // AdminRecRow is one row in the admin debug table. Surfaces every per-signal
@@ -112,6 +112,7 @@ type AdminRecsResponse struct {
 // and TopContributor is the literal "s6_pin" (locked Phase 13 hand-off).
 type AdminRecRow struct {
 	Rank              int                    `json:"rank"`
+	PreS12Rank        int                    `json:"pre_s12_rank"` // 1-based rank before the S12 MMR re-rank (Phase 4)
 	Anime             RecAnimePayload        `json:"anime"`
 	Final             float64                `json:"final"`
 	Breakdown         map[string]float64     `json:"breakdown"`
@@ -119,9 +120,9 @@ type AdminRecRow struct {
 	TopContributor    string                 `json:"top_contributor"`
 	ContributorDetail map[string]interface{} `json:"contributor_detail,omitempty"`
 	Pinned            bool                   `json:"pinned,omitempty"`
-	PinReason         string                 `json:"pin_reason,omitempty"`           // legacy English fallback
-	PinReasonKey      string                 `json:"pin_reason_key,omitempty"`       // UX-09 (Phase 3) — i18n key
-	PinReasonData     map[string]interface{} `json:"pin_reason_data,omitempty"`      // UX-09 (Phase 3) — interpolation values for PinReasonKey
+	PinReason         string                 `json:"pin_reason,omitempty"`      // legacy English fallback
+	PinReasonKey      string                 `json:"pin_reason_key,omitempty"`  // UX-09 (Phase 3) — i18n key
+	PinReasonData     map[string]interface{} `json:"pin_reason_data,omitempty"` // UX-09 (Phase 3) — interpolation values for PinReasonKey
 	PinSource         string                 `json:"pin_source,omitempty"`
 	PinSeedAnimeID    string                 `json:"pin_seed_anime_id,omitempty"`
 }
@@ -160,8 +161,12 @@ type AdminRecsHandler struct {
 	s3  *signals.S3Trending
 	s4  *signals.S4Recency
 	s5  *signals.S5Attribute
-	s6  *signals.S6ComboPin        // optional; nil-guarded
-	s7  *signals.S7DroppedPenalty  // spec 2026-06-11 Phase 3 — demotes dropped-similar
+	s6  *signals.S6ComboPin       // optional; nil-guarded
+	s7  *signals.S7DroppedPenalty // spec 2026-06-11 Phase 3 — demotes dropped-similar
+
+	// diversifier — S12 post-rank greedy MMR re-rank (spec 2026-06-11 Phase 4).
+	// Mirrors the public handler so admin ordering equals the served order.
+	diversifier *recs.Diversifier
 }
 
 // NewAdminRecsHandler wires the admin handler. The s6 module may be nil
@@ -178,19 +183,20 @@ func NewAdminRecsHandler(
 	log *logger.Logger,
 ) *AdminRecsHandler {
 	return &AdminRecsHandler{
-		db:         db,
-		recsRepo:   recsRepo,
-		cache:      cache,
-		log:        log,
-		precompute: precompute,
-		s11:        signals.NewS11Filter(db),
-		s1:         signals.NewS1ScoreCluster(db, recsRepo),
-		s2:         signals.NewS2Metadata(db),
-		s3:         signals.NewS3Trending(db, recsRepo),
-		s4:         signals.NewS4Recency(db),
-		s5:         signals.NewS5Attribute(db, recsRepo),
-		s6:         s6,
-		s7:         signals.NewS7DroppedPenalty(db), // spec 2026-06-11 Phase 3
+		db:          db,
+		recsRepo:    recsRepo,
+		cache:       cache,
+		log:         log,
+		precompute:  precompute,
+		s11:         signals.NewS11Filter(db),
+		s1:          signals.NewS1ScoreCluster(db, recsRepo),
+		s2:          signals.NewS2Metadata(db),
+		s3:          signals.NewS3Trending(db, recsRepo),
+		s4:          signals.NewS4Recency(db),
+		s5:          signals.NewS5Attribute(db, recsRepo),
+		s6:          s6,
+		s7:          signals.NewS7DroppedPenalty(db),                 // spec 2026-06-11 Phase 3
+		diversifier: recs.NewDiversifier(recs.NewGormAttrLoader(db)), // Phase 4 (S12)
 	}
 }
 
@@ -321,6 +327,60 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 	}
 	top := ranked[:end]
 
+	// 6a. Resolve the S6 pin FIRST (before the S12 re-rank) so the pin seeds
+	// the MMR similarity — mirrors the public computeFreshForUser ordering.
+	// Non-fatal resolve error → pin == nil.
+	var pin *signals.PinCandidate
+	if h.s6 != nil {
+		topIDs := make([]string, 0, len(top))
+		for _, r := range top {
+			topIDs = append(topIDs, string(r.AnimeID))
+		}
+		resolved, pinErr := h.s6.Resolve(ctx, userID, topIDs)
+		if pinErr != nil {
+			h.log.Warnw("admin recs: s6 resolve failed (non-fatal)", "user_id", userID, "error", pinErr)
+		} else {
+			pin = resolved
+		}
+	}
+
+	// 6b. Record each candidate's 1-based position in the PRE-rerank slice so
+	// the response can surface pre_s12_rank per row.
+	preS12Rank := make(map[string]int, len(top))
+	for i, r := range top {
+		preS12Rank[string(r.AnimeID)] = i + 1
+	}
+
+	// 6c. S12 diversification re-rank. Project the breakdown rows to the narrow
+	// []recs.Recommendation the Diversifier consumes, re-rank (pin-seeded,
+	// non-fatal), then reorder `top` to match the diversified order so the
+	// admin response mirrors exactly what the public API serves.
+	pinSeedID := ""
+	if pin != nil {
+		pinSeedID = pin.AnimeID
+	}
+	projection := make([]recs.Recommendation, len(top))
+	for i, r := range top {
+		projection[i] = recs.Recommendation{AnimeID: r.AnimeID, Final: r.Final}
+	}
+	if diversified, dErr := h.diversifier.Rerank(ctx, projection, pinSeedID, s12Lambda); dErr != nil {
+		h.log.Warnw("admin recs: s12 rerank failed (non-fatal); serving undiversified", "user_id", userID, "error", dErr)
+	} else {
+		// Reorder `top` (the breakdown-carrying slice) to the diversified
+		// AnimeID order. Build an index then emit in diversified sequence.
+		byID := make(map[recs.AnimeID]recs.RecommendationWithBreakdown, len(top))
+		for _, r := range top {
+			byID[r.AnimeID] = r
+		}
+		reordered := make([]recs.RecommendationWithBreakdown, 0, len(top))
+		for _, d := range diversified {
+			if r, ok := byID[d.AnimeID]; ok {
+				reordered = append(reordered, r)
+			}
+		}
+		top = reordered
+	}
+
 	// 7. Hydrate anime metadata (reuse the public handler's helper via a
 	// fresh inline implementation — keeps admin handler decoupled).
 	ids := make([]string, len(top))
@@ -354,7 +414,8 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		row := AdminRecRow{
-			Rank:           i + 1,
+			Rank:           i + 1, // post-rerank position
+			PreS12Rank:     preS12Rank[string(r.AnimeID)],
 			Anime:          anime,
 			Final:          r.Final,
 			Breakdown:      breakdownAsFloat64(r.Breakdown),
@@ -369,55 +430,48 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 		rows = append(rows, row)
 	}
 
-	// 9. S6 pin: if the resolver fires, prepend a Pinned row at rank 1, dedup
-	// the underlying anime from the ensemble tail, and re-rank rank 2..N.
-	if h.s6 != nil {
-		topIDs := make([]string, 0, len(top))
-		for _, r := range top {
-			topIDs = append(topIDs, string(r.AnimeID))
-		}
-		pin, pinErr := h.s6.Resolve(ctx, userID, topIDs)
-		if pinErr != nil {
-			h.log.Warnw("admin recs: s6 resolve failed (non-fatal)", "user_id", userID, "error", pinErr)
-		} else if pin != nil {
-			pinHydrated, hydrateErr := h.hydrateAnime(ctx, []string{pin.AnimeID})
-			if hydrateErr == nil {
-				if anime, ok := pinHydrated[pin.AnimeID]; ok {
-					// Dedup: drop the pin's anime from the ensemble tail.
-					deduped := make([]AdminRecRow, 0, len(rows))
-					for _, it := range rows {
-						if it.Anime.ID != pin.AnimeID {
-							deduped = append(deduped, it)
-						}
+	// 9. S6 pin: the pin was resolved in step 6a (before the S12 re-rank so it
+	// could seed the MMR similarity). If it fired, prepend a Pinned row at
+	// rank 1, dedup the underlying anime from the ensemble tail, and re-rank
+	// rank 2..N.
+	if pin != nil {
+		pinHydrated, hydrateErr := h.hydrateAnime(ctx, []string{pin.AnimeID})
+		if hydrateErr == nil {
+			if anime, ok := pinHydrated[pin.AnimeID]; ok {
+				// Dedup: drop the pin's anime from the ensemble tail.
+				deduped := make([]AdminRecRow, 0, len(rows))
+				for _, it := range rows {
+					if it.Anime.ID != pin.AnimeID {
+						deduped = append(deduped, it)
 					}
-					for i := range deduped {
-						deduped[i].Rank = i + 2
-					}
-					pinRow := AdminRecRow{
-						Rank:           1,
-						Anime:          anime,
-						Final:          0, // spec §B7: float64-zero approximates null; frontend gates on Pinned
-						Breakdown:      map[string]float64{}, // not from ensemble
-						Weights:        weightsAsFloat64,
-						TopContributor: "s6_pin", // locked Phase-13 hand-off
-						Pinned:         true,
-						PinReason:      "Because you finished " + pin.SeedName,                  // legacy English fallback
-						PinReasonKey:   "recs.pinReason.becauseYouFinished",                    // UX-09 (Phase 3) — i18n key
-						PinReasonData:  map[string]interface{}{"name": pin.SeedName},           // UX-09 (Phase 3) — interpolation values
-						PinSeedAnimeID: pin.SeedAnimeID,
-						PinSource:      pin.Source,
-						ContributorDetail: map[string]interface{}{
-							"pin_source":         pin.Source,
-							"pin_seed_anime_id":  pin.SeedAnimeID,
-							"pin_seed_name":      pin.SeedName,
-						},
-					}
-					rows = append([]AdminRecRow{pinRow}, deduped...)
 				}
-			} else {
-				h.log.Warnw("admin recs: s6 pin hydrate failed (non-fatal)",
-					"user_id", userID, "pin_anime_id", pin.AnimeID, "error", hydrateErr)
+				for i := range deduped {
+					deduped[i].Rank = i + 2
+				}
+				pinRow := AdminRecRow{
+					Rank:           1,
+					Anime:          anime,
+					Final:          0,                    // spec §B7: float64-zero approximates null; frontend gates on Pinned
+					Breakdown:      map[string]float64{}, // not from ensemble
+					Weights:        weightsAsFloat64,
+					TopContributor: "s6_pin", // locked Phase-13 hand-off
+					Pinned:         true,
+					PinReason:      "Because you finished " + pin.SeedName,       // legacy English fallback
+					PinReasonKey:   "recs.pinReason.becauseYouFinished",          // UX-09 (Phase 3) — i18n key
+					PinReasonData:  map[string]interface{}{"name": pin.SeedName}, // UX-09 (Phase 3) — interpolation values
+					PinSeedAnimeID: pin.SeedAnimeID,
+					PinSource:      pin.Source,
+					ContributorDetail: map[string]interface{}{
+						"pin_source":        pin.Source,
+						"pin_seed_anime_id": pin.SeedAnimeID,
+						"pin_seed_name":     pin.SeedName,
+					},
+				}
+				rows = append([]AdminRecRow{pinRow}, deduped...)
 			}
+		} else {
+			h.log.Warnw("admin recs: s6 pin hydrate failed (non-fatal)",
+				"user_id", userID, "pin_anime_id", pin.AnimeID, "error", hydrateErr)
 		}
 	}
 
@@ -431,10 +485,10 @@ func (h *AdminRecsHandler) GetAdminRecs(w http.ResponseWriter, r *http.Request) 
 }
 
 // ForceRecompute handles POST /api/admin/recs/{user_id}/recompute.
-// 1) Bust recs:user:{user_id}:topN (best-effort, logs on err).
-// 2) Run precompute.RunForUser synchronously (NOT TriggerForUser — bypasses
-//    the 5-min debounce that would NO-OP repeated admin clicks).
-// 3) Return {computed_at, top_n_count, latency_ms}.
+//  1. Bust recs:user:{user_id}:topN (best-effort, logs on err).
+//  2. Run precompute.RunForUser synchronously (NOT TriggerForUser — bypasses
+//     the 5-min debounce that would NO-OP repeated admin clicks).
+//  3. Return {computed_at, top_n_count, latency_ms}.
 //
 // top_n_count is the size of the post-recompute candidate pool (via S11),
 // NOT a re-ranked top-N — recomputing the full ensemble at the admin path

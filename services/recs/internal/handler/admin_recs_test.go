@@ -268,6 +268,127 @@ func TestAdminRecsHandler_GetAdminRecs_EmptyUserReturnsEmptyResponse(t *testing.
 	assert.Empty(t, env.Data.FilteredOut)
 }
 
+// TestAdminRecsHandler_GetAdminRecs_PreS12RankIsPermutation verifies the
+// Phase-4 S12 wiring: every non-pinned admin row carries a pre_s12_rank, and
+// the set of pre_s12_rank values across the ensemble body is a permutation of
+// 1..N (the re-rank reorders, never adds/drops). With genre-diverse fixtures
+// the post-rerank `rank` order differs from pre_s12_rank for at least one row.
+func TestAdminRecsHandler_GetAdminRecs_PreS12RankIsPermutation(t *testing.T) {
+	db := setupRecsTestDB(t)
+	setupS6CoOccTable(t, db)
+	cache := newAdminCacheStub()
+
+	// 3 candidates: two genre-clones lead on S3, one diverse trails — same
+	// shape as the public interleaving test so S12 actually reorders.
+	seedPhase12Anime(t, db, "clone-A", "released", false, 8.0, "tv", "pg_13", "manga")
+	seedPhase12Anime(t, db, "clone-B", "released", false, 8.0, "tv", "pg_13", "manga")
+	seedPhase12Anime(t, db, "diverse-C", "released", false, 8.0, "movie", "g", "original")
+	seedPopulationSignal(t, db, "clone-A", 100.0)
+	seedPopulationSignal(t, db, "clone-B", 50.0)
+	seedPopulationSignal(t, db, "diverse-C", 1.0)
+	seedPhase12Genre(t, db, "clone-A", "g1")
+	seedPhase12Genre(t, db, "clone-A", "g2")
+	seedPhase12Genre(t, db, "clone-B", "g1")
+	seedPhase12Genre(t, db, "clone-B", "g2")
+	seedPhase12Genre(t, db, "diverse-C", "g3")
+	seedPhase12Genre(t, db, "diverse-C", "g4")
+
+	recsRepo := repo.NewRecsRepository(db)
+	precompute := recs.NewOrchestrator([]recs.SignalModule{})
+	// No S6 — the body is the whole ensemble, so pre_s12_rank covers all rows.
+	h := NewAdminRecsHandler(db, recsRepo, cache, nil, precompute, logger.Default())
+
+	r := chi.NewRouter()
+	r.Get("/api/admin/recs/{user_id}", h.GetAdminRecs)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/recs/user-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool              `json:"success"`
+		Data    AdminRecsResponse `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	require.Len(t, env.Data.Recs, 3)
+
+	// pre_s12_rank across the body must be a permutation of 1..N.
+	n := len(env.Data.Recs)
+	seen := make(map[int]bool, n)
+	differs := false
+	for _, row := range env.Data.Recs {
+		assert.GreaterOrEqual(t, row.PreS12Rank, 1, "every non-pin row must carry a pre_s12_rank >= 1")
+		assert.LessOrEqual(t, row.PreS12Rank, n)
+		assert.False(t, seen[row.PreS12Rank], "pre_s12_rank %d duplicated — must be a permutation", row.PreS12Rank)
+		seen[row.PreS12Rank] = true
+		if row.Rank != row.PreS12Rank {
+			differs = true
+		}
+	}
+	for i := 1; i <= n; i++ {
+		assert.True(t, seen[i], "pre_s12_rank permutation missing value %d", i)
+	}
+	assert.True(t, differs, "S12 must reorder at least one row (post-rerank rank != pre_s12_rank)")
+
+	// Concretely: diverse-C (pre_s12_rank 3) must be pulled to post-rerank rank 2.
+	posOf := func(id string) AdminRecRow {
+		for _, row := range env.Data.Recs {
+			if row.Anime.ID == id {
+				return row
+			}
+		}
+		t.Fatalf("row %q not found", id)
+		return AdminRecRow{}
+	}
+	c := posOf("diverse-C")
+	assert.Equal(t, 3, c.PreS12Rank, "diverse-C was 3rd on raw Final")
+	assert.Equal(t, 2, c.Rank, "S12 pulls diverse-C to post-rerank rank 2")
+}
+
+// TestAdminRecsHandler_GetAdminRecs_PinRowHasZeroPreS12Rank verifies the pin
+// row (not part of the ensemble ranking) serializes pre_s12_rank as 0 while
+// the body rows still carry their real pre-rerank positions.
+func TestAdminRecsHandler_GetAdminRecs_PinRowHasZeroPreS12Rank(t *testing.T) {
+	db := setupRecsTestDB(t)
+	setupS6CoOccTable(t, db)
+	cache := newAdminCacheStub()
+
+	for i := 1; i <= 6; i++ {
+		seedAnimeFull(t, db, "cand-"+string(rune('a'+i-1)), "released", false, 7.5)
+	}
+	completed := time.Now().UTC().Add(-1 * time.Hour)
+	coOcc := map[string]int{
+		"cand-a": 10, "cand-b": 8, "cand-c": 6, "cand-d": 4, "cand-e": 3, "cand-f": 2,
+	}
+	seedS6Fixture(t, db, "user-1", "seed-1", "Grand Blue", completed, 9, coOcc)
+
+	recsRepo := repo.NewRecsRepository(db)
+	s6 := signals.NewS6ComboPin(db, recsRepo, &fakeShikimoriClientForRecs{}, logger.Default())
+	precompute := recs.NewOrchestrator([]recs.SignalModule{})
+	h := NewAdminRecsHandler(db, recsRepo, cache, s6, precompute, logger.Default())
+
+	r := chi.NewRouter()
+	r.Get("/api/admin/recs/{user_id}", h.GetAdminRecs)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/recs/user-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var env struct {
+		Success bool              `json:"success"`
+		Data    AdminRecsResponse `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&env))
+	require.NotEmpty(t, env.Data.Recs)
+
+	require.True(t, env.Data.Recs[0].Pinned, "rank 1 must be the pin")
+	assert.Equal(t, 0, env.Data.Recs[0].PreS12Rank, "pin row is not ensemble-ranked → pre_s12_rank 0")
+	// Body rows (rank >= 2) carry real pre_s12_rank values.
+	for _, row := range env.Data.Recs[1:] {
+		assert.GreaterOrEqual(t, row.PreS12Rank, 1, "body row must carry a real pre_s12_rank")
+	}
+}
+
 // ----------------------------------------------------------------------------
 // ForceRecompute tests
 // ----------------------------------------------------------------------------
@@ -304,7 +425,7 @@ func TestAdminRecsHandler_ForceRecompute_HappyPath(t *testing.T) {
 	assert.NotEmpty(t, env.Data.ComputedAt)
 	assert.GreaterOrEqual(t, env.Data.LatencyMs, int64(0))
 	// Cache was busted (fire-and-forget log on err — happy path: no err).
-	assert.Contains(t, cache.deletes, "recs:user:user-1:topN:v3")
+	assert.Contains(t, cache.deletes, "recs:user:user-1:topN:v4")
 }
 
 func TestAdminRecsHandler_ForceRecompute_EmptyUserID(t *testing.T) {

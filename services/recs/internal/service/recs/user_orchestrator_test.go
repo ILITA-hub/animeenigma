@@ -212,10 +212,10 @@ func TestUserOrchestrator_RunOnceDeletesCacheForSucceededUsersOnly(t *testing.T)
 	_ = o.RunOnce(context.Background())
 
 	// user-B succeeded -> cache key must be Deleted (so next request recomputes).
-	assert.True(t, cache.deletesContains("recs:user:user-B:topN:v3"),
+	assert.True(t, cache.deletesContains("recs:user:user-B:topN:v4"),
 		"Delete must be called for users whose precompute succeeded")
 	// user-A failed -> cache key must NOT be Deleted (stale-serves contract).
-	assert.False(t, cache.deletesContains("recs:user:user-A:topN:v3"),
+	assert.False(t, cache.deletesContains("recs:user:user-A:topN:v4"),
 		"Delete must NOT be called for users whose precompute failed")
 }
 
@@ -300,12 +300,12 @@ func TestUserOrchestrator_TriggerForUser_AcquiresAndSpawns(t *testing.T) {
 	// Also assert that the per-user topN cache key was Deleted on success.
 	deadline = time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
-		if cache.deletesContains("recs:user:user-A:topN:v3") {
+		if cache.deletesContains("recs:user:user-A:topN:v4") {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	assert.True(t, cache.deletesContains("recs:user:user-A:topN:v3"),
+	assert.True(t, cache.deletesContains("recs:user:user-A:topN:v4"),
 		"successful trigger must Delete the per-user topN cache")
 }
 

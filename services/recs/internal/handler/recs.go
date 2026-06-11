@@ -36,7 +36,15 @@ type recsCache interface {
 
 // PublicTrendingKey is the Redis key for the anonymous shared trending top-N.
 // Single shared key — anonymous personalization is deferred to v2.1.
-const PublicTrendingKey = "recs:public:trending:topN"
+//
+// :v2 — S12 diversification re-rank entered the trending row (2026-06-11);
+// the un-versioned key predates S12 (pre-diversification rankings).
+const PublicTrendingKey = "recs:public:trending:topN:v2"
+
+// s12Lambda is the MMR diversity strength (spec 2026-06-11 Phase 4):
+// score = final − λ·max_similarity(candidate, picked). 0.3 is conservative;
+// tune against the Phase-2 CTR panels.
+const s12Lambda = 0.3
 
 // publicTrendingTTL — 6h per CONTEXT.md decisions §Redis cache. The 60-min
 // population cron updates the underlying signals more frequently than this,
@@ -126,9 +134,13 @@ type RecsHandler struct {
 	s4  *signals.S4Recency
 	s1  *signals.S1ScoreCluster
 	s2  *signals.S2Metadata
-	s5  *signals.S5Attribute // Phase 12 (REC-SIG-05) — TF-IDF attribute affinity
-	s6  *signals.S6ComboPin  // Phase 13 (REC-SIG-06) — combo-watched-after pin resolver; may be nil
+	s5  *signals.S5Attribute      // Phase 12 (REC-SIG-05) — TF-IDF attribute affinity
+	s6  *signals.S6ComboPin       // Phase 13 (REC-SIG-06) — combo-watched-after pin resolver; may be nil
 	s7  *signals.S7DroppedPenalty // spec 2026-06-11 Phase 3 — demotes dropped-similar; logged-in only
+
+	// diversifier — S12 post-rank greedy MMR re-rank (spec 2026-06-11 Phase 4).
+	// Reorders the top slice for variety; never adds/drops items.
+	diversifier *recs.Diversifier
 }
 
 // NewRecsHandler wires the handler with its dependencies. The signal modules
@@ -139,18 +151,19 @@ type RecsHandler struct {
 // nil-guards before invoking.
 func NewRecsHandler(db *gorm.DB, recsRepo *repo.RecsRepository, cache recsCache, s6 *signals.S6ComboPin, log *logger.Logger) *RecsHandler {
 	return &RecsHandler{
-		db:    db,
-		repo:  recsRepo,
-		cache: cache,
-		log:   log,
-		s11:   signals.NewS11Filter(db),
-		s3:    signals.NewS3Trending(db, recsRepo),
-		s4:    signals.NewS4Recency(db),
-		s1:    signals.NewS1ScoreCluster(db, recsRepo),
-		s2:    signals.NewS2Metadata(db),
-		s5:    signals.NewS5Attribute(db, recsRepo), // Phase 12 (REC-SIG-05)
-		s6:    s6,                                   // Phase 13 (REC-SIG-06)
-		s7:    signals.NewS7DroppedPenalty(db),      // spec 2026-06-11 Phase 3
+		db:          db,
+		repo:        recsRepo,
+		cache:       cache,
+		log:         log,
+		s11:         signals.NewS11Filter(db),
+		s3:          signals.NewS3Trending(db, recsRepo),
+		s4:          signals.NewS4Recency(db),
+		s1:          signals.NewS1ScoreCluster(db, recsRepo),
+		s2:          signals.NewS2Metadata(db),
+		s5:          signals.NewS5Attribute(db, recsRepo),            // Phase 12 (REC-SIG-05)
+		s6:          s6,                                              // Phase 13 (REC-SIG-06)
+		s7:          signals.NewS7DroppedPenalty(db),                 // spec 2026-06-11 Phase 3
+		diversifier: recs.NewDiversifier(recs.NewGormAttrLoader(db)), // Phase 4 (S12)
 	}
 }
 
@@ -316,6 +329,13 @@ func (h *RecsHandler) computeFresh(ctx context.Context) (RecsEnvelope, error) {
 	}
 	top := ranked[:end]
 
+	// S12 diversification — the trending row is the most genre-monotone.
+	if diversified, dErr := h.diversifier.Rerank(ctx, top, "", s12Lambda); dErr != nil {
+		h.log.Warnw("s12 rerank failed (non-fatal); serving undiversified", "error", dErr)
+	} else {
+		top = diversified
+	}
+
 	// Hydrate anime metadata
 	ids := make([]string, len(top))
 	for i, r := range top {
@@ -389,7 +409,15 @@ func deriveTopContributor(breakdown map[recs.SignalID]recs.NormalizedScore, weig
 // S11.CandidatePoolForUser (excludes any anime already in the user's list) ->
 // full ensemble 0.30·S1 + 0.20·S2 + 0.20·S3 + 0.10·S4 + 0.20·S5 − 0.15·S7
 // (Phase-12 + S7 dropped-penalty, spec 2026-06-11 Phase 3) ->
-// stable sort -> top-50 server slice -> hydrate -> envelope with
+// stable sort -> top-50 server slice.
+//
+// Ordering (spec 2026-06-11 Phase 4): the S6 pin is resolved BEFORE the S12
+// MMR diversification re-rank so the pin SEEDS the similarity computation —
+// the diversifier treats the pin as already-picked and steers the body of
+// the row away from the pin's genres. The S12 re-rank then reorders `top`
+// for variety (λ = s12Lambda; reorders only, never adds/drops). After the
+// re-rank we hydrate, build items (rank = post-rerank position), and the
+// already-resolved pin is deduped + prepended at rank 1. Envelope carries
 // row_label_key=recs.upNext.
 func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (RecsEnvelope, error) {
 	pool, err := h.s11.CandidatePoolForUser(ctx, recs.UserID(userID))
@@ -439,6 +467,38 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 	}
 	top := ranked[:end]
 
+	// Phase 13 (REC-SIG-06 / REC-UX-03) + Phase 4 (S12): resolve the S6 pin
+	// FIRST — before the S12 diversification re-rank — so the pin seeds the
+	// MMR similarity. The cascade reads the user's s6_seed_*, runs the local
+	// + Shikimori fallbacks, and returns a single PinCandidate or nil. On a
+	// non-fatal resolve error we log + treat as no pin (pin == nil).
+	var pin *signals.PinCandidate
+	if h.s6 != nil {
+		topIDs := make([]string, 0, len(top))
+		for _, r := range top {
+			topIDs = append(topIDs, string(r.AnimeID))
+		}
+		resolved, resolveErr := h.s6.Resolve(ctx, userID, topIDs)
+		if resolveErr != nil {
+			h.log.Warnw("s6 resolve failed (non-fatal)", "user_id", userID, "error", resolveErr)
+		} else {
+			pin = resolved
+		}
+	}
+
+	// S12 diversification re-rank. The pin (when resolved) seeds the
+	// similarity so the body of the row steers away from the pin's genres.
+	// Non-fatal: on error we keep `top` in its undiversified order.
+	pinSeedID := ""
+	if pin != nil {
+		pinSeedID = pin.AnimeID
+	}
+	if diversified, dErr := h.diversifier.Rerank(ctx, top, pinSeedID, s12Lambda); dErr != nil {
+		h.log.Warnw("s12 rerank failed (non-fatal); serving undiversified", "user_id", userID, "error", dErr)
+	} else {
+		top = diversified
+	}
+
 	ids := make([]string, len(top))
 	for i, r := range top {
 		ids[i] = r.AnimeID
@@ -468,60 +528,50 @@ func (h *RecsHandler) computeFreshForUser(ctx context.Context, userID string) (R
 			Anime:          anime,
 			Final:          r.Final,
 			Pinned:         false,
-			Rank:           i + 1,
+			Rank:           i + 1, // post-rerank position
 			TopContributor: deriveTopContributor(r.Breakdown, upNextWeights),
 		})
 	}
 
-	// Phase 13 (REC-SIG-06 / REC-UX-03): try to resolve a pin candidate.
-	// The S6 cascade reads the user's s6_seed_*, runs the local + Shikimori
-	// fallbacks, and returns a single PinCandidate or nil. On non-nil:
+	// Phase 13 (REC-SIG-06 / REC-UX-03): prepend the ALREADY-resolved pin (its
+	// resolution moved above the S12 re-rank). On a non-nil pin:
 	//
 	//   1. Hydrate the pin's anime row so the frontend can render the card.
 	//   2. Remove the pin's anime from items[] if the ensemble already
 	//      ranked it (avoids the same poster appearing twice).
 	//   3. Re-rank the remaining ensemble tail (rank 2..N).
 	//   4. Prepend a Pinned RecItem at index 0 with rank 1.
-	if h.s6 != nil {
-		topIDs := make([]string, 0, len(top))
-		for _, r := range top {
-			topIDs = append(topIDs, string(r.AnimeID))
-		}
-		pin, err := h.s6.Resolve(ctx, userID, topIDs)
-		if err != nil {
-			h.log.Warnw("s6 resolve failed (non-fatal)", "user_id", userID, "error", err)
-		} else if pin != nil {
-			pinHydrated, hydrateErr := h.hydrateAnime(ctx, []string{pin.AnimeID})
-			if hydrateErr == nil {
-				if anime, ok := pinHydrated[pin.AnimeID]; ok {
-					// Drop pin from items[] if it was already in ensemble result.
-					deduped := make([]RecItem, 0, len(items))
-					for _, it := range items {
-						if it.Anime.ID != pin.AnimeID {
-							deduped = append(deduped, it)
-						}
+	if pin != nil {
+		pinHydrated, hydrateErr := h.hydrateAnime(ctx, []string{pin.AnimeID})
+		if hydrateErr == nil {
+			if anime, ok := pinHydrated[pin.AnimeID]; ok {
+				// Drop pin from items[] if it was already in ensemble result.
+				deduped := make([]RecItem, 0, len(items))
+				for _, it := range items {
+					if it.Anime.ID != pin.AnimeID {
+						deduped = append(deduped, it)
 					}
-					// Re-rank the deduped tail (pin takes rank 1).
-					for i := range deduped {
-						deduped[i].Rank = i + 2
-					}
-					pinItem := RecItem{
-						Anime:          anime,
-						Final:          0, // spec §B7: float64 zero approximates "null"; frontend gates on Pinned
-						Pinned:         true,
-						PinReason:      "Because you finished " + pin.SeedName,                         // legacy fallback
-						PinReasonKey:   "recs.pinReason.becauseYouFinished",                           // UX-09: i18n key
-						PinReasonData:  map[string]any{"name": pin.SeedName},                          // UX-09: interpolation values
-						PinSeedAnimeID: pin.SeedAnimeID,
-						PinSource:      pin.Source,
-						Rank:           1,
-					}
-					items = append([]RecItem{pinItem}, deduped...)
 				}
-			} else {
-				h.log.Warnw("s6 pin hydrate failed (non-fatal); serving row without pin",
-					"user_id", userID, "pin_anime_id", pin.AnimeID, "error", hydrateErr)
+				// Re-rank the deduped tail (pin takes rank 1).
+				for i := range deduped {
+					deduped[i].Rank = i + 2
+				}
+				pinItem := RecItem{
+					Anime:          anime,
+					Final:          0, // spec §B7: float64 zero approximates "null"; frontend gates on Pinned
+					Pinned:         true,
+					PinReason:      "Because you finished " + pin.SeedName, // legacy fallback
+					PinReasonKey:   "recs.pinReason.becauseYouFinished",    // UX-09: i18n key
+					PinReasonData:  map[string]any{"name": pin.SeedName},   // UX-09: interpolation values
+					PinSeedAnimeID: pin.SeedAnimeID,
+					PinSource:      pin.Source,
+					Rank:           1,
+				}
+				items = append([]RecItem{pinItem}, deduped...)
 			}
+		} else {
+			h.log.Warnw("s6 pin hydrate failed (non-fatal); serving row without pin",
+				"user_id", userID, "pin_anime_id", pin.AnimeID, "error", hydrateErr)
 		}
 	}
 
