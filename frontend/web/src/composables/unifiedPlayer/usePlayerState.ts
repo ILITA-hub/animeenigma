@@ -39,9 +39,20 @@ export function usePlayerState() {
     else localStorage.removeItem(HACKER_KEY)
   })
 
+  // HUD pin — keep the debug HUD on screen during playback (persisted).
+  const PIN_KEY = 'pl_hud_pin'
+  const hudPinned = ref(
+    typeof localStorage !== 'undefined' && localStorage.getItem(PIN_KEY) === '1',
+  )
+  watch(hudPinned, (on) => {
+    if (typeof localStorage === 'undefined') return
+    if (on) localStorage.setItem(PIN_KEY, '1')
+    else localStorage.removeItem(PIN_KEY)
+  })
+
   return {
     playing, progress, volume, muted, quality, speed, autoNext, autoSkip, combo,
-    subLang, subSize, subBg, subOffset, hackerMode,
+    subLang, subSize, subBg, subOffset, hackerMode, hudPinned,
     setAudio, setLang, setProvider, setServer, setTeam,
   }
 }

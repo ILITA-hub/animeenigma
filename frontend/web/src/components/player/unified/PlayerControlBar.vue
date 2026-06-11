@@ -279,18 +279,18 @@ function onVolumeInput(event: Event) {
   margin-right: 6px;
 }
 
-/* Time pill — like the source pill but informational (left side) */
+/* Time pill — same geometry as the source pill (.pl-srcbtn) */
 .pl-timepill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
+  gap: 8px;
+  height: 36px;
   padding: 0 12px;
   margin-left: 4px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border);
-  color: rgba(255, 255, 255, 0.9);
+  color: #fff;
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;

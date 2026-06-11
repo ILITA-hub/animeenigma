@@ -172,6 +172,7 @@ function makeScraperAdapter(api: typeof scraperApi, prefer?: string): ProviderAd
         label: ep.number,
         number: ep.number,
         ...(ep.is_filler ? { isFiller: true } : {}),
+        ...(ep.title ? { title: ep.title } : {}),
       }))
     },
 

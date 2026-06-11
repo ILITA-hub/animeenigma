@@ -9,4 +9,6 @@ export interface EpisodeOption {
   number: number
   /** Optional filler episode — dimmed. */
   isFiller?: boolean
+  /** Optional provider-supplied episode title (tooltips / player header). */
+  title?: string
 }

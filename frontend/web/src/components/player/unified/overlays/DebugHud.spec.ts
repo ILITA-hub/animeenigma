@@ -54,42 +54,67 @@ describe('DebugHud', () => {
     expect(w.find('[data-test="hud-seek-head"]').exists()).toBe(false)
   })
 
-  it('renders a buffer-HIT seek trace as the short path (no flush/fetch)', () => {
+  const seekBase = { t0: 0, fetchMs: null, fetchedRange: null, seekedMs: null, resumeMs: null, frags: 0, bytes: 0, done: false }
+
+  it('renders a buffer-HIT seek trace as the short path (3 steps fit)', () => {
     const w = mount(DebugHud, {
       props: {
         ...baseProps,
-        seek: { target: 754, bufferHit: true, t0: 0, seekedMs: 18, resumeMs: 24, frags: 0, bytes: 0, done: true },
+        seek: { ...seekBase, target: 754, bufferHit: true, seekedMs: 18, resumeMs: 24, done: true },
       },
     })
     expect(w.find('[data-test="hud-seek-head"]').text()).toContain('SEEK →12:34 · buffer HIT')
     expect(w.text()).toContain('no network')
-    expect(w.text()).not.toContain('flush')
     expect(w.text()).toContain('decode keyframe→target 18ms')
     expect(w.text()).toContain('resume rs≥3 24ms')
   })
 
-  it('renders a buffer-MISS trace with flush, fetch totals and pending resume', () => {
+  it('shows only the LATEST 3 pipeline steps on a buffer miss (check/flush cut)', () => {
     const w = mount(DebugHud, {
       props: {
         ...baseProps,
-        seek: { target: 90, bufferHit: false, t0: 0, seekedMs: 840, resumeMs: null, frags: 3, bytes: 2.1 * 1024 * 1024, done: false },
+        seek: { ...seekBase, target: 90, bufferHit: false, fetchMs: 610, fetchedRange: [88, 102] as [number, number], seekedMs: 840, frags: 3, bytes: 2.1 * 1024 * 1024 },
       },
     })
-    expect(w.find('[data-test="hud-seek-head"]').text()).toContain('buffer MISS')
-    expect(w.text()).toContain('flush')
-    expect(w.text()).toContain('3 frags · 2.1MB')
-    expect(w.text()).toContain('… resume rs≥3 — buffering…')
+    const steps = w.findAll('[data-test="hud-seek-step"]')
+    expect(steps.length).toBe(3)
+    expect(w.text()).not.toContain('flush')
+    expect(w.text()).toContain('3 frags · 2.1MB · 610ms')
+    expect(w.text()).toContain('resume rs≥3 — buffering')
   })
 
-  it('labels the fetch step as a range request for mp4 streams', () => {
+  it('details the mp4 fetch as a moov-index range request with timing', () => {
     const w = mount(DebugHud, {
       props: {
         ...baseProps,
         streamType: 'mp4',
-        seek: { target: 90, bufferHit: false, t0: 0, seekedMs: null, resumeMs: null, frags: 0, bytes: 0, done: false },
+        seek: { ...seekBase, target: 90, bufferHit: false, fetchMs: 320, fetchedRange: [85, 110] as [number, number] },
       },
     })
-    expect(w.text()).toContain('range request (moov index)')
+    expect(w.text()).toContain('range req (moov→bytes) · 320ms → 85–110s buffered')
+  })
+
+  it('shows a mono spinner next to the in-flight step', () => {
+    const w = mount(DebugHud, {
+      props: {
+        ...baseProps,
+        seek: { ...seekBase, target: 90, bufferHit: false },
+      },
+    })
+    expect(w.find('[data-test="hud-seek-step"] .ae-spinner').exists()).toBe(true)
+  })
+
+  it('emits update:pinned from the pin checkbox', async () => {
+    const w = mount(DebugHud, { props: { ...baseProps, pinned: false } })
+    const pin = w.find('[data-test="hud-pin-toggle"]')
+    expect(pin.attributes('aria-checked')).toBe('false')
+    await pin.trigger('click')
+    expect(w.emitted('update:pinned')?.[0]).toEqual([true])
+  })
+
+  it('applies the fading class while lingering out', () => {
+    const w = mount(DebugHud, { props: { ...baseProps, fading: true } })
+    expect(w.find('[data-test="debug-hud"]').classes()).toContain('pl-hud--fading')
   })
 
   it('toggles the seek-pipeline tech reference via the "?" button', async () => {

@@ -42,6 +42,7 @@
       @playing="onBufferEnd"
       @seeked="onSeeked"
       @timeupdate="onTimeUpdate"
+      @progress="onVideoProgress"
       @error="onVideoError"
     />
 
@@ -79,7 +80,8 @@
       <div class="pl-title-block">
         <span class="pl-eyebrow">
           <span class="pl-eyebrow-src">
-            EP {{ anime.ep }}
+            EP {{ selectedEpisode?.number ?? anime.ep }}
+            <span v-if="selectedEpisode?.title" class="pl-ep-title">· {{ selectedEpisode.title }}</span>
             <span v-if="activeProviderName" class="inline-flex items-center gap-1 ml-1">
               <span class="pl-prov-dot" :style="{ background: activeProviderHue, boxShadow: `0 0 8px ${activeProviderHue}` }" aria-hidden="true" />
               {{ activeProviderName }}
@@ -123,6 +125,9 @@
       :stream-type="currentStream?.type ?? '—'"
       :level-label="engine.currentLevelLabel.value"
       :seek="lastSeek"
+      :pinned="state.hudPinned.value"
+      :fading="hudFading"
+      @update:pinned="v => { state.hudPinned.value = v }"
     />
 
     <SkipIntroChip
@@ -195,6 +200,8 @@
       <EpisodesPanel
         :episodes="episodes"
         :selected-number="selectedEpisode?.number ?? null"
+        :watched-up-to="watchedUpTo"
+        :progress="epProgress"
         @select="onSelectEpisode"
       />
     </div>
@@ -258,6 +265,9 @@ import {
 } from 'vue'
 import { CircleAlert, LayoutGrid } from 'lucide-vue-next'
 
+import { userApi } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
+import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
 import PlayerControlBar from './PlayerControlBar.vue'
@@ -369,6 +379,41 @@ const audioLabel = computed(() => {
 
 const episodes = ref<EpisodeOption[]>([])
 const selectedEpisode = ref<EpisodeOption | null>(null)
+
+// ─── User watch data (read-only): watched marks + per-episode progress ───────
+
+const auth = useAuthStore()
+const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.animeId)
+
+const epProgress = ref<Record<number, { pct: number; completed: boolean }>>({})
+
+async function loadEpisodeProgress() {
+  if (!auth.isAuthenticated) {
+    epProgress.value = {}
+    return
+  }
+  try {
+    const res = await userApi.getProgress(props.animeId)
+    const rows = (res.data?.data ?? res.data ?? []) as Array<{
+      episode_number?: number
+      progress?: number
+      duration?: number
+      completed?: boolean
+    }>
+    const map: Record<number, { pct: number; completed: boolean }> = {}
+    for (const r of rows) {
+      if (!r.episode_number) continue
+      map[r.episode_number] = {
+        pct: r.duration ? Math.min(1, (r.progress ?? 0) / r.duration) : 0,
+        completed: !!r.completed,
+      }
+    }
+    epProgress.value = map
+  } catch {
+    // 404 / anonymous / network — no user data, panel renders plain numbers
+    epProgress.value = {}
+  }
+}
 const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
 const currentStream = ref<StreamResult | null>(null)
@@ -735,9 +780,10 @@ function onSeeked() {
 function onTimeUpdate() {
   const v = videoRef.value
   // Drop the poster only once playback actually progresses — the bare `play`
-  // event fires even on a dead source (readyState 0), which would swap the
-  // poster for a black frame under the spinner.
-  if (!hasStarted.value && v && v.currentTime > 0) {
+  // event fires even on a dead source (readyState 0), and `timeupdate` also
+  // fires on a seek-while-paused before the first play; both would swap the
+  // poster for a black frame. Require real (unpaused) progress.
+  if (!hasStarted.value && v && v.currentTime > 0 && !v.paused) {
     hasStarted.value = true
   }
   if (isBuffering.value && v && v.readyState >= 3 && !v.seeking) {
@@ -791,11 +837,31 @@ function traceSeekStart(target: number) {
     target,
     bufferHit: hit,
     t0: performance.now(),
+    fetchMs: null,
+    fetchedRange: null,
     seekedMs: null,
     resumeMs: null,
     frags: 0,
     bytes: 0,
     done: false,
+  }
+}
+
+// Fetch-phase depth: the `progress` event fires as bytes arrive — the moment
+// a buffered range covers the seek target, the network part of the seek is
+// done (mp4: the ranged bytes landed; hls: the segment(s) arrived).
+function onVideoProgress() {
+  const s = lastSeek.value
+  const v = videoRef.value
+  if (!s || s.done || s.fetchMs !== null || !v) return
+  for (let i = 0; i < v.buffered.length; i++) {
+    const start = v.buffered.start(i)
+    const end = v.buffered.end(i)
+    if (s.target >= start && s.target <= end) {
+      s.fetchMs = Math.round(performance.now() - s.t0)
+      s.fetchedRange = [start, end]
+      return
+    }
   }
 }
 
@@ -818,11 +884,41 @@ watch(engine.fragStats, (arr) => {
   s.bytes += last.size
 })
 
-// HUD shows while paused or while actively buffering/seeking. Uses
-// showBuffering (post-150ms-grace) so instant seeks don't flash it.
-const hudVisible = computed(
-  () => state.hackerMode.value && (!state.playing.value || showBuffering.value),
+// HUD shows while paused or while actively buffering/seeking (or always when
+// pinned). When the show-condition drops (playback resumed), the panel
+// LINGERS ~1s, fades 0.4s, then unmounts — so the final seek numbers are
+// readable instead of vanishing the instant video continues.
+const hudCondition = computed(
+  () =>
+    state.hackerMode.value &&
+    (state.hudPinned.value || !state.playing.value || showBuffering.value),
 )
+const hudVisible = ref(false)
+const hudFading = ref(false)
+let hudLingerTimer: ReturnType<typeof setTimeout> | null = null
+let hudFadeTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearHudTimers() {
+  if (hudLingerTimer) { clearTimeout(hudLingerTimer); hudLingerTimer = null }
+  if (hudFadeTimer) { clearTimeout(hudFadeTimer); hudFadeTimer = null }
+}
+
+watch(hudCondition, (on) => {
+  clearHudTimers()
+  if (on) {
+    hudVisible.value = true
+    hudFading.value = false
+    return
+  }
+  // linger 1s with full opacity, then 0.4s CSS fade, then unmount
+  hudLingerTimer = setTimeout(() => {
+    hudFading.value = true
+    hudFadeTimer = setTimeout(() => {
+      hudVisible.value = false
+      hudFading.value = false
+    }, 450)
+  }, 1000)
+}, { immediate: true })
 
 // Scrub-bar heatmap segments — size-tinted (green <300KB, amber <1MB, red ≥1MB).
 const fragOverlay = computed(() => {
@@ -1218,6 +1314,9 @@ onMounted(() => {
   }
   // Bootstrap episode selection so it's ready before provider resolves
   initSelectedEpisode()
+  // User watch data for the episodes drawer (best-effort, anonymous = empty)
+  void refreshWatched()
+  void loadEpisodeProgress()
   window.addEventListener('keydown', onKeydown)
 })
 
@@ -1225,6 +1324,7 @@ onUnmounted(() => {
   stopRaf()
   clearNextEpTimer()
   clearUiIdleTimer()
+  clearHudTimers()
   if (bufferingTimer) clearTimeout(bufferingTimer)
   window.removeEventListener('keydown', onKeydown)
 })
@@ -1263,6 +1363,17 @@ onUnmounted(() => {
   background: radial-gradient(80% 60% at 50% 38%, transparent, rgba(0, 0, 0, 0.35));
   z-index: 1;
   pointer-events: none;
+}
+
+/* Episode title in the eyebrow — truncate long provider titles */
+.pl-ep-title {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  opacity: 0.85;
 }
 
 /* Idle while playing — fade out the chrome (top bar lives here, the control

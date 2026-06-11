@@ -1,15 +1,31 @@
 <template>
-  <div class="pl-hud" data-test="debug-hud">
+  <div class="pl-hud" :class="{ 'pl-hud--fading': fading }" data-test="debug-hud">
     <div class="pl-hud-row pl-hud-head">
       <span>{{ provider }} · {{ streamType }}<template v-if="levelLabel"> · {{ levelLabel }}</template></span>
-      <button
-        class="pl-hud-help"
-        :class="{ 'is-open': helpOpen }"
-        aria-label="Seek pipeline reference"
-        data-test="hud-help-toggle"
-        @click="helpOpen = !helpOpen"
-      >?</button>
+      <span class="pl-hud-actions">
+        <button
+          class="pl-hud-btn"
+          :class="{ 'is-on': pinned }"
+          role="checkbox"
+          :aria-checked="pinned"
+          aria-label="Pin HUD during playback"
+          title="Pin"
+          data-test="hud-pin-toggle"
+          @click="emit('update:pinned', !pinned)"
+        >
+          <Pin :size="11" aria-hidden="true" />
+        </button>
+        <button
+          class="pl-hud-btn"
+          :class="{ 'is-on': helpOpen }"
+          aria-label="Seek pipeline reference"
+          data-test="hud-help-toggle"
+          @click="helpOpen = !helpOpen"
+        >?</button>
+      </span>
     </div>
+
+    <!-- Metadata — always shown in full -->
     <div class="pl-hud-row">BW   {{ bw }}</div>
     <div class="pl-hud-row">
       BUF  +{{ stats.bufferAheadSec.toFixed(1) }}s / −{{ stats.bufferBehindSec.toFixed(1) }}s · rs={{ stats.readyState }}
@@ -18,28 +34,20 @@
       RES  {{ stats.resolution || '—' }} · drop {{ stats.droppedFrames }}/{{ stats.totalFrames }}
     </div>
 
-    <!-- Seek pipeline trace: what the spinner covers after a scrub/arrow seek -->
+    <!-- Seek pipeline trace — only the latest 3 steps -->
     <template v-if="seek">
       <div class="pl-hud-row pl-hud-head" data-test="hud-seek-head">
         SEEK →{{ fmtTime(seek.target) }} · buffer {{ seek.bufferHit ? 'HIT' : 'MISS' }}
       </div>
-      <template v-if="seek.bufferHit">
-        <div class="pl-hud-row" data-test="hud-seek-step">
-          ✓ check  in buffer — no network
-        </div>
-      </template>
-      <template v-else>
-        <div class="pl-hud-row" data-test="hud-seek-step">✓ check  not buffered</div>
-        <div class="pl-hud-row" data-test="hud-seek-step">✓ flush  abort loads · reset decoder</div>
-        <div class="pl-hud-row" data-test="hud-seek-step">
-          {{ seek.frags > 0 ? '✓' : seek.done ? '✓' : '…' }} fetch  {{ fetchLabel }}
-        </div>
-      </template>
-      <div class="pl-hud-row" data-test="hud-seek-step">
-        {{ seek.seekedMs !== null ? '✓' : '…' }} decode keyframe→target{{ seek.seekedMs !== null ? ` ${seek.seekedMs}ms` : ' …' }}
-      </div>
-      <div class="pl-hud-row" data-test="hud-seek-step">
-        {{ seek.resumeMs !== null ? '✓' : '…' }} resume rs≥3{{ seek.resumeMs !== null ? ` ${seek.resumeMs}ms` : ' — buffering…' }}
+      <div
+        v-for="(st, i) in visibleSteps"
+        :key="seek.t0 + ':' + st.text"
+        class="pl-hud-row pl-hud-step"
+        data-test="hud-seek-step"
+      >
+        <Spinner v-if="!st.done && i === firstPendingIdx" size="xs" tone="mono" class="pl-hud-spin" label="working" />
+        <span v-else class="pl-hud-mark">{{ st.done ? '✓' : '·' }}</span>
+        <span>{{ st.text }}</span>
       </div>
     </template>
 
@@ -65,6 +73,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { Pin } from 'lucide-vue-next'
+import Spinner from '@/components/ui/Spinner.vue'
 import type { PlaybackStats } from '@/composables/unifiedPlayer/usePlaybackStats'
 import type { FragStat } from '@/composables/unifiedPlayer/useVideoEngine'
 
@@ -76,6 +86,10 @@ export interface SeekTrace {
   bufferHit: boolean
   /** performance.now() at seek start */
   t0: number
+  /** ms until the buffered ranges covered the target (network fetch done) */
+  fetchMs: number | null
+  /** buffered range [start,end] that covered the target when fetch completed */
+  fetchedRange: [number, number] | null
   /** ms until the `seeked` event (decoder positioned on the target frame) */
   seekedMs: number | null
   /** ms until readyState ≥ 3 (safety buffer refilled, playback resumes) */
@@ -96,6 +110,14 @@ const props = defineProps<{
   streamType: string
   levelLabel: string
   seek?: SeekTrace | null
+  /** keep the HUD on screen during playback */
+  pinned?: boolean
+  /** linger fade-out in progress */
+  fading?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:pinned', value: boolean): void
 }>()
 
 const helpOpen = ref(false)
@@ -106,11 +128,53 @@ const bw = computed(() =>
   props.bandwidth > 0 ? `${(props.bandwidth / 1_000_000).toFixed(1)} Mbit/s` : '—',
 )
 
+interface SeekStep {
+  done: boolean
+  text: string
+}
+
+const allSteps = computed<SeekStep[]>(() => {
+  const s = props.seek
+  if (!s) return []
+  const steps: SeekStep[] = []
+  if (s.bufferHit) {
+    steps.push({ done: true, text: 'check  in buffer — no network' })
+  } else {
+    steps.push({ done: true, text: 'check  not buffered' })
+    steps.push({ done: true, text: 'flush  abort loads · reset decoder' })
+    steps.push({ done: s.fetchMs !== null || s.done, text: `fetch  ${fetchLabel.value}` })
+  }
+  steps.push({
+    done: s.seekedMs !== null,
+    text: `decode keyframe→target${s.seekedMs !== null ? ` ${s.seekedMs}ms` : ''}`,
+  })
+  steps.push({
+    done: s.resumeMs !== null,
+    text: `resume rs≥3${s.resumeMs !== null ? ` ${s.resumeMs}ms` : ' — buffering'}`,
+  })
+  return steps
+})
+
+/** Only the latest 3 pipeline steps — metadata above stays complete. */
+const visibleSteps = computed(() => allSteps.value.slice(-3))
+
+const firstPendingIdx = computed(() => visibleSteps.value.findIndex((s) => !s.done))
+
 const fetchLabel = computed(() => {
   const s = props.seek
   if (!s) return ''
-  if (props.streamType === 'mp4') return 'range request (moov index)'
-  if (s.frags > 0) return `${s.frags} frags · ${fmtSize(s.bytes)}`
+  // The fetch step is usually the long one — show what it actually did:
+  // mp4 = moov-index lookup + HTTP range request; hls = segment downloads.
+  const ms = s.fetchMs !== null ? ` · ${s.fetchMs}ms` : ''
+  const range = s.fetchedRange
+    ? ` → ${Math.round(s.fetchedRange[0])}–${Math.round(s.fetchedRange[1])}s buffered`
+    : ''
+  if (props.streamType === 'mp4') {
+    return s.fetchMs !== null
+      ? `range req (moov→bytes)${ms}${range}`
+      : 'range req — moov index → byte offset…'
+  }
+  if (s.frags > 0) return `${s.frags} frags · ${fmtSize(s.bytes)}${ms}`
   return s.done ? 'served from hls buffer' : 'requesting segments…'
 })
 
@@ -131,7 +195,9 @@ function fmtTime(sec: number): string {
   position: absolute;
   top: 76px;
   left: 14px;
-  z-index: 5;
+  /* ABOVE the top bar (z-6): its transparent padding area extends past 76px
+     and was swallowing clicks on the "?" button. */
+  z-index: 8;
   padding: 10px 12px;
   border-radius: var(--r-md, 8px);
   background: rgba(0, 0, 0, 0.78);
@@ -144,6 +210,14 @@ function fmtTime(sec: number): string {
   white-space: pre;
   max-width: min(420px, calc(100% - 28px));
   overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+/* Linger: playback resumed — hold for ~1s (handled by the parent timer),
+   then this class fades the panel out before unmount. */
+.pl-hud--fading {
+  opacity: 0;
 }
 
 .pl-hud-head {
@@ -154,16 +228,41 @@ function fmtTime(sec: number): string {
   gap: 12px;
 }
 
+.pl-hud-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .pl-hud-dim {
   opacity: 0.6;
 }
 
-/* "?" is the only interactive element — re-enable pointer events on it */
-.pl-hud-help {
+.pl-hud-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pl-hud-mark {
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.pl-hud-spin {
+  flex-shrink: 0;
+  margin: 0 1px;
+}
+
+/* The pin / "?" buttons are the only interactive elements */
+.pl-hud-btn {
   pointer-events: auto;
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
@@ -174,8 +273,8 @@ function fmtTime(sec: number): string {
   cursor: pointer;
 }
 
-.pl-hud-help:hover,
-.pl-hud-help.is-open {
+.pl-hud-btn:hover,
+.pl-hud-btn.is-on {
   background: rgba(0, 212, 255, 0.18);
 }
 
