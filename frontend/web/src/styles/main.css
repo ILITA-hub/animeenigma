@@ -13,6 +13,18 @@
 @font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/inter-700.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/jetbrains-mono-400.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/jetbrains-mono-500.woff2') format('woff2'); }
+/* Cyrillic subsets (variable woff2, one file per family covers all weights).
+   The latin files above are latin-only subsets — without these, Cyrillic
+   falls through to the SYSTEM font, which on a Japanese-locale OS resolves
+   to a JP face with full-width Cyrillic glyphs («р а з р я ж е н н ы й»
+   spotlight terminal, 2026-06-11). unicode-range keeps them lazy: they only
+   download when Cyrillic text is actually on screen. */
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('/fonts/inter-cyr.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('/fonts/inter-cyr-ext.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 200 800; font-display: swap; src: url('/fonts/manrope-cyr.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 200 800; font-display: swap; src: url('/fonts/manrope-cyr-ext.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400 800; font-display: swap; src: url('/fonts/jetbrains-mono-cyr.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400 800; font-display: swap; src: url('/fonts/jetbrains-mono-cyr-ext.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
 /* Noto Sans JP is sliced into unicode-range subsets — see noto-sans-jp.css (imported above). */
 
 /* Neon Tokyo Theme */

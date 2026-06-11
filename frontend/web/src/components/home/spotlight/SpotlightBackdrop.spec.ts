@@ -35,7 +35,25 @@ describe('SpotlightBackdrop', () => {
     const style = img.attributes('style') ?? ''
     expect(style).toContain('blur(40px)')
     expect(style).toContain('saturate(1.2)')
-    expect(style).toContain('opacity: 0.4')
+    // The 0.4 alpha lives on the keyed wrapper (reroll crossfade, 2026-06-11)
+    // so Transition enter/leave classes can animate it.
+    expect(wrapper.find('.opacity-40').exists()).toBe(true)
+  })
+
+  it('swaps the blur <img> src when posterUrl changes (reroll crossfade)', async () => {
+    const wrapper = mount(SpotlightBackdrop, {
+      props: {
+        variant: 'poster-blur',
+        posterUrl: 'https://example.test/old.jpg',
+        accent: 'violet',
+      },
+    })
+    await wrapper.setProps({ posterUrl: 'https://example.test/new.jpg' })
+    await wrapper.vm.$nextTick()
+    const srcs = wrapper.findAll('img').map((i) => i.attributes('src'))
+    // The keyed-wrapper Transition crossfades: the NEW src must be mounted
+    // (the old one may linger one frame while it fades out in browsers).
+    expect(srcs).toContain('https://example.test/new.jpg')
   })
 
   it('falls back to gradient-mesh when poster-blur has no posterUrl', () => {

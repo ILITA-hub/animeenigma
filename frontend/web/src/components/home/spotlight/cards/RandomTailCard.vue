@@ -31,7 +31,7 @@
       <router-link
         :to="`/anime/${anime.id}`"
         class="deck relative flex-shrink-0 self-center w-24 md:w-36 group"
-        :class="{ deal: dealing && !reducedMotion }"
+        :class="{ deal: dealing && !reducedMotion, shuffling: shuffling }"
         data-testid="deck"
       >
         <span class="deck-ghost deck-g1" aria-hidden="true" />
@@ -118,6 +118,8 @@ import { useMediaQuery } from '@vueuse/core'
 import { Shuffle, Star } from 'lucide-vue-next'
 import { getLocalizedTitle } from '@/utils/title'
 import { parseDescription } from '@/utils/description-parser'
+import { preloadImage } from '@/utils/preload-image'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import type { RandomTailData, SpotlightCard } from '@/types/spotlight'
 import type { SpotlightAnime } from '@/types/spotlight'
 import Badge from '@/components/ui/Badge.vue'
@@ -191,23 +193,44 @@ onBeforeUnmount(() => {
 })
 
 // ── «Ещё разок» reroll ────────────────────────────────────────────────
+// The deck plays a looping shuffle while the fetch + poster preload run;
+// the anime only swaps in once BOTH image buckets (256 deck poster + 128
+// blurred backdrop) are in the browser cache — so the deal-in lands on a
+// ready image and the backdrop crossfades instead of flashing (user
+// feedback 2026-06-11: «криво подгружает картинку — пролаг»).
 const rerolling = ref(false)
+const shuffling = ref(false)
+// Floor so a warm-cache reroll still reads as a shuffle, not a blink.
+const MIN_SHUFFLE_MS = 650
 
 async function reroll(): Promise<void> {
   if (rerolling.value) return
   rerolling.value = true
+  shuffling.value = !reducedMotion.value
+  const startedAt = Date.now()
   try {
     const res = await apiClient.get<SpotlightCard>(
       `/home/spotlight/reroll?exclude=${encodeURIComponent(anime.value.id)}`,
     )
     const card = res.data
     if (card && card.type === 'random_tail' && card.data?.anime) {
-      rerolled.value = card.data.anime
+      const next = card.data.anime
+      await Promise.all([
+        preloadImage(cardPosterUrl(next.poster_url, 256)),
+        preloadImage(cardPosterUrl(next.poster_url, 128)),
+      ])
+      const minLeft = MIN_SHUFFLE_MS - (Date.now() - startedAt)
+      if (shuffling.value && minLeft > 0) {
+        await new Promise((r) => setTimeout(r, minLeft))
+      }
+      shuffling.value = false
+      rerolled.value = next
       playDeal()
     }
   } catch (e) {
     console.warn('[spotlight] reroll failed', e)
   } finally {
+    shuffling.value = false
     rerolling.value = false
   }
 }
@@ -254,5 +277,30 @@ async function reroll(): Promise<void> {
 @keyframes deck-deal-poster {
   from { opacity: 0; transform: rotate(-10deg) translateY(-70px) scale(0.92); }
   to { opacity: 1; transform: none; }
+}
+
+/* Shuffle loop — plays while the reroll fetch + poster preload are in
+   flight: ghosts riffle out to the sides and back, the top card bobs.
+   Loops until the swap, so slow networks just see a longer shuffle. */
+.deck.shuffling .deck-g1 {
+  animation: deck-shuffle-g1 0.65s ease-in-out infinite;
+}
+.deck.shuffling .deck-g2 {
+  animation: deck-shuffle-g2 0.65s ease-in-out 0.08s infinite;
+}
+.deck.shuffling :deep(.deck-poster) {
+  animation: deck-shuffle-poster 0.65s ease-in-out infinite;
+}
+@keyframes deck-shuffle-g1 {
+  0%, 100% { transform: rotate(-7deg) translate(-9px, 5px); }
+  50% { transform: rotate(-16deg) translate(-30px, -8px); }
+}
+@keyframes deck-shuffle-g2 {
+  0%, 100% { transform: rotate(4deg) translate(7px, 2px); }
+  50% { transform: rotate(13deg) translate(28px, -6px); }
+}
+@keyframes deck-shuffle-poster {
+  0%, 100% { transform: none; }
+  50% { transform: rotate(2.5deg) translateY(-9px) scale(0.97); }
 }
 </style>

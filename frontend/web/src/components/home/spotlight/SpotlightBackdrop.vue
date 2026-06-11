@@ -22,23 +22,37 @@
     renders against a fully transparent background.
   -->
   <div class="absolute inset-0 overflow-hidden pointer-events-none">
-    <img
-      v-if="variant === 'poster-blur' && posterUrl"
-      :src="blurSrc"
-      alt=""
-      aria-hidden="true"
-      loading="lazy"
-      decoding="async"
-      class="absolute inset-0 w-full h-full object-cover scale-110"
-      :style="POSTER_BLUR_STYLE"
-    />
-    <div
-      v-else
-      aria-hidden="true"
-      class="absolute inset-0"
-      :class="meshClass"
-      data-testid="spotlight-backdrop-mesh"
-    />
+    <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
+         URL changes in place (RandomTail reroll, 2026-06-11): old blur
+         fades out while the new (preloaded by the card) fades in — no
+         re-fetch flash. The 0.4 opacity lives on the wrapper so the
+         transition classes can animate it (an inline opacity on the <img>
+         would beat the enter/leave classes). -->
+    <Transition name="backdrop-x">
+      <div
+        v-if="variant === 'poster-blur' && posterUrl"
+        :key="blurSrc"
+        aria-hidden="true"
+        class="absolute inset-0 opacity-40"
+      >
+        <img
+          :src="blurSrc"
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          class="absolute inset-0 w-full h-full object-cover scale-110"
+          :style="POSTER_BLUR_STYLE"
+        />
+      </div>
+      <div
+        v-else
+        aria-hidden="true"
+        class="absolute inset-0"
+        :class="meshClass"
+        data-testid="spotlight-backdrop-mesh"
+      />
+    </Transition>
 
     <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->
@@ -66,8 +80,9 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Inline style for the blurred poster — kept here so the Tailwind class
 // string stays cacheable and the blur values are explicit (40px blur,
-// 1.2 saturation, 0.4 alpha as specified in the Phase 01 plan).
-const POSTER_BLUR_STYLE = 'filter: blur(40px) saturate(1.2); opacity: 0.4;'
+// 1.2 saturation as specified in the Phase 01 plan). The 0.4 alpha moved
+// to the keyed wrapper (opacity-40) so the reroll crossfade can animate it.
+const POSTER_BLUR_STYLE = 'filter: blur(40px) saturate(1.2);'
 
 // The backdrop is blurred 40px — full-res source is pure waste, so route
 // proxyable posters through the resizing image-proxy at the smallest bucket.
@@ -86,3 +101,16 @@ const MESH_CLASSES: Record<SpotlightAccent, string> = {
 
 const meshClass = computed<string>(() => MESH_CLASSES[props.accent])
 </script>
+
+<style scoped>
+/* Reroll crossfade: both keyed wrappers are absolute inset-0, so the old
+   and new backdrop overlap while one fades out and the other fades in. */
+.backdrop-x-enter-active,
+.backdrop-x-leave-active {
+  transition: opacity 0.6s ease;
+}
+.backdrop-x-enter-from,
+.backdrop-x-leave-to {
+  opacity: 0;
+}
+</style>

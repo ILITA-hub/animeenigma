@@ -40,6 +40,13 @@ vi.mock('@/api/client', () => ({
   apiClient: { get: (...args: unknown[]) => apiGet(...args) },
 }))
 
+// Poster preload resolves instantly in jsdom (no real Image loading);
+// the call args still prove BOTH buckets (256 deck + 128 backdrop) warm.
+const preload = vi.fn((..._args: unknown[]) => Promise.resolve())
+vi.mock('@/utils/preload-image', () => ({
+  preloadImage: (...args: unknown[]) => preload(...args),
+}))
+
 import RandomTailCard from './RandomTailCard.vue'
 
 const baseAnime = {
@@ -68,6 +75,7 @@ function mountCard(anime: Record<string, unknown> = baseAnime) {
 beforeEach(() => {
   mockReducedMotion.value = false
   apiGet.mockReset()
+  preload.mockClear()
 })
 
 describe('RandomTailCard (v4 B-1 deck)', () => {
@@ -113,18 +121,47 @@ describe('RandomTailCard (v4 B-1 deck)', () => {
     ).toContain('line-clamp-3')
   })
 
-  it('reroll button calls the reroll endpoint with exclude= and swaps the anime', async () => {
+  it('reroll: shuffle loop plays while loading, poster preloads, then the anime swaps', async () => {
+    vi.useFakeTimers()
+    try {
+      apiGet.mockResolvedValueOnce({
+        data: {
+          type: 'random_tail',
+          data: { anime: { ...baseAnime, id: 'a-99', name: 'Mushishi', poster_url: '/m.jpg' } },
+        },
+      })
+      const wrapper = mountCard()
+      await wrapper.find('[data-testid="reroll-btn"]').trigger('click')
+      // While the fetch + preload are in flight, the deck shuffles and the
+      // OLD anime stays on screen (no half-loaded swap — 2026-06-11 fix).
+      expect(wrapper.find('[data-testid="deck"]').classes()).toContain('shuffling')
+      expect(wrapper.text()).toContain('Neon Genesis Evangelion')
+      await flushPromises() // api + preload settle
+      await vi.advanceTimersByTimeAsync(700) // MIN_SHUFFLE_MS floor elapses
+      await flushPromises()
+      expect(apiGet).toHaveBeenCalledWith('/home/spotlight/reroll?exclude=a-30')
+      // Both image-proxy buckets were warmed before the swap.
+      expect(preload).toHaveBeenCalledTimes(2)
+      expect(wrapper.text()).toContain('Mushishi')
+      expect(wrapper.find('[data-testid="deck"]').classes()).not.toContain('shuffling')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reroll under reduced motion: no shuffle class, swap still happens', async () => {
+    mockReducedMotion.value = true
     apiGet.mockResolvedValueOnce({
       data: {
         type: 'random_tail',
-        data: { anime: { ...baseAnime, id: 'a-99', name: 'Mushishi' } },
+        data: { anime: { ...baseAnime, id: 'a-77', name: 'Monster' } },
       },
     })
     const wrapper = mountCard()
     await wrapper.find('[data-testid="reroll-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="deck"]').classes()).not.toContain('shuffling')
     await flushPromises()
-    expect(apiGet).toHaveBeenCalledWith('/home/spotlight/reroll?exclude=a-30')
-    expect(wrapper.text()).toContain('Mushishi')
+    expect(wrapper.text()).toContain('Monster')
   })
 
   it('reroll failure keeps the current anime (console.warn path)', async () => {

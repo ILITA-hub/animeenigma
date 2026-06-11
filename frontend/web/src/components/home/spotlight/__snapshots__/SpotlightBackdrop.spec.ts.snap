@@ -23,11 +23,19 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=cyan 1`] = `
     fall back to the gradient-mesh of the same accent so the card never
     renders against a fully transparent background.
   -->
-<div class="absolute inset-0 overflow-hidden pointer-events-none">
-  <div aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(0,212,255,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(0,184,230,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+<div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
+         URL changes in place (RandomTail reroll, 2026-06-11): old blur
+         fades out while the new (preloaded by the card) fades in — no
+         re-fetch flash. The 0.4 opacity lives on the wrapper so the
+         transition classes can animate it (an inline opacity on the <img>
+         would beat the enter/leave classes). -->
+  <transition-stub data-v-92a4d159="" name="backdrop-x" appear="false" persisted="false" css="true">
+    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(0,212,255,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(0,184,230,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+  </transition-stub>
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->
-  <div aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
+  <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
 </div>"
 `;
 
@@ -54,11 +62,19 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=pink 1`] = `
     fall back to the gradient-mesh of the same accent so the card never
     renders against a fully transparent background.
   -->
-<div class="absolute inset-0 overflow-hidden pointer-events-none">
-  <div aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(255,77,141,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(255,45,124,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+<div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
+         URL changes in place (RandomTail reroll, 2026-06-11): old blur
+         fades out while the new (preloaded by the card) fades in — no
+         re-fetch flash. The 0.4 opacity lives on the wrapper so the
+         transition classes can animate it (an inline opacity on the <img>
+         would beat the enter/leave classes). -->
+  <transition-stub data-v-92a4d159="" name="backdrop-x" appear="false" persisted="false" css="true">
+    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(255,77,141,0.25),transparent_55%),radial-gradient(at_75%_70%,rgba(255,45,124,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+  </transition-stub>
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->
-  <div aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
+  <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
 </div>"
 `;
 
@@ -85,11 +101,19 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=violet 1`] = `
     fall back to the gradient-mesh of the same accent so the card never
     renders against a fully transparent background.
   -->
-<div class="absolute inset-0 overflow-hidden pointer-events-none">
-  <div aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(167,139,250,0.28),transparent_55%),radial-gradient(at_75%_70%,rgba(139,92,246,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+<div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
+         URL changes in place (RandomTail reroll, 2026-06-11): old blur
+         fades out while the new (preloaded by the card) fades in — no
+         re-fetch flash. The 0.4 opacity lives on the wrapper so the
+         transition classes can animate it (an inline opacity on the <img>
+         would beat the enter/leave classes). -->
+  <transition-stub data-v-92a4d159="" name="backdrop-x" appear="false" persisted="false" css="true">
+    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(at_25%_30%,rgba(167,139,250,0.28),transparent_55%),radial-gradient(at_75%_70%,rgba(139,92,246,0.18),transparent_60%)]" data-testid="spotlight-backdrop-mesh"></div>
+  </transition-stub>
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->
-  <div aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
+  <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
 </div>"
 `;
 
@@ -116,9 +140,18 @@ exports[`SpotlightBackdrop > poster-blur snapshot with mock URL 1`] = `
     fall back to the gradient-mesh of the same accent so the card never
     renders against a fully transparent background.
   -->
-<div class="absolute inset-0 overflow-hidden pointer-events-none"><img src="/api/streaming/image-proxy?url=https%3A%2F%2Fshikimori.one%2Fposter.jpg&amp;w=128" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover scale-110" style="filter: blur(40px) saturate(1.2); opacity: 0.4;">
+<div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
+         URL changes in place (RandomTail reroll, 2026-06-11): old blur
+         fades out while the new (preloaded by the card) fades in — no
+         re-fetch flash. The 0.4 opacity lives on the wrapper so the
+         transition classes can animate it (an inline opacity on the <img>
+         would beat the enter/leave classes). -->
+  <transition-stub data-v-92a4d159="" name="backdrop-x" appear="false" persisted="false" css="true">
+    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 opacity-40"><img data-v-92a4d159="" src="/api/streaming/image-proxy?url=https%3A%2F%2Fshikimori.one%2Fposter.jpg&amp;w=128" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover scale-110" style="filter: blur(40px) saturate(1.2);"></div>
+  </transition-stub>
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->
-  <div aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
+  <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-transparent via-black/30 to-black/60"></div>
 </div>"
 `;
