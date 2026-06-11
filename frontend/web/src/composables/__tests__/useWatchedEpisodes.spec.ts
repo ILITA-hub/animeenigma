@@ -10,9 +10,16 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ get isAuthenticated() { return isAuthenticated } }),
 }))
 
+// Viewer-context aggregate (page-fetch optimization 2026-06-11): the first
+// refresh per anime consumes this when present instead of fetching.
+let viewerCtx: { watchlist_entry: { episodes?: number } | null } | null = null
+vi.mock('@/stores/viewerContext', () => ({
+  useViewerContextStore: () => ({ forAnime: () => viewerCtx }),
+}))
+
 import { useWatchedEpisodes } from '../useWatchedEpisodes'
 
-beforeEach(() => { getWatchlistEntry.mockReset(); isAuthenticated = true })
+beforeEach(() => { getWatchlistEntry.mockReset(); isAuthenticated = true; viewerCtx = null })
 
 describe('useWatchedEpisodes', () => {
   it('reads entry.episodes (wrapped data.data) when authenticated', async () => {
@@ -43,5 +50,24 @@ describe('useWatchedEpisodes', () => {
     const { watchedUpTo, refresh } = useWatchedEpisodes('a1')
     await refresh()
     expect(watchedUpTo.value).toBe(0)
+  })
+
+  it('consumes the viewer-context aggregate on first refresh (no API call)', async () => {
+    viewerCtx = { watchlist_entry: { episodes: 5 } }
+    const { watchedUpTo, refresh } = useWatchedEpisodes('a1')
+    await refresh()
+    expect(watchedUpTo.value).toBe(5)
+    expect(getWatchlistEntry).not.toHaveBeenCalled()
+  })
+
+  it('goes to the network on the SECOND refresh (post-mutation freshness)', async () => {
+    viewerCtx = { watchlist_entry: { episodes: 5 } }
+    getWatchlistEntry.mockResolvedValue({ data: { data: { episodes: 6 } } })
+    const { watchedUpTo, refresh } = useWatchedEpisodes('a1')
+    await refresh()
+    expect(getWatchlistEntry).not.toHaveBeenCalled()
+    await refresh()
+    expect(getWatchlistEntry).toHaveBeenCalledWith('a1')
+    expect(watchedUpTo.value).toBe(6)
   })
 })

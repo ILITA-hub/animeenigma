@@ -288,6 +288,7 @@ import { CircleAlert, LayoutGrid, Play, X } from 'lucide-vue-next'
 
 import { userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { useViewerContextStore } from '@/stores/viewerContext'
 import { useWatchedEpisodes } from '@/composables/useWatchedEpisodes'
 import SubtitleOverlay from '@/components/player/SubtitleOverlay.vue'
 import ResumePill from '@/components/player/ResumePill.vue'
@@ -409,29 +410,48 @@ const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.
 
 const epProgress = ref<Record<number, { pct: number; sec: number; completed: boolean }>>({})
 
+type ProgressRow = {
+  episode_number?: number
+  progress?: number
+  duration?: number
+  completed?: boolean
+}
+
+function progressRowsToMap(rows: ProgressRow[]) {
+  const map: Record<number, { pct: number; sec: number; completed: boolean }> = {}
+  for (const r of rows) {
+    if (!r.episode_number) continue
+    map[r.episode_number] = {
+      pct: r.duration ? Math.min(1, (r.progress ?? 0) / r.duration) : 0,
+      sec: r.progress ?? 0,
+      completed: !!r.completed,
+    }
+  }
+  return map
+}
+
+// Page-fetch optimization (2026-06-11): the FIRST load per anime consumes the
+// viewer-context aggregate Anime.vue already fetched, killing the duplicate
+// GET /users/progress/{id} on mount. Post-mutation reloads go to the network.
+let progressPrefetchConsumedFor: string | null = null
+
 async function loadEpisodeProgress() {
   if (!auth.isAuthenticated) {
     epProgress.value = {}
     return
   }
+  if (progressPrefetchConsumedFor !== props.animeId) {
+    progressPrefetchConsumedFor = props.animeId
+    const ctx = useViewerContextStore().forAnime(props.animeId)
+    if (ctx) {
+      epProgress.value = progressRowsToMap(ctx.progress ?? [])
+      return
+    }
+  }
   try {
     const res = await userApi.getProgress(props.animeId)
-    const rows = (res.data?.data ?? res.data ?? []) as Array<{
-      episode_number?: number
-      progress?: number
-      duration?: number
-      completed?: boolean
-    }>
-    const map: Record<number, { pct: number; sec: number; completed: boolean }> = {}
-    for (const r of rows) {
-      if (!r.episode_number) continue
-      map[r.episode_number] = {
-        pct: r.duration ? Math.min(1, (r.progress ?? 0) / r.duration) : 0,
-        sec: r.progress ?? 0,
-        completed: !!r.completed,
-      }
-    }
-    epProgress.value = map
+    const rows = (res.data?.data ?? res.data ?? []) as ProgressRow[]
+    epProgress.value = progressRowsToMap(rows)
   } catch {
     // 404 / anonymous / network — no user data, panel renders plain numbers
     epProgress.value = {}

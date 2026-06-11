@@ -69,6 +69,7 @@ func newPlayerRouter(t *testing.T, internalListHandler *handler.InternalListHand
 		nil, // overrideHandler
 		nil, // adminReportsHandler
 		internalListHandler,
+		nil, // viewerContextHandler
 		zeroJWTConfig(),
 		log,
 		zeroMetricsCollector(t),

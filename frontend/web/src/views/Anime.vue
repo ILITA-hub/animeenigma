@@ -651,7 +651,7 @@
 
       <!-- Reviews + Comments Section (SOCIAL-06: two-tab UGC strip) -->
       <!-- Phase 11 / UX-22 — section-comments anchor for AnimeQuickNav. -->
-      <section id="section-comments" class="mt-8 non-player-content">
+      <section id="section-comments" ref="ugcSectionEl" class="mt-8 non-player-content">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold text-white">
             <span class="flex items-center gap-2">
@@ -971,6 +971,10 @@
       </section>
 
       <!-- Related Anime -->
+      <!-- Lazy-load sentinel (page-fetch optimization 2026-06-11): the related
+           rail itself is v-if'd on data, so this always-rendered marker is what
+           the IntersectionObserver watches to trigger the Shikimori fetch. -->
+      <div ref="relatedSentinelEl" aria-hidden="true" />
       <!-- Phase 11 / UX-22 — section-similar anchor for AnimeQuickNav. -->
       <section
         v-if="relatedAnime.length > 0"
@@ -1101,6 +1105,7 @@ import UnifiedPlayerSkeleton from '@/components/player/unified/UnifiedPlayerSkel
 import { animeApi, userApi, reviewApi, adminApi, commentApi } from '@/api/client'
 import Tabs from '@/components/ui/Tabs.vue'
 import { useWatchlistStore } from '@/stores/watchlist'
+import { useViewerContextStore, type ViewerContextData } from '@/stores/viewerContext'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { parseDescription } from '@/utils/description-parser'
@@ -1180,6 +1185,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const watchlistStore = useWatchlistStore()
+const viewerCtxStore = useViewerContextStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 const { anime, loading, error, fetchAnime } = useAnime()
@@ -1498,8 +1504,8 @@ function onUserPickedProvider(newProvider: 'kodik' | 'kodik-adfree' | 'animelib'
   videoProvider.value = newProvider
 }
 
-const initPreferences = (animeId: string) => {
-  const pref = useWatchPreferences(animeId)
+const initPreferences = (animeId: string, tier1Combo?: ViewerContextData['combo']) => {
+  const pref = useWatchPreferences(animeId, { tier1Combo })
   preferenceState.value = {
     resolvedCombo: pref.resolvedCombo.value,
     resolve: async (available: WatchCombo[]) => {
@@ -1852,9 +1858,102 @@ const saveShikimoriId = async () => {
   }
 }
 
+// applyViewerContext — populate the page's social/user state from the
+// aggregate viewer-context payload (page-fetch optimization 2026-06-11).
+// Replaces the separate rating / watchers-count / my-review / watchlist-status
+// fetches on page load and after review/list mutations.
+const applyViewerContext = (ctx: ViewerContextData) => {
+  watchersCount.value = typeof ctx.watchers_count === 'number' && ctx.watchers_count >= 0
+    ? ctx.watchers_count
+    : 0
+  siteRating.value = (ctx.rating as AnimeRating | null) ?? null
+  if (authStore.isAuthenticated) {
+    const review = ctx.my_review as Review | null
+    if (review && review.id) {
+      myReview.value = review
+      reviewForm.score = review.score
+      reviewForm.text = review.review_text || ''
+    } else {
+      myReview.value = null
+    }
+    currentListStatus.value = ctx.watchlist_entry?.status ?? null
+  }
+}
+
+// fetchReviewsList — the reviews FEED only. Rating / my-review come from the
+// viewer-context aggregate; this stays a separate (heavier) request, fetched
+// lazily when the UGC section scrolls near the viewport.
+const reviewsFetched = ref(false)
+const fetchReviewsList = async () => {
+  if (!anime.value) return
+  reviewsFetched.value = true
+  try {
+    const reviewsResponse = await reviewApi.getAnimeReviews(anime.value.id)
+    reviews.value = reviewsResponse.data?.data || reviewsResponse.data || []
+  } catch (err) {
+    console.error('Failed to fetch reviews:', err)
+  }
+}
+
+// ── Lazy below-the-fold loaders (page-fetch optimization 2026-06-11) ─────────
+// The reviews feed and the related rail render far below the player; fetching
+// them on mount put two requests (plus a ~500ms Shikimori upstream call) on
+// the critical path. One IntersectionObserver with a generous rootMargin
+// fetches each once as the user approaches.
+const ugcSectionEl = ref<HTMLElement | null>(null)
+const relatedSentinelEl = ref<HTMLElement | null>(null)
+const relatedFetched = ref(false)
+let lazySectionObserver: IntersectionObserver | null = null
+
+function disarmLazySections() {
+  lazySectionObserver?.disconnect()
+  lazySectionObserver = null
+}
+
+function armLazySections() {
+  disarmLazySections()
+  if (typeof IntersectionObserver === 'undefined') {
+    // jsdom / ancient browser — keep the eager behavior.
+    if (!reviewsFetched.value) void fetchReviewsList()
+    if (!relatedFetched.value) {
+      relatedFetched.value = true
+      void fetchRelatedAnime()
+    }
+    return
+  }
+  lazySectionObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        if (entry.target === ugcSectionEl.value) {
+          if (!reviewsFetched.value) void fetchReviewsList()
+          lazySectionObserver?.unobserve(entry.target)
+        } else if (entry.target === relatedSentinelEl.value) {
+          if (!relatedFetched.value) {
+            relatedFetched.value = true
+            void fetchRelatedAnime()
+          }
+          lazySectionObserver?.unobserve(entry.target)
+        }
+      }
+    },
+    // Prefetch well before the section enters the viewport so the content is
+    // there by the time the user arrives (and the QuickNav anchor exists).
+    { rootMargin: '1200px 0px' },
+  )
+  if (ugcSectionEl.value) lazySectionObserver.observe(ugcSectionEl.value)
+  if (relatedSentinelEl.value) lazySectionObserver.observe(relatedSentinelEl.value)
+}
+
+onBeforeUnmount(disarmLazySections)
+
+// Legacy full path — used only when the viewer-context aggregate failed
+// (older backend / transient error): falls back to the historical
+// per-endpoint fetches.
 const fetchReviews = async () => {
   if (!anime.value) return
 
+  reviewsFetched.value = true
   try {
     // Fetch reviews
     const reviewsResponse = await reviewApi.getAnimeReviews(anime.value.id)
@@ -1883,6 +1982,17 @@ const fetchReviews = async () => {
   }
 }
 
+// refreshSocial — post-mutation refresh: one forced viewer-context reload
+// (rating + my-review + watchlist status + watchers) plus the reviews feed.
+const refreshSocial = async () => {
+  if (!anime.value) return
+  const [ctx] = await Promise.all([
+    viewerCtxStore.load(anime.value.id, true),
+    fetchReviewsList(),
+  ])
+  if (ctx) applyViewerContext(ctx)
+}
+
 const submitReview = async () => {
   if (!anime.value || reviewForm.score === 0) return
 
@@ -1893,7 +2003,7 @@ const submitReview = async () => {
       reviewForm.score,
       reviewForm.text
     )
-    await fetchReviews()
+    await refreshSocial()
   } catch (err) {
     console.error('Failed to submit review:', err)
   } finally {
@@ -1909,7 +2019,7 @@ const deleteMyReview = async () => {
     myReview.value = null
     reviewForm.score = 0
     reviewForm.text = ''
-    await fetchReviews()
+    await refreshSocial()
   } catch (err) {
     console.error('Failed to delete review:', err)
   }
@@ -2241,6 +2351,10 @@ const loadAnimeData = async (animeId: string) => {
   myReview.value = null
   siteRating.value = null
   watchersCount.value = 0
+  relatedAnime.value = []
+  reviewsFetched.value = false
+  relatedFetched.value = false
+  disarmLazySections()
   // Comments — reset cache for new anime so a stale list doesn't leak across
   // navigations. Per-anime fetch is gated on tab activation (or deep-link
   // ugc=comments path below).
@@ -2302,19 +2416,40 @@ const loadAnimeData = async (animeId: string) => {
     }
   }
 
-  // Load last-watched episode from localStorage (anon path) and from server
-  // watch_progress in parallel (auth path).
+  // Load last-watched episode from localStorage (anon path), then pull the
+  // viewer-context aggregate — ONE request carrying rating, watchers-count,
+  // watch progress, watchlist entry, my review and the saved combo (page-fetch
+  // optimization 2026-06-11). The legacy per-endpoint fetches remain as the
+  // fallback when the aggregate is unavailable.
+  let viewerCtx: ViewerContextData | null = null
   if (fetched) {
     loadLastEpisode(fetched.id)
-    void resume.init()
+    viewerCtx = await viewerCtxStore.load(fetched.id, false, fetched.malId || undefined)
+    if (gen !== loadGeneration) return
+    if (viewerCtx) {
+      applyViewerContext(viewerCtx)
+      void resume.init(viewerCtx.progress ?? [])
+      // Legacy MAL-import entry surfaced under anime_id="mal_{malId}" —
+      // auto-migrate it to the real UUID (same behavior the statuses-scan
+      // path had), fire-and-forget.
+      const entryAnimeId = viewerCtx.watchlist_entry?.anime_id
+      if (authStore.isAuthenticated && entryAnimeId && entryAnimeId.startsWith('mal_')) {
+        userApi.migrateListEntry(entryAnimeId, fetched.id).catch((e) => {
+          console.warn('Auto-migration of MAL entry failed:', e)
+        })
+      }
+    } else {
+      void resume.init()
+    }
   }
 
   // Initialize watch preferences for this anime — anon users included so the
   // combo_resolve_total denominator increments alongside combo_override_total
   // (CONTEXT D-12: per-anon-user override rate). The composable + axios
   // interceptor handle the X-Anon-ID header for unauthenticated callers.
+  // The viewer-context Tier-1 combo lets resolve() short-circuit client-side.
   if (fetched) {
-    initPreferences(fetched.id)
+    initPreferences(fetched.id, viewerCtx?.combo)
   }
 
   // Check for pending MAL bind from Browse page
@@ -2331,13 +2466,21 @@ const loadAnimeData = async (animeId: string) => {
     }
   }
 
-  await fetchWatchlistStatus()
-  if (gen !== loadGeneration) return
+  // Viewer-context already delivered watchlist status / rating / my-review /
+  // watchers-count; the legacy fetches below only run as fallback. In the
+  // fallback the rating rides on fetchReviews, so it stays eager there; in
+  // the normal path the reviews feed is lazy (IntersectionObserver below).
+  if (!viewerCtx) {
+    await fetchWatchlistStatus()
+    if (gen !== loadGeneration) return
+  }
   await fetchHiddenStatus()
   if (gen !== loadGeneration) return
-  await fetchReviews()
-  // Phase 14 / UX-28 — non-blocking; failure leaves the badge hidden.
-  void fetchWatchersCount()
+  if (!viewerCtx) {
+    await fetchReviews()
+    // Phase 14 / UX-28 — non-blocking; failure leaves the badge hidden.
+    void fetchWatchersCount()
+  }
 
   // Deep-link path: if the URL already has ?ugc=comments on first paint,
   // kick off the initial comments fetch (the watch(ugcTab) lazy-fetch only
@@ -2346,8 +2489,12 @@ const loadAnimeData = async (animeId: string) => {
     void fetchComments()
   }
 
-  // Fetch related anime (non-blocking)
-  fetchRelatedAnime()
+  // Reviews feed + related rail load lazily as the user scrolls toward them
+  // (page-fetch optimization 2026-06-11). Arm after the DOM has rendered the
+  // observed elements (they're v-if'd on `anime`).
+  await nextTick()
+  if (gen !== loadGeneration) return
+  armLazySections()
 }
 
 const { ratings: relatedSiteRatings, fetchRatings: fetchRelatedSiteRatings } = useSiteRatings()

@@ -31,6 +31,15 @@ import type { UserNotification, NewEpisodePayload } from '@/types/notification'
 
 const POLL_INTERVAL_MS = 60_000
 
+/**
+ * Minimum gap between "immediate" fetches (start(), tab-visible). Rapid
+ * visibility flaps and auth-watcher restarts used to fire several unread
+ * fetches within seconds of page load; within this window the cached list is
+ * plenty fresh. The 60s ticker and explicit force-refreshes (bell open)
+ * bypass it. Page-fetch optimization 2026-06-11.
+ */
+const MIN_FETCH_GAP_MS = 15_000
+
 /** localStorage key for the persisted toast-shown id set. */
 const SHOWN_TOAST_STORAGE_KEY = 'notif:shownToasts'
 
@@ -190,9 +199,12 @@ export const useNotificationsStore = defineStore('notifications', () => {
    * (e.g. visibility-change racing the interval tick) wait on the
    * already-running promise rather than firing duplicate requests.
    */
-  async function fetchUnread(): Promise<void> {
+  async function fetchUnread(opts?: { ifStale?: boolean }): Promise<void> {
     if (!isFeatureEnabled()) return
     if (inFlight) return inFlight
+    // Freshness guard for the "immediate" callers (start, tab-visible):
+    // a fetch that landed within the gap is recent enough.
+    if (opts?.ifStale && Date.now() - lastFetchAt.value < MIN_FETCH_GAP_MS) return
 
     inFlight = (async () => {
       try {
@@ -352,10 +364,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
         intervalId = null
       }
     } else if (polling.value && intervalId === null) {
-      // Tab visible — immediate refresh, then resume cadence. The
+      // Tab visible — refresh if stale, then resume cadence. The
       // single-flight guard inside fetchUnread() prevents the immediate
-      // refresh from racing the just-restarted interval.
-      void fetchUnread()
+      // refresh from racing the just-restarted interval; the ifStale guard
+      // keeps rapid tab flaps from bursting requests.
+      void fetchUnread({ ifStale: true })
       intervalId = setInterval(() => {
         void fetchUnread()
       }, POLL_INTERVAL_MS)
@@ -392,8 +405,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
       authListenerAttached = true
     }
 
-    // Immediate fetch — don't wait the first 60s.
-    void fetchUnread()
+    // Immediate fetch — don't wait the first 60s. ifStale: a stop()/start()
+    // flap (auth watcher re-firing on boot) must not duplicate the fetch.
+    void fetchUnread({ ifStale: true })
     if (typeof document === 'undefined' || !document.hidden) {
       intervalId = setInterval(() => {
         void fetchUnread()

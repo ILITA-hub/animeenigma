@@ -246,6 +246,13 @@ func NewRouterWithCleanup(
 		// route this path to the catalog service.
 		r.Get("/anime/{animeId}/watchers-count", proxyHandler.ProxyToPlayer)
 
+		// Aggregate anime-page context (page-fetch optimization 2026-06-11).
+		// Optional-auth: the proxy forwards Authorization as-is and the player
+		// decodes it downstream (OptionalAuthMiddleware), so anonymous and
+		// authenticated callers both pass through without a gateway JWT gate.
+		// Must be registered BEFORE the /anime/* → catalog catch-all below.
+		r.Get("/anime/{animeId}/viewer-context", proxyHandler.ProxyToPlayer)
+
 		// Player service routes - comments (must be before /anime/* catch-all)
 		// GET is public; mutations (POST/PATCH/DELETE) gate at the gateway
 		// for defense-in-depth — REVIEW.md CR-04. The player still runs

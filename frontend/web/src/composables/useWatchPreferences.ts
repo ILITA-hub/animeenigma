@@ -69,7 +69,49 @@ export function pickAnonLockMatch(
   return { ...winner, tier: 'user_global', tier_number: 2 } as ResolvedCombo
 }
 
-export function useWatchPreferences(animeId: string) {
+// pickTier1Match — authenticated short-circuit for the viewer-context-supplied
+// Tier 1 (per-anime saved) combo. Conservative: only matches when an available
+// combo agrees on player + language + watch_type AND the translation (id or
+// title). Anything fuzzier falls through to the server resolver, which owns
+// the in-lock popularity logic. Page-fetch optimization 2026-06-11.
+// Loose shape for the saved combo: the viewer-context payload types these as
+// plain strings (the backend row), not the frontend's narrowed unions.
+export interface SavedComboLike {
+  player: string
+  language: string
+  watch_type: string
+  translation_id?: string
+  translation_title?: string
+}
+
+export function pickTier1Match(
+  saved: SavedComboLike | null | undefined,
+  available: WatchCombo[],
+): ResolvedCombo | null {
+  if (!saved || available.length === 0) return null
+  const winner = available.find(
+    a =>
+      a.player === saved.player &&
+      a.language === saved.language &&
+      a.watch_type === saved.watch_type &&
+      ((saved.translation_id && a.translation_id === saved.translation_id) ||
+        (saved.translation_title && a.translation_title === saved.translation_title)),
+  )
+  if (!winner) return null
+  return { ...winner, tier: 'per_anime', tier_number: 1 } as ResolvedCombo
+}
+
+export interface UseWatchPreferencesOptions {
+  /**
+   * Tier 1 (per-anime saved) combo pre-fetched via the viewer-context
+   * aggregate. When it exactly matches an available combo, resolve()
+   * short-circuits client-side and only fires the backend resolve as a
+   * fire-and-forget metric event (mirrors the anon localStorage shortcut).
+   */
+  tier1Combo?: SavedComboLike | null
+}
+
+export function useWatchPreferences(animeId: string, options?: UseWatchPreferencesOptions) {
   const auth = useAuthStore()
   const resolvedCombo = ref<ResolvedCombo | null>(null)
   const isLoading = ref(false)
@@ -138,6 +180,24 @@ export function useWatchPreferences(animeId: string) {
         }))
         // We still inform the backend so combo_resolve_total counts this anon
         // resolution — fire-and-forget, errors swallowed.
+        userApi.resolvePreference(animeId, available).catch(() => undefined)
+        return
+      }
+    }
+
+    // Authenticated shortcut (page-fetch optimization 2026-06-11): the
+    // viewer-context aggregate already delivered the user's Tier 1 saved
+    // combo. An exact availability match resolves instantly client-side;
+    // the backend resolve still fires fire-and-forget so combo_resolve_total
+    // keeps counting.
+    if (auth.isAuthenticated) {
+      const tier1Pick = pickTier1Match(options?.tier1Combo, available)
+      if (tier1Pick) {
+        resolvedCombo.value = tier1Pick
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data: tier1Pick,
+          timestamp: Date.now(),
+        }))
         userApi.resolvePreference(animeId, available).catch(() => undefined)
         return
       }

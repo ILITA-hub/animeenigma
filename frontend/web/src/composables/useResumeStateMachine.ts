@@ -78,8 +78,12 @@ export interface ResumeStateMachine {
   startEpisode: ComputedRef<number>
   /** Episode the user just finished — drives the breadcrumb. 0 when N/A. */
   finishedEpisode: ComputedRef<number>
-  /** init() — fetch watch_progress and populate lastWatched. */
-  init: () => Promise<void>
+  /**
+   * init() — populate lastWatched from watch_progress. When the caller
+   * already holds the rows (viewer-context aggregate), pass them to skip
+   * the network fetch.
+   */
+  init: (prefetched?: Array<{ episode_number?: number; completed?: boolean }>) => Promise<void>
   /** Reset to first-time state (used when navigating between anime). */
   reset: () => void
 }
@@ -121,10 +125,18 @@ export function useResumeStateMachine(inputs: ResumeStateInputs): ResumeStateMac
     onScopeDispose(() => window.clearInterval(timer))
   }
 
-  async function init() {
+  async function init(prefetched?: Array<{ episode_number?: number; completed?: boolean }>) {
     loaded.value = false
     if (!inputs.isAuthenticated.value) {
       rawLastWatched.value = 0
+      loaded.value = true
+      return
+    }
+    // Page-fetch optimization (2026-06-11): the anime page's viewer-context
+    // aggregate already carries the progress rows — consume them instead of
+    // re-fetching /users/progress/{animeId}.
+    if (prefetched) {
+      rawLastWatched.value = deriveLastWatched(prefetched)
       loaded.value = true
       return
     }

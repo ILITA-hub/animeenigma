@@ -379,11 +379,17 @@ func main() {
 	// no auth middleware (docker-network trust boundary).
 	internalListHandler := handler.NewInternalListHandler(listService, log)
 
+	// Aggregate anime-page context endpoint (page-fetch optimization
+	// 2026-06-11) — one optional-auth round-trip replacing the page's
+	// separate rating / watchers-count / progress / watchlist / my-review /
+	// preference fetches.
+	viewerContextHandler := handler.NewViewerContextHandler(progressService, listService, reviewService, prefService, log)
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("player")
 
 	// Initialize router
-	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, adminReportsHandler, internalListHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(progressHandler, listHandler, historyHandler, reviewHandler, commentHandler, malImportHandler, malExportHandler, shikimoriImportHandler, reportHandler, syncHandler, activityHandler, exportHandler, prefHandler, overrideHandler, adminReportsHandler, internalListHandler, viewerContextHandler, cfg.JWT, log, metricsCollector)
 
 	// Create HTTP server
 	srv := &http.Server{

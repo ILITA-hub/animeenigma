@@ -29,6 +29,7 @@ func NewRouter(
 	overrideHandler *handler.OverrideHandler,
 	adminReportsHandler *handler.AdminReportsHandler, // admin feedback browser
 	internalListHandler *handler.InternalListHandler, // hero-spotlight v1.0 Phase 3
+	viewerContextHandler *handler.ViewerContextHandler, // anime-page aggregate (page-fetch optimization 2026-06-11)
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -201,6 +202,13 @@ func NewRouter(
 			r.Group(func(r chi.Router) {
 				r.Use(OptionalAuthMiddleware(jwtConfig))
 				r.Get("/reviews", reviewHandler.GetAnimeReviews)
+				// Aggregate anime-page context (page-fetch optimization
+				// 2026-06-11): rating + watchers-count + the viewer's
+				// progress / watchlist entry / review / saved combo in one
+				// round-trip. Anonymous callers get the public subset.
+				if viewerContextHandler != nil {
+					r.Get("/viewer-context", viewerContextHandler.GetViewerContext)
+				}
 			})
 			// Public routes
 			r.Get("/rating", reviewHandler.GetAnimeRating)

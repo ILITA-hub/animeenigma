@@ -55,16 +55,26 @@ function relevanceReason(def: Pick<ProviderDef, 'content'>, f: RowFilter): strin
   return `No ${f.audio}/${f.lang} stream from this source`
 }
 
-/** Live composable: polls /scraper/health, exposes rows derived from registry + filter. */
-export function useProviderHealth(filter: Ref<RowFilter>, intervalMs = 30_000) {
-  const health = ref<ScraperProviderHealth[]>([])
-  const rows = ref<ProviderRow[]>([])
+// ─── Shared singleton poller (page-fetch optimization 2026-06-11) ────────────
+// The poll loop used to live per-composable-instance, so every mounted player
+// (and every remount across tab switches) spawned its OWN 30s interval — the
+// anime page fired /scraper/health 5+ times on load. The health state and the
+// interval are now module-level: N subscribers share one loop, remounts within
+// MIN_POLL_GAP_MS reuse the last result, and the loop pauses while the tab is
+// hidden (immediate refresh on return when stale).
 
-  const recompute = () => {
-    rows.value = computeProviderRows(health.value, filter.value)
-  }
+const MIN_POLL_GAP_MS = 15_000
 
-  async function poll() {
+const sharedHealth = ref<ScraperProviderHealth[]>([])
+let sharedTimer: ReturnType<typeof setInterval> | null = null
+let sharedIntervalMs = 30_000
+let subscribers = 0
+let lastPollAt = 0
+let pollInFlight: Promise<void> | null = null
+
+function pollShared(): Promise<void> {
+  if (pollInFlight) return pollInFlight
+  pollInFlight = (async () => {
     try {
       const resp = await scraperApi.getHealth()
       // The scraper handler uses httputil.OK → { success, data: { providers, playable } }.
@@ -74,35 +84,80 @@ export function useProviderHealth(filter: Ref<RowFilter>, intervalMs = 30_000) {
         string,
         { enabled?: boolean; up?: boolean; reason?: string; description?: string }
       >
-      health.value = Object.entries(rawProviders).map(([name, v]) => ({
+      sharedHealth.value = Object.entries(rawProviders).map(([name, v]) => ({
         name,
         enabled: v.enabled ?? true,
         up: v.up ?? false,
         reason: v.reason,
         description: v.description,
       }))
+      lastPollAt = Date.now()
     } catch {
       // Fail soft: keep last known health; registry-static states still render.
+    } finally {
+      pollInFlight = null
     }
+  })()
+  return pollInFlight
+}
+
+function startSharedLoop() {
+  if (sharedTimer) return
+  // Skip the immediate poll when a fresh result already exists (player
+  // remounts on tab switches; no need to re-ask within the gap).
+  if (Date.now() - lastPollAt >= MIN_POLL_GAP_MS) void pollShared()
+  sharedTimer = setInterval(() => { void pollShared() }, sharedIntervalMs)
+}
+
+function stopSharedLoop() {
+  if (sharedTimer) {
+    clearInterval(sharedTimer)
+    sharedTimer = null
+  }
+}
+
+// Pause polling while the tab is hidden; refresh immediately on return when
+// the last result has gone stale. Registered once per module load.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      stopSharedLoop()
+    } else if (subscribers > 0) {
+      startSharedLoop()
+    }
+  })
+}
+
+/** Live composable: subscribes to the SHARED /scraper/health poll loop and
+ *  exposes rows derived from registry + live health + this instance's filter. */
+export function useProviderHealth(filter: Ref<RowFilter>, intervalMs = 30_000) {
+  const rows = ref<ProviderRow[]>([])
+  let subscribed = false
+
+  const recompute = () => {
+    rows.value = computeProviderRows(sharedHealth.value, filter.value)
+  }
+
+  // Re-derive rows immediately when the filter changes (e.g. audio/language
+  // toggle) or when any subscriber's poll lands fresh health data.
+  watch([filter, sharedHealth], recompute)
+
+  const start = () => {
+    if (subscribed) return // guard against double-start
+    subscribed = true
+    subscribers++
+    sharedIntervalMs = intervalMs
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') startSharedLoop()
     recompute()
   }
 
-  // Re-derive rows immediately when the filter changes (e.g. audio/language toggle),
-  // without waiting for the next poll cycle.
-  watch(filter, recompute)
-
-  let timer: ReturnType<typeof setInterval> | null = null
-
-  const start = () => {
-    if (timer) return // guard against double-start
-    void poll()
-    timer = setInterval(() => { void poll() }, intervalMs)
-  }
-
   const stop = () => {
-    if (timer) {
-      clearInterval(timer)
-      timer = null
+    if (!subscribed) return
+    subscribed = false
+    subscribers--
+    if (subscribers <= 0) {
+      subscribers = 0
+      stopSharedLoop()
     }
   }
 

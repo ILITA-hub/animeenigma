@@ -365,12 +365,19 @@ const gachaVisible = useGachaVisible()
 const gachaStore = useGachaStore()
 const gachaBalance = computed(() => gachaStore.balance)
 
-// Refresh wallet once on login (whenever isAuthenticated flips true and gacha is visible)
+// Wallet lifecycle (page-fetch optimization 2026-06-11): the persisted
+// balance renders instantly; the network fetch only fires when the cached
+// copy is stale. startBalanceWatch keeps the chip fresh via tab-return +
+// watch-credit events instead of per-page-load fetches. Logout clears the
+// persisted wallet so balances never leak across accounts.
 watch(
   () => authStore.isAuthenticated,
-  (authenticated) => {
+  (authenticated, was) => {
     if (authenticated && gachaVisible.value) {
-      gachaStore.refreshWallet()
+      void gachaStore.refreshWallet({ ifStale: true })
+      gachaStore.startBalanceWatch()
+    } else if (was && !authenticated) {
+      gachaStore.clearWallet()
     }
   },
   { immediate: true },

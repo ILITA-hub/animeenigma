@@ -386,6 +386,14 @@ export const animeApi = {
   // in their list with status='watching'. Public, no auth.
   getWatchersCount: (animeId: string) =>
     apiClient.get<{ count: number } | { data: { count: number } }>(`/anime/${animeId}/watchers-count`),
+  // Page-fetch optimization (2026-06-11) — aggregate anime-page context:
+  // rating + watchers-count + the viewer's progress / watchlist entry /
+  // review / saved combo in ONE optional-auth round-trip. Anonymous callers
+  // get the public subset (user-scoped fields null).
+  getViewerContext: (animeId: string, malId?: string | number) =>
+    apiClient.get(`/anime/${animeId}/viewer-context`, {
+      params: malId ? { mal_id: String(malId) } : undefined,
+    }),
   // Phase 17 (UX-33) — editorial collections.
   listCollections: (limit = 12) =>
     apiClient.get<Collection[] | { data: Collection[] }>('/collections', { params: { limit } }),
@@ -431,6 +439,16 @@ export const userApi = {
       episode,
       ...combo,
       ...(sessionId ? { session_id: sessionId } : {}),
+    }).then((res) => {
+      // Marking an episode watched triggers an async server-side «Энигмы»
+      // credit (player → gacha, fire-and-forget). Announce it so the gacha
+      // store can refresh the balance chip shortly after — the listener is
+      // GACHA_CREDIT_EVENT in stores/gacha.ts. Page-fetch optimization
+      // 2026-06-11.
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('gacha:maybe-credited'))
+      }
+      return res
     }),
   getWatchHistory: () => apiClient.get('/users/history'),
   updateProgress: (data: Record<string, unknown>) => apiClient.post('/users/progress', data),
