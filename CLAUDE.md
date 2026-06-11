@@ -198,7 +198,7 @@ Canonical reference: **`frontend/web/src/styles/DESIGN-SYSTEM.md`** (token tiers
 - Padding scale (card `p-4 md:p-6 lg:p-8`).
 - `cva` variants for component variation.
 
-**Verify visual changes in a real browser (DS-NF-06, standing rule).** jsdom/vitest CANNOT catch Tailwind-v4 cascade bugs (unlayered custom classes beat utilities). Any rendered change gets an in-browser smoke at desktop + mobile, not just a passing unit test.
+**In-browser (Chrome) smoke is OPT-IN, not mandatory (DS-NF-06, revised 2026-06-11 to save tokens).** Do a Chrome smoke only when the owner asks for one. For small fixes, skip it silently. For non-small visual changes, ASK the owner whether they want a Chrome checkup instead of running it automatically. Caveat that still stands: jsdom/vitest CANNOT catch Tailwind-v4 cascade bugs (unlayered custom classes beat utilities) — so when a change touches cascade-sensitive styling, say so when offering the checkup.
 
 ## Key Flows
 
