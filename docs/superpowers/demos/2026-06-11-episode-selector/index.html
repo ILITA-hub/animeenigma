@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Episode Selector Redesign — 4 Variants · AnimeEnigma</title>
+<style>
+  /* ── Tokens lifted from the live DS (main.css equivalents) ─────────────── */
+  :root {
+    --base: #08080f;
+    --surface: #11111c;
+    --border: rgba(255,255,255,0.10);
+    --ink: #f4f4fa;
+    --ink-2: rgba(244,244,250,0.72);
+    --muted: rgba(244,244,250,0.45);
+    --brand-cyan: #00d4ff;
+    --brand-violet: #7c5cff;
+    --pink: #ff3d8d;
+    --r-sm: 8px; --r-md: 12px; --r-xl: 16px;
+    --success: #2fd47a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--base); color: var(--ink);
+    font: 14px/1.55 "Inter", system-ui, sans-serif;
+    padding-bottom: 120px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 4px; }
+  h1 .neon { color: var(--brand-cyan); text-shadow: 0 0 18px rgba(0,212,255,.5); }
+  h2 { font-size: 18px; font-weight: 600; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  h2 .num { display:inline-flex; width:26px; height:26px; border-radius:8px; background:rgba(0,212,255,.12); color:var(--brand-cyan); align-items:center; justify-content:center; font-size:13px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+  section { margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--border); }
+  .sub { color: var(--muted); font-size: 13px; }
+  code { background: rgba(255,255,255,.07); padding: 1px 6px; border-radius: 6px; font-size: 12.5px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 18px; }
+
+  /* ── ① primitives, copied from EpisodesPanel.vue / UnifiedPlayer.vue ────── */
+  .ep-cell {
+    position: relative; height: 40px; width: 52px; border-radius: var(--r-sm); border: 0;
+    font-size: 13px; font-weight: 600; cursor: pointer; overflow: hidden;
+    background: rgba(255,255,255,0.07); color: var(--ink-2); transition: background .15s, color .15s;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ep-cell:hover { background: rgba(255,255,255,0.14); color: #fff; }
+  .ep-cell--sel { background: rgba(0,212,255,0.18); color: var(--brand-cyan); }
+  .ep-cell--watched { color: var(--muted); }
+  .ep-cell--filler { opacity: .5; }
+  .ep-check { position: absolute; top: 3px; right: 3px; color: var(--brand-cyan); opacity: .85; font-size: 9px; }
+  .ep-prog { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--brand-cyan); box-shadow: 0 0 4px var(--brand-cyan); }
+  .ep-mark {
+    background: rgba(255,255,255,0.07); color: var(--ink-2); width: 100%; height: 32px; border: 0;
+    border-radius: var(--r-sm); display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s;
+  }
+  .ep-mark:hover { background: rgba(255,255,255,0.14); color: white; }
+  .pl-resume {
+    display: inline-flex; align-items: stretch; border-radius: var(--r-md);
+    background: rgba(8,8,15,0.75); border: 1px solid rgba(255,255,255,0.35);
+    backdrop-filter: blur(8px); overflow: hidden;
+  }
+  .pl-resume-go { display:inline-flex; align-items:center; gap:8px; padding:11px 14px; border:0; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  .pl-resume-go:hover { background:#fff; color:var(--base); }
+  .pl-resume-x { display:inline-flex; align-items:center; padding:0 10px; border:0; border-left:1px solid rgba(255,255,255,.2); background:transparent; color:rgba(255,255,255,.6); cursor:pointer; }
+  .pl-icon {
+    width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: rgba(8,8,15,.55);
+    color: #fff; cursor: pointer; backdrop-filter: blur(6px); font-size: 17px;
+  }
+  .pl-icon:hover { background: rgba(255,255,255,.16); }
+  .prim-row { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-end; }
+  .prim { display: flex; flex-direction: column; gap: 8px; }
+  .prim .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+  /* ── decision history ── */
+  .hist { list-style: none; margin: 0; padding: 0; }
+  .hist li { padding: 9px 0 9px 22px; position: relative; border-bottom: 1px dashed rgba(255,255,255,.07); font-size: 13.5px; color: var(--ink-2); }
+  .hist li::before { content: ""; position: absolute; left: 4px; top: 16px; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-violet); box-shadow: 0 0 8px var(--brand-violet); }
+  .hist b { color: var(--ink); font-weight: 600; }
+  .hist .locked { color: var(--brand-cyan); font-weight: 600; }
+
+  /* ── player frame for variant demos ── */
+  .player {
+    position: relative; aspect-ratio: 16/9; border-radius: var(--r-xl); overflow: hidden;
+    border: 1px solid var(--border);
+    background:
+      radial-gradient(120% 90% at 70% 20%, rgba(124,92,255,.25), transparent 60%),
+      radial-gradient(100% 80% at 20% 85%, rgba(0,212,255,.18), transparent 55%),
+      linear-gradient(160deg, #14142a 0%, #0a0a14 70%);
+  }
+  .player::after { content:"видео"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,.13); font-size:34px; font-weight:600; letter-spacing:.2em; pointer-events:none; }
+  .p-top { position: absolute; top: 0; left: 0; right: 0; padding: 14px 16px 40px; display: flex; justify-content: space-between; align-items: flex-start; background: linear-gradient(rgba(8,8,15,.65), transparent); z-index: 3; }
+  .p-eyebrow { font-size: 11px; color: var(--ink-2); letter-spacing: .04em; }
+  .p-eyebrow .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--brand-cyan); box-shadow:0 0 8px var(--brand-cyan); margin: 0 4px; }
+  .p-name { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .p-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 12px 10px; background: linear-gradient(transparent, rgba(8,8,15,.78)); z-index: 4; }
+  .p-line { height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); position: relative; margin-bottom: 10px; }
+  .p-line .fill { position:absolute; left:0; top:0; bottom:0; width:34%; border-radius:2px; background:var(--brand-cyan); box-shadow:0 0 8px rgba(0,212,255,.7); }
+  .p-btns { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+  .p-btn { width: 34px; height: 34px; border-radius: 9px; border: 0; background: transparent; color: #fff; font-size: 15px; cursor: pointer; }
+  .p-btn:hover { background: rgba(255,255,255,.12); }
+  .timepill, .srcpill {
+    height: 32px; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px;
+    border-radius: 9px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+    color: #fff; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .eppill { cursor: pointer; }
+  .eppill:hover { background: rgba(255,255,255,.16); }
+  .eppill .chev { opacity: .6; font-size: 10px; }
+  .spacer { flex: 1; }
+
+  /* shared panel chrome */
+  .panel-head { display:flex; align-items:center; justify-content:space-between; padding: 12px 12px 8px; }
+  .panel-head .t { font-size: 13px; font-weight: 600; }
+  .panel-head .c { font-size: 11px; color: var(--muted); }
+
+  /* V1 floating grid panel */
+  .v1-panel {
+    position: absolute; top: 62px; right: 14px; width: 320px; z-index: 6;
+    background: rgba(10,10,18,.92); border: 1px solid var(--border); border-radius: var(--r-md);
+    backdrop-filter: blur(14px); box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  }
+  .v1-tools { display: flex; gap: 6px; padding: 0 12px 8px; }
+  .v1-jump { flex: 1; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--ink); padding: 0 10px; font-size: 12.5px; }
+  .v1-jump::placeholder { color: var(--muted); }
+  .v1-next { height: 30px; padding: 0 10px; border-radius: 8px; border: 0; background: rgba(0,212,255,.14); color: var(--brand-cyan); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .v1-ranges { display: flex; gap: 4px; padding: 0 12px 8px; flex-wrap: wrap; }
+  .v1-range { height: 24px; padding: 0 9px; border-radius: 7px; border: 0; background: rgba(255,255,255,.06); color: var(--ink-2); font-size: 11px; font-weight: 600; cursor: pointer; }
+  .v1-range.on { background: rgba(0,212,255,.16); color: var(--brand-cyan); }
+  .v1-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 4px 12px 10px; max-height: 230px; overflow: auto; }
+  .v1-grid .ep-cell { width: auto; }
+  .v1-foot { padding: 8px 12px 12px; border-top: 1px solid var(--border); }
+
+  /* V2 bottom sheet */
+  .v2-sheet {
+    position: absolute; left: 10px; right: 10px; bottom: 64px; z-index: 6;
+    background: rgba(10,10,18,.92); border: 1px solid var(--border); border-radius: var(--r-md);
+    backdrop-filter: blur(14px);
+  }
+  .v2-strip { display: flex; gap: 8px; overflow-x: auto; padding: 4px 12px 12px; scroll-snap-type: x mandatory; }
+  .v2-card {
+    scroll-snap-align: start; flex: 0 0 168px; border-radius: 10px; border: 1px solid var(--border);
+    background: rgba(255,255,255,.05); padding: 9px 11px; cursor: pointer; position: relative; overflow: hidden;
+  }
+  .v2-card:hover { background: rgba(255,255,255,.11); }
+  .v2-card.sel { border-color: rgba(0,212,255,.6); background: rgba(0,212,255,.10); }
+  .v2-card .n { font-size: 15px; font-weight: 600; color: var(--ink); display: flex; justify-content: space-between; }
+  .v2-card.sel .n { color: var(--brand-cyan); }
+  .v2-card .t { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .v2-card .ep-prog { height: 2px; }
+  .v2-card .wch { color: var(--brand-cyan); font-size: 10px; }
+
+  /* V3 side drawer */
+  .v3-drawer {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 300px; z-index: 6;
+    background: rgba(10,10,18,.94); border-left: 1px solid var(--border); backdrop-filter: blur(16px);
+    display: flex; flex-direction: column;
+  }
+  .v3-list { overflow: auto; flex: 1; }
+  .v3-row { display: flex; align-items: center; gap: 11px; padding: 9px 14px; cursor: pointer; position: relative; }
+  .v3-row:hover { background: rgba(255,255,255,.06); }
+  .v3-row.sel { background: rgba(0,212,255,.10); box-shadow: inset 2px 0 0 var(--brand-cyan); }
+  .v3-num { width: 30px; font-size: 15px; font-weight: 600; color: var(--ink-2); text-align: center; flex-shrink: 0; }
+  .v3-row.sel .v3-num { color: var(--brand-cyan); }
+  .v3-meta { flex: 1; min-width: 0; }
+  .v3-title { font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v3-sub { font-size: 11px; color: var(--muted); display: flex; gap: 8px; align-items: center; margin-top: 1px; }
+  .v3-bar { height: 2px; width: 64px; background: rgba(255,255,255,.12); border-radius: 1px; position: relative; }
+  .v3-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--brand-cyan); border-radius: 1px; box-shadow: 0 0 4px var(--brand-cyan); }
+  .v3-check { color: var(--brand-cyan); font-size: 11px; flex-shrink: 0; }
+
+  /* V4 grid + hover detail */
+  .v4-panel { composes: v1-panel; }
+  .v4-detail {
+    position: absolute; top: 62px; right: 344px; width: 210px; z-index: 6;
+    background: rgba(10,10,18,.92); border: 1px solid rgba(0,212,255,.35); border-radius: var(--r-md);
+    backdrop-filter: blur(14px); padding: 12px; box-shadow: 0 0 24px rgba(0,212,255,.12);
+  }
+  .v4-detail .big { font-size: 22px; font-weight: 600; color: var(--brand-cyan); }
+  .v4-detail .ttl { font-size: 13px; font-weight: 600; margin-top: 2px; }
+  .v4-detail .meta { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .v4-play { margin-top: 10px; width: 100%; height: 30px; border: 0; border-radius: 8px; background: var(--brand-cyan); color: var(--base); font-weight: 700; font-size: 12px; cursor: pointer; }
+
+  /* variant chrome */
+  .variant { margin-top: 26px; }
+  .vtag { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--brand-cyan); margin-bottom: 8px; }
+  .vtag.rec::after { content: "рекомендую"; background: rgba(47,212,122,.15); color: var(--success); font-size: 10px; padding: 2px 8px; border-radius: 99px; letter-spacing: 0; text-transform: none; }
+  .pro-con { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; font-size: 12.5px; }
+  .pro-con ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }
+  .pro-con .h { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .pro-con .p .h { color: var(--success); } .pro-con .c .h { color: var(--pink); }
+  .edge { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); background: rgba(124,92,255,.08); border: 1px solid rgba(124,92,255,.25); border-radius: 10px; padding: 10px 12px; }
+  .edge b { color: var(--brand-violet); }
+
+  /* spec */
+  .spec { font-size: 13.5px; color: var(--ink-2); }
+  .spec table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  .spec th, .spec td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .spec th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .05em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Episode Selector — <span class="neon">redesign, 4 варианта</span></h1>
+  <p class="sub">AnimeEnigma · Бета (unified player) · 2026-06-11 · все макеты интерактивны — кликайте триггеры внутри плееров</p>
+
+  <!-- ① -->
+  <section id="primitives">
+    <h2><span class="num">①</span> Переиспользуемые примитивы (из исходников)</h2>
+    <p class="sub">CSS взят 1:1 из <code>EpisodesPanel.vue</code> / <code>UnifiedPlayer.vue</code> — всё, что уже есть и переедет в любой вариант.</p>
+    <div class="card" style="margin-top:14px">
+      <div class="prim-row">
+        <div class="prim"><span class="lbl">cell · idle</span><button class="ep-cell">7</button></div>
+        <div class="prim"><span class="lbl">cell · selected</span><button class="ep-cell ep-cell--sel">4</button></div>
+        <div class="prim"><span class="lbl">cell · watched</span><button class="ep-cell ep-cell--watched">2<span class="ep-check">✓</span></button></div>
+        <div class="prim"><span class="lbl">cell · partial 40%</span><button class="ep-cell">5<span class="ep-prog" style="width:40%"></span></button></div>
+        <div class="prim"><span class="lbl">cell · filler</span><button class="ep-cell ep-cell--filler">9</button></div>
+        <div class="prim"><span class="lbl">mark-watched (new)</span><button class="ep-mark" style="width:200px">✓ Mark ep. 4 as watched</button></div>
+        <div class="prim"><span class="lbl">resume chip (new)</span><span class="pl-resume"><button class="pl-resume-go">▶ Resume from 12:34</button><button class="pl-resume-x">✕</button></span></div>
+        <div class="prim"><span class="lbl">trigger · icon</span><button class="pl-icon">▦</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② -->
+  <section id="history">
+    <h2><span class="num">②</span> История решений</h2>
+    <ul class="hist">
+      <li><b>2026-06-05</b> — выбран триггер <span class="locked">«Grid icon top-right»</span> (AskUserQuestion, против вариантов в контрол-баре и в шапке). Панель = плавающий грид 5 колонок, геометрия source-панели.</li>
+      <li><b>2026-06-11 (утро)</b> — в селектор замаплены пользовательские данные: галочка «просмотрено» (anime-list + completed-rows), подчёркивание прогресса, тултип с названием серии; в шапку плеера — номер + название текущей серии.</li>
+      <li><b>2026-06-11 (сегодня)</b> — добавлена кнопка <span class="locked">«Mark as watched»</span> внутри селектора (паритет с Kodik) + resume-chip «Resume from MM:SS» (не автоперематывает — это решение пользователя).</li>
+      <li><b>Locked DS-правила</b> — бейджи: inline = tinted, overlay = dark-glass + scrim; веса шрифта только <code>font-medium/font-semibold</code>; брендовые hue по провайдерам.</li>
+      <li><b>Сегодняшний вопрос</b> — как селектор <b>открывается</b> и как выглядит <b>внутри</b>. Триггер 06-05 можно пересмотреть — данных в селекторе стало сильно больше (названия, прогресс, отметки).</li>
+    </ul>
+  </section>
+
+  <!-- ③ -->
+  <section id="designs">
+    <h2><span class="num">③</span> Дизайн — 4 варианта</h2>
+
+    <!-- V1 -->
+    <div class="variant" id="v1">
+      <div class="vtag">V1 · Dense Grid+ (эволюция текущего)</div>
+      <div class="player">
+        <div class="p-top">
+          <div><div class="p-eyebrow">EP 4 · Стальная тревога<span class="dot"></span>AllAnime · SUB</div><div class="p-name">You Shou Yan</div></div>
+          <button class="pl-icon" onclick="tg('v1p')">▦</button>
+        </div>
+        <div class="v1-panel" id="v1p" style="display:none">
+          <div class="panel-head"><span class="t">Episodes</span><span class="c">112</span></div>
+          <div class="v1-tools">
+            <input class="v1-jump" placeholder="Jump to ep…">
+            <button class="v1-next">→ next unwatched: 4</button>
+          </div>
+          <div class="v1-ranges">
+            <button class="v1-range on">1–50</button><button class="v1-range">51–100</button><button class="v1-range">101–112</button>
+          </div>
+          <div class="v1-grid" id="v1grid"></div>
+          <div class="v1-foot"><button class="ep-mark">✓ Mark ep. 4 as watched</button></div>
+        </div>
+        <div class="p-bottom"><div class="p-line"><span class="fill"></span></div>
+          <div class="p-btns"><button class="p-btn">▶</button><button class="p-btn">↺</button><button class="p-btn">↻</button><button class="p-btn">🔊</button><span class="timepill">2:11 / 6:31</span><span class="spacer"></span><span class="srcpill"><span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--brand-cyan)"></span>AllAnime · SUB</span><button class="p-btn">⚙</button><button class="p-btn">⛶</button></div>
+        </div>
+      </div>
+      <div class="pro-con">
+        <div class="p"><span class="h">За</span><ul><li>Минимальный сдвиг от текущего — пользователи уже привыкли</li><li>Range-пейджер решает 100+ серий, jump-инпут — 1000+</li><li>«Next unwatched» = главный сценарий в один клик</li></ul></div>
+        <div class="c"><span class="h">Против</span><ul><li>Названия серий остаются в тултипах — почти невидимы</li><li>На мобиле floating-панель тесная</li></ul></div>
+      </div>
+      <div class="edge"><b>Edge cases:</b> 12 серий → range-ряд и jump скрываются (просто грид); названий нет → ничего не меняется; аноним → без галочек/прогресса, кнопка mark скрыта.</div>
+    </div>
+
+    <!-- V2 -->
+    <div class="variant" id="v2">
+      <div class="vtag rec">V2 · Bottom Sheet — карточки серий из контрол-бара</div>
+      <div class="player">
+        <div class="p-top">
+          <div><div class="p-eyebrow">EP 4 · Стальная тревога<span class="dot"></span>AllAnime · SUB</div><div class="p-name">You Shou Yan</div></div>
+        </div>
+        <div class="v2-sheet" id="v2p" style="display:none">
+          <div class="panel-head"><span class="t">Episodes</span><span class="c">scroll →</span></div>
+          <div class="v2-strip" id="v2strip"></div>
+        </div>
+        <div class="p-bottom"><div class="p-line"><span class="fill"></span></div>
+          <div class="p-btns"><button class="p-btn">▶</button><button class="p-btn">↺</button><button class="p-btn">↻</button><button class="p-btn">🔊</button><span class="timepill">2:11 / 6:31</span>
+            <span class="srcpill eppill" onclick="tg('v2p')">EP 4 <span class="chev">▴</span></span>
+            <span class="spacer"></span><span class="srcpill">AllAnime · SUB</span><button class="p-btn">⚙</button><button class="p-btn">⛶</button></div>
+        </div>
+      </div>
+      <div class="pro-con">
+        <div class="p"><span class="h">За</span><ul><li>Триггер «EP 4 ▴» живёт рядом с time-pill — там, куда смотрят во время просмотра (YouTube-паттерн)</li><li>Карточки вмещают название + прогресс + галочку БЕЗ тултипов</li><li>Лента не закрывает видео, скроллится колесом, идеальна на мобиле (свайп)</li><li>Открывается на текущей серии — соседние видны сразу</li></ul></div>
+        <div class="c"><span class="h">Против</span><ul><li>Для прыжка «с 4 на 87» лента хуже грида (нужен скролл — лечится jump-инпутом в шапке листа)</li><li>Занимает нижнюю треть в маленьком окне</li></ul></div>
+      </div>
+      <div class="edge"><b>Edge cases:</b> 1000 серий → виртуальный скролл + jump; названий нет → карточка сжимается до номера+статуса; верхний грид-триггер можно ОСТАВИТЬ как второй вход (оба открывают один лист).</div>
+    </div>
+
+    <!-- V3 -->
+    <div class="variant" id="v3">
+      <div class="vtag">V3 · Side Drawer — вертикальный список (Netflix)</div>
+      <div class="player">
+        <div class="p-top">
+          <div><div class="p-eyebrow">EP 4 · Стальная тревога<span class="dot"></span>AllAnime · SUB</div><div class="p-name">You Shou Yan</div></div>
+          <button class="pl-icon" onclick="tg('v3p')">☰</button>
+        </div>
+        <div class="v3-drawer" id="v3p" style="display:none">
+          <div class="panel-head"><span class="t">Episodes</span><span class="c">12</span></div>
+          <div class="v3-list" id="v3list"></div>
+          <div class="v1-foot"><button class="ep-mark">✓ Mark ep. 4 as watched</button></div>
+        </div>
+        <div class="p-bottom"><div class="p-line"><span class="fill"></span></div>
+          <div class="p-btns"><button class="p-btn">▶</button><button class="p-btn">↺</button><button class="p-btn">↻</button><button class="p-btn">🔊</button><span class="timepill">2:11 / 6:31</span><span class="spacer"></span><span class="srcpill">AllAnime · SUB</span><button class="p-btn">⚙</button><button class="p-btn">⛶</button></div>
+        </div>
+      </div>
+      <div class="pro-con">
+        <div class="p"><span class="h">За</span><ul><li>Максимум данных на серию: название, длительность, прогресс-бар, галочка — всё видно</li><li>Вертикальный скролл = привычно, дружит с виртуализацией на 1000+</li><li>Полная высота — листать длинные тайтлы удобнее всего</li></ul></div>
+        <div class="c"><span class="h">Против</span><ul><li>Закрывает ~30% кадра, пока открыт</li><li>Самый «тяжёлый» по ощущению — это уже почти отдельный экран</li><li>Плотность ниже грида: 12 серий — ок, найти 87-ю — скролл</li></ul></div>
+      </div>
+      <div class="edge"><b>Edge cases:</b> названий нет → строка «Episode N»; сотни серий → sticky range-теги над списком; на мобиле становится полноэкранным шитом.</div>
+    </div>
+
+    <!-- V4 -->
+    <div class="variant" id="v4">
+      <div class="vtag">V4 · Grid + Hover-detail (гибрид)</div>
+      <div class="player">
+        <div class="p-top">
+          <div><div class="p-eyebrow">EP 4 · Стальная тревога<span class="dot"></span>AllAnime · SUB</div><div class="p-name">You Shou Yan</div></div>
+          <button class="pl-icon" onclick="tg('v4p'); tg('v4d')">▦</button>
+        </div>
+        <div class="v4-detail" id="v4d" style="display:none">
+          <div class="big">EP 7</div>
+          <div class="ttl">Клинок рассвета</div>
+          <div class="meta">6 мин · просмотрено 40%<div class="v3-bar" style="margin-top:6px;width:100%"><i style="width:40%"></i></div></div>
+          <button class="v4-play">▶ Смотреть EP 7</button>
+        </div>
+        <div class="v1-panel" id="v4p" style="display:none">
+          <div class="panel-head"><span class="t">Episodes</span><span class="c">наведите на ячейку</span></div>
+          <div class="v1-grid" id="v4grid"></div>
+          <div class="v1-foot"><button class="ep-mark">✓ Mark ep. 4 as watched</button></div>
+        </div>
+        <div class="p-bottom"><div class="p-line"><span class="fill"></span></div>
+          <div class="p-btns"><button class="p-btn">▶</button><button class="p-btn">↺</button><button class="p-btn">↻</button><button class="p-btn">🔊</button><span class="timepill">2:11 / 6:31</span><span class="spacer"></span><span class="srcpill">AllAnime · SUB</span><button class="p-btn">⚙</button><button class="p-btn">⛶</button></div>
+        </div>
+      </div>
+      <div class="pro-con">
+        <div class="p"><span class="h">За</span><ul><li>Скорость грида + полнота карточки: hover по ячейке → мини-карточка слева (название, прогресс, play)</li><li>Не меняет ничего в привычном гриде</li></ul></div>
+        <div class="c"><span class="h">Против</span><ul><li>Hover не существует на тач-устройствах → на мобиле это просто V1</li><li>Два всплывающих слоя рядом — визуально шумно</li></ul></div>
+      </div>
+      <div class="edge"><b>Edge cases:</b> тач → первый тап = выделение+карточка, второй = переход; названий нет → карточка не показывается вовсе (деградация до V1).</div>
+    </div>
+  </section>
+
+  <!-- ④ -->
+  <section id="spec">
+    <h2><span class="num">④</span> Спека (зеркало: <code>docs/superpowers/specs/2026-06-11-episode-selector-redesign.md</code>)</h2>
+    <div class="spec">
+      <p><b>Цель.</b> Селектор серий бета-плеера должен показывать пользовательские данные (просмотрено / прогресс / название) без тултипов, масштабироваться от 1 до 1000+ серий и открываться оттуда, где живёт внимание зрителя.</p>
+      <table>
+        <tr><th>Критерий</th><th>V1 Grid+</th><th>V2 Bottom Sheet</th><th>V3 Side Drawer</th><th>V4 Hybrid</th></tr>
+        <tr><td>Названия серий видны</td><td>тултип</td><td>да</td><td>да</td><td>hover</td></tr>
+        <tr><td>1000+ серий</td><td>ranges+jump</td><td>virtual+jump</td><td>virtual</td><td>ranges+jump</td></tr>
+        <tr><td>Мобила</td><td>тесно</td><td>отлично (свайп)</td><td>fullscreen sheet</td><td>= V1</td></tr>
+        <tr><td>Перекрытие видео</td><td>малое</td><td>нижняя треть</td><td>правые 30%</td><td>среднее</td></tr>
+        <tr><td>Сдвиг от текущего UX</td><td>минимальный</td><td>средний</td><td>большой</td><td>малый</td></tr>
+        <tr><td>CDI (оценка)</td><td>0.02 × 3</td><td>0.04 × 5</td><td>0.05 × 8</td><td>0.03 × 5</td></tr>
+        <tr><td>UXΔ (оценка)</td><td>+1 (Better)</td><td>+3 (Better)</td><td>+2 (Better)</td><td>+2 (Ambiguous)</td></tr>
+        <tr><td>MVQ</td><td>Sprite 70%/85%</td><td>Griffin 85%/80%</td><td>Kraken 75%/70%</td><td>Basilisk 65%/75%</td></tr>
+      </table>
+      <p style="margin-top:14px"><b>Рекомендация — V2</b>, с сохранением верхнего grid-триггера как второго входа: «EP N ▴» в контрол-баре открывает тот же лист. Инварианты для любого варианта: примитивы из ①, кнопка mark-as-watched, открытие на текущей серии, esc/клик-вне закрывает, данные обновляются после mark без перезагрузки.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+  function tg(id){ const el=document.getElementById(id); el.style.display = el.style.display==='none' ? '' : 'none'; }
+
+  // demo data
+  const titles = ['Начало пути','Стальная тревога','Город теней','Клинок рассвета','Песнь пепла','Возвращение','Охота','Тихий шторм','Излом','Последний рубеж','Эхо','Финал'];
+  const watched = n => n<=3, partial = {4:34, 7:40};
+
+  // V1 grid: 50 cells
+  const g1 = document.getElementById('v1grid');
+  for (let i=1;i<=50;i++){
+    const b=document.createElement('button');
+    b.className='ep-cell'+(i===4?' ep-cell--sel':watched(i)?' ep-cell--watched':'')+(i===9?' ep-cell--filler':'');
+    b.innerHTML=i+(watched(i)?'<span class="ep-check">✓</span>':'')+(partial[i]&&!watched(i)?`<span class="ep-prog" style="width:${partial[i]}%"></span>`:'');
+    b.title=(titles[i-1]?i+'. '+titles[i-1]:'');
+    g1.appendChild(b);
+  }
+  // V2 strip
+  const s2=document.getElementById('v2strip');
+  for (let i=1;i<=12;i++){
+    const d=document.createElement('div');
+    d.className='v2-card'+(i===4?' sel':'');
+    d.innerHTML=`<div class="n"><span>EP ${i}</span>${watched(i)?'<span class="wch">✓ watched</span>':''}</div>
+      <div class="t">${titles[i-1]||'Episode '+i}</div>
+      ${partial[i]&&!watched(i)?`<span class="ep-prog" style="width:${partial[i]}%"></span>`:''}`;
+    s2.appendChild(d);
+  }
+  // V3 list
+  const l3=document.getElementById('v3list');
+  for (let i=1;i<=12;i++){
+    const r=document.createElement('div');
+    r.className='v3-row'+(i===4?' sel':'');
+    r.innerHTML=`<div class="v3-num">${i}</div>
+      <div class="v3-meta"><div class="v3-title">${titles[i-1]||'Episode '+i}</div>
+      <div class="v3-sub">6 мин ${partial[i]&&!watched(i)?`<span class="v3-bar"><i style="width:${partial[i]}%"></i></span>`:''}</div></div>
+      ${watched(i)?'<span class="v3-check">✓</span>':''}`;
+    l3.appendChild(r);
+  }
+  // V4 grid: 12 cells
+  const g4=document.getElementById('v4grid');
+  for (let i=1;i<=12;i++){
+    const b=document.createElement('button');
+    b.className='ep-cell'+(i===4?' ep-cell--sel':watched(i)?' ep-cell--watched':'');
+    b.innerHTML=i+(watched(i)?'<span class="ep-check">✓</span>':'')+(partial[i]&&!watched(i)?`<span class="ep-prog" style="width:${partial[i]}%"></span>`:'');
+    g4.appendChild(b);
+  }
+</script>
+</body>
+</html>
