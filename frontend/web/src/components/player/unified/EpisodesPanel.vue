@@ -51,6 +51,25 @@
         />
       </button>
     </div>
+
+    <!-- Manual mark-as-watched for the CURRENT episode (Kodik parity) -->
+    <div
+      v-if="canMark && selectedNumber !== null"
+      class="px-3 pb-3 pt-1 border-t border-[var(--border)]"
+    >
+      <button
+        class="ep-mark w-full h-8 rounded-[var(--r-sm)] border-0 inline-flex items-center justify-center gap-2 text-[12px] font-semibold transition-colors"
+        :class="marked ? 'ep-mark--done' : 'cursor-pointer'"
+        :disabled="marked || marking"
+        data-test="mark-watched"
+        @click="emit('mark-watched')"
+      >
+        <Check :size="12" :stroke-width="3" aria-hidden="true" />
+        <span v-if="marked">Ep. {{ selectedNumber }} watched</span>
+        <span v-else-if="marking">Marking…</span>
+        <span v-else>Mark ep. {{ selectedNumber }} as watched</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -72,12 +91,19 @@ const props = withDefaults(
     watchedUpTo?: number
     /** per-episode watch progress keyed by episode number (user data) */
     progress?: Record<number, EpisodeUserProgress>
+    /** logged-in gate for the manual mark-as-watched action */
+    canMark?: boolean
+    /** mark request in flight */
+    marking?: boolean
+    /** current episode already watched — disables the action */
+    marked?: boolean
   }>(),
-  { watchedUpTo: 0, progress: () => ({}) },
+  { watchedUpTo: 0, progress: () => ({}), canMark: false, marking: false, marked: false },
 )
 
 const emit = defineEmits<{
   (e: 'select', ep: EpisodeOption): void
+  (e: 'mark-watched'): void
 }>()
 
 function isWatched(ep: EpisodeOption): boolean {
@@ -109,5 +135,21 @@ function partialPct(ep: EpisodeOption): number {
   height: 2px;
   background: var(--brand-cyan);
   box-shadow: 0 0 4px var(--brand-cyan);
+}
+
+.ep-mark {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink-2);
+}
+
+.ep-mark:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+}
+
+.ep-mark--done {
+  color: var(--brand-cyan);
+  background: rgba(0, 212, 255, 0.1);
+  cursor: default;
 }
 </style>

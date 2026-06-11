@@ -229,7 +229,15 @@ const currentTime = ref(0)
 const maxTime = ref(0)
 const lastSaveTime = ref(0)
 const SAVE_INTERVAL = 30
-const AUTO_MARK_THRESHOLD = 20 * 60
+const AUTO_MARK_FALLBACK = 20 * 60
+// Duration-aware threshold (seconds): 90% of the known episode duration,
+// else the legacy 20-min rule. The `nearEnd` check below (real HTML5
+// duration) usually fires first; this covers metadata-less edge cases.
+const autoMarkThreshold = computed(() => {
+  const durMin = props.episodeDurationMin ?? 0
+  if (durMin > 0) return Math.min(AUTO_MARK_FALLBACK, Math.round(0.9 * durMin * 60))
+  return AUTO_MARK_FALLBACK
+})
 const authStore = useAuthStore()
 const { sessionId } = useWatchSession()
 
@@ -244,6 +252,10 @@ const props = defineProps<{
   totalEpisodes?: number
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
+  /** Per-episode duration in MINUTES (Shikimori metadata) — see KodikPlayer.
+   *  This player also has the real video duration (HTML5), so this prop is a
+   *  secondary signal for the pre-metadata window. */
+  episodeDurationMin?: number
   // When set, the player sync bridge mirrors play/pause/seek to the room.
   // When null/undefined the bridge is never instantiated and the player
   // behaves exactly as it did pre-WT wiring (zero regression).
@@ -507,7 +519,7 @@ function handleTimeUpdate() {
   }
   // Auto-mark: near the end (real duration) OR the 20-min rule (covers short eps)
   const nearEnd = Number.isFinite(v.duration) && v.duration > 0 && time >= 0.9 * v.duration
-  if (authStore.isAuthenticated && !episodeMarkedWatched.value && (nearEnd || time >= AUTO_MARK_THRESHOLD)) {
+  if (authStore.isAuthenticated && !episodeMarkedWatched.value && (nearEnd || time >= autoMarkThreshold.value)) {
     autoMarkEpisodeWatched()
   }
 }

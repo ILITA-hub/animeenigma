@@ -268,8 +268,15 @@ func (r *ListRepository) GetByUserStatuses(ctx context.Context, userID string) (
 // (user_id, anime_id) where anime_list.status ∈ statuses, joined with the
 // animes projection (name / name_ru / poster_url / episodes_aired /
 // episodes_count) and a LEFT JOIN against watch_progress so the user's
-// furthest-reached episode_number for that anime rides along on the same
+// furthest COMPLETED episode_number for that anime rides along on the same
 // row. Missing watch_progress yields last_watched_episode=0 via COALESCE.
+//
+// 2026-06-11: counts only completed=true rows — the same semantics the
+// anime page's resume state machine uses (/users/progress/{animeId} →
+// max completed). Counting any-touched rows made spotlight and the anime
+// page disagree about "continue from ep N" whenever a user sampled an
+// episode without finishing it. Duration-aware auto-complete (90% rule)
+// keeps `completed` trustworthy for short episodes.
 //
 // Used by the workstream hero-spotlight v1.0 Phase 3 catalog aggregator
 // (`not_time_yet`, `continue_watching_new` resolvers) via the
@@ -292,7 +299,7 @@ SELECT
   COALESCE(a.episodes_aired, 0)                               AS episodes_aired,
   COALESCE(a.episodes_count, 0)                               AS episodes_count,
   al.status                                                   AS status,
-  COALESCE(MAX(wp.episode_number), 0)                         AS last_watched_episode,
+  COALESCE(MAX(wp.episode_number) FILTER (WHERE wp.completed), 0) AS last_watched_episode,
   to_char(al.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')        AS updated_at
 FROM anime_list al
 JOIN animes a ON a.id = al.anime_id

@@ -136,6 +136,23 @@
       @skip="onSkipSegment"
     />
 
+    <!-- Resume-from-saved-position chip (never auto-seeks) -->
+    <div v-if="resumeChipVisible" class="pl-resume" data-test="resume-chip">
+      <button class="pl-resume-go" type="button" @click="onResumeFromSaved">
+        <Play :size="12" :stroke-width="2.5" aria-hidden="true" />
+        <span>Resume from {{ fmtResume(resumePosSec) }}</span>
+      </button>
+      <button
+        class="pl-resume-x"
+        type="button"
+        aria-label="Dismiss resume offer"
+        data-test="resume-chip-dismiss"
+        @click="resumeChipDismissed = true"
+      >
+        <X :size="12" aria-hidden="true" />
+      </button>
+    </div>
+
     <NextEpisodeCard
       v-if="showNextEpisode"
       :next-ep="anime.ep + 1"
@@ -202,7 +219,11 @@
         :selected-number="selectedEpisode?.number ?? null"
         :watched-up-to="watchedUpTo"
         :progress="epProgress"
+        :can-mark="auth.isAuthenticated"
+        :marking="tracking.marking.value"
+        :marked="selectedEpisode ? isEpisodeWatched(selectedEpisode.number) : false"
         @select="onSelectEpisode"
+        @mark-watched="onMarkWatched"
       />
     </div>
 
@@ -263,7 +284,7 @@ import {
   onMounted,
   onUnmounted,
 } from 'vue'
-import { CircleAlert, LayoutGrid } from 'lucide-vue-next'
+import { CircleAlert, LayoutGrid, Play, X } from 'lucide-vue-next'
 
 import { userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -290,6 +311,7 @@ import { segmentsToChapters, activeSkipSegment } from '@/composables/unifiedPlay
 import { useVideoEngine } from '@/composables/unifiedPlayer/useVideoEngine'
 import { useProviderResolver } from '@/composables/unifiedPlayer/useProviderResolver'
 import { useProviderHealth } from '@/composables/unifiedPlayer/useProviderHealth'
+import { useWatchTracking } from '@/composables/unifiedPlayer/useWatchTracking'
 import { mapKeyToAction } from '@/composables/unifiedPlayer/playerHotkeys'
 import { providerById } from './providerRegistry'
 
@@ -385,7 +407,7 @@ const selectedEpisode = ref<EpisodeOption | null>(null)
 const auth = useAuthStore()
 const { watchedUpTo, refresh: refreshWatched } = useWatchedEpisodes(() => props.animeId)
 
-const epProgress = ref<Record<number, { pct: number; completed: boolean }>>({})
+const epProgress = ref<Record<number, { pct: number; sec: number; completed: boolean }>>({})
 
 async function loadEpisodeProgress() {
   if (!auth.isAuthenticated) {
@@ -400,11 +422,12 @@ async function loadEpisodeProgress() {
       duration?: number
       completed?: boolean
     }>
-    const map: Record<number, { pct: number; completed: boolean }> = {}
+    const map: Record<number, { pct: number; sec: number; completed: boolean }> = {}
     for (const r of rows) {
       if (!r.episode_number) continue
       map[r.episode_number] = {
         pct: r.duration ? Math.min(1, (r.progress ?? 0) / r.duration) : 0,
+        sec: r.progress ?? 0,
         completed: !!r.completed,
       }
     }
@@ -413,6 +436,82 @@ async function loadEpisodeProgress() {
     // 404 / anonymous / network — no user data, panel renders plain numbers
     epProgress.value = {}
   }
+}
+
+// ─── Watch-progress tracking (server + localStorage + auto-complete) ─────────
+
+const tracking = useWatchTracking(
+  () => props.animeId,
+  () => selectedEpisode.value?.number ?? null,
+  {
+    onMarked: () => {
+      void refreshWatched()
+      void loadEpisodeProgress()
+    },
+  },
+)
+
+/** Whether the user already has this episode marked watched (drawer data). */
+function isEpisodeWatched(n: number): boolean {
+  return n <= watchedUpTo.value || !!epProgress.value[n]?.completed
+}
+
+/** Manual mark from the episodes drawer (Kodik-parity button). */
+function onMarkWatched() {
+  void tracking.markWatched()
+}
+
+// ─── Resume-from-saved-position chip ─────────────────────────────────────────
+// Saved position for the current episode: server watch_progress first (logged
+// in), localStorage fallback (anonymous parity with KodikPlayer). The chip
+// offers the jump — it never auto-seeks.
+
+const resumeChipDismissed = ref(false)
+const resumeChipUsed = ref(false)
+
+function localResumeSec(ep: number): number {
+  try {
+    const data = JSON.parse(localStorage.getItem(`watch_progress:${props.animeId}`) || '{}')
+    return Number(data[ep]?.time) || 0
+  } catch {
+    return 0
+  }
+}
+
+const resumePosSec = computed(() => {
+  const ep = selectedEpisode.value?.number
+  if (!ep) return 0
+  const server = epProgress.value[ep]
+  if (server && !server.completed && server.sec > 0) return server.sec
+  if (!auth.isAuthenticated) return localResumeSec(ep)
+  return 0
+})
+
+const resumeChipVisible = computed(() => {
+  if (resumeChipDismissed.value || resumeChipUsed.value) return false
+  if (sourceError.value || isResolving.value) return false
+  const pos = resumePosSec.value
+  if (pos < 30) return false // too little progress to bother
+  // Once near the end the next-episode flow takes over instead.
+  if (duration.value > 0 && pos >= 0.95 * duration.value) return false
+  // The offer expires once the user has clearly chosen to watch from here.
+  if (hasStarted.value && currentTime.value > 5) return false
+  return true
+})
+
+function fmtResume(s: number): string {
+  const m = Math.floor(s / 60)
+  const sec = Math.floor(s % 60)
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+function onResumeFromSaved() {
+  const v = videoRef.value
+  if (!v) return
+  resumeChipUsed.value = true
+  v.currentTime = resumePosSec.value
+  if (v.paused) void v.play().catch(() => {})
+  writeProgress()
 }
 const sourceError = ref<string | null>(null)
 const resolvedServers = ref<{ id: string; label: string }[]>([])
@@ -616,7 +715,11 @@ function onSelectProvider(id: string) {
 function onSelectEpisode(ep: EpisodeOption) {
   openMenu.value = null
   if (selectedEpisode.value?.number === ep.number) return
+  tracking.saveNow() // persist the outgoing episode's position
   selectedEpisode.value = ep
+  tracking.resetEpisode(isEpisodeWatched(ep.number))
+  resumeChipDismissed.value = false
+  resumeChipUsed.value = false
   void resolveStreamForEpisode(ep)
 }
 
@@ -649,6 +752,12 @@ function writeProgress() {
   if (v.buffered.length > 0 && dur > 0) {
     bufferedPct.value = (v.buffered.end(v.buffered.length - 1) / dur) * 100
   }
+  // Watch tracking: heartbeat saves + duration-aware auto-complete. Only feed
+  // real playback positions — a paused pre-start frame (currentTime 0) or a
+  // dead source must not write progress.
+  if (v.currentTime > 0) {
+    tracking.onTick(v.currentTime, dur)
+  }
 }
 
 function tick() {
@@ -679,7 +788,8 @@ function onVideoPlay() {
 
 function onVideoPause() {
   state.playing.value = false
-  stopRaf()
+  stopRaf() // final writeProgress() inside keeps tracking's lastKnown fresh
+  tracking.saveNow()
   clearUiIdleTimer()
   uiVisible.value = true
 }
@@ -957,6 +1067,9 @@ let nextEpTimer: ReturnType<typeof setInterval> | null = null
 
 function onEnded() {
   state.playing.value = false
+  // Reaching the end IS a completed watch — mark even if the 90% tick raced.
+  tracking.saveNow()
+  void tracking.markWatched()
   if (anime_hasNextEp.value && state.autoNext.value) {
     startNextEpCountdown()
   }
@@ -994,7 +1107,11 @@ function goToNextEpisode() {
   const idx = episodes.value.findIndex((e) => e.number === current.number)
   const next = episodes.value[idx + 1]
   if (next) {
+    tracking.saveNow()
     selectedEpisode.value = next
+    tracking.resetEpisode(isEpisodeWatched(next.number))
+    resumeChipDismissed.value = false
+    resumeChipUsed.value = false
     void resolveStreamForEpisode(next)
   }
 }
@@ -1304,6 +1421,16 @@ function onKeydown(e: KeyboardEvent) {
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
+// Graceful save on tab close / backgrounding. `pagehide` covers navigation
+// and close (incl. mobile); visibilitychange→hidden covers app switches —
+// both use sendBeacon, which survives the unload where XHR doesn't.
+function onPageHide() {
+  tracking.beaconSave()
+}
+function onVisibilityChange() {
+  if (document.visibilityState === 'hidden') tracking.beaconSave()
+}
+
 onMounted(() => {
   start()
   // Apply initial volume
@@ -1318,15 +1445,20 @@ onMounted(() => {
   void refreshWatched()
   void loadEpisodeProgress()
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('pagehide', onPageHide)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
   stopRaf()
+  tracking.saveNow() // persist position when navigating away in-app
   clearNextEpTimer()
   clearUiIdleTimer()
   clearHudTimers()
   if (bufferingTimer) clearTimeout(bufferingTimer)
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('pagehide', onPageHide)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
 
@@ -1340,6 +1472,57 @@ onUnmounted(() => {
   background: #000;
   border: 1px solid var(--border);
   user-select: none;
+}
+
+/* Resume-from-saved-position chip — bottom-left mirror of the skip chip. */
+.pl-resume {
+  position: absolute;
+  left: 22px;
+  bottom: 92px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: var(--r-md);
+  background: rgba(8, 8, 15, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+.pl-resume-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pl-resume-go:hover {
+  background: #fff;
+  color: var(--color-base, #08080f);
+}
+
+.pl-resume-x {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.pl-resume-x:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .pl--theater {

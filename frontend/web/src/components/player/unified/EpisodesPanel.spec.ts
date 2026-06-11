@@ -72,6 +72,31 @@ describe('EpisodesPanel', () => {
     expect(w.find('[data-test="episode-1"] [data-test="ep-progress"]').exists()).toBe(false)
   })
 
+  it('shows the mark-as-watched action only for logged-in users (canMark)', () => {
+    const anon = mount(EpisodesPanel, { props: { episodes: eps, selectedNumber: 1 } })
+    expect(anon.find('[data-test="mark-watched"]').exists()).toBe(false)
+    const authed = mount(EpisodesPanel, {
+      props: { episodes: eps, selectedNumber: 1, canMark: true },
+    })
+    expect(authed.find('[data-test="mark-watched"]').exists()).toBe(true)
+    expect(authed.find('[data-test="mark-watched"]').text()).toContain('Mark ep. 1 as watched')
+  })
+
+  it('emits mark-watched on click and disables when already marked', async () => {
+    const w = mount(EpisodesPanel, {
+      props: { episodes: eps, selectedNumber: 2, canMark: true },
+    })
+    await w.find('[data-test="mark-watched"]').trigger('click')
+    expect(w.emitted('mark-watched')).toHaveLength(1)
+
+    const done = mount(EpisodesPanel, {
+      props: { episodes: eps, selectedNumber: 2, canMark: true, marked: true },
+    })
+    const btn = done.find('[data-test="mark-watched"]')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.text()).toContain('Ep. 2 watched')
+  })
+
   it('exposes the episode title as a tooltip', () => {
     const w = mount(EpisodesPanel, {
       props: {

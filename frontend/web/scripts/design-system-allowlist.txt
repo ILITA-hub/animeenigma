@@ -97,3 +97,4 @@ src/components/player/unified/UnifiedPlayer.vue:#fff:icon/text color on player t
 src/components/player/unified/UnifiedPlayer.vue:#00d4ff:brand-cyan fallback in activeProviderHue computed (var(--brand-cyan,#00d4ff) equivalent) — canonical-fine brand value
 src/components/home/spotlight/ui/SpotlightChatBubble.vue:#2aabee:Telegram brand-blue gradient start — external brand identity, not a DS hue
 src/components/home/spotlight/ui/SpotlightChatBubble.vue:#229ed9:Telegram brand-blue gradient end — external brand identity, not a DS hue
+src/components/player/unified/UnifiedPlayer.vue:#08080f:resume-chip hover text-on-white fallback in var(--color-base,#08080f) — canonical-fine fallback (same as SkipIntroChip)

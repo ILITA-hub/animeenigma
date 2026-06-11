@@ -110,7 +110,7 @@
                 class="shadow-lg shadow-cyan-500/20"
               >
                 <Play class="size-5" fill="currentColor" aria-hidden="true" />
-                <span>{{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}</span>
+                <span>{{ lastEpisode ? $t('anime.continueEp', { n: resumeStartEpisode ?? lastEpisode }) : $t('anime.watchNow') }}</span>
               </Button>
               <!-- Workstream watch-together — discovery-stage Invite mount.
                    Anonymous users don't see it (creating a room requires JWT).
@@ -526,7 +526,7 @@
             type="button"
             @click="activatePlayer"
             class="relative w-full aspect-video rounded-lg overflow-hidden group focus:outline-none focus:ring-2 focus:ring-cyan-400"
-            :aria-label="lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow')"
+            :aria-label="lastEpisode ? $t('anime.continueEp', { n: resumeStartEpisode ?? lastEpisode }) : $t('anime.watchNow')"
           >
             <img
               :src="anime.coverImage"
@@ -540,7 +540,7 @@
                 <Play class="size-8 sm:size-10 ml-1" fill="currentColor" aria-hidden="true" />
               </span>
               <span class="text-base sm:text-lg font-semibold">
-                {{ lastEpisode ? $t('anime.continueEp', { n: lastEpisode }) : $t('anime.watchNow') }}
+                {{ lastEpisode ? $t('anime.continueEp', { n: resumeStartEpisode ?? lastEpisode }) : $t('anime.watchNow') }}
               </span>
             </div>
           </button>
@@ -551,6 +551,7 @@
               :anime-id="anime.id"
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
+              :episode-duration-min="anime.episodeDuration"
               :preferred-combo="resolvedCombo"
               :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"
@@ -565,6 +566,7 @@
               :anime-id="anime.id"
               :anime-name="anime.title"
               :total-episodes="anime.totalEpisodes"
+              :episode-duration-min="anime.episodeDuration"
               :preferred-combo="resolvedCombo"
               :initial-episode="resumeStartEpisode"
               @available-translations="handleAvailableTranslations"

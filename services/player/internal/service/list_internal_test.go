@@ -160,13 +160,21 @@ func seedInternalListFixture(t *testing.T, db *gorm.DB) {
 		"al-2", "user-1", "anime-2", "watching", 0, 5,
 		time.Now().Add(-1*time.Hour), time.Now().Add(-1*time.Hour)).Error)
 
-	// One watch_progress row for anime-2 ep 5 — anime-1 deliberately has none
+	// Two watch_progress rows for anime-2 — ep 5 COMPLETED, ep 6 merely
+	// sampled (completed=0). last_watched_episode must count only completed
+	// rows (2026-06-11 alignment with the anime page's resume semantics), so
+	// the projection below asserts 5, not 6. anime-1 deliberately has none
 	// so the LEFT JOIN yielding 0 is exercised.
 	require.NoError(t, db.Exec(
-		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number, progress, duration, last_watched_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"wp-1", "user-1", "anime-2", 5, 100, 1440,
+		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number, progress, duration, completed, last_watched_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"wp-1", "user-1", "anime-2", 5, 100, 1440, 1,
 		time.Now().Add(-30*time.Minute), time.Now().Add(-30*time.Minute), time.Now().Add(-30*time.Minute)).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO watch_progress (id, user_id, anime_id, episode_number, progress, duration, completed, last_watched_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"wp-2", "user-1", "anime-2", 6, 40, 1440, 0,
+		time.Now().Add(-20*time.Minute), time.Now().Add(-20*time.Minute), time.Now().Add(-20*time.Minute)).Error)
 }
 
 func TestGetUserListByStatusesWithProgress_EmptyStatuses_ReturnsEmpty(t *testing.T) {
@@ -196,7 +204,8 @@ func TestGetUserListByStatusesWithProgress_HappyPath_JoinsCorrectly(t *testing.T
 	assert.Equal(t, "https://cdn/p2.jpg", out[0].PosterURL)
 	assert.Equal(t, 28, out[0].EpisodesCount)
 	assert.Equal(t, 14, out[0].EpisodesAired)
-	assert.Equal(t, 5, out[0].LastWatchedEpisode, "watch_progress.episode_number must be projected")
+	assert.Equal(t, 5, out[0].LastWatchedEpisode,
+		"must project max COMPLETED episode_number (ep 6 is sampled but not completed)")
 	assert.NotEmpty(t, out[0].UpdatedAt)
 
 	assert.Equal(t, "anime-1", out[1].AnimeID)

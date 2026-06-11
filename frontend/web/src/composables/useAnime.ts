@@ -23,6 +23,7 @@ interface ApiAnime {
   score?: number
   episodes_count?: number
   episodes_aired?: number
+  episode_duration?: number
   next_episode_at?: string | null
   aired_on?: string | null
   has_video?: boolean
@@ -46,6 +47,10 @@ export interface Anime {
   rating: number
   totalEpisodes: number
   episodesAired: number
+  /** Shikimori per-episode duration in MINUTES; 0/undefined when unknown.
+   *  Drives the duration-aware auto-complete threshold in iframe players
+   *  (Kodik) that cannot read the real video duration. */
+  episodeDuration?: number
   nextEpisodeAt?: string
   // Premiere date (aired_on) — used to tell users an announced title
   // hasn't been released yet, instead of a misleading "no sources" error.
@@ -83,6 +88,7 @@ function transformAnime(apiAnime: ApiAnime): Anime {
     rating: apiAnime.score || 0,
     totalEpisodes: apiAnime.episodes_count || 0,
     episodesAired: apiAnime.episodes_aired || 0,
+    episodeDuration: apiAnime.episode_duration || undefined,
     nextEpisodeAt: apiAnime.next_episode_at || undefined,
     airedOn: apiAnime.aired_on || undefined,
     hasVideo: apiAnime.has_video ?? false,

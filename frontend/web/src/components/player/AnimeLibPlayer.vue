@@ -719,7 +719,11 @@ const handleTimeUpdate = () => {
     saveProgress()
   }
 
-  if (maxTime.value >= AUTO_MARK_THRESHOLD && !episodeMarkedWatched.value) {
+  // Auto-mark: near the end of the real video (covers short episodes the
+  // 20-min rule could never reach) OR the legacy 20-min threshold.
+  const dur = videoRef.value.duration
+  const nearEnd = Number.isFinite(dur) && dur > 0 && maxTime.value >= 0.9 * dur
+  if ((nearEnd || maxTime.value >= AUTO_MARK_THRESHOLD) && !episodeMarkedWatched.value) {
     markCurrentEpisodeWatched()
   }
 }

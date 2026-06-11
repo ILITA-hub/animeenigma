@@ -216,7 +216,15 @@ const currentTime = ref(0)
 const maxTime = ref(0) // Track max reached time as approximate duration
 const lastSaveTime = ref(0)
 const SAVE_INTERVAL = 30 // Save every 30 seconds of playback
-const AUTO_MARK_THRESHOLD = 20 * 60 // Auto-mark as watched after 20 minutes (1200 seconds)
+const AUTO_MARK_FALLBACK = 20 * 60 // Auto-mark after 20 minutes when episode duration is unknown
+// Duration-aware auto-complete threshold (seconds). With known episode
+// duration: 90% of it — so a 6-minute short completes at ~5:24 instead of
+// never reaching the 20-minute fallback. Without it: the legacy 20-min rule.
+const autoMarkThreshold = computed(() => {
+  const durMin = props.episodeDurationMin ?? 0
+  if (durMin > 0) return Math.min(AUTO_MARK_FALLBACK, Math.round(0.9 * durMin * 60))
+  return AUTO_MARK_FALLBACK
+})
 const authStore = useAuthStore()
 const { t } = useI18n()
 
@@ -352,7 +360,7 @@ const handleKodikMessage = (event: MessageEvent) => {
       // Auto-mark as watched after 20 minutes
       if (authStore.isAuthenticated &&
           !episodeMarkedWatched.value &&
-          data.value >= AUTO_MARK_THRESHOLD) {
+          data.value >= autoMarkThreshold.value) {
         autoMarkEpisodeWatched()
       }
 
@@ -437,6 +445,10 @@ const props = defineProps<{
   totalEpisodes?: number
   initialEpisode?: number
   preferredCombo?: WatchCombo | null
+  /** Per-episode duration in MINUTES (Shikimori metadata). The Kodik iframe
+   *  never exposes the real video duration, so this is the only way to make
+   *  the auto-complete threshold work for short episodes (< 20 min). */
+  episodeDurationMin?: number
   // Phase 2 (02.7) — room prop accepted, sync wiring lands in Phase 3.
   room?: WatchTogetherRoomHandle | null
 }>()
