@@ -343,6 +343,16 @@ The notifications service uses the standard `DB_*` + `JWT_SECRET` + `REDIS_HOST`
 trio. Internal producer endpoint `POST /internal/notifications` is reachable
 only inside the Docker network — the gateway does not proxy `/internal/*`.
 
+Recs service specific (extracted from player, spec 2026-06-11):
+```
+CATALOG_URL          # default http://catalog:8081 — S6 combo-pin Shikimori /similar fallback
+```
+Standard `DB_*` + `JWT_SECRET` + `REDIS_HOST` trio. Internal endpoint
+`POST /internal/recs/recompute-hint` (Docker-network-only) receives
+fire-and-forget watch-activity hints from player; player config:
+`RECS_INTERNAL_URL` (default http://recs:8094), `RECS_HINT_ENABLED` (default true).
+Gateway: `RECS_SERVICE_URL` (default http://recs:8094).
+
 ## Feedback Triage Statuses (/admin/feedback)
 
 User feedback / error reports live as JSON files on the `docker_player_reports`
@@ -516,6 +526,7 @@ After completing any implementation work (features, bug fixes, refactoring), **a
 | library    | 8089 | /metrics  | Library service (BitTorrent → HLS → MinIO, admin-only) |
 | notifications | 8090 | /metrics | Generic notification engine (new episodes, future types) |
 | watch-together | 8091 | /metrics | Co-watch service (Redis-only; rooms + sync + chat) |
+| recs       | 8094 | /metrics  | Recommendation engine (extracted from player, spec 2026-06-11) |
 | web        | 80   | -         | Vue 3 frontend (nginx)         |
 
 ### Gateway Routing
@@ -534,6 +545,7 @@ All API requests go through the gateway service:
 - `/api/themes/*` → themes:8086 (public + protected + admin)
 - `/api/library/*` → library:8089 (admin-only; routes added incrementally in v0.2 Phases 2–5)
 - `/api/notifications/*` → notifications:8090 (JWT required; internal `/internal/notifications` NOT exposed — Docker-network-only)
+- `/api/users/recs`, `/api/events/rec` → recs:8094 (optional JWT); `/api/admin/recs/*` → recs:8094 (admin). Internal `/internal/recs/recompute-hint` NOT exposed — Docker-network-only; player fires it on watch activity
 - `/api/watch-together/*` → watch-together:8091 (JWT required for HTTP; WS uses `?token=` query param since browsers can't set custom headers on WS upgrade)
 
 ### Watch Together
