@@ -43,8 +43,6 @@ export function useAdminFeedback() {
   const filterCategory = ref('all')
   const filterStatus = ref('all')
   const filterType = ref('all')
-  // Free-text username filter (case-insensitive substring match, server-side).
-  const filterUsername = ref('')
 
   const detail = ref<FeedbackDetail | null>(null)
   const isDetailLoading = ref(false)
@@ -59,7 +57,6 @@ export function useAdminFeedback() {
         category: norm(filterCategory.value),
         status: norm(filterStatus.value),
         type: norm(filterType.value),
-        username: filterUsername.value.trim() || undefined,
         page: page.value,
         page_size: pageSize.value,
       })
@@ -132,7 +129,6 @@ export function useAdminFeedback() {
     filterCategory,
     filterStatus,
     filterType,
-    filterUsername,
     detail,
     isDetailLoading,
     detailError,

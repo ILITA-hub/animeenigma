@@ -22,11 +22,8 @@ import (
 //     this combo.
 //   - latestAvail      — parser's reported latest episode number (the
 //     value that drove the detector's diff).
-//   - translationTitle — optional per-player display title for the
-//     translation (Kodik Translation.Title / AnimeLib Team.Name), resolved
-//     by catalog's /internal/episodes lookup in the same parser call as the
-//     episode count. May be empty (e.g. served from a pre-upgrade cache
-//     entry) — frontend NotificationCard treats the field as optional.
+//   - translationTitle — optional title for the translation (empty in v1.0;
+//     populated in a future patch — see TODO below).
 //
 // Returns the marshaled JSON bytes ready to feed straight into
 // NotificationService.Upsert.payload.
@@ -57,8 +54,13 @@ func BuildNewEpisodePayload(
 		Language:               combo.Language,
 		WatchType:              combo.WatchType,
 		TranslationID:          combo.TranslationID,
-		TranslationTitle:       translationTitle,
-		WatchURL:               BuildWatchURL(anime.ID, combo.Player, maxWatched+1, combo.TranslationID),
+		// TODO(v1.0.x): populate translation_title via a per-player title
+		// resolver. The detector does NOT have cheap access to it today —
+		// kodik exposes it on Translation.Title, animelib on Team.Name, but
+		// both require an extra parser hit per combo. Frontend NotificationCard
+		// already handles this field being optional.
+		TranslationTitle: translationTitle,
+		WatchURL:         BuildWatchURL(anime.ID, combo.Player, maxWatched+1, combo.TranslationID),
 	}
 
 	out, err := json.Marshal(payload)

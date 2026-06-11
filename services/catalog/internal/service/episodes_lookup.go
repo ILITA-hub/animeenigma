@@ -24,15 +24,8 @@ const EpisodesLookupCacheTTL = 5 * time.Minute
 
 // EpisodesLookupResult is the JSON payload the catalog's internal
 // /episodes endpoint returns and the value cached in Redis.
-//
-// TranslationTitle is the per-player display title for the combo's
-// translation (Kodik Translation.Title / AnimeLib Team.Name). It rides
-// along in the same upstream parser response, so it's free. Optional:
-// pre-existing cached entries (5-min TTL) deserialize with an empty title
-// and self-heal on the next cache miss.
 type EpisodesLookupResult struct {
 	LatestAvailableEpisode int       `json:"latest_available_episode"`
-	TranslationTitle       string    `json:"translation_title,omitempty"`
 	CheckedAt              time.Time `json:"checked_at"`
 }
 
@@ -108,9 +101,8 @@ func (s *EpisodesLookupService) LatestAvailable(
 	}
 
 	var (
-		latest           int
-		translationTitle string
-		err              error
+		latest int
+		err    error
 	)
 
 	switch player {
@@ -120,7 +112,7 @@ func (s *EpisodesLookupService) LatestAvailable(
 			return EpisodesLookupResult{}, apperrors.InvalidInput(
 				fmt.Sprintf("translation_id must be numeric for kodik: %v", parseErr))
 		}
-		latest, translationTitle, err = s.kodikClient.LatestEpisodeForTranslation(shikimoriID, tid)
+		latest, err = s.kodikClient.LatestEpisodeForTranslation(shikimoriID, tid)
 	case "animelib":
 		if watchType != "sub" && watchType != "dub" {
 			return EpisodesLookupResult{}, apperrors.InvalidInput(
@@ -131,7 +123,7 @@ func (s *EpisodesLookupService) LatestAvailable(
 			return EpisodesLookupResult{}, apperrors.InvalidInput(
 				fmt.Sprintf("translation_id must be numeric for animelib: %v", parseErr))
 		}
-		latest, translationTitle, err = s.lookupAnimeLib(ctx, shikimoriID, teamID, watchType)
+		latest, err = s.lookupAnimeLib(ctx, shikimoriID, teamID, watchType)
 	default:
 		return EpisodesLookupResult{}, apperrors.InvalidInput(
 			"player not supported by detector in v1.0")
@@ -152,7 +144,6 @@ func (s *EpisodesLookupService) LatestAvailable(
 
 	result := EpisodesLookupResult{
 		LatestAvailableEpisode: latest,
-		TranslationTitle:       translationTitle,
 		CheckedAt:              time.Now().UTC(),
 	}
 
@@ -171,18 +162,18 @@ func (s *EpisodesLookupService) lookupAnimeLib(
 	shikimoriID string,
 	teamID int,
 	watchType string,
-) (int, string, error) {
+) (int, error) {
 	anime, err := s.animeRepo.GetByShikimoriID(ctx, shikimoriID)
 	if err != nil {
-		return 0, "", fmt.Errorf("anime lookup by shikimori_id %q: %w", shikimoriID, err)
+		return 0, fmt.Errorf("anime lookup by shikimori_id %q: %w", shikimoriID, err)
 	}
 	if anime == nil {
-		return 0, "", fmt.Errorf("anime not found for shikimori_id %q", shikimoriID)
+		return 0, fmt.Errorf("anime not found for shikimori_id %q", shikimoriID)
 	}
 
 	animelibID, err := s.catalogService.ResolveAnimeLibID(ctx, anime)
 	if err != nil {
-		return 0, "", fmt.Errorf("animelib id resolve: %w", err)
+		return 0, fmt.Errorf("animelib id resolve: %w", err)
 	}
 
 	return s.animelibClient.LatestEpisodeForTeam(ctx, animelibID, teamID, watchType)

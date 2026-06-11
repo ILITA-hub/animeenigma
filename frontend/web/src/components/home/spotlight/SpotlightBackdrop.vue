@@ -24,11 +24,9 @@
   <div class="absolute inset-0 overflow-hidden pointer-events-none">
     <img
       v-if="variant === 'poster-blur' && posterUrl"
-      :src="blurSrc"
+      :src="posterUrl"
       alt=""
       aria-hidden="true"
-      loading="lazy"
-      decoding="async"
       class="absolute inset-0 w-full h-full object-cover scale-110"
       :style="POSTER_BLUR_STYLE"
     />
@@ -51,7 +49,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { cardPosterUrl } from '@/composables/useImageProxy'
 import type { SpotlightAccent } from './tokens'
 
 interface Props {
@@ -68,10 +65,6 @@ const props = withDefaults(defineProps<Props>(), {
 // string stays cacheable and the blur values are explicit (40px blur,
 // 1.2 saturation, 0.4 alpha as specified in the Phase 01 plan).
 const POSTER_BLUR_STYLE = 'filter: blur(40px) saturate(1.2); opacity: 0.4;'
-
-// The backdrop is blurred 40px — full-res source is pure waste, so route
-// proxyable posters through the resizing image-proxy at the smallest bucket.
-const blurSrc = computed(() => cardPosterUrl(props.posterUrl, 128))
 
 // Per-accent radial-gradient mesh. Tailwind 4 evaluates these utility
 // strings at build time, so we use a static lookup table rather than

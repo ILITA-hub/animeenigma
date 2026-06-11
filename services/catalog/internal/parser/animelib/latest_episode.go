@@ -38,10 +38,6 @@ import (
 //      number → continue to other goroutines (no early-abort because
 //      errgroup is best-effort, not strict).
 //
-// The second return value is the team's display name (Team.Name, e.g.
-// "AniRise") taken from the matching PlayerData — same upstream payload,
-// no extra HTTP. Empty when no match (alongside the error).
-//
 // Returns 0 + a not-found-ish error when no episode has a matching
 // (team, watch_type) PlayerData. Detector treats that as a per-combo
 // failure-and-skip — see services/notifications/internal/job/detector.go.
@@ -51,18 +47,18 @@ import (
 // service layer wraps this in a 5-min Redis cache so cron-storm scenarios
 // stay bounded. v1.0.x can swap this for an upstream batch endpoint without
 // changing the public signature.
-func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamID int, watchType string) (int, string, error) {
+func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamID int, watchType string) (int, error) {
 	wantType, err := translationTypeForWatchType(watchType)
 	if err != nil {
-		return 0, "", err
+		return 0, err
 	}
 
 	episodes, err := c.GetEpisodes(animelibID)
 	if err != nil {
-		return 0, "", fmt.Errorf("animelib: get_episodes anime_id=%d: %w", animelibID, err)
+		return 0, fmt.Errorf("animelib: get_episodes anime_id=%d: %w", animelibID, err)
 	}
 	if len(episodes) == 0 {
-		return 0, "", fmt.Errorf("animelib: no episodes returned for anime_id=%d", animelibID)
+		return 0, fmt.Errorf("animelib: no episodes returned for anime_id=%d", animelibID)
 	}
 
 	// Sort newest-first by parsed number so the prune comment above holds.
@@ -82,9 +78,8 @@ func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamI
 	g.SetLimit(5)
 
 	var (
-		highest  int
-		teamName string
-		mu       sync.Mutex
+		highest int
+		mu      sync.Mutex
 	)
 
 	for _, ep := range sortable {
@@ -110,9 +105,6 @@ func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamI
 					if ep.num > highest {
 						highest = ep.num
 					}
-					if teamName == "" {
-						teamName = pd.Team.Name
-					}
 					mu.Unlock()
 					return nil
 				}
@@ -124,10 +116,10 @@ func (c *Client) LatestEpisodeForTeam(ctx context.Context, animelibID int, teamI
 	_ = g.Wait()
 
 	if highest == 0 {
-		return 0, "", fmt.Errorf("animelib: no episode for team=%d watch_type=%q on anime_id=%d",
+		return 0, fmt.Errorf("animelib: no episode for team=%d watch_type=%q on anime_id=%d",
 			teamID, watchType, animelibID)
 	}
-	return highest, teamName, nil
+	return highest, nil
 }
 
 // translationTypeForWatchType maps the notifications' watch_type string into

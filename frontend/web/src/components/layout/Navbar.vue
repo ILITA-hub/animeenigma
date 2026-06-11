@@ -337,6 +337,7 @@ const navLinks = [
   { to: '/', label: 'nav.home' },
   { to: '/browse', label: 'nav.catalog' },
   { to: '/schedule', label: 'nav.schedule' },
+  { to: '/themes', label: 'nav.themes' },
 ]
 
 const languages = [
@@ -404,21 +405,13 @@ const showLogin = () => {
   router.push('/auth')
 }
 
-// rAF-throttled: reading window.scrollY right after the reactive writes below
-// invalidate style forces a synchronous reflow on EVERY scroll event (confirmed
-// in the 2026-06-10 perf trace). One read per frame, batched at rAF start.
-let scrollRafId = 0
 const handleScroll = () => {
-  if (scrollRafId) return
-  scrollRafId = requestAnimationFrame(() => {
-    scrollRafId = 0
-    const currentScrollY = window.scrollY
+  const currentScrollY = window.scrollY
 
-    isScrolled.value = currentScrollY > 50
-    isVisible.value = currentScrollY < lastScrollY.value || currentScrollY < 100
+  isScrolled.value = currentScrollY > 50
+  isVisible.value = currentScrollY < lastScrollY.value || currentScrollY < 100
 
-    lastScrollY.value = currentScrollY
-  })
+  lastScrollY.value = currentScrollY
 }
 
 // Search state

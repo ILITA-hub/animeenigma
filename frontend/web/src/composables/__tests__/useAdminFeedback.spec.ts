@@ -60,19 +60,8 @@ describe('useAdminFeedback', () => {
     const fb = useAdminFeedback()
     await fb.refresh()
     expect(listSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ category: undefined, status: undefined, type: undefined, username: undefined }),
+      expect.objectContaining({ category: undefined, status: undefined, type: undefined }),
     )
-  })
-
-  it('passes a trimmed username filter, omitting it when blank', async () => {
-    listSpy.mockResolvedValue(listEnvelope([]))
-    const fb = useAdminFeedback()
-    fb.filterUsername.value = '  tNeymik '
-    await fb.refresh()
-    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ username: 'tNeymik' }))
-    fb.filterUsername.value = '   '
-    await fb.refresh()
-    expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ username: undefined }))
   })
 
   it('passes active filters as query params and resets to page 1 via applyFilters', async () => {

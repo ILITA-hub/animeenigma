@@ -70,7 +70,7 @@
           class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-brand-violet/20 transition-shadow duration-300 group-hover:shadow-brand-violet/40"
         >
           <img
-            :src="cardPosterUrl(data.anime.poster_url, 256)"
+            :src="data.anime.poster_url || '/placeholder.svg'"
             :alt="getLocalizedTitle(data.anime.name, data.anime.name_ru, data.anime.name_jp)"
             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
@@ -172,7 +172,6 @@ import { getLocalizedTitle } from '@/utils/title'
 import type { RandomTailData } from '@/types/spotlight'
 import SpotlightBackdrop from '../SpotlightBackdrop.vue'
 import SpotlightIcon from '../SpotlightIcon.vue'
-import { cardPosterUrl } from '@/composables/useImageProxy'
 
 defineProps<{ data: RandomTailData }>()
 

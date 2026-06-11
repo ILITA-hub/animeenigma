@@ -36,5 +36,3 @@ export interface SelectOption {
   value: string | number
   label: string
 }
-export { default as Spinner } from './Spinner.vue'
-export { spinnerVariants, type SpinnerVariants } from './spinner-variants'

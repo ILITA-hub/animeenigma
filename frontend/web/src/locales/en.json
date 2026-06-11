@@ -1005,9 +1005,7 @@
         "status": "Status",
         "allTypes": "All players",
         "allCategories": "All categories",
-        "allStatuses": "All statuses",
-        "username": "User",
-        "usernamePlaceholder": "Filter by username…"
+        "allStatuses": "All statuses"
       },
       "columns": {
         "category": "Category",

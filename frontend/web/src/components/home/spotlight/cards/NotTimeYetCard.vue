@@ -24,7 +24,7 @@
           class="relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] shadow-2xl shadow-warning/20"
         >
           <img
-            :src="cardPosterUrl(data.anime.poster_url, 256)"
+            :src="data.anime.poster_url || '/placeholder.svg'"
             :alt="title"
             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
@@ -107,7 +107,6 @@ import SpotlightIcon from '../SpotlightIcon.vue'
 import { getLocalizedTitle } from '@/utils/title'
 import { formatAgo } from '@/utils/time'
 import type { NotTimeYetData } from '@/types/spotlight'
-import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{ data: NotTimeYetData }>()
 const { t, locale: i18nLocale } = useI18n()

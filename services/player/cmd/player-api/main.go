@@ -214,57 +214,6 @@ func main() {
 		}
 	}
 
-	// Denormalized-username sync (2026-06-10). anime_list, comments,
-	// review_reactions and activity_events each carry a username copy so list
-	// pages don't join users; some historical write paths left it '' (rendered
-	// as the «Пользователь» fallback) and renames never propagated. A plain FK
-	// ON UPDATE CASCADE can't sync a non-key column, so this is trigger-based:
-	//   1. one-shot backfill of stale/empty copies from users
-	//   2. AFTER UPDATE OF username ON users → propagate to all 4 copies
-	//   3. BEFORE INSERT/UPDATE ON anime_list → auto-fill empty username
-	// CREATE OR REPLACE FUNCTION/TRIGGER (PG14+) makes every statement
-	// idempotent — re-running on already-migrated DBs is a no-op.
-	{
-		stmts := []string{
-			`UPDATE anime_list SET username = u.username
-				FROM users u
-				WHERE anime_list.user_id = u.id
-				  AND anime_list.username IS DISTINCT FROM u.username`,
-			`CREATE OR REPLACE FUNCTION propagate_username_change() RETURNS trigger AS $$
-			BEGIN
-				UPDATE anime_list SET username = NEW.username WHERE user_id = NEW.id;
-				UPDATE comments SET username = NEW.username WHERE user_id = NEW.id;
-				UPDATE review_reactions SET username = NEW.username WHERE user_id = NEW.id;
-				UPDATE activity_events SET username = NEW.username WHERE user_id = NEW.id;
-				RETURN NEW;
-			END;
-			$$ LANGUAGE plpgsql`,
-			`CREATE OR REPLACE TRIGGER trg_users_propagate_username
-				AFTER UPDATE OF username ON users
-				FOR EACH ROW
-				WHEN (OLD.username IS DISTINCT FROM NEW.username)
-				EXECUTE FUNCTION propagate_username_change()`,
-			`CREATE OR REPLACE FUNCTION fill_anime_list_username() RETURNS trigger AS $$
-			BEGIN
-				IF NEW.username IS NULL OR NEW.username = '' THEN
-					SELECT u.username INTO NEW.username FROM users u WHERE u.id = NEW.user_id;
-					NEW.username := COALESCE(NEW.username, '');
-				END IF;
-				RETURN NEW;
-			END;
-			$$ LANGUAGE plpgsql`,
-			`CREATE OR REPLACE TRIGGER trg_anime_list_fill_username
-				BEFORE INSERT OR UPDATE ON anime_list
-				FOR EACH ROW
-				EXECUTE FUNCTION fill_anime_list_username()`,
-		}
-		for _, sql := range stmts {
-			if err := db.DB.Exec(sql).Error; err != nil {
-				log.Fatalw("failed to apply denormalized-username sync migration", "sql", sql, "error", err)
-			}
-		}
-	}
-
 	// Phase 10: Redis cache (required for recs handler + population orchestrator).
 	// Player did not use Redis prior to Phase 10; this is the first required
 	// dependency. If Redis is unreachable on boot we treat it as fatal because

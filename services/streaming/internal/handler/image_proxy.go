@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -53,11 +52,7 @@ func (h *ImageProxyHandler) ProxyImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optional resize width; 0/absent/garbage means full-size original.
-	// The service snaps positive values to its allowed bucket set.
-	width, _ := strconv.Atoi(r.URL.Query().Get("w"))
-
-	result, err := h.imageProxyService.GetImage(r.Context(), rawURL, width)
+	result, err := h.imageProxyService.GetImage(r.Context(), rawURL)
 	if err != nil {
 		if err.Error() == "domain not allowed" {
 			httputil.BadRequest(w, "domain not allowed")
@@ -71,8 +66,7 @@ func (h *ImageProxyHandler) ProxyImage(w http.ResponseWriter, r *http.Request) {
 	imageProxyRequestsTotal.WithLabelValues(string(result.Source)).Inc()
 
 	w.Header().Set("Content-Type", result.ContentType)
-	// Poster URLs are content-hashed upstream → safe to cache long + immutable
-	w.Header().Set("Cache-Control", "public, max-age=2592000, immutable")
+	w.Header().Set("Cache-Control", "public, max-age=604800")
 	w.Header().Set("X-Image-Source", string(result.Source))
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)

@@ -1,6 +1,6 @@
 <template>
   <router-link :to="model.href" class="mtile group">
-    <PosterImage :src="model.coverImage" :alt="model.title" ratio="16/9" rounded="lg" scrim :proxy-width="640">
+    <PosterImage :src="model.coverImage" :alt="model.title" ratio="16/9" rounded="lg" scrim>
       <!-- Hover dim so the play control reads against bright posters -->
       <div class="mtile-ovl" aria-hidden="true" />
 

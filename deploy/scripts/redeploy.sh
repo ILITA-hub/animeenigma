@@ -30,29 +30,6 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# ISS-030 guard: a `git worktree` materialises only TRACKED files, so a deploy
-# run from a worktree has no docker/.env and compose silently falls back to
-# `${JWT_SECRET:-dev-secret-change-in-production}` — the redeployed service then
-# 401s every prod token. Self-heal by copying the canonical prod env file when
-# possible; otherwise refuse to deploy.
-ENV_FILE="$PROJECT_ROOT/docker/.env"
-CANONICAL_ENV="${REDEPLOY_CANONICAL_ENV:-/data/animeenigma/docker/.env}"
-if [ ! -f "$ENV_FILE" ]; then
-    if [ -f "$CANONICAL_ENV" ] && [ "$CANONICAL_ENV" != "$ENV_FILE" ]; then
-        log_warn "docker/.env missing at $ENV_FILE (worktree deploy?) — copying from $CANONICAL_ENV"
-        cp "$CANONICAL_ENV" "$ENV_FILE"
-    else
-        log_error "docker/.env not found at $ENV_FILE and no canonical copy at $CANONICAL_ENV."
-        log_error "Refusing to deploy: compose would fall back to dev secrets (JWT_SECRET etc.) and 401 every prod token (ISS-030)."
-        exit 1
-    fi
-fi
-if ! grep -q '^JWT_SECRET=' "$ENV_FILE"; then
-    log_error "$ENV_FILE has no JWT_SECRET= line — stale/partial env file?"
-    log_error "Refusing to deploy: compose would fall back to the dev secret and 401 every prod token (ISS-030)."
-    exit 1
-fi
-
 # All backend services that can be redeployed
 ALL_SERVICES="auth catalog gateway player rooms scheduler streaming"
 

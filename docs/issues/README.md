@@ -4,16 +4,6 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
-### ISS-030: Worktree deploys without `docker/.env` shipped a dev JWT secret — two ~3-min windows of universal 401s; branch divergence made it hard to see
-- **Date:** 2026-06-10
-- **Severity:** High (all authenticated player requests 401'd during two short windows, ~12:07–12:10 and ~12:13–12:16 local), self-inflicted during AUTO-422 deployment work.
-- **Symptom:** Real users got `401 authentication required` on `/api/users/continue-watching`, `/api/users/watchlist/statuses` etc. while the player container was healthy. Hand-minted admin JWTs and the `ui_audit_bot` API-key path also 401'd.
-- **Root cause:** `make redeploy-player` was run from a fresh temp git worktree (`git worktree add` materialises only TRACKED files). `docker/.env` is gitignored, so docker compose fell back to `JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}` — the player validated prod tokens against the dev secret. Misleading correlation: the rollback target (feature-branch tree) worked, which initially looked like "main's player auth is broken"; it was only ever the missing env file.
-- **Contributing hazard (still active):** `main` and `feat/ds-primitives-lucide` have diverged materially. Player: main has the bot's `/internal/feedback` mirror API + attachment serving; the feature branch has the gacha credit producer + `/internal/reports/{id}/status`. Web: main lacks lucide-vue-next/most ui primitives (ported Spinner in 28b75d2c so main type-checks); the feature branch lacks the attachments/telegram-meta admin UI (union synced into the shared working tree, uncommitted). Deploying a service from the "wrong" tree silently regresses the other line's features — this bit three times today (player from feature tree dropped the bot mirror API; player/web from main dropped gacha + lucide work).
-- **Fix applied:** copy `docker/.env` into any worktree before `make redeploy-*` from it (done manually); prod player/web now run the main-merged build (mirror API + attachments + username filter), bot binary rebuilt from the same merged source. Verified: API-key auth 200, union Playwright smoke green, all 12 services healthy.
-- **Follow-up needed:** (1) make `redeploy.sh` fail fast (or copy from a canonical path) when `docker/.env` is absent next to the compose file; (2) merge `feat/ds-primitives-lucide` ↔ `main` properly — until then any `make redeploy-player`/`redeploy-web` from the shared tree regresses the bot mirror API/attachments UI.
-- **Status:** Active (mitigated; follow-ups open)
-
 ### ISS-029: Maintenance bot "apply fix" crashes with `signal: aborted (core dumped)` — systemd `TasksMax=50` exhaustion, not OOM
 - **Date:** 2026-06-09
 - **Severity:** High (the bot's entire auto-apply path is broken for any fix heavy enough to run a build — i.e. every real feature/code fix; AUTO-408 "emoji reactions for reviews" was the trigger). Poller itself stayed up.

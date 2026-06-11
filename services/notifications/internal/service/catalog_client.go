@@ -18,19 +18,9 @@ import (
 // EpisodeChecker is the canonical port the Phase 2 detector depends on.
 // Production = HTTPEpisodeChecker hitting catalog's
 // /internal/anime/{shikimori_id}/episodes endpoint. Tests = stub returning
-// canned EpisodeCheckResult values from a map[Combo] fixture (D-DET-07).
+// canned latest-episode integers from a map[Combo]int fixture (D-DET-07).
 type EpisodeChecker interface {
-	LatestEpisode(ctx context.Context, combo domain.Combo) (EpisodeCheckResult, error)
-}
-
-// EpisodeCheckResult is what the checker hands the detector per combo.
-// TranslationTitle is the per-player display title for the combo's
-// translation (Kodik Translation.Title / AnimeLib Team.Name), resolved by
-// catalog in the same parser call as the episode count. May be empty —
-// the new_episode payload treats it as optional.
-type EpisodeCheckResult struct {
-	Latest           int
-	TranslationTitle string
+	LatestEpisode(ctx context.Context, combo domain.Combo) (int, error)
 }
 
 // EpisodeCheckerResponse mirrors the wire shape catalog's
@@ -50,7 +40,6 @@ type EpisodeCheckerResponse struct {
 // EpisodeCheckerResponsePayload is the inner object catalog returns.
 type EpisodeCheckerResponsePayload struct {
 	LatestAvailableEpisode int       `json:"latest_available_episode"`
-	TranslationTitle       string    `json:"translation_title,omitempty"`
 	CheckedAt              time.Time `json:"checked_at"`
 }
 
@@ -81,10 +70,10 @@ func NewHTTPEpisodeChecker(baseURL string, timeout time.Duration, log *logger.Lo
 
 // LatestEpisode hits GET /internal/anime/{shikimori_id}/episodes with the
 // combo's player/translation_id/watch_type/language params and returns
-// the parsed latest_available_episode + translation_title.
-func (c *HTTPEpisodeChecker) LatestEpisode(ctx context.Context, combo domain.Combo) (EpisodeCheckResult, error) {
+// the parsed latest_available_episode.
+func (c *HTTPEpisodeChecker) LatestEpisode(ctx context.Context, combo domain.Combo) (int, error) {
 	if combo.ShikimoriID == "" {
-		return EpisodeCheckResult{}, apperrors.InvalidInput("combo missing shikimori_id")
+		return 0, apperrors.InvalidInput("combo missing shikimori_id")
 	}
 
 	q := url.Values{}
@@ -98,7 +87,7 @@ func (c *HTTPEpisodeChecker) LatestEpisode(ctx context.Context, combo domain.Com
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return EpisodeCheckResult{}, apperrors.Wrap(err, apperrors.CodeInternal, "build episodes request")
+		return 0, apperrors.Wrap(err, apperrors.CodeInternal, "build episodes request")
 	}
 	req.Header.Set("Accept", "application/json")
 
@@ -106,33 +95,30 @@ func (c *HTTPEpisodeChecker) LatestEpisode(ctx context.Context, combo domain.Com
 	if err != nil {
 		// Includes timeouts (context.DeadlineExceeded) and connection
 		// failures (DNS, refused, etc).
-		return EpisodeCheckResult{}, apperrors.Wrap(err, apperrors.CodeUnavailable, "catalog episodes request failed")
+		return 0, apperrors.Wrap(err, apperrors.CodeUnavailable, "catalog episodes request failed")
 	}
 	defer resp.Body.Close()
 
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return EpisodeCheckResult{}, apperrors.Wrap(readErr, apperrors.CodeInternal, "read episodes response")
+		return 0, apperrors.Wrap(readErr, apperrors.CodeInternal, "read episodes response")
 	}
 
 	switch resp.StatusCode {
 	case http.StatusOK:
 		var parsed EpisodeCheckerResponse
 		if err := json.Unmarshal(body, &parsed); err != nil {
-			return EpisodeCheckResult{}, apperrors.Wrap(err, apperrors.CodeInternal, "decode episodes response")
+			return 0, apperrors.Wrap(err, apperrors.CodeInternal, "decode episodes response")
 		}
-		return EpisodeCheckResult{
-			Latest:           parsed.Data.LatestAvailableEpisode,
-			TranslationTitle: parsed.Data.TranslationTitle,
-		}, nil
+		return parsed.Data.LatestAvailableEpisode, nil
 	case http.StatusNotFound:
 		// Combo has no upstream match — treat as not-found, NOT failure.
 		// Detector skips silently rather than logging a parser failure.
-		return EpisodeCheckResult{}, apperrors.NotFound("episode for combo")
+		return 0, apperrors.NotFound("episode for combo")
 	case http.StatusBadRequest:
-		return EpisodeCheckResult{}, apperrors.InvalidInput(fmt.Sprintf("catalog rejected episodes request: %s", string(body)))
+		return 0, apperrors.InvalidInput(fmt.Sprintf("catalog rejected episodes request: %s", string(body)))
 	default:
-		return EpisodeCheckResult{}, apperrors.New(apperrors.CodeUnavailable,
+		return 0, apperrors.New(apperrors.CodeUnavailable,
 			fmt.Sprintf("catalog episodes returned %d: %s", resp.StatusCode, string(body)))
 	}
 }

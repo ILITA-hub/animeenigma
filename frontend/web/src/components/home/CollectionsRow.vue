@@ -23,24 +23,12 @@
             :alt="localizedTitle(c)"
             class="collection-card-img"
             loading="lazy"
-            @load="loadedCovers.add(c.id)"
-            @error="loadedCovers.add(c.id)"
           />
           <!-- Fallback gradient (preserved from original) -->
           <div
             v-else
             class="collection-card-fallback"
           />
-          <!-- Glass skeleton — translucent overlay above the img so the native
-               progressive cover render shows through; fades out on @load.
-               AFTER the v-if/v-else chain (a node in between breaks it). -->
-          <Transition name="sk-fade">
-            <div
-              v-if="c.cover_image_url && !loadedCovers.has(c.id)"
-              class="absolute inset-0 sk-drift pointer-events-none"
-              aria-hidden="true"
-            />
-          </Transition>
           <!-- Title overlay (Top-10 visual mode, per CONTEXT.md specifics). -->
           <div class="collection-card-overlay">
             <h3 class="collection-card-title">{{ localizedTitle(c) }}</h3>
@@ -64,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { animeApi, type Collection } from '@/api/client'
 import { getLocalizedTitle } from '@/utils/title'
@@ -73,7 +61,6 @@ const { locale } = useI18n()
 
 const items = ref<Collection[]>([])
 const isLoading = ref(true)
-const loadedCovers = reactive(new Set<string>())
 
 function unwrap<T>(resp: { data: T | { data: T } }): T {
   const d = resp.data as unknown
@@ -172,7 +159,6 @@ onMounted(load)
 .collection-card-link:hover .collection-card-img {
   transform: scale(1.05);
 }
-
 
 /* Fallback gradient (preserved from original) */
 .collection-card-fallback {

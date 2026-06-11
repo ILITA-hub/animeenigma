@@ -2,7 +2,6 @@ package job
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/ILITA-hub/animeenigma/libs/database"
@@ -16,18 +15,15 @@ import (
 )
 
 // stubChecker implements service.EpisodeChecker over a static fixture.
-// `title` (optional) is returned as the TranslationTitle for every combo —
-// enough to assert the title plumbs through to the payload.
 type stubChecker struct {
 	byCombo map[domain.Combo]int
-	title   string
 }
 
-func (s *stubChecker) LatestEpisode(_ context.Context, combo domain.Combo) (service.EpisodeCheckResult, error) {
+func (s *stubChecker) LatestEpisode(_ context.Context, combo domain.Combo) (int, error) {
 	if v, ok := s.byCombo[combo]; ok {
-		return service.EpisodeCheckResult{Latest: v, TranslationTitle: s.title}, nil
+		return v, nil
 	}
-	return service.EpisodeCheckResult{}, nil
+	return 0, nil
 }
 
 // testDB spins up an in-memory SQLite DB with the schema both the
@@ -233,7 +229,7 @@ func Test_Detector_FiresOnDiffAfterBootstrap(t *testing.T) {
 	seedList(t, db, userID, animeID, "watching")
 	seedWatch(t, db, userID, animeID, "animelib", "ru", "dub", "9999", 5)
 
-	checker := &stubChecker{byCombo: map[domain.Combo]int{combo: 5}, title: "AniRise"}
+	checker := &stubChecker{byCombo: map[domain.Combo]int{combo: 5}}
 	det := newDetector(db, checker)
 
 	// First run: bootstrap.
@@ -258,15 +254,6 @@ func Test_Detector_FiresOnDiffAfterBootstrap(t *testing.T) {
 	want := "new_episode:" + animeID + ":animelib:ru:dub:9999"
 	if n.DedupeKey != want {
 		t.Fatalf("dedupe key mismatch: want %q, got %q", want, n.DedupeKey)
-	}
-
-	// The checker-resolved translation title must ride into the payload.
-	var payload domain.NewEpisodePayload
-	if err := json.Unmarshal([]byte(n.Payload), &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	if payload.TranslationTitle != "AniRise" {
-		t.Fatalf("translation_title mismatch: want %q, got %q", "AniRise", payload.TranslationTitle)
 	}
 }
 
@@ -396,11 +383,11 @@ type failingCheckerForB struct {
 	success map[domain.Combo]int
 }
 
-func (f *failingCheckerForB) LatestEpisode(_ context.Context, combo domain.Combo) (service.EpisodeCheckResult, error) {
+func (f *failingCheckerForB) LatestEpisode(_ context.Context, combo domain.Combo) (int, error) {
 	if v, ok := f.success[combo]; ok {
-		return service.EpisodeCheckResult{Latest: v}, nil
+		return v, nil
 	}
-	return service.EpisodeCheckResult{}, errParser("upstream unavailable")
+	return 0, errParser("upstream unavailable")
 }
 
 type errParser string

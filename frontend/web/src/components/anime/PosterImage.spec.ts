@@ -3,14 +3,13 @@ import { mount } from '@vue/test-utils'
 import PosterImage from './PosterImage.vue'
 
 describe('PosterImage', () => {
-  it('overlays the drift skeleton on the always-visible image until it loads', async () => {
+  it('shows the drift skeleton until the image loads', async () => {
     const w = mount(PosterImage, { props: { src: 'http://x/p.jpg', alt: 'P' } })
     expect(w.find('.sk-drift').exists()).toBe(true)
-    // The img is NEVER opacity-hidden — the native progressive render must
-    // stay visible under the translucent overlay as loading feedback.
-    expect(w.find('img').classes()).not.toContain('opacity-0')
+    expect(w.find('img').classes()).toContain('opacity-0')
     await w.find('img').trigger('load')
     expect(w.find('.sk-drift').exists()).toBe(false)
+    expect(w.find('img').classes()).toContain('opacity-100')
   })
 
   it('applies the requested aspect ratio', () => {
