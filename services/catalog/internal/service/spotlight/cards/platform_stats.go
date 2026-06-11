@@ -95,6 +95,9 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 	}
 
 	// --- Tiles: shuffle allowlist, pick a random window each, keep > 0 --
+	// A failed/zero query falls back to the metric's OTHER windows before
+	// the tile is dropped — one bad window used to silently shrink the
+	// card to 2-3 tiles for the whole cached day.
 	tiles := make([]spotlight.StatsTile, 0, 4)
 	order := make([]promTile, len(parsedTiles))
 	copy(order, parsedTiles)
@@ -106,21 +109,27 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 		if len(t.Windows) == 0 {
 			continue
 		}
-		window := t.Windows[rng.Intn(len(t.Windows))]
-		val, err := r.prom.Query(ctx, windowPromQL(t.Metric, window))
-		if err != nil {
-			r.log.Warnw("spotlight.stats_tile_failed", "metric", t.Metric, "window", window, "error", err)
-			continue
+		windows := make([]string, len(t.Windows))
+		copy(windows, t.Windows)
+		first := rng.Intn(len(windows))
+		windows[0], windows[first] = windows[first], windows[0]
+		for _, window := range windows {
+			val, err := r.prom.Query(ctx, windowPromQL(t.Metric, window))
+			if err != nil {
+				r.log.Warnw("spotlight.stats_tile_failed", "metric", t.Metric, "window", window, "error", err)
+				continue
+			}
+			if val <= 0 {
+				continue
+			}
+			tiles = append(tiles, spotlight.StatsTile{
+				Label:  t.Label,
+				Value:  val,
+				Window: window,
+				Format: t.Format,
+			})
+			break
 		}
-		if val <= 0 {
-			continue
-		}
-		tiles = append(tiles, spotlight.StatsTile{
-			Label:  t.Label,
-			Value:  val,
-			Window: window,
-			Format: t.Format,
-		})
 	}
 
 	data := spotlight.PlatformStatsData{Hero: hero, Tiles: tiles}

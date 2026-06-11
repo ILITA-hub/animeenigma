@@ -32,9 +32,12 @@
       class="relative z-10 h-full flex flex-col gap-3 p-4 md:p-6 lg:p-8"
       :class="[justify === 'end' ? 'justify-end' : '', contentClass]"
     >
+      <!-- Kicker weight is font-medium (500), NOT semibold: JetBrains Mono
+           ships only the 400/500 faces — a 600 weight forces faux-bold
+           synthesis and the kicker (incl. the season suffix) renders blurry. -->
       <p
         v-if="kicker"
-        class="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] font-semibold font-mono"
+        class="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] font-medium font-mono"
         :class="accentText[accent]"
       >
         <slot name="kicker-lead">
