@@ -38,6 +38,11 @@ func (h *ProxyHandler) ProxyToPlayer(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "player")
 }
 
+// ProxyToRecs proxies requests to the recs service (extraction Phase 1).
+func (h *ProxyHandler) ProxyToRecs(w http.ResponseWriter, r *http.Request) {
+	h.proxy(w, r, "recs")
+}
+
 // ProxyToRooms proxies requests to rooms service
 func (h *ProxyHandler) ProxyToRooms(w http.ResponseWriter, r *http.Request) {
 	h.proxy(w, r, "rooms")

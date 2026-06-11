@@ -247,6 +247,8 @@ func (s *ProxyService) getServiceURL(service string) (string, error) {
 	case "gacha":
 		// workstream gacha (Лудка), Phase 1 — REST passthrough to gacha:8093.
 		return s.serviceURLs.GachaService, nil
+	case "recs":
+		return s.serviceURLs.RecsService, nil
 	case "analytics":
 		return s.serviceURLs.AnalyticsService, nil
 	case "watch-together":

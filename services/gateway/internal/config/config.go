@@ -81,6 +81,9 @@ type ServiceURLs struct {
 	// endpoint (/internal/gacha/credit) is Docker-network-only and never
 	// registered at the gateway (D-05 security model).
 	GachaService string
+	// RecsService — recommendation engine, extracted from player (spec
+	// 2026-06-11). Port 8094.
+	RecsService string
 	WebService           string
 	// Admin panel services
 	GrafanaService    string
@@ -133,6 +136,7 @@ func Load() (*Config, error) {
 			WatchTogetherService: getEnv("WATCH_TOGETHER_SERVICE_URL", "http://watch-together:8091"),
 			AnalyticsService:     getEnv("ANALYTICS_SERVICE_URL", "http://analytics:8092"),
 			GachaService:         getEnv("GACHA_SERVICE_URL", "http://gacha:8093"),
+			RecsService:          getEnv("RECS_SERVICE_URL", "http://recs:8094"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

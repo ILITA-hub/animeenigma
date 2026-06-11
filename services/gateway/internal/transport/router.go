@@ -363,28 +363,28 @@ func NewRouterWithCleanup(
 		r.Group(func(r chi.Router) {
 			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
-			r.HandleFunc("/users/recs", proxyHandler.ProxyToPlayer)
-			r.HandleFunc("/users/recs/", proxyHandler.ProxyToPlayer)
+			r.HandleFunc("/users/recs", proxyHandler.ProxyToRecs)
+			r.HandleFunc("/users/recs/", proxyHandler.ProxyToRecs)
 		})
 
 		// Phase 14 (REC-ADMIN-01 / REC-ADMIN-02): admin debug + force-recompute
-		// routes proxied to the player service. JWT validation + admin role
-		// gate at the gateway layer (defense-in-depth — player applies the same
-		// gates again in services/player/internal/transport/router.go).
+		// routes proxied to the recs service. JWT validation + admin role
+		// gate at the gateway layer (defense-in-depth — recs applies the same
+		// gates again in services/recs/internal/transport/router.go).
 		r.Group(func(r chi.Router) {
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
 			r.Use(AdminRoleMiddleware)
-			r.HandleFunc("/admin/recs/*", proxyHandler.ProxyToPlayer)
+			r.HandleFunc("/admin/recs/*", proxyHandler.ProxyToRecs)
 		})
 
 		// Phase 14 (REC-EVAL-01): public telemetry endpoint. JWT-OPTIONAL so
-		// anonymous CTR data flows from the trending row. Player applies its
+		// anonymous CTR data flows from the trending row. Recs applies its
 		// own OptionalAuthMiddleware on the inner /events/rec route.
 		r.Group(func(r chi.Router) {
 			r.Use(OptionalJWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
-			r.HandleFunc("/events/rec", proxyHandler.ProxyToPlayer)
+			r.HandleFunc("/events/rec", proxyHandler.ProxyToRecs)
 		})
 
 		// Player service routes (protected)
