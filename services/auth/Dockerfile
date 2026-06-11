@@ -36,6 +36,7 @@ COPY services/maintenance/go.mod services/maintenance/go.sum* ./services/mainten
 COPY services/scraper/go.mod services/scraper/go.sum* ./services/scraper/
 COPY services/library/go.mod services/library/go.sum* ./services/library/
 COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
+COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
 
 RUN cd services/auth && go mod download
 

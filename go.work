@@ -24,6 +24,7 @@ use (
 	./services/maintenance
 	./services/notifications
 	./services/player
+	./services/recs
 	./services/rooms
 	./services/scheduler
 	./services/scraper

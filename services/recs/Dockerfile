@@ -38,14 +38,14 @@ COPY services/library/go.mod services/library/go.sum* ./services/library/
 COPY services/gacha/go.mod services/gacha/go.sum* ./services/gacha/
 COPY services/recs/go.mod services/recs/go.sum* ./services/recs/
 
-RUN cd services/gacha && go mod download
+RUN cd services/recs && go mod download
 
 # Copy source
 COPY libs/ ./libs/
-COPY services/gacha/ ./services/gacha/
+COPY services/recs/ ./services/recs/
 
 # Build
-RUN cd services/gacha && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /gacha-api ./cmd/gacha-api
+RUN cd services/recs && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /recs-api ./cmd/recs-api
 
 # Runtime stage
 FROM alpine:3.19
@@ -54,8 +54,8 @@ RUN apk add --no-cache ca-certificates tzdata wget
 
 WORKDIR /app
 
-COPY --from=builder /gacha-api .
+COPY --from=builder /recs-api .
 
-EXPOSE 8093
+EXPOSE 8094
 
-CMD ["./gacha-api"]
+CMD ["./recs-api"]
