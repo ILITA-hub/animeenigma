@@ -24,6 +24,10 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=cyan 1`] = `
     renders against a fully transparent background.
   -->
 <div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- DS shimmer while a COLD blur poster loads (2026-06-11 feedback:
+         «скелетона нет на фоне») — warm URLs (session registry) skip it so
+         carousel re-mounts never replay the loading state. -->
+  <!--v-if-->
   <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
          URL changes in place (RandomTail reroll, 2026-06-11): old blur
          fades out while the new (preloaded by the card) fades in — no
@@ -63,6 +67,10 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=pink 1`] = `
     renders against a fully transparent background.
   -->
 <div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- DS shimmer while a COLD blur poster loads (2026-06-11 feedback:
+         «скелетона нет на фоне») — warm URLs (session registry) skip it so
+         carousel re-mounts never replay the loading state. -->
+  <!--v-if-->
   <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
          URL changes in place (RandomTail reroll, 2026-06-11): old blur
          fades out while the new (preloaded by the card) fades in — no
@@ -102,6 +110,10 @@ exports[`SpotlightBackdrop > gradient-mesh snapshot for accent=violet 1`] = `
     renders against a fully transparent background.
   -->
 <div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- DS shimmer while a COLD blur poster loads (2026-06-11 feedback:
+         «скелетона нет на фоне») — warm URLs (session registry) skip it so
+         carousel re-mounts never replay the loading state. -->
+  <!--v-if-->
   <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
          URL changes in place (RandomTail reroll, 2026-06-11): old blur
          fades out while the new (preloaded by the card) fades in — no
@@ -141,6 +153,10 @@ exports[`SpotlightBackdrop > poster-blur snapshot with mock URL 1`] = `
     renders against a fully transparent background.
   -->
 <div data-v-92a4d159="" class="absolute inset-0 overflow-hidden pointer-events-none">
+  <!-- DS shimmer while a COLD blur poster loads (2026-06-11 feedback:
+         «скелетона нет на фоне») — warm URLs (session registry) skip it so
+         carousel re-mounts never replay the loading state. -->
+  <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 skeleton-shimmer opacity-50" data-testid="backdrop-skeleton"></div>
   <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
          URL changes in place (RandomTail reroll, 2026-06-11): old blur
          fades out while the new (preloaded by the card) fades in — no
@@ -148,7 +164,7 @@ exports[`SpotlightBackdrop > poster-blur snapshot with mock URL 1`] = `
          transition classes can animate it (an inline opacity on the <img>
          would beat the enter/leave classes). -->
   <transition-stub data-v-92a4d159="" name="backdrop-x" appear="false" persisted="false" css="true">
-    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 opacity-40"><img data-v-92a4d159="" src="/api/streaming/image-proxy?url=https%3A%2F%2Fshikimori.one%2Fposter.jpg&amp;w=128" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover scale-110" style="filter: blur(40px) saturate(1.2);"></div>
+    <div data-v-92a4d159="" aria-hidden="true" class="absolute inset-0 opacity-40"><img data-v-92a4d159="" src="/api/streaming/image-proxy?url=https%3A%2F%2Fshikimori.one%2Fposter.jpg&amp;w=128" alt="" aria-hidden="true" decoding="async" class="absolute inset-0 w-full h-full object-cover scale-110" style="filter: blur(40px) saturate(1.2);"></div>
   </transition-stub>
   <!-- Shared right-edge vignette so foreground text remains AA-readable
          regardless of variant. -->

@@ -1,33 +1,39 @@
 <template>
   <div :class="[posterVariants({ glow }), widthClass]">
     <!-- DS shimmer placeholder until the image decodes (2026-06-11 lock:
-         «скелетоны под загрузку любого картиночного элемента») — the img
-         fades in over it so a slow proxy never shows a raw empty box. -->
+         «скелетоны под загрузку любого картиночного элемента»). Skipped
+         entirely for warm URLs (already loaded this session) — a carousel
+         re-mount over an HTTP-cache hit must NOT replay the loading
+         choreography (reads as "the image reloads every time"). -->
     <div v-if="!loaded" class="absolute inset-0 skeleton-shimmer" aria-hidden="true" />
     <img
       ref="imgRef"
-      :src="cardPosterUrl(posterUrl, proxyWidth)"
+      :src="src"
       :alt="alt"
-      class="w-full h-full object-cover transition-opacity duration-300"
-      :class="[imgClass, loaded ? 'opacity-100' : 'opacity-0']"
-      loading="lazy"
+      class="w-full h-full object-cover"
+      :class="[imgClass, loaded ? 'opacity-100' : 'opacity-0 img-pending']"
       decoding="async"
-      @load="loaded = true"
-      @error="loaded = true"
+      @load="onLoad"
+      @error="onLoad"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 /**
- * Spotlight UI primitive (v4 lock, 2026-06-11) — proxied lazy 2:3 poster
- * with the brand-triad glow shadows. Decorative by design: no link, no
- * badges, no context menu (that's PosterCard's catalog territory —
- * see the v4 PS decision in 2026-06-11 spec).
+ * Spotlight UI primitive (v4 lock, 2026-06-11) — proxied 2:3 poster with
+ * the brand-triad glow shadows. Decorative by design: no link, no badges,
+ * no context menu (that's PosterCard's catalog territory — see the v4 PS
+ * decision in 2026-06-11 spec).
+ *
+ * Loading is EAGER (no loading="lazy"): the carousel mounts only the
+ * active slide, so every mounted poster is on screen — lazy only delayed
+ * cached decodes and made slide flips look like reloads.
  */
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { cva } from 'class-variance-authority'
 import { cardPosterUrl } from '@/composables/useImageProxy'
+import { isImageWarm, markImageWarm } from '@/utils/preload-image'
 
 const props = withDefaults(
   defineProps<{
@@ -45,23 +51,28 @@ const props = withDefaults(
   { posterUrl: '', alt: '', widthClass: 'w-24', proxyWidth: 256, glow: 'none', imgClass: '' },
 )
 
-const imgRef = ref<HTMLImageElement | null>(null)
-const loaded = ref(false)
+const src = computed(() => cardPosterUrl(props.posterUrl, props.proxyWidth))
 
-// Cache-hit images may be `complete` before the @load listener attaches
-// (e.g. prefetched by HeroSpotlightBlock) — check once on mount so the
-// shimmer doesn't flash over an already-decoded poster.
+const imgRef = ref<HTMLImageElement | null>(null)
+// Warm URLs (preloaded by HeroSpotlightBlock's prefetch, the reroll
+// preloader, or a previous mount) render instantly — no shimmer, no fade.
+const loaded = ref(isImageWarm(src.value))
+
+function onLoad(): void {
+  loaded.value = true
+  markImageWarm(src.value)
+}
+
+// Belt-and-braces for images that complete before the listener attaches.
 onMounted(() => {
-  if (imgRef.value?.complete && imgRef.value.naturalWidth > 0) loaded.value = true
+  if (imgRef.value?.complete && imgRef.value.naturalWidth > 0) onLoad()
 })
 
-// A reactive src swap (RandomTail reroll) restarts the load cycle.
-watch(
-  () => props.posterUrl,
-  () => {
-    loaded.value = false
-  },
-)
+// A reactive src swap (RandomTail reroll) restarts the cycle — but only
+// shows the shimmer again if the NEW url is cold.
+watch(src, (v) => {
+  loaded.value = isImageWarm(v)
+})
 
 const posterVariants = cva(
   'relative rounded-xl overflow-hidden bg-white/5 aspect-[2/3] flex-shrink-0',
@@ -78,3 +89,11 @@ const posterVariants = cva(
   },
 )
 </script>
+
+<style scoped>
+/* Fade-in runs only for cold loads (.img-pending applied while waiting);
+   warm renders mount directly at opacity-100 with no transition. */
+img {
+  transition: opacity 0.3s ease;
+}
+</style>

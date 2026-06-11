@@ -31,7 +31,7 @@ describe('SpotlightTile', () => {
 })
 
 describe('SpotlightPoster', () => {
-  it('renders a lazy proxied 2:3 poster with glow variant', () => {
+  it('renders an eager proxied 2:3 poster with glow variant', () => {
     const w = mount(SpotlightPoster, {
       props: {
         posterUrl: 'https://shikimori.io/uploads/poster/animes/30/x.jpeg',
@@ -41,11 +41,29 @@ describe('SpotlightPoster', () => {
       },
     })
     const img = w.find('img')
-    expect(img.attributes('loading')).toBe('lazy')
+    // EAGER on purpose (2026-06-11): the carousel mounts only the active
+    // slide — lazy just delayed cached decodes and read as a reload.
+    expect(img.attributes('loading')).toBeUndefined()
     expect(img.attributes('src')).toContain('image-proxy')
     expect(w.classes().join(' ')).toContain('aspect-[2/3]')
     expect(w.classes().join(' ')).toContain('shadow-pink-500/30')
     expect(w.classes().join(' ')).toContain('w-32')
+  })
+
+  it('cold load: shimmer + hidden img until @load; warm re-mount renders instantly', async () => {
+    const url = 'https://shikimori.io/uploads/poster/animes/31/cold.jpeg'
+    const w = mount(SpotlightPoster, { props: { posterUrl: url } })
+    // Cold: skeleton visible, img transparent.
+    expect(w.find('.skeleton-shimmer').exists()).toBe(true)
+    expect(w.find('img').classes()).toContain('opacity-0')
+    // Image finishes loading → shimmer gone, img visible, URL marked warm.
+    await w.find('img').trigger('load')
+    expect(w.find('.skeleton-shimmer').exists()).toBe(false)
+    expect(w.find('img').classes()).toContain('opacity-100')
+    // Re-mount with the same URL (carousel flip) → instant, no shimmer.
+    const w2 = mount(SpotlightPoster, { props: { posterUrl: url } })
+    expect(w2.find('.skeleton-shimmer').exists()).toBe(false)
+    expect(w2.find('img').classes()).toContain('opacity-100')
   })
 })
 

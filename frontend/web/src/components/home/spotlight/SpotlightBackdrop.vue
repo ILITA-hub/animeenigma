@@ -22,6 +22,15 @@
     renders against a fully transparent background.
   -->
   <div class="absolute inset-0 overflow-hidden pointer-events-none">
+    <!-- DS shimmer while a COLD blur poster loads (2026-06-11 feedback:
+         «скелетона нет на фоне») — warm URLs (session registry) skip it so
+         carousel re-mounts never replay the loading state. -->
+    <div
+      v-if="variant === 'poster-blur' && posterUrl && !bgLoaded"
+      aria-hidden="true"
+      class="absolute inset-0 skeleton-shimmer opacity-50"
+      data-testid="backdrop-skeleton"
+    />
     <!-- Keyed wrapper + non-out-in Transition = CROSSFADE when the poster
          URL changes in place (RandomTail reroll, 2026-06-11): old blur
          fades out while the new (preloaded by the card) fades in — no
@@ -39,10 +48,11 @@
           :src="blurSrc"
           alt=""
           aria-hidden="true"
-          loading="lazy"
           decoding="async"
           class="absolute inset-0 w-full h-full object-cover scale-110"
           :style="POSTER_BLUR_STYLE"
+          @load="onBgLoad"
+          @error="onBgLoad"
         />
       </div>
       <div
@@ -64,8 +74,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { cardPosterUrl } from '@/composables/useImageProxy'
+import { isImageWarm, markImageWarm } from '@/utils/preload-image'
 import type { SpotlightAccent } from './tokens'
 
 interface Props {
@@ -87,6 +98,17 @@ const POSTER_BLUR_STYLE = 'filter: blur(40px) saturate(1.2);'
 // The backdrop is blurred 40px — full-res source is pure waste, so route
 // proxyable posters through the resizing image-proxy at the smallest bucket.
 const blurSrc = computed(() => cardPosterUrl(props.posterUrl, 128))
+
+// Skeleton gate: cold URLs shimmer until @load; warm URLs (already loaded
+// this session — slide prefetch, reroll preload, prior mount) never do.
+const bgLoaded = ref(isImageWarm(blurSrc.value))
+function onBgLoad(): void {
+  bgLoaded.value = true
+  markImageWarm(blurSrc.value)
+}
+watch(blurSrc, (v) => {
+  bgLoaded.value = isImageWarm(v)
+})
 
 // Per-accent radial-gradient mesh — brand triad only (DS alignment A-1,
 // 2026-06-10): the rgba stops are the brand-cyan-400/500, brand-pink-400/500

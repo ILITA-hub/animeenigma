@@ -45,6 +45,8 @@ vi.mock('@/api/client', () => ({
 const preload = vi.fn((..._args: unknown[]) => Promise.resolve())
 vi.mock('@/utils/preload-image', () => ({
   preloadImage: (...args: unknown[]) => preload(...args),
+  isImageWarm: () => false,
+  markImageWarm: () => {},
 }))
 
 import RandomTailCard from './RandomTailCard.vue'

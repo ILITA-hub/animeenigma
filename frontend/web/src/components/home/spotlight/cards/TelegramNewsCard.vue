@@ -38,10 +38,9 @@
             :alt="hero.title ?? ''"
             class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
             :class="heroImgLoaded ? 'opacity-100' : 'opacity-0'"
-            loading="lazy"
             decoding="async"
-            @load="heroImgLoaded = true"
-            @error="heroImgLoaded = true"
+            @load="onHeroImgLoad"
+            @error="onHeroImgLoad"
           />
           <div
             v-else
@@ -114,6 +113,7 @@ import { ExternalLink, Send } from 'lucide-vue-next'
 import type { TelegramNewsData } from '@/types/spotlight'
 import Badge from '@/components/ui/Badge.vue'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { isImageWarm, markImageWarm } from '@/utils/preload-image'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
 import SpotlightTile from '../ui/SpotlightTile.vue'
 import SpotlightChatBubble from '../ui/SpotlightChatBubble.vue'
@@ -128,7 +128,13 @@ const localeStr = computed<string>(() => {
 
 // Hero = newest post; tail = the next two as chat bubbles.
 const hero = computed(() => props.data.posts[0])
-const heroImgLoaded = ref(false)
+// Warm-skip (session registry): re-mounting the slide must not replay the
+// shimmer over an HTTP-cache hit.
+const heroImgLoaded = ref(isImageWarm(props.data.posts[0]?.image_url ?? ''))
+function onHeroImgLoad(): void {
+  heroImgLoaded.value = true
+  markImageWarm(hero.value?.image_url ?? '')
+}
 const tail = computed(() => props.data.posts.slice(1, 3))
 
 const heroDate = computed(() => (hero.value ? formatPostDate(hero.value.date) : ''))

@@ -141,9 +141,9 @@ describe('NotTimeYetCard — addedAt + CTA', () => {
 describe('NotTimeYetCard — style discipline', () => {
   it('renders the poster with anime.poster_url', () => {
     const wrapper = mountCard({ data: baseData })
-    const img = wrapper.findAll('img').find((i) => i.attributes('loading') === 'lazy')
+    // Eager since 2026-06-11 (carousel mounts only the active slide).
+    const img = wrapper.findAll('img').find((i) => i.attributes('src') === '/poster.jpg')
     expect(img).toBeDefined()
-    expect(img!.attributes('src')).toBe('/poster.jpg')
   })
 
   it('uses only font-medium and font-semibold typography weights', () => {
