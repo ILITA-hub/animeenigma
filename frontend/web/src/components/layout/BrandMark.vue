@@ -32,7 +32,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: var(--f-display, "Manrope", "Inter", system-ui, sans-serif);
+  font-family: var(--font-display);
   font-weight: 800;
   font-size: 11px;
   color: var(--brand-cyan);

@@ -86,7 +86,7 @@ const kickerLabel = computed(() =>
 
 .mtile-info { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 2; }
 .mtile-kicker {
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
   color: var(--brand-cyan);

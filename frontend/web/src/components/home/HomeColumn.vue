@@ -100,7 +100,7 @@ defineProps<{
 }
 
 .col-head h3 {
-  font-family: var(--f-display);
+  font-family: var(--font-display);
   font-size: 17px;
   font-weight: 700;
 }
@@ -108,7 +108,7 @@ defineProps<{
 .col-head .sub {
   font-size: 11px;
   color: var(--ink-4);
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
   letter-spacing: 0.04em;
   margin-top: 1px;
 }

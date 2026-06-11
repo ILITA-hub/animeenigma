@@ -588,7 +588,7 @@ onUnmounted(() => {
 }
 
 .brand-wordmark {
-  font-family: var(--f-display, "Manrope", "Inter", system-ui, sans-serif);
+  font-family: var(--font-display);
   font-weight: 800;
   font-size: 18px;
   letter-spacing: -0.01em;
@@ -609,7 +609,7 @@ onUnmounted(() => {
   margin-left: -2px;
   margin-top: -4px;
   padding: 1px 5px;
-  font-family: var(--f-ui, "Inter", system-ui, sans-serif);
+  font-family: var(--font-sans);
   font-weight: 700;
   font-size: 9px;
   letter-spacing: 0.04em;
@@ -630,7 +630,7 @@ onUnmounted(() => {
   padding: 10px 14px;
   font-size: 14px;
   font-weight: 500;
-  font-family: var(--f-ui, "Inter", system-ui, sans-serif);
+  font-family: var(--font-sans);
   color: var(--muted-foreground);
   border-radius: var(--r-sm, 8px);
   transition: color 0.15s ease;

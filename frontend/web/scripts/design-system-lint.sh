@@ -6,7 +6,8 @@
 #
 #   RULE 1 — Zero off-palette Tailwind color classes (ERROR).
 #   RULE 2 — Zero hardcoded hex outside scripts/design-system-allowlist.txt (ERROR).
-#   RULE 3 — Zero deprecated brand-alias var(--ink|--accent|--pink) usages (ERROR).
+#   RULE 3 — Zero deprecated-alias var(--ink|--accent|--pink|--violet|--f-display|
+#            --f-ui|--f-mono|--f-jp) usages (ERROR).
 #
 # Brand-exemption (DS-GOV-02): cyan|pink|orange|rose|indigo|teal|lime are NOT
 # treated as off-palette — cyan/pink are the Neon-Tokyo brand primitives and
@@ -43,9 +44,13 @@ RULE3_ERRORS=0
 # (cyan|pink|orange|rose|indigo|teal|lime) are deliberately ABSENT.
 OFF_PALETTE_RE='(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50|100|200|300|400|500|600|700|800|900)'
 
-# Deprecated brand-alias var() usages, EXCLUDING the literal-alias survivors
+# Deprecated-alias var() usages, EXCLUDING the literal-alias survivors
 # (--ink-2, --ink-4, --accent-soft, --accent-line, --accent-glow, --pink-soft).
-ALIAS_RE='var\(--(ink|accent|pink)\b'
+# The font aliases (--f-display/ui/mono/jp → --font-*) and --violet (→ --brand-violet)
+# were migrated to canonical tokens (slice #2) and are now fully forbidden — no survivors.
+# The regex anchors on the alias name + \b, so the canonical forms (--font-display,
+# --brand-violet) are NOT matched.
+ALIAS_RE='var\(--(ink|accent|pink|violet|f-display|f-ui|f-mono|f-jp)\b'
 ALIAS_SURVIVORS='ink-2|ink-4|accent-soft|accent-line|accent-glow|pink-soft'
 
 # List the in-scope .vue files (exclude *.spec.* and __tests__).
@@ -147,7 +152,7 @@ run_rule2() {
 # ============================================================================
 run_rule3() {
   echo ""
-  echo "=== RULE 3: deprecated brand-alias var(--ink|--accent|--pink) ==="
+  echo "=== RULE 3: deprecated-alias var(--ink|--accent|--pink|--violet|--f-*) ==="
   local hits
   hits=$(grep -rnE "$ALIAS_RE" "$SRC_DIR" --include='*.vue' \
     | grep -v '\.spec\.' | grep -v '__tests__' \

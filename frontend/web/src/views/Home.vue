@@ -347,7 +347,7 @@ onMounted(() => {
 
 /* ⌘K decorative kbd hint */
 .search-kbd {
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 3px 6px;
   border-radius: 4px;

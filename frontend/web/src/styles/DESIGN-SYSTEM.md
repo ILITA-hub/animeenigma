@@ -65,7 +65,7 @@ already use: it is a prerequisite of **`make lint-frontend`** (→ `make lint` /
 1. **Off-palette Tailwind color classes** — `(text|bg|border|ring|from|to|via|fill|stroke|placeholder|divide|outline|decoration|shadow)-(red|amber|yellow|emerald|green|blue|sky|purple|violet|gray|slate|zinc)-(50…900)`.
    Migrate to a semantic token (`text-destructive`, `bg-warning`, `text-success`, `text-info`, `text-brand-violet`, `text-muted-foreground`, …).
 2. **Hardcoded hex outside the allowlist** — any raw `#[0-9a-fA-F]{3,8}` in a `.vue` (CSS `<style>` hex or Tailwind arbitrary `*-[#…]`) that is NOT listed in `scripts/design-system-allowlist.txt`. Allowance is per-`(file,hex)`: a hex is allowed only in the file that lists it.
-3. **Deprecated brand-alias `var()` usages** — `var(--ink)` / `var(--accent)` / `var(--pink)` (after the Wave-2 flip, brand `--accent` usage is itself a violation). EXCLUDES the literal-alias survivors `--ink-2`, `--ink-4`, `--accent-soft`, `--accent-line`, `--accent-glow`, `--pink-soft`.
+3. **Deprecated-alias `var()` usages** — `var(--ink)` / `var(--accent)` / `var(--pink)` (after the Wave-2 flip, brand `--accent` usage is itself a violation), plus `var(--violet)` → `--brand-violet` and the font aliases `var(--f-display|f-ui|f-mono|f-jp)` → `--font-display`/`--font-sans`/`--font-mono`/`--font-jp` (migrated + locked in slice #2). EXCLUDES the literal-alias survivors `--ink-2`, `--ink-4`, `--accent-soft`, `--accent-line`, `--accent-glow`, `--pink-soft`.
 
 **Brand-exemption rationale (why some hues are NOT "off-palette").** `cyan` and `pink` are the
 Neon-Tokyo BRAND primitives, and `orange` / `rose` (plus `indigo` / `teal` / `lime`) are per-provider
@@ -104,7 +104,11 @@ make lint-design                                              # → PASS on the 
 ## Deprecated aliases (migrate away over P2–P5)
 
 `--ink/-2/-3/-4` → `--foreground`/`--muted-foreground` ramp · `--pink` → `--brand-pink` ·
-`--f-display/ui/mono/jp` → `--font-*` · `--accent*` → `--brand-cyan` (kept until P2 repoints usages, then `--accent` flips to the shadcn hover surface).
+`--f-display/ui/mono/jp` → `--font-display`/`--font-sans`/`--font-mono`/`--font-jp` **(migrated + Rule-3 gated, slice #2)** ·
+`--violet` → `--brand-violet` **(migrated + Rule-3 gated, slice #2)** ·
+`--accent*` → `--brand-cyan` (the `--accent` brand→shadcn-hover flip already landed).
+
+The deprecated `--f-*`/`--violet` aliases remain *defined* in `main.css` (pointing at their canonical) for any third-party/legacy reference, but are now build-forbidden in `src/**/*.vue` by Rule 3.
 
 ## Component inventory (target shadcn-vue mapping)
 

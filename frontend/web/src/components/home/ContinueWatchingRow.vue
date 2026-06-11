@@ -73,7 +73,7 @@ function progressPct(item: ContinueWatchingItem): number {
 }
 
 .cw-title {
-  font-family: var(--f-display, "Manrope", "Inter", system-ui, sans-serif);
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -84,7 +84,7 @@ function progressPct(item: ContinueWatchingItem): number {
 }
 
 .cw-count {
-  font-family: var(--f-mono, "JetBrains Mono", ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.1em;
   color: var(--ink-4, rgba(255, 255, 255, 0.36));

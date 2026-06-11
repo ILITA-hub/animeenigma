@@ -107,7 +107,7 @@ onMounted(load)
 <style scoped>
 /* Section heading */
 .collections-heading {
-  font-family: var(--f-display);
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -212,7 +212,7 @@ onMounted(load)
   color: rgba(255,255,255,0.7);
   font-size: 11px;
   margin-top: 2px;
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
 }
 
 /* Loading skeleton cards */

@@ -346,7 +346,7 @@ onUnmounted(() => {
 }
 
 .section-title {
-  font-family: var(--f-display);
+  font-family: var(--font-display);
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -461,7 +461,7 @@ onUnmounted(() => {
 .update-when {
   font-size: 11px;
   color: var(--ink-4);
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
   flex-shrink: 0;
 }
 
@@ -487,7 +487,7 @@ onUnmounted(() => {
   font-weight: 500;
   margin-bottom: 4px;
   padding: 0 10px;
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
 }
 
 /* Changelog entry badge */

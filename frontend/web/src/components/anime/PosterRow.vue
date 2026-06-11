@@ -217,7 +217,7 @@ const nextEpLabel = computed(() =>
 
 .chips { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; overflow: hidden; }
 .chip {
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.04em;
   padding: 2px 6px;
@@ -226,12 +226,12 @@ const nextEpLabel = computed(() =>
 }
 .chip.airing    { background: rgba(0, 255, 157, 0.14); color: var(--color-success); }
 .chip.announced { background: rgba(0, 212, 255, 0.14); color: var(--brand-cyan); }
-.chip.season    { background: rgba(167, 139, 250, 0.14); color: var(--violet); }
+.chip.season    { background: rgba(167, 139, 250, 0.14); color: var(--brand-violet); }
 .chip.score { background: rgba(255, 214, 0, 0.14); color: var(--color-warning); display: inline-flex; align-items: center; gap: 4px; }
 .chip.site-score { background: rgba(0, 212, 255, 0.14); color: var(--brand-cyan); }
 
 .next-ep {
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--brand-cyan);
   letter-spacing: 0.04em;
@@ -245,7 +245,7 @@ const nextEpLabel = computed(() =>
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
-  font-family: var(--f-display);
+  font-family: var(--font-display);
   font-weight: 800;
   font-size: 56px;
   letter-spacing: -0.04em;

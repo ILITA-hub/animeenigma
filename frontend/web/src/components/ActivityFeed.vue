@@ -238,7 +238,7 @@ onMounted(() => {
 }
 
 .section-title {
-  font-family: var(--f-display);
+  font-family: var(--font-display);
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -348,7 +348,7 @@ onMounted(() => {
 
 /* Mono timestamp */
 .feed-time {
-  font-family: var(--f-mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-4);
   margin-top: 2px;
