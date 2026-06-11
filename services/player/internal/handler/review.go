@@ -23,10 +23,15 @@ import (
 // Tests in review_shape_test.go assert this projection is in place on every
 // method.
 type reviewResponse struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	AnimeID    string    `json:"anime_id"`
-	Username   string    `json:"username"`
+	ID       string `json:"id"`
+	UserID   string `json:"user_id"`
+	AnimeID  string `json:"anime_id"`
+	Username string `json:"username"`
+	// UserAvatar — the author's CURRENT avatar (read-time join from the
+	// users table, not snapshotted). Empty → omitted; the frontend Avatar
+	// primitive falls back to username initials. Unifies review/comment
+	// avatars with the activity feed (2026-06-11).
+	UserAvatar string    `json:"user_avatar,omitempty"`
 	Score      int       `json:"score"`
 	ReviewText string    `json:"review_text"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -69,13 +74,14 @@ func toReviewResponse(e *domain.AnimeListEntry) reviewResponse {
 		}
 	}
 	return reviewResponse{
-		ID:          e.ID,
-		UserID:      e.UserID,
-		AnimeID:     e.AnimeID,
-		Username:    e.Username,
-		Score:       e.Score,
-		ReviewText:  e.ReviewText,
-		CreatedAt:   e.CreatedAt,
+		ID:           e.ID,
+		UserID:       e.UserID,
+		AnimeID:      e.AnimeID,
+		Username:     e.Username,
+		UserAvatar:   e.UserAvatar,
+		Score:        e.Score,
+		ReviewText:   e.ReviewText,
+		CreatedAt:    e.CreatedAt,
 		Status:       e.Status,
 		Episodes:     e.Episodes,
 		IsRewatching: e.IsRewatching,

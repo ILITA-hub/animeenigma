@@ -347,7 +347,11 @@ func (r *ListRepository) GetReviewsByAnime(ctx context.Context, animeID string) 
 		Where("anime_id = ? AND (score > 0 OR review_text <> '')", animeID).
 		Order("created_at DESC").
 		Find(&entries).Error
-	return entries, err
+	if err != nil {
+		return nil, err
+	}
+	r.attachUserAvatars(ctx, entries)
+	return entries, nil
 }
 
 // GetReviewsByUser returns every anime_list row for `userID` that qualifies
@@ -359,7 +363,29 @@ func (r *ListRepository) GetReviewsByUser(ctx context.Context, userID string) ([
 		Where("user_id = ? AND (score > 0 OR review_text <> '')", userID).
 		Order("created_at DESC").
 		Find(&entries).Error
-	return entries, err
+	if err != nil {
+		return nil, err
+	}
+	r.attachUserAvatars(ctx, entries)
+	return entries, nil
+}
+
+// attachUserAvatars populates the transient UserAvatar on each review row
+// from the users table (current avatar, not snapshotted — same pattern as
+// the activity feed). Best-effort: on lookup failure rows keep "" and the
+// frontend falls back to username initials.
+func (r *ListRepository) attachUserAvatars(ctx context.Context, entries []*domain.AnimeListEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		ids = append(ids, e.UserID)
+	}
+	avatars := fetchUserAvatars(ctx, r.db, ids)
+	for _, e := range entries {
+		e.UserAvatar = avatars[e.UserID]
+	}
 }
 
 // GetUserReview returns the single anime_list row for the given (user, anime)

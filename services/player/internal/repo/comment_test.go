@@ -201,3 +201,30 @@ func idsOf(cs []*domain.Comment) []string {
 	}
 	return out
 }
+
+// TestCommentRepo_ListByAnime_AttachesUserAvatars — comment rows carry the
+// author's CURRENT avatar from the users table (transient UserAvatar field,
+// same read-time join pattern as the activity feed). Best-effort: users
+// without an avatar degrade to "" (frontend initials fallback).
+func TestCommentRepo_ListByAnime_AttachesUserAvatars(t *testing.T) {
+	db := setupCommentTestDB(t)
+	require.NoError(t, db.Exec(`CREATE TABLE users (id TEXT PRIMARY KEY, avatar TEXT NOT NULL DEFAULT '')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, avatar) VALUES ('user-A', '/avatars/a.webp')`).Error)
+	r := NewCommentRepository(db)
+	ctx := context.Background()
+
+	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	seedComment(t, db, "user-A", "anime-1", "with avatar", base)
+	seedComment(t, db, "user-B", "anime-1", "without avatar", base.Add(time.Minute))
+
+	comments, _, err := r.ListByAnime(ctx, "anime-1", "", 10)
+	require.NoError(t, err)
+	require.Len(t, comments, 2)
+
+	byUser := map[string]string{}
+	for _, c := range comments {
+		byUser[c.UserID] = c.UserAvatar
+	}
+	assert.Equal(t, "/avatars/a.webp", byUser["user-A"], "avatar attached from users table")
+	assert.Equal(t, "", byUser["user-B"], "missing users row degrades to empty")
+}

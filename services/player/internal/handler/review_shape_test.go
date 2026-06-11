@@ -141,6 +141,7 @@ var allowedReviewKeys = map[string]bool{
 	"anime":         true,
 	"reactions":     true, // emoji reactions (AUTO-408)
 	"my_reactions":  true, // viewer's reacted-emoji subset (AUTO-408)
+	"user_avatar":   true, // author's current avatar — DS Avatar unification (2026-06-11)
 }
 
 // forbiddenLeakKeys are the AnimeListEntry-only keys that MUST NOT appear

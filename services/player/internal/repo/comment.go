@@ -89,6 +89,19 @@ func (r *CommentRepository) ListByAnime(ctx context.Context, animeID, cursor str
 		last := comments[len(comments)-1]
 		nextCursor = pagination.Cursor{ID: last.ID, Timestamp: last.CreatedAt}.Encode()
 	}
+
+	// Attach each author's CURRENT avatar from the users table (transient
+	// field, same read-time pattern as the activity feed). Best-effort.
+	if len(comments) > 0 {
+		ids := make([]string, 0, len(comments))
+		for _, c := range comments {
+			ids = append(ids, c.UserID)
+		}
+		avatars := fetchUserAvatars(ctx, r.db, ids)
+		for _, c := range comments {
+			c.UserAvatar = avatars[c.UserID]
+		}
+	}
 	return comments, nextCursor, nil
 }
 

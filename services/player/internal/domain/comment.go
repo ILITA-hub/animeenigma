@@ -22,6 +22,10 @@ type Comment struct {
 	UserID    string         `gorm:"type:uuid;not null;index:idx_comments_user_created" json:"user_id"`
 	AnimeID   string         `gorm:"type:uuid;not null;index:idx_comments_anime_created" json:"anime_id"`
 	Username  string         `gorm:"size:32" json:"username"`
+	// UserAvatar is NOT a column — populated at read time from the users
+	// table (current avatar, not snapshotted) so comments render the same
+	// avatar as the activity feed. Empty → frontend initials fallback.
+	UserAvatar string        `gorm:"-" json:"user_avatar,omitempty"`
 	Body      string         `gorm:"type:text;not null" json:"body"`
 	ParentID  *string        `gorm:"type:uuid" json:"parent_id,omitempty"`
 	CreatedAt time.Time      `gorm:"not null;default:now();index:idx_comments_anime_created,sort:desc;index:idx_comments_user_created,sort:desc" json:"created_at"`

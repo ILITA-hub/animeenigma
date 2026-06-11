@@ -102,6 +102,12 @@ type AnimeListEntry struct {
 	// keeps it out of all SQL; `json:"-"` keeps it off the watchlist wire shape
 	// (the review handler copies it into reviewResponse.Reactions). AUTO-408.
 	Reactions []ReactionCount `gorm:"-" json:"-"`
+	// UserAvatar is a TRANSIENT (non-persisted) copy of the author's CURRENT
+	// avatar from the users table, populated at read time by the review
+	// queries (same pattern as ActivityEvent.UserAvatar). `json:"-"` keeps it
+	// off the watchlist wire shape — the review handler projects it into
+	// reviewResponse.UserAvatar.
+	UserAvatar string `gorm:"-" json:"-"`
 }
 
 func (AnimeListEntry) TableName() string {

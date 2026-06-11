@@ -750,9 +750,7 @@
           >
             <div class="flex items-start justify-between mb-2">
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold">
-                  {{ review.username?.slice(0, 2).toUpperCase() || '??' }}
-                </div>
+                <Avatar :src="review.user_avatar" :name="review.username" size="md" />
                 <div>
                   <router-link
                     :to="`/user/${review.user_id}`"
@@ -869,9 +867,7 @@
               >
                 <div class="flex items-start justify-between">
                   <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-semibold">
-                      {{ c.username?.slice(0, 2).toUpperCase() || '??' }}
-                    </div>
+                    <Avatar :src="c.user_avatar" :name="c.username" size="md" />
                     <div>
                       <router-link
                         :to="`/user/${c.user_id}`"
@@ -1038,7 +1034,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAnime } from '@/composables/useAnime'
 import { useAuthStore } from '@/stores/auth'
-import { Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
+import { Avatar, Badge, Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
 import { GenreChip, PosterCard, AnimeContextMenu } from '@/components/anime'
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
 import { Carousel } from '@/components/carousel'
@@ -1133,6 +1129,9 @@ interface Review {
   user_id: string
   anime_id: string
   username: string
+  // Author's CURRENT avatar (read-time join in the player service, not
+  // snapshotted). Absent → Avatar primitive falls back to initials.
+  user_avatar?: string
   score: number
   review_text: string
   created_at: string
@@ -1158,6 +1157,8 @@ interface Comment {
   user_id: string
   anime_id: string
   username: string
+  // Author's CURRENT avatar — same read-time join as reviews/activity feed.
+  user_avatar?: string
   body: string
   created_at: string
   updated_at: string

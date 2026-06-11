@@ -83,45 +83,18 @@ func (r *ActivityRepository) GetFeed(ctx context.Context, limit int, before stri
 }
 
 // attachUserAvatars populates UserAvatar on each event from the users table in
-// a single batched query. Best-effort: on error the feed still renders (the
-// frontend falls back to the username initial).
+// a single batched query (shared fetchUserAvatars helper, also used by the
+// reviews and comments read paths). Best-effort: on error the feed still
+// renders (the frontend falls back to the username initial).
 func (r *ActivityRepository) attachUserAvatars(ctx context.Context, events []*domain.ActivityEvent) {
 	if len(events) == 0 {
 		return
 	}
 	ids := make([]string, 0, len(events))
-	seen := make(map[string]struct{}, len(events))
 	for _, e := range events {
-		if e.UserID == "" {
-			continue
-		}
-		if _, ok := seen[e.UserID]; ok {
-			continue
-		}
-		seen[e.UserID] = struct{}{}
 		ids = append(ids, e.UserID)
 	}
-	if len(ids) == 0 {
-		return
-	}
-
-	type userAvatar struct {
-		ID     string
-		Avatar string
-	}
-	var rows []userAvatar
-	if err := r.db.WithContext(ctx).
-		Table("users").
-		Select("id, avatar").
-		Where("id IN ?", ids).
-		Scan(&rows).Error; err != nil {
-		return // best-effort
-	}
-
-	avatars := make(map[string]string, len(rows))
-	for _, row := range rows {
-		avatars[row.ID] = row.Avatar
-	}
+	avatars := fetchUserAvatars(ctx, r.db, ids)
 	for _, e := range events {
 		e.UserAvatar = avatars[e.UserID]
 	}

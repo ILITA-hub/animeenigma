@@ -307,3 +307,46 @@ func TestListRepo_GetBatchAnimeRatings(t *testing.T) {
 	assert.InDelta(t, 10.0, got["a2"].AverageScore, 0.0001)
 	assert.Equal(t, 1, got["a2"].TotalReviews)
 }
+
+// TestListRepo_GetReviewsByAnime_AttachesUserAvatars — review rows carry the
+// author's CURRENT avatar from the users table (transient UserAvatar field,
+// same read-time join pattern as the activity feed). Users without an avatar
+// (or missing rows) degrade to "" so the frontend falls back to initials.
+func TestListRepo_GetReviewsByAnime_AttachesUserAvatars(t *testing.T) {
+	db := setupListReviewTestDB(t)
+	require.NoError(t, db.Exec(`CREATE TABLE users (id TEXT PRIMARY KEY, avatar TEXT NOT NULL DEFAULT '')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, avatar) VALUES ('user-A', '/avatars/a.webp'), ('user-B', '')`).Error)
+	r := NewListRepository(db)
+	ctx := context.Background()
+
+	seedListEntry(t, db, domain.AnimeListEntry{UserID: "user-A", AnimeID: "anime-1", Score: 8, Username: "alice"})
+	seedListEntry(t, db, domain.AnimeListEntry{UserID: "user-B", AnimeID: "anime-1", Score: 6, Username: "bob"})
+	seedListEntry(t, db, domain.AnimeListEntry{UserID: "user-ghost", AnimeID: "anime-1", Score: 5, Username: "ghost"})
+
+	entries, err := r.GetReviewsByAnime(ctx, "anime-1")
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+
+	byUser := map[string]string{}
+	for _, e := range entries {
+		byUser[e.UserID] = e.UserAvatar
+	}
+	assert.Equal(t, "/avatars/a.webp", byUser["user-A"], "avatar attached from users table")
+	assert.Equal(t, "", byUser["user-B"], "empty avatar stays empty")
+	assert.Equal(t, "", byUser["user-ghost"], "missing users row degrades to empty")
+}
+
+// TestListRepo_GetReviewsByAnime_NoUsersTable — the avatar join is
+// best-effort: a failing users lookup must not fail the reviews read.
+func TestListRepo_GetReviewsByAnime_NoUsersTable(t *testing.T) {
+	db := setupListReviewTestDB(t)
+	r := NewListRepository(db)
+	ctx := context.Background()
+
+	seedListEntry(t, db, domain.AnimeListEntry{UserID: "user-A", AnimeID: "anime-1", Score: 8})
+
+	entries, err := r.GetReviewsByAnime(ctx, "anime-1")
+	require.NoError(t, err, "reviews read survives missing users table")
+	require.Len(t, entries, 1)
+	assert.Equal(t, "", entries[0].UserAvatar)
+}
