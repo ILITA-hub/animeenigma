@@ -11,8 +11,13 @@ import (
 )
 
 var (
-	issueKeywords = regexp.MustCompile(`(?i)(not working|broken|error|bug|can't watch|loading|lag|down|crash|stuck|не работает|сломал|ошибка|баг|лагает|не грузит|не воспроизвод)`)
-	serviceNames  = regexp.MustCompile(`(?i)\b(gateway|auth|catalog|streaming|player|rooms|scheduler|themes|kodik|animelib)\b`)
+	// English keywords are word-bounded so substrings don't false-positive
+	// ("lag" in "feature flags", "down" in "download"). Cyrillic keywords stay
+	// unbounded: RE2's \b is ASCII-only and never matches next to Cyrillic letters.
+	issueKeywords = regexp.MustCompile(`(?i)\b(not working|broken|error|bug|can't watch|loading|lag(s|ging|gy)?|down|crash|stuck)\b|(?i)(не работает|сломал|ошибка|баг|лагает|не грузит|не воспроизвод)`)
+	// Explicit feature-request framing beats breakage keywords in GuessCategory.
+	featureKeywords = regexp.MustCompile(`(?i)\bfeature request\b|(?i)(фича|фичу|предложени|предлага|хотелось бы|было бы (круто|здорово|удобно))`)
+	serviceNames    = regexp.MustCompile(`(?i)\b(gateway|auth|catalog|streaming|player|rooms|scheduler|themes|kodik|animelib)\b`)
 )
 
 // Classify determines the type and priority of a Telegram update.
@@ -286,10 +291,14 @@ func CountAffectedServices(batch domain.ClassifiedBatch) int {
 }
 
 // GuessCategory gives the initial feedback-store category for a raw message,
-// before Claude has classified it: keyword-matched breakage → "bug",
-// everything else → "issue". Claude's later classification lands on the
-// linked issue; the feedback entry keeps the at-intake guess.
+// before Claude has classified it: explicit feature framing → "feature",
+// keyword-matched breakage → "bug", everything else → "issue". Claude's later
+// classification lands on the linked issue; the feedback entry keeps the
+// at-intake guess.
 func GuessCategory(text string) string {
+	if featureKeywords.MatchString(text) {
+		return "feature"
+	}
 	if issueKeywords.MatchString(text) {
 		return "bug"
 	}
