@@ -12,7 +12,8 @@
     <p class="text-muted-foreground text-sm mb-3">{{ bannerName }}</p>
 
     <div class="rgrid" data-testid="summary-grid">
-      <div
+      <button
+        type="button"
         v-for="(pulled, i) in cards"
         :key="i"
         class="rcard"
@@ -43,7 +44,7 @@
         >
           {{ $t('gacha.viewer_dupe_badge', { n: pulled.count }) }}
         </span>
-      </div>
+      </button>
     </div>
 
     <template #footer>
@@ -176,6 +177,11 @@ watch(
   animation: pop 0.42s forwards;
   perspective: 600px;
   cursor: pointer;
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  font: inherit;
 }
 @keyframes pop {
   to { opacity: 1; transform: none; }

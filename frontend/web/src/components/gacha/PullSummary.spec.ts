@@ -105,4 +105,10 @@ describe('PullSummary', () => {
     expect(w.find('.tagNEW').exists()).toBe(true)
     expect(w.find('.tagDUP').text()).toContain('×4')
   })
+
+  it('reveal cards are native buttons (keyboard accessible)', () => {
+    const w = mountSummary([pulled('1', 'N')])
+    const card = w.find('[data-testid="summary-card-N"]')
+    expect(card.element.tagName).toBe('BUTTON')
+  })
 })
