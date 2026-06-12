@@ -47,4 +47,22 @@ describe('DayCell', () => {
     await w.trigger('click')
     expect(w.emitted('open')).toBeFalsy()
   })
+  it('cell with episodes is keyboard-focusable and opens on Enter', async () => {
+    const occ = [{ anime: a('1'), episode: 1, date: new Date(2026, 5, 13, 1) }]
+    const w = mountCell(model({ occurrences: occ }))
+    expect(w.attributes('tabindex')).toBe('0')
+    expect(w.attributes('role')).toBe('button')
+    await w.trigger('keydown', { key: 'Enter' })
+    expect(w.emitted('open')).toBeTruthy()
+  })
+  it('cell opens on Space', async () => {
+    const occ = [{ anime: a('1'), episode: 1, date: new Date(2026, 5, 13, 1) }]
+    const w = mountCell(model({ occurrences: occ }))
+    await w.trigger('keydown', { key: ' ' })
+    expect(w.emitted('open')).toBeTruthy()
+  })
+  it('empty cell stays out of the tab order', () => {
+    const w = mountCell(model({ occurrences: [] }))
+    expect(w.attributes('tabindex')).toBeUndefined()
+  })
 })

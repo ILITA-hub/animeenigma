@@ -6,7 +6,10 @@
       :key="i"
       class="relative min-h-[220px] rounded-xl border border-white/[0.06] bg-white/[0.025] p-2.5 overflow-hidden transition-colors"
       :class="[c.occurrences.length ? 'cursor-pointer hover:bg-white/[0.045] hover:border-white/12' : '', c.isToday ? 'today-bar' : '']"
+      :tabindex="c.occurrences.length ? 0 : undefined"
+      :role="c.occurrences.length ? 'button' : undefined"
       @click="c.occurrences.length && $emit('open', c.date)"
+      @keydown.enter.space.prevent="c.occurrences.length && $emit('open', c.date)"
     >
       <div class="text-center pb-2 mb-2 border-b border-white/5">
         <div class="text-[10px] uppercase tracking-wide" :class="c.isToday ? 'text-primary' : 'text-muted-foreground'">{{ dows[i] }}</div>

@@ -6,7 +6,10 @@
       cell.inCurrentMonth ? (hasEpisodes ? 'cursor-pointer hover:bg-white/[0.045] hover:border-white/12' : '') : 'bg-transparent border-white/[0.03]',
       cell.isToday ? 'today-bar' : '',
     ]"
+    :tabindex="hasEpisodes ? 0 : undefined"
+    :role="hasEpisodes ? 'button' : undefined"
     @click="onClick"
+    @keydown.enter.space.prevent="onClick"
   >
     <div
       class="text-xs mb-1.5 font-display"
