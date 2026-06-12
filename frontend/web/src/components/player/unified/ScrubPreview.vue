@@ -1,10 +1,11 @@
 <template>
   <div class="pl-scrub-preview" data-test="scrub-preview">
     <!-- Shadow video — always mounted once initialized so seeks reuse the
-         same decoder/buffer; shown only after the first frame decodes. -->
+         same decoder/buffer; shown only after the first frame decodes AND
+         the frame is fresh (not awaiting a new HLS segment download). -->
     <video
       ref="shadowRef"
-      v-show="frameReady"
+      v-show="frameReady && !frameStale"
       class="pl-scrub-preview-video"
       muted
       playsinline
@@ -12,9 +13,11 @@
       data-test="preview-video"
       aria-hidden="true"
     />
-    <!-- Static still fallback until a real frame is available -->
+    <!-- Static still fallback until a real fresh frame is available.
+         Also shown while seeking on HLS (segment download in progress) so the
+         user sees the anime thumbnail instead of a frozen stale frame. -->
     <div
-      v-if="!frameReady && stillUrl"
+      v-if="(!frameReady || frameStale) && stillUrl"
       class="pl-scrub-preview-still"
       :style="{ backgroundImage: `url(${stillUrl})` }"
       data-test="preview-still"
@@ -50,8 +53,11 @@ const props = defineProps<{
 
 const shadowRef = ref<HTMLVideoElement | null>(null)
 const frameReady = ref(false)
+// True while an HLS seek is in-flight (segment not yet decoded). We show the
+// still image during this window instead of the frozen stale frame.
+const frameStale = ref(false)
 
-const SEEK_THROTTLE_MS = 250
+const SEEK_THROTTLE_MS = 150
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let hls: any = null
@@ -75,6 +81,7 @@ function destroyEngine() {
   }
   initializedFor = null
   frameReady.value = false
+  frameStale.value = false
   lastSeekedTime = -1
   if (seekTimer) {
     clearTimeout(seekTimer)
@@ -126,7 +133,10 @@ async function ensureEngine() {
 
 function onFrame() {
   const v = shadowRef.value
-  if (v && v.readyState >= 2) frameReady.value = true
+  if (v && v.readyState >= 2) {
+    frameReady.value = true
+    frameStale.value = false
+  }
 }
 
 function doSeek(t: number) {
@@ -134,6 +144,9 @@ function doSeek(t: number) {
   if (!v || !initializedFor) return
   if (Math.abs(t - lastSeekedTime) < 0.5) return
   lastSeekedTime = t
+  // For HLS, segment download takes time — mark the current frame stale so the
+  // still image shows instead of a frozen frame from a different timestamp.
+  if (props.streamType === 'hls') frameStale.value = true
   v.currentTime = t
 }
 

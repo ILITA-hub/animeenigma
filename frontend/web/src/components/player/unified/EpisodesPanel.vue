@@ -89,7 +89,7 @@
             data-test="ep-watched"
           />
         </span>
-        <span class="ep-card-t">{{ ep.title || ' ' }}</span>
+        <span class="ep-card-t">{{ ep.title || '\u00a0' }}</span>
         <span
           v-if="partialPct(ep) > 0"
           class="ep-progress"
