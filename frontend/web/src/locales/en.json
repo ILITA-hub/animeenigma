@@ -16,6 +16,9 @@
     "drawerTitle": "Navigation menu",
     "about": "About"
   },
+  "a11y": {
+    "skipToContent": "Skip to content"
+  },
   "hero": {
     "tagline": "Stream anime, your way",
     "browse": "Browse",

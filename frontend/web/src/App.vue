@@ -1,5 +1,12 @@
 <template>
   <div id="app" class="min-h-screen bg-base">
+    <!-- A11y: first Tab stop. Visually hidden until keyboard-focused. -->
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-brand-violet focus:text-white focus:text-sm focus:font-medium"
+    >
+      {{ $t('a11y.skipToContent') }}
+    </a>
     <!-- Design-system Phase 3 / Wave 3: a single app-root TooltipProvider so any
          <Tooltip> primitive has its required ancestor app-wide. Reka's
          TooltipProvider renders as a transparent Slot (no extra DOM node), so it
@@ -45,7 +52,7 @@
     </div>
 
     <!-- Main Content -->
-    <main v-else>
+    <main v-else id="main-content" tabindex="-1">
       <router-view v-slot="{ Component }">
         <Transition name="page">
           <component :is="Component" />
@@ -199,5 +206,9 @@ router.afterEach(() => {
 
 .page-enter-from {
   opacity: 0;
+}
+
+main:focus-visible {
+  box-shadow: none;
 }
 </style>
