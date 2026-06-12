@@ -71,12 +71,17 @@ var megaplayExactHosts = []string{"1anime.site", "gogoanime.me.uk"}
 
 // megaplaySubdomainHosts match by host equality OR strict subdomain.
 // `megaplay.buzz` is the real player + getSources origin and may front via
-// CDN subdomains.
-var megaplaySubdomainHosts = []string{"megaplay.buzz"}
+// CDN subdomains. `vidwish.live` is the API-identical sister player the
+// gogoanime/9anime chains migrated to (2026-06) — same data-id attribute,
+// same /stream/getSources endpoint, same JSON shape (sources.file + tracks +
+// intro/outro). Extract handles it identically; only the active Referer
+// differs (derived per-request from the resolved player origin).
+var megaplaySubdomainHosts = []string{"megaplay.buzz", "vidwish.live"}
 
-// megaplayNestedIframeRegex pulls the megaplay.buzz player URL out of the
-// thin 1anime.site wrapper page (`<iframe src="https://megaplay.buzz/…">`).
-var megaplayNestedIframeRegex = regexp.MustCompile(`<iframe[^>]+src="(https?://[^"]*megaplay\.buzz/[^"]+)"`)
+// megaplayNestedIframeRegex pulls the player URL out of the thin wrapper page
+// (`<iframe src="https://megaplay.buzz/…">` or the API-identical
+// `<iframe src="https://vidwish.live/…">` the chain migrated to in 2026-06).
+var megaplayNestedIframeRegex = regexp.MustCompile(`<iframe[^>]+src="(https?://[^"]*(?:megaplay\.buzz|vidwish\.live)/[^"]+)"`)
 
 // megaplayDataIDRegex extracts the canonical numeric stream id from the
 // player page (`data-id="19015"`).
@@ -189,8 +194,21 @@ func (e *MegaplayExtractor) Extract(ctx context.Context, embedURL string, header
 		playerURL = string(m[1])
 	}
 
+	// Derive the Referer the ACTIVE player domain expects from the resolved
+	// player origin (megaplay.buzz OR the API-identical vidwish.live). Both
+	// the player page and the getSources XHR — plus the CDN that ultimately
+	// serves master.m3u8 — enforce a same-origin Referer, so hardcoding
+	// megaplay.buzz would 403 every vidwish.live stream. For the megaplay
+	// path this derives "https://megaplay.buzz/" (identical to the old
+	// megaplayReferer constant), so that path is unchanged.
+	pu, perr := url.Parse(playerURL)
+	if perr != nil {
+		return nil, domain.WrapExtractFailed(perr, "megaplay: parse player url")
+	}
+	playerReferer := pu.Scheme + "://" + pu.Host + "/"
+
 	// (2) Fetch the player page and parse the canonical data-id.
-	playerBody, err := e.fetch(ctx, playerURL, megaplayReferer, headers)
+	playerBody, err := e.fetch(ctx, playerURL, playerReferer, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -206,12 +224,8 @@ func (e *MegaplayExtractor) Extract(ctx context.Context, embedURL string, header
 
 	// (3) GET getSources?id=<dataID> off the player origin. X-Requested-With
 	// is required (the endpoint 404s on a plain navigation).
-	pu, perr := url.Parse(playerURL)
-	if perr != nil {
-		return nil, domain.WrapExtractFailed(perr, "megaplay: parse player url")
-	}
 	sourcesURL := fmt.Sprintf("%s://%s/stream/getSources?id=%s", pu.Scheme, pu.Host, url.QueryEscape(dataID))
-	srcBody, err := e.fetchXHR(ctx, sourcesURL, playerURL, headers)
+	srcBody, err := e.fetchXHR(ctx, sourcesURL, playerReferer, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +263,7 @@ func (e *MegaplayExtractor) Extract(ctx context.Context, embedURL string, header
 
 	stream := &domain.Stream{
 		Sources: []domain.Source{{URL: gs.Sources.File, Type: "hls", Quality: "auto"}},
-		Headers: map[string]string{"Referer": megaplayReferer},
+		Headers: map[string]string{"Referer": playerReferer},
 	}
 	for _, t := range gs.Tracks {
 		if !strings.HasPrefix(t.File, "http://") && !strings.HasPrefix(t.File, "https://") {

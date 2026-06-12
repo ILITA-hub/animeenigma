@@ -61,6 +61,38 @@ func newTestMegaplay(srvURL string) *MegaplayExtractor {
 	return e
 }
 
+// vidwishWrapperHTML nests a vidwish.live player iframe — the API-identical
+// sister player the gogoanime/9anime chain migrated to in 2026-06 (AUTO-446).
+const vidwishWrapperHTML = `<!DOCTYPE html><html><body>` +
+	`<iframe src="https://vidwish.live/stream/s-2/94554/sub" frameborder="0"></iframe>` +
+	`</body></html>`
+
+// vidwishSrv serves the same three-hop chain as megaplaySrv but with a wrapper
+// page that nests a vidwish.live iframe (player + getSources fixtures reused —
+// the endpoints are byte-identical to megaplay.buzz).
+func vidwishSrv(t *testing.T) *httptest.Server {
+	t.Helper()
+	player := mustRead(t, "megaplay_player.html")
+	sources := mustRead(t, "megaplay_getsources.json")
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/megaplay/stream/"):
+			_, _ = w.Write([]byte(vidwishWrapperHTML))
+		case r.URL.Path == "/stream/getSources":
+			if r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(sources)
+		case strings.HasPrefix(r.URL.Path, "/stream/s-2/"):
+			_, _ = w.Write(player)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+}
+
 func TestMegaplay_Name(t *testing.T) {
 	if got := NewMegaplayExtractor().Name(); got != "megaplay" {
 		t.Fatalf("Name() = %q; want megaplay", got)
@@ -109,6 +141,10 @@ func TestMegaplay_Matches(t *testing.T) {
 		{"https://1anime.site/megaplay/stream/s-2/94554/sub", true},
 		{"https://megaplay.buzz/stream/s-2/94554/sub", true},
 		{"https://cdn.megaplay.buzz/x", true},     // strict subdomain
+		{"https://vidwish.live/stream/s-2/94554/sub", true}, // AUTO-446 sister player
+		{"https://cdn.vidwish.live/x", true},                // strict subdomain
+		{"https://evilvidwish.live/x", false},               // substring impostor
+		{"https://vidwish.live.evil.com/x", false},          // suffix impostor
 		{"https://gogoanime.me.uk/newplayer.php?id=frieren-20409?ep=168580&type=hd-1&category=dub", true}, // gogoanime megaplay wrapper
 		{"https://evil1anime.site/x", false},      // substring impostor
 		{"https://1anime.site.evil.com/x", false}, // suffix impostor
@@ -179,6 +215,27 @@ func TestMegaplay_Extract_DirectMegaplayURL(t *testing.T) {
 	}
 	if len(stream.Sources) != 1 || !strings.HasSuffix(stream.Sources[0].URL, "master.m3u8") {
 		t.Fatalf("Sources = %+v; want one master.m3u8", stream.Sources)
+	}
+}
+
+// TestMegaplay_Extract_VidwishWrapper proves the extractor resolves a
+// vidwish.live player nested in a wrapper page (AUTO-446) and derives the
+// vidwish.live Referer from the active player origin — NOT the hardcoded
+// megaplay.buzz value, which the vidwish CDN would 403.
+func TestMegaplay_Extract_VidwishWrapper(t *testing.T) {
+	srv := vidwishSrv(t)
+	defer srv.Close()
+	e := newTestMegaplay(srv.URL)
+
+	stream, err := e.Extract(context.Background(), "https://1anime.site/megaplay/stream/s-2/94554/sub", nil)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if len(stream.Sources) != 1 || !strings.HasSuffix(stream.Sources[0].URL, "master.m3u8") {
+		t.Fatalf("Sources = %+v; want one master.m3u8", stream.Sources)
+	}
+	if got := stream.Headers["Referer"]; got != "https://vidwish.live/" {
+		t.Errorf("Headers[Referer] = %q; want https://vidwish.live/ (active domain, not megaplay.buzz)", got)
 	}
 }
 
