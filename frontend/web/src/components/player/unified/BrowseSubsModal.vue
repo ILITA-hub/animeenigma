@@ -174,7 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { X, Search } from 'lucide-vue-next'
 
 export interface SubTrack {
@@ -194,6 +194,12 @@ const emit = defineEmits<{
   (e: 'select', track: SubTrack): void
   (e: 'close'): void
 }>()
+
+function onWindowKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') emit('close')
+}
+onMounted(() => window.addEventListener('keydown', onWindowKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onWindowKey))
 
 const q = ref('')
 const activeProvider = ref<string | null>(null)

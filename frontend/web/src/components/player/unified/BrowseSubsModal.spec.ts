@@ -22,4 +22,10 @@ describe('BrowseSubsModal', () => {
     await w.find('[data-test="track"] [data-test="select"]').trigger('click')
     expect(w.emitted('select')).toBeTruthy()
   })
+  it('closes on Escape', () => {
+    const w = mount(BrowseSubsModal, { props: { tracks, selectedUrl: null } })
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(w.emitted('close')).toBeTruthy()
+    w.unmount()
+  })
 })
