@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/player/internal/domain"
@@ -51,10 +52,20 @@ func (r *ActivityRepository) Update(ctx context.Context, event *domain.ActivityE
 
 // GetFeed returns the latest activity events with cursor-based pagination.
 // Pass empty `before` for the first page. `before` is the ID of the last event from the previous page.
+//
+// Respects the author's users.activity_visibility setting at READ time (so
+// toggling the setting retroactively hides/unhides history): 'none' drops all
+// of the user's events, 'non_hentai' drops events on 18+ titles. LEFT JOIN +
+// COALESCE keep events visible when the users row is missing or predates the
+// column (pre-feature behaviour).
 func (r *ActivityRepository) GetFeed(ctx context.Context, limit int, before string) ([]*domain.ActivityEvent, bool, error) {
 	query := r.db.WithContext(ctx).
 		Preload("Anime").
-		Order("created_at DESC, id DESC")
+		Joins("LEFT JOIN users ON users.id = activity_events.user_id").
+		Where("COALESCE(users.activity_visibility, 'all') <> 'none'").
+		Where("NOT (COALESCE(users.activity_visibility, 'all') = 'non_hentai' AND "+
+			fmt.Sprintf(hentaiAnimeExistsFmt, "activity_events.anime_id")+")").
+		Order("activity_events.created_at DESC, activity_events.id DESC")
 
 	if before != "" {
 		// Get the created_at of the cursor event
@@ -62,7 +73,10 @@ func (r *ActivityRepository) GetFeed(ctx context.Context, limit int, before stri
 		if err := r.db.WithContext(ctx).Select("created_at").Where("id = ?", before).First(&cursor).Error; err != nil {
 			return nil, false, err
 		}
-		query = query.Where("created_at < ? OR (created_at = ? AND id < ?)", cursor.CreatedAt, cursor.CreatedAt, before)
+		query = query.Where(
+			"activity_events.created_at < ? OR (activity_events.created_at = ? AND activity_events.id < ?)",
+			cursor.CreatedAt, cursor.CreatedAt, before,
+		)
 	}
 
 	var events []*domain.ActivityEvent

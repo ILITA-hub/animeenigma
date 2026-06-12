@@ -50,14 +50,14 @@ func (s *ListService) GetUserList(ctx context.Context, userID, status string) ([
 	if status != "" {
 		return s.listRepo.GetByUserAndStatus(ctx, userID, status)
 	}
-	return s.listRepo.GetByUser(ctx, userID)
+	return s.listRepo.GetByUser(ctx, userID, false)
 }
 
 // GetUserListPaginated returns user's anime list with pagination.
 // search filters entries by anime title (name / name_ru / name_jp, case-insensitive). Empty = no filter.
 func (s *ListService) GetUserListPaginated(ctx context.Context, userID, status, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate()
-	return s.listRepo.GetByUserPaginated(ctx, userID, status, search, params)
+	return s.listRepo.GetByUserPaginated(ctx, userID, status, search, false, params)
 }
 
 // GetUserStatuses returns lightweight anime_id+status pairs for the entire list
@@ -95,12 +95,20 @@ func (s *ListService) GetUserListByStatusesWithProgress(
 
 // GetPublicWatchlistPaginated returns user's public watchlist with pagination.
 // search filters entries by anime title (name / name_ru / name_jp, case-insensitive). Empty = no filter.
+// Enforces the target user's activity_visibility server-side: 'none' returns
+// an empty page, 'non_hentai' drops 18+ entries. The output for 'non_hentai'
+// must stay indistinguishable from 'all' minus those rows — no hints.
 func (s *ListService) GetPublicWatchlistPaginated(ctx context.Context, userID string, statuses []string, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate()
-	if len(statuses) == 0 {
-		return s.listRepo.GetByUserPaginated(ctx, userID, "", search, params)
+	visibility := s.listRepo.GetUserActivityVisibility(ctx, userID)
+	if visibility == repo.ActivityVisibilityNone {
+		return []*domain.AnimeListEntry{}, 0, nil
 	}
-	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, search, params)
+	excludeHentai := visibility == repo.ActivityVisibilityNonHentai
+	if len(statuses) == 0 {
+		return s.listRepo.GetByUserPaginated(ctx, userID, "", search, excludeHentai, params)
+	}
+	return s.listRepo.GetByUserAndStatusesPaginated(ctx, userID, statuses, search, excludeHentai, params)
 }
 
 // GetUserAnimeEntry returns a single anime entry from user's list
@@ -469,9 +477,15 @@ func (s *ListService) MigrateListEntry(ctx context.Context, userID, oldAnimeID, 
 	return newEntry, nil
 }
 
-// GetPublicWatchlistStats returns aggregate stats for a user's public watchlist
+// GetPublicWatchlistStats returns aggregate stats for a user's public watchlist.
+// Mirrors GetPublicWatchlistPaginated's activity_visibility enforcement so the
+// stats card can't leak what the list itself hides.
 func (s *ListService) GetPublicWatchlistStats(ctx context.Context, userID string, statuses []string) (*domain.WatchlistStats, error) {
-	return s.listRepo.GetUserWatchlistStats(ctx, userID, statuses)
+	visibility := s.listRepo.GetUserActivityVisibility(ctx, userID)
+	if visibility == repo.ActivityVisibilityNone {
+		return &domain.WatchlistStats{}, nil
+	}
+	return s.listRepo.GetUserWatchlistStats(ctx, userID, statuses, visibility == repo.ActivityVisibilityNonHentai)
 }
 
 // GetWatchersCount returns how many users have the given anime in their list
@@ -483,8 +497,13 @@ func (s *ListService) GetWatchersCount(ctx context.Context, animeID string) (int
 
 // GetPublicWatchlist returns user's public watchlist filtered by allowed statuses
 func (s *ListService) GetPublicWatchlist(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
-	if len(statuses) == 0 {
-		return s.listRepo.GetByUser(ctx, userID)
+	visibility := s.listRepo.GetUserActivityVisibility(ctx, userID)
+	if visibility == repo.ActivityVisibilityNone {
+		return []*domain.AnimeListEntry{}, nil
 	}
-	return s.listRepo.GetByUserAndStatuses(ctx, userID, statuses)
+	excludeHentai := visibility == repo.ActivityVisibilityNonHentai
+	if len(statuses) == 0 {
+		return s.listRepo.GetByUser(ctx, userID, excludeHentai)
+	}
+	return s.listRepo.GetByUserAndStatuses(ctx, userID, statuses, excludeHentai)
 }

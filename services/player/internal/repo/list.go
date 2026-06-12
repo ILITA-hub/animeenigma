@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -102,13 +103,17 @@ func (r *ListRepository) Upsert(ctx context.Context, entry *domain.AnimeListEntr
 	}).Create(entry).Error
 }
 
-func (r *ListRepository) GetByUser(ctx context.Context, userID string) ([]*domain.AnimeListEntry, error) {
+// excludeHentai — see GetByUserPaginated. The own-list caller passes false.
+func (r *ListRepository) GetByUser(ctx context.Context, userID string, excludeHentai bool) ([]*domain.AnimeListEntry, error) {
 	var entries []*domain.AnimeListEntry
-	err := r.db.WithContext(ctx).
+	query := r.db.WithContext(ctx).
 		Preload("Anime").Preload("Anime.Genres").
 		Where("user_id = ?", userID).
-		Order("updated_at DESC").
-		Find(&entries).Error
+		Order("updated_at DESC")
+	if excludeHentai {
+		query = query.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
+	}
+	err := query.Find(&entries).Error
 	return entries, err
 }
 
@@ -217,17 +222,24 @@ func (r *ListRepository) CountWatchers(ctx context.Context, animeID string) (int
 	return count, err
 }
 
-func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string, statuses []string) ([]*domain.AnimeListEntry, error) {
+// excludeHentai — see GetByUserPaginated. Only the legacy public-watchlist
+// path calls this method.
+func (r *ListRepository) GetByUserAndStatuses(ctx context.Context, userID string, statuses []string, excludeHentai bool) ([]*domain.AnimeListEntry, error) {
 	var entries []*domain.AnimeListEntry
-	err := r.db.WithContext(ctx).
+	query := r.db.WithContext(ctx).
 		Preload("Anime").Preload("Anime.Genres").
 		Where("anime_list.user_id = ? AND anime_list.status IN ?", userID, statuses).
-		Order("anime_list.updated_at DESC").
-		Find(&entries).Error
+		Order("anime_list.updated_at DESC")
+	if excludeHentai {
+		query = query.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
+	}
+	err := query.Find(&entries).Error
 	return entries, err
 }
 
-func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+// excludeHentai drops 18+ entries (activity_visibility='non_hentai' public
+// reads). Own-list callers always pass false — the owner sees everything.
+func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status, search string, excludeHentai bool, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 
 	var entries []*domain.AnimeListEntry
@@ -236,6 +248,9 @@ func (r *ListRepository) GetByUserPaginated(ctx context.Context, userID, status,
 	base := r.db.WithContext(ctx).Where("anime_list.user_id = ?", userID)
 	if status != "" {
 		base = base.Where("anime_list.status = ?", status)
+	}
+	if excludeHentai {
+		base = base.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
 	}
 
 	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
@@ -330,12 +345,16 @@ LIMIT 200
 	return out, nil
 }
 
-func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID string, statuses []string) (*domain.WatchlistStats, error) {
+// excludeHentai — see GetByUserPaginated.
+func (r *ListRepository) GetUserWatchlistStats(ctx context.Context, userID string, statuses []string, excludeHentai bool) (*domain.WatchlistStats, error) {
 	var stats domain.WatchlistStats
 
 	base := r.db.WithContext(ctx).Model(&domain.AnimeListEntry{}).Where("anime_list.user_id = ?", userID)
 	if len(statuses) > 0 {
 		base = base.Where("anime_list.status IN ?", statuses)
+	}
+	if excludeHentai {
+		base = base.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
 	}
 
 	// Lifetime episodes counts rewatches: a completed entry's `episodes` equals
@@ -759,13 +778,17 @@ func (r *ListRepository) GetReactionCounts(ctx context.Context, reviewIDs []stri
 	return out, nil
 }
 
-func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, search string, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
+// excludeHentai — see GetByUserPaginated.
+func (r *ListRepository) GetByUserAndStatusesPaginated(ctx context.Context, userID string, statuses []string, search string, excludeHentai bool, params *domain.PaginationParams) ([]*domain.AnimeListEntry, int64, error) {
 	params.Validate() // defense in depth
 
 	var entries []*domain.AnimeListEntry
 	var total int64
 
 	base := r.db.WithContext(ctx).Where("anime_list.user_id = ? AND anime_list.status IN ?", userID, statuses)
+	if excludeHentai {
+		base = base.Where("NOT " + fmt.Sprintf(hentaiAnimeExistsFmt, "anime_list.anime_id"))
+	}
 
 	needsAnimesJoin := isTitleSort(params.Sort) || search != ""
 	if needsAnimesJoin {

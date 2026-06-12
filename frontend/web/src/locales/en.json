@@ -604,6 +604,15 @@
     "privacyLabel": "Which lists to show publicly",
     "savePrivacy": "Save privacy settings",
     "privacySaved": "Settings saved",
+    "activityVisibility": {
+      "label": "Activity visibility",
+      "all": "Show all activity",
+      "allHint": "Activity feed and public list work as usual",
+      "nonHentai": "Hide 18+ (hentai)",
+      "nonHentaiHint": "18+ titles won't appear in the activity feed or your public list",
+      "none": "Hide all activity",
+      "noneHint": "Nobody will see your activity or public list"
+    },
     "copied": "Copied!",
     "share": "Share",
     "userProfile": "User profile",

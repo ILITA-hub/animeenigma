@@ -490,6 +490,8 @@ export const userApi = {
   // Privacy settings
   updatePublicId: (publicId: string) => apiClient.put('/auth/profile/public-id', { public_id: publicId }),
   updatePrivacy: (publicStatuses: string[]) => apiClient.put('/auth/profile/privacy', { public_statuses: publicStatuses }),
+  updateActivityVisibility: (activityVisibility: 'all' | 'non_hentai' | 'none') =>
+    apiClient.put('/auth/profile/activity-visibility', { activity_visibility: activityVisibility }),
   // Avatar
   updateAvatar: (avatar: string) => apiClient.put('/auth/profile/avatar', { avatar }),
   updateTimezone: (timezone: string) => apiClient.put('/auth/profile/timezone', { timezone }),

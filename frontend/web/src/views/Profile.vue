@@ -427,6 +427,30 @@
                         <span class="text-white">{{ status.label }}</span>
                       </label>
                     </div>
+                    <!-- Activity visibility (design 2026-06-12): what other
+                         users see of this user's activity — feed + public
+                         watchlist. Enforced server-side. -->
+                    <label class="block text-white/60 text-sm mt-4 mb-2">{{ $t('profile.activityVisibility.label') }}</label>
+                    <div class="space-y-2" role="radiogroup" :aria-label="$t('profile.activityVisibility.label')">
+                      <label
+                        v-for="option in activityVisibilityOptions"
+                        :key="option.value"
+                        class="flex items-start gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="radio"
+                          name="activity-visibility"
+                          class="mt-1 size-4 accent-[var(--brand-violet)]"
+                          :value="option.value"
+                          :checked="activityVisibility === option.value"
+                          @change="activityVisibility = option.value"
+                        />
+                        <span>
+                          <span class="block text-white">{{ option.label }}</span>
+                          <span class="block text-white/40 text-xs mt-0.5">{{ option.hint }}</span>
+                        </span>
+                      </label>
+                    </div>
                     <div class="mt-3">
                       <Button
                         variant="outline"
@@ -1190,6 +1214,8 @@ const exportError = ref<string | null>(null)
 // Public Profile settings
 const publicId = ref('')
 const publicStatuses = ref<string[]>([])
+type ActivityVisibility = 'all' | 'non_hentai' | 'none'
+const activityVisibility = ref<ActivityVisibility>('all')
 const savingPublicId = ref(false)
 const savingPrivacy = ref(false)
 const publicIdError = ref<string | null>(null)
@@ -1202,6 +1228,12 @@ const allStatuses = computed(() => [
   { value: 'plan_to_watch', label: t('profile.watchlist.planToWatch') },
   { value: 'on_hold', label: t('profile.watchlist.onHold') },
   { value: 'dropped', label: t('profile.watchlist.dropped') },
+])
+
+const activityVisibilityOptions = computed(() => [
+  { value: 'all' as const, label: t('profile.activityVisibility.all'), hint: t('profile.activityVisibility.allHint') },
+  { value: 'non_hentai' as const, label: t('profile.activityVisibility.nonHentai'), hint: t('profile.activityVisibility.nonHentaiHint') },
+  { value: 'none' as const, label: t('profile.activityVisibility.none'), hint: t('profile.activityVisibility.noneHint') },
 ])
 
 // Avatar
@@ -1267,6 +1299,7 @@ const fetchProfile = async () => {
       }
       publicId.value = authStore.user.public_id || ''
       publicStatuses.value = authStore.user.public_statuses || ['watching', 'completed', 'plan_to_watch']
+      activityVisibility.value = authStore.user.activity_visibility || 'all'
     } else {
       // Fetch public profile data
       const response = await publicApi.getUserProfile(publicIdParam)
@@ -1907,6 +1940,7 @@ const savePrivacy = async () => {
 
   try {
     await userApi.updatePrivacy(publicStatuses.value)
+    await userApi.updateActivityVisibility(activityVisibility.value)
     privacySuccess.value = true
     await authStore.fetchUser()
     setTimeout(() => { privacySuccess.value = false }, 3000)
