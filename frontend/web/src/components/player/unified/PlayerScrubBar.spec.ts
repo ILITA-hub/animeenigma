@@ -45,4 +45,16 @@ describe('PlayerScrubBar', () => {
     })
     expect(w.findAll('[data-test="frag"]').length).toBe(0)
   })
+  it('is a keyboard slider: role + arrows emit seek ±5s', async () => {
+    const w = mount(PlayerScrubBar, { props: { progress: 50, buffered: 0, durationSec: 1000, chapters: [] } })
+    const track = w.find('[data-test="track"]')
+    expect(track.attributes('role')).toBe('slider')
+    expect(track.attributes('tabindex')).toBe('0')
+    expect(track.attributes('aria-valuenow')).toBe('50')
+    await track.trigger('keydown', { key: 'ArrowRight' })
+    await track.trigger('keydown', { key: 'ArrowLeft' })
+    const seeks = w.emitted('seek') as number[][]
+    expect(seeks[0][0]).toBeCloseTo(50.5) // +5s of 1000s = +0.5pct
+    expect(seeks[1][0]).toBeCloseTo(49.5)
+  })
 })

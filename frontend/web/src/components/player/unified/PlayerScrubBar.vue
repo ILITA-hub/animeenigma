@@ -2,9 +2,18 @@
   <div
     data-test="track"
     class="pl-track"
+    role="slider"
+    tabindex="0"
+    aria-label="Seek"
+    :aria-valuemin="0"
+    :aria-valuemax="100"
+    :aria-valuenow="Math.round(progress)"
+    :aria-valuetext="fmt((progress / 100) * durationSec)"
     @click="onTrackClick"
     @mousemove="onMouseMove"
     @mouseleave="onMouseLeave"
+    @keydown.left.prevent.stop="onKeySeek(-1)"
+    @keydown.right.prevent.stop="onKeySeek(1)"
   >
     <!-- Rail background (via ::before in scoped CSS) -->
 
@@ -130,6 +139,13 @@ function getPct(event: MouseEvent): number {
 function onTrackClick(event: MouseEvent) {
   const pct = getPct(event)
   emit('seek', pct)
+}
+
+// Keyboard slider: ←/→ = ±5 s expressed in track percent.
+function onKeySeek(dir: 1 | -1) {
+  if (!props.durationSec) return
+  const stepPct = (5 / props.durationSec) * 100
+  emit('seek', clamp(props.progress + dir * stepPct, 0, 100))
 }
 
 function onMouseMove(event: MouseEvent) {
