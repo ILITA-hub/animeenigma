@@ -1,5 +1,5 @@
 import { ref, onUnmounted } from 'vue'
-import { apiClient } from '@/api/client'
+import { postKeepalive } from '@/utils/authBeacon'
 
 /**
  * useWatchSession — Phase 5 playback session correlation + drop-off beacon.
@@ -9,18 +9,18 @@ import { apiClient } from '@/api/client'
  *     the eventual completion mark so backend can correlate them. (G-04-lite)
  *   - newSession(): rotate the ID when the user switches episodes within the
  *     same player mount — episode-grain is what Tier 2 inference needs.
- *   - sendDropOffBeacon(): fires a `navigator.sendBeacon` call to record the
- *     abandon position when the user closes the page mid-episode. (G-01)
+ *   - sendDropOffBeacon(): records the abandon position when the user closes
+ *     the page mid-episode. (G-01)
  *   - registerBeaconHooks(): wires automatic dispatch on `pagehide` /
  *     `visibilitychange:hidden`. The composable cleans up its listeners
  *     onUnmounted so callers do not need to.
  *
- * Why a beacon, not a normal POST: by the time the page is unloading, normal
- * fetch() may be cancelled by the browser. `navigator.sendBeacon` is the only
- * reliable way to ship a tiny payload at unload time. It accepts Blob; we use
- * a JSON Blob so the backend can parse it as `application/json` if desired,
- * but the player handler also tolerates `text/plain` (the default content
- * type sendBeacon picks when given a string).
+ * Why fetch+keepalive, not navigator.sendBeacon: a normal POST may be
+ * cancelled by the browser at unload time, but sendBeacon cannot set an
+ * Authorization header — and /users/progress/:id/dropoff requires a Bearer
+ * JWT, so every sendBeacon attempt was 401-rejected and silently lost.
+ * `fetch(..., { keepalive: true })` survives pagehide like a beacon AND
+ * carries the token (see utils/authBeacon.ts).
  */
 
 function uuid(): string {
@@ -48,50 +48,18 @@ export function useWatchSession() {
   }
 
   /**
-   * Send a drop-off beacon. Best-effort: if the browser refuses or
-   * sendBeacon is unsupported, falls back to a fire-and-forget fetch with
-   * keepalive. Either way, never throws — the page is unloading.
+   * Send a drop-off save. Best-effort, never throws — the page may be
+   * unloading. Authenticated keepalive fetch (see header comment).
    */
   function sendDropOffBeacon(snap: DropOffSnapshot) {
     if (!snap.animeId || snap.episodeNumber <= 0) return
     if (snap.progressSeconds < 5) return // ignore noise from instant-close
 
-    const body: Record<string, unknown> = {
+    postKeepalive(`/users/progress/${snap.animeId}/dropoff`, {
       episode_number: snap.episodeNumber,
       progress: Math.floor(snap.progressSeconds),
       session_id: sessionId.value,
-    }
-    const url = `${apiClient.defaults.baseURL ?? ''}/users/progress/${snap.animeId}/dropoff`
-
-    try {
-      const blob = new Blob([JSON.stringify(body)], { type: 'application/json' })
-      const ok =
-        typeof navigator !== 'undefined' &&
-        typeof navigator.sendBeacon === 'function' &&
-        navigator.sendBeacon(url, blob)
-      if (!ok) {
-        // sendBeacon refused (queue full or disabled) — fall back to
-        // fetch + keepalive, which Chrome / Firefox will let run to
-        // completion even after pagehide.
-        void fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          keepalive: true,
-          credentials: 'include',
-        }).catch(() => undefined)
-      }
-    } catch {
-      // navigator.sendBeacon throws when the URL is cross-origin without CORS
-      // approval — same fallback as above.
-      void fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        keepalive: true,
-        credentials: 'include',
-      }).catch(() => undefined)
-    }
+    })
   }
 
   /**

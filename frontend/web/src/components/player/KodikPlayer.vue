@@ -205,6 +205,7 @@ import { useOverrideTracker } from '@/composables/useOverrideTracker'
 import { useWatchSession } from '@/composables/useWatchSession'
 import { setPreferredWatchType, getPreferredWatchType } from '@/composables/useWatchPreferences'
 import { emitRecWatchedIfRecent } from '@/utils/recsAnalytics'
+import { postKeepalive } from '@/utils/authBeacon'
 import type { WatchCombo } from '@/types/preference'
 import type { WatchTogetherRoomHandle } from '@/composables/useWatchTogetherRoom'
 import EpisodeSelector from './EpisodeSelector.vue'
@@ -838,20 +839,20 @@ const togglePin = async (translation: KodikTranslation) => {
   }
 }
 
-// Save progress before leaving
+// Save progress before leaving. Authenticated keepalive fetch — sendBeacon
+// cannot carry the Bearer header, so its posts to this JWT-protected route
+// were 401-rejected and the final position silently lost.
 const saveBeforeLeave = () => {
   if (currentTime.value > 0) {
     saveProgressLocal(props.animeId, selectedEpisode.value, currentTime.value)
-    // Use sendBeacon for reliable save on page close
-    if (authStore.isAuthenticated && navigator.sendBeacon) {
-      const data = JSON.stringify({
+    if (authStore.isAuthenticated) {
+      postKeepalive('/users/progress', {
         anime_id: props.animeId,
         episode_number: selectedEpisode.value,
         progress: Math.floor(currentTime.value),
         duration: Math.floor(maxTime.value) || null,
         ...currentCombo.value
       })
-      navigator.sendBeacon('/api/users/progress', new Blob([data], { type: 'application/json' }))
     }
   }
 }

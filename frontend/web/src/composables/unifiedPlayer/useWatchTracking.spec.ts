@@ -18,6 +18,11 @@ vi.mock('@/stores/auth', () => ({
   }),
 }))
 
+const postKeepalive = vi.fn()
+vi.mock('@/utils/authBeacon', () => ({
+  postKeepalive: (...a: unknown[]) => postKeepalive(...a),
+}))
+
 import { useWatchTracking } from './useWatchTracking'
 
 function makeTracking(ep: number | null = 3, hooks = {}) {
@@ -27,6 +32,7 @@ function makeTracking(ep: number | null = 3, hooks = {}) {
 beforeEach(() => {
   updateProgress.mockClear()
   markEpisodeWatched.mockClear()
+  postKeepalive.mockClear()
   isAuthenticated = true
   localStorage.clear()
 })
@@ -105,14 +111,25 @@ describe('useWatchTracking', () => {
     expect(local['3']).toBeTruthy()
   })
 
-  it('beaconSave ships the position via navigator.sendBeacon', () => {
-    const sendBeacon = vi.fn().mockReturnValue(true)
-    Object.defineProperty(navigator, 'sendBeacon', { value: sendBeacon, configurable: true })
+  it('beaconSave ships the position via the AUTHENTICATED keepalive helper', () => {
     const t = makeTracking()
     t.onTick(42, 1440)
     t.beaconSave()
-    expect(sendBeacon).toHaveBeenCalledTimes(1)
-    expect(sendBeacon.mock.calls[0][0]).toBe('/api/users/progress')
+    expect(postKeepalive).toHaveBeenCalledTimes(1)
+    expect(postKeepalive).toHaveBeenCalledWith(
+      '/users/progress',
+      expect.objectContaining({ anime_id: 'anime-1', episode_number: 3, progress: 42 }),
+    )
+  })
+
+  it('beaconSave does nothing for anonymous users (local save only)', () => {
+    isAuthenticated = false
+    const t = makeTracking()
+    t.onTick(42, 1440)
+    t.beaconSave()
+    expect(postKeepalive).not.toHaveBeenCalled()
+    const local = JSON.parse(localStorage.getItem('watch_progress:anime-1') || '{}')
+    expect(local['3']).toBeTruthy()
   })
 
   it('invokes the onMarked hook after a successful mark', async () => {

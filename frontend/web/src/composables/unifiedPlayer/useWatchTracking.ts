@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { userApi } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useWatchSession } from '@/composables/useWatchSession'
+import { postKeepalive } from '@/utils/authBeacon'
 
 /**
  * useWatchTracking — server + localStorage watch-progress tracking for the
@@ -92,20 +93,21 @@ export function useWatchTracking(
     saveServer(lastKnown.time)
   }
 
-  /** Page-close save — sendBeacon survives the unload where XHR doesn't. */
+  /** Page-close save — keepalive fetch survives the unload where XHR doesn't
+   *  (and unlike sendBeacon it carries the Authorization header — beacons to
+   *  this JWT-protected endpoint were 401-rejected). */
   function beaconSave() {
     const ep = episodeNumber()
     if (!ep || lastKnown.time <= 0) return
     saveLocal(lastKnown.time)
-    if (!auth.isAuthenticated || !navigator.sendBeacon) return
-    const data = JSON.stringify({
+    if (!auth.isAuthenticated) return
+    postKeepalive('/users/progress', {
       anime_id: animeId(),
       episode_number: ep,
       progress: Math.floor(lastKnown.time),
       duration: Math.floor(maxTime.value) || null,
       session_id: sessionId.value,
     })
-    navigator.sendBeacon('/api/users/progress', new Blob([data], { type: 'application/json' }))
   }
 
   // ── completion ────────────────────────────────────────────────────────────
