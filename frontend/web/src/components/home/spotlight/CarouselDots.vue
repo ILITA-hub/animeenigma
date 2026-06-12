@@ -31,12 +31,17 @@
     for e2e selectors. Tab order: prev → anchors → next.
   -->
   <div
-    class="mt-3 flex items-center justify-center gap-2 px-4 flex-wrap"
+    class="relative mt-3 flex items-center justify-center gap-2 px-12 flex-wrap"
     data-testid="spotlight-dots"
   >
+    <!-- Chevrons are PINNED to the row's edges (absolute), not part of the
+         centered flex flow: the active pill changes width per card, and a
+         flow-positioned arrow would drift under the cursor on every flip —
+         «зафиксируй стрелочки» lock, 2026-06-11. DOM order stays
+         prev → anchors → next for the tab sequence. -->
     <button
       type="button"
-      class="menu-item menu-nav inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
+      class="menu-item menu-nav absolute left-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
       :aria-label="t('spotlight.prevSlide')"
       data-testid="menu-prev"
       @click="$emit('prev')"
@@ -74,7 +79,7 @@
 
     <button
       type="button"
-      class="menu-item menu-nav inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
+      class="menu-item menu-nav absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full border w-8 h-8 bg-white/[0.06] border-white/10 text-white/50 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors duration-200"
       :aria-label="t('spotlight.nextSlide')"
       data-testid="menu-next"
       @click="$emit('next')"
@@ -124,6 +129,12 @@ function tokenFor(type: string): CardToken {
 .menu-item {
   position: relative;
   cursor: pointer;
+}
+/* Pinned chevrons: this scoped block is UNLAYERED and would beat the
+   `absolute` utility on the nav buttons (Tailwind v4 cascade), so the
+   absolute positioning must be (re)declared here. */
+.menu-item.menu-nav {
+  position: absolute;
 }
 .menu-item::after {
   content: '';

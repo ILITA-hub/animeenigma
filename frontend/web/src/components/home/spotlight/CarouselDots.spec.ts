@@ -190,6 +190,12 @@ describe('CarouselDots', () => {
     expect(all[all.length - 1].attributes('data-testid')).toBe('menu-next')
     expect(all[0].attributes('aria-label')).toBe('spotlight.prevSlide')
     expect(all[all.length - 1].attributes('aria-label')).toBe('spotlight.nextSlide')
+    // «Зафиксируй стрелочки» (2026-06-11): chevrons are edge-PINNED
+    // (absolute) so the variable-width active pill can't drift them
+    // under the cursor between flips.
+    expect(all[0].classes()).toContain('absolute')
+    expect(all[0].classes()).toContain('left-0')
+    expect(all[all.length - 1].classes()).toContain('right-0')
   })
 
   it('chevron clicks emit prev / next (not goto)', async () => {

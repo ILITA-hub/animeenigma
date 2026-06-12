@@ -31,15 +31,17 @@
     <!-- Reserved menu row (v4 A-1): mirrors CarouselDots' mt-3 + h-8
          geometry so the icon menu appearing after load causes ZERO
          layout shift (the old dots row pushed the page ~28px down). -->
-    <!-- 7 = prev chevron + 5 anchors (4th is the active pill) + next
-         chevron — mirrors the ARR-1 row so load causes ZERO shift. -->
-    <div class="mt-3 h-8 flex items-center justify-center gap-2" data-testid="menu-skeleton">
+    <!-- Mirrors the ARR-1 row: edge-pinned chevrons + 5 centered anchors
+         (3rd is the active pill) — so load causes ZERO shift. -->
+    <div class="relative mt-3 h-8 flex items-center justify-center gap-2" data-testid="menu-skeleton">
+      <span class="skeleton-shimmer rounded-full w-8 h-8 absolute left-0 top-0" />
       <span
-        v-for="n in 7"
+        v-for="n in 5"
         :key="n"
         class="skeleton-shimmer rounded-full"
-        :class="n === 4 ? 'w-28 h-8' : 'w-8 h-8'"
+        :class="n === 3 ? 'w-28 h-8' : 'w-8 h-8'"
       />
+      <span class="skeleton-shimmer rounded-full w-8 h-8 absolute right-0 top-0" />
     </div>
   </div>
 
